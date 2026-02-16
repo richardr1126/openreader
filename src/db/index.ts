@@ -1,13 +1,15 @@
-import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
-import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
 import { sql } from 'drizzle-orm';
-import { Pool } from 'pg';
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import * as schema from './schema';
 import * as authSchemaSqlite from './schema_auth_sqlite';
 import * as authSchemaPostgres from './schema_auth_postgres';
+
+// Database driver modules are loaded lazily via require() inside getDrizzleDB()
+// to avoid loading the unused driver (~15-20 MB each) in every serverless function.
+// require() is used instead of dynamic import() because getDrizzleDB() must remain
+// synchronous for the SQLite code path.
+
 
 const UNCLAIMED_USER_ID = 'unclaimed';
 
@@ -62,12 +64,20 @@ function getDrizzleDB() {
   dbIsPostgres = !!process.env.POSTGRES_URL;
 
   if (dbIsPostgres) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { drizzle: drizzlePg } = require('drizzle-orm/node-postgres');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Pool } = require('pg');
     const pool = new Pool({
       connectionString: process.env.POSTGRES_URL,
     });
     dbInstance = drizzlePg(pool, { schema: { ...schema, ...authSchemaPostgres } });
   } else {
     // Fallback to SQLite
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { drizzle: drizzleSqlite } = require('drizzle-orm/better-sqlite3');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Database = require('better-sqlite3');
     const dbPath = path.join(process.cwd(), 'docstore', 'sqlite3.db');
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {

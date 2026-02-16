@@ -5,17 +5,13 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@/db";
-import { rateLimiter } from "@/lib/server/rate-limiter";
 import { isAuthEnabled, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth-config";
-import { deleteUserStorageData } from "@/lib/server/user-data-cleanup";
 import * as authSchemaSqlite from "@/db/schema_auth_sqlite";
 import * as authSchemaPostgres from "@/db/schema_auth_postgres";
-import {
-  transferUserAudiobooks,
-  transferUserDocuments,
-  transferUserPreferences,
-  transferUserProgress,
-} from "@/lib/server/claim-data";
+
+// Heavy modules (S3 SDK, blobstore, rate-limiter, claim-data) are loaded
+// lazily via dynamic import() inside the beforeDelete / onLinkAccount
+// callbacks to avoid inflating every serverless function that touches auth.
 
 // ...
 
@@ -80,6 +76,7 @@ const createAuth = () => betterAuth({
       enabled: true,
       beforeDelete: async (user) => {
         try {
+          const { deleteUserStorageData } = await import('@/lib/server/user-data-cleanup');
           await deleteUserStorageData(user.id, null);
         } catch (error) {
           console.error('[auth] Failed to clean up user storage before deletion:', error);
@@ -123,6 +120,12 @@ const createAuth = () => betterAuth({
                 newUserEmail: newUser.user.email,
               });
 
+              // Lazy-load heavy modules only when account linking actually happens
+              const [{ rateLimiter }, claimData] = await Promise.all([
+                import('@/lib/server/rate-limiter'),
+                import('@/lib/server/claim-data'),
+              ]);
+
               // Transfer rate limiting data (TTS char counts) from anonymous user to authenticated user
               try {
                 await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
@@ -134,7 +137,7 @@ const createAuth = () => betterAuth({
 
               // Transfer audiobooks from anonymous user to new authenticated user
               try {
-                const transferred = await transferUserAudiobooks(anonymousUser.user.id, newUser.user.id);
+                const transferred = await claimData.transferUserAudiobooks(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
                   console.log(`Successfully transferred ${transferred} audiobook(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
@@ -145,7 +148,7 @@ const createAuth = () => betterAuth({
 
               // Transfer documents from anonymous user to new authenticated user
               try {
-                const transferred = await transferUserDocuments(anonymousUser.user.id, newUser.user.id);
+                const transferred = await claimData.transferUserDocuments(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
                   console.log(`Successfully transferred ${transferred} document(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
@@ -156,7 +159,7 @@ const createAuth = () => betterAuth({
 
               // Transfer preferences from anonymous user to new authenticated user
               try {
-                const transferred = await transferUserPreferences(anonymousUser.user.id, newUser.user.id);
+                const transferred = await claimData.transferUserPreferences(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
                   console.log(`Successfully transferred preferences from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
@@ -167,7 +170,7 @@ const createAuth = () => betterAuth({
 
               // Transfer reading progress from anonymous user to new authenticated user
               try {
-                const transferred = await transferUserProgress(anonymousUser.user.id, newUser.user.id);
+                const transferred = await claimData.transferUserProgress(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
                   console.log(`Successfully transferred ${transferred} progress row(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
