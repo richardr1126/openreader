@@ -84,19 +84,39 @@ export async function POST(req: NextRequest) {
 
     for (const doc of documentsData) {
       let headSize = doc.size;
-      try {
-        const head = await headDocumentBlob(doc.id, testNamespace);
-        if (head.contentLength > 0) headSize = head.contentLength;
-      } catch (error) {
-        if (isMissingBlobError(error)) {
-          return NextResponse.json(
-            {
-              error: `Blob missing for document ${doc.id}. Upload bytes first using /api/documents/blob/upload/presign.`,
-            },
-            { status: 409 },
-          );
+
+      // Retry HEAD check to handle S3 read-after-write propagation delays.
+      // The client uploads bytes directly to S3 via presigned URL, then
+      // immediately calls this endpoint. On serverless platforms the HEAD
+      // request may reach S3 before the PUT is visible.
+      const HEAD_RETRIES = 3;
+      const HEAD_RETRY_DELAY_MS = 500;
+      let headError: unknown = null;
+      for (let attempt = 0; attempt < HEAD_RETRIES; attempt++) {
+        headError = null;
+        try {
+          const head = await headDocumentBlob(doc.id, testNamespace);
+          if (head.contentLength > 0) headSize = head.contentLength;
+          break;
+        } catch (error) {
+          if (isMissingBlobError(error)) {
+            headError = error;
+            if (attempt < HEAD_RETRIES - 1) {
+              await new Promise((r) => setTimeout(r, HEAD_RETRY_DELAY_MS));
+              continue;
+            }
+          } else {
+            throw error;
+          }
         }
-        throw error;
+      }
+      if (headError && isMissingBlobError(headError)) {
+        return NextResponse.json(
+          {
+            error: `Blob missing for document ${doc.id}. Upload bytes first using /api/documents/blob/upload/presign.`,
+          },
+          { status: 409 },
+        );
       }
 
       await db
