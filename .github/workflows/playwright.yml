@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FFMPEG_BIN: /usr/bin/ffmpeg
-      FFPROBE_BIN: /usr/bin/ffprobe
       USE_EMBEDDED_WEED_MINI: true
       BASE_URL: http://127.0.0.1:3003
       S3_ENDPOINT: http://127.0.0.1:8333

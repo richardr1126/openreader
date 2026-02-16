@@ -15,7 +15,7 @@ import {
 const require = createRequire(import.meta.url);
 const { Pool } = require('pg');
 const BetterSqlite3 = require('better-sqlite3');
-const ffprobeStatic = require('ffprobe-static');
+const ffmpegStatic = require('ffmpeg-static');
 
 const DOCSTORE_DIR = path.join(process.cwd(), 'docstore');
 const DOCUMENTS_V1_DIR = path.join(DOCSTORE_DIR, 'documents_v1');
@@ -321,34 +321,29 @@ function chooseBinary(preferred, bundled, envVarName, packageName) {
   return bundledValue;
 }
 
-function getFFprobePath() {
-  return chooseBinary(process.env.FFPROBE_BIN || null, ffprobeStatic?.path || null, 'FFPROBE_BIN', 'ffprobe-static');
+function getFFmpegPath() {
+  return chooseBinary(process.env.FFMPEG_BIN || null, ffmpegStatic || null, 'FFMPEG_BIN', 'ffmpeg-static');
 }
 
 async function ffprobeTitleTag(filePath) {
   return new Promise((resolve) => {
-    const child = spawn(getFFprobePath(), [
-      '-v', 'quiet',
-      '-print_format', 'json',
-      '-show_entries', 'format_tags=title',
-      filePath,
+    const child = spawn(getFFmpegPath(), [
+      '-i', filePath,
+      '-f', 'ffmetadata',
+      '-',
     ]);
 
-    let output = '';
-    child.stdout.on('data', (data) => { output += data.toString(); });
+    let stdout = '';
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
     child.on('error', () => resolve(null));
-    child.on('close', (code) => {
-      if (code !== 0) {
+    child.on('close', () => {
+      const line = stdout.split(/\r?\n/).find((l) => l.startsWith('title='));
+      if (!line) {
         resolve(null);
         return;
       }
-      try {
-        const parsed = JSON.parse(output);
-        const title = parsed?.format?.tags?.title;
-        resolve(typeof title === 'string' ? title : null);
-      } catch {
-        resolve(null);
-      }
+      const raw = line.slice('title='.length).trim();
+      resolve(raw.length > 0 ? raw : null);
     });
   });
 }

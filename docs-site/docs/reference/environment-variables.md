@@ -49,7 +49,6 @@ This is the single reference page for OpenReader WebUI environment variables.
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
 | `WHISPER_CPP_BIN` | Word timing | unset | Set to enable `whisper.cpp` timestamps |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
-| `FFPROBE_BIN` | Audio runtime | auto-detected (`ffprobe-static`) | Override ffprobe binary path |
 
 ## Client Runtime and Feature Flags
 
@@ -369,10 +368,3 @@ Absolute path or executable name for the ffmpeg binary used by audiobook/process
 
 - Resolution order: `FFMPEG_BIN` -> `ffmpeg-static`
 - Example: `/var/task/node_modules/ffmpeg-static/ffmpeg`
-
-### FFPROBE_BIN
-
-Absolute path or executable name for the ffprobe binary used for audio probing.
-
-- Resolution order: `FFPROBE_BIN` -> `ffprobe-static`
-- Example: `/var/task/node_modules/ffprobe-static/bin/linux/x64/ffprobe`

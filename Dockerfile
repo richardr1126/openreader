@@ -45,7 +45,7 @@ FROM node:lts-alpine AS runner
 
 # Add runtime OS dependencies:
 # - libreoffice-writer: required for DOCX → PDF conversion
-# ffmpeg/ffprobe are provided by ffmpeg-static/ffprobe-static from node_modules.
+# ffmpeg is provided by ffmpeg-static from node_modules.
 RUN apk add --no-cache ca-certificates libreoffice-writer
 
 # Install pnpm globally for running the app

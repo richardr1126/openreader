@@ -7,7 +7,7 @@ This guide covers deploying OpenReader WebUI to Vercel with external Postgres an
 ## What works on Vercel
 
 - Documents (PDF/EPUB/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
-- Audiobook routes work on Node.js serverless functions using `ffmpeg-static`/`ffprobe-static`.
+- Audiobook routes work on Node.js serverless functions using `ffmpeg-static`.
 
 :::warning DOCX Conversion Limitation
 `docx` conversion requires `soffice` (LibreOffice), which is not available in a standard Vercel runtime.
@@ -65,9 +65,9 @@ For internet-exposed Vercel deployments, set both `BASE_URL` and `AUTH_SECRET`. 
 For all variables and defaults, see [Environment Variables](../reference/environment-variables).
 :::
 
-## 2. FFmpeg/ffprobe packaging in Vercel functions
+## 2. FFmpeg packaging in Vercel functions
 
-`ffmpeg-static` and `ffprobe-static` binaries must be included in function traces. This repo already does that in `next.config.ts` via `outputFileTracingIncludes` for:
+`ffmpeg-static` binaries must be included in function traces. This repo already does that in `next.config.ts` via `outputFileTracingIncludes` for:
 
 - `/api/audiobook`
 - `/api/audiobook/chapter`
@@ -75,7 +75,7 @@ For all variables and defaults, see [Environment Variables](../reference/environ
 - `/api/whisper`
 
 :::info
-`serverExternalPackages` should include `ffmpeg-static` and `ffprobe-static` so package paths resolve at runtime instead of being bundled into route output.
+`serverExternalPackages` should include `ffmpeg-static` so package paths resolve at runtime instead of being bundled into route output.
 :::
 
 If you change route paths or split handlers, update `outputFileTracingIncludes` accordingly.
