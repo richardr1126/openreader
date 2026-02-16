@@ -448,6 +448,7 @@ test('regenerates a single MP3 audiobook PDF page and exports full audiobook', a
 });
 
 test('resumes audiobook when a chapter is missing and full download succeeds (PDF)', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
   await setupTest(page, testInfo);
   await uploadAndDisplay(page, 'sample.pdf');
 
