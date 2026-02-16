@@ -81,7 +81,7 @@ cp .env.example .env
 Then edit `.env`.
 
 - No auth mode: leave `BASE_URL` or `AUTH_SECRET` unset.
-- Auth enabled mode: set both `BASE_URL` (typically `http://localhost:3003`) and `AUTH_SECRET` (generate with `openssl rand -base64 32`).
+- Auth enabled mode: set both `BASE_URL` (typically `http://localhost:3003`) and `AUTH_SECRET` (generate with `openssl rand -hex 32`).
 
 Optional:
 

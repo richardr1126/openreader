@@ -188,7 +188,7 @@ External base URL for this OpenReader instance.
 Secret key used by auth/session handling.
 
 - Required with `BASE_URL` to enable auth
-- Generate with `openssl rand -base64 32`
+- Generate with `openssl rand -hex 32`
 - Related docs: [Auth](../configure/auth)
 
 ### AUTH_TRUSTED_ORIGINS

@@ -20,9 +20,10 @@ interface ProvidersProps {
   authEnabled: boolean;
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
+  githubAuthEnabled: boolean;
 }
 
-export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAuthSessions }: ProvidersProps) {
+export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled }: ProvidersProps) {
   const pathname = usePathname();
   const isAuthPage = pathname?.startsWith('/signin') || pathname?.startsWith('/signup');
 
@@ -32,6 +33,7 @@ export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAu
         authEnabled={authEnabled}
         authBaseUrl={authBaseUrl}
         allowAnonymousAuthSessions={allowAnonymousAuthSessions}
+        githubAuthEnabled={githubAuthEnabled}
       >
         <ThemeProvider>
           <AuthLoader>
@@ -50,6 +52,7 @@ export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAu
       authEnabled={authEnabled}
       authBaseUrl={authBaseUrl}
       allowAnonymousAuthSessions={allowAnonymousAuthSessions}
+      githubAuthEnabled={githubAuthEnabled}
     >
       <ThemeProvider>
         <AuthLoader>

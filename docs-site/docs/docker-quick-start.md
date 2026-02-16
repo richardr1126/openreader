@@ -44,7 +44,7 @@ docker run --name openreader-webui \
   -e API_BASE=http://host.docker.internal:8880/v1 \
   -e API_KEY=none \
   -e BASE_URL=http://localhost:3003 \
-  -e AUTH_SECRET=$(openssl rand -base64 32) \
+  -e AUTH_SECRET=$(openssl rand -hex 32) \
   ghcr.io/richardr1126/openreader-webui:latest
 ```
 

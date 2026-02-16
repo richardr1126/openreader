@@ -29,7 +29,7 @@ function SignInContent() {
   const [rememberMe, setRememberMe] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { authEnabled, baseUrl, allowAnonymousAuthSessions } = useAuthConfig();
+  const { authEnabled, baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
   const isAnyLoading = loadingEmail || loadingGithub || loadingAnonymous;
@@ -205,6 +205,7 @@ function SignInContent() {
           </Button>
 
           {/* GitHub */}
+          {githubAuthEnabled && (
           <Button
             type="button"
             disabled={isAnyLoading}
@@ -224,6 +225,7 @@ function SignInContent() {
               </>
             )}
           </Button>
+          )}
 
           {/* Anonymous */}
           {allowAnonymousAuthSessions && (

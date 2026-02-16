@@ -17,6 +17,7 @@ interface AuthRateLimitContextType {
   authEnabled: boolean;
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
+  githubAuthEnabled: boolean;
 
   // Rate Limit
   status: RateLimitStatus | null;
@@ -43,8 +44,8 @@ export function useAuthRateLimit(): AuthRateLimitContextType {
 
 // Re-export specific hooks for backward compatibility or convenience if needed
 export function useAuthConfig() {
-  const { authEnabled, authBaseUrl, allowAnonymousAuthSessions } = useAuthRateLimit();
-  return { authEnabled, baseUrl: authBaseUrl, allowAnonymousAuthSessions };
+  const { authEnabled, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthRateLimit();
+  return { authEnabled, baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled };
 }
 
 export function useRateLimit() {
@@ -88,6 +89,7 @@ interface AuthRateLimitProviderProps {
   authEnabled: boolean;
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
+  githubAuthEnabled: boolean;
 }
 
 export function AuthRateLimitProvider({
@@ -95,6 +97,7 @@ export function AuthRateLimitProvider({
   authEnabled,
   authBaseUrl,
   allowAnonymousAuthSessions,
+  githubAuthEnabled,
 }: AuthRateLimitProviderProps) {
   const [status, setStatus] = useState<RateLimitStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -220,6 +223,7 @@ export function AuthRateLimitProvider({
     authEnabled,
     authBaseUrl,
     allowAnonymousAuthSessions,
+    githubAuthEnabled,
     status,
     loading,
     error,

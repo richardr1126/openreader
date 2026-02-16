@@ -26,6 +26,15 @@ export function isAnonymousAuthSessionsEnabled(): boolean {
 }
 
 /**
+ * GitHub sign-in is available only when auth is enabled AND
+ * both GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set.
+ */
+export function isGithubAuthEnabled(): boolean {
+  if (!isAuthEnabled()) return false;
+  return !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+}
+
+/**
  * Get the auth base URL if auth is enabled, otherwise null.
  */
 export function getAuthBaseUrl(): string | null {
