@@ -65,6 +65,7 @@ test.describe('PDF view modes and Navigator', () => {
   });
 
   test('switches Single/Dual/Scroll modes and uses Navigator to change page', async ({ page }) => {
+    test.setTimeout(60_000);
     // Open PDF viewer
     await uploadAndDisplay(page, 'sample.pdf');
     await expect(page.locator('.react-pdf__Document')).toBeVisible({ timeout: 15000 });

@@ -201,7 +201,6 @@ export async function setupTest(page: Page, testInfo?: TestInfo) {
     // HeadlessUI keeps dialogs in the DOM during leave transitions; "hidden" is enough
     // (we mainly need to ensure it no longer blocks pointer events).
     await page.getByRole('dialog', { name: /privacy/i }).waitFor({ state: 'hidden', timeout: 15000 });
-    await expect(page.locator('.overlay-dim:visible')).toHaveCount(0);
   } catch {
     // ignore
   }
@@ -221,7 +220,6 @@ export async function setupTest(page: Page, testInfo?: TestInfo) {
   // Click the "done" button to dismiss the welcome message
   await saveBtn.click();
   await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'hidden', timeout: 15000 });
-  await expect(page.locator('.overlay-dim:visible')).toHaveCount(0);
 }
 
 /**

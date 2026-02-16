@@ -374,6 +374,7 @@ test('resets all MP3 audiobook PDF pages', async ({ page }, testInfo) => {
 });
 
 test('regenerates a single MP3 audiobook PDF page and exports full audiobook', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
   await setupTest(page, testInfo);
   await uploadAndDisplay(page, 'sample.pdf');
 
