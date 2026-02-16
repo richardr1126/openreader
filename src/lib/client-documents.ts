@@ -328,10 +328,24 @@ export async function getDocumentPreviewStatus(
     };
   }
 
+  // Handle failed preview generation (500 with status: 'failed')
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || `Failed to load preview status (status ${res.status})`);
+    const data = (await res.json().catch(() => null)) as {
+      status?: string;
+      lastError?: string;
+      error?: string;
+    } | null;
+    if (data?.status === 'failed') {
+      return {
+        kind: 'pending',
+        status: 'failed',
+        retryAfterMs: 0,
+        fallbackUrl: documentPreviewFallbackUrl(id),
+        presignUrl: documentPreviewPresignUrl(id),
+      };
+    }
+    throw new Error(data?.error || data?.lastError || `Failed to load preview status (status ${res.status})`);
   }
 
   throw new Error(`Failed to load preview status (status ${res.status})`);

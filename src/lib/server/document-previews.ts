@@ -388,6 +388,7 @@ export async function ensureDocumentPreview(doc: PreviewSourceDocument, namespac
         eTag: head.eTag,
       });
     } catch (error) {
+      console.error(`[document-previews] Preview generation failed for ${doc.id} (type=${doc.type}):`, error);
       await markPreviewFailed(doc.id, namespaceKey, error);
     }
   }

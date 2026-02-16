@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
     '/api/whisper': [
       './node_modules/ffmpeg-static/ffmpeg',
     ],
+    '/api/documents/blob/preview/ensure': [
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    ],
+    '/api/documents/blob/preview/presign': [
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    ],
+    '/api/documents/blob/preview/fallback': [
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    ],
   },
 };
 
