@@ -103,7 +103,7 @@ const createAuth = () => betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days (reasonable for user experience)
     updateAge: 60 * 60 * 1, // 1 hour (refresh more frequently)
     cookieCache: {
-      maxAge: 60 * 60 * 24 * 7, // 7 days for cookie cache
+      maxAge: 60 * 5, // 5 minutes – revalidate session against DB regularly
     },
   },
   plugins: [

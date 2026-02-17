@@ -683,6 +683,16 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
 
     if (!bookRef.current?.isOpen || !renditionRef.current) return;
 
+    // If the location is a CFI string that doesn't match the current rendered position,
+    // navigate there and let the subsequent locationChanged callback handle text extraction.
+    if (typeof location === 'string' && location !== 'next' && location !== 'prev' && renditionRef.current?.location) {
+      const currentStartCfi = renditionRef.current.location?.start?.cfi;
+      if (currentStartCfi && location !== currentStartCfi) {
+        renditionRef.current.display(location);
+        return;
+      }
+    }
+
     // Handle special 'next' and 'prev' cases
     if (location === 'next' && renditionRef.current) {
       shouldPauseRef.current = false;
