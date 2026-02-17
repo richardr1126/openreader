@@ -52,7 +52,7 @@ export const audiobookChapters = sqliteTable('audiobook_chapters', {
 // defined here. Only application-specific tables belong in this file.
 
 export const userTtsChars = sqliteTable("user_tts_chars", {
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
   date: text('date').notNull(), // SQLite doesn't have native DATE type, text YYYY-MM-DD is standard
   charCount: integer('char_count').default(0),
   createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),

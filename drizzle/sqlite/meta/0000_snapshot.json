@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d7c41fe0-7d08-42af-8f53-d95fd35776c2",
+  "id": "2406985e-1b41-49e8-9add-304814080095",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audiobook_chapters": {
@@ -673,21 +673,7 @@
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "user_tts_chars_user_id_user_id_fk": {
-          "name": "user_tts_chars_user_id_user_id_fk",
-          "tableFrom": "user_tts_chars",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {
         "user_tts_chars_user_id_date_pk": {
           "columns": [

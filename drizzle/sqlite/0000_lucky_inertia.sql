@@ -91,8 +91,7 @@ CREATE TABLE `user_tts_chars` (
 	`char_count` integer DEFAULT 0,
 	`created_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
 	`updated_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
-	PRIMARY KEY(`user_id`, `date`),
-	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+	PRIMARY KEY(`user_id`, `date`)
 );
 --> statement-breakpoint
 CREATE INDEX `idx_user_tts_chars_date` ON `user_tts_chars` (`date`);--> statement-breakpoint
