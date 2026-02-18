@@ -90,6 +90,8 @@ If `8333` is not reachable from the browser, direct presigned access is unavaila
 
 ## 3. Update Docker image
 
+Legacy image compatibility: `ghcr.io/richardr1126/openreader-webui:latest` remains available as an alias.
+
 ```bash
 docker stop openreader || true && \
 docker rm openreader || true && \
