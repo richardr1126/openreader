@@ -36,7 +36,6 @@ import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/client/dexie';
 import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
-import { useBackgroundState } from '@/hooks/audio/useBackgroundState';
 import { withRetry, generateTTS, alignAudio } from '@/lib/client/api/audiobooks';
 import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksEPUB } from '@/lib/shared/nlp';
 import { isKokoroModel } from '@/lib/shared/kokoro';
@@ -388,6 +387,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [currentWordIndex, setCurrentWordIndex] = useState<number | null>(null);
   const sentencesRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
+  const setTextRef = useRef<(text: string, options?: boolean | SetTextOptions) => void>(() => { });
+  const prefetchedLocationTextRef = useRef<Map<string, string>>(new Map());
+  const pendingNextLocationRef = useRef<TTSLocation | undefined>(undefined);
 
   const audioUnlockAttemptRef = useRef(0);
 
@@ -575,6 +577,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const advance = useCallback(async (backwards = false) => {
     const nextIndex = currentIndex + (backwards ? -1 : 1);
+    const movingForward = !backwards && nextIndex >= sentences.length;
 
     // Handle within current page bounds
     if (nextIndex < sentences.length && nextIndex >= 0) {
@@ -584,6 +587,25 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // For EPUB documents, always try to advance to next/prev section
     if (isEPUB && locationChangeHandlerRef.current) {
+      if (movingForward && typeof document !== 'undefined' && document.hidden) {
+        const targetLocation = pendingNextLocationRef.current;
+        if (targetLocation !== undefined) {
+          const bufferKey = normalizeLocationKey(targetLocation);
+          const prefetchedText = prefetchedLocationTextRef.current.get(bufferKey);
+          if (prefetchedText?.trim()) {
+            prefetchedLocationTextRef.current.delete(bufferKey);
+            pendingNextLocationRef.current = undefined;
+            setCurrDocPage(targetLocation);
+            setTextRef.current(prefetchedText, {
+              shouldPause: false,
+              location: targetLocation,
+            });
+            // Ask the viewer to continue turning pages/sections; this may be deferred while hidden.
+            locationChangeHandlerRef.current('next');
+            return;
+          }
+        }
+      }
       locationChangeHandlerRef.current(nextIndex >= sentences.length ? 'next' : 'prev');
       return;
     }
@@ -593,8 +615,27 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       // Handle next/previous page transitions
       if ((nextIndex >= sentences.length && currDocPageNumber < currDocPages!) ||
         (nextIndex < 0 && currDocPageNumber > 1)) {
+        const targetLocation = currDocPageNumber + (nextIndex >= sentences.length ? 1 : -1);
+
+        // In background tabs, page text extraction can be delayed. If we already have
+        // prefetched text for the target page, keep speaking without waiting for viewer callbacks.
+        if (movingForward && typeof document !== 'undefined' && document.hidden) {
+          const bufferKey = normalizeLocationKey(targetLocation);
+          const prefetchedText = prefetchedLocationTextRef.current.get(bufferKey);
+          if (prefetchedText?.trim()) {
+            prefetchedLocationTextRef.current.delete(bufferKey);
+            pendingNextLocationRef.current = undefined;
+            setCurrDocPage(targetLocation);
+            setTextRef.current(prefetchedText, {
+              shouldPause: false,
+              location: targetLocation,
+            });
+            return;
+          }
+        }
+
         // Pass wasPlaying to maintain playback state during page turn
-        skipToLocation(currDocPageNumber + (nextIndex >= sentences.length ? 1 : -1));
+        skipToLocation(targetLocation);
         return;
       }
 
@@ -692,6 +733,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnEstimateRef.current = null;
     }
 
+    // Keep the next-location text around so background page turns can continue when
+    // viewer/location callbacks are throttled by the browser.
+    prefetchedLocationTextRef.current.clear();
+    pendingNextLocationRef.current = normalizedOptions.nextLocation;
+    if (normalizedOptions.nextLocation !== undefined && normalizedOptions.nextText?.trim()) {
+      prefetchedLocationTextRef.current.set(
+        normalizeLocationKey(normalizedOptions.nextLocation),
+        normalizedOptions.nextText
+      );
+    }
+
     // Check for blank section after adjustments
     if (handleBlankSection(workingText)) return;
 
@@ -779,6 +831,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         });
       });
   }, [isPlaying, handleBlankSection, abortAudio, splitTextToTtsBlocksLocal, pendingRestoreIndex, isEPUB, smartSentenceSplitting]);
+
+  useEffect(() => {
+    setTextRef.current = setText;
+  }, [setText]);
 
   /**
    * Toggles the playback state between playing and paused
@@ -1408,13 +1464,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, [activeHowl, audioSpeed, applyPlaybackRateToHowl, isPlaying, startRateWatchdog]);
 
-  // Place useBackgroundState after playAudio is defined
-  const isBackgrounded = useBackgroundState({
-    activeHowl,
-    isPlaying,
-    playAudio,
-  });
-
   // Track the current word index during playback using Howler's seek position
   useEffect(() => {
     if (!activeHowl || !isPlaying || !currentSentenceAlignment || !currentSentenceAlignment.words.length) {
@@ -1510,7 +1559,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (isProcessing) return; // Don't proceed if processing audio
     if (!sentences[currentIndex]) return; // Don't proceed if no sentence to play
     if (activeHowl) return; // Don't proceed if audio is already playing
-    if (isBackgrounded) return; // Don't proceed if backgrounded
 
     // Start playing current sentence
     playAudio();
@@ -1530,7 +1578,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentIndex,
     sentences,
     activeHowl,
-    isBackgrounded,
     playAudio,
     preloadNextAudio,
     abortAudio
@@ -1674,7 +1721,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const value = useMemo(() => ({
     isPlaying,
     isProcessing,
-    isBackgrounded,
     currentSentence: sentences[currentIndex] || '',
     currentSentenceAlignment,
     currentWordIndex,
@@ -1700,7 +1746,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }), [
     isPlaying,
     isProcessing,
-    isBackgrounded,
     sentences,
     currentIndex,
     currDocPage,

@@ -101,7 +101,6 @@ interface PDFContextType {
 // Create the context
 const PDFContext = createContext<PDFContextType | undefined>(undefined);
 
-const CONTINUATION_PREVIEW_CHARS = 600;
 const EMPTY_TEXT_RETRY_DELAY_MS = 120;
 const EMPTY_TEXT_MAX_RETRIES = 6;
 
@@ -283,7 +282,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
         setTTSText(text, {
           location: currDocPageNumber,
           nextLocation: nextPageNumber,
-          nextText: nextText?.slice(0, CONTINUATION_PREVIEW_CHARS),
+          nextText: nextText,
         });
       }
     } catch (error) {

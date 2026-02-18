@@ -82,7 +82,7 @@ interface EPUBContextType {
 
 const EPUBContext = createContext<EPUBContextType | undefined>(undefined);
 
-const EPUB_CONTINUATION_CHARS = 600;
+const EPUB_CONTINUATION_CHARS = 5000;
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 
