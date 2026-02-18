@@ -20,7 +20,7 @@ type AudiobookRow = {
   description: string | null;
   coverPath: string | null;
   duration: number | null;
-  createdAt: unknown;
+  createdAt: number;
 };
 
 type AudiobookChapterRow = {
@@ -38,8 +38,8 @@ type UserPreferenceRow = {
   userId: string;
   dataJson: unknown;
   clientUpdatedAtMs: number;
-  createdAt: unknown;
-  updatedAt: unknown;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type UserDocumentProgressRow = {
@@ -49,8 +49,8 @@ type UserDocumentProgressRow = {
   location: string;
   progress: number | null;
   clientUpdatedAtMs: number;
-  createdAt: unknown;
-  updatedAt: unknown;
+  createdAt: number;
+  updatedAt: number;
 };
 
 function contentTypeForAudiobookObject(fileName: string): string {

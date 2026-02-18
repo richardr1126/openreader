@@ -185,10 +185,10 @@ export async function POST(req: NextRequest) {
         );
 
         if (!rateLimitResult.allowed) {
-          const resetTime = rateLimitResult.resetTime.toISOString();
+          const resetTimeMs = rateLimitResult.resetTimeMs;
           const retryAfterSeconds = Math.max(
             0,
-            Math.ceil((rateLimitResult.resetTime.getTime() - Date.now()) / 1000)
+            Math.ceil((resetTimeMs - Date.now()) / 1000)
           );
 
           const problem: ProblemDetails = {
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
             currentCount: rateLimitResult.currentCount,
             limit: rateLimitResult.limit,
             remainingChars: rateLimitResult.remainingChars,
-            resetTime,
+            resetTimeMs,
             userType: isAnonymous ? 'anonymous' : 'authenticated',
             upgradeHint: isAnonymous
               ? `Sign up to increase your limit from ${formatLimitForHint(RATE_LIMITS.ANONYMOUS)} to ${formatLimitForHint(RATE_LIMITS.AUTHENTICATED)} characters per day`

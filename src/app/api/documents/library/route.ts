@@ -93,7 +93,7 @@ async function scanLibraryRoot(root: string, rootIndex: number, limit: number): 
         id,
         name: relativePath,
         size: fileStat.size,
-        lastModified: fileStat.mtimeMs,
+        lastModified: Math.floor(fileStat.mtimeMs),
         type: libraryDocumentTypeFromName(relativePath),
       });
     }

@@ -20,7 +20,7 @@ CREATE TABLE `audiobooks` (
 	`description` text,
 	`cover_path` text,
 	`duration` real DEFAULT 0,
-	`created_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
 	PRIMARY KEY(`id`, `user_id`),
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -55,7 +55,7 @@ CREATE TABLE `documents` (
 	`size` integer NOT NULL,
 	`last_modified` integer NOT NULL,
 	`file_path` text NOT NULL,
-	`created_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
 	PRIMARY KEY(`id`, `user_id`),
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -69,8 +69,8 @@ CREATE TABLE `user_document_progress` (
 	`location` text NOT NULL,
 	`progress` real,
 	`client_updated_at_ms` integer DEFAULT 0 NOT NULL,
-	`created_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
-	`updated_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
 	PRIMARY KEY(`user_id`, `document_id`),
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -80,8 +80,8 @@ CREATE TABLE `user_preferences` (
 	`user_id` text PRIMARY KEY NOT NULL,
 	`data_json` text DEFAULT '{}' NOT NULL,
 	`client_updated_at_ms` integer DEFAULT 0 NOT NULL,
-	`created_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
-	`updated_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -89,8 +89,8 @@ CREATE TABLE `user_tts_chars` (
 	`user_id` text NOT NULL,
 	`date` text NOT NULL,
 	`char_count` integer DEFAULT 0,
-	`created_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
-	`updated_at` integer DEFAULT (cast(strftime('%s','now') as int) * 1000),
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
 	PRIMARY KEY(`user_id`, `date`)
 );
 --> statement-breakpoint

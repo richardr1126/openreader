@@ -2,6 +2,8 @@ import { sqliteTable, text, integer, real, primaryKey, index, foreignKey } from 
 import { sql } from 'drizzle-orm';
 import { user } from './schema_auth_sqlite';
 
+const SQLITE_NOW_MS = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
+
 export const documents = sqliteTable('documents', {
   id: text('id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
@@ -10,7 +12,7 @@ export const documents = sqliteTable('documents', {
   size: integer('size').notNull(),
   lastModified: integer('last_modified').notNull(),
   filePath: text('file_path').notNull(),
-  createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
   index('idx_documents_user_id').on(table.userId),
@@ -25,7 +27,7 @@ export const audiobooks = sqliteTable('audiobooks', {
   description: text('description'),
   coverPath: text('cover_path'),
   duration: real('duration').default(0),
-  createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
 ]);
@@ -55,8 +57,8 @@ export const userTtsChars = sqliteTable("user_tts_chars", {
   userId: text('user_id').notNull(),
   date: text('date').notNull(), // SQLite doesn't have native DATE type, text YYYY-MM-DD is standard
   charCount: integer('char_count').default(0),
-  createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-  updatedAt: integer('updated_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.userId, table.date] }),
   index('idx_user_tts_chars_date').on(table.date),
@@ -66,8 +68,8 @@ export const userPreferences = sqliteTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   dataJson: text('data_json').notNull().default('{}'),
   clientUpdatedAtMs: integer('client_updated_at_ms').notNull().default(0),
-  createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-  updatedAt: integer('updated_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });
 
 export const userDocumentProgress = sqliteTable('user_document_progress', {
@@ -77,8 +79,8 @@ export const userDocumentProgress = sqliteTable('user_document_progress', {
   location: text('location').notNull(),
   progress: real('progress'),
   clientUpdatedAtMs: integer('client_updated_at_ms').notNull().default(0),
-  createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-  updatedAt: integer('updated_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.userId, table.documentId] }),
   index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),

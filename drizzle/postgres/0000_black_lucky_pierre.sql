@@ -18,7 +18,7 @@ CREATE TABLE "audiobooks" (
 	"description" text,
 	"cover_path" text,
 	"duration" real DEFAULT 0,
-	"created_at" timestamp DEFAULT now(),
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
 	CONSTRAINT "audiobooks_id_user_id_pk" PRIMARY KEY("id","user_id")
 );
 --> statement-breakpoint
@@ -51,7 +51,7 @@ CREATE TABLE "documents" (
 	"size" bigint NOT NULL,
 	"last_modified" bigint NOT NULL,
 	"file_path" text NOT NULL,
-	"created_at" timestamp DEFAULT now(),
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
 	CONSTRAINT "documents_id_user_id_pk" PRIMARY KEY("id","user_id")
 );
 --> statement-breakpoint
@@ -62,8 +62,8 @@ CREATE TABLE "user_document_progress" (
 	"location" text NOT NULL,
 	"progress" real,
 	"client_updated_at_ms" bigint DEFAULT 0 NOT NULL,
-	"created_at" timestamp DEFAULT now(),
-	"updated_at" timestamp DEFAULT now(),
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
+	"updated_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
 	CONSTRAINT "user_document_progress_user_id_document_id_pk" PRIMARY KEY("user_id","document_id")
 );
 --> statement-breakpoint
@@ -71,16 +71,16 @@ CREATE TABLE "user_preferences" (
 	"user_id" text PRIMARY KEY NOT NULL,
 	"data_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"client_updated_at_ms" bigint DEFAULT 0 NOT NULL,
-	"created_at" timestamp DEFAULT now(),
-	"updated_at" timestamp DEFAULT now()
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
+	"updated_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint
 );
 --> statement-breakpoint
 CREATE TABLE "user_tts_chars" (
 	"user_id" text NOT NULL,
 	"date" date NOT NULL,
 	"char_count" bigint DEFAULT 0,
-	"created_at" timestamp DEFAULT now(),
-	"updated_at" timestamp DEFAULT now(),
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
+	"updated_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
 	CONSTRAINT "user_tts_chars_user_id_date_pk" PRIMARY KEY("user_id","date")
 );
 --> statement-breakpoint

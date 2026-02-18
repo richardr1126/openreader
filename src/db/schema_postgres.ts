@@ -1,5 +1,8 @@
-import { pgTable, text, integer, real, timestamp, date, bigint, primaryKey, index, jsonb, foreignKey } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, text, integer, real, date, bigint, primaryKey, index, jsonb, foreignKey } from 'drizzle-orm/pg-core';
 import { user } from './schema_auth_postgres';
+
+const PG_NOW_MS = sql`(extract(epoch from now()) * 1000)::bigint`;
 
 export const documents = pgTable('documents', {
   id: text('id').notNull(),
@@ -9,7 +12,7 @@ export const documents = pgTable('documents', {
   size: bigint('size', { mode: 'number' }).notNull(),
   lastModified: bigint('last_modified', { mode: 'number' }).notNull(),
   filePath: text('file_path').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
   index('idx_documents_user_id').on(table.userId),
@@ -24,7 +27,7 @@ export const audiobooks = pgTable('audiobooks', {
   description: text('description'),
   coverPath: text('cover_path'),
   duration: real('duration').default(0),
-  createdAt: timestamp('created_at').defaultNow(),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
 ]);
@@ -54,8 +57,8 @@ export const userTtsChars = pgTable("user_tts_chars", {
   userId: text('user_id').notNull(),
   date: date('date').notNull(),
   charCount: bigint('char_count', { mode: 'number' }).default(0),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.userId, table.date] }),
   index('idx_user_tts_chars_date').on(table.date),
@@ -65,8 +68,8 @@ export const userPreferences = pgTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   dataJson: jsonb('data_json').notNull().default({}),
   clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });
 
 export const userDocumentProgress = pgTable('user_document_progress', {
@@ -76,8 +79,8 @@ export const userDocumentProgress = pgTable('user_document_progress', {
   location: text('location').notNull(),
   progress: real('progress'),
   clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.userId, table.documentId] }),
   index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),

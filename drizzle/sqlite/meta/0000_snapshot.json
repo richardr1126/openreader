@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2406985e-1b41-49e8-9add-304814080095",
+  "id": "23271fb3-935b-4a9b-a890-e73fc9943bef",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audiobook_chapters": {
@@ -167,7 +167,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         }
       },
       "indexes": {},
@@ -412,7 +412,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         }
       },
       "indexes": {
@@ -511,7 +511,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -519,7 +519,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         }
       },
       "indexes": {
@@ -591,7 +591,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -599,7 +599,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         }
       },
       "indexes": {},
@@ -653,7 +653,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         },
         "updated_at": {
           "name": "updated_at",
@@ -661,7 +661,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "(cast(strftime('%s','now') as int) * 1000)"
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         }
       },
       "indexes": {

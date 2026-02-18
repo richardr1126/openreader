@@ -10,6 +10,7 @@ import { getDocumentBlobStream } from '@/lib/server/documents/blobstore';
 import { getAudiobookObjectStream, listAudiobookObjects } from '@/lib/server/audiobooks/blobstore';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
+import { nowTimestampMs } from '@/lib/shared/timestamps';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,17 +101,17 @@ export async function GET(req: NextRequest) {
 
   (async () => {
     try {
-      const exportedAtIso = new Date().toISOString();
+      const exportedAtMs = nowTimestampMs();
       const profileData = {
         user: session.user,
         session: session.session,
-        exportedAt: exportedAtIso,
+        exportedAtMs,
       };
 
       await appendUserExportArchive({
         archive,
         userId,
-        exportedAtIso,
+        exportedAtMs,
         profileData,
         preferences: prefs[0] ?? null,
         readingHistory: progress,

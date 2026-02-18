@@ -44,7 +44,7 @@ type ExportAudiobookObject = {
 export type AppendUserExportArchiveInput = {
   archive: Archiver;
   userId: string;
-  exportedAtIso: string;
+  exportedAtMs: number;
   profileData: unknown;
   preferences: unknown | null;
   readingHistory: unknown[];
@@ -119,7 +119,7 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
   const {
     archive,
     userId,
-    exportedAtIso,
+    exportedAtMs,
     profileData,
     preferences,
     readingHistory,
@@ -217,7 +217,7 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
 
   const manifest = {
     formatVersion: 2,
-    exportedAt: exportedAtIso,
+    exportedAtMs,
     userId,
     scope: 'owned',
     counts: {

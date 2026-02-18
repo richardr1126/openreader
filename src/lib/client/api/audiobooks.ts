@@ -57,7 +57,7 @@ export const withRetry = async <T>(
         }
         return undefined;
       })();
-      // Do not retry on user quota exceeded (server tells us when to retry via resetTime/Retry-After)
+      // Do not retry on user quota exceeded (server tells us when to retry via resetTimeMs/Retry-After)
       if (status === 429 && code === 'USER_DAILY_QUOTA_EXCEEDED') {
         break;
       }

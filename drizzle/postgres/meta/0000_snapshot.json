@@ -1,5 +1,5 @@
 {
-  "id": "ed6cbfef-d016-4265-999b-239f10f9e4e1",
+  "id": "a6243c0b-4032-4549-aa08-1f7602362f15",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -152,10 +152,10 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         }
       },
       "indexes": {},
@@ -391,10 +391,10 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         }
       },
       "indexes": {
@@ -507,17 +507,17 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         }
       },
       "indexes": {
@@ -598,17 +598,17 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         }
       },
       "indexes": {},
@@ -658,17 +658,17 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
-          "default": "now()"
+          "default": "(extract(epoch from now()) * 1000)::bigint"
         }
       },
       "indexes": {

@@ -4,12 +4,9 @@ import { db } from '@/db';
 import { userPreferences } from '@/db/schema';
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/user-state';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
+import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 
 export const dynamic = 'force-dynamic';
-
-function nowForDb(): Date | number {
-  return process.env.POSTGRES_URL ? new Date() : Date.now();
-}
 
 function serializePreferencesForDb(patch: SyncedPreferencesPatch): SyncedPreferencesPatch | string {
   if (process.env.POSTGRES_URL) return patch;
@@ -92,10 +89,9 @@ function sanitizePreferencesPatch(input: unknown): SyncedPreferencesPatch {
 }
 
 function normalizeClientUpdatedAtMs(value: unknown): number {
-  if (!Number.isFinite(value)) return Date.now();
-  const normalized = Number(value);
-  if (normalized <= 0) return Date.now();
-  return Math.floor(normalized);
+  const normalized = coerceTimestampMs(value, nowTimestampMs());
+  if (normalized <= 0) return nowTimestampMs();
+  return normalized;
 }
 
 export async function GET(req: NextRequest) {
@@ -164,7 +160,7 @@ export async function PUT(req: NextRequest) {
 
     const mergedPatch = { ...existingPatch, ...patch };
     const dataJson = serializePreferencesForDb(mergedPatch);
-    const updatedAt = nowForDb();
+    const updatedAt = nowTimestampMs();
 
     await db
       .insert(userPreferences)

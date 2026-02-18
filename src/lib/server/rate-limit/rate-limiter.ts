@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { userTtsChars } from '@/db/schema';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { eq, and, lt, sql } from 'drizzle-orm';
+import { nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 
 function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -52,7 +53,7 @@ export interface RateLimitResult {
   allowed: boolean;
   currentCount: number;
   limit: number;
-  resetTime: Date;
+  resetTimeMs: number;
   remainingChars: number;
 }
 
@@ -133,8 +134,8 @@ export class RateLimiter {
     return Boolean(process.env.POSTGRES_URL);
   }
 
-  private getUpdatedAtValue(): Date | number {
-    return this.isPostgres() ? new Date() : Date.now();
+  private getUpdatedAtValue(): number {
+    return nowTimestampMs();
   }
 
   // Use a transaction only when running with Postgres.
@@ -157,7 +158,7 @@ export class RateLimiter {
         allowed: true,
         currentCount: 0,
         limit: Number.MAX_SAFE_INTEGER,
-        resetTime: this.getResetTime(),
+        resetTimeMs: this.getResetTimeMs(),
         remainingChars: Number.MAX_SAFE_INTEGER
       };
     }
@@ -236,7 +237,7 @@ export class RateLimiter {
           allowed: true,
           currentCount: effective.currentCount,
           limit: effective.limit,
-          resetTime: this.getResetTime(),
+          resetTimeMs: this.getResetTimeMs(),
           remainingChars: effective.remainingChars,
         };
       });
@@ -258,7 +259,7 @@ export class RateLimiter {
         allowed: true,
         currentCount: 0,
         limit: Number.MAX_SAFE_INTEGER,
-        resetTime: this.getResetTime(),
+        resetTimeMs: this.getResetTimeMs(),
         remainingChars: Number.MAX_SAFE_INTEGER
       };
     }
@@ -300,7 +301,7 @@ export class RateLimiter {
       allowed: effective.allowed,
       currentCount: effective.currentCount,
       limit: effective.limit,
-      resetTime: this.getResetTime(),
+      resetTimeMs: this.getResetTimeMs(),
       remainingChars: effective.remainingChars,
     };
   }
@@ -356,12 +357,8 @@ export class RateLimiter {
     await safeDb().delete(userTtsChars).where(lt(userTtsChars.date, cutoffDateValue));
   }
 
-  private getResetTime(): Date {
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setUTCDate(now.getUTCDate() + 1);
-    tomorrow.setUTCHours(0, 0, 0, 0); // Start of next day in UTC
-    return tomorrow;
+  private getResetTimeMs(): number {
+    return nextUtcMidnightTimestampMs();
   }
 }
 

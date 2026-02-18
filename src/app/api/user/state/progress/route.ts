@@ -5,12 +5,9 @@ import { userDocumentProgress } from '@/db/schema';
 import type { ReaderType } from '@/types/user-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
+import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 
 export const dynamic = 'force-dynamic';
-
-function nowForDb(): Date | number {
-  return process.env.POSTGRES_URL ? new Date() : Date.now();
-}
 
 function normalizeReaderType(value: unknown): ReaderType | null {
   if (value === 'pdf' || value === 'epub' || value === 'html') return value;
@@ -18,16 +15,9 @@ function normalizeReaderType(value: unknown): ReaderType | null {
 }
 
 function normalizeClientUpdatedAtMs(value: unknown): number {
-  if (!Number.isFinite(value)) return Date.now();
-  const normalized = Number(value);
-  if (normalized <= 0) return Date.now();
-  return Math.floor(normalized);
-}
-
-function toUpdatedAtMs(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (value instanceof Date) return value.getTime();
-  return Date.now();
+  const normalized = coerceTimestampMs(value, nowTimestampMs());
+  if (normalized <= 0) return nowTimestampMs();
+  return normalized;
 }
 
 export async function GET(req: NextRequest) {
@@ -68,7 +58,7 @@ export async function GET(req: NextRequest) {
         location: row.location,
         progress: row.progress == null ? null : Number(row.progress),
         clientUpdatedAtMs: Number(row.clientUpdatedAtMs ?? 0),
-        updatedAtMs: toUpdatedAtMs(row.updatedAt),
+        updatedAtMs: coerceTimestampMs(row.updatedAt, nowTimestampMs()),
       },
     });
   } catch (error) {
@@ -140,13 +130,13 @@ export async function PUT(req: NextRequest) {
           location: existing.location,
           progress: existing.progress == null ? null : Number(existing.progress),
           clientUpdatedAtMs: existingUpdated,
-          updatedAtMs: toUpdatedAtMs(existing.updatedAt),
+          updatedAtMs: coerceTimestampMs(existing.updatedAt, nowTimestampMs()),
         },
         applied: false,
       });
     }
 
-    const updatedAt = nowForDb();
+    const updatedAt = nowTimestampMs();
     await db
       .insert(userDocumentProgress)
       .values({
@@ -177,7 +167,7 @@ export async function PUT(req: NextRequest) {
         location,
         progress,
         clientUpdatedAtMs,
-        updatedAtMs: toUpdatedAtMs(updatedAt),
+        updatedAtMs: updatedAt,
       },
       applied: true,
     });
@@ -186,4 +176,3 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to update user progress' }, { status: 500 });
   }
 }
-

@@ -1,13 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { coerceTimestampMs, nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 
 export interface RateLimitStatus {
   allowed: boolean;
   currentCount: number;
   limit: number;
   remainingChars: number;
-  resetTime: Date;
+  resetTimeMs: number;
   userType: 'anonymous' | 'authenticated' | 'unauthenticated';
   authEnabled: boolean;
 }
@@ -52,9 +53,8 @@ export function useRateLimit() {
   return useAuthRateLimit();
 }
 
-function calculateTimeUntilReset(resetTime: Date): string {
-  const now = new Date();
-  const timeDiff = resetTime.getTime() - now.getTime();
+function calculateTimeUntilReset(resetTimeMs: number): string {
+  const timeDiff = resetTimeMs - nowTimestampMs();
 
   if (timeDiff <= 0) {
     return 'Soon';
@@ -68,6 +68,27 @@ function calculateTimeUntilReset(resetTime: Date): string {
   } else {
     return `${minutes}m`;
   }
+}
+
+function parseRateLimitStatus(raw: unknown): RateLimitStatus | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+
+  const userType = (() => {
+    const value = data.userType;
+    if (value === 'anonymous' || value === 'authenticated' || value === 'unauthenticated') return value;
+    return 'unauthenticated';
+  })();
+
+  return {
+    allowed: Boolean(data.allowed),
+    currentCount: Number(data.currentCount ?? 0),
+    limit: Number(data.limit ?? 0),
+    remainingChars: Number(data.remainingChars ?? 0),
+    resetTimeMs: coerceTimestampMs(data.resetTimeMs ?? data.resetTime, nextUtcMidnightTimestampMs()),
+    userType,
+    authEnabled: Boolean(data.authEnabled),
+  };
 }
 
 export function formatCharCount(count: number): string {
@@ -110,18 +131,13 @@ export function AuthRateLimitProvider({
   const fetchStatus = useCallback(async () => {
     // Skip if auth is not enabled
     if (!authEnabled) {
-      const now = new Date();
-      const tomorrow = new Date(now);
-      tomorrow.setUTCDate(now.getUTCDate() + 1);
-      tomorrow.setUTCHours(0, 0, 0, 0);
-
       setStatus({
         allowed: true,
         currentCount: 0,
         // Avoid Infinity to prevent JSON/serialization edge cases elsewhere.
         limit: Number.MAX_SAFE_INTEGER,
         remainingChars: Number.MAX_SAFE_INTEGER,
-        resetTime: tomorrow,
+        resetTimeMs: nextUtcMidnightTimestampMs(),
         userType: 'unauthenticated',
         authEnabled: false
       });
@@ -140,11 +156,7 @@ export function AuthRateLimitProvider({
       }
 
       const data = await response.json();
-
-      setStatus({
-        ...data,
-        resetTime: new Date(data.resetTime)
-      });
+      setStatus(parseRateLimitStatus(data));
     } catch (err) {
       console.error('Error fetching rate limit status:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -158,7 +170,7 @@ export function AuthRateLimitProvider({
   }, [fetchStatus]);
 
   // Calculate time until reset
-  const timeUntilReset = status ? calculateTimeUntilReset(status.resetTime) : '';
+  const timeUntilReset = status ? calculateTimeUntilReset(status.resetTimeMs) : '';
   // Only treat the user as "at limit" when they are truly out of characters.
   // The server allows the final request that may cross the limit, then blocks subsequent ones.
   const isAtLimit = status ? (status.remainingChars <= 0 || !status.allowed) : false;

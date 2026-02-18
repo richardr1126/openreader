@@ -5,15 +5,12 @@ import { headers } from 'next/headers';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
+import { nextUtcMidnightTimestampMs } from '@/lib/shared/timestamps';
 
 export const dynamic = 'force-dynamic';
 
-function getUtcResetTimeIso(): string {
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setUTCDate(now.getUTCDate() + 1);
-  tomorrow.setUTCHours(0, 0, 0, 0);
-  return tomorrow.toISOString();
+function getUtcResetTimeMs(): number {
+  return nextUtcMidnightTimestampMs();
 }
 
 export async function GET(req: NextRequest) {
@@ -22,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     // If auth is not enabled, return unlimited status
     if (!isAuthEnabled() || !auth) {
-      const resetTime = getUtcResetTimeIso();
+      const resetTimeMs = getUtcResetTimeMs();
       return NextResponse.json({
         allowed: true,
         currentCount: 0,
@@ -30,7 +27,7 @@ export async function GET(req: NextRequest) {
         // because authEnabled=false, but we keep it finite to prevent surprises.
         limit: Number.MAX_SAFE_INTEGER,
         remainingChars: Number.MAX_SAFE_INTEGER,
-        resetTime,
+        resetTimeMs,
         userType: 'unauthenticated',
         authEnabled: false
       });
@@ -43,13 +40,13 @@ export async function GET(req: NextRequest) {
 
     // No session means unauthenticated
     if (!session?.user) {
-      const resetTime = getUtcResetTimeIso();
+      const resetTimeMs = getUtcResetTimeMs();
       return NextResponse.json({
         allowed: true,
         currentCount: 0,
         limit: ttsRateLimitEnabled ? RATE_LIMITS.ANONYMOUS : Number.MAX_SAFE_INTEGER,
         remainingChars: ttsRateLimitEnabled ? RATE_LIMITS.ANONYMOUS : Number.MAX_SAFE_INTEGER,
-        resetTime,
+        resetTimeMs,
         userType: 'unauthenticated',
         authEnabled: true
       });
@@ -76,7 +73,7 @@ export async function GET(req: NextRequest) {
       currentCount: result.currentCount,
       limit: result.limit,
       remainingChars: result.remainingChars,
-      resetTime: result.resetTime.toISOString(),
+      resetTimeMs: result.resetTimeMs,
       userType: isAnonymous ? 'anonymous' : 'authenticated',
       authEnabled: true
     });
