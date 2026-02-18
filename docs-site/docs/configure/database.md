@@ -2,7 +2,7 @@
 title: Database
 ---
 
-This page covers database mode selection for OpenReader WebUI.
+This page covers database mode selection for OpenReader.
 
 ## Database mode
 

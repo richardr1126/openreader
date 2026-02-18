@@ -2,7 +2,7 @@
 title: Vercel Deployment
 ---
 
-This guide covers deploying OpenReader WebUI to Vercel with external Postgres and S3-compatible object storage.
+This guide covers deploying OpenReader to Vercel with external Postgres and S3-compatible object storage.
 
 ## What works on Vercel
 

@@ -3,7 +3,7 @@ title: Environment Variables
 toc_max_heading_level: 3
 ---
 
-This is the single reference page for OpenReader WebUI environment variables.
+This is the single reference page for OpenReader environment variables.
 
 ## Quick Reference Table
 

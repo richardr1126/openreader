@@ -22,11 +22,11 @@ If you have suitable hardware, you can run Kokoro locally with Docker. See [Koko
 Auth disabled, embedded storage ephemeral, no library import:
 
 ```bash
-docker run --name openreader-webui \
+docker run --name openreader \
   --restart unless-stopped \
   -p 3003:3003 \
   -p 8333:8333 \
-  ghcr.io/richardr1126/openreader-webui:latest
+  ghcr.io/richardr1126/openreader:latest
 ```
 
   </TabItem>
@@ -35,7 +35,7 @@ docker run --name openreader-webui \
 Persistent storage, embedded SeaweedFS `weed mini`, optional auth, optional library mount:
 
 ```bash
-docker run --name openreader-webui \
+docker run --name openreader \
   --restart unless-stopped \
   -p 3003:3003 \
   -p 8333:8333 \
@@ -45,7 +45,7 @@ docker run --name openreader-webui \
   -e API_KEY=none \
   -e BASE_URL=http://localhost:3003 \
   -e AUTH_SECRET=$(openssl rand -hex 32) \
-  ghcr.io/richardr1126/openreader-webui:latest
+  ghcr.io/richardr1126/openreader:latest
 ```
 
   </TabItem>
@@ -91,10 +91,10 @@ If `8333` is not reachable from the browser, direct presigned access is unavaila
 ## 3. Update Docker image
 
 ```bash
-docker stop openreader-webui || true && \
-docker rm openreader-webui || true && \
-docker image rm ghcr.io/richardr1126/openreader-webui:latest || true && \
-docker pull ghcr.io/richardr1126/openreader-webui:latest
+docker stop openreader || true && \
+docker rm openreader || true && \
+docker image rm ghcr.io/richardr1126/openreader:latest || true && \
+docker pull ghcr.io/richardr1126/openreader:latest
 ```
 
 :::tip

@@ -1,16 +1,18 @@
-[![GitHub Release](https://img.shields.io/github/v/release/richardr1126/OpenReader-WebUI)](https://github.com/richardr1126/OpenReader-WebUI/releases)
-[![License](https://img.shields.io/github/license/richardr1126/OpenReader-WebUI)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-openreader--webui-0a6c74)](https://docs.openreader.richardr.dev/)
-[![Playwright Tests](https://github.com/richardr1126/OpenReader-WebUI/actions/workflows/playwright.yml/badge.svg)](https://github.com/richardr1126/OpenReader-WebUI/actions/workflows/playwright.yml)
-[![Docs Check](https://github.com/richardr1126/OpenReader-WebUI/actions/workflows/docs-check.yml/badge.svg)](https://github.com/richardr1126/OpenReader-WebUI/actions/workflows/docs-check.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/richardr1126/openreader)](https://github.com/richardr1126/openreader/releases)
+[![License](https://img.shields.io/github/license/richardr1126/openreader)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-openreader-0a6c74)](https://docs.openreader.richardr.dev/)
+[![Playwright Tests](https://github.com/richardr1126/openreader/actions/workflows/playwright.yml/badge.svg)](https://github.com/richardr1126/openreader/actions/workflows/playwright.yml)
+[![Docs Check](https://github.com/richardr1126/openreader/actions/workflows/docs-check.yml/badge.svg)](https://github.com/richardr1126/openreader/actions/workflows/docs-check.yml)
 
-[![GitHub Stars](https://img.shields.io/github/stars/richardr1126/OpenReader-WebUI)](https://github.com/richardr1126/OpenReader-WebUI/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/richardr1126/OpenReader-WebUI)](https://github.com/richardr1126/OpenReader-WebUI/network/members)
-[![Discussions](https://img.shields.io/badge/Discussions-Ask%20a%20Question-blue)](https://github.com/richardr1126/OpenReader-WebUI/discussions)
+[![GitHub Stars](https://img.shields.io/github/stars/richardr1126/openreader)](https://github.com/richardr1126/openreader/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/richardr1126/openreader)](https://github.com/richardr1126/openreader/network/members)
+[![Discussions](https://img.shields.io/badge/Discussions-Ask%20a%20Question-blue)](https://github.com/richardr1126/openreader/discussions)
 
-# 📄🔊 OpenReader WebUI
+# 📄🔊 OpenReader
 
-OpenReader WebUI is an open source, self-host-friendly text-to-speech document reader built with Next.js for **EPUB, PDF, TXT, MD, and DOCX** with synchronized read-along playback.
+OpenReader is an open source, self-host-friendly text-to-speech document reader built with Next.js for **EPUB, PDF, TXT, MD, and DOCX** with synchronized read-along playback.
+
+> Previously named **OpenReader-WebUI**.
 
 > **Get started in the [docs](https://docs.openreader.richardr.dev/)**.
 
@@ -40,8 +42,8 @@ OpenReader WebUI is an open source, self-host-friendly text-to-speech document r
 
 ## 🧭 Community
 
-- Questions and ideas: [GitHub Discussions](https://github.com/richardr1126/OpenReader-WebUI/discussions)
-- Bug reports: [GitHub Issues](https://github.com/richardr1126/OpenReader-WebUI/issues)
+- Questions and ideas: [GitHub Discussions](https://github.com/richardr1126/openreader/discussions)
+- Bug reports: [GitHub Issues](https://github.com/richardr1126/openreader/issues)
 - Contributions: open a pull request
 
 ## 📜 License

@@ -5,7 +5,7 @@ title: TTS Providers
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-OpenReader WebUI supports OpenAI-compatible TTS providers through a common API shape.
+OpenReader supports OpenAI-compatible TTS providers through a common API shape.
 
 :::tip
 If you are running a self-hosted TTS server (Kokoro/Orpheus/etc.), use **Custom OpenAI-Like** in Settings.

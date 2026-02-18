@@ -4,7 +4,9 @@ title: Introduction
 slug: /
 ---
 
-OpenReader WebUI is an open source text-to-speech document reader built with Next.js. It provides a read-along experience with narration for **EPUB, PDF, TXT, MD, and DOCX documents**.
+OpenReader is an open source text-to-speech document reader built with Next.js. It provides a read-along experience with narration for **EPUB, PDF, TXT, MD, and DOCX documents**.
+
+> Previously named **OpenReader-WebUI**.
 
 It supports multiple TTS providers including OpenAI, DeepInfra, and custom OpenAI-compatible endpoints such as [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) and [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI).
 
@@ -46,4 +48,4 @@ It supports multiple TTS providers including OpenAI, DeepInfra, and custom OpenA
 
 ## Source Repository
 
-- GitHub: [richardr1126/OpenReader-WebUI](https://github.com/richardr1126/OpenReader-WebUI)
+- GitHub: [richardr1126/openreader](https://github.com/richardr1126/openreader)

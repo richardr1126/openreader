@@ -3,7 +3,7 @@ import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'OpenReader WebUI Docs',
+  title: 'OpenReader Docs',
   tagline: 'Docs for OpenReader',
   favicon: 'favicon.ico',
 
@@ -15,7 +15,7 @@ const config: Config = {
   baseUrl: '/',
 
   organizationName: 'richardr1126',
-  projectName: 'OpenReader-WebUI',
+  projectName: 'OpenReader',
 
   onBrokenLinks: 'throw',
   markdown: {
@@ -36,7 +36,7 @@ const config: Config = {
         docs: {
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/richardr1126/OpenReader-WebUI/tree/main/docs-site/',
+          editUrl: 'https://github.com/richardr1126/openreader/tree/main/docs-site/',
           // lastVersion: 'current',
           // versions: {
           //   current: {
@@ -74,7 +74,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'OpenReader WebUI',
+      title: 'OpenReader',
       items: [
         {
           type: 'docSidebar',
@@ -87,7 +87,7 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://github.com/richardr1126/OpenReader-WebUI',
+          href: 'https://github.com/richardr1126/openreader',
           label: 'GitHub',
           position: 'right',
         },
@@ -99,15 +99,15 @@ const config: Config = {
           title: 'Community',
           items: [
             { label: 'Support', to: '/about/support-and-contributing' },
-            { label: 'GitHub Discussions', href: 'https://github.com/richardr1126/OpenReader-WebUI/discussions' },
-            { label: 'Issues', href: 'https://github.com/richardr1126/OpenReader-WebUI/issues' },
+            { label: 'GitHub Discussions', href: 'https://github.com/richardr1126/openreader/discussions' },
+            { label: 'Issues', href: 'https://github.com/richardr1126/openreader/issues' },
           ],
         },
         {
           title: 'Project',
           items: [
-            { label: 'GitHub', href: 'https://github.com/richardr1126/OpenReader-WebUI' },
-            { label: 'Releases', href: 'https://github.com/richardr1126/OpenReader-WebUI/releases' },
+            { label: 'GitHub', href: 'https://github.com/richardr1126/openreader' },
+            { label: 'Releases', href: 'https://github.com/richardr1126/openreader/releases' },
           ],
         },
       ],

@@ -5,7 +5,7 @@ title: Migrations
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page covers migration behavior for both database schema and storage data in OpenReader WebUI.
+This page covers migration behavior for both database schema and storage data in OpenReader.
 
 ## Startup migration behavior
 

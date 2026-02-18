@@ -14,8 +14,8 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     url: 'https://openreader.richardr.dev',
-    siteName: 'OpenReader WebUI',
-    title: 'OpenReader WebUI | Read and Listen to Documents',
+    siteName: 'OpenReader',
+    title: 'OpenReader | Read and Listen to Documents',
     description:
       'Upload EPUB, PDF, TXT, MD, and DOCX files, then listen with synchronized read-along playback using OpenAI-compatible TTS providers.',
     images: [
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
         url: '/web-app-manifest-512x512.png',
         width: 512,
         height: 512,
-        alt: 'OpenReader WebUI Logo',
+        alt: 'OpenReader Logo',
       },
     ],
   },

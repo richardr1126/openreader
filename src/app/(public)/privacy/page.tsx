@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 
 export const metadata: Metadata = {
-  title: 'Privacy & Data Usage | OpenReader WebUI',
+  title: 'Privacy & Data Usage | OpenReader',
   description:
-    'Learn how OpenReader WebUI handles your data, what is stored in your browser, and what is sent to the server.',
+    'Learn how OpenReader handles your data, what is stored in your browser, and what is sent to the server.',
   alternates: {
     canonical: '/privacy',
   },
@@ -272,12 +272,12 @@ export default async function PrivacyPage() {
               If you have questions or concerns about this Privacy Policy, please contact the instance administrator via the repository:
             </p>
             <a
-              href="https://github.com/richardr1126/OpenReader-WebUI/issues"
+              href="https://github.com/richardr1126/openreader/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline font-medium"
             >
-              OpenReader WebUI Issues
+              OpenReader Issues
             </a>
           </section>
         </div>
@@ -285,7 +285,7 @@ export default async function PrivacyPage() {
         <p className="privacy-note mt-12 pt-8 border-t border-border">
           For maximum privacy, you can self-host OpenReader using the{' '}
           <a
-            href="https://github.com/richardr1126/OpenReader-WebUI#readme"
+            href="https://github.com/richardr1126/openreader#readme"
             target="_blank"
             rel="noopener noreferrer"
           >

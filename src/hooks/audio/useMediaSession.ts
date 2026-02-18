@@ -17,7 +17,7 @@ export function useMediaSession(controls: MediaControls) {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: 'Text-to-Speech',
-        artist: 'OpenReader WebUI',
+        artist: 'OpenReader',
         album: 'Current Document',
       });
 

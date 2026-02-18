@@ -29,8 +29,8 @@ const themeInitScript = `
 
 export const metadata: Metadata = {
   title: {
-    default: "OpenReader WebUI",
-    template: "%s | OpenReader WebUI",
+    default: "OpenReader",
+    template: "%s | OpenReader",
   },
   manifest: "/manifest.json",
   metadataBase: new URL("https://openreader.richardr.dev"),

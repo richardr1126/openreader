@@ -62,8 +62,8 @@ Set `WHISPER_CPP_BIN` in your `.env` to enable word-by-word highlighting.
 1. Clone the repository.
 
 ```bash
-git clone https://github.com/richardr1126/OpenReader-WebUI.git
-cd OpenReader-WebUI
+git clone https://github.com/richardr1126/openreader.git
+cd OpenReader
 ```
 
 2. Install dependencies.

@@ -292,7 +292,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           <footer className="landing-footer">
             <div className="landing-footer-inner">
               <a
-                href="https://github.com/richardr1126/OpenReader-WebUI#readme"
+                href="https://github.com/richardr1126/openreader#readme"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="landing-footer-link-bold"
