@@ -76,7 +76,7 @@ type OpenReaderDB = Dexie & {
 
 export const db = new Dexie(DB_NAME) as OpenReaderDB;
 
-const isDev = process.env.NEXT_PUBLIC_NODE_ENV !== 'production' || process.env.NODE_ENV == null;
+
 
 type DexieOpenStatus = 'opening' | 'opened' | 'blocked' | 'stalled' | 'error';
 
@@ -113,8 +113,8 @@ function inferProviderAndBaseUrl(raw: RawConfigMap): { provider: string; baseUrl
   const cachedBaseUrl = raw.baseUrl;
   let inferredProvider = raw.ttsProvider || '';
 
-  if (!isDev && !raw.ttsProvider) {
-    inferredProvider = 'deepinfra';
+  if (!raw.ttsProvider) {
+    inferredProvider = process.env.NEXT_PUBLIC_DEFAULT_TTS_PROVIDER || 'custom-openai';
   } else if (!inferredProvider) {
     if (cachedBaseUrl) {
       const baseUrlLower = cachedBaseUrl.toLowerCase();
@@ -194,8 +194,8 @@ function buildAppConfigFromRaw(raw: RawConfigMap): AppConfigRow {
       (provider === 'openai'
         ? 'tts-1'
         : provider === 'deepinfra'
-        ? 'hexgrad/Kokoro-82M'
-        : APP_CONFIG_DEFAULTS.ttsModel),
+          ? 'hexgrad/Kokoro-82M'
+          : APP_CONFIG_DEFAULTS.ttsModel),
     ttsInstructions: raw.ttsInstructions ?? APP_CONFIG_DEFAULTS.ttsInstructions,
     savedVoices,
     pdfHighlightEnabled:

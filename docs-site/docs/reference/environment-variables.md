@@ -9,7 +9,11 @@ This is the single reference page for OpenReader WebUI environment variables.
 
 | Variable | Area | Default | When to set |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_NODE_ENV` | Runtime mode | treated as `development` unless `production` | Set `production` for production client behavior |
+| `NEXT_PUBLIC_ENABLE_DOCX_CONVERSION` | Client feature flags | `true` unless set to `false` | Set `false` to hide DOCX support |
+| `NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS` | Client feature flags | `true` unless set to `false` | Set `false` to hide destructive actions |
+| `NEXT_PUBLIC_DEFAULT_TTS_PROVIDER` | Client feature flags | `custom-openai` | Override default TTS provider |
+| `NEXT_PUBLIC_DEFAULT_TTS_MODEL` | Client feature flags | `kokoro` | Override default TTS model |
+| `NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS` | Client feature flags | `true` unless set to `false` | Set `false` to restrict DeepInfra models |
 | `NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT` | Client feature flags | `true` unless set to `false` | Set `false` to hide audiobook export UI |
 | `NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT` | Client feature flags | `false` unless set to `true` | Set `true` to enable word highlight + alignment |
 | `API_BASE` | TTS provider | none | Point to your OpenAI-compatible TTS base URL |
@@ -50,41 +54,7 @@ This is the single reference page for OpenReader WebUI environment variables.
 | `WHISPER_CPP_BIN` | Word timing | unset | Set to enable `whisper.cpp` timestamps |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 
-## Client Runtime and Feature Flags
 
-### NEXT_PUBLIC_NODE_ENV
-
-Controls development vs production behavior in client/server code paths.
-
-- Typical values: `development`, `production`
-- OpenReader `isDev` checks rely on this variable directly
-- If this is not `production`, OpenReader treats the client as development mode
-- In deployed environments, set `NEXT_PUBLIC_NODE_ENV=production` explicitly for predictable production behavior
-- Affects:
-  - Footer visibility in the app shell
-  - DOCX upload/conversion availability in upload UI
-  - Default provider/model behavior for first-run TTS config
-  - DeepInfra model picker restrictions when no API key is set
-  - Dev-only destructive document actions in settings
-
-### NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT
-
-Controls whether audiobook export UI/actions are shown in the client.
-
-- Default behavior: enabled unless explicitly set to `false`
-- Applies in both development and production
-- Affects export entry points in PDF/EPUB pages and document settings UI
-
-### NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT
-
-Controls word-by-word highlighting UI and timestamp-alignment behavior.
-
-- Default behavior: disabled unless set to `true`
-- Applies in both development and production
-- Requires working timestamp generation (for example `WHISPER_CPP_BIN`)
-- Affects:
-  - Word-highlight toggles in document settings
-  - Alignment requests during TTS playback
 
 ## TTS Provider and Request Behavior
 
@@ -367,3 +337,59 @@ Absolute path or executable name for the ffmpeg binary used by audiobook/process
 
 - Resolution order: `FFMPEG_BIN` -> `ffmpeg-static`
 - Example: `/var/task/node_modules/ffmpeg-static/ffmpeg`
+
+## Client Runtime and Feature Flags
+
+### NEXT_PUBLIC_ENABLE_DOCX_CONVERSION
+ 
+ Controls whether the experimental DOCX-to-PDF conversion and upload feature is enabled.
+ 
+ - Default: `true` (enabled)
+ - Set `false` to hide DOCX support in the upload UI
+ 
+ ### NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS
+ 
+ Controls whether the "Delete all user docs" and other bulk-delete buttons are shown in Settings.
+ 
+ - Default: `true` (enabled)
+ - Set `false` to hide destructive actions (recommended for production)
+ 
+ ### NEXT_PUBLIC_DEFAULT_TTS_PROVIDER
+ 
+ Sets the default TTS provider for new users.
+ 
+ - Default: `custom-openai`
+ - Example values: `deepinfra`, `openai`, `custom-openai`
+ 
+ ### NEXT_PUBLIC_DEFAULT_TTS_MODEL
+ 
+ Sets the default TTS model for new users.
+ 
+ - Default: `kokoro`
+ - Example values: `hexgrad/Kokoro-82M`, `tts-1`
+ 
+ ### NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS
+ 
+ Controls whether the DeepInfra model list shows all models or just the free tier when no API key is set.
+ 
+ - Default: `true` (show all)
+ - Set `false` to restrict to free tier models when no API key is provided
+
+### NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT
+
+Controls whether audiobook export UI/actions are shown in the client.
+
+- Default behavior: enabled unless explicitly set to `false`
+- Applies in both development and production
+- Affects export entry points in PDF/EPUB pages and document settings UI
+
+### NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT
+
+Controls word-by-word highlighting UI and timestamp-alignment behavior.
+
+- Default behavior: disabled unless set to `true`
+- Applies in both development and production
+- Requires working timestamp generation (for example `WHISPER_CPP_BIN`)
+- Affects:
+  - Word-highlight toggles in document settings
+  - Alignment requests during TTS playback

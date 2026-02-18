@@ -6,7 +6,8 @@ import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { uploadDocxAsPdf } from '@/lib/client-documents';
 
-const isDev = process.env.NEXT_PUBLIC_NODE_ENV !== 'production' || process.env.NODE_ENV == null;
+const enableDocx = process.env.NEXT_PUBLIC_ENABLE_DOCX_CONVERSION !== 'false';
+
 
 interface DocumentUploaderProps {
   className?: string;
@@ -14,8 +15,8 @@ interface DocumentUploaderProps {
 }
 
 export function DocumentUploader({ className = '', variant = 'default' }: DocumentUploaderProps) {
-  const { 
-    addPDFDocument: addPDF, 
+  const {
+    addPDFDocument: addPDF,
     addEPUBDocument: addEPUB,
     addHTMLDocument: addHTML,
     refreshDocuments,
@@ -38,7 +39,7 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
           await addEPUB(file);
         } else if (file.type === 'text/plain' || file.type === 'text/markdown' || file.name.endsWith('.md')) {
           await addHTML(file);
-        } else if (isDev && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        } else if (enableDocx && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
           // Preserve prior UX: show "Converting DOCX..." state rather than generic uploading.
           setIsUploading(false);
           setIsConverting(true);
@@ -65,7 +66,7 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
       'application/epub+zip': ['.epub'],
       'text/plain': ['.txt'],
       'text/markdown': ['.md'],
-      ...(isDev ? {
+      ...(enableDocx ? {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
       } : {})
     },
@@ -111,7 +112,7 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
                 {isDragActive ? 'Drop your file(s) here' : 'Drop your file(s) here, or click to select'}
               </p>
               <p className="text-xs sm:text-sm text-muted">
-                {isDev ? 'PDF, EPUB, TXT, MD, or DOCX files are accepted' : 'PDF, EPUB, TXT, or MD files are accepted'}
+                {enableDocx ? 'PDF, EPUB, TXT, MD, or DOCX files are accepted' : 'PDF, EPUB, TXT, or MD files are accepted'}
               </p>
               {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
             </>

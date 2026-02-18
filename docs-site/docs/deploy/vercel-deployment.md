@@ -18,6 +18,8 @@ This guide covers deploying OpenReader WebUI to Vercel with external Postgres an
 Recommended production setup (auth enabled):
 
 ```bash
+API_BASE=https://api.deepinfra.com/v1/openai
+API_KEY=your_deepinfra_key
 POSTGRES_URL=postgres://...
 USE_EMBEDDED_WEED_MINI=false
 S3_ACCESS_KEY_ID=...
@@ -27,34 +29,29 @@ S3_REGION=us-east-1
 S3_PREFIX=openreader
 BASE_URL=https://your-app.vercel.app
 AUTH_SECRET=...
-NEXT_PUBLIC_NODE_ENV=production
-# Optional client/runtime feature overrides:
-# NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT=false
-# NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT=true
+# Optional client/runtime feature defaults:
+NEXT_PUBLIC_ENABLE_DOCX_CONVERSION=false
+NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS=false
+NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=deepinfra
+NEXT_PUBLIC_DEFAULT_TTS_MODEL=hexgrad/Kokoro-82M
+NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS=false
+NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT=true
+NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT=false
 # Optional (non-AWS S3-compatible providers):
 # S3_ENDPOINT=https://...
 # S3_FORCE_PATH_STYLE=true
 ```
 
-:::info `NEXT_PUBLIC_*` feature flags
-- `NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT=false`: hides audiobook export UI entry points.
-- `NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT=true`: enables word-highlight UI and timestamp alignment requests.
-:::
+:::info Production Configuration & Feature Flags
+We recommend setting these defaults for a production-like environment:
 
-:::warning `NEXT_PUBLIC_NODE_ENV` behavior
-Use `NEXT_PUBLIC_NODE_ENV=production` on Vercel unless you explicitly want dev-oriented client behavior.
-
-With `production`:
-- Footer is shown in the app shell
-- DOCX upload/conversion option is hidden
-- Default provider/model behavior is production-oriented
-- DeepInfra model picker is restricted without an API key
-- Privacy modal shows hosted-service/operator wording
-- Dev-only destructive document actions are hidden
-
-With unset/non-`production`, the inverse dev behavior applies.
-
-Full details: [Environment Variables](../reference/environment-variables#next_public_node_env).
+- `NEXT_PUBLIC_ENABLE_DOCX_CONVERSION=false`: Disables DOCX upload (requires external tools anyway)
+- `NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS=false`: Hides destructive "Delete All" actions
+- `NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=deepinfra`: Points default TTS to a scalable provider
+- `NEXT_PUBLIC_DEFAULT_TTS_MODEL=hexgrad/Kokoro-82M`: Uses a high-quality default model
+- `NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS=false`: Restricts usage to free models if no key is provided
+- `NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT=true`: (Optional) Controls audiobook export UI
+- `NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT=false`: (Optional) Controls word highlighting UI (requires timestamp backend)
 :::
 
 :::warning Auth recommendation

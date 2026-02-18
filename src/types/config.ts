@@ -1,6 +1,6 @@
 import type { DocumentListState } from '@/types/documents';
 
-const isDev = process.env.NEXT_PUBLIC_NODE_ENV !== 'production' || process.env.NODE_ENV == null;
+
 const wordHighlightEnabledByDefault = process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT === 'true';
 
 export type ViewType = 'single' | 'dual' | 'scroll';
@@ -48,8 +48,8 @@ export const APP_CONFIG_DEFAULTS: AppConfigValues = {
   footerMargin: 0,
   leftMargin: 0,
   rightMargin: 0,
-  ttsProvider: isDev ? 'custom-openai' : 'deepinfra',
-  ttsModel: isDev ? 'kokoro' : 'hexgrad/Kokoro-82M',
+  ttsProvider: process.env.NEXT_PUBLIC_DEFAULT_TTS_PROVIDER || 'custom-openai',
+  ttsModel: process.env.NEXT_PUBLIC_DEFAULT_TTS_MODEL || 'kokoro',
   ttsInstructions: '',
   savedVoices: {},
   smartSentenceSplitting: true,

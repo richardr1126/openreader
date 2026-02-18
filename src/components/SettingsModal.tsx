@@ -40,7 +40,9 @@ import { deleteDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client-d
 import { cacheStoredDocumentFromBytes, clearDocumentCache } from '@/lib/document-cache';
 import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from '@/lib/document-preview-cache';
 
-const isDev = process.env.NEXT_PUBLIC_NODE_ENV !== 'production' || process.env.NODE_ENV == null;
+const enableDestructiveDelete = process.env.NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS !== 'false';
+const showAllDeepInfra = process.env.NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS !== 'false';
+
 
 const themes = THEMES.map(id => ({
   id,
@@ -108,7 +110,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
         ];
       case 'deepinfra':
         // In production without an API key, limit to free tier model
-        if (!isDev && !localApiKey) {
+        if (!showAllDeepInfra && !localApiKey) {
           return [
             { id: 'hexgrad/Kokoro-82M', name: 'hexgrad/Kokoro-82M' }
           ];
@@ -561,7 +563,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               type="password"
                               value={localApiKey}
                               onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                              placeholder={!isDev && localTTSProvider === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
+                              placeholder={!showAllDeepInfra && localTTSProvider === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
                               className="w-full rounded-lg bg-background py-1.5 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
                             />
                           </div>
@@ -782,7 +784,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                             >
                               Clear cache
                             </Button>
-                            {isDev && (
+                            {enableDestructiveDelete && (
                               <div className="flex w-full gap-2">
                                 <Button
                                   onClick={() => {
