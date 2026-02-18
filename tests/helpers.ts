@@ -177,6 +177,15 @@ export async function setupTest(page: Page, testInfo?: TestInfo) {
   // Mock the TTS API so tests don't hit the real TTS service.
   await ensureTtsRouteMock(page);
 
+  // Pre-seed consent to prevent the cookie banner from blocking interactions.
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem('cookie-consent', 'accepted');
+    } catch {
+      // ignore storage errors in restricted contexts
+    }
+  });
+
   // If auth is enabled, establish an anonymous session BEFORE navigation.
   // This keeps each test self-contained (no shared storageState) while ensuring
   // server routes that require auth don't intermittently 401 during app startup.
@@ -194,15 +203,26 @@ export async function setupTest(page: Page, testInfo?: TestInfo) {
 
   // Privacy modal should come first in onboarding.
   // Be tolerant if it's already accepted (e.g., reused context).
-  const privacyBtn = page.getByRole('button', { name: 'I Understand' });
+  const privacyBtn = page.getByRole('button', { name: /Continue|I Understand/i });
   try {
     await expect(privacyBtn).toBeVisible({ timeout: 5000 });
+    const privacyAgree = page.locator('#privacy-agree');
+    if ((await privacyAgree.count()) > 0) {
+      await privacyAgree.check();
+    }
+    await expect(privacyBtn).toBeEnabled({ timeout: 5000 });
     await privacyBtn.click();
     // HeadlessUI keeps dialogs in the DOM during leave transitions; "hidden" is enough
     // (we mainly need to ensure it no longer blocks pointer events).
     await page.getByRole('dialog', { name: /privacy/i }).waitFor({ state: 'hidden', timeout: 15000 });
   } catch {
     // ignore
+  }
+
+  // Fallback: if the banner still appears, dismiss it before continuing.
+  const cookieAcceptBtn = page.getByRole('button', { name: 'Accept All' });
+  if (await cookieAcceptBtn.isVisible().catch(() => false)) {
+    await cookieAcceptBtn.click();
   }
 
   // Settings modal should appear after privacy acceptance on first visit.
@@ -488,7 +508,7 @@ export async function waitForDocumentListHintPersist(page: Page, expected: boole
         req.onerror = () => reject(req.error);
       });
       const db = await openDb();
-      const readConfig = () => new Promise<any>((resolve, reject) => {
+      const readConfig = () => new Promise<unknown>((resolve, reject) => {
         const tx = db.transaction(['app-config'], 'readonly');
         const store = tx.objectStore('app-config');
         const getReq = store.get('singleton');
@@ -497,10 +517,11 @@ export async function waitForDocumentListHintPersist(page: Page, expected: boole
       });
       const item = await readConfig();
       db.close();
-      if (!item || typeof item.documentListState !== 'object') return false;
-      const state = item.documentListState;
-      if (!state || typeof state.showHint !== 'boolean') return false;
-      return state.showHint === exp;
+      if (!item || typeof item !== 'object') return false;
+      const state = (item as { documentListState?: unknown }).documentListState;
+      if (!state || typeof state !== 'object') return false;
+      const showHint = (state as { showHint?: unknown }).showHint;
+      return typeof showHint === 'boolean' && showHint === exp;
     } catch {
       return false;
     }

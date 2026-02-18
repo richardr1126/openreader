@@ -1184,22 +1184,22 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           if (!estimate || estimate.sentenceIndex !== sentenceIndex) return;
           if (!visualPageChangeHandlerRef.current) return;
 
-            const duration = this.duration();
-            if (!duration || !Number.isFinite(duration)) return;
+          const duration = this.duration();
+          if (!duration || !Number.isFinite(duration)) return;
 
-            const delayMs = duration * estimate.fraction * 1000;
-            if (delayMs <= 0 || delayMs >= duration * 1000) return;
+          const delayMs = duration * estimate.fraction * 1000;
+          if (delayMs <= 0 || delayMs >= duration * 1000) return;
 
-            if (pageTurnTimeoutRef.current) {
-              clearTimeout(pageTurnTimeoutRef.current);
-            }
+          if (pageTurnTimeoutRef.current) {
+            clearTimeout(pageTurnTimeoutRef.current);
+          }
 
-            pageTurnTimeoutRef.current = setTimeout(() => {
-              if (!isPlaying) return;
-              const currentEstimate = pageTurnEstimateRef.current;
-              if (!currentEstimate || currentEstimate.sentenceIndex !== sentenceIndex) return;
-              visualPageChangeHandlerRef.current?.(currentEstimate.location);
-            }, delayMs);
+          pageTurnTimeoutRef.current = setTimeout(() => {
+            if (!isPlaying) return;
+            const currentEstimate = pageTurnEstimateRef.current;
+            if (!currentEstimate || currentEstimate.sentenceIndex !== sentenceIndex) return;
+            visualPageChangeHandlerRef.current?.(currentEstimate.location);
+          }, delayMs);
         },
         onplay: function (this: Howl) {
           setIsProcessing(false);
@@ -1308,26 +1308,26 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             this.unload();
             setIsPlaying(false);
 
-              toast.error('Audio loading failed after retries. Moving to next sentence...', {
-                id: 'audio-load-error',
-                duration: 2000,
-              });
+            toast.error('Audio loading failed after retries. Moving to next sentence...', {
+              id: 'audio-load-error',
+              duration: 2000,
+            });
 
-              advance();
-            }
-          },
-          onend: function (this: Howl) {
-            clearRateWatchdog();
-            this.unload();
-            setActiveHowl(null);
-            if (pageTurnTimeoutRef.current) {
-              clearTimeout(pageTurnTimeoutRef.current);
-              pageTurnTimeoutRef.current = null;
-            }
-            if (isPlaying) {
-              advance();
-            }
-          },
+            advance();
+          }
+        },
+        onend: function (this: Howl) {
+          clearRateWatchdog();
+          this.unload();
+          setActiveHowl(null);
+          if (pageTurnTimeoutRef.current) {
+            clearTimeout(pageTurnTimeoutRef.current);
+            pageTurnTimeoutRef.current = null;
+          }
+          if (isPlaying) {
+            advance();
+          }
+        },
         onstop: function (this: Howl) {
           clearRateWatchdog();
           setIsProcessing(false);

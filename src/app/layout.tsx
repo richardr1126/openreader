@@ -1,8 +1,9 @@
 import "./globals.css";
 import { ReactNode } from "react";
 import { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import { Figtree } from "next/font/google";
+import { ConsentAwareAnalytics } from "@/components/ConsentAwareAnalytics";
+import { CookieConsentBanner } from "@/components/CookieConsentBanner";
 
 const figtree = Figtree({
   subsets: ["latin"],
@@ -47,7 +48,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="antialiased">
         {children}
-        <Analytics />
+        <CookieConsentBanner />
+        <ConsentAwareAnalytics />
       </body>
     </html>
   );

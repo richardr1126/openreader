@@ -22,6 +22,14 @@ function isNodeReadableStream(value: unknown): value is NodeJS.ReadableStream {
   return !!value && typeof value === 'object' && 'on' in value && typeof (value as NodeJS.ReadableStream).on === 'function';
 }
 
+export type DocumentBlobBody =
+  | NodeJS.ReadableStream
+  | ReadableStream<Uint8Array>
+  | Uint8Array
+  | ArrayBuffer
+  | ArrayBufferView
+  | { transformToByteArray: () => Promise<Uint8Array> };
+
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {
@@ -87,6 +95,7 @@ export async function presignPut(
     Key: key,
     ContentType: normalizedType,
     IfNoneMatch: '*',
+    ServerSideEncryption: 'AES256',
   });
   const url = await getSignedUrl(client, command, { expiresIn: 60 * 5 });
 
@@ -95,6 +104,7 @@ export async function presignPut(
     headers: {
       'Content-Type': normalizedType,
       'If-None-Match': '*',
+      'x-amz-server-side-encryption': 'AES256',
     },
   };
 }
@@ -146,6 +156,19 @@ export async function getDocumentBlob(id: string, namespace: string | null): Pro
   return bodyToBuffer(res.Body);
 }
 
+export async function getDocumentBlobStream(id: string, namespace: string | null): Promise<DocumentBlobBody> {
+  const cfg = getS3Config();
+  const client = getS3Client();
+  const key = documentKey(id, namespace);
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+    }),
+  );
+  return res.Body as DocumentBlobBody;
+}
+
 export async function presignGet(
   id: string,
   namespace: string | null,
@@ -180,6 +203,7 @@ export async function putDocumentBlob(
       Body: body,
       ContentType: contentType,
       IfNoneMatch: '*',
+      ServerSideEncryption: 'AES256',
     }),
   );
 }

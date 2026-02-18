@@ -20,6 +20,14 @@ export type AudiobookBlobObject = {
   eTag: string | null;
 };
 
+export type AudiobookBlobBody =
+  | NodeJS.ReadableStream
+  | ReadableStream<Uint8Array>
+  | Uint8Array
+  | ArrayBuffer
+  | ArrayBufferView
+  | { transformToByteArray: () => Promise<Uint8Array> };
+
 function sanitizeNamespace(namespace: string | null): string | null {
   if (!namespace) return null;
   if (!SAFE_NAMESPACE_REGEX.test(namespace)) return null;
@@ -173,12 +181,17 @@ export async function getAudiobookObjectBuffer(bookId: string, userId: string, f
   return bodyToBuffer(res.Body);
 }
 
-export async function getAudiobookObjectStream(bookId: string, userId: string, fileName: string, namespace: string | null): Promise<unknown> {
+export async function getAudiobookObjectStream(
+  bookId: string,
+  userId: string,
+  fileName: string,
+  namespace: string | null,
+): Promise<AudiobookBlobBody> {
   const cfg = getS3Config();
   const client = getS3Client();
   const key = audiobookKey(bookId, userId, fileName, namespace);
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
-  return res.Body;
+  return res.Body as AudiobookBlobBody;
 }
 
 export async function putAudiobookObject(
@@ -199,6 +212,7 @@ export async function putAudiobookObject(
       Key: key,
       Body: body,
       ContentType: contentType,
+      ServerSideEncryption: 'AES256',
       ...(options?.ifNoneMatch ? { IfNoneMatch: '*' } : {}),
     }),
   );

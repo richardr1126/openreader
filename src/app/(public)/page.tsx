@@ -347,7 +347,10 @@ export default async function LandingPage({
       {/* ── HERO ───────────────────── */}
       <section className="landing-hero">
         <div className="landing-hero-badge">
-          Document Reader + TTS
+          {process.env.RICHARDRDEV_PRODUCTION === 'true'
+            ? "Official OpenReader Instance"
+            : "Open Source Document Reader"
+          }
         </div>
         <h1>
           Your documents, <span>read&nbsp;aloud</span>
@@ -360,7 +363,7 @@ export default async function LandingPage({
         <div className="landing-hero-actions">
           <Link href="/app" className="landing-btn landing-btn-accent">
             Open App
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
           </Link>
           <Link href="/signin" className="landing-btn landing-btn-ghost">Sign In</Link>
           <Link href="/signup" className="landing-btn landing-btn-ghost">Sign Up</Link>

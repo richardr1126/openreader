@@ -65,7 +65,6 @@ Controls development vs production behavior in client/server code paths.
   - DOCX upload/conversion availability in upload UI
   - Default provider/model behavior for first-run TTS config
   - DeepInfra model picker restrictions when no API key is set
-  - Privacy modal wording (hosted-service vs local/dev wording)
   - Dev-only destructive document actions in settings
 
 ### NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT

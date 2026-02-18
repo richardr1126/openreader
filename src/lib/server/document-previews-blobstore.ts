@@ -117,6 +117,7 @@ export async function putDocumentPreviewBuffer(
       Key: key,
       Body: bytes,
       ContentType: DOCUMENT_PREVIEW_CONTENT_TYPE,
+      ServerSideEncryption: 'AES256',
       ...(options?.ifNoneMatch ? { IfNoneMatch: '*' } : {}),
     }),
   );

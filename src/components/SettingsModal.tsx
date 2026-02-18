@@ -845,7 +845,22 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               </div>
                             </div>
 
-                            <div className="space-y-3 pt-2">
+                            <div className="space-y-2">
+                              {session?.user && (
+                                <Button
+                                  onClick={() => {
+                                    window.open('/api/user/export', '_blank');
+                                  }}
+                                  className="w-full flex flex-col items-center justify-center rounded-lg bg-background border border-offbase px-3 py-2 text-sm 
+                                           font-medium text-foreground hover:bg-offbase focus:outline-none 
+                                           focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
+                                           transform transition-transform duration-200 ease-in-out hover:scale-[1.02]"
+                                >
+                                  <span>Export My Data</span>
+                                  <span className="text-xs text-muted font-normal mt-0.5">Download metadata, uploaded documents, and generated audiobooks (ZIP)</span>
+                                </Button>
+                              )}
+
                               {session?.user && !session.user.isAnonymous ? (
                                 <>
                                   <Button
@@ -859,7 +874,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                   </Button>
 
                                   <div className="pt-4 border-t border-offbase">
-                                    <h4 className="text-sm font-medium text-red-500 mb-2">Danger Zone</h4>
+                                    <label className="block text-sm font-medium text-red-500 mb-2">Danger Zone</label>
                                     <Button
                                       onClick={() => setShowDeleteAccountConfirm(true)}
                                       className="w-full justify-center rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm 

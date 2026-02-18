@@ -11,120 +11,37 @@ import {
 } from '@headlessui/react';
 import { updateAppConfig, getAppConfig } from '@/lib/dexie';
 
-const isDev = process.env.NEXT_PUBLIC_NODE_ENV !== 'production' || process.env.NODE_ENV == null;
-
 interface PrivacyModalProps {
   onAccept?: () => void;
   authEnabled?: boolean;
 }
 
-function PrivacyModalBody({
-  origin,
-  authEnabled,
-}: {
-  origin: string;
-  authEnabled: boolean;
-}) {
-  if (!isDev) {
-    return (
-      <div className="mt-4 space-y-4 text-sm text-foreground/90">
-        <div className="rounded-lg border border-offbase bg-offbase/40 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Service operator visibility</div>
-          <div className="mt-2">
-            This OpenReader instance is hosted at <span className="font-bold">{origin || 'this server'}</span>. The operator
-            of this service can access data that reaches the service.
-          </div>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Stored in your browser (IndexedDB)</div>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Document and preview cache</li>
-            <li>Settings + privacy acceptance</li>
-            <li>Reading progress (local fallback)</li>
-          </ul>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Sent to this service</div>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Uploaded files + metadata (PDF/EPUB/HTML; DOCX converted server-side)</li>
-            <li>TTS text + settings (optional custom API key/base URL)</li>
-            <li>Request metadata (IP/user agent) and optional alignment audio/text</li>
-          </ul>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Stored on this service</div>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Uploaded docs, metadata, and preview images</li>
-            <li>Generated audiobooks and temporary TTS cache</li>
-            {authEnabled ? (
-              <li>Account/session data, synced preferences/progress, and rate-limit counters</li>
-            ) : (
-              <li>Auth disabled: no account/session tables</li>
-            )}
-          </ul>
-        </div>
-
-        <div className="text-xs text-muted">
-          This site uses Vercel Analytics to collect anonymous usage data. For maximum privacy, use self-hosted mode.
-        </div>
-      </div>
-    );
-  }
-
+function PrivacyModalBody({ origin }: { origin: string }) {
   return (
     <div className="mt-4 space-y-4 text-sm text-foreground/90">
       <div className="rounded-lg border border-offbase bg-offbase/40 p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Server owner visibility</div>
-        <div className="mt-2">
-          This OpenReader instance is hosted at <span className="font-bold">{origin || 'this server'}</span>. The operator
-          of this server can access data that reaches the server.
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Service Operator</div>
+        <div className="mt-1">
+          This instance is hosted at <span className="font-bold">{origin || 'this server'}</span>.
         </div>
       </div>
 
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Stored in your browser (IndexedDB)</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Document and preview cache</li>
-          <li>Settings + privacy acceptance</li>
-          <li>Reading progress (local fallback)</li>
-        </ul>
-      </div>
+      <p className="leading-relaxed">
+        We value your privacy. This application uses strictly necessary cookies for authentication
+        and anonymous analytics to improve performance. Your documents are stored securely and encrypted at rest.
+      </p>
 
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Sent to this server</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Uploaded files + metadata (PDF/EPUB/HTML; DOCX converted server-side)</li>
-          <li>TTS text + settings (optional custom API key/base URL)</li>
-          <li>Request metadata (IP/user agent; device ID if rate limiting is enabled) and optional alignment audio/text</li>
-        </ul>
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Stored on this server</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Uploaded docs, metadata, and preview images</li>
-          <li>Generated audiobooks and temporary TTS cache</li>
-          {authEnabled ? (
-            <li>Account/session data, synced preferences/progress, and rate-limit counters</li>
-          ) : (
-            <li>Auth disabled: no account/session tables</li>
-          )}
-        </ul>
-      </div>
-
-      <div className="text-xs text-muted">
-        Tip: If you are behind a reverse proxy, the proxy operator may also have access to request logs.
-      </div>
+      <p className="leading-relaxed">
+        For full details on data collection, processing, and your rights, please review our complete Privacy Policy.
+      </p>
     </div>
   );
 }
 
-export function PrivacyModal({ onAccept, authEnabled = false }: PrivacyModalProps) {
+export function PrivacyModal({ onAccept }: PrivacyModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [origin, setOrigin] = useState('');
+  const [agreed, setAgreed] = useState(false);
 
   const checkPrivacyAccepted = useCallback(async () => {
     const config = await getAppConfig();
@@ -187,19 +104,43 @@ export function PrivacyModal({ onAccept, authEnabled = false }: PrivacyModalProp
                   Privacy & Data Usage
                 </DialogTitle>
 
-                <PrivacyModalBody origin={origin} authEnabled={authEnabled} />
+                <PrivacyModalBody origin={origin} />
 
-                <div className="mt-6 flex justify-end">
-                  <Button
-                    type="button"
-                    className="inline-flex justify-center rounded-lg bg-accent px-4 py-2 text-sm 
-                             font-medium text-background hover:bg-secondary-accent focus:outline-none 
-                             focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-200 ease-in-out hover:scale-[1.04]"
-                    onClick={handleAccept}
-                  >
-                    I Understand
-                  </Button>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-start gap-3 rounded-lg border border-offbase p-3 bg-offbase/20">
+                    <div className="flex h-6 items-center">
+                      <input
+                        id="privacy-agree"
+                        type="checkbox"
+                        checked={agreed}
+                        onChange={(e) => setAgreed(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent bg-base"
+                      />
+                    </div>
+                    <div className="text-sm leading-6">
+                      <label htmlFor="privacy-agree" className="font-medium text-foreground select-none cursor-pointer">
+                        I have read and agree to the
+                      </label>{' '}
+                      <a href="/privacy" target="_blank" className="font-semibold text-accent hover:underline">
+                        Privacy Policy
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      disabled={!agreed}
+                      className="inline-flex justify-center rounded-lg bg-accent px-4 py-2 text-sm 
+                               font-medium text-background hover:bg-secondary-accent
+                               disabled:opacity-50 disabled:cursor-not-allowed
+                               focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
+                               transform transition-transform duration-200 ease-in-out enabled:hover:scale-[1.04]"
+                      onClick={handleAccept}
+                    >
+                      Continue
+                    </Button>
+                  </div>
                 </div>
               </DialogPanel>
             </TransitionChild>
@@ -221,7 +162,7 @@ export function showPrivacyModal(options?: { authEnabled?: boolean }): void {
   document.body.appendChild(container);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const authEnabled = Boolean(options?.authEnabled);
+  void options;
 
   // Import React and render the popup
   import('react-dom/client').then(({ createRoot }) => {
@@ -277,7 +218,7 @@ export function showPrivacyModal(options?: { authEnabled?: boolean }): void {
                         Privacy & Data Usage
                       </DialogTitle>
 
-                      <PrivacyModalBody origin={origin} authEnabled={authEnabled} />
+                      <PrivacyModalBody origin={origin} />
 
                       <div className="mt-6 flex justify-end">
                         <Button
