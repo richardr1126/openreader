@@ -101,7 +101,8 @@ interface SetTextOptions {
 
 const CONTINUATION_LOOKAHEAD = 600;
 const SENTENCE_ENDING = /[.?!…]["'”’)\]]*\s*$/;
-const wordHighlightFeatureEnabled = process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT === 'true';
+const wordHighlightFeatureEnabled =
+  process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
 
 // Tiny silent WAV used to unlock HTML5 audio on iOS/Safari.
 const SILENT_WAV_DATA_URI =

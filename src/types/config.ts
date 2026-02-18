@@ -1,7 +1,8 @@
 import type { DocumentListState } from '@/types/documents';
 
 
-const wordHighlightEnabledByDefault = process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT === 'true';
+const wordHighlightEnabledByDefault =
+  process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
 
 export type ViewType = 'single' | 'dual' | 'scroll';
 

@@ -15,7 +15,7 @@ This is the single reference page for OpenReader WebUI environment variables.
 | `NEXT_PUBLIC_DEFAULT_TTS_MODEL` | Client feature flags | `kokoro` | Override default TTS model |
 | `NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS` | Client feature flags | `true` unless set to `false` | Set `false` to restrict DeepInfra models |
 | `NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT` | Client feature flags | `true` unless set to `false` | Set `false` to hide audiobook export UI |
-| `NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT` | Client feature flags | `false` unless set to `true` | Set `true` to enable word highlight + alignment |
+| `NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT` | Client feature flags | `true` unless set to `false` | Set `false` to disable word highlight + alignment |
 | `API_BASE` | TTS provider | none | Point to your OpenAI-compatible TTS base URL |
 | `API_KEY` | TTS provider | `none` fallback in TTS route | Set when provider requires auth |
 | `TTS_CACHE_MAX_SIZE_BYTES` | TTS caching | `268435456` (256 MB) | Tune in-memory TTS cache size |
@@ -387,7 +387,7 @@ Controls whether audiobook export UI/actions are shown in the client.
 
 Controls word-by-word highlighting UI and timestamp-alignment behavior.
 
-- Default behavior: disabled unless set to `true`
+- Default behavior: enabled unless explicitly set to `false`
 - Applies in both development and production
 - Requires working timestamp generation (for example `WHISPER_CPP_BIN`)
 - Affects:

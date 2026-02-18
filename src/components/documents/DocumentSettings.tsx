@@ -12,7 +12,7 @@ import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 
 const canExportAudiobook = process.env.NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT !== 'false';
-const canWordHighlight = process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT === 'true';
+const canWordHighlight = process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
 
 const viewTypeTextMapping = [
   { id: 'single', name: 'Single Page' },
