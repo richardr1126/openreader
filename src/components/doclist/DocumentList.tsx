@@ -13,7 +13,7 @@ import { SortControls } from '@/components/doclist/SortControls';
 import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { Button } from '@headlessui/react';
-import { DocumentUploader } from '@/components/DocumentUploader';
+import { DocumentUploader } from '@/components/documents/DocumentUploader';
 
 type DocumentToDelete = {
   id: string;
@@ -318,7 +318,7 @@ export function DocumentList() {
             onViewModeChange={setViewMode}
           />
         </div>
-        
+
         <p className="text-xs text-muted mb-2" data-doc-summary>
           {summaryParts.join(' • ')}{summaryParts.length ? ' • ' : ''}{totalSizeMB} MB total
         </p>

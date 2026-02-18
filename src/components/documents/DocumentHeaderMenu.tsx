@@ -3,7 +3,7 @@
 import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon } from '@/components/icons/Icons';
-import { ZoomControl } from '@/components/ZoomControl';
+import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
 
 interface DocumentHeaderMenuProps {

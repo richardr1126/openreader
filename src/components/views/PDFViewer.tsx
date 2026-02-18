@@ -5,7 +5,7 @@ import { Document, Page } from 'react-pdf';
 import type { Dest } from 'react-pdf/src/shared/types.js';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { DocumentSkeleton } from '@/components/DocumentSkeleton';
+import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { useTTS } from '@/contexts/TTSContext';
 import { usePDF } from '@/contexts/PDFContext';
 import { useConfig } from '@/contexts/ConfigContext';

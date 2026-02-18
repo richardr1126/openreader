@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useEPUB } from '@/contexts/EPUBContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
-import { DocumentSkeleton } from '@/components/DocumentSkeleton';
+import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { useEPUBTheme, getThemeStyles } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import { DotsVerticalIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';

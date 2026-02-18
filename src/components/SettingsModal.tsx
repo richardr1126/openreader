@@ -29,7 +29,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import { THEMES } from '@/contexts/ThemeContext';
-import { DocumentSelectionModal } from '@/components/DocumentSelectionModal';
+import { DocumentSelectionModal } from '@/components/documents/DocumentSelectionModal';
 import { BaseDocument } from '@/types/documents';
 import { getAuthClient } from '@/lib/auth-client';
 import { useAuthSession } from '@/hooks/useAuthSession';

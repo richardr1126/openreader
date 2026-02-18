@@ -4,15 +4,15 @@ import { useParams, useRouter } from "next/navigation";
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHTML } from '@/contexts/HTMLContext';
-import { DocumentSkeleton } from '@/components/DocumentSkeleton';
+import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
-import { DocumentSettings } from '@/components/DocumentSettings';
+import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { resolveDocumentId } from '@/lib/dexie';
-import { DocumentHeaderMenu } from '@/components/DocumentHeaderMenu';
+import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 

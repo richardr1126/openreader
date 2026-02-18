@@ -1,6 +1,6 @@
 'use client';
 
-import { DocumentUploader } from '@/components/DocumentUploader';
+import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { DocumentList } from '@/components/doclist/DocumentList';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { useDocuments } from '@/contexts/DocumentContext';
