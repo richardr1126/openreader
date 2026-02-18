@@ -42,10 +42,15 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    console.info('[blob-fallback] upload proxy used', {
+      id,
+      contentType,
+      bytes: body.byteLength,
+    });
+
     return NextResponse.json({ success: true, id });
   } catch (error) {
     console.error('Error proxy-uploading document blob:', error);
     return NextResponse.json({ error: 'Failed to upload document blob' }, { status: 500 });
   }
 }
-

@@ -65,6 +65,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
+    console.info('[blob-fallback] preview proxy used', {
+      id,
+      snippetRequested,
+    });
+
     const rows = (await db
       .select({
         id: documents.id,

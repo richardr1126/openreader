@@ -250,6 +250,13 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           gap: 0.35rem;
           font-weight: 600;
         }
+
+        @media (prefers-reduced-motion: reduce) {
+          .landing * {
+            animation: none !important;
+            transition: none !important;
+          }
+        }
       `}</style>
 
       <div className="landing">

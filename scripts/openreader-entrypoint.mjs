@@ -153,6 +153,17 @@ async function waitForEndpoint(url, timeoutSeconds) {
   throw new Error(`Embedded weed mini did not become ready at ${url} within ${timeoutSeconds}s.`);
 }
 
+function isRunningInDocker() {
+  if (process.platform !== 'linux') return false;
+  if (fs.existsSync('/.dockerenv')) return true;
+  try {
+    const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
+    return /(docker|containerd|kubepods|podman)/i.test(cgroup);
+  } catch {
+    return false;
+  }
+}
+
 function spawnMainCommand(command, env) {
   const [cmd, ...args] = command;
   const child = spawn(cmd, args, {
@@ -351,41 +362,42 @@ async function main() {
       runtimeEnv.S3_SECRET_ACCESS_KEY = withDefault(runtimeEnv.S3_SECRET_ACCESS_KEY, randomBytes(32).toString('hex'));
       runtimeEnv.AWS_ACCESS_KEY_ID = runtimeEnv.S3_ACCESS_KEY_ID;
       runtimeEnv.AWS_SECRET_ACCESS_KEY = runtimeEnv.S3_SECRET_ACCESS_KEY;
-
-
-
       fs.mkdirSync(runtimeEnv.WEED_MINI_DIR, { recursive: true });
+      const runningInDocker = isRunningInDocker();
+      const waitSec = Number.parseInt(runtimeEnv.WEED_MINI_WAIT_SEC || '20', 10);
+      const waitTimeout = Number.isFinite(waitSec) ? waitSec : 20;
+      const launchWeed = (endpointUrl) => {
+        const parsedEndpoint = parseS3Endpoint(endpointUrl);
+        const weedArgs = ['mini', `-dir=${runtimeEnv.WEED_MINI_DIR}`];
+        weedArgs.push(`-s3.port=${parsedEndpoint.port}`);
+        if (runningInDocker) {
+          weedArgs.push('-ip.bind=0.0.0.0');
+        }
+
+        weedProc = spawn('weed', weedArgs, {
+          env: runtimeEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        stopWeedStdoutForward = forwardChildStream(weedProc.stdout, process.stdout);
+        stopWeedStderrForward = forwardChildStream(weedProc.stderr, process.stderr);
+        weedExitPromise = once(weedProc, 'exit').then(() => undefined).catch(() => undefined);
+
+        weedProc.on('exit', (code, signal) => {
+          if (typeof code === 'number' && code !== 0) {
+            console.error(`Embedded weed mini exited with code ${code}.`);
+            return;
+          }
+          if (signal) {
+            console.error(`Embedded weed mini exited due to signal ${signal}.`);
+          }
+        });
+      };
 
       console.log('Starting embedded SeaweedFS weed mini...');
-      const weedArgs = ['mini', `-dir=${runtimeEnv.WEED_MINI_DIR}`];
-      if (configuredS3Endpoint || baseUrlHost) {
-        const endpoint = parseS3Endpoint(runtimeEnv.S3_ENDPOINT);
-        weedArgs.push(`-ip=${endpoint.hostname}`);
-        weedArgs.push(`-s3.port=${endpoint.port}`);
-      }
-
-      weedProc = spawn('weed', weedArgs, {
-        env: runtimeEnv,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      stopWeedStdoutForward = forwardChildStream(weedProc.stdout, process.stdout);
-      stopWeedStderrForward = forwardChildStream(weedProc.stderr, process.stderr);
-      weedExitPromise = once(weedProc, 'exit').then(() => undefined).catch(() => undefined);
-
-      weedProc.on('exit', (code, signal) => {
-        if (typeof code === 'number' && code !== 0) {
-          console.error(`Embedded weed mini exited with code ${code}.`);
-          return;
-        }
-        if (signal) {
-          console.error(`Embedded weed mini exited due to signal ${signal}.`);
-        }
-      });
-
-      const endpoint = runtimeEnv.S3_ENDPOINT;
-      const waitSec = Number.parseInt(runtimeEnv.WEED_MINI_WAIT_SEC || '20', 10);
-      await waitForEndpoint(endpoint, Number.isFinite(waitSec) ? waitSec : 20);
-      console.log(`Embedded SeaweedFS is ready at ${endpoint}`);
+      launchWeed(runtimeEnv.S3_ENDPOINT);
+      const startupEndpoint = parseS3Endpoint(runtimeEnv.S3_ENDPOINT);
+      await waitForEndpoint(`http://127.0.0.1:${startupEndpoint.port}`, waitTimeout);
+      console.log(`Embedded SeaweedFS is ready at ${runtimeEnv.S3_ENDPOINT}`);
     }
 
     const shouldRunStorageMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_FS_MIGRATIONS', true);

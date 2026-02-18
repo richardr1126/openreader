@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
 
     const directUrl = await presignDocumentPreviewGet(doc.id, testNamespace).catch(() => null);
     if (!directUrl) {
+      console.warn('[blob-fallback] presign preview unavailable, redirecting to proxy fallback', { id: doc.id });
       return NextResponse.redirect(fallbackUrl, {
         status: 307,
         headers: { 'Cache-Control': 'no-store' },

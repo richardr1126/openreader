@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
     const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(doc.id)}`;
     const directUrl = await presignGet(doc.id, testNamespace).catch(() => null);
     if (!directUrl) {
+      console.warn('[blob-fallback] presign download unavailable, redirecting to proxy fallback', { id: doc.id });
       return NextResponse.redirect(fallbackUrl, {
         status: 307,
         headers: { 'Cache-Control': 'no-store' },

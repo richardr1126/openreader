@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
+    console.info('[blob-fallback] download proxy used', { id });
+
     const rows = (await db
       .select({ id: documents.id, userId: documents.userId, name: documents.name })
       .from(documents)

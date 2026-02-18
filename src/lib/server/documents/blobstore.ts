@@ -7,7 +7,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getS3Client, getS3Config } from '@/lib/server/storage/s3';
+import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -114,7 +114,7 @@ export async function headDocumentBlob(
   namespace: string | null,
 ): Promise<{ contentLength: number; contentType: string | null; eTag: string | null }> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
   const res = await client.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return {
@@ -131,7 +131,7 @@ export async function getDocumentRange(
   namespace: string | null,
 ): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -145,7 +145,7 @@ export async function getDocumentRange(
 
 export async function getDocumentBlob(id: string, namespace: string | null): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -158,7 +158,7 @@ export async function getDocumentBlob(id: string, namespace: string | null): Pro
 
 export async function getDocumentBlobStream(id: string, namespace: string | null): Promise<DocumentBlobBody> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -194,7 +194,7 @@ export async function putDocumentBlob(
   namespace: string | null,
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
   await client.send(
     new PutObjectCommand({
@@ -210,7 +210,7 @@ export async function putDocumentBlob(
 
 export async function deleteDocumentBlob(id: string, namespace: string | null): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
 }
@@ -226,7 +226,7 @@ export function isMissingBlobError(error: unknown): boolean {
 
 export async function deleteDocumentPrefix(prefix: string): Promise<number> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const cleanedPrefix = prefix.replace(/^\/+/, '');
   let deleted = 0;
   let continuationToken: string | undefined;

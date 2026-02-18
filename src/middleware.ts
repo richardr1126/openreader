@@ -6,6 +6,8 @@ import type { NextRequest } from 'next/server';
  * @see https://www.better-auth.com/docs/concepts/session-management
  */
 const SESSION_COOKIE = 'better-auth.session_token';
+const SECURE_SESSION_COOKIE = '__Secure-better-auth.session_token';
+const SESSION_COOKIE_NAMES = [SESSION_COOKIE, SECURE_SESSION_COOKIE];
 
 /**
  * Routes that never require a session cookie.
@@ -43,6 +45,18 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Fast-path redirect for signed-in users hitting the public landing page.
+  // This avoids extra server work in the landing page render path.
+  if (pathname === '/' && request.nextUrl.searchParams.get('redirect') !== 'false') {
+    const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
+    if (hasSession) {
+      const appUrl = request.nextUrl.clone();
+      appUrl.pathname = '/app';
+      appUrl.search = '';
+      return NextResponse.redirect(appUrl);
+    }
+  }
+
   // Public routes are always accessible.
   if (isPublicPath(pathname)) {
     return NextResponse.next();
@@ -55,7 +69,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Check for the presence of a session cookie.
-  const hasSession = request.cookies.has(SESSION_COOKIE);
+  const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
 
   if (!hasSession) {
     // API routes get a 401 instead of a redirect.

@@ -1,10 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
-
-import { auth } from '@/lib/server/auth/auth';
-import { isAuthEnabled } from '@/lib/server/auth/config';
 
 export const metadata: Metadata = {
   title: 'Read and Listen to Documents',
@@ -45,23 +40,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = 'force-dynamic';
-
-export default async function LandingPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  const params = await searchParams;
-  const skipRedirect = params.redirect === 'false';
-
-  if (!skipRedirect && isAuthEnabled() && auth) {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (session?.user) {
-      redirect('/app');
-    }
-  }
-
+export default function LandingPage() {
   return (
     <>
       <style>{`
@@ -71,7 +50,7 @@ export default async function LandingPage({
           margin: 0 auto;
           padding: 3rem 1.5rem 4rem;
           text-align: center;
-          animation: landing-fade-up 0.8s ease-out 0.15s both;
+          animation: landing-fade-up 0.45s ease-out both;
         }
         .landing-hero-badge {
           display: inline-flex;
@@ -140,12 +119,9 @@ export default async function LandingPage({
         }
         .landing-feature-card {
           padding: 2rem;
-          animation: landing-scale-in 0.6s ease-out both;
+          animation: landing-scale-in 0.45s ease-out both;
           transition: transform 0.3s, border-color 0.3s;
         }
-        .landing-feature-card:nth-child(1) { animation-delay: 0.3s; }
-        .landing-feature-card:nth-child(2) { animation-delay: 0.4s; }
-        .landing-feature-card:nth-child(3) { animation-delay: 0.5s; }
         .landing-feature-card:hover {
           transform: translateY(-4px);
           border-color: color-mix(in srgb, var(--g-accent), transparent 50%);
@@ -181,7 +157,7 @@ export default async function LandingPage({
           max-width: 72rem;
           margin: 0 auto;
           padding: 0 1.5rem 5rem;
-          animation: landing-fade-up 0.7s ease-out 0.55s both;
+          animation: landing-fade-up 0.45s ease-out both;
         }
         .landing-tts-inner {
           display: grid;
@@ -260,7 +236,7 @@ export default async function LandingPage({
           margin: 0 auto;
           padding: 0 1.5rem 5rem;
           text-align: center;
-          animation: landing-fade-up 0.7s ease-out 1s both;
+          animation: landing-fade-up 0.45s ease-out both;
         }
         .landing-formats-label {
           font-family: var(--g-display);
@@ -300,7 +276,7 @@ export default async function LandingPage({
           max-width: 48rem;
           margin: 0 auto;
           padding: 0 1.5rem 5rem;
-          animation: landing-fade-up 0.7s ease-out 1.1s both;
+          animation: landing-fade-up 0.45s ease-out both;
         }
         .landing-cta-card {
           padding: 3rem 2rem;

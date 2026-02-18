@@ -36,9 +36,21 @@ if (!process.env.POSTGRES_URL) {
   }
 }
 
-const result = spawnSync('drizzle-kit', ['migrate', ...configArgs, ...extraArgs], {
+function resolveDrizzleKitBin() {
+  const binName = process.platform === 'win32' ? 'drizzle-kit.cmd' : 'drizzle-kit';
+  const localBin = path.join(process.cwd(), 'node_modules', '.bin', binName);
+  if (fs.existsSync(localBin)) return localBin;
+  return 'drizzle-kit';
+}
+
+const result = spawnSync(resolveDrizzleKitBin(), ['migrate', ...configArgs, ...extraArgs], {
   stdio: 'inherit',
   env: process.env,
 });
+
+if (result.error) {
+  console.error(result.error.message);
+  process.exit(1);
+}
 
 process.exit(result.status ?? 1);
