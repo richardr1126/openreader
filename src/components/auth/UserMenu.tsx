@@ -4,7 +4,7 @@ import { Button } from '@headlessui/react';
 import Link from 'next/link';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { getAuthClient } from '@/lib/auth-client';
+import { getAuthClient } from '@/lib/client/auth-client';
 import { useRouter } from 'next/navigation';
 
 export function UserMenu({ className = '' }: { className?: string }) {

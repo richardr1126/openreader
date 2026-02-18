@@ -5,7 +5,7 @@ import {
   splitTextToTtsBlocksEPUB,
   normalizeTextForTts,
   MAX_BLOCK_LENGTH
-} from '../../src/lib/nlp';
+} from '../../src/lib/shared/nlp';
 
 const PDF_MAX_BLOCK_LENGTH = MAX_BLOCK_LENGTH * 2; // splitTextToTtsBlocks can overflow to reach punctuation
 

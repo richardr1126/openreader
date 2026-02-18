@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { 
   sha256HexSoftwareFromBytes, 
   sha256HexFromString 
-} from '../../src/lib/sha256';
+} from '../../src/lib/client/sha256';
 
 test.describe('SHA256 Software Implementation', () => {
     // Known test vectors

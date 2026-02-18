@@ -2,8 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import type { BaseDocument } from '@/types/documents';
-import { listDocuments, uploadDocuments, deleteDocuments } from '@/lib/client-documents';
-import { putCachedEpub, putCachedHtml, putCachedPdf, evictCachedEpub, evictCachedHtml, evictCachedPdf } from '@/lib/document-cache';
+import { listDocuments, uploadDocuments, deleteDocuments } from '@/lib/client/api/documents';
+import { putCachedEpub, putCachedHtml, putCachedPdf, evictCachedEpub, evictCachedHtml, evictCachedPdf } from '@/lib/client/cache/documents';
 import { useAuthSession } from '@/hooks/useAuthSession';
 
 interface DocumentContextType {

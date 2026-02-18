@@ -14,9 +14,9 @@ import {
   headDocumentPreview,
   isMissingBlobError,
   putDocumentPreviewBuffer,
-} from '@/lib/server/document-previews-blobstore';
-import { getDocumentBlob } from '@/lib/server/documents-blobstore';
-import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from '@/lib/server/document-previews-render';
+} from '@/lib/server/documents/previews-blobstore';
+import { getDocumentBlob } from '@/lib/server/documents/blobstore';
+import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from '@/lib/server/documents/previews-render';
 
 const LEASE_MS = 45_000;
 const RETRY_AFTER_MS = 1_500;

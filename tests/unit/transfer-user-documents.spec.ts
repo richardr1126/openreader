@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
 import { documents } from '../../src/db/schema_sqlite';
-import { transferUserDocuments } from '../../src/lib/server/claim-data';
+import { transferUserDocuments } from '../../src/lib/server/user/claim-data';
 
 test.describe('transferUserDocuments', () => {
   test('moves document rows to new user without PK conflicts', async () => {

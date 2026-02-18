@@ -1,5 +1,5 @@
 import path from 'path';
-import { UNCLAIMED_USER_ID } from '@/lib/server/docstore';
+import { UNCLAIMED_USER_ID } from '@/lib/server/storage/docstore-legacy';
 import { ensureSystemUserExists } from '@/db';
 
 const TEST_NAMESPACE_HEADER = 'x-openreader-test-namespace';

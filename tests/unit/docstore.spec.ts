@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { getMigratedDocumentFileName } from '../../src/lib/server/docstore';
+import { getMigratedDocumentFileName } from '../../src/lib/server/storage/docstore-legacy';
 
 test.describe('Docstore Filename Safety', () => {
   const id = 'a'.repeat(64); // Simulate sha256 hex ID

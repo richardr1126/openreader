@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '../../src/lib/server/auth-config';
+import { isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '../../src/lib/server/auth/config';
 
 const ORIGINAL_BASE_URL = process.env.BASE_URL;
 const ORIGINAL_AUTH_SECRET = process.env.AUTH_SECRET;

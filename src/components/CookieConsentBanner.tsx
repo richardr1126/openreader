@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getConsentState, setConsentState } from '@/lib/analytics';
+import { getConsentState, setConsentState } from '@/lib/client/analytics';
 import { Transition } from '@headlessui/react';
 
 export function CookieConsentBanner() {

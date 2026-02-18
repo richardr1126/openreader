@@ -1,4 +1,4 @@
-import { sha256HexFromArrayBuffer } from '@/lib/sha256';
+import { sha256HexFromArrayBuffer } from '@/lib/client/sha256';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
 export type UploadSource = {
@@ -243,11 +243,11 @@ export async function getDocumentContentSnippet(
 ): Promise<string> {
   const params = new URLSearchParams();
   params.set('id', id);
-  params.set('format', 'snippet');
+  params.set('snippet', '1');
   if (typeof options?.maxChars === 'number') params.set('maxChars', String(options.maxChars));
   if (typeof options?.maxBytes === 'number') params.set('maxBytes', String(options.maxBytes));
 
-  const res = await fetch(`/api/documents/blob?${params.toString()}`, { signal: options?.signal });
+  const res = await fetch(`/api/documents/blob/preview/fallback?${params.toString()}`, { signal: options?.signal });
   if (!res.ok) {
     const data = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(data?.error || `Failed to load content snippet (status ${res.status})`);

@@ -2,11 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild, Button } from '@headlessui/react';
-import { getAppConfig, getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, updateAppConfig } from '@/lib/dexie';
-import { listDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client-documents';
+import { getAppConfig, getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, updateAppConfig } from '@/lib/client/dexie';
+import { listDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
 import { useDocuments } from '@/contexts/DocumentContext';
 import type { BaseDocument } from '@/types/documents';
-import { cacheStoredDocumentFromBytes } from '@/lib/document-cache';
+import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
 
 export function DexieMigrationModal() {
   const { refreshDocuments } = useDocuments();

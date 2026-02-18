@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
-import { getAuthClient } from '@/lib/auth-client';
+import { getAuthClient } from '@/lib/client/auth-client';
 
 type SessionHookResult = ReturnType<ReturnType<typeof getAuthClient>['useSession']>;
 

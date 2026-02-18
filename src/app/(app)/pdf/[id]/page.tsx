@@ -15,7 +15,7 @@ import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
-import { resolveDocumentId } from '@/lib/dexie';
+import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 

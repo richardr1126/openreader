@@ -1,8 +1,8 @@
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
-import { contentTypeForName, decodeLibraryId, isPathWithinRoot, parseLibraryRoots } from '@/lib/server/library';
-import { auth } from '@/lib/server/auth';
+import { contentTypeForName, decodeLibraryId, isPathWithinRoot, parseLibraryRoots } from '@/lib/server/storage/library-mount';
+import { auth } from '@/lib/server/auth/auth';
 
 export const dynamic = 'force-dynamic';
 

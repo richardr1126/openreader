@@ -32,7 +32,7 @@ function getHighlightWorker(): Worker | null {
 
   try {
     highlightWorker = new Worker(
-      new URL('pdfHighlightWorker.ts', import.meta.url),
+      new URL('pdf-highlight-worker.ts', import.meta.url),
       { type: 'module' }
     );
     return highlightWorker;

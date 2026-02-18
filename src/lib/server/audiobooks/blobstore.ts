@@ -6,7 +6,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getS3Client, getS3Config } from '@/lib/server/s3';
+import { getS3Client, getS3Config } from '@/lib/server/storage/s3';
 
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const SAFE_BOOK_ID_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;

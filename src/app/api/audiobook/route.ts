@@ -6,7 +6,7 @@ import { join } from 'path';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { audiobooks, audiobookChapters } from '@/db/schema';
-import { requireAuthContext } from '@/lib/server/auth';
+import { requireAuthContext } from '@/lib/server/auth/auth';
 import {
   audiobookPrefix,
   deleteAudiobookObject,
@@ -14,16 +14,16 @@ import {
   getAudiobookObjectBuffer,
   listAudiobookObjects,
   putAudiobookObject,
-} from '@/lib/server/audiobooks-blobstore';
+} from '@/lib/server/audiobooks/blobstore';
 import {
   decodeChapterFileName,
   escapeFFMetadata,
   ffprobeAudio,
-} from '@/lib/server/audiobook';
-import { isS3Configured } from '@/lib/server/s3';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
-import { getFFmpegPath } from '@/lib/server/ffmpeg-bin';
-import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobook-scope';
+} from '@/lib/server/audiobooks/chapters';
+import { isS3Configured } from '@/lib/server/storage/s3';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
+import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
 import type { TTSAudiobookFormat } from '@/types/tts';
 
 export const dynamic = 'force-dynamic';

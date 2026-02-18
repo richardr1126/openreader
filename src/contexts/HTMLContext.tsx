@@ -10,8 +10,8 @@ import {
   useEffect,
   useRef,
 } from 'react';
-import { getDocumentMetadata } from '@/lib/client-documents';
-import { ensureCachedDocument } from '@/lib/document-cache';
+import { getDocumentMetadata } from '@/lib/client/api/documents';
+import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
 
 interface HTMLContextType {

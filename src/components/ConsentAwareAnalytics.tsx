@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Analytics } from '@vercel/analytics/next';
-import { CONSENT_CHANGED_EVENT, disableAnalytics, getConsentState } from '@/lib/analytics';
+import { CONSENT_CHANGED_EVENT, disableAnalytics, getConsentState } from '@/lib/client/analytics';
 
 export function ConsentAwareAnalytics() {
   const [enabled, setEnabled] = useState(false);

@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { auth } from '@/lib/server/auth';
-import { isAuthEnabled } from '@/lib/server/auth-config';
+import { auth } from '@/lib/server/auth/auth';
+import { isAuthEnabled } from '@/lib/server/auth/config';
 
 export const metadata: Metadata = {
   title: 'Read and Listen to Documents',

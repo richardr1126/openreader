@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isKokoroModel } from '@/lib/kokoro';
-import { auth } from '@/lib/server/auth';
+import { isKokoroModel } from '@/lib/shared/kokoro';
+import { auth } from '@/lib/server/auth/auth';
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 const GPT4O_MINI_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer'];

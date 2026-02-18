@@ -2,9 +2,9 @@ import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { and, eq, inArray, like } from 'drizzle-orm';
 import { db } from '../src/db';
 import { audiobooks, audiobookChapters, documents } from '../src/db/schema';
-import { deleteDocumentPrefix } from '../src/lib/server/documents-blobstore';
-import { deleteAudiobookPrefix } from '../src/lib/server/audiobooks-blobstore';
-import { getS3Client, getS3Config, isS3Configured } from '../src/lib/server/s3';
+import { deleteDocumentPrefix } from '../src/lib/server/documents/blobstore';
+import { deleteAudiobookPrefix } from '../src/lib/server/audiobooks/blobstore';
+import { getS3Client, getS3Config, isS3Configured } from '../src/lib/server/storage/s3';
 
 function chunk<T>(items: T[], size: number): T[][] {
   if (items.length === 0) return [];

@@ -5,7 +5,7 @@ import type { BetterFetchError } from 'better-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { getAuthClient } from '@/lib/auth-client';
+import { getAuthClient } from '@/lib/client/auth-client';
 import { LoadingSpinner } from '@/components/Spinner';
 
 function sleep(ms: number) {

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button, Input } from '@headlessui/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getAuthClient } from '@/lib/auth-client';
+import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';

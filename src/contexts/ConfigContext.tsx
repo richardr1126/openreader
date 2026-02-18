@@ -2,9 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, initDB, migrateLegacyDexieDocumentIdsToSha, updateAppConfig } from '@/lib/dexie';
+import { db, initDB, migrateLegacyDexieDocumentIdsToSha, updateAppConfig } from '@/lib/client/dexie';
 import { APP_CONFIG_DEFAULTS, type ViewType, type SavedVoices, type AppConfigValues, type AppConfigRow } from '@/types/config';
-import { scheduleUserPreferencesSync, cancelPendingPreferenceSync, getUserPreferences, putUserPreferences } from '@/lib/client-user-state';
+import { scheduleUserPreferencesSync, cancelPendingPreferenceSync, getUserPreferences, putUserPreferences } from '@/lib/client/api/user-state';
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferenceKey, type SyncedPreferencesPatch } from '@/types/user-state';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';

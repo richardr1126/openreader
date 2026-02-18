@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthContext } from '@/lib/server/auth';
-import { isValidDocumentId, putDocumentBlob } from '@/lib/server/documents-blobstore';
-import { isS3Configured } from '@/lib/server/s3';
-import { getOpenReaderTestNamespace } from '@/lib/server/test-namespace';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import { isValidDocumentId, putDocumentBlob } from '@/lib/server/documents/blobstore';
+import { isS3Configured } from '@/lib/server/storage/s3';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 
 export const dynamic = 'force-dynamic';
 

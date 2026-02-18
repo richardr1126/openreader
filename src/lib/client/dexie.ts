@@ -8,9 +8,9 @@ import {
   BaseDocument,
   DocumentListDocument,
 } from '@/types/documents';
-import { sha256HexFromBytes, sha256HexFromString } from '@/lib/sha256';
-import { downloadDocumentContent, listDocuments, uploadDocumentSources, type UploadSource } from '@/lib/client-documents';
-import { cacheStoredDocumentFromBytes } from '@/lib/document-cache';
+import { sha256HexFromBytes, sha256HexFromString } from '@/lib/client/sha256';
+import { downloadDocumentContent, listDocuments, uploadDocumentSources, type UploadSource } from '@/lib/client/api/documents';
+import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
 
 const DB_NAME = 'openreader-db';
 // Managed via Dexie (version bumped from the original manual IndexedDB)

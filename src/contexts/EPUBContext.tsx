@@ -16,16 +16,16 @@ import type { NavItem } from 'epubjs';
 import type { SpineItem } from 'epubjs/types/section';
 import type { Book, Rendition } from 'epubjs';
 
-import { setLastDocumentLocation } from '@/lib/dexie';
-import { scheduleDocumentProgressSync } from '@/lib/client-user-state';
-import { getDocumentMetadata } from '@/lib/client-documents';
-import { ensureCachedDocument } from '@/lib/document-cache';
+import { setLastDocumentLocation } from '@/lib/client/dexie';
+import { scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
+import { getDocumentMetadata } from '@/lib/client/api/documents';
+import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
-import { createRangeCfi } from '@/lib/epub';
+import { createRangeCfi } from '@/lib/client/epub';
 import { useParams } from 'next/navigation';
 import { useConfig } from './ConfigContext';
-import { withRetry, getAudiobookStatus, generateTTS, createAudiobookChapter } from '@/lib/client';
+import { withRetry, getAudiobookStatus, generateTTS, createAudiobookChapter } from '@/lib/client/api/audiobooks';
 import { CmpStr } from 'cmpstr';
 import type {
   TTSSentenceAlignment,

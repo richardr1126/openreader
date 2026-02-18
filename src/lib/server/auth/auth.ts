@@ -5,7 +5,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@/db";
-import { isAuthEnabled, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth-config";
+import { isAuthEnabled, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
 import * as authSchemaSqlite from "@/db/schema_auth_sqlite";
 import * as authSchemaPostgres from "@/db/schema_auth_postgres";
 
@@ -76,7 +76,7 @@ const createAuth = () => betterAuth({
       enabled: true,
       beforeDelete: async (user) => {
         try {
-          const { deleteUserStorageData } = await import('@/lib/server/user-data-cleanup');
+          const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
           await deleteUserStorageData(user.id, null);
         } catch (error) {
           console.error('[auth] Failed to clean up user storage before deletion:', error);
@@ -122,8 +122,8 @@ const createAuth = () => betterAuth({
 
               // Lazy-load heavy modules only when account linking actually happens
               const [{ rateLimiter }, claimData] = await Promise.all([
-                import('@/lib/server/rate-limiter'),
-                import('@/lib/server/claim-data'),
+                import('@/lib/server/rate-limit/rate-limiter'),
+                import('@/lib/server/user/claim-data'),
               ]);
 
               // Transfer rate limiting data (TTS char counts) from anonymous user to authenticated user

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
-import type { AuthContext } from '@/lib/server/auth';
-import { requireAuthContext } from '@/lib/server/auth';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
+import type { AuthContext } from '@/lib/server/auth/auth';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 
 export type ResolvedUserStateScope = {
   auth: AuthContext;

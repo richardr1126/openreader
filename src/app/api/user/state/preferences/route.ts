@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { userPreferences } from '@/db/schema';
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/user-state';
-import { resolveUserStateScope } from '@/lib/server/user-state-scope';
+import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 
 export const dynamic = 'force-dynamic';
 

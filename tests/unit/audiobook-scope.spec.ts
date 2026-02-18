@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '../../src/lib/server/audiobook-scope';
+import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '../../src/lib/server/audiobooks/user-scope';
 
 test.describe('audiobook scope selection', () => {
   test('uses only unclaimed scope when auth is disabled', () => {

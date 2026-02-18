@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/server/auth';
-import { isAuthEnabled } from '@/lib/server/auth-config';
+import { auth } from '@/lib/server/auth/auth';
+import { isAuthEnabled } from '@/lib/server/auth/config';
 
 export async function DELETE() {
   if (!isAuthEnabled() || !auth) {

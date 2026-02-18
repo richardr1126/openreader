@@ -18,7 +18,7 @@ import {
   deleteAudiobook, 
   downloadAudiobookChapter, 
   downloadAudiobook 
-} from '@/lib/client';
+} from '@/lib/client/api/audiobooks';
 import type { AudiobookGenerationSettings } from '@/types/client';
 interface AudiobookExportModalProps {
   isOpen: boolean;

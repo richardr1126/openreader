@@ -34,12 +34,12 @@ import { useAudioCache } from '@/hooks/audio/useAudioCache';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
-import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/dexie';
-import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client-user-state';
+import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/client/dexie';
+import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
 import { useBackgroundState } from '@/hooks/audio/useBackgroundState';
-import { withRetry, generateTTS, alignAudio } from '@/lib/client';
-import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksEPUB } from '@/lib/nlp';
-import { isKokoroModel } from '@/lib/kokoro';
+import { withRetry, generateTTS, alignAudio } from '@/lib/client/api/audiobooks';
+import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksEPUB } from '@/lib/shared/nlp';
+import { isKokoroModel } from '@/lib/shared/kokoro';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
   TTSLocation,

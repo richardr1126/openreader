@@ -4,7 +4,7 @@ import {
   audiobookPrefix,
   isMissingBlobError,
   isPreconditionFailed,
-} from '../../src/lib/server/audiobooks-blobstore';
+} from '../../src/lib/server/audiobooks/blobstore';
 
 function configureS3Env() {
   process.env.S3_BUCKET = process.env.S3_BUCKET || 'test-bucket';

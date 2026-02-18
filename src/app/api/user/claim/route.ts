@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { claimAnonymousData } from '@/lib/server/claim-data';
-import { auth } from '@/lib/server/auth';
+import { claimAnonymousData } from '@/lib/server/user/claim-data';
+import { auth } from '@/lib/server/auth/auth';
 import { db } from '@/db';
 import { audiobooks, documents, userDocumentProgress, userPreferences } from '@/db/schema';
 import { count, eq, ne } from 'drizzle-orm';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 
 async function checkClaimMigrationReadiness(): Promise<NextResponse | null> {
   const [legacyRows] = await db

@@ -5,13 +5,13 @@ import {
   documentPreviewFallbackUrl,
   getDocumentContentSnippet,
   getDocumentPreviewStatus,
-} from '@/lib/client-documents';
+} from '@/lib/client/api/documents';
 import {
   getInMemoryDocumentPreviewUrl,
   getPersistedDocumentPreviewUrl,
   primeDocumentPreviewCache,
   setInMemoryDocumentPreviewUrl,
-} from '@/lib/document-preview-cache';
+} from '@/lib/client/cache/previews';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 

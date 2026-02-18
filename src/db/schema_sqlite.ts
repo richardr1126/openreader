@@ -11,11 +11,11 @@ export const documents = sqliteTable('documents', {
   lastModified: integer('last_modified').notNull(),
   filePath: text('file_path').notNull(),
   createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.id, table.userId] }),
-  userIdIdx: index('idx_documents_user_id').on(table.userId),
-  userIdLastModifiedIdx: index('idx_documents_user_id_last_modified').on(table.userId, table.lastModified),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  index('idx_documents_user_id').on(table.userId),
+  index('idx_documents_user_id_last_modified').on(table.userId, table.lastModified),
+]);
 
 export const audiobooks = sqliteTable('audiobooks', {
   id: text('id').notNull(),
@@ -26,9 +26,9 @@ export const audiobooks = sqliteTable('audiobooks', {
   coverPath: text('cover_path'),
   duration: real('duration').default(0),
   createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.id, table.userId] }),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+]);
 
 export const audiobookChapters = sqliteTable('audiobook_chapters', {
   id: text('id').notNull(),
@@ -39,13 +39,13 @@ export const audiobookChapters = sqliteTable('audiobook_chapters', {
   duration: real('duration').default(0),
   filePath: text('file_path').notNull(),
   format: text('format').notNull(), // mp3, m4b
-}, (table) => ({
-  pk: primaryKey({ columns: [table.id, table.userId] }),
-  bookFk: foreignKey({
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  foreignKey({
     columns: [table.bookId, table.userId],
     foreignColumns: [audiobooks.id, audiobooks.userId],
   }).onDelete('cascade'),
-}));
+]);
 
 // Auth tables (user, session, account, verification) are managed by Better Auth.
 // They are created/migrated via `@better-auth/cli migrate` and should NOT be
@@ -57,10 +57,10 @@ export const userTtsChars = sqliteTable("user_tts_chars", {
   charCount: integer('char_count').default(0),
   createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
   updatedAt: integer('updated_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.date] }),
-  dateIdx: index('idx_user_tts_chars_date').on(table.date),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.date] }),
+  index('idx_user_tts_chars_date').on(table.date),
+]);
 
 export const userPreferences = sqliteTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
@@ -79,10 +79,10 @@ export const userDocumentProgress = sqliteTable('user_document_progress', {
   clientUpdatedAtMs: integer('client_updated_at_ms').notNull().default(0),
   createdAt: integer('created_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
   updatedAt: integer('updated_at').default(sql`(cast(strftime('%s','now') as int) * 1000)`),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.documentId] }),
-  userUpdatedIdx: index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.documentId] }),
+  index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
+]);
 
 export const documentPreviews = sqliteTable('document_previews', {
   documentId: text('document_id').notNull(),
@@ -102,7 +102,7 @@ export const documentPreviews = sqliteTable('document_previews', {
   lastError: text('last_error'),
   createdAtMs: integer('created_at_ms').notNull().default(0),
   updatedAtMs: integer('updated_at_ms').notNull().default(0),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.documentId, table.namespace, table.variant] }),
-  statusLeaseIdx: index('idx_document_previews_status_lease').on(table.status, table.leaseUntilMs),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.documentId, table.namespace, table.variant] }),
+  index('idx_document_previews_status_lease').on(table.status, table.leaseUntilMs),
+]);

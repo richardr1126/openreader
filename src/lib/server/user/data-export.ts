@@ -1,7 +1,7 @@
 import type { Archiver } from 'archiver';
 import { Readable } from 'stream';
 import type { ReadableStream as NodeReadableStream } from 'stream/web';
-import { decodeChapterFileName } from '@/lib/server/audiobook';
+import { decodeChapterFileName } from '@/lib/server/audiobooks/chapters';
 
 export type ExportBlobBody =
   | NodeJS.ReadableStream

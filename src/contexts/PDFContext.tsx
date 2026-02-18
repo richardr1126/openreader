@@ -27,19 +27,19 @@ import {
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
-import { getDocumentMetadata } from '@/lib/client-documents';
-import { ensureCachedDocument } from '@/lib/document-cache';
+import { getDocumentMetadata } from '@/lib/client/api/documents';
+import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
-import { normalizeTextForTts } from '@/lib/nlp';
-import { withRetry, getAudiobookStatus, generateTTS, createAudiobookChapter } from '@/lib/client';
+import { normalizeTextForTts } from '@/lib/shared/nlp';
+import { withRetry, getAudiobookStatus, generateTTS, createAudiobookChapter } from '@/lib/client/api/audiobooks';
 import {
   extractTextFromPDF,
   highlightPattern,
   clearHighlights,
   clearWordHighlights,
   highlightWordIndex,
-} from '@/lib/pdf';
+} from '@/lib/client/pdf';
 
 import type {
   TTSSentenceAlignment,

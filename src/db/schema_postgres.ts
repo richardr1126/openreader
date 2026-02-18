@@ -10,11 +10,11 @@ export const documents = pgTable('documents', {
   lastModified: bigint('last_modified', { mode: 'number' }).notNull(),
   filePath: text('file_path').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.id, table.userId] }),
-  userIdIdx: index('idx_documents_user_id').on(table.userId),
-  userIdLastModifiedIdx: index('idx_documents_user_id_last_modified').on(table.userId, table.lastModified),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  index('idx_documents_user_id').on(table.userId),
+  index('idx_documents_user_id_last_modified').on(table.userId, table.lastModified),
+]);
 
 export const audiobooks = pgTable('audiobooks', {
   id: text('id').notNull(),
@@ -25,9 +25,9 @@ export const audiobooks = pgTable('audiobooks', {
   coverPath: text('cover_path'),
   duration: real('duration').default(0),
   createdAt: timestamp('created_at').defaultNow(),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.id, table.userId] }),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+]);
 
 export const audiobookChapters = pgTable('audiobook_chapters', {
   id: text('id').notNull(),
@@ -38,13 +38,13 @@ export const audiobookChapters = pgTable('audiobook_chapters', {
   duration: real('duration').default(0),
   filePath: text('file_path').notNull(),
   format: text('format').notNull(), // mp3, m4b
-}, (table) => ({
-  pk: primaryKey({ columns: [table.id, table.userId] }),
-  bookFk: foreignKey({
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  foreignKey({
     columns: [table.bookId, table.userId],
     foreignColumns: [audiobooks.id, audiobooks.userId],
   }).onDelete('cascade'),
-}));
+]);
 
 // Auth tables (user, session, account, verification) are managed by Better Auth.
 // They are created/migrated via `@better-auth/cli migrate` and should NOT be
@@ -56,10 +56,10 @@ export const userTtsChars = pgTable("user_tts_chars", {
   charCount: bigint('char_count', { mode: 'number' }).default(0),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.date] }),
-  dateIdx: index('idx_user_tts_chars_date').on(table.date),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.date] }),
+  index('idx_user_tts_chars_date').on(table.date),
+]);
 
 export const userPreferences = pgTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
@@ -78,10 +78,10 @@ export const userDocumentProgress = pgTable('user_document_progress', {
   clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.documentId] }),
-  userUpdatedIdx: index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.documentId] }),
+  index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
+]);
 
 export const documentPreviews = pgTable('document_previews', {
   documentId: text('document_id').notNull(),
@@ -101,7 +101,7 @@ export const documentPreviews = pgTable('document_previews', {
   lastError: text('last_error'),
   createdAtMs: bigint('created_at_ms', { mode: 'number' }).notNull().default(0),
   updatedAtMs: bigint('updated_at_ms', { mode: 'number' }).notNull().default(0),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.documentId, table.namespace, table.variant] }),
-  statusLeaseIdx: index('idx_document_previews_status_lease').on(table.status, table.leaseUntilMs),
-}));
+}, (table) => [
+  primaryKey({ columns: [table.documentId, table.namespace, table.variant] }),
+  index('idx_document_previews_status_lease').on(table.status, table.leaseUntilMs),
+]);

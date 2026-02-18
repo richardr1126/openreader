@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthContext } from '@/lib/server/auth';
-import { isValidDocumentId, presignPut } from '@/lib/server/documents-blobstore';
-import { getOpenReaderTestNamespace } from '@/lib/server/test-namespace';
-import { isS3Configured } from '@/lib/server/s3';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import { isValidDocumentId, presignPut } from '@/lib/server/documents/blobstore';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
+import { isS3Configured } from '@/lib/server/storage/s3';
 
 export const dynamic = 'force-dynamic';
 

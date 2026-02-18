@@ -15,7 +15,7 @@ import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
-import { resolveDocumentId } from '@/lib/dexie';
+import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 

@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
-import { uploadDocxAsPdf } from '@/lib/client-documents';
+import { uploadDocxAsPdf } from '@/lib/client/api/documents';
 
 const enableDocx = process.env.NEXT_PUBLIC_ENABLE_DOCX_CONVERSION !== 'false';
 

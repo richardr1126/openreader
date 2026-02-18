@@ -2,19 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
-import { requireAuthContext } from '@/lib/server/auth';
-import { isValidDocumentId } from '@/lib/server/documents-blobstore';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import {
+  getDocumentRange,
+  isMissingBlobError as isMissingDocumentBlobError,
+  isValidDocumentId,
+} from '@/lib/server/documents/blobstore';
 import {
   getDocumentPreviewBuffer,
-  isMissingBlobError,
-} from '@/lib/server/document-previews-blobstore';
+  isMissingBlobError as isMissingPreviewBlobError,
+} from '@/lib/server/documents/previews-blobstore';
 import {
   ensureDocumentPreview,
   enqueueDocumentPreview,
   isPreviewableDocumentType,
-} from '@/lib/server/document-previews';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
-import { isS3Configured } from '@/lib/server/s3';
+} from '@/lib/server/documents/previews';
+import { extractRawTextSnippet } from '@/lib/server/documents/text-snippets';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { isS3Configured } from '@/lib/server/storage/s3';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +39,11 @@ function streamBuffer(buffer: Buffer): ReadableStream<Uint8Array> {
   });
 }
 
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
 export async function GET(req: NextRequest) {
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
@@ -48,6 +58,7 @@ export async function GET(req: NextRequest) {
 
     const url = new URL(req.url);
     const id = (url.searchParams.get('id') || '').trim().toLowerCase();
+    const snippetRequested = (url.searchParams.get('snippet') || '').trim() === '1';
     const presignUrl = `/api/documents/blob/preview/presign?id=${encodeURIComponent(id)}`;
     const fallbackUrl = `/api/documents/blob/preview/fallback?id=${encodeURIComponent(id)}`;
     if (!isValidDocumentId(id)) {
@@ -72,6 +83,28 @@ export async function GET(req: NextRequest) {
     const doc = rows.find((row) => row.userId === storageUserId) ?? rows[0];
     if (!doc) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    if (snippetRequested) {
+      const maxChars = clampInt(Number.parseInt(url.searchParams.get('maxChars') || '1600', 10), 100, 8000);
+      const maxBytes = clampInt(Number.parseInt(url.searchParams.get('maxBytes') || '131072', 10), 4096, 1024 * 1024);
+      try {
+        const head = await getDocumentRange(id, 0, maxBytes - 1, testNamespace);
+        const decoded = new TextDecoder().decode(new Uint8Array(head));
+        const snippet = extractRawTextSnippet(decoded, maxChars);
+        return NextResponse.json(
+          { snippet },
+          { headers: { 'Cache-Control': 'no-store' } },
+        );
+      } catch (error) {
+        if (isMissingDocumentBlobError(error)) {
+          await db
+            .delete(documents)
+            .where(and(eq(documents.id, id), inArray(documents.userId, allowedUserIds)));
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+        throw error;
+      }
     }
 
     if (!isPreviewableDocumentType(doc.type)) {
@@ -112,7 +145,7 @@ export async function GET(req: NextRequest) {
         },
       });
     } catch (error) {
-      if (isMissingBlobError(error)) {
+      if (isMissingPreviewBlobError(error)) {
         await enqueueDocumentPreview(
           {
             id: doc.id,

@@ -3,8 +3,8 @@ import {
   getDocumentPreviewCache,
   putDocumentPreviewCache,
   removeDocumentPreviewCache,
-} from '@/lib/dexie';
-import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/client-documents';
+} from '@/lib/client/dexie';
+import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/client/api/documents';
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
 const inFlightPreviewPrime = new Map<string, Promise<string | null>>();

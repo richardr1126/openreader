@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { userTtsChars } from '@/db/schema';
-import { isAuthEnabled } from '@/lib/server/auth-config';
+import { isAuthEnabled } from '@/lib/server/auth/config';
 import { eq, and, lt, sql } from 'drizzle-orm';
 
 function readPositiveIntEnv(name: string, fallback: number): number {

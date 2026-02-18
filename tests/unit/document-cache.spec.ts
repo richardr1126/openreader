@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { BaseDocument, EPUBDocument, HTMLDocument, PDFDocument } from '../../src/types/documents';
-import { ensureCachedDocumentCore } from '../../src/lib/document-cache';
+import { ensureCachedDocumentCore } from '../../src/lib/client/cache/documents';
 
 test.describe('document-cache-core', () => {
   test('returns cached PDF without downloading', async () => {

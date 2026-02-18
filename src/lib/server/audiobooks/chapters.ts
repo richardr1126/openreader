@@ -102,7 +102,7 @@ function parseTitleFromFFMetadata(stdout: string): string | undefined {
 }
 
 export async function ffprobeAudio(filePath: string, signal?: AbortSignal): Promise<ProbeResult> {
-  const { getFFmpegPath } = await import('@/lib/server/ffmpeg-bin');
+  const { getFFmpegPath } = await import('@/lib/server/audiobooks/ffmpeg-bin');
 
   return new Promise<ProbeResult>((resolve, reject) => {
     const ffmpeg = spawn(getFFmpegPath(), [

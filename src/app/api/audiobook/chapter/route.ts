@@ -7,24 +7,24 @@ import { randomUUID } from 'crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { audiobooks, audiobookChapters } from '@/db/schema';
-import { requireAuthContext } from '@/lib/server/auth';
+import { requireAuthContext } from '@/lib/server/auth/auth';
 import {
   deleteAudiobookObject,
   getAudiobookObjectBuffer,
   isMissingBlobError,
   listAudiobookObjects,
   putAudiobookObject,
-} from '@/lib/server/audiobooks-blobstore';
+} from '@/lib/server/audiobooks/blobstore';
 import {
   decodeChapterFileName,
   encodeChapterFileName,
   encodeChapterTitleTag,
   ffprobeAudio,
-} from '@/lib/server/audiobook';
-import { isS3Configured } from '@/lib/server/s3';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
-import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobook-scope';
-import { getFFmpegPath } from '@/lib/server/ffmpeg-bin';
+} from '@/lib/server/audiobooks/chapters';
+import { isS3Configured } from '@/lib/server/storage/s3';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
+import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudioBytes, TTSAudiobookFormat } from '@/types/tts';
 

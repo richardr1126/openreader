@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { presignDocumentPreviewGet } from '@/lib/server/document-previews-blobstore';
-import { ensureDocumentPreview } from '@/lib/server/document-previews';
+import { presignDocumentPreviewGet } from '@/lib/server/documents/previews-blobstore';
+import { ensureDocumentPreview } from '@/lib/server/documents/previews';
 import { validatePreviewRequest } from '../utils';
 
 export const dynamic = 'force-dynamic';

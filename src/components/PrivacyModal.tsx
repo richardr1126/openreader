@@ -9,7 +9,7 @@ import {
   TransitionChild,
   Button,
 } from '@headlessui/react';
-import { updateAppConfig, getAppConfig } from '@/lib/dexie';
+import { updateAppConfig, getAppConfig } from '@/lib/client/dexie';
 
 interface PrivacyModalProps {
   onAccept?: () => void;

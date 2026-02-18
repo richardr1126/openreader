@@ -7,10 +7,10 @@
 import { db } from '@/db';
 import { documents, audiobooks } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { isS3Configured } from '@/lib/server/s3';
-import { deleteDocumentBlob } from '@/lib/server/documents-blobstore';
-import { deleteDocumentPreviewArtifacts } from '@/lib/server/document-previews-blobstore';
-import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks-blobstore';
+import { isS3Configured } from '@/lib/server/storage/s3';
+import { deleteDocumentBlob } from '@/lib/server/documents/blobstore';
+import { deleteDocumentPreviewArtifacts } from '@/lib/server/documents/previews-blobstore';
+import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks/blobstore';
 
 type DocumentRow = { id: string };
 type AudiobookRow = { id: string };

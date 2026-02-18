@@ -1,5 +1,5 @@
 import type { BaseDocument, EPUBDocument, HTMLDocument, PDFDocument } from '@/types/documents';
-import { downloadDocumentContent } from '@/lib/client-documents';
+import { downloadDocumentContent } from '@/lib/client/api/documents';
 
 export type DocumentCacheBackend = {
   get: (meta: BaseDocument) => Promise<PDFDocument | EPUBDocument | HTMLDocument | null>;
@@ -42,12 +42,12 @@ export async function ensureCachedDocumentCore(
 }
 
 export async function getCachedPdf(id: string): Promise<PDFDocument | null> {
-  const { getPdfDocument } = await import('@/lib/dexie');
+  const { getPdfDocument } = await import('@/lib/client/dexie');
   return (await getPdfDocument(id)) ?? null;
 }
 
 export async function putCachedPdf(meta: BaseDocument, data: ArrayBuffer): Promise<void> {
-  const { addPdfDocument } = await import('@/lib/dexie');
+  const { addPdfDocument } = await import('@/lib/client/dexie');
   await addPdfDocument({
     id: meta.id,
     type: 'pdf',
@@ -59,17 +59,17 @@ export async function putCachedPdf(meta: BaseDocument, data: ArrayBuffer): Promi
 }
 
 export async function evictCachedPdf(id: string): Promise<void> {
-  const { removePdfDocument } = await import('@/lib/dexie');
+  const { removePdfDocument } = await import('@/lib/client/dexie');
   await removePdfDocument(id);
 }
 
 export async function getCachedEpub(id: string): Promise<EPUBDocument | null> {
-  const { getEpubDocument } = await import('@/lib/dexie');
+  const { getEpubDocument } = await import('@/lib/client/dexie');
   return (await getEpubDocument(id)) ?? null;
 }
 
 export async function putCachedEpub(meta: BaseDocument, data: ArrayBuffer): Promise<void> {
-  const { addEpubDocument } = await import('@/lib/dexie');
+  const { addEpubDocument } = await import('@/lib/client/dexie');
   await addEpubDocument({
     id: meta.id,
     type: 'epub',
@@ -81,17 +81,17 @@ export async function putCachedEpub(meta: BaseDocument, data: ArrayBuffer): Prom
 }
 
 export async function evictCachedEpub(id: string): Promise<void> {
-  const { removeEpubDocument } = await import('@/lib/dexie');
+  const { removeEpubDocument } = await import('@/lib/client/dexie');
   await removeEpubDocument(id);
 }
 
 export async function getCachedHtml(id: string): Promise<HTMLDocument | null> {
-  const { getHtmlDocument } = await import('@/lib/dexie');
+  const { getHtmlDocument } = await import('@/lib/client/dexie');
   return (await getHtmlDocument(id)) ?? null;
 }
 
 export async function putCachedHtml(meta: BaseDocument, data: string): Promise<void> {
-  const { addHtmlDocument } = await import('@/lib/dexie');
+  const { addHtmlDocument } = await import('@/lib/client/dexie');
   await addHtmlDocument({
     id: meta.id,
     type: 'html',
@@ -103,12 +103,12 @@ export async function putCachedHtml(meta: BaseDocument, data: string): Promise<v
 }
 
 export async function evictCachedHtml(id: string): Promise<void> {
-  const { removeHtmlDocument } = await import('@/lib/dexie');
+  const { removeHtmlDocument } = await import('@/lib/client/dexie');
   await removeHtmlDocument(id);
 }
 
 export async function clearDocumentCache(): Promise<void> {
-  const { clearPdfDocuments, clearEpubDocuments, clearHtmlDocuments } = await import('@/lib/dexie');
+  const { clearPdfDocuments, clearEpubDocuments, clearHtmlDocuments } = await import('@/lib/client/dexie');
   await Promise.all([clearPdfDocuments(), clearEpubDocuments(), clearHtmlDocuments()]);
 }
 
@@ -132,7 +132,7 @@ export async function ensureCachedDocument(meta: BaseDocument, options?: { signa
     meta,
     {
       get: async (m) => {
-        const { getPdfDocument, getEpubDocument, getHtmlDocument } = await import('@/lib/dexie');
+        const { getPdfDocument, getEpubDocument, getHtmlDocument } = await import('@/lib/client/dexie');
         if (m.type === 'pdf') return (await getPdfDocument(m.id)) ?? null;
         if (m.type === 'epub') return (await getEpubDocument(m.id)) ?? null;
         return (await getHtmlDocument(m.id)) ?? null;

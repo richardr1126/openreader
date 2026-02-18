@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
-import { requireAuthContext } from '@/lib/server/auth';
-import { contentTypeForName } from '@/lib/server/library';
-import { getDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents-blobstore';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
-import { isS3Configured } from '@/lib/server/s3';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import { contentTypeForName } from '@/lib/server/storage/library-mount';
+import { getDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { isS3Configured } from '@/lib/server/storage/s3';
 
 export const dynamic = 'force-dynamic';
 

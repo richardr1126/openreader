@@ -1,16 +1,16 @@
 import { db } from '@/db';
 import { documents, audiobooks, audiobookChapters, userPreferences, userDocumentProgress } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
-import { UNCLAIMED_USER_ID } from './docstore';
+import { UNCLAIMED_USER_ID } from '../storage/docstore-legacy';
 import {
   deleteAudiobookObject,
   getAudiobookObjectBuffer,
   listAudiobookObjects,
   putAudiobookObject,
-} from './audiobooks-blobstore';
-import { isS3Configured } from './s3';
+} from '../audiobooks/blobstore';
+import { isS3Configured } from '../storage/s3';
 
-import { isAuthEnabled } from '@/lib/server/auth-config';
+import { isAuthEnabled } from '@/lib/server/auth/config';
 
 type AudiobookRow = {
   id: string;

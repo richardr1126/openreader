@@ -2,16 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
-import { requireAuthContext } from '@/lib/server/auth';
-import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents-utils';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
 import {
   cleanupDocumentPreviewArtifacts,
   deleteDocumentPreviewRows,
   enqueueDocumentPreview,
-} from '@/lib/server/document-previews';
-import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents-blobstore';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/test-namespace';
-import { isS3Configured } from '@/lib/server/s3';
+} from '@/lib/server/documents/previews';
+import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
 export const dynamic = 'force-dynamic';

@@ -2,9 +2,9 @@ import type { Dirent } from 'fs';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
-import { parseLibraryRoots } from '@/lib/server/library';
+import { parseLibraryRoots } from '@/lib/server/storage/library-mount';
 import type { DocumentType } from '@/types/documents';
-import { auth } from '@/lib/server/auth';
+import { auth } from '@/lib/server/auth/auth';
 
 export const dynamic = 'force-dynamic';
 

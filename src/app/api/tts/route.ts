@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
-import { isKokoroModel } from '@/lib/kokoro';
+import { isKokoroModel } from '@/lib/shared/kokoro';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import type { TTSRequestPayload } from '@/types/client';
 import type { TTSError, TTSAudioBuffer } from '@/types/tts';
 import { headers } from 'next/headers';
-import { auth } from '@/lib/server/auth';
-import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limiter';
-import { isAuthEnabled } from '@/lib/server/auth-config';
-import { getClientIp } from '@/lib/server/request-ip';
-import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/device-id';
+import { auth } from '@/lib/server/auth/auth';
+import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { isAuthEnabled } from '@/lib/server/auth/config';
+import { getClientIp } from '@/lib/server/rate-limit/request-ip';
+import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 
 function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, didCreate: boolean) {
   if (didCreate && deviceId) {

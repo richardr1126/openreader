@@ -5,9 +5,9 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import type { TTSSentenceAlignment, TTSAudioBytes, TTSAudioBuffer } from '@/types/tts';
-import { preprocessSentenceForAudio } from '@/lib/nlp';
-import { auth } from '@/lib/server/auth';
-import { getFFmpegPath } from '@/lib/server/ffmpeg-bin';
+import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
+import { auth } from '@/lib/server/auth/auth';
+import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
 
 export const runtime = 'nodejs';
 

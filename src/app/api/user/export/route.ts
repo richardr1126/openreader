@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PassThrough, Readable } from 'stream';
-import { auth } from '@/lib/server/auth';
+import { auth } from '@/lib/server/auth/auth';
 import { db } from '@/db';
 import { documents, audiobooks, audiobookChapters, userPreferences, userDocumentProgress, userTtsChars } from '@/db/schema';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import archiver from 'archiver';
-import { appendUserExportArchive } from '@/lib/server/user-export';
-import { getDocumentBlobStream } from '@/lib/server/documents-blobstore';
-import { getAudiobookObjectStream, listAudiobookObjects } from '@/lib/server/audiobooks-blobstore';
-import { isS3Configured } from '@/lib/server/s3';
-import { getOpenReaderTestNamespace } from '@/lib/server/test-namespace';
+import { appendUserExportArchive } from '@/lib/server/user/data-export';
+import { getDocumentBlobStream } from '@/lib/server/documents/blobstore';
+import { getAudiobookObjectStream, listAudiobookObjects } from '@/lib/server/audiobooks/blobstore';
+import { isS3Configured } from '@/lib/server/storage/s3';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 
 export const dynamic = 'force-dynamic';
 

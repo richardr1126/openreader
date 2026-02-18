@@ -11,7 +11,7 @@ import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
-import { resolveDocumentId } from '@/lib/dexie';
+import { resolveDocumentId } from '@/lib/client/dexie';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';

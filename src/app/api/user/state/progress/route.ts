@@ -3,8 +3,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { userDocumentProgress } from '@/db/schema';
 import type { ReaderType } from '@/types/user-state';
-import { isValidDocumentId } from '@/lib/server/documents-blobstore';
-import { resolveUserStateScope } from '@/lib/server/user-state-scope';
+import { isValidDocumentId } from '@/lib/server/documents/blobstore';
+import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 
 export const dynamic = 'force-dynamic';
 

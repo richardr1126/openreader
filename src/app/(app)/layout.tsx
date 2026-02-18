@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast';
 
 import { Providers } from '@/app/providers';
 import ClaimDataPopup from '@/components/auth/ClaimDataModal';
-import { getAuthBaseUrl, isAnonymousAuthSessionsEnabled, isAuthEnabled, isGithubAuthEnabled } from '@/lib/server/auth-config';
+import { getAuthBaseUrl, isAnonymousAuthSessionsEnabled, isAuthEnabled, isGithubAuthEnabled } from '@/lib/server/auth/config';
 
 export const dynamic = 'force-dynamic';
 
