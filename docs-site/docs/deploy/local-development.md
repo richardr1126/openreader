@@ -63,7 +63,7 @@ Set `WHISPER_CPP_BIN` in your `.env` to enable word-by-word highlighting.
 
 ```bash
 git clone https://github.com/richardr1126/openreader.git
-cd OpenReader
+cd openreader
 ```
 
 2. Install dependencies.

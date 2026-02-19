@@ -43,6 +43,7 @@ export default function ClaimDataModal() {
     progress: 0,
   });
   const user = sessionData?.user;
+  const userId = user?.id;
 
   const checkClaimableData = useCallback(async () => {
     setHasChecked(true);
@@ -66,11 +67,16 @@ export default function ClaimDataModal() {
   }, []);
 
   useEffect(() => {
-    // Only check once per session if user is logged in (non-anonymous)
-    if (user && !user.isAnonymous && !hasChecked) {
+    // Reset per-user guard so account switches trigger a fresh check.
+    setHasChecked(false);
+  }, [userId]);
+
+  useEffect(() => {
+    // Only check once per authenticated user
+    if (userId && !user?.isAnonymous && !hasChecked) {
       checkClaimableData();
     }
-  }, [user, hasChecked, checkClaimableData]);
+  }, [userId, user?.isAnonymous, hasChecked, checkClaimableData]);
 
   const handleClaim = async () => {
     setIsClaiming(true);

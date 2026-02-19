@@ -105,9 +105,14 @@ async function scanLibraryRoot(root: string, rootIndex: number, limit: number): 
 
 export async function GET(req: NextRequest) {
   // Auth check - require session
-  const session = await auth?.api.getSession({ headers: req.headers });
-  if (auth && !session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const session = await auth?.api.getSession({ headers: req.headers });
+    if (auth && !session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  } catch (error) {
+    console.error('Error checking auth:', error);
+    return NextResponse.json({ error: 'Error checking auth' }, { status: 500 });
   }
 
   const url = new URL(req.url);
