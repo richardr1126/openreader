@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
-import { isKokoroModel } from '@/utils/voice';
+import { isKokoroModel } from '@/lib/shared/kokoro';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import type { TTSRequestPayload } from '@/types/client';
 import type { TTSError, TTSAudioBuffer } from '@/types/tts';
+import { headers } from 'next/headers';
+import { auth } from '@/lib/server/auth/auth';
+import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { isAuthEnabled } from '@/lib/server/auth/config';
+import { getClientIp } from '@/lib/server/rate-limit/request-ip';
+import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
+
+function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, didCreate: boolean) {
+  if (didCreate && deviceId) {
+    setDeviceIdCookie(response, deviceId);
+  }
+}
 
 type CustomVoice = string;
 type ExtendedSpeechParams = Omit<SpeechCreateParams, 'voice'> & {
@@ -31,6 +43,21 @@ type InflightEntry = {
 
 const inflightRequests = new Map<string, InflightEntry>();
 
+const PROBLEM_TYPES = {
+  dailyQuotaExceeded: 'https://openreader.app/problems/daily-quota-exceeded',
+  upstreamRateLimited: 'https://openreader.app/problems/upstream-rate-limited',
+} as const;
+
+type ProblemDetails = {
+  type: string;
+  title: string;
+  status: number;
+  detail?: string;
+  instance?: string;
+  code?: string;
+  [key: string]: unknown;
+};
+
 function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
 }
@@ -47,7 +74,7 @@ async function fetchTTSBufferWithRetry(
   const backoff = Number(process.env.TTS_RETRY_BACKOFF ?? 2);
 
   // Retry on 429 and 5xx only; never retry aborts
-  for (;;) {
+  for (; ;) {
     try {
       const response = await openai.audio.speech.create(createParams as SpeechCreateParams, { signal });
       return await response.arrayBuffer();
@@ -96,15 +123,22 @@ function makeCacheKey(input: {
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
+function formatLimitForHint(limit: number): string {
+  if (!Number.isFinite(limit) || limit <= 0) return String(limit);
+  if (limit >= 1_000_000) {
+    const m = limit / 1_000_000;
+    return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
+  }
+  if (limit >= 1_000) return `${Math.round(limit / 1_000)}K`;
+  return String(limit);
+}
+
 export async function POST(req: NextRequest) {
+  let providerForError: string | null = null;
   try {
-    // Get API credentials from headers or fall back to environment variables
-    const openApiKey = req.headers.get('x-openai-key') || process.env.API_KEY || 'none';
-    const openApiBaseUrl = req.headers.get('x-openai-base-url') || process.env.API_BASE;
-    const provider = req.headers.get('x-tts-provider') || 'openai';
+    // Parse body first to get text for rate limiting
     const body = (await req.json()) as TTSRequestPayload;
     const { text, voice, speed, format, model: req_model, instructions } = body;
-    console.log('Received TTS request:', { provider, req_model, voice, speed, format, hasInstructions: Boolean(instructions) });
 
     if (!text || !voice || !speed) {
       const errorBody: TTSError = {
@@ -113,6 +147,88 @@ export async function POST(req: NextRequest) {
       };
       return NextResponse.json(errorBody, { status: 400 });
     }
+
+    // Auth and TTS char rate limiting check (only when auth is enabled)
+    let didCreateDeviceIdCookie = false;
+    let deviceIdToSet: string | null = null;
+
+    if (isAuthEnabled() && auth) {
+      const session = await auth.api.getSession({
+        headers: await headers()
+      });
+
+      if (!session?.user) {
+        return NextResponse.json(
+          { code: 'UNAUTHORIZED', message: 'Authentication required' },
+          { status: 401 }
+        );
+      }
+
+      const isAnonymous = Boolean(session.user.isAnonymous);
+      if (isTtsRateLimitEnabled()) {
+        const charCount = text.length;
+        const ip = getClientIp(req);
+        const device = isAnonymous ? getOrCreateDeviceId(req) : null;
+        if (device?.didCreate) {
+          didCreateDeviceIdCookie = true;
+          deviceIdToSet = device.deviceId;
+        }
+
+        // Check rate limit
+        const rateLimitResult = await rateLimiter.checkAndIncrementLimit(
+          { id: session.user.id, isAnonymous },
+          charCount,
+          {
+            deviceId: device?.deviceId ?? null,
+            ip,
+          }
+        );
+
+        if (!rateLimitResult.allowed) {
+          const resetTimeMs = rateLimitResult.resetTimeMs;
+          const retryAfterSeconds = Math.max(
+            0,
+            Math.ceil((resetTimeMs - Date.now()) / 1000)
+          );
+
+          const problem: ProblemDetails = {
+            type: PROBLEM_TYPES.dailyQuotaExceeded,
+            title: 'Daily quota exceeded',
+            status: 429,
+            detail: 'Daily character limit exceeded',
+            code: 'USER_DAILY_QUOTA_EXCEEDED',
+            currentCount: rateLimitResult.currentCount,
+            limit: rateLimitResult.limit,
+            remainingChars: rateLimitResult.remainingChars,
+            resetTimeMs,
+            userType: isAnonymous ? 'anonymous' : 'authenticated',
+            upgradeHint: isAnonymous
+              ? `Sign up to increase your limit from ${formatLimitForHint(RATE_LIMITS.ANONYMOUS)} to ${formatLimitForHint(RATE_LIMITS.AUTHENTICATED)} characters per day`
+              : undefined,
+            instance: req.nextUrl.pathname,
+          };
+
+          const response = new NextResponse(JSON.stringify(problem), {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/problem+json',
+              'Retry-After': String(retryAfterSeconds),
+            },
+          });
+
+          attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+
+          return response;
+        }
+      }
+    }
+
+    // Get API credentials from headers or fall back to environment variables
+    const openApiKey = req.headers.get('x-openai-key') || process.env.API_KEY || 'none';
+    const openApiBaseUrl = req.headers.get('x-openai-base-url') || process.env.API_BASE;
+    const provider = req.headers.get('x-tts-provider') || 'openai';
+    providerForError = provider;
+    console.log('Received TTS request:', { provider, req_model, voice, speed, format, hasInstructions: Boolean(instructions) });
     // Use default Kokoro model for Deepinfra if none specified, then fall back to a safe default
     const rawModel = provider === 'deepinfra' && !req_model ? 'hexgrad/Kokoro-82M' : req_model;
     const model: SpeechCreateParams['model'] = (rawModel ?? 'gpt-4o-mini-tts') as SpeechCreateParams['model'];
@@ -125,10 +241,10 @@ export async function POST(req: NextRequest) {
 
     const normalizedVoice = (
       !isKokoroModel(model as string) && voice.includes('+')
-      ? (voice.split('+')[0].trim())
-      : voice
+        ? (voice.split('+')[0].trim())
+        : voice
     ) as SpeechCreateParams['voice'];
-    
+
     const createParams: ExtendedSpeechParams = {
       model: model,
       voice: normalizedVoice,
@@ -165,7 +281,7 @@ export async function POST(req: NextRequest) {
     const cachedBuffer = ttsAudioCache.get(cacheKey);
     if (cachedBuffer) {
       if (ifNoneMatch && (ifNoneMatch.includes(cacheKey) || ifNoneMatch.includes(etag))) {
-        return new NextResponse(null, {
+        const response = new NextResponse(null, {
           status: 304,
           headers: {
             'ETag': etag,
@@ -173,9 +289,13 @@ export async function POST(req: NextRequest) {
             'Vary': 'x-tts-provider, x-openai-key, x-openai-base-url'
           }
         });
+
+        attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+
+        return response;
       }
       console.log('TTS cache HIT for key:', cacheKey.slice(0, 8));
-      return new NextResponse(cachedBuffer, {
+      const response = new NextResponse(cachedBuffer, {
         headers: {
           'Content-Type': contentType,
           'X-Cache': 'HIT',
@@ -185,6 +305,10 @@ export async function POST(req: NextRequest) {
           'Vary': 'x-tts-provider, x-openai-key, x-openai-base-url'
         }
       });
+
+      attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+
+      return response;
     }
 
     // De-duplicate identical in-flight requests
@@ -203,7 +327,7 @@ export async function POST(req: NextRequest) {
 
       try {
         const buffer = await existing.promise;
-        return new NextResponse(buffer, {
+        const response = new NextResponse(buffer, {
           headers: {
             'Content-Type': contentType,
             'X-Cache': 'INFLIGHT',
@@ -213,8 +337,12 @@ export async function POST(req: NextRequest) {
             'Vary': 'x-tts-provider, x-openai-key, x-openai-base-url'
           }
         });
+
+        attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+
+        return response;
       } finally {
-        try { req.signal.removeEventListener('abort', onAbort); } catch {}
+        try { req.signal.removeEventListener('abort', onAbort); } catch { }
       }
     }
 
@@ -248,10 +376,10 @@ export async function POST(req: NextRequest) {
     try {
       buffer = await entry.promise;
     } finally {
-      try { req.signal.removeEventListener('abort', onAbort); } catch {}
+      try { req.signal.removeEventListener('abort', onAbort); } catch { }
     }
 
-    return new NextResponse(buffer, {
+    const response = new NextResponse(buffer, {
       headers: {
         'Content-Type': contentType,
         'X-Cache': 'MISS',
@@ -261,11 +389,44 @@ export async function POST(req: NextRequest) {
         'Vary': 'x-tts-provider, x-openai-key, x-openai-base-url'
       }
     });
+
+    attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+
+    return response;
   } catch (error) {
     // Check if this was an abort error
     if (error instanceof Error && error.name === 'AbortError') {
       console.log('TTS request aborted by client');
       return new NextResponse(null, { status: 499 }); // Use 499 status for client closed request
+    }
+
+    const upstreamStatus = (() => {
+      if (typeof error === 'object' && error !== null) {
+        const rec = error as Record<string, unknown>;
+        if (typeof rec.status === 'number') return rec.status as number;
+        if (typeof rec.statusCode === 'number') return rec.statusCode as number;
+      }
+      return undefined;
+    })();
+
+    if (upstreamStatus === 429) {
+      const problem: ProblemDetails = {
+        type: PROBLEM_TYPES.upstreamRateLimited,
+        title: 'Upstream rate limited',
+        status: 429,
+        detail: 'The TTS provider is rate limiting requests. Please try again shortly.',
+        code: 'UPSTREAM_RATE_LIMIT',
+        provider: providerForError ?? undefined,
+        upstreamStatus,
+        instance: req.nextUrl.pathname,
+      };
+
+      return new NextResponse(JSON.stringify(problem), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/problem+json',
+        },
+      });
     }
 
     console.warn('Error generating TTS:', error);

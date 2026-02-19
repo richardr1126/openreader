@@ -18,7 +18,7 @@ import {
   deleteAudiobook, 
   downloadAudiobookChapter, 
   downloadAudiobook 
-} from '@/lib/client';
+} from '@/lib/client/api/audiobooks';
 import type { AudiobookGenerationSettings } from '@/types/client';
 interface AudiobookExportModalProps {
   isOpen: boolean;
@@ -449,7 +449,7 @@ export function AudiobookExportModal({
           </TransitionChild>
 
           <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
               <TransitionChild
                 as={Fragment}
                 enter="ease-out duration-300"
@@ -703,7 +703,7 @@ export function AudiobookExportModal({
                                 <h4 className="text-sm font-medium text-foreground">Chapters</h4>
                                 {isRefreshingChapters && <ClockIcon className="h-4 w-4 text-muted animate-spin" />}
                               </div>
-                              {displayChapters.map((chapter, index) => (
+                              {displayChapters.map((chapter) => (
                                 <div
                                   key={chapter.index}
                                   className={`flex items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-offbase ${(regeneratingChapter === chapter.index || chapter.status === 'generating') ? 'prism-outline' : ''}`}
@@ -751,7 +751,11 @@ export function AudiobookExportModal({
                                           leaveFrom="transform opacity-100 scale-100"
                                           leaveTo="transform opacity-0 scale-95"
                                         >
-                                          <MenuItems className={`absolute right-0 w-44 rounded-md bg-background shadow-lg ring-1 ring-black/5 focus:outline-none z-10 p-1 ${index < 2 ? 'top-full mt-2 origin-top-right' : 'bottom-full mb-2 origin-bottom-right'}`}>
+                                          <MenuItems
+                                            anchor={{ to: 'bottom end', gap: '8px', padding: '12px' }}
+                                            portal
+                                            className="w-44 rounded-md bg-background shadow-lg ring-1 ring-black/5 focus:outline-none z-[70] p-1 origin-top-right"
+                                          >
                                             {chapter.status === 'completed' && (
                                               <>
                                                 <MenuItem>

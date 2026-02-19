@@ -5,7 +5,9 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import type { TTSSentenceAlignment, TTSAudioBytes, TTSAudioBuffer } from '@/types/tts';
-import { preprocessSentenceForAudio } from '@/lib/nlp';
+import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
+import { auth } from '@/lib/server/auth/auth';
+import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
 
 export const runtime = 'nodejs';
 
@@ -352,7 +354,7 @@ async function alignAudioWithText(
     await writeFile(inputPath, Buffer.from(new Uint8Array(audioBuffer)));
 
     await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', [
+      const ffmpeg = spawn(getFFmpegPath(), [
         '-y',
         '-i',
         inputPath,
@@ -416,6 +418,12 @@ function makeCacheKey(input: WhisperRequestBody) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Auth check - require session
+    const session = await auth?.api.getSession({ headers: req.headers });
+    if (auth && !session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = (await req.json()) as WhisperRequestBody;
     const { text, audio, lang } = body;
 

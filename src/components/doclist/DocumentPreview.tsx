@@ -1,12 +1,17 @@
 import { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getEpubDocument, getHtmlDocument, getPdfDocument } from '@/lib/dexie';
 import {
-  extractEpubCoverToDataUrl,
-  extractRawTextSnippet,
-  renderPdfFirstPageToDataUrl,
-} from '@/lib/documentPreview';
+  documentPreviewFallbackUrl,
+  getDocumentContentSnippet,
+  getDocumentPreviewStatus,
+} from '@/lib/client/api/documents';
+import {
+  getInMemoryDocumentPreviewUrl,
+  getPersistedDocumentPreviewUrl,
+  primeDocumentPreviewCache,
+  setInMemoryDocumentPreviewUrl,
+} from '@/lib/client/cache/previews';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -14,8 +19,33 @@ interface DocumentPreviewProps {
   doc: DocumentListDocument;
 }
 
-const imagePreviewCache = new Map<string, string>();
+const MAX_TEXT_PREVIEW_CACHE = 100;
 const textPreviewCache = new Map<string, string>();
+
+/** Read from cache and promote entry to most-recently-used. */
+function textPreviewCacheGet(key: string): string | undefined {
+  const value = textPreviewCache.get(key);
+  if (value !== undefined) {
+    // Re-insert to move to end (most-recently-used)
+    textPreviewCache.delete(key);
+    textPreviewCache.set(key, value);
+  }
+  return value;
+}
+
+/** Write to cache, evicting the least-recently-used entry when over the cap. */
+function textPreviewCacheSet(key: string, value: string): void {
+  // If the key already exists, delete first so re-insertion moves it to the end
+  if (textPreviewCache.has(key)) {
+    textPreviewCache.delete(key);
+  }
+  textPreviewCache.set(key, value);
+  if (textPreviewCache.size > MAX_TEXT_PREVIEW_CACHE) {
+    // Map keys iterate in insertion order; first key is the LRU entry
+    const oldest = textPreviewCache.keys().next().value;
+    if (oldest !== undefined) textPreviewCache.delete(oldest);
+  }
+}
 
 export function DocumentPreview({ doc }: DocumentPreviewProps) {
   const isPDF = doc.type === 'pdf';
@@ -33,6 +63,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isImageReady, setIsImageReady] = useState(false);
   const [textPreview, setTextPreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -59,14 +90,14 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   useEffect(() => {
     if (!isVisible) return;
 
-    const cachedImage = imagePreviewCache.get(previewKey);
+    const cachedImage = getInMemoryDocumentPreviewUrl(previewKey);
     if (cachedImage) {
       setImagePreview(cachedImage);
       setTextPreview(null);
       return;
     }
 
-    const cachedText = textPreviewCache.get(previewKey);
+    const cachedText = textPreviewCacheGet(previewKey);
     if (cachedText) {
       setTextPreview(cachedText);
       setImagePreview(null);
@@ -74,45 +105,86 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
 
-	    const run = async () => {
-	      setIsGenerating(true);
-	      try {
-	        const targetWidth = 240;
+    const run = async () => {
+      setIsGenerating(true);
+      try {
+        if (doc.type === 'pdf' || doc.type === 'epub') {
+          const persistedUrl = await getPersistedDocumentPreviewUrl(
+            doc.id,
+            Number(doc.lastModified),
+            previewKey,
+          );
+          if (!cancelled && persistedUrl) {
+            setImagePreview(persistedUrl);
+            setTextPreview(null);
+            return;
+          }
 
-	        if (doc.type === 'pdf') {
-	          const pdfDoc = await getPdfDocument(doc.id);
-	          if (!pdfDoc?.data) return;
-	          const dataUrl = await renderPdfFirstPageToDataUrl(pdfDoc.data, targetWidth);
-	          if (cancelled) return;
-	          imagePreviewCache.set(previewKey, dataUrl);
-	          setImagePreview(dataUrl);
-	          setTextPreview(null);
-	          return;
-	        }
+          let attempt = 0;
+          while (!cancelled && attempt < 12) {
+            const status = await getDocumentPreviewStatus(doc.id, { signal: controller.signal });
+            if (cancelled) return;
 
-	        if (doc.type === 'epub') {
-	          const epubDoc = await getEpubDocument(doc.id);
-	          if (!epubDoc?.data) return;
-	          const cover = await extractEpubCoverToDataUrl(epubDoc.data, targetWidth);
-	          if (cancelled) return;
-	          if (cover) {
-	            imagePreviewCache.set(previewKey, cover);
-	            setImagePreview(cover);
-	            setTextPreview(null);
-	          }
-	          return;
-	        }
+            if (status.kind === 'ready') {
+              const primedUrl = await primeDocumentPreviewCache(
+                doc.id,
+                Number(doc.lastModified),
+                previewKey,
+                { signal: controller.signal },
+              ).catch(() => null);
+              if (cancelled) return;
 
-	        if (doc.type === 'html') {
-	          const htmlDoc = await getHtmlDocument(doc.id);
-	          if (cancelled) return;
-	          const snippet = extractRawTextSnippet(htmlDoc?.data ?? '');
-	          textPreviewCache.set(previewKey, snippet);
-	          setTextPreview(snippet);
-	          setImagePreview(null);
-	          return;
-	        }
+              if (primedUrl) {
+                setImagePreview(primedUrl);
+                setTextPreview(null);
+                return;
+              }
+
+              const fallbackUrl = status.fallbackUrl || documentPreviewFallbackUrl(doc.id);
+              setInMemoryDocumentPreviewUrl(previewKey, fallbackUrl);
+              setImagePreview(fallbackUrl);
+              setTextPreview(null);
+              return;
+            }
+
+            if (status.status === 'failed') {
+              return;
+            }
+
+            const waitMs = Math.max(
+              400,
+              Math.min(6000, Number.isFinite(status.retryAfterMs) ? status.retryAfterMs : 1500),
+            );
+            await new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, waitMs);
+              controller.signal.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            attempt += 1;
+          }
+          return;
+        }
+
+        if (doc.type === 'html') {
+          const snippet = await getDocumentContentSnippet(doc.id, {
+            maxChars: 1600,
+            maxBytes: 128 * 1024,
+            signal: controller.signal,
+          });
+          if (cancelled) return;
+          textPreviewCacheSet(previewKey, snippet);
+          setTextPreview(snippet);
+          setImagePreview(null);
+          return;
+        }
       } catch {
         // fall back to icon
       } finally {
@@ -125,8 +197,13 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     run();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [doc.id, doc.type, isVisible, previewKey]);
+  }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey]);
+
+  useEffect(() => {
+    setIsImageReady(false);
+  }, [imagePreview]);
 
   const gradientClass = isPDF
     ? 'from-red-500/80 via-red-400/60 to-red-600/80'
@@ -157,15 +234,40 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     >
       {imagePreview ? (
         <>
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
+          {!isImageReady ? (
+            <div className="relative z-10 flex flex-col items-center justify-center h-full gap-2 px-2 text-white">
+              <Icon className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-md" />
+              <span className="text-[10px] sm:text-[11px] tracking-wide uppercase font-semibold opacity-90">
+                {typeLabel}
+              </span>
+            </div>
+          ) : null}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={imagePreview}
             alt={`${doc.name} preview`}
-            className="absolute inset-0 h-full w-full object-cover"
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${isImageReady ? 'opacity-100' : 'opacity-0'}`}
             draggable={false}
             loading="lazy"
+            onLoad={() => {
+              setIsImageReady(true);
+            }}
+            onError={() => {
+              if (!imagePreview) return;
+              setIsImageReady(false);
+              const fallback = documentPreviewFallbackUrl(doc.id);
+              if (imagePreview === fallback) return;
+              setInMemoryDocumentPreviewUrl(previewKey, fallback);
+              setImagePreview(fallback);
+              void primeDocumentPreviewCache(
+                doc.id,
+                Number(doc.lastModified),
+                previewKey,
+              ).catch(() => { });
+            }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/15" />
+          {isImageReady ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/15" /> : null}
         </>
       ) : textPreview ? (
         <>

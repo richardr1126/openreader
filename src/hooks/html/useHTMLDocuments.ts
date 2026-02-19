@@ -2,9 +2,9 @@
 
 import { useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/dexie';
+import { db } from '@/lib/client/dexie';
 import type { HTMLDocument } from '@/types/documents';
-import { sha256HexFromString } from '@/lib/sha256';
+import { sha256HexFromString } from '@/lib/client/sha256';
 
 export function useHTMLDocuments() {
   const documents = useLiveQuery(

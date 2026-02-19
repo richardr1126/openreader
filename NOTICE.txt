@@ -1,4 +1,4 @@
-OpenReader-WebUI
+OpenReader
 Third-Party Notices
 ===================
 

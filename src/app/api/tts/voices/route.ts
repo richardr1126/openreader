@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isKokoroModel } from '@/utils/voice';
+import { isKokoroModel } from '@/lib/shared/kokoro';
+import { auth } from '@/lib/server/auth/auth';
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 const GPT4O_MINI_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer'];
@@ -27,7 +28,7 @@ function getDefaultVoices(provider: string, model: string): string[] {
     }
     return OPENAI_VOICES;
   }
-  
+
   // For Custom OpenAI-Like provider
   if (provider === 'custom-openai') {
     // If using Kokoro-FastAPI (model string contains 'kokoro'), expose full Kokoro voices
@@ -36,7 +37,7 @@ function getDefaultVoices(provider: string, model: string): string[] {
     }
     return CUSTOM_OPENAI_VOICES;
   }
-  
+
   // For Deepinfra provider - model-specific voices
   if (provider === 'deepinfra') {
     if (model === 'hexgrad/Kokoro-82M') {
@@ -58,7 +59,7 @@ function getDefaultVoices(provider: string, model: string): string[] {
     // Default Deepinfra voices
     return CUSTOM_OPENAI_VOICES;
   }
-  
+
   // Default fallback
   return OPENAI_VOICES;
 }
@@ -77,7 +78,7 @@ async function fetchDeepinfraVoices(apiKey: string): Promise<string[]> {
     }
 
     const data = await response.json();
-    
+
     // Extract voice names from the response, excluding preset voices
     if (data.voices && Array.isArray(data.voices)) {
       return data.voices
@@ -93,6 +94,12 @@ async function fetchDeepinfraVoices(apiKey: string): Promise<string[]> {
 
 export async function GET(req: NextRequest) {
   try {
+    // Auth check - require session
+    const session = await auth?.api.getSession({ headers: req.headers });
+    if (auth && !session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const openApiKey = req.headers.get('x-openai-key') || process.env.API_KEY || 'none';
     const openApiBaseUrl = req.headers.get('x-openai-base-url') || process.env.API_BASE;
     const provider = req.headers.get('x-tts-provider') || 'openai';
@@ -106,9 +113,9 @@ export async function GET(req: NextRequest) {
     // For Deepinfra provider with specific models that need API fetching
     if (provider === 'deepinfra') {
       const needsApiFetch = model === 'ResembleAI/chatterbox' ||
-                           model === 'Zyphra/Zonos-v0.1-hybrid' ||
-                           model === 'Zyphra/Zonos-v0.1-transformer';
-      
+        model === 'Zyphra/Zonos-v0.1-hybrid' ||
+        model === 'Zyphra/Zonos-v0.1-transformer';
+
       if (needsApiFetch) {
         const apiVoices = await fetchDeepinfraVoices(openApiKey);
         // Combine default voice with fetched voices
@@ -117,7 +124,7 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ voices: [...defaultVoice, ...apiVoices] });
         }
       }
-      
+
       // For other Deepinfra models, return static defaults
       return NextResponse.json({ voices: getDefaultVoices(provider, model) });
     }
@@ -141,7 +148,7 @@ export async function GET(req: NextRequest) {
       } catch {
         console.log('Custom endpoint does not support voices, using defaults');
       }
-      
+
       // Fallback to default voices if API call fails
       return NextResponse.json({ voices: getDefaultVoices(provider, model) });
     }

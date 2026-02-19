@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { setupTest, uploadFiles, ensureDocumentsListed, waitForDocumentListHintPersist } from './helpers';
+import { setupTest, uploadFiles, ensureDocumentsListed, waitForDocumentListHintPersist, dispatchHtml5DragAndDrop } from './helpers';
 
 test.describe('Document folders and hint persistence', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   // Utility to get the draggable row for a given filename (by link)
@@ -21,13 +21,14 @@ test.describe('Document folders and hint persistence', () => {
     // Drag PDF onto EPUB to create a folder
     const pdfRow = rowFor(page, 'sample.pdf');
     const epubRow = rowFor(page, 'sample.epub');
-    await pdfRow.dragTo(epubRow);
+    await dispatchHtml5DragAndDrop(page, pdfRow, epubRow);
 
     // Folder name dialog appears
     await expect(page.getByRole('heading', { name: 'Create New Folder' })).toBeVisible();
     const nameInput = page.getByPlaceholder('Enter folder name');
     await nameInput.fill('My Folder');
     await nameInput.press('Enter');
+    await expect(page.getByRole('dialog', { name: 'Create New Folder' })).toHaveCount(0);
 
     // Folder shows with both docs
     const folderHeading = page.getByRole('heading', { name: 'My Folder' });
@@ -40,7 +41,7 @@ test.describe('Document folders and hint persistence', () => {
 
     // Drag third doc (TXT) into folder
     const txtRow = rowFor(page, 'sample.txt');
-    await txtRow.dragTo(folderContainer);
+    await dispatchHtml5DragAndDrop(page, txtRow, folderContainer);
     await expect(folderContainer.getByRole('link', { name: /sample\.txt/i })).toBeVisible();
 
     // Collapse folder and verify items are hidden

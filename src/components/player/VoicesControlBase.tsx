@@ -8,7 +8,7 @@ import {
 } from '@headlessui/react';
 import { ChevronUpDownIcon, AudioWaveIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useState } from 'react';
-import { buildKokoroVoiceString, getMaxVoicesForProvider, isKokoroModel, parseKokoroVoiceNames } from '@/utils/voice';
+import { buildKokoroVoiceString, getMaxVoicesForProvider, isKokoroModel, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
 
 export function VoicesControlBase({
   availableVoices,
@@ -96,7 +96,7 @@ export function VoicesControlBase({
             <span>{selectedVoices.length > 1 ? selectedVoices.join(' + ') : selectedVoices[0] || currentVoice}</span>
             <ChevronUpDownIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
           </ListboxButton>
-          <ListboxOptions anchor="top end" className="absolute z-50 w-40 sm:w-44 max-h-64 overflow-auto rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          <ListboxOptions className="absolute bottom-full right-0 mb-1 z-50 w-40 sm:w-44 !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
             {availableVoices.map((voiceId) => (
               <ListboxOption
                 key={voiceId}
@@ -117,7 +117,7 @@ export function VoicesControlBase({
             <span>{currentVoice}</span>
             <ChevronUpDownIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
           </ListboxButton>
-          <ListboxOptions anchor="top end" className="absolute z-50 w-28 sm:w-32 max-h-64 overflow-auto rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          <ListboxOptions className="absolute bottom-full right-0 mb-1 z-50 w-28 sm:w-32 !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
             {availableVoices.map((voiceId) => (
               <ListboxOption
                 key={voiceId}
@@ -135,4 +135,3 @@ export function VoicesControlBase({
     </div>
   );
 }
-

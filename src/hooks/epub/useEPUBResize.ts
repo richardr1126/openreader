@@ -1,5 +1,5 @@
 import { useEffect, RefObject, useState } from 'react';
-import { debounce } from '@/lib/pdf';
+import { debounce } from '@/lib/client/pdf';
 
 export function useEPUBResize(containerRef: RefObject<HTMLDivElement | null>) {
   const [isResizing, setIsResizing] = useState(false);

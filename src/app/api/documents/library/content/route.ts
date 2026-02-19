@@ -1,7 +1,8 @@
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
-import { contentTypeForName, decodeLibraryId, isPathWithinRoot, parseLibraryRoots } from '@/lib/server/library';
+import { contentTypeForName, decodeLibraryId, isPathWithinRoot, parseLibraryRoots } from '@/lib/server/storage/library-mount';
+import { auth } from '@/lib/server/auth/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +58,12 @@ function contentDispositionAttachment(filename: string): string {
 }
 
 export async function GET(req: NextRequest) {
+  // Auth check - require session
+  const session = await auth?.api.getSession({ headers: req.headers });
+  if (auth && !session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const url = new URL(req.url);
   const id = url.searchParams.get('id');
   if (!id) {

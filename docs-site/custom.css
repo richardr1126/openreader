@@ -1,0 +1,134 @@
+:root {
+  /* OpenReader default light theme colors */
+  --ifm-color-primary: #ef4444;
+  --ifm-color-primary-dark: #dc2626;
+  --ifm-color-primary-darker: #b91c1c;
+  --ifm-color-primary-darkest: #991b1b;
+  --ifm-color-primary-light: #f87171;
+  --ifm-color-primary-lighter: #fca5a5;
+  --ifm-color-primary-lightest: #fecaca;
+
+  --ifm-background-color: #ffffff;
+  --ifm-background-surface-color: #f7fafc;
+  --ifm-navbar-background-color: #f7fafc;
+  --ifm-footer-background-color: #f7fafc;
+  --ifm-font-color-base: #2d3748;
+  --ifm-color-content: #2d3748;
+  --ifm-color-content-secondary: #718096;
+  --ifm-toc-border-color: #e2e8f0;
+  --ifm-hr-background-color: #e2e8f0;
+  --ifm-code-background: #e2e8f0;
+  --ifm-code-font-size: 95%;
+}
+
+[data-theme='dark'] {
+  /* OpenReader default dark theme colors */
+  --ifm-color-primary: #f87171;
+  --ifm-color-primary-dark: #ef4444;
+  --ifm-color-primary-darker: #dc2626;
+  --ifm-color-primary-darkest: #b91c1c;
+  --ifm-color-primary-light: #fb8c8c;
+  --ifm-color-primary-lighter: #fca5a5;
+  --ifm-color-primary-lightest: #fecaca;
+
+  --ifm-background-color: #111111;
+  --ifm-background-surface-color: #171717;
+  --ifm-navbar-background-color: #171717;
+  --ifm-footer-background-color: #171717;
+  --ifm-font-color-base: #ededed;
+  --ifm-color-content: #ededed;
+  --ifm-color-content-secondary: #a3a3a3;
+  --ifm-toc-border-color: #343434;
+  --ifm-hr-background-color: #343434;
+  --ifm-code-background: #343434;
+}
+
+.navbar {
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+}
+
+.footer {
+  border-top: 1px solid var(--ifm-toc-border-color);
+  background: var(--ifm-background-surface-color);
+}
+
+.footer__title {
+  color: var(--ifm-font-color-base);
+  font-weight: 600;
+}
+
+.footer__link-item {
+  color: var(--ifm-color-content-secondary);
+}
+
+.footer__link-item:hover {
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+.footer__copyright {
+  border-top: 1px solid var(--ifm-toc-border-color);
+  color: var(--ifm-color-content-secondary);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+/* Force override Infima defaults (which use high-specificity selectors). */
+:root:not(#\#):not(#\#):not(#\#) {
+  --ifm-color-primary: #ef4444 !important;
+  --ifm-color-primary-dark: #dc2626 !important;
+  --ifm-color-primary-darker: #b91c1c !important;
+  --ifm-color-primary-darkest: #991b1b !important;
+  --ifm-color-primary-light: #f87171 !important;
+  --ifm-color-primary-lighter: #fca5a5 !important;
+  --ifm-color-primary-lightest: #fecaca !important;
+
+  --ifm-background-color: #ffffff !important;
+  --ifm-background-surface-color: #f7fafc !important;
+  --ifm-navbar-background-color: #f7fafc !important;
+  --ifm-footer-background-color: #f7fafc !important;
+  --ifm-font-color-base: #2d3748 !important;
+  --ifm-color-content: #2d3748 !important;
+  --ifm-color-content-secondary: #718096 !important;
+  --ifm-toc-border-color: #e2e8f0 !important;
+  --ifm-hr-background-color: #e2e8f0 !important;
+  --ifm-code-background: #e2e8f0 !important;
+}
+
+html[data-theme='dark']:not(#\#):not(#\#):not(#\#) {
+  --ifm-color-primary: #f87171 !important;
+  --ifm-color-primary-dark: #ef4444 !important;
+  --ifm-color-primary-darker: #dc2626 !important;
+  --ifm-color-primary-darkest: #b91c1c !important;
+  --ifm-color-primary-light: #fb8c8c !important;
+  --ifm-color-primary-lighter: #fca5a5 !important;
+  --ifm-color-primary-lightest: #fecaca !important;
+
+  --ifm-background-color: #111111 !important;
+  --ifm-background-surface-color: #171717 !important;
+  --ifm-navbar-background-color: #171717 !important;
+  --ifm-footer-background-color: #171717 !important;
+  --ifm-font-color-base: #ededed !important;
+  --ifm-color-content: #ededed !important;
+  --ifm-color-content-secondary: #a3a3a3 !important;
+  --ifm-toc-border-color: #343434 !important;
+  --ifm-hr-background-color: #343434 !important;
+  --ifm-code-background: #343434 !important;
+}
+
+/* Search/Ask-AI plugin accents should follow OpenReader accent colors. */
+:root:not(#\#):not(#\#):not(#\#) {
+  --search-local-highlight-color: var(--ifm-color-primary) !important;
+  --search-local-hit-active-color: var(--ifm-color-primary) !important;
+  --search-local-input-active-border-color: var(--ifm-color-primary) !important;
+}
+
+.ask-ai:not(#\#):not(#\#) {
+  --ask-ai-primary: var(--ifm-color-primary) !important;
+  --ask-ai-primary-hover: var(--ifm-color-primary-dark) !important;
+}
+
+html[data-theme='dark'] .ask-ai:not(#\#):not(#\#) {
+  --ask-ai-primary: var(--ifm-color-primary) !important;
+  --ask-ai-primary-hover: var(--ifm-color-primary-dark) !important;
+}

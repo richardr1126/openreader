@@ -32,8 +32,8 @@ async function triggerViewportResize(page: any, width: number, height: number) {
 }
 
 test.describe('Document link navigation by type', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   test('navigates to /pdf, /epub, /html and renders correct viewers', async ({ page }) => {
@@ -60,11 +60,12 @@ test.describe('Document link navigation by type', () => {
 });
 
 test.describe('PDF view modes and Navigator', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   test('switches Single/Dual/Scroll modes and uses Navigator to change page', async ({ page }) => {
+    test.setTimeout(60_000);
     // Open PDF viewer
     await uploadAndDisplay(page, 'sample.pdf');
     await expect(page.locator('.react-pdf__Document')).toBeVisible({ timeout: 15000 });
@@ -101,8 +102,8 @@ test.describe('PDF view modes and Navigator', () => {
 });
 
 test.describe('EPUB resize pauses TTS', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   test('resizing viewport pauses playback and play resumes after', async ({ page }) => {

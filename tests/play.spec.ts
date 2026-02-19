@@ -45,8 +45,8 @@ async function changeNativeSpeedAndAssert(page: any, newSpeed: number) {
 }
 
 test.describe('Play/Pause Tests', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   test.describe.configure({ mode: 'serial', timeout: 60000 });

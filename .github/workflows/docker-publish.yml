@@ -23,18 +23,24 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       image_name: ${{ steps.image-name.outputs.image_name }}
+      legacy_image_name: ${{ steps.image-name.outputs.legacy_image_name }}
       tags: ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
     steps:
-      - name: Compute lowercase image name
+      - name: Compute Docker image names
         id: image-name
-        run: echo "image_name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image_name=${owner}/openreader" >> "$GITHUB_OUTPUT"
+          echo "legacy_image_name=${owner}/openreader-webui" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ steps.image-name.outputs.image_name }}
+          images: |
+            ${{ env.REGISTRY }}/${{ steps.image-name.outputs.image_name }}
+            ${{ env.REGISTRY }}/${{ steps.image-name.outputs.legacy_image_name }}
           tags: |
             type=raw,value=latest,enable=${{ (github.event_name == 'push' && !contains(github.ref, '-pre')) || (github.event_name == 'workflow_dispatch' && inputs.use_latest_tag == true) }},priority=1000
             type=semver,pattern={{version}}
@@ -86,7 +92,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           provenance: false
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }},${{ env.REGISTRY }}/${{ needs.prepare.outputs.legacy_image_name }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |

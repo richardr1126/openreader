@@ -15,7 +15,7 @@ export function Header({
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {left}
           {typeof title === 'string' ? (
-            <h1 className="text-xs sm:text-sm font-semibold truncate text-foreground tracking-tight">{title}</h1>
+            <h1 className="text-xs md:text-sm font-semibold truncate text-foreground tracking-tight">{title}</h1>
           ) : (
             title
           )}

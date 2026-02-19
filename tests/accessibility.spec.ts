@@ -8,8 +8,8 @@ import {
 } from './helpers';
 
 test.describe('Accessibility smoke', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   test('dropzone input and hint text are accessible', async ({ page }) => {

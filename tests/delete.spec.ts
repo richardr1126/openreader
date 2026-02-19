@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { setupTest, uploadFile, expectDocumentListed, expectNoDocumentLink, deleteDocumentByName, deleteAllLocalDocuments, ensureDocumentsListed } from './helpers';
 
 test.describe('Document deletion flow', () => {
-  test.beforeEach(async ({ page }) => {
-    await setupTest(page);
+  test.beforeEach(async ({ page }, testInfo) => {
+    await setupTest(page, testInfo);
   });
 
   test('deletes a document and updates list', async ({ page }) => {

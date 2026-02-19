@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import 'dotenv/config';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -7,6 +8,7 @@ export default defineConfig({
   testDir: './tests',
   timeout: 30 * 1000,
   outputDir: './tests/results',
+  globalTeardown: './tests/global-teardown.ts',
   // fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
@@ -26,7 +28,8 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run build && npm run start',
+    // Disable auth rate limiting for tests to support parallel workers creating sessions
+    command: `npm run build && DISABLE_AUTH_RATE_LIMIT=true npm run start`,
     url: 'http://localhost:3003',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

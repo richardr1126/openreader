@@ -27,18 +27,19 @@ import {
 } from 'react';
 import { Howl } from 'howler';
 import toast from 'react-hot-toast';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 
 import { useConfig } from '@/contexts/ConfigContext';
 import { useAudioCache } from '@/hooks/audio/useAudioCache';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
-import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/dexie';
-import { useBackgroundState } from '@/hooks/audio/useBackgroundState';
-import { withRetry, generateTTS, alignAudio } from '@/lib/client';
-import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksEPUB } from '@/lib/nlp';
-import { isKokoroModel } from '@/utils/voice';
+import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/client/dexie';
+import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
+import { withRetry, generateTTS, alignAudio } from '@/lib/client/api/audiobooks';
+import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksEPUB } from '@/lib/shared/nlp';
+import { isKokoroModel } from '@/lib/shared/kokoro';
+import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
   TTSLocation,
   TTSSmartMergeResult,
@@ -52,6 +53,7 @@ import type {
   TTSRequestHeaders,
   TTSRetryOptions,
 } from '@/types/client';
+import type { ReaderType } from '@/types/user-state';
 
 // Media globals
 declare global {
@@ -98,6 +100,12 @@ interface SetTextOptions {
 
 const CONTINUATION_LOOKAHEAD = 600;
 const SENTENCE_ENDING = /[.?!…]["'”’)\]]*\s*$/;
+const wordHighlightFeatureEnabled =
+  process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
+
+// Tiny silent WAV used to unlock HTML5 audio on iOS/Safari.
+const SILENT_WAV_DATA_URI =
+  'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
 const normalizeLocationKey = (location: TTSLocation) =>
   typeof location === 'number' ? `num:${location}` : `str:${location}`;
@@ -298,6 +306,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const audioContext = useAudioContext();
   const audioCache = useAudioCache(25);
   const { availableVoices, fetchVoices } = useVoiceManagement(openApiKey, openApiBaseUrl, configTTSProvider, configTTSModel);
+  const {
+    authEnabled,
+    onTTSStart,
+    onTTSComplete,
+    refresh: refreshRateLimit,
+    triggerRateLimit,
+    isAtLimit,
+  } = useAuthRateLimit();
 
   // Add ref for location change handler
   const locationChangeHandlerRef = useRef<((location: TTSLocation) => void) | null>(null);
@@ -325,6 +341,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Get document ID from URL params
   const { id } = useParams();
+  const pathname = usePathname();
+
+  const currentReaderType: ReaderType = useMemo(() => {
+    if (pathname.startsWith('/epub/')) return 'epub';
+    if (pathname.startsWith('/html/')) return 'html';
+    return 'pdf';
+  }, [pathname]);
 
   /**
    * State Management
@@ -364,6 +387,112 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [currentWordIndex, setCurrentWordIndex] = useState<number | null>(null);
   const sentencesRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
+  const setTextRef = useRef<(text: string, options?: boolean | SetTextOptions) => void>(() => { });
+  const prefetchedLocationTextRef = useRef<Map<string, string>>(new Map());
+  const pendingNextLocationRef = useRef<TTSLocation | undefined>(undefined);
+
+  const audioUnlockAttemptRef = useRef(0);
+
+  // Safari/iOS (HTML5 audio) can spontaneously reset playbackRate to 1. Keep re-applying
+  // the desired rate while a sentence is playing.
+  const rateWatchdogIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearRateWatchdog = useCallback(() => {
+    if (!rateWatchdogIntervalRef.current) return;
+    clearInterval(rateWatchdogIntervalRef.current);
+    rateWatchdogIntervalRef.current = null;
+  }, []);
+
+  const applyPlaybackRateToHowl = useCallback((howl: Howl | null) => {
+    if (!howl) return;
+
+    try {
+      howl.rate(audioSpeed);
+    } catch {
+      // ignore
+    }
+
+    // Best-effort: Howler doesn't expose the underlying HTMLAudioElement publicly.
+    // This helps on browsers that reset playbackRate/defaultPlaybackRate.
+    try {
+      const sounds = (howl as unknown as { _sounds?: Array<{ _node?: unknown }> })._sounds;
+      const node = sounds?.[0]?._node as unknown;
+      if (node && typeof node === 'object') {
+        const anyNode = node as { playbackRate?: number; defaultPlaybackRate?: number };
+        if (typeof anyNode.playbackRate === 'number') anyNode.playbackRate = audioSpeed;
+        if (typeof anyNode.defaultPlaybackRate === 'number') anyNode.defaultPlaybackRate = audioSpeed;
+      }
+    } catch {
+      // ignore
+    }
+  }, [audioSpeed]);
+
+  const startRateWatchdog = useCallback((howl: Howl | null) => {
+    if (!howl) return;
+    clearRateWatchdog();
+
+    // Apply immediately + keep applying while playback is active.
+    applyPlaybackRateToHowl(howl);
+    rateWatchdogIntervalRef.current = setInterval(() => {
+      applyPlaybackRateToHowl(howl);
+    }, 250);
+  }, [applyPlaybackRateToHowl, clearRateWatchdog]);
+
+  const unlockPlaybackOnUserGesture = useCallback(() => {
+    // Best-effort; safe to call multiple times.
+    audioUnlockAttemptRef.current += 1;
+    const attempt = audioUnlockAttemptRef.current;
+
+    try {
+      void audioContext?.resume();
+    } catch {
+      // ignore
+    }
+
+    try {
+      const el = new Audio(SILENT_WAV_DATA_URI);
+      try {
+        el.setAttribute('playsinline', 'true');
+      } catch {
+        // ignore
+      }
+      el.preload = 'auto';
+      el.volume = 0;
+
+      const p = el.play();
+      if (p && typeof (p as Promise<void>).then === 'function') {
+        void (p as Promise<void>)
+          .then(() => {
+            if (audioUnlockAttemptRef.current !== attempt) return;
+            try {
+              el.pause();
+              el.currentTime = 0;
+            } catch {
+              // ignore
+            }
+          })
+          .catch(() => {
+            // ignore
+          });
+      }
+    } catch {
+      // ignore
+    }
+  }, [audioContext]);
+
+  const isAutoplayBlockedError = useCallback((err: unknown) => {
+    const msg = (() => {
+      if (typeof err === 'string') return err;
+      if (err instanceof Error) return err.message;
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        const maybe = (err as { message?: unknown }).message;
+        if (typeof maybe === 'string') return maybe;
+      }
+      return '';
+    })();
+
+    return /notallowed|not allowed|user gesture|interaction|autoplay|play\(\) failed/i.test(msg);
+  }, []);
 
   useEffect(() => {
     sentencesRef.current = sentences;
@@ -393,6 +522,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * @param {boolean} [clearPending=false] - Whether to clear pending requests
    */
   const abortAudio = useCallback((clearPending = false) => {
+    clearRateWatchdog();
     if (activeHowl) {
       activeHowl.stop();
       activeHowl.unload();
@@ -412,7 +542,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnTimeoutRef.current = null;
     }
     setCurrentWordIndex(null);
-  }, [activeHowl]);
+  }, [activeHowl, clearRateWatchdog]);
 
   /**
    * Pauses the current audio playback
@@ -447,6 +577,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const advance = useCallback(async (backwards = false) => {
     const nextIndex = currentIndex + (backwards ? -1 : 1);
+    const movingForward = !backwards && nextIndex >= sentences.length;
 
     // Handle within current page bounds
     if (nextIndex < sentences.length && nextIndex >= 0) {
@@ -456,6 +587,25 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // For EPUB documents, always try to advance to next/prev section
     if (isEPUB && locationChangeHandlerRef.current) {
+      if (movingForward && typeof document !== 'undefined' && document.hidden) {
+        const targetLocation = pendingNextLocationRef.current;
+        if (targetLocation !== undefined) {
+          const bufferKey = normalizeLocationKey(targetLocation);
+          const prefetchedText = prefetchedLocationTextRef.current.get(bufferKey);
+          if (prefetchedText?.trim()) {
+            prefetchedLocationTextRef.current.delete(bufferKey);
+            pendingNextLocationRef.current = undefined;
+            setCurrDocPage(targetLocation);
+            setTextRef.current(prefetchedText, {
+              shouldPause: false,
+              location: targetLocation,
+            });
+            // Ask the viewer to continue turning pages/sections; this may be deferred while hidden.
+            locationChangeHandlerRef.current('next');
+            return;
+          }
+        }
+      }
       locationChangeHandlerRef.current(nextIndex >= sentences.length ? 'next' : 'prev');
       return;
     }
@@ -465,8 +615,27 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       // Handle next/previous page transitions
       if ((nextIndex >= sentences.length && currDocPageNumber < currDocPages!) ||
         (nextIndex < 0 && currDocPageNumber > 1)) {
+        const targetLocation = currDocPageNumber + (nextIndex >= sentences.length ? 1 : -1);
+
+        // In background tabs, page text extraction can be delayed. If we already have
+        // prefetched text for the target page, keep speaking without waiting for viewer callbacks.
+        if (movingForward && typeof document !== 'undefined' && document.hidden) {
+          const bufferKey = normalizeLocationKey(targetLocation);
+          const prefetchedText = prefetchedLocationTextRef.current.get(bufferKey);
+          if (prefetchedText?.trim()) {
+            prefetchedLocationTextRef.current.delete(bufferKey);
+            pendingNextLocationRef.current = undefined;
+            setCurrDocPage(targetLocation);
+            setTextRef.current(prefetchedText, {
+              shouldPause: false,
+              location: targetLocation,
+            });
+            return;
+          }
+        }
+
         // Pass wasPlaying to maintain playback state during page turn
-        skipToLocation(currDocPageNumber + (nextIndex >= sentences.length ? 1 : -1));
+        skipToLocation(targetLocation);
         return;
       }
 
@@ -493,10 +662,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     toast.success(isEPUB ? 'Skipping blank section' : `Skipping blank page ${currDocPageNumber}`, {
       id: isEPUB ? `epub-section-skip` : `page-${currDocPageNumber}`,
-      iconTheme: {
-        primary: 'var(--accent)',
-        secondary: 'var(--background)',
-      },
       style: {
         background: 'var(--background)',
         color: 'var(--accent)',
@@ -566,6 +731,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       epubContinuationRef.current = null;
       continuationCarryRef.current.clear();
       pageTurnEstimateRef.current = null;
+    }
+
+    // Keep the next-location text around so background page turns can continue when
+    // viewer/location callbacks are throttled by the browser.
+    prefetchedLocationTextRef.current.clear();
+    pendingNextLocationRef.current = normalizedOptions.nextLocation;
+    if (normalizedOptions.nextLocation !== undefined && normalizedOptions.nextText?.trim()) {
+      prefetchedLocationTextRef.current.set(
+        normalizeLocationKey(normalizedOptions.nextLocation),
+        normalizedOptions.nextText
+      );
     }
 
     // Check for blank section after adjustments
@@ -651,28 +827,29 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         console.warn('Error processing text:', error);
         setIsProcessing(false);
         toast.error('Failed to process text', {
-          style: {
-            background: 'var(--background)',
-            color: 'var(--accent)',
-          },
           duration: 3000,
         });
       });
   }, [isPlaying, handleBlankSection, abortAudio, splitTextToTtsBlocksLocal, pendingRestoreIndex, isEPUB, smartSentenceSplitting]);
 
+  useEffect(() => {
+    setTextRef.current = setText;
+  }, [setText]);
+
   /**
    * Toggles the playback state between playing and paused
    */
   const togglePlay = useCallback(() => {
-    setIsPlaying((prev) => {
-      if (!prev) {
-        return true;
-      } else {
-        abortAudio();
-        return false;
-      }
-    });
-  }, [abortAudio]);
+    if (isPlaying) {
+      abortAudio();
+      setIsPlaying(false);
+      return;
+    }
+
+    // Ensure audio is unlocked while we're still in the click/tap handler.
+    unlockPlaybackOnUserGesture();
+    setIsPlaying(true);
+  }, [abortAudio, isPlaying, unlockPlaybackOnUserGesture]);
 
 
   /**
@@ -752,10 +929,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * @param {string} sentence - The sentence to generate audio for
    * @returns {Promise<TTSAudioBuffer | undefined>} The generated audio buffer
    */
-  const getAudio = useCallback(async (sentence: string): Promise<TTSAudioBuffer | undefined> => {
+  const getAudio = useCallback(async (sentence: string, preload = false): Promise<TTSAudioBuffer | undefined> => {
     const alignmentEnabledForCurrentDoc =
-      (!isEPUB && pdfHighlightEnabled && pdfWordHighlightEnabled) ||
-      (isEPUB && epubHighlightEnabled && epubWordHighlightEnabled);
+      wordHighlightFeatureEnabled &&
+      ((!isEPUB && pdfHighlightEnabled && pdfWordHighlightEnabled) ||
+        (isEPUB && epubHighlightEnabled && epubWordHighlightEnabled));
     // Helper to ensure we have an alignment for a given
     // sentence/audio pair, even when the audio itself is
     // served from the local cache.
@@ -818,6 +996,15 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       return cachedAudio;
     }
 
+    // If the user is already out of quota, avoid spamming requests.
+    // Cached audio above is still allowed to play.
+    if (isAtLimit) {
+      if (!preload) {
+        setIsPlaying(false);
+      }
+      return undefined;
+    }
+
     try {
       console.log('Requesting audio for sentence:', sentence);
 
@@ -849,12 +1036,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         backoffFactor: 2
       };
 
-      const arrayBuffer = await withRetry(
-        async () => {
-          return await generateTTS(reqBody, reqHeaders, controller.signal);
-        },
-        retryOptions
-      );
+      onTTSStart();
+      let arrayBuffer: TTSAudioBuffer;
+      try {
+        arrayBuffer = await withRetry(
+          async () => {
+            return await generateTTS(reqBody, reqHeaders, controller.signal);
+          },
+          retryOptions
+        );
+      } finally {
+        onTTSComplete();
+      }
 
       // Remove the controller once the request is complete
       activeAbortControllers.current.delete(controller);
@@ -867,21 +1060,57 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
       return arrayBuffer;
     } catch (error) {
+      const status = (() => {
+        if (typeof error === 'object' && error !== null && 'status' in error) {
+          const maybe = (error as { status?: unknown }).status;
+          return typeof maybe === 'number' ? maybe : undefined;
+        }
+        return undefined;
+      })();
+
+      const code = (() => {
+        if (typeof error === 'object' && error !== null && 'code' in error) {
+          const maybe = (error as { code?: unknown }).code;
+          return typeof maybe === 'string' ? maybe : undefined;
+        }
+        return undefined;
+      })();
+
       // Check if this was an abort error
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('TTS request aborted:', sentence.substring(0, 20));
         return;
       }
 
-      setIsPlaying(false);
-      toast.error('Failed to generate audio. Server not responding.', {
-        id: 'tts-api-error',
-        style: {
-          background: 'var(--background)',
-          color: 'var(--accent)',
-        },
-        duration: 7000,
-      });
+      // If a preload request fails, we should not flip the global playback state.
+      // Otherwise the UI can lose the pause button while the current sentence
+      // continues playing.
+      if (!preload) {
+        setIsPlaying(false);
+      }
+
+      // Handle daily quota exceeded (429 + Problem Details code)
+      if (status === 429 && code === 'USER_DAILY_QUOTA_EXCEEDED') {
+        // Avoid noisy toasts from background preloading; keep the user-facing error for active playback.
+        if (!preload) {
+          toast.error('Daily TTS limit reached.', {
+            id: 'tts-limit-error',
+            duration: 5000,
+          });
+        }
+        triggerRateLimit();
+        refreshRateLimit().catch(console.error);
+        // Do NOT re-throw, just return undefined to stop playback gracefully
+        return undefined;
+      }
+
+      // Avoid noisy toasts from background preloading.
+      if (!preload) {
+        toast.error('TTS failed. Skipped sentence and paused.', {
+          id: 'tts-api-error',
+          duration: 7000,
+        });
+      }
       throw error;
     }
   }, [
@@ -897,7 +1126,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
     epubHighlightEnabled,
-    epubWordHighlightEnabled
+    epubWordHighlightEnabled,
+    triggerRateLimit,
+    refreshRateLimit,
+    onTTSComplete,
+    onTTSStart,
+    isAtLimit
   ]);
 
   /**
@@ -928,8 +1162,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Create the audio processing promise
     const processPromise = (async () => {
       try {
-        const audioBuffer = await getAudio(sentence);
-        if (!audioBuffer) throw new Error('No audio data generated');
+        const audioBuffer = await getAudio(sentence, preload);
+        if (!audioBuffer) {
+          // If quota or other handled error returns undefined, ensure we don't throw "No audio data"
+          // Just return empty string to signal graceful failure/skip
+          return '';
+        }
 
         // Convert to base64 data URI
         const bytes = new Uint8Array(audioBuffer);
@@ -946,9 +1184,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (preload) {
       preloadRequests.current.set(sentence, processPromise);
       // Clean up the map entry once the promise resolves or rejects
-      processPromise.finally(() => {
-        preloadRequests.current.delete(sentence);
-      });
+      void processPromise
+        .finally(() => {
+          preloadRequests.current.delete(sentence);
+        })
+        .catch(() => {
+          // Prevent unhandled rejections from the cleanup-only chained promise.
+        });
     }
 
     return processPromise;
@@ -970,148 +1212,223 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const INITIAL_RETRY_DELAY = 1000; // 1 second
 
     const createHowl = async (retryCount = 0): Promise<Howl | null> => {
-      try {
-        // Get the processed audio data URI directly from processSentence
-        const audioDataUri = await processSentence(sentence);
-        if (!audioDataUri) {
-          throw new Error('No audio data generated');
-        }
+      let playErrorAttempts = 0;
+      // Get the processed audio data URI directly from processSentence
+      const audioDataUri = await processSentence(sentence);
+      if (!audioDataUri) {
+        // Graceful exit for rate limit / abort / intentionally skipped sentence
+        console.log('Skipping playback for sentence (no audio generated)');
+        return null;
+      }
 
-        // Force unload any previous Howl instance to free up resources
-        if (activeHowl) {
-          activeHowl.unload();
-        }
+      // Force unload any previous Howl instance to free up resources
+      if (activeHowl) {
+        activeHowl.unload();
+      }
 
-        return new Howl({
-          src: [audioDataUri],
-          format: ['mp3', 'mpeg'],
-          html5: true,
-          preload: true,
-          pool: 5,
-          rate: audioSpeed,
-          onload: function (this: Howl) {
-            const estimate = pageTurnEstimateRef.current;
-            if (!estimate || estimate.sentenceIndex !== sentenceIndex) return;
-            if (!visualPageChangeHandlerRef.current) return;
+      return new Howl({
+        src: [audioDataUri],
+        format: ['mp3', 'mpeg'],
+        html5: true,
+        preload: true,
+        // We never need overlapping playback for a single sentence. Keeping this low avoids
+        // Safari/HTML5 Audio pool exhaustion when retries happen.
+        pool: 1,
+        rate: audioSpeed,
+        onload: function (this: Howl) {
+          applyPlaybackRateToHowl(this);
+          const estimate = pageTurnEstimateRef.current;
+          if (!estimate || estimate.sentenceIndex !== sentenceIndex) return;
+          if (!visualPageChangeHandlerRef.current) return;
 
-            const duration = this.duration();
-            if (!duration || !Number.isFinite(duration)) return;
+          const duration = this.duration();
+          if (!duration || !Number.isFinite(duration)) return;
 
-            const delayMs = duration * estimate.fraction * 1000;
-            if (delayMs <= 0 || delayMs >= duration * 1000) return;
+          const delayMs = duration * estimate.fraction * 1000;
+          if (delayMs <= 0 || delayMs >= duration * 1000) return;
 
-            if (pageTurnTimeoutRef.current) {
-              clearTimeout(pageTurnTimeoutRef.current);
-            }
+          if (pageTurnTimeoutRef.current) {
+            clearTimeout(pageTurnTimeoutRef.current);
+          }
 
-            pageTurnTimeoutRef.current = setTimeout(() => {
-              if (!isPlaying) return;
-              const currentEstimate = pageTurnEstimateRef.current;
-              if (!currentEstimate || currentEstimate.sentenceIndex !== sentenceIndex) return;
-              visualPageChangeHandlerRef.current?.(currentEstimate.location);
-            }, delayMs);
-          },
-          onplay: () => {
+          pageTurnTimeoutRef.current = setTimeout(() => {
+            if (!isPlaying) return;
+            const currentEstimate = pageTurnEstimateRef.current;
+            if (!currentEstimate || currentEstimate.sentenceIndex !== sentenceIndex) return;
+            visualPageChangeHandlerRef.current?.(currentEstimate.location);
+          }, delayMs);
+        },
+        onplay: function (this: Howl) {
+          setIsProcessing(false);
+          startRateWatchdog(this);
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'playing';
+          }
+        },
+        onplayerror: function (this: Howl, soundId, error) {
+          const actualError = error ?? soundId;
+          console.warn('Howl playback error:', actualError);
+
+          // Common on iOS/Safari when the actual play() call happens after awaiting TTS.
+          // Do not skip/advance in this case; just pause and tell the user to tap play again.
+          if (isAutoplayBlockedError(actualError)) {
             setIsProcessing(false);
-            if ('mediaSession' in navigator) {
-              navigator.mediaSession.playbackState = 'playing';
-            }
-          },
-          onplayerror: function (this: Howl, error) {
-            console.warn('Howl playback error:', error);
-            // Try to recover by forcing HTML5 audio mode
-            if (this.state() === 'loaded') {
+            setActiveHowl(null);
+            try {
               this.unload();
-              this.once('load', () => {
-                this.play();
-              });
-              this.load();
+            } catch {
+              // ignore unload errors
             }
-          },
-          onloaderror: async function (this: Howl, error) {
-            console.warn(`Error loading audio (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error);
+            setIsPlaying(false);
 
-            if (retryCount < MAX_RETRIES) {
-              // Calculate exponential backoff delay
-              const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
-              console.log(`Retrying in ${delay}ms...`);
+            toast.error('Playback was blocked by your browser. Tap play again to start.', {
+              id: 'tts-playback-blocked',
+              duration: 4000,
+            });
+            return;
+          }
 
-              // Wait for the delay
-              await new Promise(resolve => setTimeout(resolve, delay));
+          playErrorAttempts += 1;
 
-              // Try to create a new Howl instance
+          // Avoid looping for many seconds on Safari: if playback still fails after a single
+          // recovery attempt, skip the sentence and pause.
+          if (playErrorAttempts > 1) {
+            setIsProcessing(false);
+            setActiveHowl(null);
+            this.unload();
+            setIsPlaying(false);
+
+            toast.error('Audio playback failed. Skipped sentence and paused.', {
+              id: 'tts-playback-error',
+              duration: 4000,
+            });
+
+            advance();
+            return;
+          }
+
+          // Try to recover by reloading once.
+          if (this.state() === 'loaded') {
+            this.unload();
+            this.once('load', () => this.play());
+            this.load();
+          }
+        },
+        onloaderror: async function (this: Howl, soundId, error) {
+          const actualError = error ?? soundId;
+          console.warn(`Error loading audio (attempt ${retryCount + 1}/${MAX_RETRIES}):`, actualError);
+
+          if (retryCount < MAX_RETRIES) {
+            // Calculate exponential backoff delay
+            const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
+            console.log(`Retrying in ${delay}ms...`);
+
+            // Free the current Howl/audio objects before retrying to avoid pool exhaustion.
+            try {
+              this.unload();
+            } catch {
+              // ignore unload errors
+            }
+
+            // Wait for the delay
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            // Try to create a new Howl instance
+            try {
               const retryHowl = await createHowl(retryCount + 1);
               if (retryHowl) {
                 setActiveHowl(retryHowl);
                 retryHowl.play();
+              } else {
+                // No audio generated (quota/abort). Stop cleanly without spamming errors.
+                setIsProcessing(false);
+                setActiveHowl(null);
+                setIsPlaying(false);
               }
-            } else {
-              console.error('Max retries reached, moving to next sentence');
+            } catch (err) {
+              console.error('Error creating Howl instance:', err);
               setIsProcessing(false);
               setActiveHowl(null);
-              this.unload();
               setIsPlaying(false);
 
               toast.error('Audio loading failed after retries. Moving to next sentence...', {
                 id: 'audio-load-error',
-                style: {
-                  background: 'var(--background)',
-                  color: 'var(--accent)',
-                },
                 duration: 2000,
               });
 
               advance();
             }
-          },
-          onend: function (this: Howl) {
-            this.unload();
-            setActiveHowl(null);
-            if (pageTurnTimeoutRef.current) {
-              clearTimeout(pageTurnTimeoutRef.current);
-              pageTurnTimeoutRef.current = null;
-            }
-            if (isPlaying) {
-              advance();
-            }
-          },
-          onstop: function (this: Howl) {
+          } else {
+            console.error('Max retries reached, moving to next sentence');
             setIsProcessing(false);
+            setActiveHowl(null);
             this.unload();
+            setIsPlaying(false);
+
+            toast.error('Audio loading failed after retries. Moving to next sentence...', {
+              id: 'audio-load-error',
+              duration: 2000,
+            });
+
+            advance();
           }
-        });
-      } catch (error) {
-        console.error('Error creating Howl instance:', error);
-        return null;
-      }
+        },
+        onend: function (this: Howl) {
+          clearRateWatchdog();
+          this.unload();
+          setActiveHowl(null);
+          if (pageTurnTimeoutRef.current) {
+            clearTimeout(pageTurnTimeoutRef.current);
+            pageTurnTimeoutRef.current = null;
+          }
+          if (isPlaying) {
+            advance();
+          }
+        },
+        onstop: function (this: Howl) {
+          clearRateWatchdog();
+          setIsProcessing(false);
+          this.unload();
+        }
+      });
     };
 
     try {
       const howl = await createHowl();
-      if (howl) {
-        setActiveHowl(howl);
-        return howl;
+      if (!howl) {
+        // No audio generated (quota hit / aborted / intentionally skipped). Stop cleanly without
+        // advancing or spamming errors.
+        setActiveHowl(null);
+        setIsProcessing(false);
+        setIsPlaying(false);
+        return null;
       }
 
-      throw new Error('Failed to create Howl instance');
+      setActiveHowl(howl);
+      return howl;
     } catch (error) {
       console.error('Error playing TTS:', error);
       setActiveHowl(null);
       setIsProcessing(false);
 
-      toast.error('Failed to process audio. Skipping problematic sentence.', {
-        id: 'tts-processing-error',
-        style: {
-          background: 'var(--background)',
-          color: 'var(--accent)',
-        },
-        duration: 3000,
-      });
-
+      // Skip the sentence but pause playback (user can resume manually).
+      abortAudio(true);
+      setIsPlaying(false);
       advance();
       return null;
     }
-  }, [isPlaying, advance, activeHowl, processSentence, audioSpeed]);
+  }, [
+    abortAudio,
+    isPlaying,
+    advance,
+    activeHowl,
+    processSentence,
+    audioSpeed,
+    isAutoplayBlockedError,
+    applyPlaybackRateToHowl,
+    startRateWatchdog,
+    clearRateWatchdog,
+  ]);
 
   const playAudio = useCallback(async () => {
     const sentence = sentences[currentIndex];
@@ -1137,12 +1454,15 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, [sentences, currentIndex, playSentenceWithHowl, voice, speed, configTTSProvider, ttsModel]);
 
-  // Place useBackgroundState after playAudio is defined
-  const isBackgrounded = useBackgroundState({
-    activeHowl,
-    isPlaying,
-    playAudio,
-  });
+  // Keep the current playback rate applied to the active Howl. Some browsers (notably
+  // iOS Safari with HTML5 audio) can reset playbackRate after initial load/play.
+  useEffect(() => {
+    if (!activeHowl) return;
+    applyPlaybackRateToHowl(activeHowl);
+    if (isPlaying) {
+      startRateWatchdog(activeHowl);
+    }
+  }, [activeHowl, audioSpeed, applyPlaybackRateToHowl, isPlaying, startRateWatchdog]);
 
   // Track the current word index during playback using Howler's seek position
   useEffect(() => {
@@ -1189,6 +1509,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * Preloads the next sentence's audio
    */
   const preloadNextAudio = useCallback(async () => {
+    if (isAtLimit) return;
     try {
       const nextSentence = sentences[currentIndex + 1];
       if (nextSentence) {
@@ -1201,16 +1522,33 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         );
 
         if (!audioCache.has(nextKey) && !preloadRequests.current.has(nextSentence)) {
-        // Start preloading but don't wait for it to complete
+          // Start preloading but don't wait for it to complete
           processSentence(nextSentence, true).catch(error => {
-            console.error('Error preloading next sentence:', error);
+            const status = (() => {
+              if (typeof error === 'object' && error !== null && 'status' in error) {
+                const maybe = (error as { status?: unknown }).status;
+                return typeof maybe === 'number' ? maybe : undefined;
+              }
+              return undefined;
+            })();
+            const code = (() => {
+              if (typeof error === 'object' && error !== null && 'code' in error) {
+                const maybe = (error as { code?: unknown }).code;
+                return typeof maybe === 'string' ? maybe : undefined;
+              }
+              return undefined;
+            })();
+            // Ignore quota errors during preload
+            if (!(status === 429 && code === 'USER_DAILY_QUOTA_EXCEEDED')) {
+              console.error('Error preloading next sentence:', error);
+            }
           });
         }
       }
     } catch (error) {
       console.error('Error initiating preload:', error);
     }
-  }, [currentIndex, sentences, audioCache, processSentence, voice, speed, configTTSProvider, ttsModel]);
+  }, [isAtLimit, currentIndex, sentences, audioCache, processSentence, voice, speed, configTTSProvider, ttsModel]);
 
   /**
    * Main Playback Driver
@@ -1221,7 +1559,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (isProcessing) return; // Don't proceed if processing audio
     if (!sentences[currentIndex]) return; // Don't proceed if no sentence to play
     if (activeHowl) return; // Don't proceed if audio is already playing
-    if (isBackgrounded) return; // Don't proceed if backgrounded
 
     // Start playing current sentence
     playAudio();
@@ -1241,7 +1578,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentIndex,
     sentences,
     activeHowl,
-    isBackgrounded,
     playAudio,
     preloadNextAudio,
     abortAudio
@@ -1276,9 +1612,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const stopAndPlayFromIndex = useCallback((index: number) => {
     abortAudio();
 
+    // Same autoplay-unlock issue as togglePlay when starting from a fresh load.
+    unlockPlaybackOnUserGesture();
+
     setCurrentIndex(index);
     setIsPlaying(true);
-  }, [abortAudio]);
+  }, [abortAudio, unlockPlaybackOnUserGesture]);
 
   /**
    * Sets the speed and restarts the playback
@@ -1382,7 +1721,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const value = useMemo(() => ({
     isPlaying,
     isProcessing,
-    isBackgrounded,
     currentSentence: sentences[currentIndex] || '',
     currentSentenceAlignment,
     currentWordIndex,
@@ -1408,7 +1746,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }), [
     isPlaying,
     isProcessing,
-    isBackgrounded,
     sentences,
     currentIndex,
     currDocPage,
@@ -1441,38 +1778,75 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipBackward,
   });
 
-  // Load last location on mount for both EPUB and PDF
+  // Load last location on mount for both EPUB and PDF.
+  // Prefer server-backed progress when available, then fall back to local Dexie.
   useEffect(() => {
-    if (id) {
-      getLastDocumentLocation(id as string).then(lastLocation => {
-        if (lastLocation) {
-          console.log('Setting last location:', lastLocation);
+    if (!id) return;
 
-          if (isEPUB && locationChangeHandlerRef.current) {
-            // For EPUB documents, use the location change handler
-            locationChangeHandlerRef.current(lastLocation);
-          } else if (!isEPUB) {
-            // For PDF documents, parse the location as "page:sentence"
-            try {
-              const [pageStr, sentenceIndexStr] = lastLocation.split(':');
-              const page = parseInt(pageStr, 10);
-              const sentenceIndex = parseInt(sentenceIndexStr, 10);
+    let cancelled = false;
+    const docId = id as string;
 
-              if (!isNaN(page) && !isNaN(sentenceIndex)) {
-                console.log(`Restoring PDF position: page ${page}, sentence ${sentenceIndex}`);
-                // Skip to the page first, then the sentence index will be restored when setText is called
-                setCurrDocPage(page);
-                // Store the sentence index to be used when text is loaded
-                setPendingRestoreIndex(sentenceIndex);
-              }
-            } catch (error) {
-              console.warn('Error parsing PDF location:', error);
-            }
+    const applyLocation = (lastLocation: string) => {
+      console.log('Setting last location:', lastLocation);
+
+      if (isEPUB && locationChangeHandlerRef.current) {
+        // For EPUB documents, use the location change handler
+        locationChangeHandlerRef.current(lastLocation);
+        return;
+      }
+
+      if (!isEPUB) {
+        // For PDF documents, parse the location as "page:sentence"
+        try {
+          const [pageStr, sentenceIndexStr] = lastLocation.split(':');
+          const page = parseInt(pageStr, 10);
+          const sentenceIndex = parseInt(sentenceIndexStr, 10);
+
+          if (!isNaN(page) && !isNaN(sentenceIndex)) {
+            console.log(`Restoring PDF position: page ${page}, sentence ${sentenceIndex}`);
+            // Skip to the page first, then the sentence index will be restored when setText is called
+            setCurrDocPage(page);
+            // Store the sentence index to be used when text is loaded
+            setPendingRestoreIndex(sentenceIndex);
           }
+        } catch (error) {
+          console.warn('Error parsing PDF location:', error);
         }
-      });
-    }
-  }, [id, isEPUB]);
+      }
+    };
+
+    const load = async () => {
+      if (authEnabled) {
+        try {
+          const remote = await getDocumentProgress(docId);
+          if (!cancelled && remote?.location) {
+            await setLastDocumentLocation(docId, remote.location).catch((error) => {
+              console.warn('Error caching remote location locally:', error);
+            });
+            applyLocation(remote.location);
+            return;
+          }
+        } catch (error) {
+          console.warn('Error loading remote progress:', error);
+        }
+      }
+
+      try {
+        const local = await getLastDocumentLocation(docId);
+        if (!cancelled && local) {
+          applyLocation(local);
+        }
+      } catch (error) {
+        console.warn('Error loading local last location:', error);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isEPUB, currentReaderType, authEnabled]);
 
   // Save current position periodically for PDFs
   useEffect(() => {
@@ -1483,11 +1857,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         setLastDocumentLocation(id as string, location).catch(error => {
           console.warn('Error saving PDF location:', error);
         });
+        if (authEnabled) {
+          scheduleDocumentProgressSync({
+            documentId: id as string,
+            readerType: currentReaderType,
+            location,
+          });
+        }
       }, 1000); // Debounce saves by 1 second
 
       return () => clearTimeout(timeoutId);
     }
-  }, [id, isEPUB, currDocPageNumber, currentIndex, sentences.length]);
+  }, [id, isEPUB, currDocPageNumber, currentIndex, sentences.length, currentReaderType, authEnabled]);
 
   /**
    * Renders the TTS context provider with its children

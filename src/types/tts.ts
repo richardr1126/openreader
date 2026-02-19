@@ -23,7 +23,6 @@ export interface TTSError {
 export interface TTSPlaybackState {
   isPlaying: boolean;
   isProcessing: boolean;
-  isBackgrounded: boolean;
   currentSentence: string;
   currDocPage: TTSLocation;
   currDocPageNumber: number;

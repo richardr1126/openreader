@@ -1,215 +1,320 @@
-import { createHash } from 'crypto';
-import { readdir, readFile, stat, unlink, utimes, writeFile } from 'fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-import { DOCUMENTS_V1_DIR, isDocumentsV1Ready } from '@/lib/server/docstore';
-import type { BaseDocument, DocumentType, SyncedDocument } from '@/types/documents';
+import { and, count, eq, inArray } from 'drizzle-orm';
+import { db } from '@/db';
+import { documents } from '@/db/schema';
+import { requireAuthContext } from '@/lib/server/auth/auth';
+import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
+import {
+  cleanupDocumentPreviewArtifacts,
+  deleteDocumentPreviewRows,
+  enqueueDocumentPreview,
+} from '@/lib/server/documents/previews';
+import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
+import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { isS3Configured } from '@/lib/server/storage/s3';
+import type { BaseDocument, DocumentType } from '@/types/documents';
 
 export const dynamic = 'force-dynamic';
 
-const SYNC_DIR = DOCUMENTS_V1_DIR;
+type RegisterDocument = {
+  id: string;
+  name: string;
+  type: DocumentType;
+  size: number;
+  lastModified: number;
+};
 
-async function trySetFileMtime(filePath: string, lastModifiedMs: number): Promise<void> {
-  if (!Number.isFinite(lastModifiedMs)) return;
-  const mtime = new Date(lastModifiedMs);
-  if (Number.isNaN(mtime.getTime())) return;
-
-  try {
-    await utimes(filePath, mtime, mtime);
-  } catch (error) {
-    console.warn('Failed to set document mtime:', filePath, error);
-  }
+function s3NotConfiguredResponse(): NextResponse {
+  return NextResponse.json(
+    { error: 'Documents storage is not configured. Set S3_* environment variables.' },
+    { status: 503 },
+  );
 }
 
-function toDocumentTypeFromName(name: string): DocumentType {
-  const ext = path.extname(name).toLowerCase();
-  if (ext === '.pdf') return 'pdf';
-  if (ext === '.epub') return 'epub';
-  if (ext === '.docx') return 'docx';
-  return 'html';
+function normalizeDocumentType(rawType: unknown, safeName: string): DocumentType {
+  if (rawType === 'pdf' || rawType === 'epub' || rawType === 'docx' || rawType === 'html') {
+    return rawType;
+  }
+  return toDocumentTypeFromName(safeName);
 }
 
-function parseSyncedFileName(fileName: string): { id: string; name: string } | null {
-  const match = /^([a-f0-9]{64})__(.+)$/i.exec(fileName);
-  if (!match) return null;
-  try {
-    return { id: match[1].toLowerCase(), name: decodeURIComponent(match[2]) };
-  } catch {
-    return null;
-  }
+function normalizeLastModified(value: unknown): number {
+  return Number.isFinite(value) && Number(value) > 0 ? Number(value) : Date.now();
 }
 
-async function loadSyncedDocuments(includeData: boolean, targetIds?: Set<string>): Promise<(BaseDocument | SyncedDocument)[]> {
-  const results: (BaseDocument | SyncedDocument)[] = [];
-  let files: string[] = [];
+function parseDocumentPayload(body: unknown): RegisterDocument[] {
+  if (!body || typeof body !== 'object') return [];
+  const rawDocs = (body as { documents?: unknown }).documents;
+  if (!Array.isArray(rawDocs)) return [];
 
-  try {
-    files = await readdir(SYNC_DIR);
-  } catch {
-    return results;
+  const docs: RegisterDocument[] = [];
+  for (const rawDoc of rawDocs) {
+    if (!rawDoc || typeof rawDoc !== 'object') continue;
+    const rec = rawDoc as Record<string, unknown>;
+    const id = typeof rec.id === 'string' ? rec.id.trim().toLowerCase() : '';
+    if (!isValidDocumentId(id)) continue;
+    const fallbackName = `${id}.${typeof rec.type === 'string' ? rec.type : 'txt'}`;
+    const name = safeDocumentName(typeof rec.name === 'string' ? rec.name : '', fallbackName);
+    const type = normalizeDocumentType(rec.type, name);
+    const lastModified = normalizeLastModified(rec.lastModified);
+    const size = Number.isFinite(rec.size) && Number(rec.size) >= 0 ? Number(rec.size) : 0;
+    docs.push({ id, name, type, size, lastModified });
   }
-
-  for (const file of files) {
-    const parsed = parseSyncedFileName(file);
-    if (!parsed) continue;
-
-    // Filter by ID if specific IDs are requested
-    if (targetIds && !targetIds.has(parsed.id)) continue;
-
-    const filePath = path.join(SYNC_DIR, file);
-    let fileStat: Awaited<ReturnType<typeof stat>>;
-    try {
-      fileStat = await stat(filePath);
-    } catch {
-      continue;
-    }
-
-    if (!fileStat.isFile()) continue;
-
-    const type = toDocumentTypeFromName(parsed.name);
-    const metadata: BaseDocument = {
-      id: parsed.id,
-      name: parsed.name,
-      size: fileStat.size,
-      lastModified: fileStat.mtimeMs,
-      type,
-    };
-
-    if (!includeData) {
-      results.push(metadata);
-      continue;
-    }
-
-    const content = await readFile(filePath);
-    results.push({
-      ...metadata,
-      data: Array.from(new Uint8Array(content)),
-    });
-  }
-
-  return results;
+  return docs;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    if (!(await isDocumentsV1Ready())) {
-      return NextResponse.json(
-        { error: 'Documents storage is not migrated; run /api/migrations/v1 first.' },
-        { status: 409 },
-      );
-    }
-    const data = await req.json();
-    const documents = data.documents as SyncedDocument[];
+    if (!isS3Configured()) return s3NotConfiguredResponse();
 
-    let existingFiles: string[] = [];
-    try {
-      existingFiles = await readdir(SYNC_DIR);
-    } catch {
-      existingFiles = [];
+    const ctxOrRes = await requireAuthContext(req);
+    if (ctxOrRes instanceof Response) return ctxOrRes;
+
+    const testNamespace = getOpenReaderTestNamespace(req.headers);
+    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
+    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
+
+    const body = await req.json().catch(() => null);
+    const documentsData = parseDocumentPayload(body);
+    if (documentsData.length === 0) {
+      return NextResponse.json({ error: 'No valid documents provided' }, { status: 400 });
     }
 
-    const existingById = new Map<string, string>();
-    for (const file of existingFiles) {
-      const parsed = parseSyncedFileName(file);
-      if (!parsed) continue;
-      if (!existingById.has(parsed.id)) {
-        existingById.set(parsed.id, file);
+    const stored: BaseDocument[] = [];
+
+    for (const doc of documentsData) {
+      let headSize = doc.size;
+
+      // Retry HEAD check to handle S3 read-after-write propagation delays.
+      // The client uploads bytes directly to S3 via presigned URL, then
+      // immediately calls this endpoint. On serverless platforms the HEAD
+      // request may reach S3 before the PUT is visible.
+      const HEAD_RETRIES = 3;
+      const HEAD_RETRY_DELAY_MS = 500;
+      let headError: unknown = null;
+      for (let attempt = 0; attempt < HEAD_RETRIES; attempt++) {
+        headError = null;
+        try {
+          const head = await headDocumentBlob(doc.id, testNamespace);
+          if (head.contentLength > 0) headSize = head.contentLength;
+          break;
+        } catch (error) {
+          if (isMissingBlobError(error)) {
+            headError = error;
+            if (attempt < HEAD_RETRIES - 1) {
+              await new Promise((r) => setTimeout(r, HEAD_RETRY_DELAY_MS));
+              continue;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
-    }
-
-    const stored: Array<{ oldId: string; id: string; name: string }> = [];
-
-    for (const doc of documents) {
-      const content = Buffer.from(new Uint8Array(doc.data));
-      const id = createHash('sha256').update(content).digest('hex');
-
-      const baseName = path.basename(doc.name || `${id}.${doc.type}`);
-      const safeName = baseName.replaceAll('\u0000', '').slice(0, 240) || `${id}.${doc.type}`;
-
-      const existingFile = existingById.get(id);
-      const targetFileName = existingFile ?? `${id}__${encodeURIComponent(safeName)}`;
-      const targetPath = path.join(SYNC_DIR, targetFileName);
-
-      if (!existingFile) {
-        await writeFile(targetPath, content);
-        existingById.set(id, targetFileName);
+      if (headError && isMissingBlobError(headError)) {
+        return NextResponse.json(
+          {
+            error: `Blob missing for document ${doc.id}. Upload bytes first using /api/documents/blob/upload/presign.`,
+          },
+          { status: 409 },
+        );
       }
 
-      await trySetFileMtime(targetPath, doc.lastModified);
+      await db
+        .insert(documents)
+        .values({
+          id: doc.id,
+          userId: storageUserId,
+          name: doc.name,
+          type: doc.type,
+          size: headSize,
+          lastModified: doc.lastModified,
+          filePath: doc.id,
+        })
+        .onConflictDoUpdate({
+          target: [documents.id, documents.userId],
+          set: {
+            name: doc.name,
+            type: doc.type,
+            size: headSize,
+            lastModified: doc.lastModified,
+            filePath: doc.id,
+          },
+        });
 
-      stored.push({ oldId: doc.id, id, name: safeName });
+      stored.push({
+        id: doc.id,
+        name: doc.name,
+        type: doc.type,
+        size: headSize,
+        lastModified: doc.lastModified,
+        scope: storageUserId === unclaimedUserId ? 'unclaimed' : 'user',
+      });
+
+      await enqueueDocumentPreview(
+        {
+          id: doc.id,
+          type: doc.type,
+          lastModified: doc.lastModified,
+        },
+        testNamespace,
+      ).catch((error) => {
+        console.error(`Failed to enqueue preview for document ${doc.id}:`, error);
+      });
     }
 
     return NextResponse.json({ success: true, stored });
   } catch (error) {
-    console.error('Error saving documents:', error);
-    return NextResponse.json({ error: 'Failed to save documents' }, { status: 500 });
+    console.error('Error registering documents:', error);
+    return NextResponse.json({ error: 'Failed to register documents' }, { status: 500 });
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    if (!(await isDocumentsV1Ready())) {
-      return NextResponse.json(
-        { error: 'Documents storage is not migrated; run /api/migrations/v1 first.' },
-        { status: 409 },
-      );
-    }
+    if (!isS3Configured()) return s3NotConfiguredResponse();
+
+    const ctxOrRes = await requireAuthContext(req);
+    if (ctxOrRes instanceof Response) return ctxOrRes;
+
+    const testNamespace = getOpenReaderTestNamespace(req.headers);
+    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
+    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
+    const allowedUserIds = ctxOrRes.authEnabled ? [storageUserId, unclaimedUserId] : [unclaimedUserId];
 
     const url = new URL(req.url);
-    const list = url.searchParams.get('list') === 'true';
-    const format = url.searchParams.get('format');
     const idsParam = url.searchParams.get('ids');
+    const targetIds = idsParam
+      ? idsParam
+        .split(',')
+        .map((id) => id.trim().toLowerCase())
+        .filter((id) => isValidDocumentId(id))
+      : null;
 
-    // If list=true, force metadata only.
-    // If format=metadata, force metadata only.
-    // Otherwise include data.
-    const includeData = !list && format !== 'metadata';
-    
-    let targetIds: Set<string> | undefined;
-    if (idsParam) {
-        targetIds = new Set(idsParam.split(',').filter(Boolean));
+    if (idsParam && (!targetIds || targetIds.length === 0)) {
+      return NextResponse.json({ documents: [] });
     }
 
-    const documents = await loadSyncedDocuments(includeData, targetIds);
+    const conditions = [
+      inArray(documents.userId, allowedUserIds),
+      ...(targetIds && targetIds.length > 0 ? [inArray(documents.id, targetIds)] : []),
+    ];
+    const rows = (await db.select().from(documents).where(and(...conditions))) as Array<{
+      id: string;
+      userId: string;
+      name: string;
+      type: string;
+      size: number;
+      lastModified: number;
+      filePath: string;
+    }>;
 
-    return NextResponse.json({ documents });
+    const results: BaseDocument[] = rows.map((doc) => {
+      const type = normalizeDocumentType(doc.type, doc.name);
+      return {
+        id: doc.id,
+        name: doc.name,
+        size: Number(doc.size),
+        lastModified: Number(doc.lastModified),
+        type,
+        scope: doc.userId === unclaimedUserId ? 'unclaimed' : 'user',
+      };
+    });
+
+    return NextResponse.json({ documents: results });
   } catch (error) {
-    console.error('Error loading documents:', error);
+    console.error('Error loading document metadata:', error);
     return NextResponse.json({ error: 'Failed to load documents' }, { status: 500 });
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   try {
-    if (!(await isDocumentsV1Ready())) {
+    if (!isS3Configured()) return s3NotConfiguredResponse();
+
+    const ctxOrRes = await requireAuthContext(req);
+    if (ctxOrRes instanceof Response) return ctxOrRes;
+
+    const testNamespace = getOpenReaderTestNamespace(req.headers);
+    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
+    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
+
+    const url = new URL(req.url);
+    const idsParam = url.searchParams.get('ids');
+    const scopeParam = (url.searchParams.get('scope') || '').toLowerCase().trim();
+
+    const wantsUnclaimed = scopeParam === 'unclaimed';
+    const wantsUser = scopeParam === '' || scopeParam === 'user';
+
+    if (!wantsUser && !wantsUnclaimed) {
       return NextResponse.json(
-        { error: 'Documents storage is not migrated; run /api/migrations/v1 first.' },
-        { status: 409 },
+        { error: "Invalid scope. Expected 'user' (default) or 'unclaimed'." },
+        { status: 400 },
       );
     }
 
-    // Delete synced docs (new format) safely without touching unrelated docstore data.
-    let syncFiles: string[] = [];
-    try {
-      syncFiles = await readdir(SYNC_DIR);
-    } catch {
-      syncFiles = [];
+    if (ctxOrRes.authEnabled && wantsUnclaimed && ctxOrRes.user?.isAnonymous) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    for (const file of syncFiles) {
-      const filePath = path.join(SYNC_DIR, file);
+    const targetUserIds = Array.from(
+      new Set(
+        [
+          ...(wantsUser ? [storageUserId] : []),
+          ...(wantsUnclaimed ? [unclaimedUserId] : []),
+        ].filter(Boolean),
+      ),
+    );
+
+    if (targetUserIds.length === 0) {
+      return NextResponse.json({ success: true, deleted: 0 });
+    }
+
+    let targetIds: string[] = [];
+    if (idsParam) {
+      targetIds = idsParam
+        .split(',')
+        .map((id) => id.trim().toLowerCase())
+        .filter((id) => isValidDocumentId(id));
+    } else {
+      const rows = (await db
+        .select({ id: documents.id })
+        .from(documents)
+        .where(inArray(documents.userId, targetUserIds))) as Array<{ id: string }>;
+      targetIds = rows.map((row) => row.id);
+    }
+
+    if (targetIds.length === 0) {
+      return NextResponse.json({ success: true, deleted: 0 });
+    }
+
+    const deletedRows = (await db
+      .delete(documents)
+      .where(and(inArray(documents.userId, targetUserIds), inArray(documents.id, targetIds)))
+      .returning({ id: documents.id })) as Array<{ id: string }>;
+
+    const uniqueIds = Array.from(new Set(deletedRows.map((row) => row.id)));
+    for (const id of uniqueIds) {
+      const [ref] = await db.select({ count: count() }).from(documents).where(eq(documents.id, id));
+      const refCount = Number(ref?.count ?? 0);
+      if (refCount > 0) continue;
+
       try {
-        const st = await stat(filePath);
-        if (st.isFile()) {
-          await unlink(filePath);
+        await deleteDocumentBlob(id, testNamespace);
+      } catch (error) {
+        if (!isMissingBlobError(error)) {
+          console.error(`[best-effort] Failed to delete blob for document ${id}, orphaned blob may need manual cleanup:`, error);
         }
-      } catch {
-        continue;
       }
+
+      await cleanupDocumentPreviewArtifacts(id, testNamespace).catch((error) => {
+        console.error(`Failed to cleanup preview artifacts for document ${id}:`, error);
+      });
+      await deleteDocumentPreviewRows(id, testNamespace).catch((error) => {
+        console.error(`Failed to cleanup preview rows for document ${id}:`, error);
+      });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deleted: deletedRows.length });
   } catch (error) {
     console.error('Error deleting documents:', error);
     return NextResponse.json({ error: 'Failed to delete documents' }, { status: 500 });

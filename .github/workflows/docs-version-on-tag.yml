@@ -1,0 +1,69 @@
+name: Version Docs on Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - name: Install docs dependencies
+        run: pnpm --dir docs-site install --frozen-lockfile
+
+      - name: Snapshot docs version
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -f docs-site/versions.json ] && grep -q "\"${VERSION}\"" docs-site/versions.json; then
+            echo "Version ${VERSION} already exists in versions.json; skipping docs:version"
+          else
+            pnpm --dir docs-site docusaurus docs:version "${VERSION}"
+          fi
+
+      - name: Build docs
+        run: pnpm --dir docs-site build
+
+      - name: Create docs version PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "docs: snapshot ${{ github.ref_name }}"
+          title: "docs: snapshot ${{ github.ref_name }}"
+          body: |
+            Automated docs version snapshot for `${{ github.ref_name }}`.
+
+            - Ran `docusaurus docs:version`
+            - Added versioned docs/sidebar snapshot files
+          branch: docs/version-${{ github.ref_name }}
+          base: main
+          delete-branch: true
+          labels: docs,automation
+          add-paths: |
+            docs-site/versions.json
+            docs-site/versioned_docs/**
+            docs-site/versioned_sidebars/**

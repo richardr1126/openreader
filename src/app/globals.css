@@ -112,12 +112,56 @@ html.mint {
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+  font-family: var(--font-display), -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
     "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display), system-ui, -apple-system, sans-serif;
+}
+
+/*
+ * PDF page turn smoothing
+ * - Keep a stable paint surface (prevents background flash)
+ * - Fade-in newly rendered canvas
+ */
+.pdf-page-stage {
+  /* Ensure we always paint something (matches app theme) while react-pdf swaps canvases */
+  background: var(--background);
+  position: relative;
+}
+
+.pdf-viewer .react-pdf__Page {
+  /* Make page paints more stable and avoid seeing the app background between renders */
+  background: var(--background);
+  isolation: isolate;
+}
+
+/* Fade-in the freshly rendered canvas (react-pdf replaces the canvas element). */
+.pdf-viewer .react-pdf__Page canvas {
+  display: block;
+  background: var(--background);
+  /* GPU hint; helps reduce flicker on some browsers */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  opacity: 0;
+  animation: pdf-canvas-fade-in 140ms ease-out forwards;
+}
+
+@keyframes pdf-canvas-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Hide react-pdf's default tiny "Loading page..." placeholder to avoid jarring layout shifts. */
+.pdf-viewer .react-pdf__message {
+  display: none !important;
+}
+
+
 
 /* App shell utility (fullscreen, vertical layout) */
 .app-shell {

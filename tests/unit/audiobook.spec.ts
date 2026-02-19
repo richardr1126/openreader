@@ -5,7 +5,7 @@ import {
   decodeChapterTitleTag,
   encodeChapterFileName,
   decodeChapterFileName
-} from '../../src/lib/server/audiobook';
+} from '../../src/lib/server/audiobooks/chapters';
 
 test.describe('escapeFFMetadata', () => {
   test('escapes special characters correctly', () => {

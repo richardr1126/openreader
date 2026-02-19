@@ -8,6 +8,11 @@ jobs:
   e2e-testing:
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    env:
+      FFMPEG_BIN: /usr/bin/ffmpeg
+      USE_EMBEDDED_WEED_MINI: true
+      BASE_URL: http://127.0.0.1:3003
+      S3_ENDPOINT: http://127.0.0.1:8333
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
@@ -20,6 +25,15 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libreoffice-writer ffmpeg
+    - name: Install SeaweedFS weed binary
+      run: |
+        WEED_PATH=$(docker run --rm --entrypoint sh chrislusf/seaweedfs:latest -lc 'command -v weed')
+        CID=$(docker create chrislusf/seaweedfs:latest)
+        docker cp "${CID}:${WEED_PATH}" ./weed
+        docker rm "${CID}"
+        sudo install -m 0755 ./weed /usr/local/bin/weed
+        rm -f ./weed
+        weed version
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
     - name: Verify ffprobe
@@ -28,7 +42,6 @@ jobs:
       run: pnpm exec playwright install --with-deps
     - name: Run Playwright tests
       env:
-        NEXT_PUBLIC_NODE_ENV: test
         API_BASE: https://api.deepinfra.com/v1/openai
         API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
       run: pnpm exec playwright test --reporter=list,github,html

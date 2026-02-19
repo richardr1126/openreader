@@ -31,6 +31,14 @@ export interface TTSRetryOptions {
   backoffFactor?: number;
 }
 
+export interface TTSRequestError extends Error {
+  status?: number;
+  code?: string;
+  type?: string;
+  title?: string;
+  detail?: string;
+}
+
 // --- Audiobook API Types ---
 
 export interface AudiobookStatusResponse {

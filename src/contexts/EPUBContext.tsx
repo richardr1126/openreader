@@ -16,12 +16,16 @@ import type { NavItem } from 'epubjs';
 import type { SpineItem } from 'epubjs/types/section';
 import type { Book, Rendition } from 'epubjs';
 
-import { getEpubDocument, setLastDocumentLocation } from '@/lib/dexie';
+import { setLastDocumentLocation } from '@/lib/client/dexie';
+import { scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
+import { getDocumentMetadata } from '@/lib/client/api/documents';
+import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
-import { createRangeCfi } from '@/lib/epub';
+import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
+import { createRangeCfi } from '@/lib/client/epub';
 import { useParams } from 'next/navigation';
 import { useConfig } from './ConfigContext';
-import { withRetry, getAudiobookStatus, generateTTS, createAudiobookChapter } from '@/lib/client';
+import { withRetry, getAudiobookStatus, generateTTS, createAudiobookChapter } from '@/lib/client/api/audiobooks';
 import { CmpStr } from 'cmpstr';
 import type {
   TTSSentenceAlignment,
@@ -78,7 +82,7 @@ interface EPUBContextType {
 
 const EPUBContext = createContext<EPUBContextType | undefined>(undefined);
 
-const EPUB_CONTINUATION_CHARS = 600;
+const EPUB_CONTINUATION_CHARS = 5000;
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 
@@ -169,6 +173,7 @@ const collectContinuationFromRange = (range: Range | null | undefined, limit = E
  */
 export function EPUBProvider({ children }: { children: ReactNode }) {
   const { setText: setTTSText, currDocPage, currDocPages, setCurrDocPages, stop, skipToLocation, setIsEPUB } = useTTS();
+  const { authEnabled } = useAuthConfig();
   const { id } = useParams();
   // Configuration context to get TTS settings
   const {
@@ -223,21 +228,27 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
    */
   const setCurrentDocument = useCallback(async (id: string): Promise<void> => {
     try {
-      const doc = await getEpubDocument(id);
-      if (doc) {
-        console.log('Retrieved document size:', doc.size);
-        console.log('Retrieved ArrayBuffer size:', doc.data.byteLength);
-
-        if (doc.data.byteLength === 0) {
-          console.error('Retrieved ArrayBuffer is empty');
-          throw new Error('Empty document data');
-        }
-
-        setCurrDocName(doc.name);
-        setCurrDocData(doc.data);  // Store ArrayBuffer directly
-      } else {
-        console.error('Document not found in IndexedDB');
+      const meta = await getDocumentMetadata(id);
+      if (!meta) {
+        clearCurrDoc();
+        console.error('Document not found on server');
+        return;
       }
+
+      const doc = await ensureCachedDocument(meta);
+      if (doc.type !== 'epub') {
+        clearCurrDoc();
+        console.error('Document is not an EPUB');
+        return;
+      }
+
+      if (doc.data.byteLength === 0) {
+        console.error('Retrieved ArrayBuffer is empty');
+        throw new Error('Empty document data');
+      }
+
+      setCurrDocName(doc.name);
+      setCurrDocData(doc.data); // Store ArrayBuffer directly
     } catch (error) {
       console.error('Failed to get EPUB document:', error);
       clearCurrDoc(); // Clean up on error
@@ -672,6 +683,16 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
 
     if (!bookRef.current?.isOpen || !renditionRef.current) return;
 
+    // If the location is a CFI string that doesn't match the current rendered position,
+    // navigate there and let the subsequent locationChanged callback handle text extraction.
+    if (typeof location === 'string' && location !== 'next' && location !== 'prev' && renditionRef.current?.location) {
+      const currentStartCfi = renditionRef.current.location?.start?.cfi;
+      if (currentStartCfi && location !== currentStartCfi) {
+        renditionRef.current.display(location);
+        return;
+      }
+    }
+
     // Handle special 'next' and 'prev' cases
     if (location === 'next' && renditionRef.current) {
       shouldPauseRef.current = false;
@@ -688,6 +709,13 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     if (id && locationRef.current !== 1) {
       console.log('Saving location:', location);
       setLastDocumentLocation(id as string, location.toString());
+      if (authEnabled) {
+        scheduleDocumentProgressSync({
+          documentId: id as string,
+          readerType: 'epub',
+          location: location.toString(),
+        });
+      }
     }
 
     skipToLocation(location);
@@ -697,7 +725,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       extractPageText(bookRef.current, renditionRef.current, shouldPauseRef.current);
       shouldPauseRef.current = true;
     }
-  }, [id, skipToLocation, extractPageText, setIsEPUB]);
+  }, [id, skipToLocation, extractPageText, setIsEPUB, authEnabled]);
 
   const clearWordHighlights = useCallback(() => {
     if (!renditionRef.current) return;
