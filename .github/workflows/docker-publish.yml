@@ -92,7 +92,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           provenance: false
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }},${{ env.REGISTRY }}/${{ needs.prepare.outputs.legacy_image_name }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
