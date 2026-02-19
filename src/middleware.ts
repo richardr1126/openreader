@@ -8,6 +8,13 @@ import type { NextRequest } from 'next/server';
 const SESSION_COOKIE = 'better-auth.session_token';
 const SECURE_SESSION_COOKIE = '__Secure-better-auth.session_token';
 const SESSION_COOKIE_NAMES = [SESSION_COOKIE, SECURE_SESSION_COOKIE];
+const US_COUNTRY_CODE = 'US';
+const COUNTRY_HEADER_NAMES = [
+  'x-vercel-ip-country',
+  'cf-ipcountry',
+  'x-country-code',
+  'x-geo-country',
+];
 
 /**
  * Routes that never require a session cookie.
@@ -37,7 +44,50 @@ function isAnonymousAuthEnabled(): boolean {
   return raw?.trim().toLowerCase() === 'true';
 }
 
+function isRichardrDevProductionInstance(): boolean {
+  return process.env.RICHARDRDEV_PRODUCTION?.trim().toLowerCase() === 'true';
+}
+
+function getCountryCodeFromHeaders(request: NextRequest): string | null {
+  for (const headerName of COUNTRY_HEADER_NAMES) {
+    const rawValue = request.headers.get(headerName);
+    if (!rawValue) continue;
+
+    const normalized = rawValue.trim().toUpperCase();
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
 export function middleware(request: NextRequest) {
+  if (isRichardrDevProductionInstance()) {
+    const countryCode = getCountryCodeFromHeaders(request);
+    const isUnitedStatesRequest = countryCode === US_COUNTRY_CODE;
+
+    // Strict region gate for the official production instance.
+    if (!isUnitedStatesRequest) {
+      const { pathname } = request.nextUrl;
+
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'OpenReader is only available in the United States.' },
+          { status: 451, headers: { 'Cache-Control': 'no-store' } },
+        );
+      }
+
+      return new NextResponse('OpenReader is only available in the United States.', {
+        status: 451,
+        headers: {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'text/plain; charset=utf-8',
+        },
+      });
+    }
+  }
+
   // When auth is disabled entirely, let everything through.
   if (!isAuthEnabled()) {
     return NextResponse.next();

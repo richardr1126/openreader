@@ -17,6 +17,8 @@ export const metadata: Metadata = {
 
 export default async function PrivacyPage() {
   const effectiveDate = 'February 17, 2026';
+  const isRichardrDevProductionInstance =
+    process.env.RICHARDRDEV_PRODUCTION === 'true';
 
   const hdrs = await headers();
   const host = hdrs.get('host') ?? 'this server';
@@ -146,6 +148,14 @@ export default async function PrivacyPage() {
           The operator of this service is responsible for handling your information.
         </div>
 
+        {isRichardrDevProductionInstance ? (
+          <div className="privacy-highlight">
+            <strong>US-only availability:</strong> This instance is intended for
+            users located in the United States. Requests from outside the US,
+            or requests without reliable country metadata, may be blocked.
+          </div>
+        ) : null}
+
         <div className="privacy-highlight">
           <strong>OpenReader does not sell your personal information.</strong> We do not sell data to data brokers or third parties.
           We use data solely to provide and improve the reading experience.
@@ -205,7 +215,7 @@ export default async function PrivacyPage() {
             </p>
             <div className="privacy-card landing-panel">
               <div className="privacy-card-label">Service Providers (Sub-processors)</div>
-              {process.env.RICHARDRDEV_PRODUCTION === 'true' ? (
+              {isRichardrDevProductionInstance ? (
                 <ul className="grid gap-2 sm:grid-cols-2 mt-2">
                   <li className="text-sm"><strong>Vercel:</strong> Hosting, Edge Functions &amp; Analytics</li>
                   <li className="text-sm"><strong>Neon (PostgreSQL):</strong> Database Storage</li>
@@ -217,7 +227,7 @@ export default async function PrivacyPage() {
                   <li className="text-sm"><strong>Hosting Provider:</strong> Application Hosting &amp; Logs</li>
                   <li className="text-sm"><strong>Database Service:</strong> Relational Database Storage</li>
                   <li className="text-sm"><strong>Object Storage:</strong> Encrypted File Storage (Documents)</li>
-                  <li className="text-sm"><strong>TTS Provider:</strong> Text-to-Speech Processing (Optional)</li>
+                  <li className="text-sm"><strong>TTS Provider:</strong> Text-to-Speech Processing (Based on your configured provider)</li>
                 </ul>
               )}
             </div>
@@ -266,7 +276,27 @@ export default async function PrivacyPage() {
           <section>
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-accent"></span>
-              6. Contact Us
+              6. US Processing &amp; Location
+            </h2>
+            {isRichardrDevProductionInstance ? (
+              <p className="mb-4 text-sm leading-relaxed text-foreground/90">
+                For the official OpenReader instance, personal
+                information is processed and stored in the United States.
+                By using this service, you acknowledge that your data is handled
+                in the US and that the service is available only for US users.
+              </p>
+            ) : (
+              <p className="mb-4 text-sm leading-relaxed text-foreground/90">
+                Data processing location depends on your deployment and hosting
+                provider configuration.
+              </p>
+            )}
+          </section>
+
+          <section>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent"></span>
+              7. Contact Us
             </h2>
             <p className="mb-4 text-sm leading-relaxed text-foreground/90">
               If you have questions or concerns about this Privacy Policy, please contact the instance administrator via the repository:
