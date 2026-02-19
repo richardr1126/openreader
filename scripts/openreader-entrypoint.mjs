@@ -93,6 +93,12 @@ function parseS3Endpoint(endpoint) {
   };
 }
 
+function loopbackS3Endpoint(endpoint) {
+  const parsed = parseS3Endpoint(endpoint);
+  const url = new URL(parsed.normalized);
+  return `${url.protocol}//127.0.0.1:${parsed.port}`;
+}
+
 function parseUrlHost(urlValue, fieldName) {
   let url;
   try {
@@ -403,7 +409,11 @@ async function main() {
     const shouldRunStorageMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_FS_MIGRATIONS', true);
     if (shouldRunStorageMigrations) {
       if (hasS3Config(runtimeEnv)) {
-        runStorageMigrations(runtimeEnv);
+        const migrationEnv = { ...runtimeEnv };
+        if (useEmbeddedWeed && migrationEnv.S3_ENDPOINT?.trim()) {
+          migrationEnv.S3_ENDPOINT = loopbackS3Endpoint(migrationEnv.S3_ENDPOINT);
+        }
+        runStorageMigrations(migrationEnv);
       } else {
         console.warn('Skipping storage migrations: S3 configuration is incomplete.');
       }
