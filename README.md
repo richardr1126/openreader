@@ -30,15 +30,15 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 
 | Goal | Link |
 | --- | --- |
-| Run with Docker | [Docker Quick Start](https://docs.openreader.richardr.dev/getting-started/docker-quick-start) |
-| Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/getting-started/vercel-deployment) |
-| Develop locally | [Local Development](https://docs.openreader.richardr.dev/getting-started/local-development) |
-| Configure auth | [Auth](https://docs.openreader.richardr.dev/guides/configuration) |
-| Configure SQL database | [Database and Migrations](https://docs.openreader.richardr.dev/operations/database-and-migrations) |
-| Configure object storage | [Object / Blob Storage](https://docs.openreader.richardr.dev/guides/storage-and-blob-behavior) |
-| Configure TTS providers | [TTS Providers](https://docs.openreader.richardr.dev/guides/tts-providers) |
-| Run Kokoro locally | [Kokoro-FastAPI](https://docs.openreader.richardr.dev/integrations/kokoro-fastapi) |
-| Get support or contribute | [Support and Contributing](https://docs.openreader.richardr.dev/community/support) |
+| Run with Docker | [Docker Quick Start](https://docs.openreader.richardr.dev/docker-quick-start) |
+| Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
+| Develop locally | [Local Development](https://docs.openreader.richardr.dev/deploy/local-development) |
+| Configure auth | [Auth](https://docs.openreader.richardr.dev/configure/auth) |
+| Configure SQL database | [Database and Migrations](https://docs.openreader.richardr.dev/configure/database) |
+| Configure object storage | [Object / Blob Storage](https://docs.openreader.richardr.dev/configure/object-blob-storage) |
+| Configure TTS providers | [TTS Providers](https://docs.openreader.richardr.dev/configure/tts-providers) |
+| Run Kokoro locally | [Kokoro-FastAPI](https://docs.openreader.richardr.dev/configure/tts-provider-guides/kokoro-fastapi) |
+| Get support or contribute | [Support and Contributing](https://docs.openreader.richardr.dev/about/support-and-contributing) |
 
 ## 🧭 Community
 

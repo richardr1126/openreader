@@ -49,6 +49,27 @@ docker run --name openreader \
 ```
 
   </TabItem>
+  <TabItem value="local-network" label="On Local Network">
+
+Use this when the app should be reachable from other devices on your LAN:
+
+```bash
+docker run --name openreader \
+  --restart unless-stopped \
+  -e API_BASE=http://host.docker.internal:8880/v1 \
+  -e BASE_URL=http://192.168.0.122:3003 \
+  -e AUTH_SECRET=replace-with-a-long-random-secret \
+  -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003,http://192.168.0.122:3003 \
+  -e USE_ANONYMOUS_AUTH_SESSIONS=true \
+  -p 3003:3003 \
+  -p 8333:8333 \
+  -v openreader_docstore:/app/docstore \
+  ghcr.io/richardr1126/openreader:main
+```
+
+Replace `192.168.0.122` with your Docker host LAN IP.
+
+  </TabItem>
 </Tabs>
 
 :::tip
