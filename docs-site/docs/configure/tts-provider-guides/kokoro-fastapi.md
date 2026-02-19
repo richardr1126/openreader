@@ -18,9 +18,9 @@ For Kokoro issues and support, use the upstream repository: [remsky/Kokoro-FastA
 ## Run Kokoro (CPU)
 
 ```bash
-docker run -d \
-  --name kokoro-tts \
+docker run --name kokoro-tts \
   --restart unless-stopped \
+  -d \
   -p 8880:8880 \
   -e ONNX_NUM_THREADS=8 \
   -e ONNX_INTER_OP_THREADS=4 \
@@ -35,11 +35,11 @@ docker run -d \
 ## Run Kokoro (GPU)
 
 ```bash
-docker run -d \
-  --name kokoro-tts \
+docker run --name kokoro-tts \
+  --restart unless-stopped \
+  -d \
   --gpus all \
   --user 1001:1001 \
-  --restart unless-stopped \
   -p 8880:8880 \
   -e USE_GPU=true \
   -e PYTHONUNBUFFERED=1 \

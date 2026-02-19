@@ -30,7 +30,7 @@ docker run --name openreader \
 ```
 
   </TabItem>
-  <TabItem value="full" label="Full Setup">
+  <TabItem value="localhost" label="Localhost">
 
 Persistent storage, embedded SeaweedFS `weed mini`, optional auth, optional library mount:
 
@@ -49,39 +49,33 @@ docker run --name openreader \
 ```
 
   </TabItem>
-  <TabItem value="local-network" label="On Local Network">
+  <TabItem value="local-network" label="LAN Host">
 
 Use this when the app should be reachable from other devices on your LAN:
 
 ```bash
 docker run --name openreader \
   --restart unless-stopped \
-  -e API_BASE=http://host.docker.internal:8880/v1 \
-  -e BASE_URL=http://192.168.0.122:3003 \
-  -e AUTH_SECRET=replace-with-a-long-random-secret \
-  -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003,http://192.168.0.122:3003 \
-  -e USE_ANONYMOUS_AUTH_SESSIONS=true \
   -p 3003:3003 \
   -p 8333:8333 \
   -v openreader_docstore:/app/docstore \
-  ghcr.io/richardr1126/openreader:main
+  -e API_BASE=http://host.docker.internal:8880/v1 \
+  -e BASE_URL=http://<YOUR_LAN_IP>:3003 \
+  -e AUTH_SECRET=$(openssl rand -hex 32) \
+  -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003 \
+  -e USE_ANONYMOUS_AUTH_SESSIONS=true \
+  ghcr.io/richardr1126/openreader:latest
 ```
 
-Replace `192.168.0.122` with your Docker host LAN IP.
+Replace `<YOUR_LAN_IP>` with the Docker host IP address on your local network to allow access from other devices.
 
   </TabItem>
 </Tabs>
 
-:::tip
-Remove `/app/docstore/library` if you do not need server library import.
-:::
-
-:::tip
-Remove either `BASE_URL` or `AUTH_SECRET` to keep auth disabled.
-:::
-
-:::tip TTS API Base
-Set `API_BASE` to your reachable TTS server base URL.
+:::tip Quick Tips
+- Remove `/app/docstore/library` if you do not need server library import.
+- Remove either `BASE_URL` or `AUTH_SECRET` to keep auth disabled.
+- Set `API_BASE` to your reachable TTS server base URL.
 :::
 
 :::warning Port `8333` Exposure
