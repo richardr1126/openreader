@@ -6,7 +6,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getS3Client, getS3Config } from '@/lib/server/storage/s3';
+import { getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const SAFE_BOOK_ID_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -122,7 +122,7 @@ export function audiobookKey(bookId: string, userId: string, fileName: string, n
 
 export async function listAudiobookObjects(bookId: string, userId: string, namespace: string | null): Promise<AudiobookBlobObject[]> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const prefix = audiobookPrefix(bookId, userId, namespace);
   let continuationToken: string | undefined;
   const objects: AudiobookBlobObject[] = [];
@@ -163,7 +163,7 @@ export async function headAudiobookObject(
   namespace: string | null,
 ): Promise<{ contentLength: number; contentType: string | null; eTag: string | null }> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = audiobookKey(bookId, userId, fileName, namespace);
   const res = await client.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return {
@@ -175,7 +175,7 @@ export async function headAudiobookObject(
 
 export async function getAudiobookObjectBuffer(bookId: string, userId: string, fileName: string, namespace: string | null): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = audiobookKey(bookId, userId, fileName, namespace);
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return bodyToBuffer(res.Body);
@@ -188,7 +188,7 @@ export async function getAudiobookObjectStream(
   namespace: string | null,
 ): Promise<AudiobookBlobBody> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = audiobookKey(bookId, userId, fileName, namespace);
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return res.Body as AudiobookBlobBody;
@@ -204,7 +204,7 @@ export async function putAudiobookObject(
   options?: { ifNoneMatch?: boolean },
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = audiobookKey(bookId, userId, fileName, namespace);
   await client.send(
     new PutObjectCommand({
@@ -220,14 +220,14 @@ export async function putAudiobookObject(
 
 export async function deleteAudiobookObject(bookId: string, userId: string, fileName: string, namespace: string | null): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const key = audiobookKey(bookId, userId, fileName, namespace);
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
 }
 
 export async function deleteAudiobookPrefix(prefix: string): Promise<number> {
   const cfg = getS3Config();
-  const client = getS3Client();
+  const client = getS3ProxyClient();
   const cleanedPrefix = prefix.replace(/^\/+/, '');
   let deleted = 0;
   let continuationToken: string | undefined;
