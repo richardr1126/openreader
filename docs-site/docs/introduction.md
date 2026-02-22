@@ -8,12 +8,13 @@ OpenReader is an open source text-to-speech document reader built with Next.js. 
 
 > Previously named **OpenReader-WebUI**.
 
-It supports multiple TTS providers including OpenAI, DeepInfra, and custom OpenAI-compatible endpoints such as [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) and [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI).
+It supports multiple TTS providers including OpenAI, DeepInfra, and custom OpenAI-compatible endpoints such as [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI), [KittenTTS-FastAPI](https://github.com/richardr1126/KittenTTS-FastAPI), and [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI).
 
 ## ✨ Highlights
 
 - 🎯 **Multi-Provider TTS Support**
   - [**Kokoro-FastAPI**](https://github.com/remsky/Kokoro-FastAPI): supports multi-voice combinations (for example `af_heart+af_bella`)
+  - [**KittenTTS-FastAPI**](https://github.com/richardr1126/KittenTTS-FastAPI): lightweight, CPU-friendly self-hosted TTS
   - [**Orpheus-FastAPI**](https://github.com/Lex-au/Orpheus-FastAPI)
   - **Custom OpenAI-compatible**: any TTS API with `/v1/audio/voices` and `/v1/audio/speech` endpoints
   - **Cloud TTS providers**:

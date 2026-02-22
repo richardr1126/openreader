@@ -6,6 +6,8 @@ Use any custom OpenAI-compatible TTS service with OpenReader.
 
 Use this integration when your endpoint is not directly covered by built-in dropdown defaults.
 
+Known compatible examples include Kokoro-FastAPI, KittenTTS-FastAPI, and Orpheus-FastAPI.
+
 ## Provider
 
 - Provider: `Custom OpenAI-Like`

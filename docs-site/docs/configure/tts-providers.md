@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 OpenReader supports OpenAI-compatible TTS providers through a common API shape.
 
 :::tip
-If you are running a self-hosted TTS server (Kokoro/Orpheus/etc.), use **Custom OpenAI-Like** in Settings.
+If you are running a self-hosted TTS server (Kokoro/KittenTTS/Orpheus/etc.), use **Custom OpenAI-Like** in Settings.
 :::
 
 ## Quick Setup by Provider
@@ -46,7 +46,7 @@ In Settings, provider options include:
 
 - `OpenAI`
 - `Deepinfra`
-- `Custom OpenAI-Like` (Kokoro, Orpheus, and other OpenAI-compatible endpoints)
+- `Custom OpenAI-Like` (Kokoro, KittenTTS-FastAPI, Orpheus, and other OpenAI-compatible endpoints)
 
 `API_BASE` guidance:
 
@@ -67,6 +67,7 @@ TTS requests are sent from the Next.js server, not directly from the browser. `A
 ## Provider Guides
 
 - [Kokoro-FastAPI](./tts-provider-guides/kokoro-fastapi)
+- [KittenTTS-FastAPI](./tts-provider-guides/kitten-tts-fastapi)
 - [Orpheus-FastAPI](./tts-provider-guides/orpheus-fastapi)
 - [DeepInfra](./tts-provider-guides/deepinfra)
 - [OpenAI](./tts-provider-guides/openai)

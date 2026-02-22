@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 ## Prerequisites
 
 - A recent Docker version installed
-- A TTS API server that OpenReader can reach (Kokoro-FastAPI, Orpheus-FastAPI, DeepInfra, OpenAI, or equivalent)
+- A TTS API server that OpenReader can reach (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI, DeepInfra, OpenAI, or equivalent)
 
 :::note
 If you have suitable hardware, you can run Kokoro locally with Docker. See [Kokoro-FastAPI](./configure/tts-provider-guides/kokoro-fastapi).

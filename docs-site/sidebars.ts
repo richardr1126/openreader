@@ -21,6 +21,7 @@ const sidebars: SidebarsConfig = {
           },
           items: [
             'configure/tts-provider-guides/kokoro-fastapi',
+            'configure/tts-provider-guides/kitten-tts-fastapi',
             'configure/tts-provider-guides/orpheus-fastapi',
             'configure/tts-provider-guides/deepinfra',
             'configure/tts-provider-guides/openai',

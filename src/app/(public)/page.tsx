@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     'OpenReader lets you upload EPUB, PDF, TXT, MD, and DOCX files for synchronized text-to-speech reading with multi-provider TTS support.',
   keywords:
-    'PDF reader, EPUB reader, text to speech, tts open ai, kokoro tts, OpenReader, TTS PDF reader, ebook reader, epub tts, document reader',
+    'PDF reader, EPUB reader, text to speech, tts open ai, kokoro tts, kitten tts, OpenReader, TTS PDF reader, ebook reader, epub tts, document reader',
   alternates: {
     canonical: '/',
   },
@@ -388,7 +388,7 @@ export default function LandingPage() {
               OpenReader highlights every word as it&rsquo;s spoken, turning
               any document into a synchronized read-along experience. Connect
               any OpenAI-compatible TTS provider &mdash; including Kokoro,
-              Deepinfra, or your own self-hosted endpoint.
+              KittenTTS, Deepinfra, or your own self-hosted endpoint.
             </p>
           </div>
           <ul className="landing-tts-list">
@@ -403,7 +403,7 @@ export default function LandingPage() {
               <span className="landing-tts-list-icon" aria-hidden="true">&bull;</span>
               <div>
                 <h4>Multiple voices &amp; providers</h4>
-                <p>Choose from dozens of voices across OpenAI, Kokoro, Deepinfra, or any compatible endpoint.</p>
+                <p>Choose from dozens of voices across OpenAI, Kokoro, KittenTTS, Deepinfra, or any compatible endpoint.</p>
               </div>
             </li>
             <li>

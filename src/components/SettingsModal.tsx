@@ -105,6 +105,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
       case 'custom-openai':
         return [
           { id: 'kokoro', name: 'Kokoro' },
+          { id: 'kitten-tts', name: 'KittenTTS' },
           { id: 'orpheus', name: 'Orpheus' },
           { id: 'custom', name: 'Other' }
         ];
