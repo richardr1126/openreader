@@ -62,6 +62,26 @@ export const withRetry = async <T>(
         break;
       }
 
+      // Narrow client retries to transport-level failures only.
+      // If we got an HTTP status from /api/tts, do not retry from the client.
+      // Server-side /api/tts already applies upstream retry logic.
+      const message = lastError.message.toLowerCase();
+      const isTransportFailure =
+        status === undefined &&
+        (
+          lastError instanceof TypeError ||
+          message.includes('failed to fetch') ||
+          message.includes('networkerror') ||
+          message.includes('network request failed') ||
+          message.includes('load failed') ||
+          message.includes('fetch failed') ||
+          message.includes('econnreset') ||
+          message.includes('etimedout')
+        );
+      if (!isTransportFailure) {
+        break;
+      }
+
       if (attempt === maxRetries - 1) {
         break;
       }

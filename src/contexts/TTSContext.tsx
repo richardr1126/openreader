@@ -67,6 +67,7 @@ declare global {
  */
 interface TTSContextType extends TTSPlaybackState {
   // Voice settings
+  voice: string;
   availableVoices: string[];
 
   // Alignment metadata for the current sentence
@@ -905,23 +906,33 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (availableVoices.length > 0) {
       // Allow Kokoro multi-voice strings (e.g., "voice1(0.5)+voice2(0.5)") for any provider
       const isKokoro = isKokoroModel(configTTSModel);
+      const fallbackVoice = configVoice || availableVoices[0];
 
       if (isKokoro) {
         // If Kokoro and we have any voice string (including plus/weights), don't override it.
-        // Only default when voice is empty.
+        // Only default when local voice is empty.
         if (!voice) {
-          setVoice(availableVoices[0]);
+          setVoice(fallbackVoice);
         }
         return;
       }
 
-      if (!voice || !availableVoices.includes(voice)) {
+      // For non-Kokoro, only force a fallback when there is no active local voice.
+      // If a persisted config voice exists, keep it rather than overriding from a
+      // potentially stale in-flight voices response during reload.
+      if (!voice) {
+        console.log(`Voice "${voice || '(empty)'}" not set. Using "${fallbackVoice}"`);
+        setVoice(fallbackVoice);
+        return;
+      }
+
+      if (!configVoice && !availableVoices.includes(voice)) {
         console.log(`Voice "${voice || '(empty)'}" not found in available voices. Using "${availableVoices[0]}"`);
         setVoice(availableVoices[0]);
         // Don't save to config - just use it temporarily until user explicitly selects one
       }
     }
-  }, [availableVoices, voice, configTTSModel]);
+  }, [availableVoices, voice, configVoice, configTTSModel]);
 
   /**
    * Generates and plays audio for the current sentence
@@ -1029,11 +1040,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         instructions: ttsModel === 'gpt-4o-mini-tts' ? ttsInstructions : undefined,
       };
 
+      // Allow one narrow client retry for transient browser->/api/tts transport failures.
+      // HTTP failures are not retried client-side.
       const retryOptions: TTSRetryOptions = {
-        maxRetries: 3,
-        initialDelay: 1000,
-        maxDelay: 5000,
-        backoffFactor: 2
+        maxRetries: 2,
+        initialDelay: 300,
+        maxDelay: 300,
       };
 
       onTTSStart();
@@ -1727,6 +1739,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPage,
     currDocPageNumber,
     currDocPages,
+    voice,
     availableVoices,
     togglePlay,
     skipForward,
@@ -1751,6 +1764,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPage,
     currDocPageNumber,
     currDocPages,
+    voice,
     availableVoices,
     togglePlay,
     skipForward,

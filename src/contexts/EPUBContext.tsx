@@ -457,11 +457,12 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
             instructions: effectiveModel === 'gpt-4o-mini-tts' ? ttsInstructions : undefined
           };
 
+          // Allow one narrow client retry for transient browser->/api/tts transport failures.
+          // HTTP failures are not retried client-side.
           const retryOptions: TTSRetryOptions = {
             maxRetries: 2,
-            initialDelay: 5000,
-            maxDelay: 10000,
-            backoffFactor: 2
+            initialDelay: 300,
+            maxDelay: 300,
           };
 
           const audioBuffer = await withRetry(
@@ -623,11 +624,12 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
         instructions: effectiveModel === 'gpt-4o-mini-tts' ? ttsInstructions : undefined
       };
 
+      // Allow one narrow client retry for transient browser->/api/tts transport failures.
+      // HTTP failures are not retried client-side.
       const retryOptions: TTSRetryOptions = {
         maxRetries: 2,
-        initialDelay: 5000,
-        maxDelay: 10000,
-        backoffFactor: 2
+        initialDelay: 300,
+        maxDelay: 300,
       };
 
       const audioBuffer = await withRetry(

@@ -513,11 +513,12 @@ export function PDFProvider({ children }: { children: ReactNode }) {
           instructions: effectiveModel === 'gpt-4o-mini-tts' ? ttsInstructions : undefined
         };
 
+        // Allow one narrow client retry for transient browser->/api/tts transport failures.
+        // HTTP failures are not retried client-side.
         const retryOptions: TTSRetryOptions = {
-          maxRetries: 3,
-          initialDelay: 1000,
-          maxDelay: 5000,
-          backoffFactor: 2
+          maxRetries: 2,
+          initialDelay: 300,
+          maxDelay: 300,
         };
 
         try {
@@ -686,11 +687,12 @@ export function PDFProvider({ children }: { children: ReactNode }) {
         instructions: effectiveModel === 'gpt-4o-mini-tts' ? ttsInstructions : undefined
       };
 
+      // Allow one narrow client retry for transient browser->/api/tts transport failures.
+      // HTTP failures are not retried client-side.
       const retryOptions: TTSRetryOptions = {
-        maxRetries: 3,
-        initialDelay: 1000,
-        maxDelay: 5000,
-        backoffFactor: 2
+        maxRetries: 2,
+        initialDelay: 300,
+        maxDelay: 300,
       };
 
       const audioBuffer: TTSAudioBuffer = await withRetry(

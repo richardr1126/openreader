@@ -13,6 +13,9 @@ import { isAuthEnabled } from '@/lib/server/auth/config';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, didCreate: boolean) {
   if (didCreate && deviceId) {
     setDeviceIdCookie(response, deviceId);
@@ -237,6 +240,10 @@ export async function POST(req: NextRequest) {
     const openai = new OpenAI({
       apiKey: openApiKey,
       baseURL: openApiBaseUrl,
+      // Keep retry policy centralized in this route's fetchTTSBufferWithRetry.
+      maxRetries: 0,
+      // Keep upstream timeout below route max duration so we can return a controlled error.
+      timeout: Number(process.env.TTS_UPSTREAM_TIMEOUT_MS ?? 45_000),
     });
 
     const normalizedVoice = (

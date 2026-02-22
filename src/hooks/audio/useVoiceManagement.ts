@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { getVoices } from '@/lib/client/api/audiobooks';
 
 const DEFAULT_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer'];
@@ -20,8 +20,10 @@ export function useVoiceManagement(
   ttsModel: string | undefined
 ) {
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+  const fetchSeqRef = useRef(0);
 
   const fetchVoices = useCallback(async () => {
+    const fetchSeq = ++fetchSeqRef.current;
     try {
       console.log('Fetching voices...');
       const data = await getVoices({
@@ -31,10 +33,13 @@ export function useVoiceManagement(
         'x-tts-model': ttsModel || 'tts-1',
         'Content-Type': 'application/json',
       });
-      
+
+      // Ignore stale responses from older provider/model fetches.
+      if (fetchSeq !== fetchSeqRef.current) return;
       setAvailableVoices(data.voices || DEFAULT_VOICES);
     } catch (error) {
       console.error('Error fetching voices:', error);
+      if (fetchSeq !== fetchSeqRef.current) return;
       // Set available voices to default openai voices
       setAvailableVoices(DEFAULT_VOICES);
     }
