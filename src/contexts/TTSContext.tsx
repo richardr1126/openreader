@@ -1519,45 +1519,73 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [activeHowl, isPlaying, currentSentenceAlignment]);
 
   /**
-   * Preloads the next sentence's audio
+   * Preloads upcoming sentences sequentially.
+   * As soon as one preload finishes, the next one starts (up to lookahead window).
    */
-  const preloadNextAudio = useCallback(async () => {
+  const preloadNextAudio = useCallback(() => {
+    const PRELOAD_LOOKAHEAD = 3;
     if (isAtLimit) return;
-    try {
-      const nextSentence = sentences[currentIndex + 1];
-      if (nextSentence) {
-        const nextKey = buildCacheKey(
-          nextSentence,
-          voice,
-          speed,
-          configTTSProvider,
-          ttsModel,
-        );
 
-        if (!audioCache.has(nextKey) && !preloadRequests.current.has(nextSentence)) {
-          // Start preloading but don't wait for it to complete
-          processSentence(nextSentence, true).catch(error => {
-            const status = (() => {
-              if (typeof error === 'object' && error !== null && 'status' in error) {
-                const maybe = (error as { status?: unknown }).status;
-                return typeof maybe === 'number' ? maybe : undefined;
-              }
-              return undefined;
-            })();
-            const code = (() => {
-              if (typeof error === 'object' && error !== null && 'code' in error) {
-                const maybe = (error as { code?: unknown }).code;
-                return typeof maybe === 'string' ? maybe : undefined;
-              }
-              return undefined;
-            })();
-            // Ignore quota errors during preload
-            if (!(status === 429 && code === 'USER_DAILY_QUOTA_EXCEEDED')) {
-              console.error('Error preloading next sentence:', error);
-            }
-          });
-        }
+    const preloadFromOffset = (offset: number) => {
+      if (offset > PRELOAD_LOOKAHEAD) return;
+
+      const sentenceIndex = currentIndex + offset;
+      const nextSentence = sentences[sentenceIndex];
+      if (!nextSentence) return;
+
+      const nextKey = buildCacheKey(
+        nextSentence,
+        voice,
+        speed,
+        configTTSProvider,
+        ttsModel,
+      );
+
+      if (audioCache.has(nextKey)) {
+        preloadFromOffset(offset + 1);
+        return;
       }
+
+      const pending = preloadRequests.current.get(nextSentence);
+      if (pending) {
+        void pending
+          .finally(() => {
+            preloadFromOffset(offset + 1);
+          })
+          .catch(() => {
+            // Prevent unhandled rejections from the chained preload progression.
+          });
+        return;
+      }
+
+      void processSentence(nextSentence, true)
+        .catch((error) => {
+          const status = (() => {
+            if (typeof error === 'object' && error !== null && 'status' in error) {
+              const maybe = (error as { status?: unknown }).status;
+              return typeof maybe === 'number' ? maybe : undefined;
+            }
+            return undefined;
+          })();
+          const code = (() => {
+            if (typeof error === 'object' && error !== null && 'code' in error) {
+              const maybe = (error as { code?: unknown }).code;
+              return typeof maybe === 'string' ? maybe : undefined;
+            }
+            return undefined;
+          })();
+          // Ignore quota errors during preload.
+          if (!(status === 429 && code === 'USER_DAILY_QUOTA_EXCEEDED')) {
+            console.error(`Error preloading sentence at offset ${offset}:`, error);
+          }
+        })
+        .finally(() => {
+          preloadFromOffset(offset + 1);
+        });
+    };
+
+    try {
+      preloadFromOffset(1);
     } catch (error) {
       console.error('Error initiating preload:', error);
     }
@@ -1576,7 +1604,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Start playing current sentence
     playAudio();
 
-    // Start preloading next sentence in parallel
+    // Start background lookahead preloading for upcoming sentences.
     preloadNextAudio();
 
     return () => {
