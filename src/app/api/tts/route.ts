@@ -252,12 +252,14 @@ export async function POST(req: NextRequest) {
         : voice
     ) as SpeechCreateParams['voice'];
 
+    const resolvedFormat = format || 'mp3';
+
     const createParams: ExtendedSpeechParams = {
       model: model,
       voice: normalizedVoice,
       input: text,
       speed: speed,
-      response_format: format,
+      response_format: resolvedFormat,
     };
     // Only add instructions if model is gpt-4o-mini-tts and instructions are provided
     if ((model as string) === 'gpt-4o-mini-tts' && instructions) {

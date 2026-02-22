@@ -1036,6 +1036,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         text: sentence,
         voice,
         speed,
+        format: 'mp3',
         model: ttsModel,
         instructions: ttsModel === 'gpt-4o-mini-tts' ? ttsInstructions : undefined,
       };
