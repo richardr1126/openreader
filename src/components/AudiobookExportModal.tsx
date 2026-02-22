@@ -77,6 +77,26 @@ export function AudiobookExportModal({
   const isLegacyAudiobookMissingSettings = hasExistingAudiobook && savedSettings === null;
 
   useEffect(() => {
+    // For new audiobooks (no saved settings/chapters), keep generation defaults aligned
+    // with the current playback controls so users don't need a route remount.
+    if (!isOpen) return;
+    if (savedSettings) return;
+    if (hasExistingAudiobook) return;
+
+    setNativeSpeed(voiceSpeed);
+    setPostSpeed(audioPlayerSpeed);
+    setAudiobookVoice(configVoice || availableVoices[0] || '');
+  }, [
+    isOpen,
+    savedSettings,
+    hasExistingAudiobook,
+    voiceSpeed,
+    audioPlayerSpeed,
+    configVoice,
+    availableVoices,
+  ]);
+
+  useEffect(() => {
     if (savedSettings) return;
     if (audiobookVoice) return;
     if (availableVoices.length > 0) {

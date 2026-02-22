@@ -138,6 +138,13 @@ async function runFFmpeg(args: string[], signal?: AbortSignal): Promise<void> {
   });
 }
 
+async function ensurePositiveDuration(filePath: string, signal?: AbortSignal): Promise<void> {
+  const probe = await ffprobeAudio(filePath, signal);
+  if (!probe.durationSec || probe.durationSec <= 0) {
+    throw new Error(`Invalid duration for output file: ${filePath}`);
+  }
+}
+
 export async function GET(request: NextRequest) {
   let workDir: string | null = null;
   try {
@@ -230,16 +237,17 @@ export async function GET(request: NextRequest) {
       const bytes = await getAudiobookObjectBuffer(bookId, existingBookUserId, chapter.fileName, testNamespace);
       await writeFile(localPath, bytes);
 
-      let duration = durationByIndex.get(chapter.index) ?? 0;
-      if (!duration || duration <= 0) {
-        try {
-          const probe = await ffprobeAudio(localPath, request.signal);
-          if (probe.durationSec && probe.durationSec > 0) {
-            duration = probe.durationSec;
-          }
-        } catch {
-          duration = 0;
+      let duration = 0;
+      try {
+        const probe = await ffprobeAudio(localPath, request.signal);
+        if (probe.durationSec && probe.durationSec > 0) {
+          duration = probe.durationSec;
         }
+      } catch {
+        duration = 0;
+      }
+      if (!duration || duration <= 0) {
+        duration = durationByIndex.get(chapter.index) ?? 0;
       }
 
       localChapters.push({
@@ -268,31 +276,67 @@ export async function GET(request: NextRequest) {
     );
 
     if (format === 'mp3') {
-      await runFFmpeg(['-f', 'concat', '-safe', '0', '-i', listPath, '-c:a', 'libmp3lame', '-b:a', '64k', outputPath], request.signal);
+      try {
+        await runFFmpeg(
+          ['-f', 'concat', '-safe', '0', '-i', listPath, '-map_metadata', '-1', '-c:a', 'copy', outputPath],
+          request.signal,
+        );
+      } catch (copyError) {
+        console.warn('MP3 concat copy failed; falling back to re-encode:', copyError);
+        await runFFmpeg(
+          ['-f', 'concat', '-safe', '0', '-i', listPath, '-c:a', 'libmp3lame', '-b:a', '64k', outputPath],
+          request.signal,
+        );
+      }
     } else {
-      await runFFmpeg(
-        [
-          '-f',
-          'concat',
-          '-safe',
-          '0',
-          '-i',
-          listPath,
-          '-i',
-          metadataPath,
-          '-map_metadata',
-          '1',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '64k',
-          '-f',
-          'mp4',
-          outputPath,
-        ],
-        request.signal,
-      );
+      try {
+        await runFFmpeg(
+          [
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            listPath,
+            '-i',
+            metadataPath,
+            '-map_metadata',
+            '1',
+            '-c:a',
+            'copy',
+            '-f',
+            'mp4',
+            outputPath,
+          ],
+          request.signal,
+        );
+      } catch (copyError) {
+        console.warn('M4B concat copy failed; falling back to re-encode:', copyError);
+        await runFFmpeg(
+          [
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            listPath,
+            '-i',
+            metadataPath,
+            '-map_metadata',
+            '1',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '64k',
+            '-f',
+            'mp4',
+            outputPath,
+          ],
+          request.signal,
+        );
+      }
     }
+    await ensurePositiveDuration(outputPath, request.signal);
 
     const outputBytes = await readFile(outputPath);
     await putAudiobookObject(bookId, existingBookUserId, completeName, outputBytes, chapterFileMimeType(format), testNamespace);

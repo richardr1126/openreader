@@ -152,6 +152,46 @@ async function runFFmpeg(args: string[], signal?: AbortSignal): Promise<void> {
   });
 }
 
+function chapterEncodeArgs(
+  inputPath: string,
+  outputPath: string,
+  format: TTSAudiobookFormat,
+  postSpeed: number,
+  titleTag: string,
+): string[] {
+  if (format === 'mp3') {
+    return [
+      '-y',
+      '-i',
+      inputPath,
+      ...(postSpeed !== 1 ? ['-filter:a', buildAtempoFilter(postSpeed)] : []),
+      '-c:a',
+      'libmp3lame',
+      '-b:a',
+      '64k',
+      '-metadata',
+      `title=${titleTag}`,
+      outputPath,
+    ];
+  }
+
+  return [
+    '-y',
+    '-i',
+    inputPath,
+    ...(postSpeed !== 1 ? ['-filter:a', buildAtempoFilter(postSpeed)] : []),
+    '-c:a',
+    'aac',
+    '-b:a',
+    '64k',
+    '-metadata',
+    `title=${titleTag}`,
+    '-f',
+    'mp4',
+    outputPath,
+  ];
+}
+
 function findChapterFileNameByIndex(fileNames: string[], index: number): { fileName: string; title: string; format: 'mp3' | 'm4b' } | null {
   const matches = fileNames
     .map((fileName) => {
@@ -276,40 +316,36 @@ export async function POST(request: NextRequest) {
 
     await writeFile(inputPath, Buffer.from(new Uint8Array(data.buffer)));
 
-    if (format === 'mp3') {
-      await runFFmpeg(
-        [
-          '-y',
-          '-i',
-          inputPath,
-          ...(postSpeed !== 1 ? ['-filter:a', buildAtempoFilter(postSpeed)] : []),
-          '-c:a',
-          'libmp3lame',
-          '-b:a',
-          '64k',
-          '-metadata',
-          `title=${titleTag}`,
-          chapterOutputTempPath,
-        ],
-        request.signal,
-      );
+    const canCopyMp3WithoutReencode = format === 'mp3' && postSpeed === 1;
+    if (canCopyMp3WithoutReencode) {
+      try {
+        await runFFmpeg(
+          [
+            '-y',
+            '-i',
+            inputPath,
+            '-c:a',
+            'copy',
+            '-map_metadata',
+            '-1',
+            '-id3v2_version',
+            '3',
+            '-metadata',
+            `title=${titleTag}`,
+            chapterOutputTempPath,
+          ],
+          request.signal,
+        );
+      } catch (copyError) {
+        console.warn('Chapter remux failed; falling back to mp3 re-encode:', copyError);
+        await runFFmpeg(
+          chapterEncodeArgs(inputPath, chapterOutputTempPath, format, postSpeed, titleTag),
+          request.signal,
+        );
+      }
     } else {
       await runFFmpeg(
-        [
-          '-y',
-          '-i',
-          inputPath,
-          ...(postSpeed !== 1 ? ['-filter:a', buildAtempoFilter(postSpeed)] : []),
-          '-c:a',
-          'aac',
-          '-b:a',
-          '64k',
-          '-metadata',
-          `title=${titleTag}`,
-          '-f',
-          'mp4',
-          chapterOutputTempPath,
-        ],
+        chapterEncodeArgs(inputPath, chapterOutputTempPath, format, postSpeed, titleTag),
         request.signal,
       );
     }
