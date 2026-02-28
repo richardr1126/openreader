@@ -14,7 +14,9 @@ RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git && \
 
 # Stage 1b: extract seaweedfs weed binary (for optional embedded weed mini)
 FROM chrislusf/seaweedfs:latest AS seaweedfs-builder
-RUN cp "$(command -v weed)" /tmp/weed
+RUN cp "$(command -v weed)" /tmp/weed && \
+    (wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/LICENSE" || \
+     wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/main/LICENSE")
 
 
 # Stage 2: build the Next.js app
@@ -38,6 +40,14 @@ COPY . .
 # Build the Next.js application
 RUN pnpm exec next telemetry disable
 RUN pnpm build
+# Generate third-party dependency license report plus copied license files.
+RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
+    pnpm dlx license-checker-rseidelsohn@4.3.0 \
+      --production \
+      --json \
+      --relativeLicensePath \
+      --out /app/THIRD_PARTY_LICENSES/licenses.json \
+      --files /app/THIRD_PARTY_LICENSES/files
 
 
 # Stage 3: minimal runtime image
@@ -56,6 +66,10 @@ WORKDIR /app
 
 # Copy built app and dependencies from the builder stage
 COPY --from=app-builder /app ./
+# Include third-party license report and copied license texts at a stable path in the image.
+COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
+# Include SeaweedFS license text for the copied weed binary.
+COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
 
 # Copy the compiled whisper.cpp build output into the runtime image
 # (includes whisper-cli and its shared libraries, e.g. libwhisper.so, libggml.so)
