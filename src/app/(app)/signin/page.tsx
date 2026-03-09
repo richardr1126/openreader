@@ -180,16 +180,21 @@ function SignInContent() {
             />
           </div>
 
-          {/* Remember Me */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-muted text-accent focus:ring-accent"
-            />
-            <span className="text-sm text-foreground">Remember me</span>
-          </label>
+          {/* Remember Me & Forgot Password */}
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-muted text-accent focus:ring-accent"
+              />
+              <span className="text-sm text-foreground">Remember me</span>
+            </label>
+            <Link href="/forgot-password" className="text-sm text-muted underline hover:text-foreground">
+              Forgot password?
+            </Link>
+          </div>
 
           {/* Connect Button */}
           <Button

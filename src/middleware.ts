@@ -24,6 +24,8 @@ const PUBLIC_PATH_PREFIXES = [
   '/api/auth',   // Better Auth endpoints (sign-in, sign-up, callbacks, etc.)
   '/signin',
   '/signup',
+  '/forgot-password',
+  '/reset-password',
   '/privacy',
 ];
 

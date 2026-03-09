@@ -101,7 +101,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
   const [retryNonce, setRetryNonce] = useState(0);
   const attemptedForNullSessionRef = useRef(false);
   const clearingDisallowedAnonymousRef = useRef(false);
-  const isAuthPage = pathname === '/signin' || pathname === '/signup';
+  const isAuthPage = pathname === '/signin' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/reset-password';
 
   // If the auth base URL changes, re-run the bootstrap logic.
   useEffect(() => {

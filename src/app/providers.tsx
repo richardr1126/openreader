@@ -25,7 +25,7 @@ interface ProvidersProps {
 
 export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled }: ProvidersProps) {
   const pathname = usePathname();
-  const isAuthPage = pathname?.startsWith('/signin') || pathname?.startsWith('/signup');
+  const isAuthPage = pathname?.startsWith('/signin') || pathname?.startsWith('/signup') || pathname?.startsWith('/forgot-password') || pathname?.startsWith('/reset-password');
 
   if (isAuthPage) {
     return (
