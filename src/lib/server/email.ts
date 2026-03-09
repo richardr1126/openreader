@@ -3,38 +3,19 @@ import type { Transporter } from 'nodemailer';
 
 let transporter: Transporter | null = null;
 
-function getSmtpConfig() {
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || user;
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-  return { host, port, user, pass, from, secure };
-}
-
 export function isSmtpConfigured(): boolean {
-  const { host, user, pass } = getSmtpConfig();
-  return !!(host && user && pass);
+  return !!process.env.SMTP_URL;
 }
 
 function getTransporter(): Transporter {
   if (transporter) return transporter;
 
-  const { host, port, user, pass, secure } = getSmtpConfig();
-
-  if (!host || !user || !pass) {
-    throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables.');
+  const url = process.env.SMTP_URL;
+  if (!url) {
+    throw new Error('SMTP is not configured. Set the SMTP_URL environment variable.');
   }
 
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
-
+  transporter = nodemailer.createTransport(url);
   return transporter;
 }
 
@@ -43,11 +24,11 @@ export async function sendPasswordResetEmail(
   resetUrl: string,
   appName = 'OpenReader',
 ): Promise<void> {
-  const { from } = getSmtpConfig();
+  const from = process.env.SMTP_FROM;
   const transport = getTransporter();
 
   await transport.sendMail({
-    from: `"${appName}" <${from}>`,
+    ...(from ? { from: `"${appName}" <${from}>` } : {}),
     to,
     subject: `Reset your ${appName} password`,
     text: [

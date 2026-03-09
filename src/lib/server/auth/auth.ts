@@ -71,7 +71,7 @@ const createAuth = () => betterAuth({
       try {
         const { isSmtpConfigured, sendPasswordResetEmail } = await import('@/lib/server/email');
         if (!isSmtpConfigured()) {
-          console.warn("[auth] SMTP not configured – password reset email not sent. Set SMTP_HOST, SMTP_USER, and SMTP_PASS.");
+          console.warn("[auth] SMTP not configured – password reset email not sent. Set SMTP_URL.");
           return;
         }
         await sendPasswordResetEmail(data.user.email, data.url);
