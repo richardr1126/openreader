@@ -2,16 +2,9 @@
 title: KittenTTS-FastAPI
 ---
 
-Use [KittenTTS-FastAPI](https://github.com/richardr1126/KittenTTS-FastAPI) as an OpenAI-compatible TTS backend for OpenReader.
+Run [KittenTTS-FastAPI](https://github.com/richardr1126/KittenTTS-FastAPI) locally and connect it to OpenReader using the `Custom OpenAI-Like` provider. Lightweight and CPU-friendly.
 
-## Provider
-
-- Provider: `Custom OpenAI-Like`
-- Typical model: `kitten-tts`
-- `API_BASE`: required (usually your KittenTTS URL ending with `/v1`)
-- `API_KEY`: set only if your deployment requires one
-
-## Run KittenTTS (CPU)
+## Run KittenTTS
 
 ```bash
 docker run -it --rm \
@@ -21,23 +14,24 @@ docker run -it --rm \
   ghcr.io/richardr1126/kittentts-fastapi-cpu
 ```
 
-## OpenReader setup
+## Connect to OpenReader
 
-1. Start your KittenTTS-FastAPI server.
-2. In OpenReader Settings, choose provider `Custom OpenAI-Like`.
-3. Set `API_BASE` to your KittenTTS base URL (typically ending with `/v1`).
-4. Set `API_KEY` only if your deployment requires one.
-5. Choose model `kitten-tts` (or another model exposed by your deployment).
+**Environment variables (recommended for deployment):**
 
-## Notes
+```env
+API_BASE=http://kittentts-fastapi:8005/v1
+```
 
-:::info OpenAI-compatible API
-OpenReader expects OpenAI-compatible audio endpoints when using KittenTTS through `Custom OpenAI-Like`.
-:::
+> Use `kittentts-fastapi` if that's the container name, or `host.docker.internal` if not.
 
-:::tip Endpoint shape
-Use an `API_BASE` that points at the KittenTTS API root (typically ending with `/v1`).
-:::
+**Or in-app via Settings → TTS Provider:**
+
+1. Set provider to `Custom OpenAI-Like`.
+2. Set `API_BASE` to your KittenTTS endpoint (e.g. `http://kittentts-fastapi:8005/v1`).
+3. Leave `API_KEY` blank unless your deployment requires one.
+4. Choose model `kitten-tts` (or the model your deployment exposes).
+
+Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
 
 ## References
 

@@ -2,32 +2,30 @@
 title: Orpheus-FastAPI
 ---
 
-Use Orpheus-FastAPI as an OpenAI-compatible TTS backend for OpenReader.
+Run [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI) locally and connect it to OpenReader using the `Custom OpenAI-Like` provider.
 
-## Provider
+## Run Orpheus
 
-- Provider: `Custom OpenAI-Like`
-- Typical model: `Orpheus`
-- `API_BASE`: required (usually your Orpheus URL ending with `/v1`)
-- `API_KEY`: set only if your deployment requires one
+Refer to the upstream repository for Docker instructions: [Lex-au/Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI).
 
-## OpenReader setup
+## Connect to OpenReader
 
-1. Start your Orpheus-FastAPI server.
-2. In OpenReader Settings, choose provider `Custom OpenAI-Like`.
-3. Set `API_BASE` to your Orpheus base URL (typically ending with `/v1`).
-4. Set `API_KEY` only if your Orpheus deployment requires one.
-5. Choose model `Orpheus` (or another model exposed by your deployment).
+**Environment variables (recommended for deployment):**
 
-## Notes
+```env
+API_BASE=http://orpheus:8000/v1
+```
 
-:::info OpenAI-compatible API
-OpenReader expects OpenAI-compatible audio endpoints when using Orpheus through `Custom OpenAI-Like`.
-:::
+> Use the container name if that's how it's named, or `host.docker.internal` if not.
 
-:::tip Endpoint shape
-Use an `API_BASE` that points at the Orpheus API root (typically ending with `/v1`).
-:::
+**Or in-app via Settings → TTS Provider:**
+
+1. Set provider to `Custom OpenAI-Like`.
+2. Set `API_BASE` to your Orpheus endpoint (e.g. `http://orpheus:8000/v1`).
+3. Leave `API_KEY` blank unless your deployment requires one.
+4. Choose model `Orpheus` (or the model your deployment exposes).
+
+Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
 
 ## References
 

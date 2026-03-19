@@ -2,20 +2,15 @@
 title: Kokoro-FastAPI
 ---
 
-You can run the Kokoro TTS API server directly with Docker.
+Run [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) locally and connect it to OpenReader using the `Custom OpenAI-Like` provider.
 
 :::warning
 For Kokoro issues and support, use the upstream repository: [remsky/Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI).
 :::
 
-## Provider
+## Run Kokoro
 
-- Provider: `Custom OpenAI-Like`
-- Typical model: `Kokoro`
-- `API_BASE`: required (typically your Kokoro URL ending with `/v1`)
-- `API_KEY`: set only if your deployment requires one
-
-## Run Kokoro (CPU)
+**CPU:**
 
 ```bash
 docker run --name kokoro-tts \
@@ -32,7 +27,7 @@ docker run --name kokoro-tts \
   ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.4
 ```
 
-## Run Kokoro (GPU)
+**GPU (NVIDIA):**
 
 ```bash
 docker run --name kokoro-tts \
@@ -47,19 +42,24 @@ docker run --name kokoro-tts \
   ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.4
 ```
 
-## OpenReader setup
+## Connect to OpenReader
 
-1. Start Kokoro using either the CPU or GPU image.
-2. In OpenReader Settings, choose provider `Custom OpenAI-Like`.
-3. Set `API_BASE` to your Kokoro endpoint (for Docker Compose, commonly `http://kokoro-tts:8880/v1`).
-4. Set `API_KEY` only if your deployment requires one.
-5. Choose model `Kokoro`.
+**Environment variables (recommended for deployment):**
 
-## Notes
+```env
+API_BASE=http://kokoro-tts:8880/v1
+```
 
-:::tip Runtime guidance
-GPU mode requires NVIDIA Docker support and is best on NVIDIA hardware. CPU mode is a good default on Apple Silicon and modern x86 CPUs.
-:::
+> Use `kokoro-tts` if that's the container name, or `host.docker.internal` if not.
+
+**Or in-app via Settings → TTS Provider:**
+
+1. Set provider to `Custom OpenAI-Like`.
+2. Set `API_BASE` to your Kokoro endpoint (e.g. `http://kokoro-tts:8880/v1`).
+3. Leave `API_KEY` blank unless your deployment requires one.
+4. Choose model `Kokoro`.
+
+Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
 
 ## References
 

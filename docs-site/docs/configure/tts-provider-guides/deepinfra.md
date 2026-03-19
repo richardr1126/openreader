@@ -1,33 +1,36 @@
 ---
-title: Deepinfra
+title: DeepInfra
 ---
 
-Use Deepinfra as a hosted OpenAI-compatible TTS provider.
+Use DeepInfra's hosted TTS models as your provider.
 
-## Provider
+## Setup
 
-- Provider: `Deepinfra`
-- Default endpoint: `https://api.deepinfra.com/v1/openai` (auto-filled)
-- `API_KEY`: required for authenticated DeepInfra usage
+**Environment variables (recommended for deployment):**
 
-## OpenReader setup
+```env
+API_BASE=https://api.deepinfra.com/v1/openai
+API_KEY=your-deepinfra-key
+NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=deepinfra
+```
 
-1. In OpenReader Settings, choose provider `Deepinfra`.
-2. Keep the default `API_BASE`.
-3. Set `API_KEY`.
-4. Choose your model and voice.
+**Or in-app via Settings → TTS Provider:**
+
+1. Set provider to `Deepinfra`.
+2. The base URL is pre-filled, no changes needed.
+3. Enter your `API_KEY`.
+4. Choose a model and voice.
+
+Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
 
 ## Notes
 
-:::tip Built-in endpoint
-`Deepinfra` is a built-in provider, so OpenReader auto-fills the default `API_BASE`.
-:::
-
-:::info Model support
-DeepInfra exposes multiple TTS models, including Kokoro-family options.
-:::
+- Available models include `hexgrad/Kokoro-82M` and `canopylabs/orpheus-3b-0.1-ft`.
+- Without an API key, only the free-tier model (`hexgrad/Kokoro-82M`) is shown in the dropdown.
+- TTS requests are sent from the server, not the browser. The API key is never exposed to clients.
 
 ## References
 
+- [DeepInfra TTS models](https://deepinfra.com/models/text-to-speech)
 - [TTS Providers](../tts-providers)
 - [TTS Environment Variables](../../reference/environment-variables#tts-provider-and-request-behavior)

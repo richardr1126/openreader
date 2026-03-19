@@ -32,7 +32,7 @@ It supports multiple TTS providers including OpenAI, DeepInfra, and custom OpenA
 - 🗂️ **Flexible Storage and Database Modes** with embedded defaults or external S3/Postgres
 - 🚀 **Production-ready Server Behavior** with TTS caching/retries/rate limits and startup migrations
 - 🎨 **Customizable Experience**
-  - Theme, TTS, and document handling controls
+  - 13 built-in themes (light and dark palettes), TTS, and document handling controls
 
 ## 🧭 Key Docs
 

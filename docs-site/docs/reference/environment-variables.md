@@ -60,18 +60,20 @@ This is the single reference page for OpenReader environment variables.
 
 ### API_BASE
 
-Base URL for OpenAI-compatible TTS API requests.
+Server-level default base URL for OpenAI-compatible TTS API requests.
 
 - Example: `http://host.docker.internal:8880/v1`
-- Can be overridden per request from UI settings
+- Used when no `API_BASE` is set in the user's Settings modal
+- If the user sets `API_BASE` in **Settings → TTS Provider**, that value takes precedence
 - Related docs: [TTS Providers](../configure/tts-providers)
 
 ### API_KEY
 
-Default API key for TTS provider requests.
+Server-level default API key for TTS provider requests.
 
-- Example: `none` or your provider token
-- Can be overridden by request headers from app settings
+- Example: your provider token, or omit if the provider doesn't require auth
+- Used when no `API_KEY` is set in the user's Settings modal
+- If the user sets `API_KEY` in **Settings → TTS Provider**, that value takes precedence
 - Related docs: [TTS Providers](../configure/tts-providers)
 
 ### TTS_CACHE_MAX_SIZE_BYTES

@@ -2,32 +2,34 @@
 title: OpenAI
 ---
 
-Use OpenAI directly as an OpenAI-compatible TTS provider.
+Use the OpenAI TTS API as your provider.
 
-## Provider
+## Setup
 
-- Provider: `OpenAI`
-- Default endpoint: `https://api.openai.com/v1` (auto-filled)
-- `API_KEY`: required for OpenAI access
+**Environment variables (recommended for deployment):**
 
-## OpenReader setup
+```env
+API_BASE=https://api.openai.com/v1
+API_KEY=sk-...
+NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=openai
+```
 
-1. In OpenReader Settings, choose provider `OpenAI`.
-2. Keep the default `API_BASE`.
-3. Set `API_KEY`.
-4. Choose your model and voice.
+**Or in-app via Settings → TTS Provider:**
+
+1. Set provider to `OpenAI`.
+2. The base URL is pre-filled, no changes needed.
+3. Enter your `API_KEY`.
+4. Choose a model and voice.
+
+Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
 
 ## Notes
 
-:::tip Built-in endpoint
-`OpenAI` is a built-in provider, so OpenReader auto-fills the default `API_BASE`.
-:::
-
-:::info Server-side requests
-OpenReader sends TTS requests from the server runtime, not directly from the browser.
-:::
+- Models: `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`
+- TTS requests are sent from the server, not the browser. The API key is never exposed to clients.
 
 ## References
 
+- [OpenAI TTS pricing](https://platform.openai.com/docs/pricing#transcription-and-speech)
 - [TTS Providers](../tts-providers)
 - [TTS Environment Variables](../../reference/environment-variables#tts-provider-and-request-behavior)

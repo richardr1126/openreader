@@ -25,7 +25,7 @@ const sidebars: SidebarsConfig = {
             'configure/tts-provider-guides/orpheus-fastapi',
             'configure/tts-provider-guides/deepinfra',
             'configure/tts-provider-guides/openai',
-            'configure/tts-provider-guides/custom-openai',
+            'configure/tts-provider-guides/other',
           ],
         },
         {
