@@ -11,6 +11,7 @@ This is the single reference page for OpenReader environment variables.
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_ENABLE_DOCX_CONVERSION` | Client feature flags | `true` unless set to `false` | Set `false` to hide DOCX support |
 | `NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS` | Client feature flags | `true` unless set to `false` | Set `false` to hide destructive actions |
+| `NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB` | Client feature flags | `true` unless set to `false` | Set `false` to hide the TTS Provider settings tab |
 | `NEXT_PUBLIC_DEFAULT_TTS_PROVIDER` | Client feature flags | `custom-openai` | Override default TTS provider |
 | `NEXT_PUBLIC_DEFAULT_TTS_MODEL` | Client feature flags | `kokoro` | Override default TTS model |
 | `NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS` | Client feature flags | `true` unless set to `false` | Set `false` to restrict DeepInfra models |
@@ -355,6 +356,14 @@ Absolute path or executable name for the ffmpeg binary used by audiobook/process
  
  - Default: `true` (enabled)
  - Set `false` to hide destructive actions (recommended for production)
+
+### NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB
+
+Controls whether the **TTS Provider** section appears in the Settings modal.
+
+- Default: `true` (enabled)
+- Set `false` to hide provider/model/API controls in Settings
+- Useful when you want provider config locked to environment defaults
  
  ### NEXT_PUBLIC_DEFAULT_TTS_PROVIDER
  

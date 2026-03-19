@@ -136,10 +136,15 @@ export async function pauseTTSAndVerify(page: Page) {
  * Common test setup function
  */
 export async function setupTest(page: Page, testInfo?: TestInfo) {
-  const namespace = testInfo ? `${testInfo.project.name}-worker${testInfo.workerIndex}` : null;
+  const namespace = testInfo
+    ? `${testInfo.project.name}-w${testInfo.workerIndex}-r${testInfo.retry}-${createHash('sha1')
+      .update(`${testInfo.file}|${testInfo.title}|${testInfo.repeatEachIndex}`)
+      .digest('hex')
+      .slice(0, 12)}`
+    : null;
   if (namespace) {
-    // Isolate server-side storage per Playwright worker to avoid cross-test flake
-    // when running with multiple workers (server-first document storage).
+    // Isolate server-side storage per test run (scoped by project/worker/retry/test)
+    // to avoid cross-test flake from in-flight server-side writes.
     await page.context().setExtraHTTPHeaders({ 'x-openreader-test-namespace': namespace });
   }
 

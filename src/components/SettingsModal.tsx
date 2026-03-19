@@ -37,6 +37,7 @@ import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from
 
 const enableDestructiveDelete = process.env.NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS !== 'false';
 const showAllDeepInfra = process.env.NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS !== 'false';
+const enableTTSProvidersTab = process.env.NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB !== 'false';
 
 // Hard-coded theme color palettes for the visual theme selector
 type ThemeColorSet = { background: string; base: string; offbase: string; accent: string; secondaryAccent: string; foreground: string; muted: string };
@@ -78,7 +79,7 @@ const SIDEBAR_SECTIONS: { id: SectionId; label: string; icon: React.ComponentTyp
 
 export function SettingsModal({ className = '' }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<SectionId>('api');
+  const [activeSection, setActiveSection] = useState<SectionId>(enableTTSProvidersTab ? 'api' : 'theme');
 
   const { theme, setTheme } = useTheme();
   const { apiKey, baseUrl, ttsProvider, ttsModel, ttsInstructions, updateConfig, updateConfigKey } = useConfig();
@@ -386,7 +387,22 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     return THEME_COLORS[id] || THEME_COLORS.light;
   }, [systemIsDark]);
 
-  const visibleSections = SIDEBAR_SECTIONS.filter(s => !s.authOnly || authEnabled);
+  const visibleSections = useMemo(
+    () => SIDEBAR_SECTIONS.filter((section) => {
+      if (section.id === 'api' && !enableTTSProvidersTab) {
+        return false;
+      }
+      return !section.authOnly || authEnabled;
+    }),
+    [authEnabled]
+  );
+
+  useEffect(() => {
+    if (visibleSections.some(section => section.id === activeSection)) {
+      return;
+    }
+    setActiveSection(visibleSections[0]?.id ?? 'theme');
+  }, [activeSection, visibleSections]);
 
   const btnBase = "inline-flex items-center justify-center rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transform transition-transform duration-200 ease-in-out";
   const btnPrimary = `${btnBase} bg-accent text-background hover:bg-secondary-accent hover:scale-[1.04]`;

@@ -32,6 +32,7 @@ AUTH_SECRET=...
 # Optional client/runtime feature defaults:
 NEXT_PUBLIC_ENABLE_DOCX_CONVERSION=false
 NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS=false
+NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB=false
 NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=deepinfra
 NEXT_PUBLIC_DEFAULT_TTS_MODEL=hexgrad/Kokoro-82M
 NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS=false
@@ -47,6 +48,7 @@ We recommend setting these defaults for a production-like environment:
 
 - `NEXT_PUBLIC_ENABLE_DOCX_CONVERSION=false`: Disables DOCX upload (requires external tools anyway)
 - `NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS=false`: Hides destructive "Delete All" actions
+- `NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB=false`: Hides the Settings -> TTS Provider section
 - `NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=deepinfra`: Points default TTS to a scalable provider
 - `NEXT_PUBLIC_DEFAULT_TTS_MODEL=hexgrad/Kokoro-82M`: Uses a high-quality default model
 - `NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS=false`: Restricts usage to free models if no key is provided
