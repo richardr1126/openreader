@@ -69,7 +69,7 @@ export function ConfirmDialog({
                   {title}
                 </DialogTitle>
                 <div className="mt-2">
-                  <p className="text-sm text-foreground/90">{message}</p>
+                  <p className="text-sm text-foreground/90 break-words">{message}</p>
                 </div>
 
                 <div className="mt-6 flex justify-end space-x-3">
@@ -85,7 +85,7 @@ export function ConfirmDialog({
                   </button>
                   <button
                     type="button"
-                    className={`inline-flex justify-center rounded-lg px-3 py-1.5 text-sm 
+                    className={`inline-flex justify-center rounded-lg px-3 py-1.5 text-sm text-wrap
                              font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
                              transform transition-transform duration-200 ease-in-out hover:scale-[1.04]
                              ${isDangerous 

@@ -6,7 +6,7 @@ import {
   ListboxOption,
   ListboxOptions,
 } from '@headlessui/react';
-import { ChevronUpDownIcon, AudioWaveIcon } from '@/components/icons/Icons';
+import { ChevronUpDownIcon, AudioWaveIcon, CheckIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useState } from 'react';
 import { buildKokoroVoiceString, getMaxVoicesForProvider, isKokoroModel, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
 
@@ -16,13 +16,36 @@ export function VoicesControlBase({
   onChangeVoice,
   ttsProvider,
   ttsModel,
+  dropdownDirection = 'up',
+  variant = 'compact',
 }: {
   availableVoices: string[];
   voice: string;
   onChangeVoice: (voice: string) => void;
   ttsProvider: string;
   ttsModel: string;
+  dropdownDirection?: 'up' | 'down';
+  variant?: 'compact' | 'field';
 }) {
+  const dropdownPosition = dropdownDirection === 'down'
+    ? 'top-full left-0 mt-1'
+    : 'bottom-full right-0 mb-1';
+
+  const buttonClass = variant === 'field'
+    ? 'relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.01] hover:text-accent w-full'
+    : 'flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent';
+
+  const iconClass = variant === 'field'
+    ? 'h-3.5 w-3.5 shrink-0'
+    : 'h-3 w-3 sm:h-3.5 sm:w-3.5';
+
+  const chevronClass = variant === 'field'
+    ? 'h-4 w-4 text-muted'
+    : 'h-2.5 w-2.5 sm:h-3 sm:w-3';
+
+  const dropdownWidth = variant === 'field'
+    ? 'w-full'
+    : isKokoroModel(ttsModel) && getMaxVoicesForProvider(ttsProvider, ttsModel) > 1 ? 'w-40 sm:w-44' : 'w-28 sm:w-32';
   const isKokoro = isKokoroModel(ttsModel);
   const maxVoices = getMaxVoicesForProvider(ttsProvider, ttsModel);
 
@@ -91,33 +114,70 @@ export function VoicesControlBase({
             }
           }}
         >
-          <ListboxButton className="flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent">
-            <AudioWaveIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-            <span>{selectedVoices.length > 1 ? selectedVoices.join(' + ') : selectedVoices[0] || currentVoice}</span>
-            <ChevronUpDownIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+          <ListboxButton className={buttonClass}>
+            {variant === 'field' ? (
+              <>
+                <span className="flex items-center gap-2 truncate text-sm font-medium">
+                  <AudioWaveIcon className={iconClass} />
+                  {selectedVoices.length > 1 ? selectedVoices.join(' + ') : selectedVoices[0] || currentVoice}
+                </span>
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                  <ChevronUpDownIcon className={chevronClass} />
+                </span>
+              </>
+            ) : (
+              <>
+                <AudioWaveIcon className={iconClass} />
+                <span>{selectedVoices.length > 1 ? selectedVoices.join(' + ') : selectedVoices[0] || currentVoice}</span>
+                <ChevronUpDownIcon className={chevronClass} />
+              </>
+            )}
           </ListboxButton>
-          <ListboxOptions className="absolute bottom-full right-0 mb-1 z-50 w-40 sm:w-44 !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          <ListboxOptions className={`absolute ${dropdownPosition} z-50 ${dropdownWidth} !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}>
             {availableVoices.map((voiceId) => (
               <ListboxOption
                 key={voiceId}
                 value={voiceId}
                 className={({ active, selected }) =>
-                  `relative cursor-pointer select-none py-1 px-2 sm:py-2 sm:px-3 ${active ? 'bg-offbase' : ''} ${selected ? 'font-medium bg-accent text-background' : ''} ${selected && active ? 'text-foreground' : ''}`
+                  `relative cursor-pointer select-none py-1 px-2 sm:py-2 sm:px-3 flex items-center gap-2 ${active ? 'bg-offbase' : ''} ${selected ? 'font-medium bg-accent text-background' : ''} ${selected && active ? 'text-foreground' : ''}`
                 }
               >
-                <span className="text-xs sm:text-sm">{voiceId}</span>
+                {({ selected }) => (
+                  <>
+                    {selected ? (
+                      <CheckIcon className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <span className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="text-xs sm:text-sm">{voiceId}</span>
+                  </>
+                )}
               </ListboxOption>
             ))}
           </ListboxOptions>
         </Listbox>
       ) : (
         <Listbox value={currentVoice} onChange={onChangeVoice}>
-          <ListboxButton className="flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent">
-            <AudioWaveIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-            <span>{currentVoice}</span>
-            <ChevronUpDownIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+          <ListboxButton className={buttonClass}>
+            {variant === 'field' ? (
+              <>
+                <span className="flex items-center gap-2 truncate text-sm font-medium">
+                  <AudioWaveIcon className={iconClass} />
+                  {currentVoice}
+                </span>
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                  <ChevronUpDownIcon className={chevronClass} />
+                </span>
+              </>
+            ) : (
+              <>
+                <AudioWaveIcon className={iconClass} />
+                <span>{currentVoice}</span>
+                <ChevronUpDownIcon className={chevronClass} />
+              </>
+            )}
           </ListboxButton>
-          <ListboxOptions className="absolute bottom-full right-0 mb-1 z-50 w-28 sm:w-32 !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+          <ListboxOptions className={`absolute ${dropdownPosition} z-50 ${dropdownWidth} !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}>
             {availableVoices.map((voiceId) => (
               <ListboxOption
                 key={voiceId}

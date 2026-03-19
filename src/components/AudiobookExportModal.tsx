@@ -491,161 +491,183 @@ export function AudiobookExportModal({
 			                          <h3 className="text-lg font-medium text-foreground">Export Audiobook</h3>
 			                        </div>
 			                        {!isGenerating && (
-			                          <div className="flex justify-center">
-			                            <div className="w-full rounded-xl border border-offbase bg-background p-4">
-			                              <div className="flex items-start justify-between gap-3">
-			                                <div>
-			                                  <h4 className="text-sm font-medium text-foreground">Generation settings</h4>
-			                                  <p className="text-xs text-muted mt-0.5">
-			                                    These settings are saved per audiobook for consistent resumes across devices.
-			                                  </p>
-			                                </div>
-				                                {settingsLocked && (
-				                                  <span className="inline-flex items-center rounded-full bg-offbase px-2 py-0.5 text-xs text-muted">
-				                                    Locked
-				                                  </span>
-				                                )}
-				                              </div>
+			                          <div className="w-full rounded-xl border border-offbase bg-background">
+			                            {/* Header */}
+			                            <div className="flex items-center justify-between px-4 py-3 border-b border-offbase bg-base rounded-t-xl">
+			                              <h4 className="text-sm font-medium text-foreground tracking-tight">Generation settings</h4>
+			                              {settingsLocked && (
+			                                <span className="inline-flex items-center gap-1 rounded-md bg-offbase px-2 py-0.5 text-[11px] font-medium text-muted uppercase tracking-wider">
+			                                  <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z" clipRule="evenodd" /></svg>
+			                                  Locked
+			                                </span>
+			                              )}
+			                            </div>
 
-				                              {isLegacyAudiobookMissingSettings && (
-				                                <div className="mt-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-foreground">
-				                                  <div className="font-medium">Saved generation settings not found</div>
-				                                  <div className="mt-1 text-muted">
-				                                    This audiobook was likely created before v1 metadata was introduced, so OpenReader can’t know
-				                                    which voice/speeds/format were used. Consider resetting this audiobook to regenerate it with
-				                                    v1 metadata (so settings are saved for resumes across devices).
-				                                  </div>
-				                                </div>
-				                              )}
-
-				                              {settingsLocked && savedSettings ? (
-				                                <div className="mt-3 text-sm">
-				                                  <div className="text-muted">
-				                                    Voice: <span className="text-foreground">{savedSettings.voice}</span>
-			                                  </div>
-			                                  <div className="text-muted">
-			                                    Native speed: <span className="text-foreground">{formatSpeed(savedSettings.nativeSpeed)}x</span>
-			                                  </div>
-			                                  <div className="text-muted">
-			                                    Post speed: <span className="text-foreground">{formatSpeed(savedSettings.postSpeed)}x</span>
-			                                  </div>
-			                                  <div className="text-muted">
-			                                    Format: <span className="text-foreground">{savedSettings.format.toUpperCase()}</span>
-			                                  </div>
-			                                  <p className="text-xs text-muted mt-2">
-			                                    Reset the audiobook to change generation settings.
-			                                  </p>
-			                                </div>
-			                              ) : (
-			                                <div className="mt-3 space-y-4">
-			                                  <div className="space-y-1">
-			                                    <div className="text-xs font-medium text-foreground">Voice</div>
-			                                    <VoicesControlBase
-			                                      availableVoices={availableVoices}
-			                                      voice={audiobookVoice}
-			                                      onChangeVoice={setAudiobookVoice}
-			                                      ttsProvider={ttsProvider}
-			                                      ttsModel={ttsModel}
-			                                    />
-			                                  </div>
-
-			                                  <div className="space-y-1">
-			                                    <div className="text-xs font-medium text-foreground">Output format</div>
-			                                    {chapters.length === 0 ? (
-			                                      <Listbox
-			                                        value={format}
-			                                        onChange={(newFormat) => setFormat(newFormat)}
-			                                        disabled={chapters.length > 0 || settingsLocked}
-			                                      >
-			                                        <div className="relative inline-block">
-			                                          <ListboxButton className="relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.01] hover:text-accent min-w-[120px]">
-			                                            <span className="block truncate text-sm font-medium">{format.toUpperCase()}</span>
-			                                            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-			                                              <ChevronUpDownIcon className="h-5 w-5 text-muted" />
-			                                            </span>
-			                                          </ListboxButton>
-			                                          <Transition
-			                                            as={Fragment}
-			                                            leave="transition ease-in duration-100"
-			                                            leaveFrom="opacity-100"
-			                                            leaveTo="opacity-0"
-			                                          >
-			                                            <ListboxOptions className="absolute left-0 mt-1 max-h-60 w-full overflow-auto rounded-md bg-base py-1 shadow-lg ring-1 ring-black/5 focus:outline-none z-10">
-			                                              <ListboxOption
-			                                                value="m4b"
-			                                                className={({ active }) =>
-			                                                  `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'
-			                                                  }`
-			                                                }
-			                                              >
-			                                                {({ selected }) => (
-			                                                  <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
-			                                                    M4B
-			                                                  </span>
-			                                                )}
-			                                              </ListboxOption>
-			                                              <ListboxOption
-			                                                value="mp3"
-			                                                className={({ active }) =>
-			                                                  `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'
-			                                                  }`
-			                                                }
-			                                              >
-			                                                {({ selected }) => (
-			                                                  <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
-			                                                    MP3
-			                                                  </span>
-			                                                )}
-			                                              </ListboxOption>
-			                                            </ListboxOptions>
-			                                          </Transition>
-			                                        </div>
-			                                      </Listbox>
-			                                    ) : (
-			                                      <div className="text-sm text-foreground">{format.toUpperCase()}</div>
-			                                    )}
-			                                  </div>
-
-			                                  <div className="space-y-1">
-			                                    <div className="flex items-center">
-			                                      <div className="text-xs font-medium text-foreground mr-1">Native model speed</div>
-			                                      <div className="text-xs text-muted">• {formatSpeed(nativeSpeed)}x</div>
-			                                    </div>
-			                                    <input
-			                                      type="range"
-			                                      min="0.5"
-			                                      max="3"
-			                                      step="0.1"
-			                                      value={nativeSpeed}
-			                                      onChange={(e) => setNativeSpeed(parseFloat(e.target.value))}
-			                                      className="w-full max-w-xs bg-offbase rounded-lg appearance-none cursor-pointer accent-accent [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-lg [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-lg [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent"
-			                                    />
-			                                  </div>
-
-			                                  <div className="space-y-1">
-			                                    <div className="flex items-center">
-			                                      <div className="text-xs font-medium text-foreground mr-1">Post-generation speed</div>
-			                                      <div className="text-xs text-muted">• {formatSpeed(postSpeed)}x</div>
-			                                    </div>
-			                                    <input
-			                                      type="range"
-			                                      min="0.5"
-			                                      max="3"
-			                                      step="0.1"
-			                                      value={postSpeed}
-			                                      onChange={(e) => setPostSpeed(parseFloat(e.target.value))}
-			                                      className="w-full max-w-xs bg-offbase rounded-lg appearance-none cursor-pointer accent-accent [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-lg [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-lg [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent"
-			                                    />
+			                            <div className="p-4">
+			                              {isLegacyAudiobookMissingSettings && (
+			                                <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-foreground">
+			                                  <div className="font-medium">Saved generation settings not found</div>
+			                                  <div className="mt-1 text-muted">
+			                                    This audiobook was likely created before v1 metadata was introduced, so OpenReader can&apos;t know
+			                                    which voice/speeds/format were used. Consider resetting this audiobook to regenerate it with
+			                                    v1 metadata (so settings are saved for resumes across devices).
 			                                  </div>
 			                                </div>
 			                              )}
 
-			                              <div className="mt-4 space-y-2">
+			                              {settingsLocked && savedSettings ? (
+			                                <div className="space-y-3">
+			                                  <div className="grid grid-cols-2 gap-3">
+			                                    <div className="rounded-lg bg-base p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Voice</div>
+			                                      <div className="text-sm font-medium text-foreground truncate">{savedSettings.voice}</div>
+			                                    </div>
+			                                    <div className="rounded-lg bg-base p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Format</div>
+			                                      <div className="text-sm font-medium text-foreground">{savedSettings.format.toUpperCase()}</div>
+			                                    </div>
+			                                  </div>
+			                                  <div className="grid grid-cols-2 gap-3">
+			                                    <div className="rounded-lg bg-base p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Native speed</div>
+			                                      <div className="text-sm font-medium text-foreground">{formatSpeed(savedSettings.nativeSpeed)}x</div>
+			                                    </div>
+			                                    <div className="rounded-lg bg-base p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Post speed</div>
+			                                      <div className="text-sm font-medium text-foreground">{formatSpeed(savedSettings.postSpeed)}x</div>
+			                                    </div>
+			                                  </div>
+			                                  <p className="text-xs text-muted">
+			                                    Reset the audiobook to change generation settings.
+			                                  </p>
+			                                </div>
+			                              ) : (
+			                                <div className="space-y-4">
+			                                  {/* Voice & Format row */}
+			                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+			                                    <div className="space-y-1.5">
+			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Voice</label>
+			                                      <VoicesControlBase
+			                                        availableVoices={availableVoices}
+			                                        voice={audiobookVoice}
+			                                        onChangeVoice={setAudiobookVoice}
+			                                        ttsProvider={ttsProvider}
+			                                        ttsModel={ttsModel}
+			                                        dropdownDirection="down"
+			                                        variant="field"
+			                                      />
+			                                    </div>
+
+			                                    <div className="space-y-1.5">
+			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Format</label>
+			                                      {chapters.length === 0 ? (
+			                                        <Listbox
+			                                          value={format}
+			                                          onChange={(newFormat) => setFormat(newFormat)}
+			                                          disabled={chapters.length > 0 || settingsLocked}
+			                                        >
+			                                          <div className="relative">
+			                                            <ListboxButton className="relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.01] hover:text-accent w-full">
+			                                              <span className="block truncate text-sm font-medium">{format.toUpperCase()}</span>
+			                                              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+			                                                <ChevronUpDownIcon className="h-4 w-4 text-muted" />
+			                                              </span>
+			                                            </ListboxButton>
+			                                            <Transition
+			                                              as={Fragment}
+			                                              leave="transition ease-in duration-100"
+			                                              leaveFrom="opacity-100"
+			                                              leaveTo="opacity-0"
+			                                            >
+			                                              <ListboxOptions className="absolute left-0 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-base py-1 shadow-lg ring-1 ring-black/5 focus:outline-none z-10">
+			                                                <ListboxOption
+			                                                  value="m4b"
+			                                                  className={({ active }) =>
+			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
+			                                                  }
+			                                                >
+			                                                  {({ selected }) => (
+			                                                    <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
+			                                                      M4B
+			                                                    </span>
+			                                                  )}
+			                                                </ListboxOption>
+			                                                <ListboxOption
+			                                                  value="mp3"
+			                                                  className={({ active }) =>
+			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
+			                                                  }
+			                                                >
+			                                                  {({ selected }) => (
+			                                                    <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
+			                                                      MP3
+			                                                    </span>
+			                                                  )}
+			                                                </ListboxOption>
+			                                              </ListboxOptions>
+			                                            </Transition>
+			                                          </div>
+			                                        </Listbox>
+			                                      ) : (
+			                                        <div className="text-sm font-medium text-foreground py-1.5 pl-3">{format.toUpperCase()}</div>
+			                                      )}
+			                                    </div>
+			                                  </div>
+
+			                                  {/* Speed controls */}
+			                                  <div className="rounded-lg bg-base p-3 space-y-3">
+			                                    <div className="space-y-2">
+			                                      <div className="flex items-center justify-between">
+			                                        <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Native model speed</label>
+			                                        <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(nativeSpeed)}x</span>
+			                                      </div>
+			                                      <input
+			                                        type="range"
+			                                        min="0.5"
+			                                        max="3"
+			                                        step="0.1"
+			                                        value={nativeSpeed}
+			                                        onChange={(e) => setNativeSpeed(parseFloat(e.target.value))}
+			                                        className="w-full h-1.5 bg-offbase rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
+			                                      />
+			                                      <div className="flex justify-between text-[10px] text-muted">
+			                                        <span>0.5x</span>
+			                                        <span>3x</span>
+			                                      </div>
+			                                    </div>
+
+			                                    <div className="border-t border-offbase" />
+
+			                                    <div className="space-y-2">
+			                                      <div className="flex items-center justify-between">
+			                                        <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Post-generation speed</label>
+			                                        <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(postSpeed)}x</span>
+			                                      </div>
+			                                      <input
+			                                        type="range"
+			                                        min="0.5"
+			                                        max="3"
+			                                        step="0.1"
+			                                        value={postSpeed}
+			                                        onChange={(e) => setPostSpeed(parseFloat(e.target.value))}
+			                                        className="w-full h-1.5 bg-offbase rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
+			                                      />
+			                                      <div className="flex justify-between text-[10px] text-muted">
+			                                        <span>0.5x</span>
+			                                        <span>3x</span>
+			                                      </div>
+			                                    </div>
+			                                  </div>
+			                                </div>
+			                              )}
+
+			                              {/* Action buttons */}
+			                              <div className="mt-4 flex items-center gap-2">
 			                                {chapters.length === 0 && (
 			                                  <Button
 			                                    onClick={handleStartGeneration}
 			                                    disabled={!canGenerate}
-			                                    className="w-full inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
+			                                    className="flex-1 inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
 			                                            font-medium text-background hover:bg-secondary-accent focus:outline-none
 			                                            focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
 			                                            transform transition-transform duration-200 ease-in-out hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
@@ -657,7 +679,7 @@ export function AudiobookExportModal({
 			                                  <Button
 			                                    onClick={handleStartGeneration}
 			                                    disabled={!canGenerate}
-			                                    className="w-full inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
+			                                    className="flex-1 inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
 			                                            font-medium text-background hover:bg-secondary-accent focus:outline-none
 			                                            focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
 			                                            transform transition-transform duration-200 ease-in-out hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
@@ -669,10 +691,10 @@ export function AudiobookExportModal({
 			                                  <Button
 			                                    onClick={() => setShowResetConfirm(true)}
 			                                    disabled={isGenerating}
-			                                    className="w-full justify-center rounded-lg bg-red-500 px-3 py-2 text-sm 
-			                                           font-medium text-background hover:bg-red-500/90 focus:outline-none 
-			                                           focus-visible:ring-2 focus-visible:bg-red-500 focus-visible:ring-offset-2
-			                                         transform transition-transform duration-200 ease-in-out hover:scale-[1.01]"
+			                                    className="inline-flex justify-center rounded-lg border border-red-500 bg-transparent px-3 py-2 text-sm
+			                                           font-medium text-red-500 hover:bg-red-500 hover:text-background focus:outline-none
+			                                           focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2
+			                                           transform transition-transform duration-200 ease-in-out hover:scale-[1.01]"
 			                                    title="Delete all generated chapters/pages for this document"
 			                                  >
 			                                    Reset
@@ -716,7 +738,7 @@ export function AudiobookExportModal({
                         {chapters.length > 0 && (
                           <>
                             <div
-                              className={`space-y-2 max-h-96 overflow-scroll pr-1 ${isRefreshingChapters ? 'opacity-70 transition-opacity' : ''}`}
+                              className={`w-full space-y-2 max-h-96 overflow-y-auto ${isRefreshingChapters ? 'opacity-70 transition-opacity' : ''}`}
                               aria-busy={isRefreshingChapters}
                             >
                               <div className="flex items-center gap-2">

@@ -52,7 +52,7 @@ export function ProgressCard({
         </div>
         <button
           type="button"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground hover:text-accent hover:bg-background/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground hover:text-accent hover:bg-background/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.04]"
           onClick={(e) => onCancel(e)}
         >
           <span>{cancelText}</span>
