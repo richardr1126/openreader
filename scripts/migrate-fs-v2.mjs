@@ -734,7 +734,7 @@ async function migrateDatabaseRows(database, userId, docCandidates, audiobookBoo
       );
     } else {
       await database.query(
-        "INSERT INTO user (id, name, email, email_verified, created_at, updated_at, is_anonymous) VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0), to_timestamp($6 / 1000.0), $7) ON CONFLICT (id) DO NOTHING",
+        "INSERT INTO \"user\" (id, name, email, email_verified, created_at, updated_at, is_anonymous) VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0), to_timestamp($6 / 1000.0), $7) ON CONFLICT (id) DO NOTHING",
         [userId, 'System User', `${userId}@local`, false, now, now, false]
       );
     }
