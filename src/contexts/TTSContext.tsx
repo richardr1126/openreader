@@ -100,6 +100,10 @@ interface SetTextOptions {
 }
 
 const CONTINUATION_LOOKAHEAD = 600;
+const MAX_CONTINUATION_CARRY_CHARS = 220;
+const MAX_CONTINUATION_CARRY_WORDS = 40;
+const LOOP_GUARD_MIN_INDEX = 2;
+const LOOP_GUARD_MIN_PROGRESS = 0.6;
 const SENTENCE_ENDING = /[.?!…]["'”’)\]]*\s*$/;
 const wordHighlightFeatureEnabled =
   process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
@@ -110,6 +114,15 @@ const SILENT_WAV_DATA_URI =
 
 const normalizeLocationKey = (location: TTSLocation) =>
   typeof location === 'number' ? `num:${location}` : `str:${location}`;
+
+const normalizeBlockFingerprint = (text: string): string => {
+  const normalized = preprocessSentenceForAudio(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalized.slice(0, 200);
+};
 
 const isWhitespaceChar = (char: string) => /\s/.test(char);
 
@@ -221,7 +234,10 @@ const extractContinuationSlice = (nextText: string): TTSSmartMergeResult | null 
   }
 
   const rawSlice = snippet.slice(0, boundaryIndex);
-  const addition = rawSlice.trim();
+  const charsCappedSlice = rawSlice.slice(0, MAX_CONTINUATION_CARRY_CHARS);
+  const words = charsCappedSlice.trim().split(/\s+/).filter(Boolean);
+  const wordCapped = words.slice(0, MAX_CONTINUATION_CARRY_WORDS).join(' ');
+  const addition = wordCapped.trim();
 
   if (!addition) {
     return null;
@@ -229,7 +245,7 @@ const extractContinuationSlice = (nextText: string): TTSSmartMergeResult | null 
 
   return {
     text: addition,
-    carried: rawSlice,
+    carried: addition,
   };
 };
 
@@ -388,6 +404,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const epubContinuationRef = useRef<string | null>(null);
   const pageTurnEstimateRef = useRef<TTSPageTurnEstimate | null>(null);
   const pageTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pageFirstBlockFingerprintRef = useRef<Map<string, string>>(new Map());
   const sentenceAlignmentCacheRef = useRef<Map<string, TTSSentenceAlignment>>(new Map());
   const [currentSentenceAlignment, setCurrentSentenceAlignment] = useState<TTSSentenceAlignment | undefined>();
   const [currentWordIndex, setCurrentWordIndex] = useState<number | null>(null);
@@ -587,6 +604,35 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // Handle within current page bounds
     if (nextIndex < sentences.length && nextIndex >= 0) {
+      if (
+        !isEPUB &&
+        !backwards &&
+        currDocPages !== undefined &&
+        currDocPageNumber < currDocPages &&
+        nextIndex >= LOOP_GUARD_MIN_INDEX &&
+        sentences.length > 0
+      ) {
+        const locationKey = normalizeLocationKey(currDocPageNumber);
+        const cachedFirstFingerprint = pageFirstBlockFingerprintRef.current.get(locationKey)
+          ?? normalizeBlockFingerprint(sentences[0] || '');
+        const nextFingerprint = normalizeBlockFingerprint(sentences[nextIndex] || '');
+        const progress = sentences.length > 1 ? nextIndex / (sentences.length - 1) : 0;
+
+        if (
+          cachedFirstFingerprint &&
+          nextFingerprint &&
+          cachedFirstFingerprint === nextFingerprint &&
+          progress >= LOOP_GUARD_MIN_PROGRESS
+        ) {
+          const targetLocation = currDocPageNumber + 1;
+          prefetchedLocationTextRef.current.delete(normalizeLocationKey(targetLocation));
+          pendingNextLocationRef.current = targetLocation;
+          continuationCarryRef.current.delete(normalizeLocationKey(targetLocation));
+          skipToLocation(targetLocation);
+          return;
+        }
+      }
+
       setCurrentIndex(nextIndex);
       return;
     }
@@ -767,6 +813,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           console.warn('No sentences found in text');
           setIsProcessing(false);
           return;
+        }
+
+        if (!isEPUB && typeof normalizedOptions.location === 'number') {
+          const firstFingerprint = normalizeBlockFingerprint(newSentences[0] || '');
+          if (firstFingerprint) {
+            pageFirstBlockFingerprintRef.current.set(
+              normalizeLocationKey(normalizedOptions.location),
+              firstFingerprint
+            );
+          }
         }
 
         // Set all state updates in a predictable order
@@ -1667,6 +1723,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     locationChangeHandlerRef.current = null;
     epubContinuationRef.current = null;
     continuationCarryRef.current.clear();
+    pageFirstBlockFingerprintRef.current.clear();
     setIsPlaying(false);
     setCurrentIndex(0);
     setSentences([]);

@@ -234,12 +234,17 @@ export async function setupTest(page: Page, testInfo?: TestInfo) {
   // privacy modal, so open Settings explicitly if onboarding did not auto-open.
   const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
   const saveBtn = settingsDialog.getByRole('button', { name: 'Save' });
-  if (!(await saveBtn.isVisible().catch(() => false))) {
+
+  // On some local runs, Settings opens automatically but the Save button is not yet
+  // visible during enter transition. Prefer waiting for it before trying to click.
+  await saveBtn.waitFor({ state: 'visible', timeout: 2500 }).catch(async () => {
     const settingsBtn = page.getByRole('button', { name: 'Settings' });
     if (await settingsBtn.isVisible().catch(() => false)) {
-      await settingsBtn.click();
+      // Force avoids occasional pointer interception by in-flight dialog overlays.
+      await settingsBtn.click({ force: true });
     }
-  }
+  });
+
   await expect(saveBtn).toBeVisible({ timeout: 10000 });
   // SettingsModal can briefly disable Save while it mirrors a custom model into the input field.
   await expect(saveBtn).toBeEnabled({ timeout: 15000 });
