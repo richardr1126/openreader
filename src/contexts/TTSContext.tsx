@@ -413,6 +413,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const sentenceAlignmentCacheRef = useRef<Map<string, TTSSentenceAlignment>>(new Map());
   const [currentSentenceAlignment, setCurrentSentenceAlignment] = useState<TTSSentenceAlignment | undefined>();
   const [currentWordIndex, setCurrentWordIndex] = useState<number | null>(null);
+  const isPlayingRef = useRef(false);
   const sentencesRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
   const setTextRef = useRef<(text: string, options?: boolean | SetTextOptions) => void>(() => { });
@@ -530,6 +531,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
 
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
   /**
    * Processes text into sentences using the shared NLP utility
    * 
@@ -573,13 +578,39 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [activeHowl, clearRateWatchdog]);
 
   /**
+   * Pauses the current audio playback while preserving seek position.
+   */
+  const pauseActiveHowl = useCallback(() => {
+    clearRateWatchdog();
+    if (activeHowl) {
+      try {
+        activeHowl.pause();
+      } catch (error) {
+        console.warn('Error pausing audio:', error);
+      }
+    }
+
+    if (pageTurnTimeoutRef.current) {
+      clearTimeout(pageTurnTimeoutRef.current);
+      pageTurnTimeoutRef.current = null;
+    }
+
+    playbackInFlightRef.current = false;
+    setIsProcessing(false);
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+    }
+  }, [activeHowl, clearRateWatchdog]);
+
+  /**
    * Pauses the current audio playback
    * Used for external control of playback state
    */
   const pause = useCallback(() => {
-    abortAudio();
+    pauseActiveHowl();
     setIsPlaying(false);
-  }, [abortAudio]);
+  }, [pauseActiveHowl]);
 
   /**
    * Navigates to a specific location in the document
@@ -908,15 +939,31 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const togglePlay = useCallback(() => {
     if (isPlaying) {
-      abortAudio();
+      pauseActiveHowl();
       setIsPlaying(false);
       return;
     }
 
     // Ensure audio is unlocked while we're still in the click/tap handler.
     unlockPlaybackOnUserGesture();
+
+    // Resume current sentence if we already have a paused Howl.
+    if (activeHowl) {
+      applyPlaybackRateToHowl(activeHowl);
+      playbackInFlightRef.current = true;
+      try {
+        activeHowl.play();
+        setIsPlaying(true);
+        return;
+      } catch (error) {
+        console.warn('Error resuming audio:', error);
+        playbackInFlightRef.current = false;
+        setActiveHowl(null);
+      }
+    }
+
     setIsPlaying(true);
-  }, [abortAudio, isPlaying, unlockPlaybackOnUserGesture]);
+  }, [activeHowl, applyPlaybackRateToHowl, isPlaying, pauseActiveHowl, unlockPlaybackOnUserGesture]);
 
 
   /**
@@ -1348,6 +1395,19 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             navigator.mediaSession.playbackState = 'playing';
           }
         },
+        onpause: function () {
+          clearRateWatchdog();
+          playbackInFlightRef.current = false;
+          setIsProcessing(false);
+          if (pageTurnTimeoutRef.current) {
+            clearTimeout(pageTurnTimeoutRef.current);
+            pageTurnTimeoutRef.current = null;
+          }
+          setIsPlaying(false);
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'paused';
+          }
+        },
         onplayerror: function (this: Howl, soundId, error) {
           const actualError = error ?? soundId;
           console.warn('Howl playback error:', actualError);
@@ -1551,6 +1611,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     const howl = await playSentenceWithHowl(sentence, currentIndex);
     if (howl) {
+      if (!isPlayingRef.current) {
+        playbackInFlightRef.current = false;
+        return;
+      }
       howl.play();
     }
   }, [sentences, currentIndex, playSentenceWithHowl, voice, effectiveNativeSpeed, configTTSProvider, ttsModel]);
