@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS `tts_segments`;--> statement-breakpoint
 CREATE TABLE `tts_segments` (
 	`segment_id` text NOT NULL,
 	`user_id` text NOT NULL,
@@ -6,7 +7,7 @@ CREATE TABLE `tts_segments` (
 	`document_version` integer NOT NULL,
 	`segment_index` integer NOT NULL,
 	`locator_json` text,
-	`settings_hash` text NOT NULL,
+	`settings_json` text NOT NULL,
 	`text_hash` text NOT NULL,
 	`text_length` integer DEFAULT 0 NOT NULL,
 	`audio_key` text,
@@ -21,6 +22,5 @@ CREATE TABLE `tts_segments` (
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `idx_tts_segments_lookup` ON `tts_segments` (`user_id`,`document_id`,`document_version`,`settings_hash`);
---> statement-breakpoint
+CREATE INDEX `idx_tts_segments_lookup` ON `tts_segments` (`user_id`,`document_id`,`document_version`,`settings_json`);--> statement-breakpoint
 CREATE INDEX `idx_tts_segments_doc_index` ON `tts_segments` (`user_id`,`document_id`,`segment_index`);

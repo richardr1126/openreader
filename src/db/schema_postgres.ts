@@ -117,7 +117,7 @@ export const ttsSegments = pgTable('tts_segments', {
   documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
   segmentIndex: integer('segment_index').notNull(),
   locatorJson: text('locator_json'),
-  settingsHash: text('settings_hash').notNull(),
+  settingsJson: jsonb('settings_json').notNull(),
   textHash: text('text_hash').notNull(),
   textLength: integer('text_length').notNull().default(0),
   audioKey: text('audio_key'),
@@ -130,6 +130,6 @@ export const ttsSegments = pgTable('tts_segments', {
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.segmentId, table.userId] }),
-  index('idx_tts_segments_lookup').on(table.userId, table.documentId, table.documentVersion, table.settingsHash),
+  index('idx_tts_segments_lookup').on(table.userId, table.documentId, table.documentVersion, table.settingsJson),
   index('idx_tts_segments_doc_index').on(table.userId, table.documentId, table.segmentIndex),
 ]);
