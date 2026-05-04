@@ -54,7 +54,7 @@ export function DocumentHeaderMenu({
               ? 'border-accent text-accent bg-offbase'
               : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
           }`}
-          aria-label={isSegmentsOpen ? 'Close segments sidebar' : 'Open segments sidebar'}
+          aria-label={isSegmentsOpen ? 'Hide segments sidebar' : 'Open segments sidebar'}
           title={isSegmentsOpen ? 'Hide Segments' : 'Segments'}
         >
           <ListIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09]" />
@@ -68,7 +68,7 @@ export function DocumentHeaderMenu({
               ? 'border-accent text-accent bg-offbase'
               : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
           }`}
-          aria-label={isAudiobookOpen ? 'Close audiobook export' : 'Open audiobook export'}
+          aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
           title={isAudiobookOpen ? 'Hide Export Audiobook' : 'Export Audiobook'}
         >
           <DownloadIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09]" />
@@ -81,7 +81,7 @@ export function DocumentHeaderMenu({
             ? 'border-accent text-accent bg-offbase'
             : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
         }`}
-        aria-label={isSettingsOpen ? 'Close settings' : 'Open settings'}
+        aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
         title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
       >
         <FileSettingsIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09]" />

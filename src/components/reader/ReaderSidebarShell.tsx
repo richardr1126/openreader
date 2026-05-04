@@ -47,7 +47,7 @@ export function ReaderSidebarShell({
         >
           <button
             type="button"
-            aria-label={`Close ${title.toLowerCase()}`}
+            aria-label="Close"
             onClick={onClose}
             className="sm:hidden absolute inset-0 overlay-dim backdrop-blur-sm pointer-events-auto"
           />
@@ -76,7 +76,7 @@ export function ReaderSidebarShell({
                 <button
                   type="button"
                   onClick={onClose}
-                  aria-label={`Close ${title.toLowerCase()}`}
+                  aria-label="Close"
                   title="Close"
                   className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-offbase bg-base text-muted hover:bg-offbase hover:text-accent transition-colors"
                 >
