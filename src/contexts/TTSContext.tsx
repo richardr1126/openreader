@@ -30,7 +30,6 @@ import toast from 'react-hot-toast';
 import { useParams, usePathname } from 'next/navigation';
 
 import { useConfig } from '@/contexts/ConfigContext';
-import { useAudioCache } from '@/hooks/audio/useAudioCache';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
@@ -47,7 +46,6 @@ import type {
   TTSPageTurnEstimate,
   TTSPlaybackState,
   TTSSentenceAlignment,
-  TTSAudioBuffer,
 } from '@/types/tts';
 import type {
   TTSRequestHeaders,
@@ -99,6 +97,12 @@ interface SetTextOptions {
   nextLocation?: TTSLocation;
   nextText?: string;
 }
+
+type TTSSegmentPlaybackSource = {
+  presignUrl: string;
+  fallbackUrl: string;
+  manifest: TTSSegmentManifestItem;
+};
 
 const CONTINUATION_LOOKAHEAD = 600;
 const MAX_CONTINUATION_CARRY_CHARS = 220;
@@ -323,7 +327,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Audio and voice management hooks
   const audioContext = useAudioContext();
-  const audioCache = useAudioCache(AUDIO_CACHE_MAX_ITEMS);
   const { availableVoices, fetchVoices } = useVoiceManagement(openApiKey, openApiBaseUrl, configTTSProvider, configTTSModel);
   const {
     authEnabled,
@@ -398,7 +401,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   );
 
   // Track pending preload requests
-  const preloadRequests = useRef<Map<string, Promise<string>>>(new Map());
+  const preloadRequests = useRef<Map<string, Promise<TTSSegmentPlaybackSource | null>>>(new Map());
   // Track active abort controllers for TTS requests
   const activeAbortControllers = useRef<Set<AbortController>>(new Set());
   // Synchronous guard to prevent duplicate playAudio calls from the main playback effect.
@@ -1081,17 +1084,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, [availableVoices, voice, configVoice, configTTSModel]);
 
-  /**
-   * Generates and plays audio for the current sentence
-   * 
-   * @param {string} sentence - The sentence to generate audio for
-   * @returns {Promise<TTSAudioBuffer | undefined>} The generated audio buffer
-   */
-  const getAudio = useCallback(async (
+  const getSegmentPlaybackSource = useCallback(async (
     sentence: string,
     sentenceIndex: number,
     preload = false,
-  ): Promise<TTSAudioBuffer | undefined> => {
+  ): Promise<TTSSegmentPlaybackSource | undefined> => {
     const alignmentEnabledForCurrentDoc =
       wordHighlightFeatureEnabled &&
       ((!isEPUB && pdfHighlightEnabled && pdfWordHighlightEnabled) ||
@@ -1104,13 +1101,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ttsModel,
     );
 
-    const cachedAudio = audioCache.get(audioCacheKey);
-    if (cachedAudio) {
-      const cachedManifest = segmentManifestCacheRef.current.get(audioCacheKey);
-      if (alignmentEnabledForCurrentDoc && cachedManifest?.alignment) {
+    const cachedManifest = segmentManifestCacheRef.current.get(audioCacheKey);
+    if (cachedManifest?.status === 'completed' && cachedManifest.audioPresignUrl && cachedManifest.audioFallbackUrl) {
+      if (alignmentEnabledForCurrentDoc && cachedManifest.alignment) {
         sentenceAlignmentCacheRef.current.set(audioCacheKey, cachedManifest.alignment);
       }
-      return cachedAudio;
+      return {
+        presignUrl: cachedManifest.audioPresignUrl,
+        fallbackUrl: cachedManifest.audioFallbackUrl,
+        manifest: cachedManifest,
+      };
     }
 
     if (!documentId) {
@@ -1169,25 +1169,19 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       );
 
       const segment = ensured.segments[0];
-      if (!segment || segment.status !== 'completed' || !segment.audioUrl) {
+      if (!segment || segment.status !== 'completed' || !segment.audioPresignUrl || !segment.audioFallbackUrl) {
         throw new Error('Failed to prepare segment audio');
       }
 
-      const response = await fetch(segment.audioUrl, { signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`Segment audio fetch failed: ${response.status}`);
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      if (arrayBuffer.byteLength === 0) {
-        throw new Error('Received empty segment audio buffer');
-      }
-
-      audioCache.set(audioCacheKey, arrayBuffer);
       setSegmentManifestCache(audioCacheKey, segment);
       if (alignmentEnabledForCurrentDoc && segment.alignment) {
         sentenceAlignmentCacheRef.current.set(audioCacheKey, segment.alignment);
       }
-      return arrayBuffer;
+      return {
+        presignUrl: segment.audioPresignUrl,
+        fallbackUrl: segment.audioFallbackUrl,
+        manifest: segment,
+      };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return undefined;
@@ -1234,7 +1228,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     effectiveNativeSpeed,
     ttsModel,
     ttsInstructions,
-    audioCache,
     openApiKey,
     openApiBaseUrl,
     configTTSProvider,
@@ -1260,13 +1253,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * 
    * @param {string} sentence - The sentence to process
    * @param {boolean} [preload=false] - Whether this is a preload request
-   * @returns {Promise<string>} The URL of the processed audio
+   * @returns {Promise<TTSSegmentPlaybackSource | null>} Prepared playback source metadata
    */
   const processSentence = useCallback(async (
     sentence: string,
     sentenceIndex: number,
     preload = false,
-  ): Promise<string> => {
+  ): Promise<TTSSegmentPlaybackSource | null> => {
     if (!audioContext) throw new Error('Audio context not initialized');
     const requestKey = `${sentenceIndex}::${sentence}`;
 
@@ -1288,18 +1281,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Create the audio processing promise
     const processPromise = (async () => {
       try {
-        const audioBuffer = await getAudio(sentence, sentenceIndex, preload);
-        if (!audioBuffer) {
-          // If quota or other handled error returns undefined, ensure we don't throw "No audio data"
-          // Just return empty string to signal graceful failure/skip
-          return '';
-        }
-
-        // Convert to base64 data URI
-        const bytes = new Uint8Array(audioBuffer);
-        const binaryString = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '');
-        const base64String = btoa(binaryString);
-        return `data:audio/mp3;base64,${base64String}`;
+        const source = await getSegmentPlaybackSource(sentence, sentenceIndex, preload);
+        return source || null;
       } catch (error) {
         setIsProcessing(false);
         throw error;
@@ -1320,7 +1303,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     return processPromise;
-  }, [audioContext, getAudio]);
+  }, [audioContext, getSegmentPlaybackSource]);
 
   /**
    * Plays the current sentence with Howl
@@ -1338,15 +1321,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const MAX_RETRIES = 3;
     const INITIAL_RETRY_DELAY = 1000; // 1 second
 
-    const createHowl = async (retryCount = 0): Promise<Howl | null> => {
+    const createHowl = async (
+      retryCount = 0,
+      useFallbackSource = false,
+    ): Promise<Howl | null> => {
       let playErrorAttempts = 0;
-      // Get the processed audio data URI directly from processSentence
-      const audioDataUri = await processSentence(sentence, sentenceIndex);
-      if (!audioDataUri) {
+      const playbackSource = await processSentence(sentence, sentenceIndex);
+      if (!playbackSource) {
         // Graceful exit for rate limit / abort / intentionally skipped sentence
         console.log('Skipping playback for sentence (no audio generated)');
         return null;
       }
+      const audioUrl = useFallbackSource ? playbackSource.fallbackUrl : playbackSource.presignUrl;
 
       // Force unload any previous Howl instance to free up resources
       if (activeHowl) {
@@ -1357,7 +1343,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       let howlFinished = false;
 
       return new Howl({
-        src: [audioDataUri],
+        src: [audioUrl],
         format: ['mp3', 'mpeg'],
         html5: true,
         preload: true,
@@ -1465,6 +1451,26 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           const actualError = error ?? soundId;
           console.warn(`Error loading audio (attempt ${retryCount + 1}/${MAX_RETRIES}):`, actualError);
 
+          // First load failure on presigned URL should fail over to proxy fallback immediately.
+          if (!useFallbackSource && playbackSource.fallbackUrl && playbackSource.fallbackUrl !== playbackSource.presignUrl) {
+            try {
+              this.unload();
+            } catch {
+              // ignore unload errors
+            }
+
+            try {
+              const fallbackHowl = await createHowl(retryCount, true);
+              if (fallbackHowl) {
+                setActiveHowl(fallbackHowl);
+                fallbackHowl.play();
+                return;
+              }
+            } catch (fallbackError) {
+              console.error('Error switching to fallback segment source:', fallbackError);
+            }
+          }
+
           if (retryCount < MAX_RETRIES) {
             // Calculate exponential backoff delay
             const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
@@ -1482,7 +1488,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
             // Try to create a new Howl instance
             try {
-              const retryHowl = await createHowl(retryCount + 1);
+              const retryHowl = await createHowl(retryCount + 1, useFallbackSource);
               if (retryHowl) {
                 setActiveHowl(retryHowl);
                 retryHowl.play();
@@ -1693,7 +1699,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         ttsModel,
       );
 
-      if (audioCache.has(nextKey)) {
+      if (segmentManifestCacheRef.current.has(nextKey)) {
         preloadFromOffset(offset + 1);
         return;
       }
@@ -1742,7 +1748,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     } catch (error) {
       console.error('Error initiating preload:', error);
     }
-  }, [isAtLimit, currentIndex, sentences, audioCache, processSentence, voice, effectiveNativeSpeed, configTTSProvider, ttsModel]);
+  }, [isAtLimit, currentIndex, sentences, processSentence, voice, effectiveNativeSpeed, configTTSProvider, ttsModel]);
 
   /**
    * Main Playback Driver

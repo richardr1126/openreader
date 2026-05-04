@@ -115,7 +115,8 @@ export interface TTSSegmentsEnsureRequest {
 export interface TTSSegmentManifestItem {
   segmentId: string;
   segmentIndex: number;
-  audioUrl: string;
+  audioPresignUrl: string | null;
+  audioFallbackUrl: string | null;
   durationMs: number;
   alignment: TTSSentenceAlignment | null;
   locator: TTSSegmentLocator | null;
@@ -124,7 +125,5 @@ export interface TTSSegmentManifestItem {
 
 export interface TTSSegmentsEnsureResponse {
   documentId: string;
-  documentVersion: number;
-  settingsHash: string;
   segments: TTSSegmentManifestItem[];
 }

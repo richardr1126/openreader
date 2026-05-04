@@ -108,6 +108,18 @@ function textHmacSecret(): string {
     || 'openreader-default-tts-segment-secret';
 }
 
+function buildSegmentAudioUrls(documentId: string, segmentId: string): {
+  audioPresignUrl: string;
+  audioFallbackUrl: string;
+} {
+  const encodedDocumentId = encodeURIComponent(documentId);
+  const encodedSegmentId = encodeURIComponent(segmentId);
+  return {
+    audioPresignUrl: `/api/tts/segments/audio/presign?documentId=${encodedDocumentId}&segmentId=${encodedSegmentId}`,
+    audioFallbackUrl: `/api/tts/segments/audio/fallback?documentId=${encodedDocumentId}&segmentId=${encodedSegmentId}`,
+  };
+}
+
 export async function POST(request: NextRequest) {
   let didCreateDeviceIdCookie = false;
   let deviceIdToSet: string | null = null;
@@ -230,7 +242,7 @@ export async function POST(request: NextRequest) {
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: existing.segmentIndex,
-          audioUrl: `/api/tts/segments/audio?documentId=${encodeURIComponent(parsed.documentId)}&segmentId=${encodeURIComponent(segment.segmentId)}`,
+          ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
           durationMs: existing.durationMs ?? 0,
           alignment,
           locator,
@@ -389,7 +401,7 @@ export async function POST(request: NextRequest) {
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
-          audioUrl: `/api/tts/segments/audio?documentId=${encodeURIComponent(parsed.documentId)}&segmentId=${encodeURIComponent(segment.segmentId)}`,
+          ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
           durationMs,
           alignment,
           locator: segment.locator,
@@ -409,7 +421,8 @@ export async function POST(request: NextRequest) {
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
-          audioUrl: '',
+          audioPresignUrl: null,
+          audioFallbackUrl: null,
           durationMs: 0,
           alignment: null,
           locator: segment.locator,
@@ -420,8 +433,6 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({
       documentId: parsed.documentId,
-      documentVersion: scope.documentVersion,
-      settingsHash,
       segments: manifest,
     });
     attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);

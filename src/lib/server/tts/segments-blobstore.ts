@@ -4,7 +4,8 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 
 function isNodeReadableStream(value: unknown): value is NodeJS.ReadableStream {
   return !!value && typeof value === 'object' && 'on' in value && typeof (value as NodeJS.ReadableStream).on === 'function';
@@ -62,6 +63,22 @@ export async function getTtsSegmentAudioObject(key: string): Promise<Buffer> {
   const client = getS3ProxyClient();
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return bodyToBuffer(res.Body);
+}
+
+export async function presignTtsSegmentAudioGet(
+  key: string,
+  options?: { expiresInSeconds?: number },
+): Promise<string> {
+  const cfg = getS3Config();
+  const client = getS3Client();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+    }),
+    { expiresIn: Math.max(30, Math.min(options?.expiresInSeconds ?? 300, 3600)) },
+  );
 }
 
 export async function deleteTtsSegmentPrefix(prefix: string): Promise<number> {

@@ -288,23 +288,3 @@ export const ensureTtsSegments = async (
 
   return await response.json();
 };
-
-export const fetchTtsSegmentManifest = async (params: {
-  documentId: string;
-  settingsHash: string;
-  fromIndex: number;
-  toIndex: number;
-}): Promise<TTSSegmentsEnsureResponse> => {
-  const query = new URLSearchParams({
-    documentId: params.documentId,
-    settingsHash: params.settingsHash,
-    fromIndex: String(params.fromIndex),
-    toIndex: String(params.toIndex),
-  });
-  const response = await fetch(`/api/tts/segments/manifest?${query.toString()}`);
-  if (!response.ok) {
-    const data = await response.json().catch(() => null) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to fetch segment manifest');
-  }
-  return await response.json();
-};
