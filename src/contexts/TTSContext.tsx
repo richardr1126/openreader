@@ -409,6 +409,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   // and those guards taking effect, the effect can re-fire and start duplicate playback.
   // This is especially problematic in Firefox where HTML5 Audio events can cause extra renders.
   const playbackInFlightRef = useRef(false);
+  const playbackRunIdRef = useRef(0);
   // Track if we're restoring from a saved position
   const [pendingRestoreIndex, setPendingRestoreIndex] = useState<number | null>(null);
   // Guard to coalesce rapid restarts and only resume the latest change
@@ -536,6 +537,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, []);
 
+  const invalidatePlaybackRun = useCallback(() => {
+    playbackRunIdRef.current += 1;
+    playbackInFlightRef.current = false;
+  }, []);
+
   const isAutoplayBlockedError = useCallback((err: unknown) => {
     const msg = (() => {
       if (typeof err === 'string') return err;
@@ -582,6 +588,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * @param {boolean} [clearPending=false] - Whether to clear pending requests
    */
   const abortAudio = useCallback((clearPending = false) => {
+    // Ensure next playback attempt is not blocked by a stale in-flight guard.
+    invalidatePlaybackRun();
     clearRateWatchdog();
     if (activeHowl) {
       activeHowl.stop();
@@ -602,7 +610,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnTimeoutRef.current = null;
     }
     setCurrentWordIndex(null);
-  }, [activeHowl, clearRateWatchdog]);
+  }, [activeHowl, clearRateWatchdog, invalidatePlaybackRun]);
 
   /**
    * Pauses the current audio playback while preserving seek position.
@@ -654,13 +662,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     // Reset state for new content in correct order
-    abortAudio();
+    invalidatePlaybackRun();
+    abortAudio(true);
     if (shouldPause) setIsPlaying(false);
     setCurrentIndex(0);
     setSentences([]);
     setCurrDocPage(location);
 
-  }, [abortAudio]);
+  }, [abortAudio, invalidatePlaybackRun]);
 
   /**
    * Moves to the next or previous sentence
@@ -876,6 +885,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     // Keep track of previous state and pause playback
+    invalidatePlaybackRun();
     setIsPlaying(false);
     abortAudio(true); // Clear pending requests since text is changing
     setIsProcessing(true); // Set processing state before text processing starts
@@ -965,7 +975,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           duration: 3000,
         });
       });
-  }, [isPlaying, handleBlankSection, abortAudio, splitTextToTtsBlocksLocal, pendingRestoreIndex, isEPUB, smartSentenceSplitting]);
+  }, [isPlaying, handleBlankSection, abortAudio, splitTextToTtsBlocksLocal, pendingRestoreIndex, isEPUB, smartSentenceSplitting, invalidatePlaybackRun]);
 
   useEffect(() => {
     setTextRef.current = setText;
@@ -1011,9 +1021,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (isPlaying) {
       setIsProcessing(true);
     }
-    abortAudio(false); // Don't clear pending requests
+    invalidatePlaybackRun();
+    abortAudio(true);
     await advance();
-  }, [isPlaying, abortAudio, advance]);
+  }, [isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
   /**
    * Moves backward one sentence in the text
@@ -1023,9 +1034,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (isPlaying) {
       setIsProcessing(true);
     }
-    abortAudio(false); // Don't clear pending requests
+    invalidatePlaybackRun();
+    abortAudio(true);
     await advance(true);
-  }, [isPlaying, abortAudio, advance]);
+  }, [isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
   /**
    * Updates the voice and speed settings from the configuration
@@ -1310,7 +1322,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * 
    * @param {string} sentence - The sentence to play
    */
-  const playSentenceWithHowl = useCallback(async (sentence: string, sentenceIndex: number) => {
+  const playSentenceWithHowl = useCallback(async (sentence: string, sentenceIndex: number, runId: number) => {
     if (!sentence) {
       console.log('No sentence to play');
       playbackInFlightRef.current = false;
@@ -1325,8 +1337,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       retryCount = 0,
       useFallbackSource = false,
     ): Promise<Howl | null> => {
+      if (runId !== playbackRunIdRef.current) return null;
       let playErrorAttempts = 0;
       const playbackSource = await processSentence(sentence, sentenceIndex);
+      if (runId !== playbackRunIdRef.current) return null;
       if (!playbackSource) {
         // Graceful exit for rate limit / abort / intentionally skipped sentence
         console.log('Skipping playback for sentence (no audio generated)');
@@ -1352,6 +1366,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         pool: 1,
         rate: audioSpeed,
         onload: function (this: Howl) {
+          if (runId !== playbackRunIdRef.current) {
+            try { this.unload(); } catch {}
+            return;
+          }
           applyPlaybackRateToHowl(this);
           const estimate = pageTurnEstimateRef.current;
           if (!estimate || estimate.sentenceIndex !== sentenceIndex) return;
@@ -1375,6 +1393,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }, delayMs);
         },
         onplay: function (this: Howl) {
+          if (runId !== playbackRunIdRef.current) {
+            try { this.unload(); } catch {}
+            return;
+          }
           setIsProcessing(false);
           startRateWatchdog(this);
           if ('mediaSession' in navigator) {
@@ -1382,6 +1404,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
         },
         onpause: function () {
+          if (runId !== playbackRunIdRef.current) return;
           clearRateWatchdog();
           playbackInFlightRef.current = false;
           setIsProcessing(false);
@@ -1395,6 +1418,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
         },
         onplayerror: function (this: Howl, soundId, error) {
+          if (runId !== playbackRunIdRef.current) {
+            try { this.unload(); } catch {}
+            return;
+          }
           const actualError = error ?? soundId;
           console.warn('Howl playback error:', actualError);
 
@@ -1448,6 +1475,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
         },
         onloaderror: async function (this: Howl, soundId, error) {
+          if (runId !== playbackRunIdRef.current) {
+            try { this.unload(); } catch {}
+            return;
+          }
           const actualError = error ?? soundId;
           console.warn(`Error loading audio (attempt ${retryCount + 1}/${MAX_RETRIES}):`, actualError);
 
@@ -1462,6 +1493,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             try {
               const fallbackHowl = await createHowl(retryCount, true);
               if (fallbackHowl) {
+                if (runId !== playbackRunIdRef.current) {
+                  try { fallbackHowl.unload(); } catch {}
+                  return;
+                }
                 setActiveHowl(fallbackHowl);
                 fallbackHowl.play();
                 return;
@@ -1490,6 +1525,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             try {
               const retryHowl = await createHowl(retryCount + 1, useFallbackSource);
               if (retryHowl) {
+                if (runId !== playbackRunIdRef.current) {
+                  try { retryHowl.unload(); } catch {}
+                  return;
+                }
                 setActiveHowl(retryHowl);
                 retryHowl.play();
               } else {
@@ -1533,6 +1572,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
         },
         onend: function (this: Howl) {
+          if (runId !== playbackRunIdRef.current) {
+            try { this.unload(); } catch {}
+            return;
+          }
           if (howlFinished) return; // Deduplicate – Firefox can fire ended twice
           howlFinished = true;
           clearRateWatchdog();
@@ -1548,6 +1591,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
         },
         onstop: function (this: Howl) {
+          if (runId !== playbackRunIdRef.current) {
+            try { this.unload(); } catch {}
+            return;
+          }
           if (howlFinished) return;
           howlFinished = true;
           clearRateWatchdog();
@@ -1560,6 +1607,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     try {
       const howl = await createHowl();
+      if (runId !== playbackRunIdRef.current) {
+        if (howl) {
+          try { howl.unload(); } catch {}
+        }
+        return null;
+      }
       if (!howl) {
         // No audio generated (quota hit / aborted / intentionally skipped). Stop cleanly without
         // advancing or spamming errors.
@@ -1598,6 +1651,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   ]);
 
   const playAudio = useCallback(async () => {
+    const runId = playbackRunIdRef.current;
     const sentence = sentences[currentIndex];
     const alignmentKey = buildCacheKey(
       sentence,
@@ -1615,7 +1669,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setCurrentWordIndex(null);
     }
 
-    const howl = await playSentenceWithHowl(sentence, currentIndex);
+    const howl = await playSentenceWithHowl(sentence, currentIndex, runId);
+    if (runId !== playbackRunIdRef.current) {
+      if (howl) {
+        try { howl.unload(); } catch {}
+      }
+      return;
+    }
     if (howl) {
       if (!isPlayingRef.current) {
         playbackInFlightRef.current = false;
@@ -1794,6 +1854,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const stop = useCallback(() => {
     // Cancel any ongoing request
+    invalidatePlaybackRun();
     abortAudio();
     playbackInFlightRef.current = false;
     locationChangeHandlerRef.current = null;
@@ -1810,7 +1871,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-  }, [abortAudio]);
+  }, [abortAudio, invalidatePlaybackRun]);
 
   /**
    * Stops the current audio playback and starts playing from a specified index
@@ -1818,6 +1879,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * @param {number} index - The index to start playing from
    */
   const stopAndPlayFromIndex = useCallback((index: number) => {
+    invalidatePlaybackRun();
     abortAudio();
 
     // Same autoplay-unlock issue as togglePlay when starting from a fresh load.
@@ -1825,7 +1887,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     setCurrentIndex(index);
     setIsPlaying(true);
-  }, [abortAudio, unlockPlaybackOnUserGesture]);
+  }, [abortAudio, invalidatePlaybackRun, unlockPlaybackOnUserGesture]);
 
   /**
    * Sets the speed and restarts the playback
