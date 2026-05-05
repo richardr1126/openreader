@@ -90,6 +90,16 @@ function dedupeVariants(variants: Array<{ dedupeKey: string; variant: TTSSegment
   return Array.from(byKey.values());
 }
 
+function locatorGroupKey(locator: TTSSegmentLocator | null): string {
+  if (!locator) return 'none';
+  const page = typeof locator.page === 'number' && Number.isFinite(locator.page)
+    ? String(Math.floor(locator.page))
+    : '';
+  const location = typeof locator.location === 'string' ? locator.location : '';
+  const readerType = locator.readerType || '';
+  return `p:${page}|l:${location}|r:${readerType}`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const documentIdRaw = request.nextUrl.searchParams.get('documentId');
@@ -131,21 +141,24 @@ export async function GET(request: NextRequest) {
       updatedAt: number | null;
     }>;
 
-    const grouped = new Map<number, Omit<TTSSegmentRow, 'variants'> & {
+    const grouped = new Map<string, Omit<TTSSegmentRow, 'variants'> & {
       variants: Array<{ dedupeKey: string; variant: TTSSegmentVariant }>;
     }>();
 
     for (const row of rows) {
-      let entry = grouped.get(row.segmentIndex);
+      const locator = parseLocator(row.locatorJson);
+      const groupKey = `${row.segmentIndex}|${locatorGroupKey(locator)}`;
+
+      let entry = grouped.get(groupKey);
       if (!entry) {
         entry = {
           segmentIndex: row.segmentIndex,
-          locator: parseLocator(row.locatorJson),
+          locator,
           variants: [],
         };
-        grouped.set(row.segmentIndex, entry);
+        grouped.set(groupKey, entry);
       } else if (!entry.locator) {
-        entry.locator = parseLocator(row.locatorJson);
+        entry.locator = locator;
       }
 
       let alignmentWordCount = 0;
@@ -189,7 +202,15 @@ export async function GET(request: NextRequest) {
         locator: segment.locator,
         variants: dedupeVariants(segment.variants),
       }))
-      .sort((a, b) => a.segmentIndex - b.segmentIndex);
+      .sort((a, b) => {
+        if (a.segmentIndex !== b.segmentIndex) return a.segmentIndex - b.segmentIndex;
+        const aPage = typeof a.locator?.page === 'number' ? a.locator.page : Number.MAX_SAFE_INTEGER;
+        const bPage = typeof b.locator?.page === 'number' ? b.locator.page : Number.MAX_SAFE_INTEGER;
+        if (aPage !== bPage) return aPage - bPage;
+        const aLoc = a.locator?.location || '';
+        const bLoc = b.locator?.location || '';
+        return aLoc.localeCompare(bLoc);
+      });
     const response: TTSSegmentsManifestResponse = { documentId, segments };
     return NextResponse.json(response);
   } catch (error) {

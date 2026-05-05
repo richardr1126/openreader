@@ -7,6 +7,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import type {
+  TTSSegmentLocator,
   TTSSegmentRow,
   TTSSegmentSettings,
   TTSSegmentVariant,
@@ -75,10 +76,34 @@ function statusColor(status: TTSSegmentVariant['status']): string {
   return 'bg-muted';
 }
 
+function locatorMatchesCurrent(
+  locator: TTSSegmentLocator | null,
+  currentLocation: string | number,
+  currentPageNumber: number,
+): boolean {
+  if (!locator) return false;
+  if (typeof locator.location === 'string' && locator.location.length > 0) {
+    return String(locator.location) === String(currentLocation);
+  }
+  if (typeof locator.page === 'number' && Number.isFinite(locator.page)) {
+    return Math.floor(locator.page) === Math.floor(Number(currentPageNumber || 1));
+  }
+  return false;
+}
+
+function latestUpdatedAt(row: TTSSegmentRow): number {
+  return row.variants.reduce((max, variant) => {
+    const updated = typeof variant.updatedAt === 'number' ? variant.updatedAt : 0;
+    return Math.max(max, updated);
+  }, 0);
+}
+
 export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSidebarProps) {
   const {
     sentences,
     currentSentenceIndex,
+    currDocPage,
+    currDocPageNumber,
     isPlaying,
     stopAndPlayFromIndex,
   } = useTTS();
@@ -170,10 +195,28 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
 
   const segmentsByIndex = useMemo(() => {
     if (state.kind !== 'ready') return new Map<number, TTSSegmentRow>();
-    const map = new Map<number, TTSSegmentRow>();
-    for (const row of state.data) map.set(row.segmentIndex, row);
-    return map;
-  }, [state]);
+    const map = new Map<number, { row: TTSSegmentRow; score: number; updatedAt: number }>();
+    for (const row of state.data) {
+      const isCurrent = locatorMatchesCurrent(row.locator, currDocPage, currDocPageNumber);
+      const score = isCurrent ? 2 : row.locator ? 0 : 1;
+      if (score === 0) continue;
+
+      const candidateUpdatedAt = latestUpdatedAt(row);
+      const existing = map.get(row.segmentIndex);
+      if (!existing) {
+        map.set(row.segmentIndex, { row, score, updatedAt: candidateUpdatedAt });
+        continue;
+      }
+
+      if (score > existing.score || (score === existing.score && candidateUpdatedAt >= existing.updatedAt)) {
+        map.set(row.segmentIndex, { row, score, updatedAt: candidateUpdatedAt });
+      }
+    }
+
+    const selected = new Map<number, TTSSegmentRow>();
+    for (const [idx, entry] of map) selected.set(idx, entry.row);
+    return selected;
+  }, [state, currDocPage, currDocPageNumber]);
 
   const indicesToRender = useMemo(() => {
     const indices = new Set<number>();
