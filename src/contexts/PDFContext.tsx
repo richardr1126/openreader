@@ -237,10 +237,12 @@ export function PDFProvider({ children }: { children: ReactNode }) {
       };
 
       const totalPages = currDocPages ?? currentPdf.numPages;
+      const prevPageNumber = currDocPageNumber > 1 ? currDocPageNumber - 1 : undefined;
       const nextPageNumber = currDocPageNumber < totalPages ? currDocPageNumber + 1 : undefined;
 
-      const [text, nextText] = await Promise.all([
+      const [text, prevText, nextText] = await Promise.all([
         getPageText(currDocPageNumber),
+        prevPageNumber ? getPageText(prevPageNumber) : Promise.resolve<string | undefined>(undefined),
         nextPageNumber ? getPageText(nextPageNumber, true) : Promise.resolve<string | undefined>(undefined),
       ]);
 
@@ -281,6 +283,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
         setCurrDocText(text);
         setTTSText(text, {
           location: currDocPageNumber,
+          previousText: prevText,
           nextLocation: nextPageNumber,
           nextText: nextText,
         });

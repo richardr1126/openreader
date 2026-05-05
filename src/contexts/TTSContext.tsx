@@ -100,6 +100,7 @@ interface SetTextOptions {
   location?: TTSLocation;
   nextLocation?: TTSLocation;
   nextText?: string;
+  previousText?: string;
 }
 
 type TTSSegmentPlaybackSource = {
@@ -829,8 +830,22 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // Apply or clear sentence continuation logic based on config
     let continuationCarried: string | undefined;
+    let strippedByPreviousContext = false;
     if (smartSentenceSplitting) {
-      if (isEPUB && epubContinuationRef.current) {
+      if (typeof normalizedOptions.previousText === 'string' && normalizedOptions.previousText.trim()) {
+        const previousMerge = mergeContinuation(normalizedOptions.previousText, workingText);
+        if (previousMerge?.carried) {
+          const { text: strippedText, removed } = stripContinuationPrefix(workingText, previousMerge.carried);
+          if (removed) {
+            workingText = strippedText;
+            strippedByPreviousContext = true;
+          }
+        }
+      }
+
+      if (isEPUB && strippedByPreviousContext) {
+        epubContinuationRef.current = null;
+      } else if (isEPUB && epubContinuationRef.current) {
         const { text: strippedText, removed } = stripContinuationPrefix(workingText, epubContinuationRef.current);
         workingText = strippedText;
         if (removed) {
@@ -840,12 +855,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
       if (!isEPUB && normalizedOptions.location !== undefined) {
         const key = normalizeLocationKey(normalizedOptions.location);
-        const carried = continuationCarryRef.current.get(key);
-        if (carried) {
-          const { text: strippedText, removed } = stripContinuationPrefix(workingText, carried);
-          workingText = strippedText;
-          if (removed) {
-            continuationCarryRef.current.delete(key);
+        if (strippedByPreviousContext) {
+          continuationCarryRef.current.delete(key);
+        } else {
+          const carried = continuationCarryRef.current.get(key);
+          if (carried) {
+            const { text: strippedText, removed } = stripContinuationPrefix(workingText, carried);
+            workingText = strippedText;
+            if (removed) {
+              continuationCarryRef.current.delete(key);
+            }
           }
         }
       }
