@@ -96,6 +96,7 @@ export function buildTtsSegmentId(input: {
   documentVersion: number;
   settingsHash: string;
   segmentIndex: number;
+  segmentKey?: string | null;
   normalizedText: string;
   locatorFingerprint: string;
 }): string {
@@ -103,9 +104,10 @@ export function buildTtsSegmentId(input: {
     d: input.documentId,
     v: input.documentVersion,
     s: input.settingsHash,
-    i: input.segmentIndex,
+    k: input.segmentKey || null,
+    i: input.segmentKey ? null : input.segmentIndex,
     t: input.normalizedText,
-    l: input.locatorFingerprint,
+    l: input.segmentKey ? null : input.locatorFingerprint,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }

@@ -33,7 +33,7 @@ export function EPUBViewer({ className = '' }: EPUBViewerProps) {
     tocRef,
     setRendition,
     extractPageText,
-    highlightPattern,
+    highlightSegment,
     clearHighlights,
     highlightWordIndex,
     clearWordHighlights,
@@ -43,7 +43,7 @@ export function EPUBViewer({ className = '' }: EPUBViewerProps) {
     registerLocationChangeHandler,
     registerEpubLocationWalker,
     pause,
-    currentSentence,
+    currentSegment,
     currentSentenceAlignment,
     currentWordIndex
   } = useTTS();
@@ -82,12 +82,12 @@ export function EPUBViewer({ className = '' }: EPUBViewerProps) {
 
   // Handle highlighting
   useEffect(() => {
-    if (currentSentence) {
-      highlightPattern(currentSentence);
+    if (currentSegment) {
+      highlightSegment(currentSegment);
     } else {
       clearHighlights();
     }
-  }, [currentSentence, highlightPattern, clearHighlights]);
+  }, [currentSegment, highlightSegment, clearHighlights]);
 
   // Word-level highlight layered on top of the block highlight
   useEffect(() => {
@@ -109,11 +109,11 @@ export function EPUBViewer({ className = '' }: EPUBViewerProps) {
     highlightWordIndex(
       currentSentenceAlignment,
       currentWordIndex,
-      currentSentence || ''
+      currentSegment
     );
   }, [
     currentWordIndex,
-    currentSentence,
+    currentSegment,
     currentSentenceAlignment,
     epubHighlightEnabled,
     epubWordHighlightEnabled,

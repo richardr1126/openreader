@@ -57,6 +57,38 @@ test.describe('tts segment helpers', () => {
     expect(id1).not.toBe(id3);
   });
 
+  test('canonical segment key makes id independent of locator and index', () => {
+    const id1 = buildTtsSegmentId({
+      documentId: 'doc',
+      documentVersion: 1,
+      settingsHash: 'abc',
+      segmentIndex: 2,
+      segmentKey: 'doc:v1:segment-a',
+      normalizedText: 'hello world',
+      locatorFingerprint: 'loc-a',
+    });
+    const id2 = buildTtsSegmentId({
+      documentId: 'doc',
+      documentVersion: 1,
+      settingsHash: 'abc',
+      segmentIndex: 99,
+      segmentKey: 'doc:v1:segment-a',
+      normalizedText: 'hello world',
+      locatorFingerprint: 'loc-b',
+    });
+    const id3 = buildTtsSegmentId({
+      documentId: 'doc',
+      documentVersion: 1,
+      settingsHash: 'abc',
+      segmentIndex: 2,
+      segmentKey: 'doc:v1:segment-b',
+      normalizedText: 'hello world',
+      locatorFingerprint: 'loc-a',
+    });
+    expect(id1).toBe(id2);
+    expect(id1).not.toBe(id3);
+  });
+
   test('does not leak plaintext via text hash', () => {
     const hash = buildTtsSegmentTextHash('plain sentence', 'secret');
     expect(hash).not.toContain('plain');

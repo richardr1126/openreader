@@ -81,6 +81,9 @@ function parseSegments(value: unknown): TTSSegmentInput[] | null {
     if (typeof rec.text !== 'string') return null;
     parsed.push({
       segmentIndex: Number(rec.segmentIndex),
+      ...(typeof rec.segmentKey === 'string' && rec.segmentKey.trim()
+        ? { segmentKey: rec.segmentKey.trim() }
+        : {}),
       text: rec.text,
       ...(rec.locator && typeof rec.locator === 'object' ? { locator: rec.locator as TTSSegmentInput['locator'] } : {}),
     });
@@ -231,6 +234,7 @@ export async function POST(request: NextRequest) {
           documentVersion: scope.documentVersion,
           settingsHash,
           segmentIndex: segment.segmentIndex,
+          segmentKey: segment.segmentKey,
           normalizedText: text,
           locatorFingerprint: locatorHash,
         });
@@ -334,6 +338,7 @@ export async function POST(request: NextRequest) {
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: existing.segmentIndex,
+          segmentKey: segment.original.segmentKey ?? null,
           ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
           durationMs: existing.durationMs ?? 0,
           alignment,
@@ -506,6 +511,7 @@ export async function POST(request: NextRequest) {
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
+          segmentKey: segment.original.segmentKey ?? null,
           ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
           durationMs,
           alignment,
@@ -527,6 +533,7 @@ export async function POST(request: NextRequest) {
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
+          segmentKey: segment.original.segmentKey ?? null,
           audioPresignUrl: null,
           audioFallbackUrl: null,
           durationMs: 0,

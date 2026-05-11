@@ -98,6 +98,17 @@ test.describe('tts segments manifest helpers', () => {
     expect(sorted.map((row) => row.groupKey)).toEqual(['b', 'd', 'a', 'c']);
   });
 
+  test('sorts EPUB CFI locations naturally instead of lexicographically', () => {
+    const rows = [
+      { groupKey: 'ten', segmentIndex: 0, locator: { location: 'epubcfi(/6/10!/4/2)', readerType: 'epub' as const } },
+      { groupKey: 'two-b', segmentIndex: 1, locator: { location: 'epubcfi(/6/2!/4/2)', readerType: 'epub' as const } },
+      { groupKey: 'two-a', segmentIndex: 0, locator: { location: 'epubcfi(/6/2!/4/2)', readerType: 'epub' as const } },
+    ];
+
+    const sorted = rows.sort(compareManifestSegments);
+    expect(sorted.map((row) => row.groupKey)).toEqual(['two-a', 'two-b', 'ten']);
+  });
+
   test('encodes and decodes cursors', () => {
     const raw = '3|p:2|l:epubcfi(/6/2)|r:epub';
     const encoded = encodeManifestCursor(raw);

@@ -1,3 +1,5 @@
+import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
+
 export type TTSLocation = string | number;
 
 // Core audio representations used across TTS and audiobook flows
@@ -24,15 +26,10 @@ export interface TTSPlaybackState {
   isPlaying: boolean;
   isProcessing: boolean;
   currentSentence: string;
+  currentSegment?: CanonicalTtsSegment | null;
   currDocPage: TTSLocation;
   currDocPageNumber: number;
   currDocPages?: number;
-}
-
-// Result of merging a continuation slice into the current text
-export interface TTSSmartMergeResult {
-  text: string;
-  carried: string;
 }
 
 // Estimate for when a visual page/section turn should occur during audio playback

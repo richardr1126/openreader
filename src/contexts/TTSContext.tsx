@@ -36,15 +36,25 @@ import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/client/dexie';
 import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
 import { withRetry, ensureTtsSegments } from '@/lib/client/api/audiobooks';
-import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksEPUB } from '@/lib/shared/nlp';
-import { normalizeEpubLocationToken } from '@/lib/shared/tts-locator';
+import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
+import {
+  planCanonicalTtsSegments,
+  type CanonicalTtsSegment,
+  type CanonicalTtsSourceUnit,
+} from '@/lib/shared/tts-segment-plan';
+import {
+  completedEpubBoundarySegment,
+  resolveEpubBoundaryHandoffStartIndex,
+  resolveEpubReplaySuppressionAction,
+  type CompletedEpubBoundarySegment,
+} from '@/lib/shared/tts-epub-handoff';
+import { normalizeEpubLocationToken, normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
 import { isKokoroModel } from '@/lib/shared/kokoro';
 import { supportsNativeModelSpeed, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
   EpubRenderedLocationWalker,
   TTSLocation,
-  TTSSmartMergeResult,
   TTSPageTurnEstimate,
   TTSPlaybackState,
   TTSSentenceAlignment,
@@ -107,6 +117,7 @@ interface TTSContextType extends TTSPlaybackState {
 interface SetTextOptions {
   shouldPause?: boolean;
   location?: TTSLocation;
+  previousLocation?: TTSLocation;
   nextLocation?: TTSLocation;
   nextText?: string;
   previousText?: string;
@@ -124,13 +135,9 @@ type TTSPendingJumpTarget = {
   index: number;
 };
 
-type EpubLocationWalkItem = {
-  location: string;
-  text: string;
-};
-
 type EpubLocationPreloadCandidate = {
   sentence: string;
+  segmentKey: string;
   segmentIndex: number;
   location: string;
   requestKey: string;
@@ -151,13 +158,9 @@ type JumpResolution =
   | { kind: 'strict-resolved'; index: number }
   | { kind: 'fresh' };
 
-const CONTINUATION_LOOKAHEAD = 600;
-const MAX_CONTINUATION_CARRY_CHARS = 220;
-const MAX_CONTINUATION_CARRY_WORDS = 40;
 const LOOP_GUARD_MIN_INDEX = 2;
 const LOOP_GUARD_MIN_PROGRESS = 0.6;
 const AUDIO_CACHE_MAX_ITEMS = 25;
-const SENTENCE_ENDING = /[.?!…]["'”’)\]]*\s*$/;
 const wordHighlightFeatureEnabled =
   process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
 
@@ -165,8 +168,7 @@ const wordHighlightFeatureEnabled =
 const SILENT_WAV_DATA_URI =
   'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
-const normalizeLocationKey = (location: TTSLocation) =>
-  typeof location === 'number' ? `num:${location}` : `str:${location}`;
+const normalizeLocationKey = normalizeTtsLocationKey;
 
 const normalizeBlockFingerprint = (text: string): string => {
   const normalized = preprocessSentenceForAudio(text)
@@ -175,153 +177,6 @@ const normalizeBlockFingerprint = (text: string): string => {
     .replace(/\s+/g, ' ')
     .trim();
   return normalized.slice(0, 200);
-};
-
-const isWhitespaceChar = (char: string) => /\s/.test(char);
-
-const skipWhitespace = (source: string, start: number) => {
-  let index = start;
-  while (index < source.length && isWhitespaceChar(source[index])) {
-    index++;
-  }
-  return index;
-};
-
-const matchNormalizedPrefixLength = (text: string, prefix: string): number | null => {
-  let textIndex = 0;
-  let prefixIndex = 0;
-
-  while (prefixIndex < prefix.length) {
-    const prefixChar = prefix[prefixIndex];
-
-    if (isWhitespaceChar(prefixChar)) {
-      prefixIndex = skipWhitespace(prefix, prefixIndex);
-      textIndex = skipWhitespace(text, textIndex);
-      continue;
-    }
-
-    if (textIndex >= text.length) {
-      return null;
-    }
-
-    const textChar = text[textIndex];
-
-    if (textChar === prefixChar || textChar.toLowerCase() === prefixChar.toLowerCase()) {
-      textIndex++;
-      prefixIndex++;
-      continue;
-    }
-
-    return null;
-  }
-
-  return textIndex;
-};
-
-const needsSentenceContinuation = (text: string) => {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return false;
-  }
-  return !SENTENCE_ENDING.test(trimmed);
-};
-
-const stripContinuationPrefix = (text: string, prefix: string) => {
-  if (!prefix) return { text, removed: false };
-
-  // Try literal match first since PDF text is normalized already
-  if (text.startsWith(prefix)) {
-    return {
-      text: text.slice(prefix.length).trimStart(),
-      removed: true,
-    };
-  }
-
-  const trimmedPrefix = prefix.trimStart();
-  const trimmedText = text.trimStart();
-
-  if (trimmedText.startsWith(trimmedPrefix)) {
-    const offset = text.length - trimmedText.length;
-    return {
-      text: text.slice(offset + trimmedPrefix.length).trimStart(),
-      removed: true,
-    };
-  }
-
-  const matchedLength = matchNormalizedPrefixLength(text, prefix);
-  if (matchedLength !== null) {
-    return {
-      text: text.slice(matchedLength).trimStart(),
-      removed: true,
-    };
-  }
-
-  return { text, removed: false };
-};
-
-const extractContinuationSlice = (nextText: string): TTSSmartMergeResult | null => {
-  if (!nextText?.trim()) {
-    return null;
-  }
-
-  const snippet = nextText.trim().slice(0, CONTINUATION_LOOKAHEAD);
-  let boundaryIndex = -1;
-
-  for (let i = 0; i < snippet.length; i++) {
-    const char = snippet[i];
-    if (/[.?!…]/.test(char)) {
-      let j = i + 1;
-      while (j < snippet.length && /["'”’)\]]/.test(snippet[j])) {
-        j++;
-      }
-      while (j < snippet.length && /\s/.test(snippet[j])) {
-        j++;
-      }
-      boundaryIndex = j;
-      break;
-    }
-  }
-
-  if (boundaryIndex === -1) {
-    return null;
-  }
-
-  const rawSlice = snippet.slice(0, boundaryIndex);
-  const charsCappedSlice = rawSlice.slice(0, MAX_CONTINUATION_CARRY_CHARS);
-  const words = charsCappedSlice.trim().split(/\s+/).filter(Boolean);
-  const wordCapped = words.slice(0, MAX_CONTINUATION_CARRY_WORDS).join(' ');
-  const addition = wordCapped.trim();
-
-  if (!addition) {
-    return null;
-  }
-
-  return {
-    text: addition,
-    carried: addition,
-  };
-};
-
-const mergeContinuation = (text: string, nextText: string): TTSSmartMergeResult | null => {
-  if (!needsSentenceContinuation(text)) {
-    return null;
-  }
-
-  const slice = extractContinuationSlice(nextText);
-  if (!slice) {
-    return null;
-  }
-
-  const trimmed = text.trimEnd();
-  const endsWithHyphen = trimmed.endsWith('-');
-  const base = endsWithHyphen ? trimmed.slice(0, -1) : trimmed;
-  const joiner = endsWithHyphen ? '' : (base ? ' ' : '');
-  const mergedText = `${base}${joiner}${slice.text}`.trim();
-
-  return {
-    text: mergedText,
-    carried: slice.carried,
-  };
 };
 
 const buildCacheKey = (
@@ -348,11 +203,13 @@ const buildScopedSegmentCacheKey = (
   speed: number,
   provider: string,
   model: string,
+  segmentKey?: string | null,
 ) => {
   return [
     buildCacheKey(sentence, voice, speed, provider, model),
-    `locator=${buildLocatorRequestKey(locator)}`,
-    `segmentIndex=${segmentIndex}`,
+    `segmentKey=${segmentKey || ''}`,
+    `locator=${segmentKey ? '' : buildLocatorRequestKey(locator)}`,
+    `segmentIndex=${segmentKey ? '' : segmentIndex}`,
   ].join('|');
 };
 
@@ -367,48 +224,10 @@ const buildSegmentRequestKey = (
   locator: TTSSegmentLocator,
   segmentIndex: number,
   sentence: string,
-): string => `${buildLocatorRequestKey(locator)}::${segmentIndex}::${sentence}`;
-
-const planEpubLocationPreloadCandidates = (input: {
-  locationItems: EpubLocationWalkItem[];
-  sentenceLookahead: number;
-  maxBlockLength: number;
-  segmentManifestCache: Map<string, unknown>;
-  preloadRequests: Map<string, unknown>;
-  splitSentences: (text: string, options: { maxBlockLength: number }) => string[];
-  buildCacheKey: (location: string, segmentIndex: number, sentence: string) => string;
-}): EpubLocationPreloadCandidate[] => {
-  const candidates: EpubLocationPreloadCandidate[] = [];
-  const { sentenceLookahead, maxBlockLength } = input;
-
-  for (const item of input.locationItems) {
-    if (!item?.location || !item?.text?.trim()) continue;
-
-    const sentences = input.splitSentences(item.text, { maxBlockLength });
-    for (let index = 0; index < Math.min(sentenceLookahead, sentences.length); index += 1) {
-      const sentence = sentences[index];
-      candidates.push({
-        sentence,
-        segmentIndex: index,
-        location: item.location,
-        requestKey: `str:${item.location}::${index}::${sentence}`,
-        cacheKey: input.buildCacheKey(item.location, index, sentence),
-      });
-    }
-  }
-
-  const unique: EpubLocationPreloadCandidate[] = [];
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    if (seen.has(candidate.requestKey)) continue;
-    seen.add(candidate.requestKey);
-    if (input.segmentManifestCache.has(candidate.cacheKey)) continue;
-    if (input.preloadRequests.has(candidate.requestKey)) continue;
-    unique.push(candidate);
-  }
-
-  return unique;
-};
+  segmentKey?: string | null,
+): string => segmentKey
+  ? `${segmentKey}::${sentence}`
+  : `${buildLocatorRequestKey(locator)}::${segmentIndex}::${sentence}`;
 
 const resolveJumpIndex = (input: JumpResolutionInput): JumpResolution => {
   if (input.newSentenceCount <= 0) {
@@ -435,16 +254,17 @@ const resolveJumpIndex = (input: JumpResolutionInput): JumpResolution => {
   return { kind: 'fresh' };
 };
 
-const splitCanonicalSentencesForReader = (
-  text: string,
+const sourceKeyForLocation = (location: TTSLocation | undefined, fallback: TTSLocation): string =>
+  normalizeLocationKey(location ?? fallback);
+
+const locatorForLocation = (
+  location: TTSLocation,
   readerType: ReaderType,
-  maxBlockLength: number,
-): string[] => {
-  const options = { maxBlockLength };
-  if (readerType === 'epub') {
-    return splitTextToTtsBlocksEPUB(text, options);
+): TTSSegmentLocator => {
+  if (typeof location === 'string') {
+    return { location, readerType };
   }
-  return splitTextToTtsBlocks(text, options);
+  return { page: Math.max(1, Math.floor(Number(location || 1))), readerType };
 };
 
 // Create the context
@@ -551,6 +371,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [currDocPages, setCurrDocPages] = useState<number>();
 
   const [sentences, setSentences] = useState<string[]>([]);
+  const [playbackSegments, setPlaybackSegments] = useState<CanonicalTtsSegment[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeHowl, setActiveHowl] = useState<Howl | null>(null);
   const [speed, setSpeed] = useState(voiceSpeed);
@@ -584,13 +405,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const epubWalkInFlightRef = useRef<Set<string>>(new Set());
   // Guard to coalesce rapid restarts and only resume the latest change
   const restartSeqRef = useRef(0);
-  // Track continuation slices for PDF/EPUB page transitions
-  const continuationCarryRef = useRef<Map<string, string>>(new Map());
   // Preserve autoplay intent across location changes. Some browsers can emit pause
   // events while we stop/unload between pages, which momentarily flips `isPlaying`
   // false and can prevent automatic resume on the next page.
   const resumeAfterLocationChangeRef = useRef(false);
-  const epubContinuationRef = useRef<string | null>(null);
   const pageTurnEstimateRef = useRef<TTSPageTurnEstimate | null>(null);
   const pageTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageFirstBlockFingerprintRef = useRef<Map<string, string>>(new Map());
@@ -602,8 +420,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const pauseEpochRef = useRef(0);
   const sentencesRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
-  const setTextRef = useRef<(text: string, options?: boolean | SetTextOptions) => void>(() => { });
-  const prefetchedLocationTextRef = useRef<Map<string, string>>(new Map());
+  const plannedSegmentsByLocationRef = useRef<Map<string, CanonicalTtsSegment[]>>(new Map());
+  const currentSourceUnitRef = useRef<CanonicalTtsSourceUnit | null>(null);
+  const completedEpubBoundarySegmentRef = useRef<CompletedEpubBoundarySegment | null>(null);
   const pendingNextLocationRef = useRef<TTSLocation | undefined>(undefined);
 
   const audioUnlockAttemptRef = useRef(0);
@@ -768,24 +587,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [isPlaying]);
 
   /**
-   * Processes text into sentences using the shared NLP utility
-   * 
-   * @param {string} text - The text to be processed
-   * @returns {Promise<string[]>} Array of processed sentences
-   */
-  const splitTextToTtsBlocksLocal = useCallback(async (text: string): Promise<string[]> => {
-    if (text.length < 1) {
-      return [];
-    }
-
-    return splitCanonicalSentencesForReader(
-      text,
-      isEPUB ? 'epub' : currentReaderType,
-      ttsSegmentMaxBlockLength,
-    );
-  }, [isEPUB, currentReaderType, ttsSegmentMaxBlockLength]);
-
-  /**
    * Stops the current audio playback and clears the active Howl instance
    * @param {boolean} [clearPending=false] - Whether to clear pending requests
    */
@@ -888,6 +689,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (shouldPause) setIsPlaying(false);
     setCurrentIndex(0);
     setSentences([]);
+    setPlaybackSegments([]);
     setCurrDocPage(location);
 
   }, [abortAudio, invalidatePlaybackRun]);
@@ -924,9 +726,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           progress >= LOOP_GUARD_MIN_PROGRESS
         ) {
           const targetLocation = currDocPageNumber + 1;
-          prefetchedLocationTextRef.current.delete(normalizeLocationKey(targetLocation));
+          plannedSegmentsByLocationRef.current.delete(normalizeLocationKey(targetLocation));
           pendingNextLocationRef.current = targetLocation;
-          continuationCarryRef.current.delete(normalizeLocationKey(targetLocation));
           skipToLocation(targetLocation);
           return;
         }
@@ -942,15 +743,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         const targetLocation = pendingNextLocationRef.current;
         if (targetLocation !== undefined) {
           const bufferKey = normalizeLocationKey(targetLocation);
-          const prefetchedText = prefetchedLocationTextRef.current.get(bufferKey);
-          if (prefetchedText?.trim()) {
-            prefetchedLocationTextRef.current.delete(bufferKey);
+          const prefetchedSegments = plannedSegmentsByLocationRef.current.get(bufferKey);
+          if (prefetchedSegments?.length) {
+            plannedSegmentsByLocationRef.current.delete(bufferKey);
             pendingNextLocationRef.current = undefined;
             setCurrDocPage(targetLocation);
-            setTextRef.current(prefetchedText, {
-              shouldPause: false,
-              location: targetLocation,
-            });
+            setPlaybackSegments(prefetchedSegments);
+            setSentences(prefetchedSegments.map((segment) => segment.text));
+            setCurrentIndex(0);
+            setCurrentSentenceAlignment(undefined);
+            setCurrentWordIndex(null);
             // Ask the viewer to continue turning pages/sections; this may be deferred while hidden.
             locationChangeHandlerRef.current('next');
             return;
@@ -972,15 +774,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         // prefetched text for the target page, keep speaking without waiting for viewer callbacks.
         if (movingForward && typeof document !== 'undefined' && document.hidden) {
           const bufferKey = normalizeLocationKey(targetLocation);
-          const prefetchedText = prefetchedLocationTextRef.current.get(bufferKey);
-          if (prefetchedText?.trim()) {
-            prefetchedLocationTextRef.current.delete(bufferKey);
+          const prefetchedSegments = plannedSegmentsByLocationRef.current.get(bufferKey);
+          if (prefetchedSegments?.length) {
+            plannedSegmentsByLocationRef.current.delete(bufferKey);
             pendingNextLocationRef.current = undefined;
             setCurrDocPage(targetLocation);
-            setTextRef.current(prefetchedText, {
-              shouldPause: false,
-              location: targetLocation,
-            });
+            setPlaybackSegments(prefetchedSegments);
+            setSentences(prefetchedSegments.map((segment) => segment.text));
+            setCurrentIndex(0);
+            setCurrentSentenceAlignment(undefined);
+            setCurrentWordIndex(null);
             return;
           }
         }
@@ -1034,100 +837,91 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ? { shouldPause: options }
       : (options || {});
 
-    let workingText = text;
+    const resolvedLocation = normalizedOptions.location !== undefined
+      ? normalizedOptions.location
+      : currDocPage;
+    const resolvedLocationKey = normalizeLocationKey(resolvedLocation);
+    const activeReaderType = isEPUB ? 'epub' : currentReaderType;
+    const currentSourceKey = sourceKeyForLocation(resolvedLocation, currDocPage);
+    const currentSource: CanonicalTtsSourceUnit = {
+      sourceKey: currentSourceKey,
+      text,
+      locator: locatorForLocation(resolvedLocation, activeReaderType),
+    };
 
-    // Apply or clear sentence continuation logic based on config
-    let continuationCarried: string | undefined;
-    let strippedByPreviousContext = false;
-    if (smartSentenceSplitting) {
-      if (typeof normalizedOptions.previousText === 'string' && normalizedOptions.previousText.trim()) {
-        const previousMerge = mergeContinuation(normalizedOptions.previousText, workingText);
-        if (previousMerge?.carried) {
-          const { text: strippedText, removed } = stripContinuationPrefix(workingText, previousMerge.carried);
-          if (removed) {
-            workingText = strippedText;
-            strippedByPreviousContext = true;
-          }
-        }
-      }
-
-      if (isEPUB && strippedByPreviousContext) {
-        epubContinuationRef.current = null;
-      } else if (isEPUB && epubContinuationRef.current) {
-        const { text: strippedText, removed } = stripContinuationPrefix(workingText, epubContinuationRef.current);
-        workingText = strippedText;
-        if (removed) {
-          epubContinuationRef.current = null;
-        }
-      }
-
-      if (!isEPUB && normalizedOptions.location !== undefined) {
-        const key = normalizeLocationKey(normalizedOptions.location);
-        if (strippedByPreviousContext) {
-          continuationCarryRef.current.delete(key);
-        } else {
-          const carried = continuationCarryRef.current.get(key);
-          if (carried) {
-            const { text: strippedText, removed } = stripContinuationPrefix(workingText, carried);
-            workingText = strippedText;
-            if (removed) {
-              continuationCarryRef.current.delete(key);
-            }
-          }
-        }
-      }
-
-      if (normalizedOptions.nextText) {
-        const merged = mergeContinuation(workingText, normalizedOptions.nextText);
-        if (merged) {
-          workingText = merged.text;
-          continuationCarried = merged.carried;
-        }
-      }
-
-      if (continuationCarried) {
-        if (isEPUB) {
-          epubContinuationRef.current = continuationCarried;
-        } else if (normalizedOptions.nextLocation !== undefined) {
-          continuationCarryRef.current.set(
-            normalizeLocationKey(normalizedOptions.nextLocation),
-            continuationCarried
-          );
-        }
-      }
-    } else {
-      // When disabled, clear any stale continuation state
-      epubContinuationRef.current = null;
-      continuationCarryRef.current.clear();
-      pageTurnEstimateRef.current = null;
+    const sourceUnits: CanonicalTtsSourceUnit[] = [];
+    if (smartSentenceSplitting && normalizedOptions.previousText?.trim()) {
+      const previousLocation = normalizedOptions.previousLocation;
+      sourceUnits.push({
+        sourceKey: previousLocation !== undefined
+          ? sourceKeyForLocation(previousLocation, currDocPage)
+          : `previous:${currentSourceKey}`,
+        text: normalizedOptions.previousText,
+        locator: previousLocation !== undefined
+          ? locatorForLocation(previousLocation, activeReaderType)
+          : null,
+      });
     }
+    sourceUnits.push(currentSource);
 
-    // Keep the next-location text around so background page turns can continue when
-    // viewer/location callbacks are throttled by the browser.
-    prefetchedLocationTextRef.current.clear();
+    plannedSegmentsByLocationRef.current.clear();
     pendingNextLocationRef.current = normalizedOptions.nextLocation;
-    const pendingPrefetches: Array<{ location: TTSLocation; text: string }> = [];
+    const pendingPrefetches: Array<CanonicalTtsSourceUnit & { location: TTSLocation }> = [];
     if (normalizedOptions.nextLocation !== undefined && normalizedOptions.nextText?.trim()) {
       pendingPrefetches.push({
+        sourceKey: sourceKeyForLocation(normalizedOptions.nextLocation, currDocPage),
         location: normalizedOptions.nextLocation,
         text: normalizedOptions.nextText,
+        locator: locatorForLocation(normalizedOptions.nextLocation, activeReaderType),
       });
     }
     if (Array.isArray(normalizedOptions.upcomingLocations)) {
       for (const item of normalizedOptions.upcomingLocations) {
         if (item.location === undefined || !item.text?.trim()) continue;
         pendingPrefetches.push({
+          sourceKey: sourceKeyForLocation(item.location, currDocPage),
           location: item.location,
           text: item.text,
+          locator: locatorForLocation(item.location, activeReaderType),
         });
       }
     }
     for (const item of pendingPrefetches) {
-      prefetchedLocationTextRef.current.set(normalizeLocationKey(item.location), item.text);
+      if (smartSentenceSplitting) {
+        sourceUnits.push(item);
+      }
     }
 
-    // Check for blank section after adjustments
-    if (handleBlankSection(workingText)) return;
+    const plan = planCanonicalTtsSegments(sourceUnits, {
+      readerType: activeReaderType,
+      maxBlockLength: ttsSegmentMaxBlockLength,
+      keyPrefix: `${documentId || 'document'}:${activeReaderType}:v1`,
+    });
+    const currentSegments = smartSentenceSplitting
+      ? plan.segments.filter((segment) => segment.ownerSourceKey === currentSourceKey)
+      : planCanonicalTtsSegments([currentSource], {
+        readerType: activeReaderType,
+        maxBlockLength: ttsSegmentMaxBlockLength,
+        keyPrefix: `${documentId || 'document'}:${activeReaderType}:v1`,
+      }).segments;
+    const newSentences = currentSegments.map((segment) => segment.text);
+
+    for (const item of pendingPrefetches) {
+      const planned = smartSentenceSplitting
+        ? plan.segments.filter((segment) => segment.ownerSourceKey === item.sourceKey)
+        : planCanonicalTtsSegments([item], {
+          readerType: activeReaderType,
+          maxBlockLength: ttsSegmentMaxBlockLength,
+          keyPrefix: `${documentId || 'document'}:${activeReaderType}:v1`,
+        }).segments;
+      if (planned.length > 0) {
+        plannedSegmentsByLocationRef.current.set(normalizeLocationKey(item.location), planned);
+      }
+    }
+
+    currentSourceUnitRef.current = currentSource;
+
+    if (handleBlankSection(newSentences.join(' '))) return;
 
     const shouldPause = normalizedOptions.shouldPause ?? false;
     const pauseEpochAtStart = pauseEpochRef.current;
@@ -1143,113 +937,115 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     abortAudio(true); // Clear pending requests since text is changing
     setIsProcessing(true); // Set processing state before text processing starts
 
-    splitTextToTtsBlocksLocal(workingText)
-      .then(newSentences => {
-        if (newSentences.length === 0) {
-          console.warn('No sentences found in text');
-          setIsProcessing(false);
-          return;
-        }
-
-        if (!isEPUB && typeof normalizedOptions.location === 'number') {
-          const firstFingerprint = normalizeBlockFingerprint(newSentences[0] || '');
-          if (firstFingerprint) {
-            pageFirstBlockFingerprintRef.current.set(
-              normalizeLocationKey(normalizedOptions.location),
-              firstFingerprint
-            );
-          }
-        }
-
-        // Set all state updates in a predictable order
-        setSentences(newSentences);
-
-        const resolvedLocation = normalizedOptions.location !== undefined
-          ? normalizedOptions.location
-          : currDocPage;
-        const resolvedLocationKey = normalizeLocationKey(resolvedLocation);
-        const resolution = resolveJumpIndex({
-          isEPUB,
-          newSentenceCount: newSentences.length,
-          resolvedLocationKey,
-          pendingEpubJump: pendingEpubJumpRef.current,
-          currentEpubEpoch: epubJumpEpochRef.current,
-          pendingStrictJump: pendingJumpTargetRef.current,
-        });
-        if (resolution.kind === 'epub-resolved') {
-          setCurrentIndex(resolution.index);
-          pendingEpubJumpRef.current = null;
-          pendingJumpTargetRef.current = null;
-        } else if (resolution.kind === 'strict-resolved') {
-          setCurrentIndex(resolution.index);
-          pendingJumpTargetRef.current = null;
-        } else {
-          if (isEPUB) {
-            clearPendingEpubJump();
-          }
-          setCurrentIndex(0);
-        }
-
-        // Reset alignment state whenever the text block changes
-        sentenceAlignmentCacheRef.current.clear();
-        setCurrentSentenceAlignment(undefined);
-        setCurrentWordIndex(null);
-
-        // Compute auto page-turn estimate for PDFs when we have a continuation
-        if (smartSentenceSplitting && !isEPUB && continuationCarried && normalizedOptions.nextLocation !== undefined) {
-          const continuationNormalized = preprocessSentenceForAudio(continuationCarried);
-          if (continuationNormalized) {
-            let bestEstimate: TTSPageTurnEstimate | null = null;
-
-            newSentences.forEach((sentence, index) => {
-              const normalizedSentence = preprocessSentenceForAudio(sentence);
-              if (!normalizedSentence) return;
-
-              if (!normalizedSentence.toLowerCase().endsWith(continuationNormalized.toLowerCase())) return;
-
-              const totalLength = normalizedSentence.length;
-              const continuationLength = continuationNormalized.length;
-              if (totalLength <= continuationLength) return;
-
-              const baseLength = totalLength - continuationLength;
-              const fraction = baseLength / totalLength;
-              if (fraction <= 0 || fraction >= 1) return;
-
-              bestEstimate = {
-                location: normalizedOptions.nextLocation!,
-                sentenceIndex: index,
-                fraction,
-              };
-            });
-
-            pageTurnEstimateRef.current = bestEstimate;
-          } else {
-            pageTurnEstimateRef.current = null;
-          }
-        } else {
-          pageTurnEstimateRef.current = null;
-        }
-
+    try {
+      if (newSentences.length === 0) {
+        console.warn('No sentences found in text');
         setIsProcessing(false);
+        return;
+      }
 
-        // Restore playback state if needed
-        // Respect explicit pauses that happened while sentence splitting was in flight.
-        if (shouldResumePlayback && pauseEpochRef.current === pauseEpochAtStart) {
-          setIsPlaying(true);
+      if (!isEPUB && typeof resolvedLocation === 'number') {
+        const firstFingerprint = normalizeBlockFingerprint(newSentences[0] || '');
+        if (firstFingerprint) {
+          pageFirstBlockFingerprintRef.current.set(
+            normalizeLocationKey(resolvedLocation),
+            firstFingerprint
+          );
         }
-      })
-      .catch(error => {
-        console.warn('Error processing text:', error);
-        setIsProcessing(false);
-        toast.error('Failed to process text', {
-          duration: 3000,
-        });
+      }
+
+      setPlaybackSegments(currentSegments);
+      setSentences(newSentences);
+
+      const resolution = resolveJumpIndex({
+        isEPUB,
+        newSentenceCount: newSentences.length,
+        resolvedLocationKey,
+        pendingEpubJump: pendingEpubJumpRef.current,
+        currentEpubEpoch: epubJumpEpochRef.current,
+        pendingStrictJump: pendingJumpTargetRef.current,
       });
-  }, [isPlaying, handleBlankSection, abortAudio, splitTextToTtsBlocksLocal, isEPUB, smartSentenceSplitting, invalidatePlaybackRun, currDocPage, clearPendingEpubJump]);
+      let startIndex = 0;
+      if (resolution.kind === 'epub-resolved') {
+        startIndex = resolution.index;
+        setCurrentIndex(startIndex);
+        pendingEpubJumpRef.current = null;
+        pendingJumpTargetRef.current = null;
+      } else if (resolution.kind === 'strict-resolved') {
+        startIndex = resolution.index;
+        setCurrentIndex(startIndex);
+        pendingJumpTargetRef.current = null;
+      } else {
+        if (isEPUB) {
+          clearPendingEpubJump();
+        }
+        startIndex = isEPUB && shouldResumePlayback
+          ? resolveEpubBoundaryHandoffStartIndex(currentSegments, completedEpubBoundarySegmentRef.current)
+          : 0;
+        if (startIndex > 0) {
+          completedEpubBoundarySegmentRef.current = null;
+        }
+        setCurrentIndex(startIndex);
+      }
 
-  useEffect(() => {
-    setTextRef.current = setText;
-  }, [setText]);
+      sentenceAlignmentCacheRef.current.clear();
+      setCurrentSentenceAlignment(undefined);
+      setCurrentWordIndex(null);
+
+      if (smartSentenceSplitting && !isEPUB && normalizedOptions.nextLocation !== undefined) {
+        const spanningIndex = currentSegments.findIndex((segment) =>
+          segment.spansSourceBoundary
+          && segment.startAnchor.sourceKey === currentSourceKey
+          && segment.endAnchor.sourceKey !== currentSourceKey
+        );
+        const spanningSegment = spanningIndex >= 0 ? currentSegments[spanningIndex] : null;
+        const currentTextLength = preprocessSentenceForAudio(text).length;
+        const totalLength = spanningSegment ? preprocessSentenceForAudio(spanningSegment.text).length : 0;
+        const baseLength = spanningSegment
+          ? Math.max(0, currentTextLength - spanningSegment.startAnchor.offset)
+          : 0;
+        const fraction = totalLength > 0 ? baseLength / totalLength : 0;
+        pageTurnEstimateRef.current = spanningSegment && fraction > 0 && fraction < 1
+          ? {
+            location: normalizedOptions.nextLocation,
+            sentenceIndex: spanningIndex,
+            fraction,
+          }
+          : null;
+      } else {
+        pageTurnEstimateRef.current = null;
+      }
+
+      setIsProcessing(false);
+
+      if (shouldResumePlayback && startIndex >= newSentences.length) {
+        setIsPlaying(false);
+        return;
+      }
+
+      if (shouldResumePlayback && pauseEpochRef.current === pauseEpochAtStart) {
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.warn('Error processing text:', error);
+      setIsProcessing(false);
+      toast.error('Failed to process text', {
+        duration: 3000,
+      });
+    }
+  }, [
+    isPlaying,
+    handleBlankSection,
+    abortAudio,
+    isEPUB,
+    currentReaderType,
+    smartSentenceSplitting,
+    invalidatePlaybackRun,
+    currDocPage,
+    documentId,
+    ttsSegmentMaxBlockLength,
+    clearPendingEpubJump,
+  ]);
 
   /**
    * Toggles the playback state between playing and paused
@@ -1414,6 +1210,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceIndex: number,
     preload = false,
     locatorOverride?: TTSSegmentLocator,
+    segmentKey?: string | null,
   ): Promise<TTSSegmentPlaybackSource | undefined> => {
     const alignmentEnabledForCurrentDoc =
       wordHighlightFeatureEnabled &&
@@ -1430,6 +1227,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       effectiveNativeSpeed,
       configTTSProvider,
       ttsModel,
+      segmentKey,
     );
 
     const cachedManifest = segmentManifestCacheRef.current.get(audioCacheKey);
@@ -1487,6 +1285,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           segments: [
             {
               segmentIndex: sentenceIndex,
+              ...(segmentKey ? { segmentKey } : {}),
               text: sentence,
               locator,
             },
@@ -1598,10 +1397,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceIndex: number,
     preload = false,
     locatorOverride?: TTSSegmentLocator,
+    segmentKey?: string | null,
   ): Promise<TTSSegmentPlaybackSource | null> => {
     if (!audioContext) throw new Error('Audio context not initialized');
-    const locatorKey = locatorOverride ? buildLocatorRequestKey(locatorOverride) : normalizeLocationKey(currDocPage);
-    const requestKey = `${locatorKey}::${sentenceIndex}::${sentence}`;
+    const locator = locatorOverride || (isEPUB
+      ? { location: String(currDocPage), readerType: currentReaderType }
+      : { page: Number(currDocPageNumber || 1), readerType: currentReaderType });
+    const requestKey = buildSegmentRequestKey(locator, sentenceIndex, sentence, segmentKey);
 
     // Check if there's a pending preload request for this sentence
     const pendingRequest = preloadRequests.current.get(requestKey);
@@ -1620,7 +1422,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Create the audio processing promise
     const processPromise = (async () => {
       try {
-        const source = await getSegmentPlaybackSource(sentence, sentenceIndex, preload, locatorOverride);
+        const source = await getSegmentPlaybackSource(sentence, sentenceIndex, preload, locatorOverride, segmentKey);
         return source || null;
       } catch (error) {
         setIsProcessing(false);
@@ -1642,14 +1444,20 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     return processPromise;
-  }, [audioContext, getSegmentPlaybackSource, currDocPage]);
+  }, [audioContext, getSegmentPlaybackSource, currDocPage, currDocPageNumber, currentReaderType, isEPUB]);
 
   /**
    * Plays the current sentence with Howl
    * 
    * @param {string} sentence - The sentence to play
    */
-  const playSentenceWithHowl = useCallback(async (sentence: string, sentenceIndex: number, runId: number) => {
+  const playSentenceWithHowl = useCallback(async (
+    sentence: string,
+    sentenceIndex: number,
+    runId: number,
+    segmentKey?: string | null,
+    playbackSegment?: CanonicalTtsSegment | null,
+  ) => {
     if (!sentence) {
       playbackInFlightRef.current = false;
       setIsProcessing(false);
@@ -1665,7 +1473,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ): Promise<Howl | null> => {
       if (runId !== playbackRunIdRef.current) return null;
       let playErrorAttempts = 0;
-      const playbackSource = await processSentence(sentence, sentenceIndex);
+      const playbackSource = await processSentence(sentence, sentenceIndex, false, undefined, segmentKey);
       if (runId !== playbackRunIdRef.current) return null;
       if (!playbackSource) {
         // Graceful exit for rate limit / abort / intentionally skipped sentence
@@ -1916,6 +1724,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             clearTimeout(pageTurnTimeoutRef.current);
             pageTurnTimeoutRef.current = null;
           }
+          if (isEPUB) {
+            completedEpubBoundarySegmentRef.current = completedEpubBoundarySegment(playbackSegment);
+          }
           if (isPlaying) {
             advance();
           }
@@ -1974,6 +1785,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     activeHowl,
     processSentence,
     audioSpeed,
+    isEPUB,
     isAutoplayBlockedError,
     applyPlaybackRateToHowl,
     startRateWatchdog,
@@ -1982,10 +1794,37 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const playAudio = useCallback(async () => {
     const runId = playbackRunIdRef.current;
-    const sentence = sentences[currentIndex];
-    const activeLocator: TTSSegmentLocator = isEPUB
-      ? { location: String(currDocPage), readerType: currentReaderType }
-      : { page: Number(currDocPageNumber || 1), readerType: currentReaderType };
+    const playbackSegment = playbackSegments[currentIndex];
+    const sentence = playbackSegment?.text ?? sentences[currentIndex];
+    if (isEPUB && playbackSegment && completedEpubBoundarySegmentRef.current) {
+      const suppression = resolveEpubReplaySuppressionAction(
+        playbackSegments,
+        currentIndex,
+        completedEpubBoundarySegmentRef.current,
+      );
+      if (suppression.kind === 'skip-to-index') {
+        playbackInFlightRef.current = false;
+        setCurrentSentenceAlignment(undefined);
+        setCurrentWordIndex(null);
+        completedEpubBoundarySegmentRef.current = null;
+        setCurrentIndex(suppression.index);
+        return;
+      }
+      if (suppression.kind === 'pause') {
+        playbackInFlightRef.current = false;
+        setCurrentSentenceAlignment(undefined);
+        setCurrentWordIndex(null);
+        completedEpubBoundarySegmentRef.current = null;
+        setIsProcessing(false);
+        setIsPlaying(false);
+        return;
+      }
+      completedEpubBoundarySegmentRef.current = null;
+    }
+    const activeLocator: TTSSegmentLocator = playbackSegment?.ownerLocator
+      ?? (isEPUB
+        ? { location: String(currDocPage), readerType: currentReaderType }
+        : { page: Number(currDocPageNumber || 1), readerType: currentReaderType });
     const alignmentKey = buildScopedSegmentCacheKey(
       activeLocator,
       currentIndex,
@@ -1994,6 +1833,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       effectiveNativeSpeed,
       configTTSProvider,
       ttsModel,
+      playbackSegment?.key,
     );
     const cachedAlignment = sentenceAlignmentCacheRef.current.get(alignmentKey);
     if (cachedAlignment) {
@@ -2004,7 +1844,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setCurrentWordIndex(null);
     }
 
-    const howl = await playSentenceWithHowl(sentence, currentIndex, runId);
+    const howl = await playSentenceWithHowl(sentence, currentIndex, runId, playbackSegment?.key, playbackSegment);
     if (runId !== playbackRunIdRef.current) {
       if (howl) {
         try { howl.unload(); } catch {}
@@ -2020,6 +1860,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, [
     sentences,
+    playbackSegments,
     currentIndex,
     playSentenceWithHowl,
     voice,
@@ -2107,11 +1948,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       const preloadFromOffset = (offset: number) => {
         if (offset > sentenceLookahead) return;
         const sentenceIndex = currentIndex + offset;
-        const nextSentence = sentences[sentenceIndex];
+        const nextSegment = playbackSegments[sentenceIndex];
+        const nextSentence = nextSegment?.text ?? sentences[sentenceIndex];
         if (!nextSentence) return;
 
-        const currentLocator: TTSSegmentLocator = { location: String(currDocPage), readerType: currentReaderType };
-        const requestKey = buildSegmentRequestKey(currentLocator, sentenceIndex, nextSentence);
+        const currentLocator: TTSSegmentLocator =
+          nextSegment?.ownerLocator ?? { location: String(currDocPage), readerType: currentReaderType };
+        const requestKey = buildSegmentRequestKey(currentLocator, sentenceIndex, nextSentence, nextSegment?.key);
         const cacheKey = buildScopedSegmentCacheKey(
           currentLocator,
           sentenceIndex,
@@ -2120,6 +1963,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           effectiveNativeSpeed,
           configTTSProvider,
           ttsModel,
+          nextSegment?.key,
         );
         if (segmentManifestCacheRef.current.has(cacheKey)) {
           preloadFromOffset(offset + 1);
@@ -2133,7 +1977,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           return;
         }
 
-        void processSentence(nextSentence, sentenceIndex, true, currentLocator)
+        void processSentence(nextSentence, sentenceIndex, true, currentLocator, nextSegment?.key)
           .catch((error) => {
             const status = typeof error === 'object' && error !== null && 'status' in error
               ? ((error as { status?: unknown }).status as number | undefined)
@@ -2195,51 +2039,61 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           const upcomingLocationItems = filteredLocationItems.slice(0, targetDepth);
           if (!upcomingLocationItems.length) return;
 
-          const normalizedLocationItems = upcomingLocationItems.map((item) => ({
-            location: item.location,
+          const sourceUnits: CanonicalTtsSourceUnit[] = [];
+          if (smartSentenceSplitting && currentSourceUnitRef.current) {
+            sourceUnits.push(currentSourceUnitRef.current);
+          }
+          sourceUnits.push(...upcomingLocationItems.map((item) => ({
+            sourceKey: sourceKeyForLocation(item.location, currDocPage),
             text: item.text,
-          }));
-          if (smartSentenceSplitting) {
-            const carryByIndex = new Map<number, string>();
-            if (epubContinuationRef.current) {
-              carryByIndex.set(0, epubContinuationRef.current);
-            }
-            for (let i = 0; i < normalizedLocationItems.length; i += 1) {
-              const current = normalizedLocationItems[i];
-              const carry = carryByIndex.get(i);
-              if (carry) {
-                current.text = stripContinuationPrefix(current.text, carry).text;
-              }
-              const next = normalizedLocationItems[i + 1];
-              if (!next?.text?.trim()) continue;
-              const merged = mergeContinuation(current.text, next.text);
-              if (merged?.carried) {
-                carryByIndex.set(i + 1, merged.carried);
-              }
+            locator: { location: item.location, readerType: 'epub' as const },
+          })));
+
+          const plan = planCanonicalTtsSegments(sourceUnits, {
+            readerType: 'epub',
+            maxBlockLength: ttsSegmentMaxBlockLength,
+            keyPrefix: `${documentId || 'document'}:epub:v1`,
+          });
+          const uniqueCandidates: EpubLocationPreloadCandidate[] = [];
+          const seenCandidates = new Set<string>();
+          for (const item of upcomingLocationItems) {
+            const sourceKey = sourceKeyForLocation(item.location, currDocPage);
+            const planned = plan.segments
+              .filter((segment) => segment.ownerSourceKey === sourceKey)
+              .slice(0, sentenceLookahead);
+            for (let index = 0; index < planned.length; index += 1) {
+              const segment = planned[index];
+              const locator = segment.ownerLocator ?? { location: item.location, readerType: 'epub' as const };
+              const requestKey = buildSegmentRequestKey(locator, index, segment.text, segment.key);
+              const cacheKey = buildScopedSegmentCacheKey(
+                locator,
+                index,
+                segment.text,
+                voice,
+                effectiveNativeSpeed,
+                configTTSProvider,
+                ttsModel,
+                segment.key,
+              );
+              if (seenCandidates.has(requestKey)) continue;
+              seenCandidates.add(requestKey);
+              if (segmentManifestCacheRef.current.has(cacheKey)) continue;
+              if (preloadRequests.current.has(requestKey)) continue;
+              uniqueCandidates.push({
+                sentence: segment.text,
+                segmentKey: segment.key,
+                segmentIndex: index,
+                location: item.location,
+                requestKey,
+                cacheKey,
+              });
             }
           }
-
-          const uniqueCandidates = planEpubLocationPreloadCandidates({
-            locationItems: normalizedLocationItems,
-            sentenceLookahead,
-            maxBlockLength: ttsSegmentMaxBlockLength,
-            segmentManifestCache: segmentManifestCacheRef.current,
-            preloadRequests: preloadRequests.current,
-            splitSentences: splitTextToTtsBlocksEPUB,
-            buildCacheKey: (location, segmentIndex, sentence) => buildScopedSegmentCacheKey(
-              { location, readerType: 'epub' },
-              segmentIndex,
-              sentence,
-              voice,
-              effectiveNativeSpeed,
-              configTTSProvider,
-              ttsModel,
-            ),
-          });
           if (uniqueCandidates.length === 0) return;
 
           const payload = uniqueCandidates.map((candidate) => ({
             segmentIndex: candidate.segmentIndex,
+            segmentKey: candidate.segmentKey,
             text: candidate.sentence,
             locator: { location: candidate.location, readerType: 'epub' as const },
           }));
@@ -2268,14 +2122,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             for (const segment of ensured.segments) {
               if (segment.status !== 'completed' || !segment.audioPresignUrl || !segment.audioFallbackUrl) continue;
               if (!segment.locator) continue;
-              segmentLookup.set(
-                `${buildLocatorRequestKey(segment.locator)}::${segment.segmentIndex}`,
-                segment,
-              );
+              segmentLookup.set(segment.segmentKey || `${buildLocatorRequestKey(segment.locator)}::${segment.segmentIndex}`, segment);
             }
 
             for (const candidate of uniqueCandidates) {
-              const segment = segmentLookup.get(`str:${candidate.location}::${candidate.segmentIndex}`);
+              const segment = segmentLookup.get(candidate.segmentKey);
               if (!segment) continue;
               setSegmentManifestCache(candidate.cacheKey, segment);
               if (alignmentEnabledForCurrentDoc && segment.alignment) {
@@ -2331,9 +2182,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       wordHighlightFeatureEnabled &&
       ((!isEPUB && pdfHighlightEnabled && pdfWordHighlightEnabled) ||
         (isEPUB && epubHighlightEnabled && epubWordHighlightEnabled));
-    const splitOptions = { maxBlockLength: ttsSegmentMaxBlockLength };
     const candidates: Array<{
       sentence: string;
+      segmentKey?: string | null;
       segmentIndex: number;
       locator: TTSSegmentLocator;
       requestKey: string;
@@ -2346,26 +2197,27 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     for (let offset = 1; offset <= sentenceLookahead; offset += 1) {
       const sentenceIndex = currentIndex + offset;
-      const sentence = sentences[sentenceIndex];
+      const plannedSegment = playbackSegments[sentenceIndex];
+      const sentence = plannedSegment?.text ?? sentences[sentenceIndex];
       if (!sentence) break;
+      const locator = plannedSegment?.ownerLocator ?? currentLocator;
       const cacheKey = buildScopedSegmentCacheKey(
-        currentLocator,
+        locator,
         sentenceIndex,
         sentence,
         voice,
         effectiveNativeSpeed,
         configTTSProvider,
         ttsModel,
+        plannedSegment?.key,
       );
-      const requestKey = `${buildLocatorRequestKey(currentLocator)}::${sentenceIndex}::${sentence}`;
-      candidates.push({ sentence, segmentIndex: sentenceIndex, locator: currentLocator, requestKey, cacheKey });
+      const requestKey = buildSegmentRequestKey(locator, sentenceIndex, sentence, plannedSegment?.key);
+      candidates.push({ sentence, segmentKey: plannedSegment?.key, segmentIndex: sentenceIndex, locator, requestKey, cacheKey });
     }
 
-    const prefetched = Array.from(prefetchedLocationTextRef.current.entries()).slice(0, maxDepth);
-    const carryByLocation = new Map<string, string>(continuationCarryRef.current);
-    for (let prefetchedIndex = 0; prefetchedIndex < prefetched.length; prefetchedIndex += 1) {
-      const [locationKey, text] = prefetched[prefetchedIndex];
-      if (!text?.trim()) continue;
+    const prefetched = Array.from(plannedSegmentsByLocationRef.current.entries()).slice(0, maxDepth);
+    for (const [locationKey, planned] of prefetched) {
+      if (!planned.length) continue;
       const location = locationKey.startsWith('num:')
         ? Number(locationKey.slice(4))
         : locationKey.startsWith('str:')
@@ -2376,38 +2228,22 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       const locator: TTSSegmentLocator = typeof location === 'string'
         ? { location, readerType: currentReaderType }
         : { page: Number(location || 1), readerType: currentReaderType };
-      let normalizedUpcomingText = text;
-      if (smartSentenceSplitting) {
-        const carriedPrefix = carryByLocation.get(locationKey);
-        if (carriedPrefix) {
-          const stripped = stripContinuationPrefix(normalizedUpcomingText, carriedPrefix);
-          normalizedUpcomingText = stripped.text;
-        }
-        const nextPrefetched = prefetched[prefetchedIndex + 1];
-        if (nextPrefetched && nextPrefetched[1]?.trim()) {
-          const merged = mergeContinuation(normalizedUpcomingText, nextPrefetched[1]);
-          if (merged?.carried) {
-            carryByLocation.set(nextPrefetched[0], merged.carried);
-          }
-        }
-      }
-      const upcomingSentences = isEPUB
-        ? splitTextToTtsBlocksEPUB(normalizedUpcomingText, splitOptions)
-        : splitTextToTtsBlocks(normalizedUpcomingText, splitOptions);
-
-      for (let index = 0; index < Math.min(sentenceLookahead, upcomingSentences.length); index += 1) {
-        const sentence = upcomingSentences[index];
+      for (let index = 0; index < Math.min(sentenceLookahead, planned.length); index += 1) {
+        const segment = planned[index];
+        const sentence = segment.text;
+        const segmentLocator = segment.ownerLocator ?? locator;
         const cacheKey = buildScopedSegmentCacheKey(
-          locator,
+          segmentLocator,
           index,
           sentence,
           voice,
           effectiveNativeSpeed,
           configTTSProvider,
           ttsModel,
+          segment.key,
         );
-        const requestKey = `${buildLocatorRequestKey(locator)}::${index}::${sentence}`;
-        candidates.push({ sentence, segmentIndex: index, locator, requestKey, cacheKey });
+        const requestKey = buildSegmentRequestKey(segmentLocator, index, sentence, segment.key);
+        candidates.push({ sentence, segmentKey: segment.key, segmentIndex: index, locator: segmentLocator, requestKey, cacheKey });
       }
     }
 
@@ -2440,6 +2276,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     };
     const payload = uniqueCandidates.map((candidate) => ({
       segmentIndex: candidate.segmentIndex,
+      ...(candidate.segmentKey ? { segmentKey: candidate.segmentKey } : {}),
       text: candidate.sentence,
       locator: candidate.locator,
     }));
@@ -2531,6 +2368,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentReaderType,
     currentIndex,
     sentences,
+    playbackSegments,
     voice,
     effectiveNativeSpeed,
     configTTSProvider,
@@ -2597,15 +2435,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     abortAudio();
     playbackInFlightRef.current = false;
-    epubContinuationRef.current = null;
     pendingJumpTargetRef.current = null;
     clearPendingEpubJump();
     bumpEpubPreloadGeneration();
-    continuationCarryRef.current.clear();
+    plannedSegmentsByLocationRef.current.clear();
+    currentSourceUnitRef.current = null;
+    completedEpubBoundarySegmentRef.current = null;
     pageFirstBlockFingerprintRef.current.clear();
     setIsPlaying(false);
     setCurrentIndex(0);
     setSentences([]);
+    setPlaybackSegments([]);
     setCurrDocPage(1);
     setCurrDocPages(undefined);
     setIsProcessing(false);
@@ -2799,6 +2639,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     isPlaying,
     isProcessing,
     currentSentence: sentences[currentIndex] || '',
+    currentSegment: playbackSegments[currentIndex] ?? null,
     sentences,
     currentSentenceIndex: currentIndex,
     currentSentenceAlignment,
@@ -2829,6 +2670,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     isPlaying,
     isProcessing,
     sentences,
+    playbackSegments,
     currentIndex,
     currDocPage,
     currDocPageNumber,

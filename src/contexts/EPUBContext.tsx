@@ -26,9 +26,15 @@ import { EpubRenderedLocationCloneManager } from '@/lib/client/epub/rendered-loc
 import { useTTS } from '@/contexts/TTSContext';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { createRangeCfi } from '@/lib/client/epub';
+import { normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
+import {
+  buildMonotonicWordToTokenMap,
+  buildWordHighlightCacheKey,
+  tokenizeCanonicalSegment,
+  type EpubCanonicalWordToken,
+} from '@/lib/shared/epub-word-highlight';
 import { useParams } from 'next/navigation';
 import { useConfig } from './ConfigContext';
-import { CmpStr } from 'cmpstr';
 import type {
   EpubRenderedLocationWalker,
   TTSSentenceAlignment,
@@ -36,6 +42,7 @@ import type {
   TTSAudiobookChapter,
 } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
+import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 
 interface EPUBContextType {
   currDocData: ArrayBuffer | undefined;
@@ -69,12 +76,12 @@ interface EPUBContextType {
   handleLocationChanged: (location: string | number) => void;
   setRendition: (rendition: Rendition) => void;
   isAudioCombining: boolean;
-  highlightPattern: (text: string) => void;
+  highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => void;
   clearHighlights: () => void;
   highlightWordIndex: (
     alignment: TTSSentenceAlignment | undefined,
     wordIndex: number | null | undefined,
-    sentence: string | null | undefined
+    segment: CanonicalTtsSegment | null | undefined
   ) => void;
   clearWordHighlights: () => void;
 }
@@ -82,14 +89,6 @@ interface EPUBContextType {
 const EPUBContext = createContext<EPUBContextType | undefined>(undefined);
 
 const EPUB_CONTINUATION_CHARS = 5000;
-
-const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
-
-const normalizeWordForMatch = (text: string): string =>
-  text
-    .trim()
-    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
-    .toLowerCase();
 
 const stepToNextNode = (node: Node | null, root: Node): Node | null => {
   if (!node) return null;
@@ -278,6 +277,250 @@ const collectLeadingContextFromRange = (range: Range | null | undefined, limit =
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 };
 
+type EpubMappedPosition = {
+  node: Text;
+  offset: number;
+};
+
+type EpubMappedChar = {
+  char: string;
+  position: EpubMappedPosition;
+};
+
+type EpubRenderedTextMap = {
+  sourceKey: string;
+  chars: EpubMappedPosition[];
+  content: {
+    cfiFromRange: (range: Range) => string;
+  };
+};
+
+type EpubWordHighlightMapCache = {
+  key: string;
+  wordToToken: number[];
+  tokens: EpubCanonicalWordToken[];
+};
+
+const cloneMappedChar = (char: string, source: EpubMappedChar): EpubMappedChar => ({
+  char,
+  position: source.position,
+});
+
+const replaceMappedUrls = (tokens: EpubMappedChar[]): EpubMappedChar[] => {
+  const text = tokens.map((token) => token.char).join('');
+  const urlPattern = /\S*(?:https?:\/\/|www\.)([^\/\s]+)(?:\/\S*)?/gi;
+  const replaced: EpubMappedChar[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = urlPattern.exec(text)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    replaced.push(...tokens.slice(cursor, start));
+
+    const anchor = tokens[start] ?? tokens[Math.max(0, end - 1)];
+    if (anchor) {
+      const replacement = `- (link to ${match[1]}) -`;
+      for (const char of replacement) {
+        replaced.push(cloneMappedChar(char, anchor));
+      }
+    }
+    cursor = end;
+  }
+
+  replaced.push(...tokens.slice(cursor));
+  return replaced;
+};
+
+const removeMappedHyphenation = (tokens: EpubMappedChar[]): EpubMappedChar[] => {
+  const text = tokens.map((token) => token.char).join('');
+  const hyphenPattern = /(\w+)-\s+(\w+)/g;
+  const replaced: EpubMappedChar[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = hyphenPattern.exec(text)) !== null) {
+    const start = match.index;
+    const full = match[0];
+    const first = match[1];
+    const second = match[2];
+    const secondOffset = full.lastIndexOf(second);
+
+    replaced.push(...tokens.slice(cursor, start));
+    replaced.push(...tokens.slice(start, start + first.length));
+    replaced.push(...tokens.slice(start + secondOffset, start + secondOffset + second.length));
+    cursor = start + full.length;
+  }
+
+  replaced.push(...tokens.slice(cursor));
+  return replaced;
+};
+
+const normalizeMappedTokensForTts = (tokens: EpubMappedChar[]): EpubMappedChar[] => {
+  const withoutLinks = replaceMappedUrls(tokens);
+  const withoutHyphenation = removeMappedHyphenation(withoutLinks);
+  const normalized: EpubMappedChar[] = [];
+  let pendingWhitespace: EpubMappedChar | null = null;
+
+  const flushWhitespace = () => {
+    if (!pendingWhitespace || normalized.length === 0 || normalized[normalized.length - 1].char === ' ') {
+      pendingWhitespace = null;
+      return;
+    }
+    normalized.push(cloneMappedChar(' ', pendingWhitespace));
+    pendingWhitespace = null;
+  };
+
+  for (const token of withoutHyphenation) {
+    if (token.char === '*') continue;
+    if (/\s/.test(token.char)) {
+      pendingWhitespace ??= token;
+      continue;
+    }
+
+    flushWhitespace();
+    normalized.push(token);
+  }
+
+  if (normalized[normalized.length - 1]?.char === ' ') {
+    normalized.pop();
+  }
+
+  return normalized;
+};
+
+const collectMappedTextFromRange = (range: Range): EpubMappedChar[] => {
+  const root = range.commonAncestorContainer;
+  const doc = range.startContainer.ownerDocument ?? (range.startContainer as Document);
+  const mapped: EpubMappedChar[] = [];
+
+  const addTextSlice = (textNode: Text, start: number, end: number) => {
+    const text = textNode.textContent || '';
+    const safeStart = Math.max(0, Math.min(start, text.length));
+    const safeEnd = Math.max(safeStart, Math.min(end, text.length));
+    for (let offset = safeStart; offset < safeEnd; offset += 1) {
+      mapped.push({
+        char: text[offset],
+        position: { node: textNode, offset },
+      });
+    }
+  };
+
+  if (root.nodeType === Node.TEXT_NODE) {
+    addTextSlice(root as Text, range.startOffset, range.endOffset);
+    return mapped;
+  }
+
+  const nodeFilter = doc.defaultView?.NodeFilter ?? NodeFilter;
+  const walker = doc.createTreeWalker(
+    root,
+    nodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) => {
+        try {
+          return range.intersectsNode(node)
+            ? nodeFilter.FILTER_ACCEPT
+            : nodeFilter.FILTER_REJECT;
+        } catch {
+          return nodeFilter.FILTER_REJECT;
+        }
+      },
+    },
+  );
+
+  let textNode = walker.nextNode() as Text | null;
+  while (textNode) {
+    const text = textNode.textContent || '';
+    let start = 0;
+    let end = text.length;
+
+    if (textNode === range.startContainer) {
+      start = range.startOffset;
+    }
+    if (textNode === range.endContainer) {
+      end = range.endOffset;
+    }
+
+    addTextSlice(textNode, start, end);
+    textNode = walker.nextNode() as Text | null;
+  }
+
+  return mapped;
+};
+
+const buildRenderedTextMaps = (
+  rendition: Rendition,
+  rangeCfi: string,
+  sourceKey: string,
+): EpubRenderedTextMap[] => {
+  const contents = rendition.getContents();
+  const contentsArray = Array.isArray(contents) ? contents : [contents];
+  const maps: EpubRenderedTextMap[] = [];
+
+  for (const content of contentsArray) {
+    try {
+      const range = content.range(rangeCfi);
+      if (!range) continue;
+
+      const normalized = normalizeMappedTokensForTts(collectMappedTextFromRange(range));
+      if (!normalized.length) continue;
+
+      maps.push({
+        sourceKey,
+        chars: normalized.map((token) => token.position),
+        content,
+      });
+    } catch {
+      // Not every displayed iframe can resolve every CFI in spread mode.
+    }
+  }
+
+  return maps;
+};
+
+const createRangeFromMappedOffsets = (
+  map: EpubRenderedTextMap,
+  startOffset: number,
+  endOffset: number,
+): Range | null => {
+  const start = Math.max(0, Math.min(startOffset, map.chars.length));
+  const end = Math.max(start, Math.min(endOffset, map.chars.length));
+  if (end <= start) return null;
+
+  const startPosition = map.chars[start];
+  const endPosition = map.chars[end - 1];
+  if (!startPosition || !endPosition) return null;
+
+  const doc = startPosition.node.ownerDocument;
+  const range = doc.createRange();
+  range.setStart(startPosition.node, startPosition.offset);
+  range.setEnd(endPosition.node, endPosition.offset + 1);
+  return range;
+};
+
+const resolveVisibleSegmentRange = (
+  maps: EpubRenderedTextMap[],
+  segment: CanonicalTtsSegment | null | undefined,
+): { map: EpubRenderedTextMap; range: Range; startOffset: number; endOffset: number } | null => {
+  if (!segment) return null;
+
+  for (const map of maps) {
+    const startsInMap = segment.startAnchor.sourceKey === map.sourceKey;
+    const endsInMap = segment.endAnchor.sourceKey === map.sourceKey;
+    if (!startsInMap && !endsInMap) continue;
+
+    const startOffset = startsInMap ? segment.startAnchor.offset : 0;
+    const endOffset = endsInMap ? segment.endAnchor.offset : map.chars.length;
+    const range = createRangeFromMappedOffsets(map, startOffset, endOffset);
+    if (range) {
+      return { map, range, startOffset, endOffset };
+    }
+  }
+
+  return null;
+};
+
+
 /**
  * Provider component for EPUB functionality
  * Manages the state and operations for EPUB document handling
@@ -314,6 +557,8 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
   // Track current highlight CFI for removal
   const currentHighlightCfi = useRef<string | null>(null);
   const currentWordHighlightCfi = useRef<string | null>(null);
+  const renderedTextMapsRef = useRef<EpubRenderedTextMap[]>([]);
+  const wordHighlightMapCacheRef = useRef<EpubWordHighlightMapCache | null>(null);
   const renderedLocationCloneManagerRef = useRef<EpubRenderedLocationCloneManager>(
     new EpubRenderedLocationCloneManager(),
   );
@@ -339,6 +584,8 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     renditionRef.current = undefined;
     locationRef.current = 1;
     tocRef.current = [];
+    renderedTextMapsRef.current = [];
+    wordHighlightMapCacheRef.current = null;
     renderedLocationCloneManagerRef.current.invalidate();
     stop();
   }, [setCurrDocPages, stop]);
@@ -386,7 +633,9 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
    */
   const extractPageText = useCallback(async (book: Book, rendition: Rendition, shouldPause = false): Promise<string> => {
     try {
-      const { start, end } = rendition?.location;
+      const location = rendition?.location;
+      if (!location) return '';
+      const { start, end } = location;
       if (!start?.cfi || !end?.cfi || !book || !book.isOpen || !rendition) return '';
 
       const rangeCfi = createRangeCfi(start.cfi, end.cfi);
@@ -397,6 +646,12 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
         return '';
       }
       const textContent = range.toString().trim();
+      renderedTextMapsRef.current = buildRenderedTextMaps(
+        rendition,
+        rangeCfi,
+        normalizeTtsLocationKey(start.cfi),
+      );
+      wordHighlightMapCacheRef.current = null;
       const leadingPreview = collectLeadingContextFromRange(range);
       const continuationPreview = collectContinuationFromRange(range);
 
@@ -714,53 +969,29 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     clearWordHighlights();
   }, [clearWordHighlights]);
 
-  const highlightPattern = useCallback(async (text: string) => {
+  const highlightSegment = useCallback((segment: CanonicalTtsSegment | null | undefined) => {
     if (!renditionRef.current) return;
 
-    // Clear existing highlights first
     clearHighlights();
 
-    if (!epubHighlightEnabled) return;
+    if (!epubHighlightEnabled || !segment) return;
 
-    if (!text || !text.trim()) return;
+    const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
+    if (!resolved) return;
 
     try {
-      const contents = renditionRef.current.getContents();
-      const contentsArray = Array.isArray(contents) ? contents : [contents];
-      for (const content of contentsArray) {
-        const win = content.window;
-        if (win && win.find) {
-          // Reset selection to start of document to ensure full search
-          const sel = win.getSelection();
-          sel?.removeAllRanges();
-
-          // Attempt to find the text
-          // window.find(aString, aCaseSensitive, aBackwards, aWrapAround, aWholeWord, aSearchInFrames, aShowDialog);
-          // Note: We search for the trimmed text.
-          if (win.find(text.trim(), false, false, true, false, false, false)) {
-            const range = sel?.getRangeAt(0);
-            if (range) {
-              const cfi = content.cfiFromRange(range);
-              // Store CFI for removal
-              currentHighlightCfi.current = cfi;
-              renditionRef.current.annotations.add(
-                'highlight',
-                cfi,
-                {},
-                () => {},
-                '',
-                { fill: 'grey', 'fill-opacity': '0.4', 'mix-blend-mode': 'multiply' },
-              );
-
-              // Clear the browser selection so it doesn't look like user selected text
-              sel?.removeAllRanges();
-              return; // Stop after first match
-            }
-          }
-        }
-      }
+      const cfi = resolved.map.content.cfiFromRange(resolved.range);
+      currentHighlightCfi.current = cfi;
+      renditionRef.current.annotations.add(
+        'highlight',
+        cfi,
+        {},
+        () => { },
+        '',
+        { fill: 'grey', 'fill-opacity': '0.4', 'mix-blend-mode': 'multiply' },
+      );
     } catch (error) {
-      console.error('Error highlighting text:', error);
+      console.error('Error highlighting EPUB segment:', error);
     }
   }, [clearHighlights, epubHighlightEnabled]);
 
@@ -774,7 +1005,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
   const highlightWordIndex = useCallback((
     alignment: TTSSentenceAlignment | undefined,
     wordIndex: number | null | undefined,
-    sentence: string | null | undefined
+    segment: CanonicalTtsSegment | null | undefined
   ) => {
     clearWordHighlights();
 
@@ -786,244 +1017,50 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     if (!words.length || wordIndex >= words.length) return;
 
     if (!renditionRef.current) return;
-    if (!currentHighlightCfi.current) return;
 
-    const cleanSentence =
-      sentence && sentence.trim()
-        ? sentence.trim().replace(/\s+/g, ' ')
-        : null;
-    if (!cleanSentence) return;
+    if (!segment || segment.startAnchor.sourceKey !== segment.ownerSourceKey) return;
 
-    const alignmentSentenceClean = alignment.sentence
-      ? alignment.sentence.trim().replace(/\s+/g, ' ')
-      : null;
-    if (!alignmentSentenceClean || alignmentSentenceClean !== cleanSentence) {
-      return;
+    const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
+    if (!resolved || segment.startAnchor.sourceKey !== resolved.map.sourceKey) return;
+
+    const cacheKey = buildWordHighlightCacheKey(segment, alignment);
+    if (wordHighlightMapCacheRef.current?.key !== cacheKey) {
+      const tokens = tokenizeCanonicalSegment(segment);
+      wordHighlightMapCacheRef.current = {
+        key: cacheKey,
+        tokens,
+        wordToToken: buildMonotonicWordToTokenMap(words, tokens),
+      };
     }
 
-    const contents = renditionRef.current.getContents();
-    const contentsArray = Array.isArray(contents) ? contents : [contents];
+    const cached = wordHighlightMapCacheRef.current;
+    const tokenIndex = cached.wordToToken[wordIndex] ?? -1;
+    if (tokenIndex < 0) return;
 
-    for (const content of contentsArray) {
-      let range: Range | null = null;
-      try {
-        range = content.range(currentHighlightCfi.current as string);
-      } catch {
-        range = null;
-      }
-      if (!range) continue;
+    const token = cached.tokens[tokenIndex];
+    if (!token) return;
+    if (token.sourceStart < resolved.startOffset || token.sourceEnd > resolved.endOffset) return;
 
-      const root = range.commonAncestorContainer;
-      if (!root) continue;
+    const wordRange = createRangeFromMappedOffsets(resolved.map, token.sourceStart, token.sourceEnd);
+    if (!wordRange) return;
 
-      const domTokens: Array<{
-        node: Text;
-        startOffset: number;
-        endOffset: number;
-        norm: string;
-      }> = [];
-
-      const addTokensFromNode = (textNode: Text, start: number, end: number) => {
-        const full = textNode.textContent || '';
-        const safeStart = Math.max(0, Math.min(start, full.length));
-        const safeEnd = Math.max(safeStart, Math.min(end, full.length));
-        if (safeEnd <= safeStart) return;
-
-        const slice = full.slice(safeStart, safeEnd);
-        const wordRegex = /\S+/g;
-        let match: RegExpExecArray | null;
-        while ((match = wordRegex.exec(slice)) !== null) {
-          const raw = match[0];
-          const norm = normalizeWordForMatch(raw);
-          if (!norm) continue;
-          const tokenStart = safeStart + match.index;
-          const tokenEnd = tokenStart + raw.length;
-          domTokens.push({
-            node: textNode,
-            startOffset: tokenStart,
-            endOffset: tokenEnd,
-            norm,
-          });
+    try {
+      const wordCfi = resolved.map.content.cfiFromRange(wordRange);
+      currentWordHighlightCfi.current = wordCfi;
+      renditionRef.current.annotations.add(
+        'highlight',
+        wordCfi,
+        {},
+        () => { },
+        '',
+        {
+          fill: 'var(--accent)',
+          'fill-opacity': '0.4',
+          'mix-blend-mode': 'multiply',
         }
-      };
-
-      const nextTextNode = (node: Node | null): Text | null => {
-        let next = getNextTextNode(node, root);
-        while (next) {
-          if (next.nodeType === Node.TEXT_NODE) {
-            return next as Text;
-          }
-          next = getNextTextNode(next, root);
-        }
-        return null;
-      };
-
-      // Collect tokens within the sentence range
-      if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-        addTokensFromNode(range.startContainer as Text, range.startOffset, range.endOffset);
-      } else {
-        let current: Text | null = null;
-
-        if (range.startContainer.nodeType === Node.TEXT_NODE) {
-          const startText = range.startContainer as Text;
-          const isEnd = range.endContainer === startText && range.endContainer.nodeType === Node.TEXT_NODE;
-          const endOffset = isEnd ? range.endOffset : (startText.textContent || '').length;
-          addTokensFromNode(startText, range.startOffset, endOffset);
-          if (isEnd) {
-            current = null;
-          } else {
-            current = nextTextNode(startText);
-          }
-        } else {
-          current = nextTextNode(range.startContainer);
-        }
-
-        while (current) {
-          if (range.endContainer.nodeType === Node.TEXT_NODE && current === range.endContainer) {
-            addTokensFromNode(current, 0, range.endOffset);
-            break;
-          } else {
-            addTokensFromNode(current, 0, (current.textContent || '').length);
-          }
-          current = nextTextNode(current);
-        }
-      }
-
-      if (!domTokens.length) {
-        return;
-      }
-
-      const domFiltered: Array<{ tokenIndex: number; norm: string }> = [];
-      for (let i = 0; i < domTokens.length; i++) {
-        const norm = domTokens[i].norm;
-        if (!norm) continue;
-        domFiltered.push({ tokenIndex: i, norm });
-      }
-
-      const ttsFiltered: Array<{ wordIndex: number; norm: string }> = [];
-      for (let i = 0; i < words.length; i++) {
-        const norm = normalizeWordForMatch(words[i].text);
-        if (!norm) continue;
-        ttsFiltered.push({ wordIndex: i, norm });
-      }
-
-      const wordToToken = new Array<number>(words.length).fill(-1);
-      const m = domFiltered.length;
-      const n = ttsFiltered.length;
-
-      if (m && n) {
-        const dp: number[][] = Array.from({ length: m + 1 }, () =>
-          new Array<number>(n + 1).fill(Number.POSITIVE_INFINITY)
-        );
-        const bt: number[][] = Array.from({ length: m + 1 }, () =>
-          new Array<number>(n + 1).fill(0)
-        ); // 0=diag,1=up,2=left
-
-        dp[0][0] = 0;
-        const GAP_COST = 0.7;
-
-        for (let i = 0; i <= m; i++) {
-          for (let j = 0; j <= n; j++) {
-            if (i > 0 && j > 0) {
-              const a = domFiltered[i - 1].norm;
-              const b = ttsFiltered[j - 1].norm;
-              const sim = cmp.compare(a, b);
-              const subCost = 1 - sim;
-              const cand = dp[i - 1][j - 1] + subCost;
-              if (cand < dp[i][j]) {
-                dp[i][j] = cand;
-                bt[i][j] = 0;
-              }
-            }
-            if (i > 0) {
-              const cand = dp[i - 1][j] + GAP_COST;
-              if (cand < dp[i][j]) {
-                dp[i][j] = cand;
-                bt[i][j] = 1;
-              }
-            }
-            if (j > 0) {
-              const cand = dp[i][j - 1] + GAP_COST;
-              if (cand < dp[i][j]) {
-                dp[i][j] = cand;
-                bt[i][j] = 2;
-              }
-            }
-          }
-        }
-
-        let i = m;
-        let j = n;
-        while (i > 0 || j > 0) {
-          const move = bt[i][j];
-          if (i > 0 && j > 0 && move === 0) {
-            const domIdx = domFiltered[i - 1].tokenIndex;
-            const ttsIdx = ttsFiltered[j - 1].wordIndex;
-            if (wordToToken[ttsIdx] === -1) {
-              wordToToken[ttsIdx] = domIdx;
-            }
-            i -= 1;
-            j -= 1;
-          } else if (i > 0 && (move === 1 || j === 0)) {
-            i -= 1;
-          } else if (j > 0 && (move === 2 || i === 0)) {
-            j -= 1;
-          } else {
-            break;
-          }
-        }
-
-        // Propagate nearest known mapping to fill gaps
-        let lastSeen = -1;
-        for (let k = 0; k < wordToToken.length; k++) {
-          if (wordToToken[k] !== -1) {
-            lastSeen = wordToToken[k];
-          } else if (lastSeen !== -1) {
-            wordToToken[k] = lastSeen;
-          }
-        }
-        let nextSeen = -1;
-        for (let k = wordToToken.length - 1; k >= 0; k--) {
-          if (wordToToken[k] !== -1) {
-            nextSeen = wordToToken[k];
-          } else if (nextSeen !== -1) {
-            wordToToken[k] = nextSeen;
-          }
-        }
-      }
-
-      const mappedIndex =
-        wordIndex < wordToToken.length ? wordToToken[wordIndex] : -1;
-      if (mappedIndex === -1) {
-        return;
-      }
-
-      const token = domTokens[mappedIndex];
-      const doc = token.node.ownerDocument || (range.commonAncestorContainer as Document);
-      const wordRange = doc.createRange();
-      wordRange.setStart(token.node, token.startOffset);
-      wordRange.setEnd(token.node, token.endOffset);
-
-      try {
-        const wordCfi = content.cfiFromRange(wordRange);
-        currentWordHighlightCfi.current = wordCfi;
-        renditionRef.current.annotations.add(
-          'highlight',
-          wordCfi,
-          {},
-          () => { },
-          '',
-          {
-            fill: 'var(--accent)',
-            'fill-opacity': '0.4',
-            'mix-blend-mode': 'multiply',
-          }
-        );
-      } catch (error) {
-        console.error('Error highlighting EPUB word:', error);
-      }
-
-      break;
+      );
+    } catch (error) {
+      console.error('Error highlighting EPUB word:', error);
     }
   }, [epubHighlightEnabled, clearWordHighlights]);
 
@@ -1050,7 +1087,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       handleLocationChanged,
       setRendition,
       isAudioCombining,
-      highlightPattern,
+      highlightSegment,
       clearHighlights,
       highlightWordIndex,
       clearWordHighlights,
@@ -1070,7 +1107,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       handleLocationChanged,
       setRendition,
       isAudioCombining,
-      highlightPattern,
+      highlightSegment,
       clearHighlights,
       highlightWordIndex,
       clearWordHighlights,

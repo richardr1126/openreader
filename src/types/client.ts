@@ -102,6 +102,7 @@ export interface TTSSegmentLocator {
 
 export interface TTSSegmentInput {
   segmentIndex: number;
+  segmentKey?: string;
   text: string;
   locator?: TTSSegmentLocator;
 }
@@ -115,6 +116,7 @@ export interface TTSSegmentsEnsureRequest {
 export interface TTSSegmentManifestItem {
   segmentId: string;
   segmentIndex: number;
+  segmentKey?: string | null;
   audioPresignUrl: string | null;
   audioFallbackUrl: string | null;
   durationMs: number;

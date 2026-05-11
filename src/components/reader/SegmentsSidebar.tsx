@@ -7,7 +7,7 @@ import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { locatorGroupKey, normalizeEpubLocationToken } from '@/lib/shared/tts-locator';
+import { compareSegmentLocators, locatorGroupKey, normalizeEpubLocationToken } from '@/lib/shared/tts-locator';
 import type {
   TTSSegmentLocator,
   TTSSegmentRow,
@@ -122,13 +122,8 @@ function formatLocatorGroupLabel(locator: TTSSegmentLocator | null): string {
 }
 
 function compareRows(a: TTSSegmentRow, b: TTSSegmentRow): number {
-  const aPage = typeof a.locator?.page === 'number' ? a.locator.page : Number.MAX_SAFE_INTEGER;
-  const bPage = typeof b.locator?.page === 'number' ? b.locator.page : Number.MAX_SAFE_INTEGER;
-  if (aPage !== bPage) return aPage - bPage;
-  const aLoc = a.locator?.location || '';
-  const bLoc = b.locator?.location || '';
-  const byLocation = aLoc.localeCompare(bLoc);
-  if (byLocation !== 0) return byLocation;
+  const byLocator = compareSegmentLocators(a.locator, b.locator);
+  if (byLocator !== 0) return byLocator;
   if (a.segmentIndex !== b.segmentIndex) return a.segmentIndex - b.segmentIndex;
   return locatorGroupKey(a.locator).localeCompare(locatorGroupKey(b.locator));
 }

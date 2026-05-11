@@ -1,4 +1,4 @@
-import { locatorGroupKey } from '@/lib/shared/tts-locator';
+import { compareSegmentLocators, locatorGroupKey } from '@/lib/shared/tts-locator';
 import type {
   TTSSegmentLocator,
   TTSSegmentVariant,
@@ -39,13 +39,8 @@ export function compareManifestSegments(
   a: { locator: TTSSegmentLocator | null; segmentIndex: number; groupKey: string },
   b: { locator: TTSSegmentLocator | null; segmentIndex: number; groupKey: string },
 ): number {
-  const aPage = typeof a.locator?.page === 'number' ? a.locator.page : Number.MAX_SAFE_INTEGER;
-  const bPage = typeof b.locator?.page === 'number' ? b.locator.page : Number.MAX_SAFE_INTEGER;
-  if (aPage !== bPage) return aPage - bPage;
-  const aLoc = a.locator?.location || '';
-  const bLoc = b.locator?.location || '';
-  const byLocation = aLoc.localeCompare(bLoc);
-  if (byLocation !== 0) return byLocation;
+  const byLocator = compareSegmentLocators(a.locator, b.locator);
+  if (byLocator !== 0) return byLocator;
   if (a.segmentIndex !== b.segmentIndex) return a.segmentIndex - b.segmentIndex;
   return a.groupKey.localeCompare(b.groupKey);
 }
