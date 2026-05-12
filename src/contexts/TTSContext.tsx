@@ -38,17 +38,22 @@ import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/
 import { withRetry, ensureTtsSegments } from '@/lib/client/api/audiobooks';
 import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
 import {
+  buildSegmentKeyPrefix,
   planCanonicalTtsSegments,
   type CanonicalTtsSegment,
   type CanonicalTtsSourceUnit,
 } from '@/lib/shared/tts-segment-plan';
+import {
+  buildWalkerPlanningSourceUnits,
+  selectUpcomingWalkerItems,
+} from '@/lib/shared/tts-epub-preload';
 import {
   completedEpubBoundarySegment,
   resolveEpubBoundaryHandoffStartIndex,
   resolveEpubReplaySuppressionAction,
   type CompletedEpubBoundarySegment,
 } from '@/lib/shared/tts-epub-handoff';
-import { normalizeEpubLocationToken, normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
+import { normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
 import { isKokoroModel } from '@/lib/shared/kokoro';
 import { supportsNativeModelSpeed, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
@@ -61,10 +66,35 @@ import type {
 } from '@/types/tts';
 import type {
   TTSRequestHeaders,
+  TTSSegmentInput,
   TTSSegmentLocator,
   TTSRetryOptions,
   TTSSegmentManifestItem,
 } from '@/types/client';
+import { isStableEpubLocator } from '@/types/client';
+
+/**
+ * Resolves an EPUB segment's draft locator (typically `{ readerType: 'epub',
+ * location: <CFI> }`) into a stable book coordinate. The resolver lives in
+ * EPUBContext where the live `Book` instance is available; TTSContext calls it
+ * just before posting segments to the server so what gets persisted is
+ * viewport-independent. Returns null when the CFI can't be resolved.
+ */
+export type EpubLocatorResolver = (
+  draft: TTSSegmentLocator,
+  segmentText: string,
+  options?: {
+    segmentIndex: number;
+    segmentKey?: string | null;
+    keyPrefix: string;
+    maxBlockLength: number;
+  },
+) => Promise<{
+  locator: TTSSegmentLocator;
+  segmentKey?: string | null;
+  segmentIndex?: number;
+  text?: string;
+} | null>;
 import type { ReaderType } from '@/types/user-state';
 import {
   clampSegmentPreloadDepth,
@@ -110,8 +140,11 @@ interface TTSContextType extends TTSPlaybackState {
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   registerEpubLocationWalker: (walker: EpubRenderedLocationWalker | null) => void;
+  registerEpubLocatorResolver: (resolver: EpubLocatorResolver | null) => void;  // EPUB-only: resolves CFI drafts to stable spine coords before persist
   registerVisualPageChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;
   setIsEPUB: (isEPUB: boolean) => void;
+  /** Effective reader type used to mint segmentKeys (see buildSegmentKeyPrefix). */
+  activeReaderType: ReaderType;
 }
 
 interface SetTextOptions {
@@ -214,6 +247,22 @@ const buildScopedSegmentCacheKey = (
 };
 
 const buildLocatorRequestKey = (locator: TTSSegmentLocator): string => {
+  // Stable EPUB locators: use spine identity + charOffset for a unique,
+  // viewport-independent cache key. Falling through to `locator.location`
+  // would yield the empty string for the new shape and collide across
+  // segments.
+  if (locator.readerType === 'epub') {
+    if (
+      typeof locator.spineHref === 'string'
+      && typeof locator.spineIndex === 'number'
+      && typeof locator.charOffset === 'number'
+    ) {
+      return `epub:${locator.spineIndex}:${locator.spineHref}:${locator.charOffset}`;
+    }
+    if (typeof locator.cfi === 'string' && locator.cfi) {
+      return normalizeLocationKey(locator.cfi);
+    }
+  }
   if (typeof locator.location === 'string' && locator.location) {
     return normalizeLocationKey(locator.location);
   }
@@ -314,6 +363,21 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     isAtLimit,
   } = useAuthRateLimit();
 
+  // Get document ID and reader type from URL
+  const { id } = useParams();
+  const pathname = usePathname();
+  const documentId = useMemo(() => {
+    if (typeof id === 'string') return id;
+    if (Array.isArray(id)) return id[0];
+    return '';
+  }, [id]);
+
+  const currentReaderType: ReaderType = useMemo(() => {
+    if (pathname.startsWith('/epub/')) return 'epub';
+    if (pathname.startsWith('/html/')) return 'html';
+    return 'pdf';
+  }, [pathname]);
+
   // Add ref for location change handler
   const locationChangeHandlerRef = useRef<((location: TTSLocation) => void) | null>(null);
   const visualPageChangeHandlerRef = useRef<((location: TTSLocation) => void) | null>(null);
@@ -335,6 +399,77 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, []);
 
   /**
+   * Resolves a CFI + segment text into stable EPUB coordinates. Registered by
+   * EPUBContext (which owns the live `Book` instance). Used at server-persist
+   * time so the saved locator carries `spineHref`/`spineIndex`/`charOffset`
+   * rather than the viewport-dependent CFI string. Returns null when the CFI
+   * can't be resolved — callers should drop the segment from the persist
+   * payload in that case to avoid writing legacy-shape locators.
+   */
+  const epubLocatorResolverRef = useRef<EpubLocatorResolver | null>(null);
+
+  const registerEpubLocatorResolver = useCallback((resolver: EpubLocatorResolver | null) => {
+    epubLocatorResolverRef.current = resolver;
+  }, []);
+
+  /**
+   * Walks the segment payload that's about to be POSTed to
+   * /api/tts/segments/ensure and canonicalizes EPUB entries through the
+   * registered resolver. This normalizes both draft and already-stable locators
+   * to a spine-level canonical segment identity (text/key/index/locator).
+   * Non-EPUB locators are untouched.
+   *
+   * Segments whose EPUB locators can't be resolved are DROPPED from the
+   * payload — we'd rather persist nothing than persist a viewport-dependent
+   * locator that will misbehave across devices and resizes.
+   */
+  const resolveSegmentsForPersist = useCallback(async (
+    segments: TTSSegmentInput[],
+  ): Promise<TTSSegmentInput[]> => {
+    const resolver = epubLocatorResolverRef.current;
+    const out: TTSSegmentInput[] = [];
+    for (const segment of segments) {
+      const locator = segment.locator;
+      if (!locator || locator.readerType !== 'epub') {
+        out.push(segment);
+        continue;
+      }
+      if (!resolver) {
+        // No book available to resolve — drop. This can happen during early
+        // boot before EPUBContext has mounted.
+        continue;
+      }
+      const keyPrefix = buildSegmentKeyPrefix(documentId, 'epub');
+      try {
+        const resolved = await resolver(locator, segment.text, {
+          segmentIndex: segment.segmentIndex,
+          segmentKey: segment.segmentKey ?? null,
+          keyPrefix,
+          maxBlockLength: ttsSegmentMaxBlockLength,
+        });
+        if (resolved && isStableEpubLocator(resolved.locator)) {
+          out.push({
+            ...segment,
+            locator: resolved.locator,
+            ...(typeof resolved.segmentKey === 'string' && resolved.segmentKey.trim()
+              ? { segmentKey: resolved.segmentKey.trim() }
+              : {}),
+            ...(typeof resolved.segmentIndex === 'number' && Number.isFinite(resolved.segmentIndex)
+              ? { segmentIndex: Math.max(0, Math.floor(resolved.segmentIndex)) }
+              : {}),
+            ...(typeof resolved.text === 'string' && resolved.text.trim()
+              ? { text: resolved.text }
+              : {}),
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to resolve EPUB locator; dropping segment', error);
+      }
+    }
+    return out;
+  }, [documentId, ttsSegmentMaxBlockLength]);
+
+  /**
    * Registers a handler function for visual page changes in EPUB documents
    * This is only used for EPUB documents to handle visual page navigation
    * 
@@ -344,27 +479,23 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     visualPageChangeHandlerRef.current = handler;
   }, []);
 
-  // Get document ID from URL params
-  const { id } = useParams();
-  const pathname = usePathname();
-  const documentId = useMemo(() => {
-    if (typeof id === 'string') return id;
-    if (Array.isArray(id)) return id[0];
-    return '';
-  }, [id]);
-
-  const currentReaderType: ReaderType = useMemo(() => {
-    if (pathname.startsWith('/epub/')) return 'epub';
-    if (pathname.startsWith('/html/')) return 'html';
-    return 'pdf';
-  }, [pathname]);
-
   /**
    * State Management
    */
   const [isPlaying, setIsPlaying] = useState(false);
   const [isEPUB, setIsEPUB] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  /**
+   * Resolved reader type for segment planning. Mirrors the `activeReaderType`
+   * used inside `setText`/preload paths so external consumers (e.g. the
+   * sidebar) can compute identical `segmentKey`s from local text and match
+   * them against persisted manifest rows by content identity.
+   */
+  const activeReaderType: ReaderType = useMemo(
+    () => (isEPUB ? 'epub' : currentReaderType),
+    [isEPUB, currentReaderType],
+  );
 
   const [currDocPage, setCurrDocPage] = useState<TTSLocation>(1);
   const currDocPageNumber = (!isEPUB ? parseInt(currDocPage.toString()) : 1); // PDF uses numbers only
@@ -422,6 +553,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const currentIndexRef = useRef(0);
   const plannedSegmentsByLocationRef = useRef<Map<string, CanonicalTtsSegment[]>>(new Map());
   const currentSourceUnitRef = useRef<CanonicalTtsSourceUnit | null>(null);
+  const currentSourceContextUnitsRef = useRef<CanonicalTtsSourceUnit[]>([]);
   const completedEpubBoundarySegmentRef = useRef<CompletedEpubBoundarySegment | null>(null);
   const pendingNextLocationRef = useRef<TTSLocation | undefined>(undefined);
 
@@ -526,6 +658,21 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       cache.delete(oldestKey);
     }
   }, []);
+
+  const cacheCompletedManifestForCandidate = useCallback((
+    cacheKey: string,
+    segment: TTSSegmentManifestItem,
+    alignmentEnabledForCurrentDoc: boolean,
+  ): boolean => {
+    if (segment.status !== 'completed' || !segment.audioPresignUrl || !segment.audioFallbackUrl) {
+      return false;
+    }
+    setSegmentManifestCache(cacheKey, segment);
+    if (alignmentEnabledForCurrentDoc && segment.alignment) {
+      sentenceAlignmentCacheRef.current.set(cacheKey, segment.alignment);
+    }
+    return true;
+  }, [setSegmentManifestCache]);
 
   const invalidatePlaybackRun = useCallback(() => {
     playbackRunIdRef.current += 1;
@@ -841,7 +988,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ? normalizedOptions.location
       : currDocPage;
     const resolvedLocationKey = normalizeLocationKey(resolvedLocation);
-    const activeReaderType = isEPUB ? 'epub' : currentReaderType;
+
+    // Keep currDocPage aligned with whatever the caller declared as the viewport's
+    // location. This is the canonical entry point for "the rendered page now shows
+    // this content at this location" — the navigation flow (handleLocationChanged →
+    // skipToLocation) already set it before calling setText, so this is a no-op
+    // for next/prev/jump. The path that needs it is **resize**: EPUBViewer's
+    // checkResize calls extractPageText directly (bypassing skipToLocation), so
+    // without this, currDocPage would stay pinned to the pre-resize CFI even
+    // though the page has repaginated to a new start CFI.
+    if (normalizedOptions.location !== undefined && normalizedOptions.location !== currDocPage) {
+      setCurrDocPage(normalizedOptions.location);
+    }
     const currentSourceKey = sourceKeyForLocation(resolvedLocation, currDocPage);
     const currentSource: CanonicalTtsSourceUnit = {
       sourceKey: currentSourceKey,
@@ -849,10 +1007,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       locator: locatorForLocation(resolvedLocation, activeReaderType),
     };
 
-    const sourceUnits: CanonicalTtsSourceUnit[] = [];
+    const contextSourceUnits: CanonicalTtsSourceUnit[] = [];
     if (smartSentenceSplitting && normalizedOptions.previousText?.trim()) {
       const previousLocation = normalizedOptions.previousLocation;
-      sourceUnits.push({
+      contextSourceUnits.push({
         sourceKey: previousLocation !== undefined
           ? sourceKeyForLocation(previousLocation, currDocPage)
           : `previous:${currentSourceKey}`,
@@ -862,7 +1020,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           : null,
       });
     }
-    sourceUnits.push(currentSource);
+    contextSourceUnits.push(currentSource);
+    const sourceUnits: CanonicalTtsSourceUnit[] = [...contextSourceUnits];
 
     plannedSegmentsByLocationRef.current.clear();
     pendingNextLocationRef.current = normalizedOptions.nextLocation;
@@ -895,14 +1054,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const plan = planCanonicalTtsSegments(sourceUnits, {
       readerType: activeReaderType,
       maxBlockLength: ttsSegmentMaxBlockLength,
-      keyPrefix: `${documentId || 'document'}:${activeReaderType}:v1`,
+      keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
     });
     const currentSegments = smartSentenceSplitting
       ? plan.segments.filter((segment) => segment.ownerSourceKey === currentSourceKey)
       : planCanonicalTtsSegments([currentSource], {
         readerType: activeReaderType,
         maxBlockLength: ttsSegmentMaxBlockLength,
-        keyPrefix: `${documentId || 'document'}:${activeReaderType}:v1`,
+        keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
       }).segments;
     const newSentences = currentSegments.map((segment) => segment.text);
 
@@ -912,7 +1071,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         : planCanonicalTtsSegments([item], {
           readerType: activeReaderType,
           maxBlockLength: ttsSegmentMaxBlockLength,
-          keyPrefix: `${documentId || 'document'}:${activeReaderType}:v1`,
+          keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
         }).segments;
       if (planned.length > 0) {
         plannedSegmentsByLocationRef.current.set(normalizeLocationKey(item.location), planned);
@@ -920,6 +1079,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     currentSourceUnitRef.current = currentSource;
+    currentSourceContextUnitsRef.current = contextSourceUnits;
 
     if (handleBlankSection(newSentences.join(' '))) return;
 
@@ -1038,7 +1198,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     handleBlankSection,
     abortAudio,
     isEPUB,
-    currentReaderType,
+    activeReaderType,
     smartSentenceSplitting,
     invalidatePlaybackRun,
     currDocPage,
@@ -1272,6 +1432,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     try {
       onTTSStart();
+      const persistSegments = await resolveSegmentsForPersist([
+        {
+          segmentIndex: sentenceIndex,
+          ...(segmentKey ? { segmentKey } : {}),
+          text: sentence,
+          locator,
+        },
+      ]);
+      if (persistSegments.length === 0) {
+        if (!preload) setIsPlaying(false);
+        return undefined;
+      }
       const ensured = await withRetry(
         async () => ensureTtsSegments({
           documentId,
@@ -1282,14 +1454,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             nativeSpeed: effectiveNativeSpeed,
             ...(supportsTtsInstructions(ttsModel) && ttsInstructions ? { ttsInstructions } : {}),
           },
-          segments: [
-            {
-              segmentIndex: sentenceIndex,
-              ...(segmentKey ? { segmentKey } : {}),
-              text: sentence,
-              locator,
-            },
-          ],
+          segments: persistSegments,
         }, reqHeaders, controller.signal),
         retryOptions,
       );
@@ -1383,11 +1548,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentReaderType,
     setSegmentManifestCache,
     isAbortLikeError,
+    resolveSegmentsForPersist,
   ]);
 
   /**
    * Processes and plays the current sentence
-   * 
+   *
    * @param {string} sentence - The sentence to process
    * @param {boolean} [preload=false] - Whether this is a preload request
    * @returns {Promise<TTSSegmentPlaybackSource | null>} Prepared playback source metadata
@@ -2031,39 +2197,55 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           if (generationAtStart !== epubPreloadGenerationRef.current) return;
           if (!locationItems.length) return;
 
-          const currentToken = normalizeEpubLocationToken(String(currDocPage));
-          const filteredLocationItems = locationItems.filter((item) =>
-            normalizeEpubLocationToken(item.location) !== currentToken,
+          const upcomingLocationItems = selectUpcomingWalkerItems(
+            locationItems,
+            String(currDocPage),
+            maxDepth,
           );
-          const targetDepth = Math.max(0, maxDepth - 1);
-          const upcomingLocationItems = filteredLocationItems.slice(0, targetDepth);
           if (!upcomingLocationItems.length) return;
 
-          const sourceUnits: CanonicalTtsSourceUnit[] = [];
-          if (smartSentenceSplitting && currentSourceUnitRef.current) {
-            sourceUnits.push(currentSourceUnitRef.current);
-          }
-          sourceUnits.push(...upcomingLocationItems.map((item) => ({
-            sourceKey: sourceKeyForLocation(item.location, currDocPage),
+          // Build a stable EPUB locator for each rendered chunk from the
+          // walker's spine coordinates. These are viewport-independent — the
+          // same content yields the same locator across devices and resizes.
+          const locatorForWalkerItem = (
+            item: typeof upcomingLocationItems[number],
+          ): TTSSegmentLocator => ({
+            readerType: 'epub',
+            spineHref: item.spineHref,
+            spineIndex: item.spineIndex,
+            charOffset: item.chunkOffset,
+            cfi: item.cfi,
+          });
+
+          const upcomingUnits: CanonicalTtsSourceUnit[] = upcomingLocationItems.map((item) => ({
+            sourceKey: sourceKeyForLocation(item.cfi, currDocPage),
             text: item.text,
-            locator: { location: item.location, readerType: 'epub' as const },
-          })));
+            locator: locatorForWalkerItem(item),
+          }));
+          const liveContextUnits = currentSourceContextUnitsRef.current.length > 0
+            ? currentSourceContextUnitsRef.current
+            : (currentSourceUnitRef.current ? [currentSourceUnitRef.current] : []);
+          const sourceUnits: CanonicalTtsSourceUnit[] = buildWalkerPlanningSourceUnits(
+            smartSentenceSplitting,
+            liveContextUnits,
+            upcomingUnits,
+          );
 
           const plan = planCanonicalTtsSegments(sourceUnits, {
             readerType: 'epub',
             maxBlockLength: ttsSegmentMaxBlockLength,
-            keyPrefix: `${documentId || 'document'}:epub:v1`,
+            keyPrefix: buildSegmentKeyPrefix(documentId, 'epub'),
           });
-          const uniqueCandidates: EpubLocationPreloadCandidate[] = [];
+          const uniqueCandidates: Array<EpubLocationPreloadCandidate & { locator: TTSSegmentLocator }> = [];
           const seenCandidates = new Set<string>();
           for (const item of upcomingLocationItems) {
-            const sourceKey = sourceKeyForLocation(item.location, currDocPage);
+            const sourceKey = sourceKeyForLocation(item.cfi, currDocPage);
             const planned = plan.segments
               .filter((segment) => segment.ownerSourceKey === sourceKey)
               .slice(0, sentenceLookahead);
             for (let index = 0; index < planned.length; index += 1) {
               const segment = planned[index];
-              const locator = segment.ownerLocator ?? { location: item.location, readerType: 'epub' as const };
+              const locator = segment.ownerLocator ?? locatorForWalkerItem(item);
               const requestKey = buildSegmentRequestKey(locator, index, segment.text, segment.key);
               const cacheKey = buildScopedSegmentCacheKey(
                 locator,
@@ -2083,9 +2265,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
                 sentence: segment.text,
                 segmentKey: segment.key,
                 segmentIndex: index,
-                location: item.location,
+                location: item.cfi,
                 requestKey,
                 cacheKey,
+                locator,
               });
             }
           }
@@ -2095,12 +2278,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             segmentIndex: candidate.segmentIndex,
             segmentKey: candidate.segmentKey,
             text: candidate.sentence,
-            locator: { location: candidate.location, readerType: 'epub' as const },
+            locator: candidate.locator,
           }));
 
           const preloadPromise = (async (): Promise<void> => {
             onTTSStart();
             started = true;
+            const persistPayload = await resolveSegmentsForPersist(payload);
+            if (persistPayload.length === 0) return;
             const ensured = await withRetry(
               async () => ensureTtsSegments({
                 documentId,
@@ -2111,7 +2296,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
                   nativeSpeed: effectiveNativeSpeed,
                   ...(supportsTtsInstructions(ttsModel) && ttsInstructions ? { ttsInstructions } : {}),
                 },
-                segments: payload,
+                segments: persistPayload,
               }, reqHeaders, controller.signal),
               retryOptions,
             );
@@ -2128,10 +2313,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             for (const candidate of uniqueCandidates) {
               const segment = segmentLookup.get(candidate.segmentKey);
               if (!segment) continue;
-              setSegmentManifestCache(candidate.cacheKey, segment);
-              if (alignmentEnabledForCurrentDoc && segment.alignment) {
-                sentenceAlignmentCacheRef.current.set(candidate.cacheKey, segment.alignment);
-              }
+              cacheCompletedManifestForCandidate(candidate.cacheKey, segment, alignmentEnabledForCurrentDoc);
             }
           })();
 
@@ -2280,9 +2462,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       text: candidate.sentence,
       locator: candidate.locator,
     }));
+    const candidateLookup = new Map<string, typeof uniqueCandidates[number]>();
+    const candidateLookupKey = (segmentIndex: number, segmentKey?: string | null) =>
+      `${segmentIndex}|${segmentKey || ''}`;
+    for (const candidate of uniqueCandidates) {
+      candidateLookup.set(candidateLookupKey(candidate.segmentIndex, candidate.segmentKey), candidate);
+    }
     const preloadPromise = (async (): Promise<void> => {
       try {
         onTTSStart();
+        const persistPayload = await resolveSegmentsForPersist(payload);
+        if (persistPayload.length === 0) return;
         const ensured = await withRetry(
           async () => ensureTtsSegments({
             documentId,
@@ -2293,19 +2483,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
               nativeSpeed: effectiveNativeSpeed,
               ...(supportsTtsInstructions(ttsModel) && ttsInstructions ? { ttsInstructions } : {}),
             },
-            segments: payload,
+            segments: persistPayload,
           }, reqHeaders, controller.signal),
           retryOptions,
         );
 
-        ensured.segments.forEach((segment, index) => {
-          const candidate = uniqueCandidates[index];
+        ensured.segments.forEach((segment) => {
+          const candidate = candidateLookup.get(
+            candidateLookupKey(segment.segmentIndex, segment.segmentKey),
+          );
           if (!candidate) return;
-          if (segment.status !== 'completed' || !segment.audioPresignUrl || !segment.audioFallbackUrl) return;
-          setSegmentManifestCache(candidate.cacheKey, segment);
-          if (alignmentEnabledForCurrentDoc && segment.alignment) {
-            sentenceAlignmentCacheRef.current.set(candidate.cacheKey, segment.alignment);
-          }
+          cacheCompletedManifestForCandidate(candidate.cacheKey, segment, alignmentEnabledForCurrentDoc);
         });
       } finally {
         activeAbortControllers.current.delete(controller);
@@ -2380,12 +2568,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     onTTSStart,
     onTTSComplete,
     processSentence,
-    setSegmentManifestCache,
+    cacheCompletedManifestForCandidate,
     isAbortLikeError,
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
     epubHighlightEnabled,
     epubWordHighlightEnabled,
+    resolveSegmentsForPersist,
   ]);
 
   /**
@@ -2440,6 +2629,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     bumpEpubPreloadGeneration();
     plannedSegmentsByLocationRef.current.clear();
     currentSourceUnitRef.current = null;
+    currentSourceContextUnitsRef.current = [];
     completedEpubBoundarySegmentRef.current = null;
     pageFirstBlockFingerprintRef.current.clear();
     setIsPlaying(false);
@@ -2478,6 +2668,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     const resolvedLocation: TTSLocation | undefined = (() => {
       if (!locator) return undefined;
+      // Stable EPUB locators carry the jump-hint CFI in `cfi`, not `location`
+      // (which is now reserved for HTML / legacy rows).
+      if (locator.readerType === 'epub' && typeof locator.cfi === 'string' && locator.cfi) {
+        return locator.cfi;
+      }
       if (typeof locator.location === 'string' && locator.location) return locator.location;
       if (typeof locator.page === 'number' && Number.isFinite(locator.page)) return Math.floor(locator.page);
       return undefined;
@@ -2664,8 +2859,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipToLocation,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
+    registerEpubLocatorResolver,
     registerVisualPageChangeHandler,
-    setIsEPUB
+    setIsEPUB,
+    activeReaderType,
   }), [
     isPlaying,
     isProcessing,
@@ -2692,10 +2889,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipToLocation,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
+    registerEpubLocatorResolver,
     registerVisualPageChangeHandler,
     setIsEPUB,
     currentSentenceAlignment,
-    currentWordIndex
+    currentWordIndex,
+    activeReaderType,
   ]);
 
   // Use media session hook

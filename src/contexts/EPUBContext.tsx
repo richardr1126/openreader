@@ -23,7 +23,9 @@ import { scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
 import { getDocumentMetadata } from '@/lib/client/api/documents';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { EpubRenderedLocationCloneManager } from '@/lib/client/epub/rendered-location-walker';
-import { useTTS } from '@/contexts/TTSContext';
+import { canonicalizeEpubSegmentAgainstSpineText } from '@/lib/client/epub/canonicalize-epub-segment';
+import { buildEpubLocator, getSpineItemPlainText } from '@/lib/client/epub/spine-coordinates';
+import { useTTS, type EpubLocatorResolver } from '@/contexts/TTSContext';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { createRangeCfi } from '@/lib/client/epub';
 import { normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
@@ -41,7 +43,8 @@ import type {
   TTSAudiobookFormat,
   TTSAudiobookChapter,
 } from '@/types/tts';
-import type { AudiobookGenerationSettings } from '@/types/client';
+import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
+import { isStableEpubLocator } from '@/types/client';
 import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 
 interface EPUBContextType {
@@ -54,6 +57,7 @@ interface EPUBContextType {
   clearCurrDoc: () => void;
   extractPageText: (book: Book, rendition: Rendition, shouldPause?: boolean) => Promise<string>;
   walkUpcomingRenderedLocations: EpubRenderedLocationWalker;
+  resolveEpubLocator: EpubLocatorResolver;
   createFullAudioBook: (
     onProgress: (progress: number) => void,
     signal?: AbortSignal,
@@ -536,6 +540,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     apiKey,
     baseUrl,
     ttsProvider,
+    ttsSegmentMaxBlockLength,
     smartSentenceSplitting,
     epubTheme,
     epubHighlightEnabled,
@@ -544,6 +549,11 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
   const [currDocData, setCurrDocData] = useState<ArrayBuffer>();
   const [currDocName, setCurrDocName] = useState<string>();
   const [currDocText, setCurrDocText] = useState<string>();
+  // Mirror state into a ref so resolveEpubLocator (registered once with
+  // TTSContext via a stable callback) can always read the latest page text
+  // without forcing re-registration on every page turn.
+  const currDocTextRef = useRef<string | undefined>(undefined);
+  useEffect(() => { currDocTextRef.current = currDocText; }, [currDocText]);
   const [isAudioCombining] = useState(false);
 
   // Add new refs
@@ -744,6 +754,57 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     }
   }, [loadSpineSection]);
 
+  /**
+   * Resolves a draft EPUB locator (typically `{ readerType: 'epub', location:
+   * <CFI> }`) into stable spine coordinates using the live `Book` instance.
+   * Registered with TTSContext so segment-persist payloads are normalised to
+   * viewport-independent coordinates before they hit the server.
+   *
+   * Returns null when there's no live book or the CFI doesn't resolve.
+   */
+  const resolveEpubLocator = useCallback<EpubLocatorResolver>(async (
+    draft,
+    segmentText,
+    options,
+  ) => {
+    const book = bookRef.current;
+    if (!book || !book.isOpen) return null;
+    const resolvedLocator = (() => {
+      if (isStableEpubLocator(draft)) return Promise.resolve(draft);
+      const cfi = (typeof draft.cfi === 'string' && draft.cfi)
+        || (typeof draft.location === 'string' && draft.location)
+        || '';
+      if (!cfi) return Promise.resolve<TTSSegmentLocator | null>(null);
+      // Pass the current rendered page's text as the chunk anchor so the
+      // per-segment search starts at this page's position in the spine.
+      const chunkText = currDocTextRef.current;
+      return buildEpubLocator(book, cfi, segmentText, chunkText);
+    })();
+
+    const stable = await resolvedLocator;
+    if (!stable || !isStableEpubLocator(stable)) return null;
+
+    const spineText = await getSpineItemPlainText(book, stable.spineHref);
+    const canonical = canonicalizeEpubSegmentAgainstSpineText({
+      segmentText,
+      spineText,
+      spineHref: stable.spineHref,
+      spineIndex: stable.spineIndex,
+      hintCharOffset: stable.charOffset,
+      cfi: stable.cfi,
+      keyPrefix: options?.keyPrefix,
+      maxBlockLength: options?.maxBlockLength ?? ttsSegmentMaxBlockLength,
+    });
+    if (!canonical) return null;
+
+    return {
+      locator: canonical.locator,
+      segmentKey: canonical.segmentKey,
+      segmentIndex: canonical.segmentIndex,
+      text: canonical.text,
+    };
+  }, [ttsSegmentMaxBlockLength]);
+
   const walkUpcomingRenderedLocations = useCallback<EpubRenderedLocationWalker>(async (startCfi, depth, signal) => {
     if (!startCfi || depth <= 0 || signal.aborted) return [];
     const visibleRendition = renditionRef.current;
@@ -763,10 +824,24 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
     const width = Math.max(320, Math.floor(bounds?.width || 900));
     const height = Math.max(320, Math.floor(bounds?.height || 700));
 
+    const visibleContents = typeof visibleRendition.getContents === 'function'
+      ? visibleRendition.getContents()
+      : [];
+    const visibleContent = Array.isArray(visibleContents) ? visibleContents[0] : visibleContents;
+    const contentDoc = (visibleContent as { document?: Document | null } | null | undefined)?.document ?? null;
+    const contentBody = contentDoc?.body ?? null;
+    const bodyStyle = contentBody ? getComputedStyle(contentBody) : null;
+
     const theme = epubTheme
       ? {
         foreground: getComputedStyle(document.documentElement).getPropertyValue('--foreground'),
         base: getComputedStyle(document.documentElement).getPropertyValue('--base'),
+        fontFamily: bodyStyle?.fontFamily || undefined,
+        fontSize: bodyStyle?.fontSize || undefined,
+        lineHeight: bodyStyle?.lineHeight || undefined,
+        fontWeight: bodyStyle?.fontWeight || undefined,
+        letterSpacing: bodyStyle?.letterSpacing || undefined,
+        wordSpacing: bodyStyle?.wordSpacing || undefined,
       }
       : null;
 
@@ -1078,6 +1153,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       clearCurrDoc,
       extractPageText,
       walkUpcomingRenderedLocations,
+      resolveEpubLocator,
       createFullAudioBook,
       regenerateChapter,
       bookRef,
@@ -1102,6 +1178,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       clearCurrDoc,
       extractPageText,
       walkUpcomingRenderedLocations,
+      resolveEpubLocator,
       createFullAudioBook,
       regenerateChapter,
       handleLocationChanged,

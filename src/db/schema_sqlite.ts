@@ -116,6 +116,7 @@ export const ttsSegments = sqliteTable('tts_segments', {
   readerType: text('reader_type').notNull(),
   documentVersion: integer('document_version').notNull(),
   segmentIndex: integer('segment_index').notNull(),
+  segmentKey: text('segment_key'),
   locatorJson: text('locator_json'),
   settingsHash: text('settings_hash').notNull(),
   settingsJson: text('settings_json').notNull(),

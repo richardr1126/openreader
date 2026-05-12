@@ -55,11 +55,27 @@ export interface TTSSentenceAlignment {
   words: TTSSentenceWord[];
 }
 
+export interface EpubRenderedLocationWalkItem {
+  /** Page-start CFI from the rendition — best-effort jump hint only. */
+  cfi: string;
+  /** Plain text content of the rendered page chunk. */
+  text: string;
+  /** Spine item href the chunk belongs to (stable across viewports). */
+  spineHref: string;
+  /** Ordinal of the spine item within the book (stable across viewports). */
+  spineIndex: number;
+  /**
+   * Offset (in normalized character space) of this chunk's start inside the
+   * spine item's plain text. Stable across viewports.
+   */
+  chunkOffset: number;
+}
+
 export type EpubRenderedLocationWalker = (
   startCfi: string,
   depth: number,
   signal: AbortSignal,
-) => Promise<Array<{ location: string; text: string }>>;
+) => Promise<EpubRenderedLocationWalkItem[]>;
 
 // Supported output formats for generated audiobooks
 export type TTSAudiobookFormat = 'mp3' | 'm4b';

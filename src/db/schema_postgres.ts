@@ -116,6 +116,7 @@ export const ttsSegments = pgTable('tts_segments', {
   readerType: text('reader_type').notNull(),
   documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
   segmentIndex: integer('segment_index').notNull(),
+  segmentKey: text('segment_key'),
   locatorJson: text('locator_json'),
   settingsHash: text('settings_hash').notNull(),
   settingsJson: jsonb('settings_json').notNull(),

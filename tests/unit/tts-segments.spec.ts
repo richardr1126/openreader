@@ -95,10 +95,34 @@ test.describe('tts segment helpers', () => {
     expect(hash).toHaveLength(64);
   });
 
-  test('normalizes locators and creates fingerprints', () => {
-    const locator = normalizeLocator({ page: 2.9, location: '  cfi(1)  ', readerType: 'epub' });
-    expect(locator).toEqual({ page: 2, location: 'cfi(1)', readerType: 'epub' });
+  test('normalizes PDF locators and creates fingerprints', () => {
+    const locator = normalizeLocator({ readerType: 'pdf', page: 2.9 });
+    expect(locator).toEqual({ readerType: 'pdf', page: 2 });
     expect(locatorFingerprint(locator)).toHaveLength(64);
+  });
+
+  test('normalizes stable EPUB locators and rejects legacy CFI-only drafts', () => {
+    // Stable shape: passes through with floors and trims applied.
+    const stable = normalizeLocator({
+      readerType: 'epub',
+      spineHref: '  OEBPS/ch02.xhtml  ',
+      spineIndex: 2.7,
+      charOffset: 128.4,
+      cfi: '  epubcfi(/6/4!/4:0)  ',
+    });
+    expect(stable).toEqual({
+      readerType: 'epub',
+      spineHref: 'OEBPS/ch02.xhtml',
+      spineIndex: 2,
+      charOffset: 128,
+      cfi: 'epubcfi(/6/4!/4:0)',
+    });
+    expect(locatorFingerprint(stable)).toHaveLength(64);
+
+    // Legacy/draft EPUB shape (CFI in `location` but no spine coords) is
+    // rejected so we never persist viewport-dependent locators.
+    const legacy = normalizeLocator({ readerType: 'epub', location: 'epubcfi(/6/4!/4:0)' });
+    expect(legacy).toBeNull();
   });
 
   test('builds proportional alignment preserving order', () => {

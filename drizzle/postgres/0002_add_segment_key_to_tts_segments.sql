@@ -1,0 +1,1 @@
+ALTER TABLE "tts_segments" ADD COLUMN "segment_key" text;

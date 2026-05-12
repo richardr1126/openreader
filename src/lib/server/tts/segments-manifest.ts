@@ -1,10 +1,10 @@
-import { compareSegmentLocators, locatorGroupKey } from '@/lib/shared/tts-locator';
+import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
 import type {
   TTSSegmentLocator,
   TTSSegmentVariant,
 } from '@/types/client';
 
-export { locatorGroupKey };
+export { locatorGroupKey, locatorIdentityKey };
 
 export const DEFAULT_PAGE_SIZE = 150;
 export const MIN_PAGE_SIZE = 25;

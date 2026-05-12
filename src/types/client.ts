@@ -94,10 +94,78 @@ export interface TTSSegmentSettings {
   ttsInstructions?: string;
 }
 
+export type TTSReaderType = 'pdf' | 'epub' | 'html';
+
+/**
+ * Locator describing where a TTS segment came from inside a document.
+ *
+ * Field usage by readerType:
+ *  - PDF:  `page` (1-based).
+ *  - HTML: `location` (free-form fragment id / scroll anchor).
+ *  - EPUB: **stable book coordinates** — `spineHref`, `spineIndex`, `charOffset`.
+ *          `cfi` is a best-effort jump hint only; it is NOT used for identity,
+ *          grouping, sorting, or matching. The stable coordinates are the same
+ *          across devices and window sizes.
+ *
+ * The interface is structurally permissive for backwards compatibility with
+ * in-flight code paths, but the server-side `normalizeLocator` enforces the
+ * required fields per readerType before persisting. Use the
+ * `isStableEpubLocator` / `isPdfLocator` / `isHtmlLocator` guards at read sites
+ * that need a particular shape.
+ */
 export interface TTSSegmentLocator {
+  readerType?: TTSReaderType;
+  // PDF / legacy
   page?: number;
+  // HTML / legacy EPUB CFI (kept for in-flight drafts; not persisted for EPUB)
   location?: string;
-  readerType?: 'pdf' | 'epub' | 'html';
+  // Stable EPUB coordinates
+  spineHref?: string;
+  spineIndex?: number;
+  charOffset?: number;
+  /** Best-effort jump hint for EPUB; not part of identity/sort/group. */
+  cfi?: string;
+}
+
+export function isPdfLocator(
+  locator: TTSSegmentLocator | null | undefined,
+): locator is TTSSegmentLocator & { readerType: 'pdf'; page: number } {
+  return !!locator
+    && locator.readerType === 'pdf'
+    && typeof locator.page === 'number'
+    && Number.isFinite(locator.page);
+}
+
+export function isHtmlLocator(
+  locator: TTSSegmentLocator | null | undefined,
+): locator is TTSSegmentLocator & { readerType: 'html'; location: string } {
+  return !!locator
+    && locator.readerType === 'html'
+    && typeof locator.location === 'string'
+    && locator.location.length > 0;
+}
+
+/**
+ * Narrow to a fully-stable EPUB locator. Returns false for EPUB drafts that
+ * only carry a CFI — those must be resolved to spine coordinates before being
+ * sent to the server.
+ */
+export function isStableEpubLocator(
+  locator: TTSSegmentLocator | null | undefined,
+): locator is TTSSegmentLocator & {
+  readerType: 'epub';
+  spineHref: string;
+  spineIndex: number;
+  charOffset: number;
+} {
+  return !!locator
+    && locator.readerType === 'epub'
+    && typeof locator.spineHref === 'string'
+    && locator.spineHref.length > 0
+    && typeof locator.spineIndex === 'number'
+    && Number.isFinite(locator.spineIndex)
+    && typeof locator.charOffset === 'number'
+    && Number.isFinite(locator.charOffset);
 }
 
 export interface TTSSegmentInput {
@@ -145,6 +213,15 @@ export interface TTSSegmentVariant {
 
 export interface TTSSegmentRow {
   segmentIndex: number;
+  /**
+   * Content-stable identity for this segment, derived from the normalized
+   * sentence text on the client (see `buildSegmentKey` in
+   * `lib/shared/tts-segment-plan.ts`). The sidebar uses this to merge
+   * locally-synthesized current-page rows with persisted manifest rows of the
+   * same content, so audio/variants attach to the visible text row instead of
+   * showing as a separate listing.
+   */
+  segmentKey: string | null;
   locator: TTSSegmentLocator | null;
   variants: TTSSegmentVariant[];
 }

@@ -8,7 +8,7 @@ import {
   decodeManifestCursor,
   dedupeManifestVariants,
   encodeManifestCursor,
-  locatorGroupKey,
+  locatorIdentityKey,
   parseManifestPageSize,
 } from '@/lib/server/tts/segments-manifest';
 import type {
@@ -106,6 +106,7 @@ export async function GET(request: NextRequest) {
       readerType: string;
       documentVersion: number;
       segmentIndex: number;
+      segmentKey: string | null;
       locatorJson: string | null;
       settingsHash: string;
       settingsJson: unknown;
@@ -127,18 +128,24 @@ export async function GET(request: NextRequest) {
 
     for (const row of rows) {
       const locator = parseLocator(row.locatorJson);
-      const groupKey = `${row.segmentIndex}|${locatorGroupKey(locator)}`;
+      // Use the per-row identity key (not the coarse sidebar group key) so two
+      // persisted rows in the same chapter at different `charOffset`s remain
+      // distinct entries instead of collapsing into one bucket whose locator
+      // only reflects the first row seen.
+      const groupKey = `${row.segmentIndex}|${locatorIdentityKey(locator)}`;
 
       let entry = grouped.get(groupKey);
       if (!entry) {
         entry = {
           segmentIndex: row.segmentIndex,
+          segmentKey: row.segmentKey,
           locator,
           variants: [],
         };
         grouped.set(groupKey, entry);
-      } else if (!entry.locator) {
-        entry.locator = locator;
+      } else {
+        if (!entry.locator) entry.locator = locator;
+        if (!entry.segmentKey && row.segmentKey) entry.segmentKey = row.segmentKey;
       }
 
       let alignmentWordCount = 0;
@@ -182,6 +189,7 @@ export async function GET(request: NextRequest) {
       .map(([groupKey, segment]) => ({
         groupKey,
         segmentIndex: segment.segmentIndex,
+        segmentKey: segment.segmentKey,
         locator: segment.locator,
         variants: dedupeManifestVariants(segment.variants),
       }))
@@ -206,6 +214,7 @@ export async function GET(request: NextRequest) {
       documentId,
       segments: page.map((segment) => ({
         segmentIndex: segment.segmentIndex,
+        segmentKey: segment.segmentKey ?? null,
         locator: segment.locator,
         variants: segment.variants,
       })),

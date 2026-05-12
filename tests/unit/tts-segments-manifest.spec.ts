@@ -86,27 +86,74 @@ test.describe('tts segments manifest helpers', () => {
     expect(variants[0].status).toBe('completed');
   });
 
-  test('sorts segments deterministically by page, location, and segment index', () => {
+  test('sorts PDF segments deterministically by page and segment index', () => {
     const rows = [
-      { groupKey: 'c', segmentIndex: 4, locator: { page: 2, location: 'z' } },
-      { groupKey: 'a', segmentIndex: 1, locator: { page: 1, location: 'b' } },
-      { groupKey: 'b', segmentIndex: 0, locator: { page: 1, location: 'a' } },
-      { groupKey: 'd', segmentIndex: 2, locator: { page: 1, location: 'a' } },
+      { groupKey: 'p2-i4', segmentIndex: 4, locator: { readerType: 'pdf' as const, page: 2 } },
+      { groupKey: 'p1-i1', segmentIndex: 1, locator: { readerType: 'pdf' as const, page: 1 } },
+      { groupKey: 'p1-i0', segmentIndex: 0, locator: { readerType: 'pdf' as const, page: 1 } },
+      { groupKey: 'p1-i2', segmentIndex: 2, locator: { readerType: 'pdf' as const, page: 1 } },
     ];
 
     const sorted = rows.sort(compareManifestSegments);
-    expect(sorted.map((row) => row.groupKey)).toEqual(['b', 'd', 'a', 'c']);
+    expect(sorted.map((row) => row.groupKey)).toEqual(['p1-i0', 'p1-i1', 'p1-i2', 'p2-i4']);
   });
 
-  test('sorts EPUB CFI locations naturally instead of lexicographically', () => {
+  test('sorts EPUB locators by spineIndex then charOffset (numeric, viewport-stable)', () => {
+    // The order below is intentionally jumbled, with spineIndex 10 placed
+    // first so that a lexicographic compare on the spine string would put
+    // "10" before "2". A correct numeric compare must surface spine 2 first.
     const rows = [
-      { groupKey: 'ten', segmentIndex: 0, locator: { location: 'epubcfi(/6/10!/4/2)', readerType: 'epub' as const } },
-      { groupKey: 'two-b', segmentIndex: 1, locator: { location: 'epubcfi(/6/2!/4/2)', readerType: 'epub' as const } },
-      { groupKey: 'two-a', segmentIndex: 0, locator: { location: 'epubcfi(/6/2!/4/2)', readerType: 'epub' as const } },
+      { groupKey: 'spine-10-off-0', segmentIndex: 0, locator: { readerType: 'epub' as const, spineHref: 'OEBPS/ch10.xhtml', spineIndex: 10, charOffset: 0 } },
+      { groupKey: 'spine-2-off-200', segmentIndex: 1, locator: { readerType: 'epub' as const, spineHref: 'OEBPS/ch02.xhtml', spineIndex: 2, charOffset: 200 } },
+      { groupKey: 'spine-2-off-50', segmentIndex: 0, locator: { readerType: 'epub' as const, spineHref: 'OEBPS/ch02.xhtml', spineIndex: 2, charOffset: 50 } },
     ];
 
     const sorted = rows.sort(compareManifestSegments);
-    expect(sorted.map((row) => row.groupKey)).toEqual(['two-a', 'two-b', 'ten']);
+    expect(sorted.map((row) => row.groupKey)).toEqual(['spine-2-off-50', 'spine-2-off-200', 'spine-10-off-0']);
+  });
+
+  test('groups EPUB rows by spine identity, not by raw CFI', () => {
+    // Two rows in the same spine item but at different char offsets must share
+    // a groupKey (so the sidebar buckets them together as one chapter), while
+    // a row in a different spine sits in its own group.
+    const rows = [
+      { groupKey: 'a', segmentIndex: 0, locator: { readerType: 'epub' as const, spineHref: 'OEBPS/ch02.xhtml', spineIndex: 2, charOffset: 0, cfi: 'epubcfi(/6/4!/2:0)' } },
+      { groupKey: 'b', segmentIndex: 1, locator: { readerType: 'epub' as const, spineHref: 'OEBPS/ch02.xhtml', spineIndex: 2, charOffset: 1024, cfi: 'epubcfi(/6/4!/4:0)' } },
+      { groupKey: 'c', segmentIndex: 0, locator: { readerType: 'epub' as const, spineHref: 'OEBPS/ch03.xhtml', spineIndex: 3, charOffset: 0, cfi: 'epubcfi(/6/6!/2:0)' } },
+    ];
+
+    const sorted = rows.sort(compareManifestSegments);
+    // Recompute groupKey using the production helper to assert the actual
+    // grouping behavior rather than the test's hand-labeled groupKey.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { locatorGroupKey } = require('../../src/lib/shared/tts-locator');
+    const groupKeys = sorted.map((row) => locatorGroupKey(row.locator));
+    expect(groupKeys[0]).toBe(groupKeys[1]); // both ch02
+    expect(groupKeys[2]).not.toBe(groupKeys[0]); // ch03 is its own group
+  });
+
+  test('manifest aggregator distinguishes rows by identity (regression: per-page rows collapsed by chapter bucket)', () => {
+    // Bug reproduction: previously the server-side aggregator keyed rows by
+    // `${segmentIndex}|${locatorGroupKey(locator)}`. Because the new EPUB
+    // groupKey is chapter-coarse, two persisted rows in different *pages* of
+    // the same chapter that happened to share segmentIndex (which is
+    // page-relative) collapsed into a single entry — making earlier pages'
+    // rows visually "disappear" when later pages were generated.
+    //
+    // The fix uses `locatorIdentityKey` which includes charOffset for EPUB.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { locatorIdentityKey, locatorGroupKey } = require('../../src/lib/shared/tts-locator');
+
+    const page1Row0 = { readerType: 'epub' as const, spineHref: 'OEBPS/ch02.xhtml', spineIndex: 2, charOffset: 0 };
+    const page2Row0 = { readerType: 'epub' as const, spineHref: 'OEBPS/ch02.xhtml', spineIndex: 2, charOffset: 2048 };
+
+    // Same chapter bucket (sidebar grouping should put them under one chapter header).
+    expect(locatorGroupKey(page1Row0)).toBe(locatorGroupKey(page2Row0));
+    // Different storage identity (server aggregator must NOT collapse them).
+    const segmentIndex = 0;
+    const k1 = `${segmentIndex}|${locatorIdentityKey(page1Row0)}`;
+    const k2 = `${segmentIndex}|${locatorIdentityKey(page2Row0)}`;
+    expect(k1).not.toBe(k2);
   });
 
   test('encodes and decodes cursors', () => {

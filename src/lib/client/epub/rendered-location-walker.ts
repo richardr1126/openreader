@@ -1,10 +1,27 @@
 import type { Book, Rendition } from 'epubjs';
 
 import { createRangeCfi } from '@/lib/client/epub';
+import {
+  buildEpubChunkAnchor,
+  invalidateSpinePlainTextCache,
+} from '@/lib/client/epub/spine-coordinates';
+import { buildWalkerThemeRules, type WalkerThemeSnapshot } from '@/lib/client/epub/walker-theme';
 
 export interface RenderedLocationWalkItem {
-  location: string;
+  /** Page-start CFI from the rendition. Retained as a soft jump hint only. */
+  cfi: string;
+  /** Plain-text content of the rendered page chunk. */
   text: string;
+  /** Spine item href the chunk belongs to. Stable across viewports. */
+  spineHref: string;
+  /** Ordinal of the spine item within the book. Stable across viewports. */
+  spineIndex: number;
+  /**
+   * Offset (in normalized character space — see normalizeSegmentIdentityText)
+   * where this chunk begins inside the spine item's plain text. Stable across
+   * viewports, so segments can be anchored to this base.
+   */
+  chunkOffset: number;
 }
 
 export interface RenderedLocationWalkRequest {
@@ -15,10 +32,7 @@ export interface RenderedLocationWalkRequest {
   width: number;
   height: number;
   spread?: string;
-  theme?: {
-    foreground: string;
-    base: string;
-  } | null;
+  theme?: WalkerThemeSnapshot | null;
 }
 
 type Session = {
@@ -137,6 +151,9 @@ export class EpubRenderedLocationCloneManager {
     this.activeSession = null;
     if (!current) return;
     try {
+      invalidateSpinePlainTextCache(current.book);
+    } catch {}
+    try {
       current.rendition.destroy();
     } catch {}
     try {
@@ -191,12 +208,7 @@ export class EpubRenderedLocationCloneManager {
 
       if (request.theme) {
         try {
-          rendition.themes.registerRules('openreader-preload-theme', {
-            body: {
-              color: request.theme.foreground,
-              'background-color': request.theme.base,
-            },
-          });
+          rendition.themes.registerRules('openreader-preload-theme', buildWalkerThemeRules(request.theme));
           rendition.themes.select('openreader-preload-theme');
         } catch (error) {
           console.warn('Failed applying preload EPUB theme rules:', error);
@@ -261,9 +273,18 @@ export class EpubRenderedLocationCloneManager {
       const text = range?.toString()?.trim() || '';
       if (!text) continue;
 
+      const chunkAnchor = await Promise.race([
+        buildEpubChunkAnchor(session.book, start, text),
+        abortPromise,
+      ]);
+      if (!chunkAnchor) continue;
+
       results.push({
-        location: start,
+        cfi: start,
         text,
+        spineHref: chunkAnchor.spineHref,
+        spineIndex: chunkAnchor.spineIndex,
+        chunkOffset: chunkAnchor.charOffset,
       });
     }
 

@@ -57,7 +57,7 @@ const normalizeSourceText = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const normalizeSegmentIdentityText = (text: string): string =>
+export const normalizeSegmentIdentityText = (text: string): string =>
   preprocessSentenceForAudio(text)
     .toLowerCase()
     .replace(/\s+/g, ' ')
@@ -72,7 +72,16 @@ const stableHash = (value: string): string => {
   return hash.toString(16).padStart(8, '0');
 };
 
-const buildSegmentKey = (keyPrefix: string, text: string): string =>
+/**
+ * Compose a key prefix in the canonical form used everywhere segmentKeys are
+ * minted. Keep this in lock-step with the inline prefixes in TTSContext.
+ */
+export const buildSegmentKeyPrefix = (
+  documentId: string | null | undefined,
+  readerType: ReaderType,
+): string => `${documentId || 'document'}:${readerType}:v1`;
+
+export const buildSegmentKey = (keyPrefix: string, text: string): string =>
   [
     keyPrefix,
     stableHash(normalizeSegmentIdentityText(text)),

@@ -7,7 +7,23 @@ import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { compareSegmentLocators, locatorGroupKey, normalizeEpubLocationToken } from '@/lib/shared/tts-locator';
+import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
+import { buildSegmentKey, buildSegmentKeyPrefix } from '@/lib/shared/tts-segment-plan';
+import { useEPUB } from '@/contexts/EPUBContext';
+import {
+  canonicalizeEpubSegmentsAgainstSpineText,
+  type CanonicalizedEpubSegment,
+} from '@/lib/client/epub/canonicalize-epub-segment';
+import {
+  getSpineItemPlainText,
+  resolveMonotonicSentenceOffsets,
+  resolveSpineFromCfi,
+} from '@/lib/client/epub/spine-coordinates';
+import {
+  isHtmlLocator,
+  isPdfLocator,
+  isStableEpubLocator,
+} from '@/types/client';
 import type {
   TTSSegmentLocator,
   TTSSegmentRow,
@@ -87,51 +103,39 @@ function statusColor(status: TTSSegmentVariant['status']): string {
   return 'bg-muted';
 }
 
-function locatorMatchesCurrent(
-  locator: TTSSegmentLocator | null,
-  currentLocation: string | number,
-  currentPageNumber: number,
-): boolean {
-  if (!locator) return false;
-  if (typeof locator.location === 'string' && locator.location.length > 0) {
-    if (locator.readerType === 'epub') {
-      if (typeof currentLocation !== 'string') return false;
-      return normalizeEpubLocationToken(locator.location) === normalizeEpubLocationToken(currentLocation);
-    }
-    return String(locator.location) === String(currentLocation);
-  }
-  if (typeof locator.page === 'number' && Number.isFinite(locator.page)) {
-    return Math.floor(locator.page) === Math.floor(Number(currentPageNumber || 1));
-  }
-  return false;
-}
-
 function formatLocatorGroupLabel(locator: TTSSegmentLocator | null): string {
   if (!locator) return 'Unknown location';
-  const parts: string[] = [];
-  if (typeof locator.page === 'number' && Number.isFinite(locator.page)) {
-    parts.push(`Page ${Math.floor(locator.page)}`);
+  if (isStableEpubLocator(locator)) {
+    // Show the spine item filename as a recognisable chapter label. epubjs
+    // hrefs look like "OEBPS/Chapter_03.xhtml" — strip the directory for the
+    // primary label and keep the index for tie-breaks.
+    const base = locator.spineHref.split('/').pop() || locator.spineHref;
+    const stem = base.replace(/\.x?html?$/i, '');
+    return `${stem} · EPUB`;
   }
-  if (typeof locator.location === 'string' && locator.location) {
-    parts.push(locator.location);
+  if (isPdfLocator(locator)) {
+    return `Page ${Math.floor(locator.page)} · PDF`;
   }
-  if (locator.readerType) {
-    parts.push(locator.readerType.toUpperCase());
+  if (isHtmlLocator(locator)) {
+    return `${locator.location} · HTML`;
   }
-  return parts.join(' · ') || 'Unknown location';
+  return 'Unknown location';
 }
 
 function compareRows(a: TTSSegmentRow, b: TTSSegmentRow): number {
   const byLocator = compareSegmentLocators(a.locator, b.locator);
   if (byLocator !== 0) return byLocator;
   if (a.segmentIndex !== b.segmentIndex) return a.segmentIndex - b.segmentIndex;
-  return locatorGroupKey(a.locator).localeCompare(locatorGroupKey(b.locator));
+  return locatorIdentityKey(a.locator).localeCompare(locatorIdentityKey(b.locator));
 }
 
 function mergeRows(existing: TTSSegmentRow[], incoming: TTSSegmentRow[]): TTSSegmentRow[] {
   const map = new Map<string, TTSSegmentRow>();
   const upsert = (row: TTSSegmentRow) => {
-    const key = `${row.segmentIndex}|${locatorGroupKey(row.locator)}`;
+    // Identity key (NOT the coarse sidebar group key) so that two rows in the
+    // same chapter at different charOffsets stay as separate entries instead
+    // of collapsing into one.
+    const key = `${row.segmentIndex}|${locatorIdentityKey(row.locator)}`;
     const prev = map.get(key);
     if (!prev) {
       map.set(key, row);
@@ -176,8 +180,60 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
     currDocPageNumber,
     isPlaying,
     playFromSegment,
+    activeReaderType,
   } = useTTS();
-  const { ttsProvider, ttsModel, voice, voiceSpeed, ttsInstructions, updateConfigKey } = useConfig();
+  const {
+    ttsProvider,
+    ttsModel,
+    voice,
+    voiceSpeed,
+    ttsInstructions,
+    ttsSegmentMaxBlockLength,
+    updateConfigKey,
+  } = useConfig();
+  const { bookRef } = useEPUB();
+
+  /**
+   * Canonicalized per-sentence identities for the currently rendered page.
+   * Each local sentence is mapped onto the spine-level canonical segment plan
+   * (forward-only ordinal walk), so overlap-boundary local splits still resolve
+   * to the same canonical `segmentKey`/`charOffset` as persisted rows.
+   */
+  const [synthRowCanonical, setSynthRowCanonical] = useState<Array<CanonicalizedEpubSegment | null>>([]);
+  useEffect(() => {
+    if (typeof currDocPage !== 'string' || !currDocPage || sentences.length === 0) {
+      setSynthRowCanonical([]);
+      return;
+    }
+    const book = bookRef.current;
+    if (!book?.isOpen) {
+      setSynthRowCanonical([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const spine = resolveSpineFromCfi(book, currDocPage);
+      if (!spine) {
+        if (!cancelled) setSynthRowCanonical([]);
+        return;
+      }
+      const spineText = await getSpineItemPlainText(book, spine.href);
+      if (cancelled) return;
+      const offsets = resolveMonotonicSentenceOffsets(spineText, sentences);
+      const next = canonicalizeEpubSegmentsAgainstSpineText({
+        segmentTexts: sentences,
+        hintCharOffsets: offsets,
+        spineText,
+        spineHref: spine.href,
+        spineIndex: spine.index,
+        cfi: currDocPage,
+        keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
+        maxBlockLength: ttsSegmentMaxBlockLength,
+      });
+      if (!cancelled) setSynthRowCanonical(next);
+    })();
+    return () => { cancelled = true; };
+  }, [bookRef, currDocPage, sentences, documentId, activeReaderType, ttsSegmentMaxBlockLength]);
 
   const [state, setState] = useState<FetchState>({ kind: 'idle' });
   const [isClearing, setIsClearing] = useState(false);
@@ -345,72 +401,140 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
   }, [playFromSegment]);
 
   const rowsToRender = useMemo(() => {
-    if (state.kind !== 'ready') return [] as Array<{
+    type Entry = {
       segmentIndex: number;
       sentenceText: string;
       row: TTSSegmentRow;
       isCurrentLocation: boolean;
       groupKey: string;
       groupLabel: string;
-    }>;
-    const currentRowsFromManifest = state.data.filter((row) =>
-      locatorMatchesCurrent(row.locator, currDocPage, currDocPageNumber),
-    );
-    const nonCurrentRows = state.data.filter((row) =>
-      !locatorMatchesCurrent(row.locator, currDocPage, currDocPageNumber),
-    );
+      /**
+       * Synthesized rows are produced locally from the currently rendered page's
+       * sentences. They carry sentence text and the live-play highlight. Manifest
+       * rows come from the server-side manifest and may overlap synthesized rows
+       * for the current page; we render them as their own listings so the
+       * sidebar can show the rest of the chapter (and other chapters) without
+       * needing to re-derive page boundaries on the client.
+       */
+      isSynthesized: boolean;
+    };
+    if (state.kind !== 'ready') return [] as Entry[];
 
-    const inferredCurrentLocator = (() => {
-      const first = currentRowsFromManifest[0]?.locator;
-      if (first) return first;
+    // Fallback locator for the live viewport. Used when per-sentence
+    // canonical resolution hasn't completed yet and for PDF/HTML, which don't
+    // have a spine concept.
+    const inferredCurrentLocator: TTSSegmentLocator | null = (() => {
       if (typeof currDocPage === 'string' && currDocPage.length > 0) {
-        return {
-          location: currDocPage,
-          readerType: 'epub' as const,
-        };
+        const book = bookRef.current;
+        const spine = book && book.isOpen ? resolveSpineFromCfi(book, currDocPage) : null;
+        if (spine) {
+          return {
+            readerType: 'epub',
+            spineHref: spine.href,
+            spineIndex: spine.index,
+            charOffset: 0,
+            cfi: currDocPage,
+          };
+        }
+        return null;
       }
       if (typeof currDocPageNumber === 'number' && Number.isFinite(currDocPageNumber)) {
-        return {
-          page: Math.floor(currDocPageNumber),
-          readerType: 'pdf' as const,
-        };
+        return { readerType: 'pdf', page: Math.floor(currDocPageNumber) };
       }
       return null;
     })();
 
-    const variantsByIndex = new Map<number, TTSSegmentVariant[]>();
-    for (const row of currentRowsFromManifest) {
-      if (!variantsByIndex.has(row.segmentIndex)) {
-        variantsByIndex.set(row.segmentIndex, []);
-      }
-      const merged = variantsByIndex.get(row.segmentIndex)!;
-      const seenIds = new Set(merged.map((variant) => variant.segmentId));
-      for (const variant of row.variants ?? []) {
-        if (seenIds.has(variant.segmentId)) continue;
-        seenIds.add(variant.segmentId);
-        merged.push(variant);
+    // Index manifest rows by their content-stable segmentKey so we can attach
+    // their variants to the matching synthesized current-page row. This
+    // collapses the visible duplicates (same content showing up twice — once
+    // as a synth row with sentence text, once as a manifest row with audio).
+    const manifestBySegmentKey = new Map<string, TTSSegmentRow>();
+    for (const row of state.data) {
+      if (row.segmentKey) manifestBySegmentKey.set(row.segmentKey, row);
+    }
+
+    const entries: Entry[] = [];
+    const claimedManifestKeys = new Set<string>();
+    const keyPrefix = buildSegmentKeyPrefix(documentId, activeReaderType);
+
+    // Synthesized rows: one per local sentence. Always tagged as
+    // `isCurrentLocation: true` so the live-playback highlight can fire on
+    // `currentSentenceIndex`. We compute each sentence's `segmentKey` the same
+    // way TTSContext does for persistence; when a manifest row carries the
+    // same key, we pull in its variants/audio but keep the locally-resolved
+    // per-sentence locator for sort positioning.
+    //
+    // **Locator preference (drives sort order):**
+    //   1. Canonicalized per-sentence locator (`synthRowCanonical[i]`) —
+    //      identity-stable with persisted manifest rows across resize and
+    //      boundary split variations.
+    //   2. Matching manifest row's persisted locator — fallback while the
+    //      async resolution is still running.
+    //   3. `inferredCurrentLocator` (chapter + 0) — final fallback.
+    //
+    // Variants/audio are always taken from the manifest match when present,
+    // regardless of which locator wins.
+    if (inferredCurrentLocator) {
+      for (let segmentIndex = 0; segmentIndex < sentences.length; segmentIndex += 1) {
+        const sentence = sentences[segmentIndex] ?? '';
+        const canonical = synthRowCanonical[segmentIndex] ?? null;
+        const segmentKey = canonical?.segmentKey
+          ?? (sentence ? buildSegmentKey(keyPrefix, sentence) : null);
+        const manifestMatch = segmentKey ? manifestBySegmentKey.get(segmentKey) : undefined;
+        if (segmentKey && manifestMatch) claimedManifestKeys.add(segmentKey);
+
+        const localPerSentence = canonical?.locator ?? null;
+        const mergedLocator: TTSSegmentLocator =
+          localPerSentence
+          ?? manifestMatch?.locator
+          ?? inferredCurrentLocator;
+        const synthRow: TTSSegmentRow = {
+          segmentIndex,
+          segmentKey,
+          locator: mergedLocator,
+          variants: manifestMatch?.variants ?? [],
+        };
+        entries.push({
+          segmentIndex,
+          sentenceText: sentence,
+          row: synthRow,
+          isCurrentLocation: true,
+          groupKey: locatorGroupKey(mergedLocator),
+          groupLabel: formatLocatorGroupLabel(mergedLocator),
+          isSynthesized: true,
+        });
       }
     }
 
-    const currentRows: TTSSegmentRow[] = sentences.map((_, segmentIndex) => ({
-      segmentIndex,
-      locator: inferredCurrentLocator,
-      variants: variantsByIndex.get(segmentIndex) ?? [],
-    }));
-
-    const mergedRows = [...currentRows, ...nonCurrentRows].sort(compareRows);
-    return mergedRows.map((row) => {
-      const isCurrentLocation = locatorMatchesCurrent(row.locator, currDocPage, currDocPageNumber);
-      return {
+    // Manifest rows not claimed by a synth row (i.e. content not currently on
+    // screen) render as their own listings. They keep their original locator
+    // and group, so they sort into their chapter bucket at their real
+    // `charOffset` position.
+    for (const row of state.data) {
+      if (row.segmentKey && claimedManifestKeys.has(row.segmentKey)) continue;
+      entries.push({
         segmentIndex: row.segmentIndex,
-        sentenceText: isCurrentLocation ? (sentences[row.segmentIndex] ?? '') : '',
+        sentenceText: '',
         row,
-        isCurrentLocation,
+        isCurrentLocation: false,
         groupKey: locatorGroupKey(row.locator),
         groupLabel: formatLocatorGroupLabel(row.locator),
-      };
+        isSynthesized: false,
+      });
+    }
+
+    entries.sort((a, b) => {
+      const byLocator = compareSegmentLocators(a.row.locator, b.row.locator);
+      if (byLocator !== 0) return byLocator;
+      // Within the same locator group, place synthesized (current-page) rows
+      // first so the user's active reading position floats to the top of the
+      // chapter group.
+      if (a.isSynthesized !== b.isSynthesized) return a.isSynthesized ? -1 : 1;
+      return a.segmentIndex - b.segmentIndex;
     });
-  }, [state, currDocPage, currDocPageNumber, sentences]);
+
+    return entries;
+  }, [state, currDocPage, currDocPageNumber, sentences, bookRef, documentId, activeReaderType, synthRowCanonical]);
 
   const totalVariants = state.kind === 'ready'
     ? rowsToRender.reduce((sum, r) => sum + r.row.variants.length, 0)
@@ -538,7 +662,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
               )}
               {state.kind === 'ready' && rowsToRender.length > 0 && (
                 <ul className="divide-y divide-offbase">
-                  {rowsToRender.map(({ segmentIndex, sentenceText, row, isCurrentLocation, groupKey, groupLabel }, rowIndex) => {
+                  {rowsToRender.map(({ segmentIndex, sentenceText, row, isCurrentLocation, groupKey, groupLabel, isSynthesized }, rowIndex) => {
                     const previousGroupKey = rowIndex > 0 ? rowsToRender[rowIndex - 1]?.groupKey : null;
                     const showGroupHeader = previousGroupKey !== groupKey;
                     const isCurrent = isCurrentLocation && segmentIndex === currentSentenceIndex;
@@ -562,7 +686,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
                     const playable = !!(activeVariant && activeVariant.audioPresignUrl);
                     return (
                       <li
-                        key={`${groupKey}::${segmentIndex}`}
+                        key={`${isSynthesized ? 'syn' : 'mfr'}::${groupKey}::${segmentIndex}::${rowIndex}`}
                         data-active-segment={isCurrent ? 'true' : undefined}
                         className={`relative px-4 py-3 ${isCurrent ? 'bg-offbase/40' : ''}`}
                       >
@@ -700,9 +824,13 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
             <Row label="locator">
               {row.locator ? (
                 <span className="font-mono tabular-nums text-[11px] text-foreground break-all">
-                  {row.locator.page !== undefined ? `p.${row.locator.page} ` : ''}
-                  {row.locator.location ?? ''}
-                  {row.locator.readerType ? ` (${row.locator.readerType})` : ''}
+                  {isStableEpubLocator(row.locator)
+                    ? `epub spine[${row.locator.spineIndex}] ${row.locator.spineHref} @${row.locator.charOffset}`
+                    : isPdfLocator(row.locator)
+                      ? `pdf p.${row.locator.page}`
+                      : isHtmlLocator(row.locator)
+                        ? `html ${row.locator.location}`
+                        : `${row.locator.readerType || '?'} (legacy)`}
                 </span>
               ) : (
                 <span className="text-muted text-[11px]">none</span>

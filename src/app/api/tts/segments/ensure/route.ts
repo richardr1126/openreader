@@ -359,6 +359,9 @@ export async function POST(request: NextRequest) {
       });
 
       const segmentLocatorJson = canonicalLocatorJson(segment.locator);
+      const segmentKeyForRow = typeof segment.original.segmentKey === 'string' && segment.original.segmentKey.trim()
+        ? segment.original.segmentKey.trim()
+        : null;
       await db
         .insert(ttsSegments)
         .values({
@@ -368,6 +371,7 @@ export async function POST(request: NextRequest) {
           readerType: scope.readerType,
           documentVersion: scope.documentVersion,
           segmentIndex: segment.original.segmentIndex,
+          segmentKey: segmentKeyForRow,
           locatorJson: segmentLocatorJson,
           settingsHash,
           settingsJson,
@@ -386,6 +390,7 @@ export async function POST(request: NextRequest) {
             readerType: scope.readerType,
             documentVersion: scope.documentVersion,
             segmentIndex: segment.original.segmentIndex,
+            segmentKey: segmentKeyForRow,
             locatorJson: segmentLocatorJson,
             settingsHash,
             settingsJson,

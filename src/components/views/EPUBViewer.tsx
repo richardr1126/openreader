@@ -38,10 +38,12 @@ export function EPUBViewer({ className = '' }: EPUBViewerProps) {
     highlightWordIndex,
     clearWordHighlights,
     walkUpcomingRenderedLocations,
+    resolveEpubLocator,
   } = useEPUB();
   const {
     registerLocationChangeHandler,
     registerEpubLocationWalker,
+    registerEpubLocatorResolver,
     pause,
     currentSegment,
     currentSentenceAlignment,
@@ -74,11 +76,20 @@ export function EPUBViewer({ className = '' }: EPUBViewerProps) {
   useEffect(() => {
     registerLocationChangeHandler(handleLocationChanged);
     registerEpubLocationWalker(walkUpcomingRenderedLocations);
+    registerEpubLocatorResolver(resolveEpubLocator);
     return () => {
       registerLocationChangeHandler(null);
       registerEpubLocationWalker(null);
+      registerEpubLocatorResolver(null);
     };
-  }, [registerLocationChangeHandler, registerEpubLocationWalker, handleLocationChanged, walkUpcomingRenderedLocations]);
+  }, [
+    registerLocationChangeHandler,
+    registerEpubLocationWalker,
+    registerEpubLocatorResolver,
+    handleLocationChanged,
+    walkUpcomingRenderedLocations,
+    resolveEpubLocator,
+  ]);
 
   // Handle highlighting
   useEffect(() => {

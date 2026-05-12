@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { planCanonicalTtsSegments } from '../../src/lib/shared/tts-segment-plan';
+import { buildSegmentKey, buildSegmentKeyPrefix, planCanonicalTtsSegments } from '../../src/lib/shared/tts-segment-plan';
 
 test.describe('planCanonicalTtsSegments', () => {
   test('emits a cross-boundary segment once and assigns it to the source where it starts', () => {
@@ -163,5 +163,38 @@ test.describe('planCanonicalTtsSegments', () => {
     expect(plan.text).toBe('Only useful text remains.');
     expect(plan.segments).toHaveLength(1);
     expect(plan.segments[0].ownerSourceKey).toBe('page:1');
+  });
+});
+
+test.describe('buildSegmentKeyPrefix / buildSegmentKey contract', () => {
+  // These keys are the bridge between persistence and the sidebar's merge of
+  // synth rows with manifest rows. Both sides must produce identical keys for
+  // the same `(documentId, readerType, text)` triple, or the sidebar will
+  // show duplicates.
+
+  test('prefix shape is `${documentId}:${readerType}:v1` (or "document" when documentId is falsy)', () => {
+    expect(buildSegmentKeyPrefix('abc123', 'epub')).toBe('abc123:epub:v1');
+    expect(buildSegmentKeyPrefix(null, 'pdf')).toBe('document:pdf:v1');
+    expect(buildSegmentKeyPrefix('', 'epub')).toBe('document:epub:v1');
+  });
+
+  test('same prefix + same text → same key (sidebar can match synth to manifest)', () => {
+    const prefix = buildSegmentKeyPrefix('doc-1', 'epub');
+    const k1 = buildSegmentKey(prefix, 'Hello world.');
+    const k2 = buildSegmentKey(prefix, 'Hello world.');
+    expect(k1).toBe(k2);
+  });
+
+  test('normalization makes whitespace + casing differences identity-equivalent', () => {
+    const prefix = buildSegmentKeyPrefix('doc-1', 'epub');
+    const a = buildSegmentKey(prefix, '  Hello   world.  ');
+    const b = buildSegmentKey(prefix, 'hello world.');
+    expect(a).toBe(b);
+  });
+
+  test('different readerType yields different keys for the same text', () => {
+    const a = buildSegmentKey(buildSegmentKeyPrefix('doc-1', 'epub'), 'Same text.');
+    const b = buildSegmentKey(buildSegmentKeyPrefix('doc-1', 'pdf'), 'Same text.');
+    expect(a).not.toBe(b);
   });
 });
