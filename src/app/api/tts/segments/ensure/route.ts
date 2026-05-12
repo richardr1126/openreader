@@ -1,25 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { ttsSegments } from '@/db/schema';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
 import { isS3Configured, getS3Config } from '@/lib/server/storage/s3';
 import { generateTTSBuffer } from '@/lib/server/tts/generate';
 import {
-  deleteTtsSegmentAudioObjects,
   getTtsSegmentAudioObject,
   putTtsSegmentAudioObject,
 } from '@/lib/server/tts/segments-blobstore';
 import {
   buildTtsSegmentAudioKey,
+  buildTtsSegmentEntryId,
   buildTtsSegmentId,
   buildTtsSegmentSettingsHash,
   buildTtsSegmentSettingsJson,
   buildTtsSegmentTextHash,
-  canonicalLocatorJson,
-  canonicalizeLocatorJsonString,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
+  projectSegmentLocator,
   probeAudioDurationMsFromBuffer,
 } from '@/lib/server/tts/segments';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
@@ -140,67 +139,24 @@ function isAbortLikeError(error: unknown): boolean {
   return /abort/i.test(message);
 }
 
-async function cleanupStaleCanonicalVariants(input: {
-  userId: string;
-  documentId: string;
-  documentVersion: number;
-  segmentIndex: number;
-  activeLocatorJson: string | null;
-  activeSegmentId: string;
-  activeSettingsHash: string;
-}): Promise<void> {
-  const staleRows = (await db
-    .select({
-      segmentId: ttsSegments.segmentId,
-      settingsHash: ttsSegments.settingsHash,
-      audioKey: ttsSegments.audioKey,
-      locatorJson: ttsSegments.locatorJson,
-    })
-    .from(ttsSegments)
+async function deleteEntryIfUnused(userId: string, segmentEntryId: string): Promise<void> {
+  const stillReferenced = await db
+    .select({ segmentId: ttsSegmentVariants.segmentId })
+    .from(ttsSegmentVariants)
     .where(and(
-      eq(ttsSegments.userId, input.userId),
-      eq(ttsSegments.documentId, input.documentId),
-      eq(ttsSegments.documentVersion, input.documentVersion),
-      eq(ttsSegments.segmentIndex, input.segmentIndex),
-      ne(ttsSegments.segmentId, input.activeSegmentId),
-    ))) as Array<{
-      segmentId: string;
-      settingsHash: string;
-      audioKey: string | null;
-      locatorJson: string | null;
-    }>;
+      eq(ttsSegmentVariants.userId, userId),
+      eq(ttsSegmentVariants.segmentEntryId, segmentEntryId),
+    ))
+    .limit(1);
 
-  const activeCanonicalLocator = canonicalizeLocatorJsonString(input.activeLocatorJson);
-  const staleRowsForSettings = staleRows.filter((row) =>
-    row.settingsHash === input.activeSettingsHash
-    && canonicalizeLocatorJsonString(row.locatorJson) === activeCanonicalLocator,
-  );
-  const staleIds = staleRowsForSettings.map((row) => row.segmentId);
-
-  if (staleIds.length === 0) return;
+  if (stillReferenced.length > 0) return;
 
   await db
-    .delete(ttsSegments)
+    .delete(ttsSegmentEntries)
     .where(and(
-      eq(ttsSegments.userId, input.userId),
-      inArray(ttsSegments.segmentId, staleIds),
+      eq(ttsSegmentEntries.userId, userId),
+      eq(ttsSegmentEntries.segmentEntryId, segmentEntryId),
     ));
-
-  const staleAudioKeys = Array.from(new Set(staleRowsForSettings
-    .map((row) => row.audioKey)
-    .filter((key): key is string => Boolean(key))));
-  if (staleAudioKeys.length > 0) {
-    try {
-      await deleteTtsSegmentAudioObjects(staleAudioKeys);
-    } catch (error) {
-      console.warn('Failed deleting stale TTS segment audio objects:', {
-        documentId: input.documentId,
-        userId: input.userId,
-        segmentIndex: input.segmentIndex,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -223,11 +179,16 @@ export async function POST(request: NextRequest) {
     const storagePrefix = getS3Config().prefix;
     const secret = textHmacSecret();
 
+    let invalidLocatorIndex = -1;
     const normalized = parsed.segments
-      .map((segment) => {
+      .map((segment, index) => {
         const text = normalizeSegmentText(segment.text);
         if (!text) return null;
         const locator = normalizeLocator(segment.locator);
+        if (!locator) {
+          invalidLocatorIndex = index;
+          return null;
+        }
         const locatorHash = locatorFingerprint(locator);
         const segmentId = buildTtsSegmentId({
           documentId: parsed.documentId,
@@ -249,6 +210,13 @@ export async function POST(request: NextRequest) {
       })
       .filter((value): value is NonNullable<typeof value> => Boolean(value));
 
+    if (invalidLocatorIndex >= 0) {
+      return NextResponse.json(
+        { error: `Invalid or unsupported segment locator at index ${invalidLocatorIndex}` },
+        { status: 400 },
+      );
+    }
+
     if (normalized.length === 0) {
       return NextResponse.json({ error: 'No valid non-empty segments provided' }, { status: 400 });
     }
@@ -256,19 +224,16 @@ export async function POST(request: NextRequest) {
     const ids = normalized.map((segment) => segment.segmentId);
     const rows = (await db
       .select()
-      .from(ttsSegments)
-      .where(and(eq(ttsSegments.userId, scope.storageUserId), inArray(ttsSegments.segmentId, ids)))) as Array<{
+      .from(ttsSegmentVariants)
+      .where(and(
+        eq(ttsSegmentVariants.userId, scope.storageUserId),
+        inArray(ttsSegmentVariants.segmentId, ids),
+      ))) as Array<{
       segmentId: string;
       userId: string;
-      documentId: string;
-      readerType: string;
-      documentVersion: number;
-      segmentIndex: number;
-      locatorJson: string | null;
+      segmentEntryId: string;
       settingsHash: string;
       settingsJson: unknown;
-      textHash: string;
-      textLength: number;
       audioKey: string | null;
       audioFormat: string;
       durationMs: number | null;
@@ -283,25 +248,74 @@ export async function POST(request: NextRequest) {
     const manifest: TTSSegmentManifestItem[] = [];
 
     for (const segment of normalized) {
-      const existing = existingById.get(segment.segmentId);
+      const locatorProjection = projectSegmentLocator(segment.locator);
+      const segmentKeyForRow = typeof segment.original.segmentKey === 'string' && segment.original.segmentKey.trim()
+        ? segment.original.segmentKey.trim()
+        : null;
+      const segmentEntryId = buildTtsSegmentEntryId({
+        documentId: parsed.documentId,
+        documentVersion: scope.documentVersion,
+        segmentIndex: segment.original.segmentIndex,
+        segmentKey: segmentKeyForRow,
+        locatorIdentityKey: locatorProjection.locatorIdentityKey,
+        textHash: segment.textHash,
+      });
 
-      if (existing?.status === 'completed' && existing.audioKey) {
-        await cleanupStaleCanonicalVariants({
+      await db
+        .insert(ttsSegmentEntries)
+        .values({
+          segmentEntryId,
           userId: scope.storageUserId,
           documentId: parsed.documentId,
+          readerType: scope.readerType,
           documentVersion: scope.documentVersion,
           segmentIndex: segment.original.segmentIndex,
-          activeLocatorJson: existing.locatorJson,
-          activeSegmentId: segment.segmentId,
-          activeSettingsHash: settingsHash,
+          segmentKey: segmentKeyForRow,
+          ...locatorProjection,
+          textHash: segment.textHash,
+          textLength: segment.text.length,
+          updatedAt: nowMs,
+        })
+        .onConflictDoUpdate({
+          target: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
+          set: {
+            documentId: parsed.documentId,
+            readerType: scope.readerType,
+            documentVersion: scope.documentVersion,
+            segmentIndex: segment.original.segmentIndex,
+            segmentKey: segmentKeyForRow,
+            ...locatorProjection,
+            textHash: segment.textHash,
+            textLength: segment.text.length,
+            updatedAt: nowMs,
+          },
         });
+
+      const existing = existingById.get(segment.segmentId);
+      const movedFromEntryId = existing && existing.segmentEntryId !== segmentEntryId
+        ? existing.segmentEntryId
+        : null;
+
+      if (existing?.status === 'completed' && existing.audioKey) {
+        if (movedFromEntryId) {
+          await db
+            .update(ttsSegmentVariants)
+            .set({
+              segmentEntryId,
+              settingsJson,
+              updatedAt: nowMs,
+            })
+            .where(and(
+              eq(ttsSegmentVariants.segmentId, segment.segmentId),
+              eq(ttsSegmentVariants.userId, scope.storageUserId),
+            ));
+          await deleteEntryIfUnused(scope.storageUserId, movedFromEntryId);
+        }
 
         let alignment = existing.alignmentJson
           ? (JSON.parse(existing.alignmentJson) as TTSSegmentManifestItem['alignment'])
           : null;
-        const locator = existing.locatorJson
-          ? (JSON.parse(existing.locatorJson) as TTSSegmentManifestItem['locator'])
-          : null;
+        const locator = segment.locator;
 
         // Self-heal transient Whisper failures: if audio exists but alignment was
         // previously unavailable, retry alignment using the current segment text.
@@ -319,12 +333,15 @@ export async function POST(request: NextRequest) {
 
             if (alignment) {
               await db
-                .update(ttsSegments)
+                .update(ttsSegmentVariants)
                 .set({
                   alignmentJson: JSON.stringify(alignment),
                   updatedAt: Date.now(),
                 })
-                .where(and(eq(ttsSegments.segmentId, segment.segmentId), eq(ttsSegments.userId, scope.storageUserId)));
+                .where(and(
+                  eq(ttsSegmentVariants.segmentId, segment.segmentId),
+                  eq(ttsSegmentVariants.userId, scope.storageUserId),
+                ));
             }
           } catch (alignError) {
             console.warn('Whisper alignment still unavailable for completed segment; continuing without word highlights.', {
@@ -337,8 +354,8 @@ export async function POST(request: NextRequest) {
 
         manifest.push({
           segmentId: segment.segmentId,
-          segmentIndex: existing.segmentIndex,
-          segmentKey: segment.original.segmentKey ?? null,
+          segmentIndex: segment.original.segmentIndex,
+          segmentKey: segmentKeyForRow,
           ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
           durationMs: existing.durationMs ?? 0,
           alignment,
@@ -358,25 +375,14 @@ export async function POST(request: NextRequest) {
         segmentId: segment.segmentId,
       });
 
-      const segmentLocatorJson = canonicalLocatorJson(segment.locator);
-      const segmentKeyForRow = typeof segment.original.segmentKey === 'string' && segment.original.segmentKey.trim()
-        ? segment.original.segmentKey.trim()
-        : null;
       await db
-        .insert(ttsSegments)
+        .insert(ttsSegmentVariants)
         .values({
           segmentId: segment.segmentId,
           userId: scope.storageUserId,
-          documentId: parsed.documentId,
-          readerType: scope.readerType,
-          documentVersion: scope.documentVersion,
-          segmentIndex: segment.original.segmentIndex,
-          segmentKey: segmentKeyForRow,
-          locatorJson: segmentLocatorJson,
+          segmentEntryId,
           settingsHash,
           settingsJson,
-          textHash: segment.textHash,
-          textLength: segment.text.length,
           audioKey,
           audioFormat: 'mp3',
           status: 'pending',
@@ -384,18 +390,11 @@ export async function POST(request: NextRequest) {
           updatedAt: nowMs,
         })
         .onConflictDoUpdate({
-          target: [ttsSegments.segmentId, ttsSegments.userId],
+          target: [ttsSegmentVariants.segmentId, ttsSegmentVariants.userId],
           set: {
-            documentId: parsed.documentId,
-            readerType: scope.readerType,
-            documentVersion: scope.documentVersion,
-            segmentIndex: segment.original.segmentIndex,
-            segmentKey: segmentKeyForRow,
-            locatorJson: segmentLocatorJson,
+            segmentEntryId,
             settingsHash,
             settingsJson,
-            textHash: segment.textHash,
-            textLength: segment.text.length,
             audioKey,
             audioFormat: 'mp3',
             status: 'pending',
@@ -403,6 +402,10 @@ export async function POST(request: NextRequest) {
             updatedAt: nowMs,
           },
         });
+
+      if (movedFromEntryId) {
+        await deleteEntryIfUnused(scope.storageUserId, movedFromEntryId);
+      }
 
       try {
         if (scope.authEnabled && scope.userId && isTtsRateLimitEnabled()) {
@@ -493,7 +496,7 @@ export async function POST(request: NextRequest) {
         }
 
         await db
-          .update(ttsSegments)
+          .update(ttsSegmentVariants)
           .set({
             durationMs,
             alignmentJson: alignment ? JSON.stringify(alignment) : null,
@@ -501,22 +504,15 @@ export async function POST(request: NextRequest) {
             error: null,
             updatedAt: Date.now(),
           })
-          .where(and(eq(ttsSegments.segmentId, segment.segmentId), eq(ttsSegments.userId, scope.storageUserId)));
-
-        await cleanupStaleCanonicalVariants({
-          userId: scope.storageUserId,
-          documentId: parsed.documentId,
-          documentVersion: scope.documentVersion,
-          segmentIndex: segment.original.segmentIndex,
-          activeLocatorJson: canonicalLocatorJson(segment.locator),
-          activeSegmentId: segment.segmentId,
-          activeSettingsHash: settingsHash,
-        });
+          .where(and(
+            eq(ttsSegmentVariants.segmentId, segment.segmentId),
+            eq(ttsSegmentVariants.userId, scope.storageUserId),
+          ));
 
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
-          segmentKey: segment.original.segmentKey ?? null,
+          segmentKey: segmentKeyForRow,
           ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
           durationMs,
           alignment,
@@ -527,18 +523,21 @@ export async function POST(request: NextRequest) {
         const message = error instanceof Error ? error.message : 'Failed to generate segment';
         const aborted = isAbortLikeError(error);
         await db
-          .update(ttsSegments)
+          .update(ttsSegmentVariants)
           .set({
             status: aborted ? 'pending' : 'error',
             error: aborted ? null : message,
             updatedAt: Date.now(),
           })
-          .where(and(eq(ttsSegments.segmentId, segment.segmentId), eq(ttsSegments.userId, scope.storageUserId)));
+          .where(and(
+            eq(ttsSegmentVariants.segmentId, segment.segmentId),
+            eq(ttsSegmentVariants.userId, scope.storageUserId),
+          ));
 
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
-          segmentKey: segment.original.segmentKey ?? null,
+          segmentKey: segmentKeyForRow,
           audioPresignUrl: null,
           audioFallbackUrl: null,
           durationMs: 0,

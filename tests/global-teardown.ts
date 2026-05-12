@@ -76,7 +76,8 @@ export default async function globalTeardown(): Promise<void> {
   const config = getS3Config();
   const docsNsRootPrefix = `${config.prefix}/documents_v1/ns/`;
   const audiobooksNsRootPrefix = `${config.prefix}/audiobooks_v1/ns/`;
-  const ttsSegmentsNsRootPrefix = `${config.prefix}/tts_segments_v1/ns/`;
+  const ttsSegmentsNsRootPrefixV1 = `${config.prefix}/tts_segments_v1/ns/`;
+  const ttsSegmentsNsRootPrefixV2 = `${config.prefix}/tts_segments_v2/ns/`;
 
   // Remove SQL audiobook rows for namespaced objects (covers auth claim flows too).
   const audiobookKeys = await listKeysByPrefix(audiobooksNsRootPrefix);
@@ -105,5 +106,6 @@ export default async function globalTeardown(): Promise<void> {
 
   await deleteDocumentPrefix(docsNsRootPrefix);
   await deleteAudiobookPrefix(audiobooksNsRootPrefix);
-  await deleteTtsSegmentPrefix(ttsSegmentsNsRootPrefix);
+  await deleteTtsSegmentPrefix(ttsSegmentsNsRootPrefixV1);
+  await deleteTtsSegmentPrefix(ttsSegmentsNsRootPrefixV2);
 }

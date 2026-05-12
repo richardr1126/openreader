@@ -10,6 +10,18 @@ export const DEFAULT_PAGE_SIZE = 150;
 export const MIN_PAGE_SIZE = 25;
 export const MAX_PAGE_SIZE = 500;
 
+export type TTSSegmentManifestCursor = {
+  locatorReaderRank: number;
+  locatorSpineIndex: number;
+  locatorCharOffset: number;
+  locatorSpineHref: string;
+  locatorPage: number;
+  locatorLocation: string;
+  segmentIndex: number;
+  locatorIdentityKey: string;
+  segmentEntryId: string;
+};
+
 function statusRank(status: TTSSegmentVariant['status']): number {
   if (status === 'completed') return 3;
   if (status === 'pending') return 2;
@@ -45,24 +57,49 @@ export function compareManifestSegments(
   return a.groupKey.localeCompare(b.groupKey);
 }
 
-export function decodeManifestCursor(cursor: string | null): string | null {
+export function decodeManifestCursor(cursor: string | null): TTSSegmentManifestCursor | null {
   if (!cursor) return null;
   try {
     const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
     if (!decoded) return null;
-    // Reject malformed input that Node's base64url decoder may parse into gibberish.
-    const normalizedInput = cursor.replace(/=+$/, '');
-    if (encodeManifestCursor(decoded) !== normalizedInput) {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(decoded);
+    } catch {
       return null;
     }
-    return decoded;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const rec = parsed as Record<string, unknown>;
+    const next: TTSSegmentManifestCursor = {
+      locatorReaderRank: Number(rec.locatorReaderRank),
+      locatorSpineIndex: Number(rec.locatorSpineIndex),
+      locatorCharOffset: Number(rec.locatorCharOffset),
+      locatorSpineHref: typeof rec.locatorSpineHref === 'string' ? rec.locatorSpineHref : '',
+      locatorPage: Number(rec.locatorPage),
+      locatorLocation: typeof rec.locatorLocation === 'string' ? rec.locatorLocation : '',
+      segmentIndex: Number(rec.segmentIndex),
+      locatorIdentityKey: typeof rec.locatorIdentityKey === 'string' ? rec.locatorIdentityKey : '',
+      segmentEntryId: typeof rec.segmentEntryId === 'string' ? rec.segmentEntryId : '',
+    };
+    if (!Number.isFinite(next.locatorReaderRank)) return null;
+    if (!Number.isFinite(next.locatorSpineIndex)) return null;
+    if (!Number.isFinite(next.locatorCharOffset)) return null;
+    if (!Number.isFinite(next.locatorPage)) return null;
+    if (!Number.isFinite(next.segmentIndex)) return null;
+    if (!next.locatorIdentityKey) return null;
+    if (!next.segmentEntryId) return null;
+    const normalizedInput = cursor.replace(/=+$/, '');
+    if (encodeManifestCursor(next) !== normalizedInput) {
+      return null;
+    }
+    return next;
   } catch {
     return null;
   }
 }
 
-export function encodeManifestCursor(value: string): string {
-  return Buffer.from(value, 'utf8').toString('base64url');
+export function encodeManifestCursor(value: TTSSegmentManifestCursor): string {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }
 
 export function parseManifestPageSize(value: string | null): number {

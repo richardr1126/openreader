@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { ttsSegments } from '@/db/schema';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 
 export type ResolvedSegmentAudio = {
@@ -41,15 +41,19 @@ export async function resolveCompletedSegmentAudio(
 
   const rows = (await db
     .select({
-      audioKey: ttsSegments.audioKey,
-      status: ttsSegments.status,
+      audioKey: ttsSegmentVariants.audioKey,
+      status: ttsSegmentVariants.status,
     })
-    .from(ttsSegments)
+    .from(ttsSegmentVariants)
+    .innerJoin(ttsSegmentEntries, and(
+      eq(ttsSegmentEntries.segmentEntryId, ttsSegmentVariants.segmentEntryId),
+      eq(ttsSegmentEntries.userId, ttsSegmentVariants.userId),
+    ))
     .where(and(
-      eq(ttsSegments.userId, scope.storageUserId),
-      eq(ttsSegments.documentId, documentId),
-      eq(ttsSegments.documentVersion, scope.documentVersion),
-      eq(ttsSegments.segmentId, segmentId),
+      eq(ttsSegmentVariants.userId, scope.storageUserId),
+      eq(ttsSegmentEntries.documentId, documentId),
+      eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
+      eq(ttsSegmentVariants.segmentId, segmentId),
     ))) as Array<{ audioKey: string | null; status: string }>;
 
   const row = rows[0];

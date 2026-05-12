@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { ttsSegments } from '@/db/schema';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
 import { deleteTtsSegmentAudioObjects } from '@/lib/server/tts/segments-blobstore';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 
@@ -27,22 +27,26 @@ export async function POST(request: NextRequest) {
 
     const rows = (await db
       .select({
-        segmentId: ttsSegments.segmentId,
-        audioKey: ttsSegments.audioKey,
+        segmentId: ttsSegmentVariants.segmentId,
+        audioKey: ttsSegmentVariants.audioKey,
       })
-      .from(ttsSegments)
+      .from(ttsSegmentVariants)
+      .innerJoin(ttsSegmentEntries, and(
+        eq(ttsSegmentEntries.segmentEntryId, ttsSegmentVariants.segmentEntryId),
+        eq(ttsSegmentEntries.userId, ttsSegmentVariants.userId),
+      ))
       .where(and(
-        eq(ttsSegments.userId, scope.storageUserId),
-        eq(ttsSegments.documentId, parsed.documentId),
-        eq(ttsSegments.documentVersion, scope.documentVersion),
+        eq(ttsSegmentEntries.userId, scope.storageUserId),
+        eq(ttsSegmentEntries.documentId, parsed.documentId),
+        eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
       ))) as Array<{ segmentId: string; audioKey: string | null }>;
 
     await db
-      .delete(ttsSegments)
+      .delete(ttsSegmentEntries)
       .where(and(
-        eq(ttsSegments.userId, scope.storageUserId),
-        eq(ttsSegments.documentId, parsed.documentId),
-        eq(ttsSegments.documentVersion, scope.documentVersion),
+        eq(ttsSegmentEntries.userId, scope.storageUserId),
+        eq(ttsSegmentEntries.documentId, parsed.documentId),
+        eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
       ));
 
     const audioKeys = rows

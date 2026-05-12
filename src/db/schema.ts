@@ -13,4 +13,5 @@ export const userTtsChars = usePostgres ? postgresSchema.userTtsChars : sqliteSc
 export const userPreferences = usePostgres ? postgresSchema.userPreferences : sqliteSchema.userPreferences;
 export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentProgress : sqliteSchema.userDocumentProgress;
 export const documentPreviews = usePostgres ? postgresSchema.documentPreviews : sqliteSchema.documentPreviews;
-export const ttsSegments = usePostgres ? postgresSchema.ttsSegments : sqliteSchema.ttsSegments;
+export const ttsSegmentEntries = usePostgres ? postgresSchema.ttsSegmentEntries : sqliteSchema.ttsSegmentEntries;
+export const ttsSegmentVariants = usePostgres ? postgresSchema.ttsSegmentVariants : sqliteSchema.ttsSegmentVariants;

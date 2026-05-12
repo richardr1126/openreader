@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 import {
   buildProportionalAlignment,
+  buildTtsSegmentEntryId,
   buildTtsSegmentId,
   buildTtsSegmentSettingsHash,
   buildTtsSegmentTextHash,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
+  projectSegmentLocator,
 } from '../../src/lib/server/tts/segments';
 
 test.describe('tts segment helpers', () => {
@@ -57,6 +59,35 @@ test.describe('tts segment helpers', () => {
     expect(id1).not.toBe(id3);
   });
 
+  test('builds deterministic segment entry id independent of settings', () => {
+    const entry1 = buildTtsSegmentEntryId({
+      documentId: 'doc',
+      documentVersion: 1,
+      segmentIndex: 2,
+      segmentKey: 'doc:v1:segment-a',
+      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
+      textHash: 'abc123',
+    });
+    const entry2 = buildTtsSegmentEntryId({
+      documentId: 'doc',
+      documentVersion: 1,
+      segmentIndex: 2,
+      segmentKey: 'doc:v1:segment-a',
+      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
+      textHash: 'abc123',
+    });
+    const entry3 = buildTtsSegmentEntryId({
+      documentId: 'doc',
+      documentVersion: 1,
+      segmentIndex: 2,
+      segmentKey: 'doc:v1:segment-b',
+      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
+      textHash: 'abc123',
+    });
+    expect(entry1).toBe(entry2);
+    expect(entry1).not.toBe(entry3);
+  });
+
   test('canonical segment key makes id independent of locator and index', () => {
     const id1 = buildTtsSegmentId({
       documentId: 'doc',
@@ -97,8 +128,15 @@ test.describe('tts segment helpers', () => {
 
   test('normalizes PDF locators and creates fingerprints', () => {
     const locator = normalizeLocator({ readerType: 'pdf', page: 2.9 });
+    if (!locator) throw new Error('expected normalized pdf locator');
     expect(locator).toEqual({ readerType: 'pdf', page: 2 });
     expect(locatorFingerprint(locator)).toHaveLength(64);
+    expect(projectSegmentLocator(locator)).toMatchObject({
+      locatorReaderRank: 1,
+      locatorReaderType: 'pdf',
+      locatorPage: 2,
+      locatorIdentityKey: 'pdf:2',
+    });
   });
 
   test('normalizes stable EPUB locators and rejects legacy CFI-only drafts', () => {
@@ -110,6 +148,7 @@ test.describe('tts segment helpers', () => {
       charOffset: 128.4,
       cfi: '  epubcfi(/6/4!/4:0)  ',
     });
+    if (!stable) throw new Error('expected normalized epub locator');
     expect(stable).toEqual({
       readerType: 'epub',
       spineHref: 'OEBPS/ch02.xhtml',
@@ -118,11 +157,28 @@ test.describe('tts segment helpers', () => {
       cfi: 'epubcfi(/6/4!/4:0)',
     });
     expect(locatorFingerprint(stable)).toHaveLength(64);
+    expect(projectSegmentLocator(stable)).toMatchObject({
+      locatorReaderRank: 0,
+      locatorReaderType: 'epub',
+      locatorSpineIndex: 2,
+      locatorCharOffset: 128,
+      locatorSpineHref: 'OEBPS/ch02.xhtml',
+      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
+    });
 
     // Legacy/draft EPUB shape (CFI in `location` but no spine coords) is
     // rejected so we never persist viewport-dependent locators.
     const legacy = normalizeLocator({ readerType: 'epub', location: 'epubcfi(/6/4!/4:0)' });
     expect(legacy).toBeNull();
+  });
+
+  test('projects html locators into stable manifest sort fields', () => {
+    expect(projectSegmentLocator({ readerType: 'html', location: '#intro' })).toMatchObject({
+      locatorReaderRank: 2,
+      locatorReaderType: 'html',
+      locatorLocation: '#intro',
+      locatorIdentityKey: 'html:#intro',
+    });
   });
 
   test('builds proportional alignment preserving order', () => {

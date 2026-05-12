@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
+import { locatorIdentityKey } from '@/lib/shared/tts-locator';
 import { ffprobeAudio } from '@/lib/server/audiobooks/chapters';
 import type {
   TTSSegmentLocator,
@@ -54,6 +55,17 @@ export function normalizeSegmentText(text: string): string {
   return preprocessSentenceForAudio(text || '').trim();
 }
 
+export type TTSSegmentLocatorProjection = {
+  locatorReaderRank: number;
+  locatorReaderType: string;
+  locatorPage: number;
+  locatorSpineIndex: number;
+  locatorSpineHref: string;
+  locatorCharOffset: number;
+  locatorLocation: string;
+  locatorIdentityKey: string;
+};
+
 /**
  * Validate and shape a locator for persistence. EPUB locators MUST carry the
  * stable spine coordinates (`spineHref`, `spineIndex`, `charOffset`) — the
@@ -104,25 +116,49 @@ export function normalizeLocator(locator: TTSSegmentLocator | undefined): TTSSeg
   return null;
 }
 
+export function projectSegmentLocator(locator: TTSSegmentLocator): TTSSegmentLocatorProjection {
+  if (locator.readerType === 'epub') {
+    return {
+      locatorReaderRank: 0,
+      locatorReaderType: 'epub',
+      locatorPage: -1,
+      locatorSpineIndex: typeof locator.spineIndex === 'number' ? locator.spineIndex : -1,
+      locatorSpineHref: typeof locator.spineHref === 'string' ? locator.spineHref : '',
+      locatorCharOffset: typeof locator.charOffset === 'number' ? locator.charOffset : -1,
+      locatorLocation: '',
+      locatorIdentityKey: locatorIdentityKey(locator),
+    };
+  }
+  if (locator.readerType === 'pdf') {
+    return {
+      locatorReaderRank: 1,
+      locatorReaderType: 'pdf',
+      locatorPage: typeof locator.page === 'number' ? Math.floor(locator.page) : -1,
+      locatorSpineIndex: -1,
+      locatorSpineHref: '',
+      locatorCharOffset: -1,
+      locatorLocation: '',
+      locatorIdentityKey: locatorIdentityKey(locator),
+    };
+  }
+  if (locator.readerType === 'html') {
+    return {
+      locatorReaderRank: 2,
+      locatorReaderType: 'html',
+      locatorPage: -1,
+      locatorSpineIndex: -1,
+      locatorSpineHref: '',
+      locatorCharOffset: -1,
+      locatorLocation: typeof locator.location === 'string' ? locator.location : '',
+      locatorIdentityKey: locatorIdentityKey(locator),
+    };
+  }
+  throw new Error(`Unsupported segment locator readerType for projection: ${String(locator.readerType)}`);
+}
+
 export function locatorFingerprint(locator: TTSSegmentLocator | null): string {
   if (!locator) return '';
   return createHash('sha256').update(stableStringify(locator)).digest('hex');
-}
-
-export function canonicalLocatorJson(locator: TTSSegmentLocator | null | undefined): string | null {
-  if (!locator) return null;
-  return stableStringify(locator);
-}
-
-export function canonicalizeLocatorJsonString(json: string | null | undefined): string | null {
-  if (!json) return null;
-  try {
-    const parsed = JSON.parse(json);
-    if (parsed === null || typeof parsed !== 'object') return null;
-    return stableStringify(parsed);
-  } catch {
-    return null;
-  }
 }
 
 export function buildTtsSegmentId(input: {
@@ -146,6 +182,25 @@ export function buildTtsSegmentId(input: {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+export function buildTtsSegmentEntryId(input: {
+  documentId: string;
+  documentVersion: number;
+  segmentIndex: number;
+  segmentKey?: string | null;
+  locatorIdentityKey: string;
+  textHash: string;
+}): string {
+  const canonical = stableStringify({
+    d: input.documentId,
+    v: input.documentVersion,
+    i: input.segmentIndex,
+    k: input.segmentKey ? input.segmentKey : null,
+    l: input.locatorIdentityKey,
+    t: input.textHash,
+  });
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
 export function buildTtsSegmentTextHash(text: string, secret: string): string {
   return createHmac('sha256', secret).update(text).digest('hex');
 }
@@ -160,7 +215,7 @@ export function buildTtsSegmentAudioKey(input: {
   segmentId: string;
 }): string {
   const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
-  return `${input.storagePrefix}/tts_segments_v1/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.segmentId}.mp3`;
+  return `${input.storagePrefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.segmentId}.mp3`;
 }
 
 export async function probeAudioDurationMsFromBuffer(buffer: Buffer, signal?: AbortSignal): Promise<number> {

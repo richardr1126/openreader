@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, or } from 'drizzle-orm';
 import { db } from '@/db';
-import { ttsSegments } from '@/db/schema';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import {
-  compareManifestSegments,
   decodeManifestCursor,
   dedupeManifestVariants,
   encodeManifestCursor,
-  locatorIdentityKey,
   parseManifestPageSize,
+  type TTSSegmentManifestCursor,
 } from '@/lib/server/tts/segments-manifest';
 import type {
   TTSSegmentLocator,
@@ -22,6 +21,21 @@ import type {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+type ManifestGroupRow = {
+  segmentEntryId: string;
+  segmentIndex: number;
+  segmentKey: string | null;
+  textLength: number;
+  locatorReaderRank: number;
+  locatorReaderType: string;
+  locatorPage: number;
+  locatorSpineIndex: number;
+  locatorSpineHref: string;
+  locatorCharOffset: number;
+  locatorLocation: string;
+  locatorIdentityKey: string;
+};
+
 function parseSettingsValue(value: unknown): TTSSegmentSettings | null {
   let raw: unknown = value;
   if (typeof raw === 'string') {
@@ -30,9 +44,6 @@ function parseSettingsValue(value: unknown): TTSSegmentSettings | null {
   if (!raw || typeof raw !== 'object') return null;
   const rec = raw as Record<string, unknown>;
 
-  // Settings stored via buildTtsSegmentSettingsJson — accept either the runtime
-  // shape (ttsProvider/ttsModel/voice/nativeSpeed/ttsInstructions) or the
-  // canonical hash form (provider/model/voice/speed/instructions/format).
   const ttsProvider = typeof rec.ttsProvider === 'string'
     ? rec.ttsProvider
     : typeof rec.provider === 'string' ? rec.provider : null;
@@ -49,16 +60,22 @@ function parseSettingsValue(value: unknown): TTSSegmentSettings | null {
   return { ttsProvider, ttsModel, voice, nativeSpeed, ttsInstructions };
 }
 
-function parseLocator(value: unknown): TTSSegmentLocator | null {
-  if (!value) return null;
-  if (typeof value !== 'string') return value as TTSSegmentLocator;
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object') return null;
-    return parsed as TTSSegmentLocator;
-  } catch {
-    return null;
+function locatorFromProjection(row: ManifestGroupRow): TTSSegmentLocator | null {
+  if (row.locatorReaderType === 'epub' && row.locatorSpineIndex >= 0 && row.locatorCharOffset >= 0 && row.locatorSpineHref) {
+    return {
+      readerType: 'epub',
+      spineIndex: row.locatorSpineIndex,
+      spineHref: row.locatorSpineHref,
+      charOffset: row.locatorCharOffset,
+    };
   }
+  if (row.locatorReaderType === 'pdf' && row.locatorPage >= 1) {
+    return { readerType: 'pdf', page: row.locatorPage };
+  }
+  if (row.locatorReaderType === 'html' && row.locatorLocation) {
+    return { readerType: 'html', location: row.locatorLocation };
+  }
+  return null;
 }
 
 function buildSegmentAudioUrls(documentId: string, segmentId: string): {
@@ -78,6 +95,86 @@ function isAbortLikeMessage(message: string | null | undefined): boolean {
   return /abort/i.test(message);
 }
 
+function buildKeysetWhere(cursor: TTSSegmentManifestCursor) {
+  return or(
+    gt(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      gt(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      gt(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      eq(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+      gt(ttsSegmentEntries.locatorSpineHref, cursor.locatorSpineHref),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      eq(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+      eq(ttsSegmentEntries.locatorSpineHref, cursor.locatorSpineHref),
+      gt(ttsSegmentEntries.locatorPage, cursor.locatorPage),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      eq(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+      eq(ttsSegmentEntries.locatorSpineHref, cursor.locatorSpineHref),
+      eq(ttsSegmentEntries.locatorPage, cursor.locatorPage),
+      gt(ttsSegmentEntries.locatorLocation, cursor.locatorLocation),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      eq(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+      eq(ttsSegmentEntries.locatorSpineHref, cursor.locatorSpineHref),
+      eq(ttsSegmentEntries.locatorPage, cursor.locatorPage),
+      eq(ttsSegmentEntries.locatorLocation, cursor.locatorLocation),
+      gt(ttsSegmentEntries.segmentIndex, cursor.segmentIndex),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      eq(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+      eq(ttsSegmentEntries.locatorSpineHref, cursor.locatorSpineHref),
+      eq(ttsSegmentEntries.locatorPage, cursor.locatorPage),
+      eq(ttsSegmentEntries.locatorLocation, cursor.locatorLocation),
+      eq(ttsSegmentEntries.segmentIndex, cursor.segmentIndex),
+      gt(ttsSegmentEntries.locatorIdentityKey, cursor.locatorIdentityKey),
+    ),
+    and(
+      eq(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
+      eq(ttsSegmentEntries.locatorSpineIndex, cursor.locatorSpineIndex),
+      eq(ttsSegmentEntries.locatorCharOffset, cursor.locatorCharOffset),
+      eq(ttsSegmentEntries.locatorSpineHref, cursor.locatorSpineHref),
+      eq(ttsSegmentEntries.locatorPage, cursor.locatorPage),
+      eq(ttsSegmentEntries.locatorLocation, cursor.locatorLocation),
+      eq(ttsSegmentEntries.segmentIndex, cursor.segmentIndex),
+      eq(ttsSegmentEntries.locatorIdentityKey, cursor.locatorIdentityKey),
+      gt(ttsSegmentEntries.segmentEntryId, cursor.segmentEntryId),
+    ),
+  );
+}
+
+function cursorFromGroupRow(row: ManifestGroupRow): TTSSegmentManifestCursor {
+  return {
+    locatorReaderRank: row.locatorReaderRank,
+    locatorSpineIndex: row.locatorSpineIndex,
+    locatorCharOffset: row.locatorCharOffset,
+    locatorSpineHref: row.locatorSpineHref,
+    locatorPage: row.locatorPage,
+    locatorLocation: row.locatorLocation,
+    segmentIndex: row.segmentIndex,
+    locatorIdentityKey: row.locatorIdentityKey,
+    segmentEntryId: row.segmentEntryId,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const documentIdRaw = request.nextUrl.searchParams.get('documentId');
@@ -91,27 +188,92 @@ export async function GET(request: NextRequest) {
     const scope = await resolveSegmentDocumentScope(request, documentId);
     if (scope instanceof Response) return scope;
 
-    const rows = (await db
-      .select()
-      .from(ttsSegments)
-      .where(and(
-        eq(ttsSegments.userId, scope.storageUserId),
-        eq(ttsSegments.documentId, documentId),
-        eq(ttsSegments.documentVersion, scope.documentVersion),
+    const scopeWhere = and(
+      eq(ttsSegmentEntries.userId, scope.storageUserId),
+      eq(ttsSegmentEntries.documentId, documentId),
+      eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
+    );
+
+    const groupWhere = cursor
+      ? and(scopeWhere, buildKeysetWhere(cursor))
+      : scopeWhere;
+
+    const groupedRows = (await db
+      .select({
+        segmentEntryId: ttsSegmentEntries.segmentEntryId,
+        segmentIndex: ttsSegmentEntries.segmentIndex,
+        segmentKey: ttsSegmentEntries.segmentKey,
+        textLength: ttsSegmentEntries.textLength,
+        locatorReaderRank: ttsSegmentEntries.locatorReaderRank,
+        locatorReaderType: ttsSegmentEntries.locatorReaderType,
+        locatorPage: ttsSegmentEntries.locatorPage,
+        locatorSpineIndex: ttsSegmentEntries.locatorSpineIndex,
+        locatorSpineHref: ttsSegmentEntries.locatorSpineHref,
+        locatorCharOffset: ttsSegmentEntries.locatorCharOffset,
+        locatorLocation: ttsSegmentEntries.locatorLocation,
+        locatorIdentityKey: ttsSegmentEntries.locatorIdentityKey,
+      })
+      .from(ttsSegmentEntries)
+      .innerJoin(ttsSegmentVariants, and(
+        eq(ttsSegmentVariants.segmentEntryId, ttsSegmentEntries.segmentEntryId),
+        eq(ttsSegmentVariants.userId, ttsSegmentEntries.userId),
       ))
-      .orderBy(asc(ttsSegments.segmentIndex), asc(ttsSegments.updatedAt))) as Array<{
+      .where(groupWhere)
+      .groupBy(
+        ttsSegmentEntries.segmentEntryId,
+        ttsSegmentEntries.segmentIndex,
+        ttsSegmentEntries.segmentKey,
+        ttsSegmentEntries.textLength,
+        ttsSegmentEntries.locatorReaderRank,
+        ttsSegmentEntries.locatorReaderType,
+        ttsSegmentEntries.locatorPage,
+        ttsSegmentEntries.locatorSpineIndex,
+        ttsSegmentEntries.locatorSpineHref,
+        ttsSegmentEntries.locatorCharOffset,
+        ttsSegmentEntries.locatorLocation,
+        ttsSegmentEntries.locatorIdentityKey,
+      )
+      .orderBy(
+        asc(ttsSegmentEntries.locatorReaderRank),
+        asc(ttsSegmentEntries.locatorSpineIndex),
+        asc(ttsSegmentEntries.locatorCharOffset),
+        asc(ttsSegmentEntries.locatorSpineHref),
+        asc(ttsSegmentEntries.locatorPage),
+        asc(ttsSegmentEntries.locatorLocation),
+        asc(ttsSegmentEntries.segmentIndex),
+        asc(ttsSegmentEntries.locatorIdentityKey),
+        asc(ttsSegmentEntries.segmentEntryId),
+      )
+      .limit(limit + 1)) as ManifestGroupRow[];
+
+    const hasMore = groupedRows.length > limit;
+    const pageGroups = hasMore ? groupedRows.slice(0, limit) : groupedRows;
+    if (pageGroups.length === 0) {
+      const emptyResponse: TTSSegmentsManifestResponse = {
+        documentId,
+        segments: [],
+        nextCursor: null,
+        hasMore: false,
+      };
+      return NextResponse.json(emptyResponse);
+    }
+
+    const entryIds = pageGroups.map((row) => row.segmentEntryId);
+    const entryById = new Map(pageGroups.map((entry) => [entry.segmentEntryId, entry]));
+
+    const variantRows = (await db
+      .select()
+      .from(ttsSegmentVariants)
+      .where(and(
+        eq(ttsSegmentVariants.userId, scope.storageUserId),
+        inArray(ttsSegmentVariants.segmentEntryId, entryIds),
+      ))
+      .orderBy(asc(ttsSegmentVariants.segmentEntryId), asc(ttsSegmentVariants.updatedAt))) as Array<{
       segmentId: string;
       userId: string;
-      documentId: string;
-      readerType: string;
-      documentVersion: number;
-      segmentIndex: number;
-      segmentKey: string | null;
-      locatorJson: string | null;
+      segmentEntryId: string;
       settingsHash: string;
       settingsJson: unknown;
-      textHash: string;
-      textLength: number;
       audioKey: string | null;
       audioFormat: string;
       durationMs: number | null;
@@ -126,26 +288,21 @@ export async function GET(request: NextRequest) {
       variants: Array<{ dedupeKey: string; variant: TTSSegmentVariant }>;
     }>();
 
-    for (const row of rows) {
-      const locator = parseLocator(row.locatorJson);
-      // Use the per-row identity key (not the coarse sidebar group key) so two
-      // persisted rows in the same chapter at different `charOffset`s remain
-      // distinct entries instead of collapsing into one bucket whose locator
-      // only reflects the first row seen.
-      const groupKey = `${row.segmentIndex}|${locatorIdentityKey(locator)}`;
+    for (const row of variantRows) {
+      const entryMeta = entryById.get(row.segmentEntryId);
+      if (!entryMeta) continue;
+      const key = row.segmentEntryId;
+      const locator = locatorFromProjection(entryMeta);
 
-      let entry = grouped.get(groupKey);
+      let entry = grouped.get(key);
       if (!entry) {
         entry = {
-          segmentIndex: row.segmentIndex,
-          segmentKey: row.segmentKey,
+          segmentIndex: entryMeta.segmentIndex,
+          segmentKey: entryMeta.segmentKey,
           locator,
           variants: [],
         };
-        grouped.set(groupKey, entry);
-      } else {
-        if (!entry.locator) entry.locator = locator;
-        if (!entry.segmentKey && row.segmentKey) entry.segmentKey = row.segmentKey;
+        grouped.set(key, entry);
       }
 
       let alignmentWordCount = 0;
@@ -177,7 +334,7 @@ export async function GET(request: NextRequest) {
           audioFallbackUrl: audioUrls.audioFallbackUrl,
           durationMs: row.durationMs,
           status,
-          textLength: row.textLength,
+          textLength: entryMeta.textLength,
           alignmentWordCount,
           audioKey: row.audioKey,
           updatedAt: row.updatedAt,
@@ -185,39 +342,25 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const segments = Array.from(grouped.entries())
-      .map(([groupKey, segment]) => ({
-        groupKey,
-        segmentIndex: segment.segmentIndex,
-        segmentKey: segment.segmentKey,
-        locator: segment.locator,
-        variants: dedupeManifestVariants(segment.variants),
-      }))
-      .sort(compareManifestSegments);
+    const segments = pageGroups
+      .map((row) => {
+        const key = row.segmentEntryId;
+        const entry = grouped.get(key);
+        return {
+          segmentIndex: row.segmentIndex,
+          segmentKey: row.segmentKey ?? null,
+          locator: entry?.locator || locatorFromProjection(row),
+          variants: dedupeManifestVariants(entry?.variants || []),
+        };
+      });
 
-    let startIndex = 0;
-    if (cursor) {
-      const cursorIndex = segments.findIndex((segment) => segment.groupKey === cursor);
-      if (cursorIndex < 0) {
-        return NextResponse.json({ error: 'Invalid cursor' }, { status: 400 });
-      }
-      if (cursorIndex >= 0) startIndex = cursorIndex + 1;
-    }
-
-    const page = segments.slice(startIndex, startIndex + limit);
-    const hasMore = startIndex + page.length < segments.length;
-    const nextCursor = hasMore && page.length > 0
-      ? encodeManifestCursor(page[page.length - 1].groupKey)
+    const nextCursor = hasMore
+      ? encodeManifestCursor(cursorFromGroupRow(pageGroups[pageGroups.length - 1]))
       : null;
 
     const response: TTSSegmentsManifestResponse = {
       documentId,
-      segments: page.map((segment) => ({
-        segmentIndex: segment.segmentIndex,
-        segmentKey: segment.segmentKey ?? null,
-        locator: segment.locator,
-        variants: segment.variants,
-      })),
+      segments,
       nextCursor,
       hasMore,
     };

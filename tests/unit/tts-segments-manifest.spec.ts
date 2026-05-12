@@ -157,10 +157,22 @@ test.describe('tts segments manifest helpers', () => {
   });
 
   test('encodes and decodes cursors', () => {
-    const raw = '3|p:2|l:epubcfi(/6/2)|r:epub';
+    const raw = {
+      locatorReaderRank: 0,
+      locatorSpineIndex: 2,
+      locatorCharOffset: 128,
+      locatorSpineHref: 'OEBPS/ch02.xhtml',
+      locatorPage: -1,
+      locatorLocation: '',
+      segmentIndex: 4,
+      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
+      segmentEntryId: 'entry-4',
+    };
     const encoded = encodeManifestCursor(raw);
-    expect(decodeManifestCursor(encoded)).toBe(raw);
+    expect(decodeManifestCursor(encoded)).toEqual(raw);
     expect(decodeManifestCursor('not-base64')).toBeNull();
+    const malformed = Buffer.from(JSON.stringify({ bad: true }), 'utf8').toString('base64url');
+    expect(decodeManifestCursor(malformed)).toBeNull();
   });
 
   test('clamps page size bounds', () => {

@@ -44,7 +44,6 @@ type FetchState =
   | {
     kind: 'ready';
     data: TTSSegmentRow[];
-    fetchedAt: number;
     nextCursor: string | null;
     hasMore: boolean;
     loadingMore: boolean;
@@ -290,7 +289,6 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
         return {
           kind: 'ready',
           data: merged,
-          fetchedAt: Date.now(),
           nextCursor: data.nextCursor,
           hasMore: data.hasMore,
           loadingMore: false,

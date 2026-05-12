@@ -92,8 +92,10 @@ export async function deleteUserStorageData(
     try {
       const cfg = getS3Config();
       const nsSegment = namespace ? `ns/${namespace}/` : '';
-      const ttsPrefix = `${cfg.prefix}/tts_segments_v1/${nsSegment}users/${encodeURIComponent(userId)}/`;
-      segmentsDeleted = await deleteTtsSegmentPrefix(ttsPrefix);
+      const ttsPrefixV1 = `${cfg.prefix}/tts_segments_v1/${nsSegment}users/${encodeURIComponent(userId)}/`;
+      const ttsPrefixV2 = `${cfg.prefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(userId)}/`;
+      segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV1);
+      segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV2);
     } catch (error) {
       console.error(`[user-data-cleanup] Failed to delete TTS segment blobs for user ${userId}:`, error);
     }

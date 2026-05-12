@@ -109,19 +109,61 @@ export const documentPreviews = sqliteTable('document_previews', {
   index('idx_document_previews_status_lease').on(table.status, table.leaseUntilMs),
 ]);
 
-export const ttsSegments = sqliteTable('tts_segments', {
-  segmentId: text('segment_id').notNull(),
+export const ttsSegmentEntries = sqliteTable('tts_segment_entries', {
+  segmentEntryId: text('segment_entry_id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   documentId: text('document_id').notNull(),
   readerType: text('reader_type').notNull(),
   documentVersion: integer('document_version').notNull(),
   segmentIndex: integer('segment_index').notNull(),
   segmentKey: text('segment_key'),
-  locatorJson: text('locator_json'),
-  settingsHash: text('settings_hash').notNull(),
-  settingsJson: text('settings_json').notNull(),
+  locatorReaderRank: integer('locator_reader_rank').notNull(),
+  locatorReaderType: text('locator_reader_type').notNull(),
+  locatorPage: integer('locator_page').notNull(),
+  locatorSpineIndex: integer('locator_spine_index').notNull(),
+  locatorSpineHref: text('locator_spine_href').notNull(),
+  locatorCharOffset: integer('locator_char_offset').notNull(),
+  locatorLocation: text('locator_location').notNull(),
+  locatorIdentityKey: text('locator_identity_key').notNull(),
   textHash: text('text_hash').notNull(),
   textLength: integer('text_length').notNull().default(0),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.segmentEntryId, table.userId] }),
+  index('idx_tts_segment_entries_manifest_sort').on(
+    table.userId,
+    table.documentId,
+    table.documentVersion,
+    table.locatorReaderRank,
+    table.locatorSpineIndex,
+    table.locatorCharOffset,
+    table.locatorSpineHref,
+    table.locatorPage,
+    table.locatorLocation,
+    table.segmentIndex,
+    table.locatorIdentityKey,
+  ),
+  index('idx_tts_segment_entries_manifest_group').on(
+    table.userId,
+    table.documentId,
+    table.documentVersion,
+    table.segmentIndex,
+    table.locatorIdentityKey,
+  ),
+  index('idx_tts_segment_entries_scope').on(
+    table.userId,
+    table.documentId,
+    table.documentVersion,
+  ),
+]);
+
+export const ttsSegmentVariants = sqliteTable('tts_segment_variants', {
+  segmentId: text('segment_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  segmentEntryId: text('segment_entry_id').notNull(),
+  settingsHash: text('settings_hash').notNull(),
+  settingsJson: text('settings_json').notNull(),
   audioKey: text('audio_key'),
   audioFormat: text('audio_format').notNull().default('mp3'),
   durationMs: integer('duration_ms'),
@@ -132,6 +174,11 @@ export const ttsSegments = sqliteTable('tts_segments', {
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.segmentId, table.userId] }),
-  index('idx_tts_segments_lookup').on(table.userId, table.documentId, table.documentVersion, table.settingsHash),
-  index('idx_tts_segments_doc_index').on(table.userId, table.documentId, table.segmentIndex),
+  foreignKey({
+    columns: [table.segmentEntryId, table.userId],
+    foreignColumns: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
+  }).onDelete('cascade'),
+  index('idx_tts_segment_variants_entry').on(table.userId, table.segmentEntryId, table.updatedAt),
+  index('idx_tts_segment_variants_status').on(table.userId, table.status),
+  index('idx_tts_segment_variants_unique_settings').on(table.userId, table.segmentEntryId, table.settingsHash),
 ]);
