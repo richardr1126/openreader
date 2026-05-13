@@ -1,7 +1,8 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { DocumentProvider } from '@/contexts/DocumentContext';
 import { PDFProvider } from '@/contexts/PDFContext';
@@ -26,31 +27,35 @@ interface ProvidersProps {
 
 export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled }: ProvidersProps) {
   const pathname = usePathname();
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 1,
+        refetchOnWindowFocus: false,
+      },
+    },
+  }));
   const isAuthPage = pathname?.startsWith('/signin') || pathname?.startsWith('/signup');
 
-  if (isAuthPage) {
-    return (
-      <RuntimeConfigProvider>
-        <AuthRateLimitProvider
-          authEnabled={authEnabled}
-          authBaseUrl={authBaseUrl}
-          allowAnonymousAuthSessions={allowAnonymousAuthSessions}
-          githubAuthEnabled={githubAuthEnabled}
-        >
-          <ThemeProvider>
-            <AuthLoader>
-              <>
-                {children}
-                {authEnabled && <PrivacyModal />}
-              </>
-            </AuthLoader>
-          </ThemeProvider>
-        </AuthRateLimitProvider>
-      </RuntimeConfigProvider>
-    );
-  }
-
-  return (
+  const content = isAuthPage ? (
+    <RuntimeConfigProvider>
+      <AuthRateLimitProvider
+        authEnabled={authEnabled}
+        authBaseUrl={authBaseUrl}
+        allowAnonymousAuthSessions={allowAnonymousAuthSessions}
+        githubAuthEnabled={githubAuthEnabled}
+      >
+        <ThemeProvider>
+          <AuthLoader>
+            <>
+              {children}
+              {authEnabled && <PrivacyModal />}
+            </>
+          </AuthLoader>
+        </ThemeProvider>
+      </AuthRateLimitProvider>
+    </RuntimeConfigProvider>
+  ) : (
     <RuntimeConfigProvider>
       <AuthRateLimitProvider
         authEnabled={authEnabled}
@@ -81,5 +86,11 @@ export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAu
         </ThemeProvider>
       </AuthRateLimitProvider>
     </RuntimeConfigProvider>
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {content}
+    </QueryClientProvider>
   );
 }

@@ -1373,6 +1373,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsModel,
     voice,
     effectiveNativeSpeed,
+    providerModelPolicy.supportsInstructions,
     ttsInstructions,
     ttsSegmentMaxBlockLength,
     clearPendingEpubJump,
@@ -1592,6 +1593,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     openApiKey,
     openApiBaseUrl,
     configProviderRef,
+    configProviderType,
+    providerModelPolicy.supportsInstructions,
     isEPUB,
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
@@ -2622,9 +2625,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     voice,
     effectiveNativeSpeed,
     configProviderRef,
+    configProviderType,
     ttsModel,
     openApiKey,
     openApiBaseUrl,
+    providerModelPolicy.supportsInstructions,
     ttsInstructions,
     smartSentenceSplitting,
     onTTSStart,
@@ -3077,7 +3082,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
       return () => clearTimeout(timeoutId);
     }
-  }, [id, isEPUB, currDocPageNumber, currentIndex, sentences.length, currentReaderType, authEnabled]);
+  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType, authEnabled]);
 
   /**
    * Renders the TTS context provider with its children

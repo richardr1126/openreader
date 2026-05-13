@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { coerceTimestampMs, nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 
 export interface RateLimitStatus {
@@ -43,7 +44,6 @@ export function useAuthRateLimit(): AuthRateLimitContextType {
   return context;
 }
 
-// Re-export specific hooks for backward compatibility or convenience if needed
 export function useAuthConfig() {
   const { authEnabled, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthRateLimit();
   return { authEnabled, baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled };
@@ -94,11 +94,9 @@ function parseRateLimitStatus(raw: unknown): RateLimitStatus | null {
 export function formatCharCount(count: number): string {
   if (count >= 1_000_000) {
     const m = count / 1_000_000;
-    // Show up to 1 decimal place, stripping trailing zeros (1.0 -> 1)
     return `${parseFloat(m.toFixed(1))}M`;
   } else if (count >= 1_000) {
     const k = Math.round(count / 1_000);
-    // Handle edge case where rounding up reaches 1M (e.g., 999,999 -> 1000K -> 1M)
     if (k >= 1_000) return '1M';
     return `${k}K`;
   }
@@ -113,6 +111,8 @@ interface AuthRateLimitProviderProps {
   githubAuthEnabled: boolean;
 }
 
+const RATE_LIMIT_QUERY_KEY = ['rate-limit-status'] as const;
+
 export function AuthRateLimitProvider({
   children,
   authEnabled,
@@ -120,64 +120,63 @@ export function AuthRateLimitProvider({
   allowAnonymousAuthSessions,
   githubAuthEnabled,
 }: AuthRateLimitProviderProps) {
-  const [status, setStatus] = useState<RateLimitStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Track pending TTS operations to delay count updates
   const pendingTTSRef = useRef<number>(0);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchStatus = useCallback(async () => {
-    // Skip if auth is not enabled
-    if (!authEnabled) {
-      setStatus({
-        allowed: true,
-        currentCount: 0,
-        // Avoid Infinity to prevent JSON/serialization edge cases elsewhere.
-        limit: Number.MAX_SAFE_INTEGER,
-        remainingChars: Number.MAX_SAFE_INTEGER,
-        resetTimeMs: nextUtcMidnightTimestampMs(),
-        userType: 'unauthenticated',
-        authEnabled: false
-      });
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
+  const {
+    data: queryStatus,
+    error: queryError,
+    isPending,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: RATE_LIMIT_QUERY_KEY,
+    queryFn: async () => {
       const response = await fetch('/api/rate-limit/status');
-
       if (!response.ok) {
         throw new Error(`Failed to fetch rate limit status: ${response.status}`);
       }
+      return parseRateLimitStatus(await response.json());
+    },
+    enabled: authEnabled,
+    retry: 0,
+  });
 
-      const data = await response.json();
-      setStatus(parseRateLimitStatus(data));
-    } catch (err) {
-      console.error('Error fetching rate limit status:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }, [authEnabled]);
+  const status = authEnabled
+    ? (queryStatus ?? null)
+    : {
+      allowed: true,
+      currentCount: 0,
+      // Avoid Infinity to prevent JSON/serialization edge cases elsewhere.
+      limit: Number.MAX_SAFE_INTEGER,
+      remainingChars: Number.MAX_SAFE_INTEGER,
+      resetTimeMs: nextUtcMidnightTimestampMs(),
+      userType: 'unauthenticated' as const,
+      authEnabled: false,
+    };
+  const loading = authEnabled ? (isPending || isFetching) : false;
+  const error = authEnabled
+    ? (queryError instanceof Error ? queryError.message : queryError ? 'Unknown error' : null)
+    : null;
 
   useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+    if (!queryError) return;
+    console.error('Error fetching rate limit status:', queryError);
+  }, [queryError]);
 
-  // Calculate time until reset
+  const refresh = useCallback(async () => {
+    if (!authEnabled) return;
+    await refetch();
+  }, [authEnabled, refetch]);
+
   const timeUntilReset = status ? calculateTimeUntilReset(status.resetTimeMs) : '';
-  // Only treat the user as "at limit" when they are truly out of characters.
-  // The server allows the final request that may cross the limit, then blocks subsequent ones.
   const isAtLimit = status ? (status.remainingChars <= 0 || !status.allowed) : false;
 
-  // Increment count locally (for immediate UI feedback)
   const incrementCount = useCallback((charCount: number) => {
-    setStatus(prevStatus => {
+    if (!authEnabled) return;
+    queryClient.setQueryData<RateLimitStatus | null>(RATE_LIMIT_QUERY_KEY, (prevStatus) => {
       if (!prevStatus) return prevStatus;
 
       const newCurrentCount = prevStatus.currentCount + charCount;
@@ -190,39 +189,33 @@ export function AuthRateLimitProvider({
         allowed: newRemainingChars > 0
       };
     });
-  }, []);
+  }, [authEnabled, queryClient]);
 
-  // Called when a TTS request starts
   const onTTSStart = useCallback(() => {
     pendingTTSRef.current += 1;
 
-    // Clear any existing timeout
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = null;
     }
   }, []);
 
-  // Called when a TTS request completes (success or error)
   const onTTSComplete = useCallback(() => {
     pendingTTSRef.current = Math.max(0, pendingTTSRef.current - 1);
 
-    // Clear any existing timeout
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = null;
     }
 
-    // If no more pending requests, schedule an update
     if (pendingTTSRef.current === 0) {
       updateTimeoutRef.current = setTimeout(() => {
-        fetchStatus();
+        void refresh();
         updateTimeoutRef.current = null;
-      }, 1000); // Wait 1 second after completion to refresh
+      }, 1000);
     }
-  }, [fetchStatus]);
+  }, [refresh]);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (updateTimeoutRef.current) {
@@ -239,13 +232,18 @@ export function AuthRateLimitProvider({
     status,
     loading,
     error,
-    refresh: fetchStatus,
+    refresh,
     isAtLimit,
     timeUntilReset,
     incrementCount,
     onTTSStart,
     onTTSComplete,
-    triggerRateLimit: () => setStatus(prev => prev ? { ...prev, remainingChars: 0, allowed: false } : null)
+    triggerRateLimit: () => {
+      if (!authEnabled) return;
+      queryClient.setQueryData<RateLimitStatus | null>(RATE_LIMIT_QUERY_KEY, (prev) =>
+        prev ? { ...prev, remainingChars: 0, allowed: false } : null,
+      );
+    },
   };
 
   return (

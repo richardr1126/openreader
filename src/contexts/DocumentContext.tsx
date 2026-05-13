@@ -1,56 +1,65 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BaseDocument } from '@/types/documents';
 import { listDocuments, uploadDocuments, deleteDocuments } from '@/lib/client/api/documents';
 import { putCachedEpub, putCachedHtml, putCachedPdf, evictCachedEpub, evictCachedHtml, evictCachedPdf } from '@/lib/client/cache/documents';
 import { useAuthSession } from '@/hooks/useAuthSession';
 
 interface DocumentContextType {
-  // PDF Documents
   pdfDocs: Array<BaseDocument & { type: 'pdf' }>;
   addPDFDocument: (file: File) => Promise<string>;
   removePDFDocument: (id: string) => Promise<void>;
   isPDFLoading: boolean;
 
-  // EPUB Documents
   epubDocs: Array<BaseDocument & { type: 'epub' }>;
   addEPUBDocument: (file: File) => Promise<string>;
   removeEPUBDocument: (id: string) => Promise<void>;
   isEPUBLoading: boolean;
 
-  // HTML Documents
   htmlDocs: Array<BaseDocument & { type: 'html' }>;
   addHTMLDocument: (file: File) => Promise<string>;
   removeHTMLDocument: (id: string) => Promise<void>;
   isHTMLLoading: boolean;
 
   refreshDocuments: () => Promise<void>;
-
-
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
+const DOCUMENTS_QUERY_KEY = 'documents';
 
 export function DocumentProvider({ children }: { children: ReactNode }) {
-  const [docs, setDocs] = useState<BaseDocument[] | null>(null);
-  const isLoading = docs === null;
+  const queryClient = useQueryClient();
   const { data: sessionData, isPending: isSessionPending } = useAuthSession();
   const sessionKey = sessionData?.user?.id ?? 'no-session';
+  const documentsQueryKey = useMemo(() => [DOCUMENTS_QUERY_KEY, sessionKey] as const, [sessionKey]);
 
-  const refreshDocuments = useCallback(async () => {
-    const serverDocs = await listDocuments();
-    // Keep only viewer-supported types
-    setDocs(serverDocs.filter((d) => d.type === 'pdf' || d.type === 'epub' || d.type === 'html'));
+  const loadDocuments = useCallback(async () => {
+    try {
+      const serverDocs = await listDocuments();
+      return serverDocs.filter((d): d is BaseDocument & { type: 'pdf' | 'epub' | 'html' } =>
+        d.type === 'pdf' || d.type === 'epub' || d.type === 'html',
+      );
+    } catch (err) {
+      console.error('Failed to load documents from server:', err);
+      return [];
+    }
   }, []);
 
-  useEffect(() => {
+  const { data: docs = [], isPending, refetch } = useQuery({
+    queryKey: documentsQueryKey,
+    queryFn: loadDocuments,
+    enabled: !isSessionPending,
+  });
+
+  const isLoading = isSessionPending || (isPending && docs.length === 0);
+
+  const refreshDocuments = useCallback(async () => {
     if (isSessionPending) return;
-    refreshDocuments().catch((err) => {
-      console.error('Failed to load documents from server:', err);
-      setDocs([]);
-    });
-  }, [refreshDocuments, sessionKey, isSessionPending]);
+    await queryClient.invalidateQueries({ queryKey: documentsQueryKey });
+    await refetch();
+  }, [isSessionPending, queryClient, documentsQueryKey, refetch]);
 
   useEffect(() => {
     const handler = () => {
@@ -66,9 +75,9 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, [refreshDocuments]);
 
   const docsByType = useMemo(() => {
-    const pdfDocs = (docs ?? []).filter((d) => d.type === 'pdf') as Array<BaseDocument & { type: 'pdf' }>;
-    const epubDocs = (docs ?? []).filter((d) => d.type === 'epub') as Array<BaseDocument & { type: 'epub' }>;
-    const htmlDocs = (docs ?? []).filter((d) => d.type === 'html') as Array<BaseDocument & { type: 'html' }>;
+    const pdfDocs = docs.filter((d) => d.type === 'pdf') as Array<BaseDocument & { type: 'pdf' }>;
+    const epubDocs = docs.filter((d) => d.type === 'epub') as Array<BaseDocument & { type: 'epub' }>;
+    const htmlDocs = docs.filter((d) => d.type === 'html') as Array<BaseDocument & { type: 'html' }>;
     return { pdfDocs, epubDocs, htmlDocs };
   }, [docs]);
 
@@ -93,14 +102,15 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     const [stored] = await uploadDocuments([file]);
     if (!stored) throw new Error('Upload succeeded but returned no document');
     await cacheUploaded(stored, file);
-    setDocs((prev) => {
-      const current = prev ?? [];
-      // Replace if same id exists (e.g. re-upload)
-      const next = current.filter((d) => d.id !== stored.id);
-      return [stored, ...next];
+    const isSupported = stored.type === 'pdf' || stored.type === 'epub' || stored.type === 'html';
+    if (!isSupported) return stored.id;
+    const supportedStored = stored as BaseDocument & { type: 'pdf' | 'epub' | 'html' };
+    queryClient.setQueryData<Array<BaseDocument & { type: 'pdf' | 'epub' | 'html' }>>(documentsQueryKey, (prev = []) => {
+      const next = prev.filter((d) => d.id !== supportedStored.id);
+      return [supportedStored, ...next];
     });
     return stored.id;
-  }, [cacheUploaded]);
+  }, [cacheUploaded, queryClient, documentsQueryKey]);
 
   const addPDFDocument = useCallback(async (file: File) => addDocument(file), [addDocument]);
   const addEPUBDocument = useCallback(async (file: File) => addDocument(file), [addDocument]);
@@ -109,14 +119,14 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   const removeById = useCallback(async (id: string) => {
     await deleteDocuments({ ids: [id] });
     await Promise.allSettled([evictCachedPdf(id), evictCachedEpub(id), evictCachedHtml(id)]);
-    setDocs((prev) => (prev ?? []).filter((d) => d.id !== id));
-  }, []);
+    queryClient.setQueryData<Array<BaseDocument & { type: 'pdf' | 'epub' | 'html' }>>(documentsQueryKey, (prev = []) =>
+      prev.filter((d) => d.id !== id),
+    );
+  }, [queryClient, documentsQueryKey]);
 
   const removePDFDocument = useCallback(async (id: string) => removeById(id), [removeById]);
   const removeEPUBDocument = useCallback(async (id: string) => removeById(id), [removeById]);
   const removeHTMLDocument = useCallback(async (id: string) => removeById(id), [removeById]);
-
-  // Removed unused clear functions
 
   return (
     <DocumentContext.Provider value={{

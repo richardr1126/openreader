@@ -1,24 +1,11 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Button,
-  Listbox,
-  ListboxButton,
-  ListboxOption,
-  ListboxOptions,
-  Transition,
-} from '@headlessui/react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Button, Listbox, ListboxButton, ListboxOption, ListboxOptions, Transition } from '@headlessui/react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronUpDownIcon, CheckIcon } from '@/components/icons/Icons';
-import {
-  Badge,
-  Card,
-  Section,
-  ToggleRow,
-  btnPrimary,
-  btnSecondary,
-} from '@/components/admin/ui';
+import { Badge, Card, Section, ToggleRow, btnPrimary, btnSecondary } from '@/components/admin/ui';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 
@@ -33,33 +20,76 @@ interface ProviderOption {
   id: string;
   name: string;
   providerType: TtsProviderId;
-  shared: boolean;
+}
+
+const ADMIN_SETTINGS_QUERY_KEY = ['admin-settings'] as const;
+
+async function fetchAdminSettings(): Promise<SettingsResponse> {
+  const res = await fetch('/api/admin/settings');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as SettingsResponse;
+}
+
+async function patchAdminSettings(payload: { updates?: Record<string, unknown>; reset?: string[] }): Promise<void> {
+  const res = await fetch('/api/admin/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
 }
 
 export function AdminFeaturesPanel() {
-  const [data, setData] = useState<SettingsResponse | null>(null);
+  const queryClient = useQueryClient();
+  const { data, error } = useQuery({
+    queryKey: ADMIN_SETTINGS_QUERY_KEY,
+    queryFn: fetchAdminSettings,
+  });
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
   const { providers: sharedProviders } = useSharedProviders();
 
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/settings');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const next = (await res.json()) as SettingsResponse;
-      setData(next);
-      setDraft({ ...next.values });
-      setDirty(new Set());
-    } catch (error) {
-      console.error('[AdminFeaturesPanel] load failed:', error);
-      toast.error('Failed to load site settings');
-    }
-  }, []);
+  useEffect(() => {
+    if (!data) return;
+    setDraft({ ...data.values });
+    setDirty(new Set());
+  }, [data]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!error) return;
+    console.error('[AdminFeaturesPanel] load failed:', error);
+    toast.error('Failed to load site settings');
+  }, [error]);
+
+  const resetMutation = useMutation({
+    mutationFn: async (key: string) => {
+      await patchAdminSettings({ reset: [key] });
+    },
+    onSuccess: async () => {
+      toast.success('Reset to env default');
+      await queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
+    },
+    onError: (mutationError) => {
+      console.error(mutationError);
+      toast.error('Reset failed');
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (updates: Record<string, unknown>) => {
+      await patchAdminSettings({ updates });
+    },
+    onSuccess: async () => {
+      toast.success('Settings saved');
+      await queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
+    },
+    onError: (mutationError) => {
+      console.error(mutationError);
+      toast.error('Save failed');
+    },
+  });
+
+  const saving = resetMutation.isPending || saveMutation.isPending;
 
   const updateDraft = (key: string, value: unknown) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -70,45 +100,16 @@ export function AdminFeaturesPanel() {
     });
   };
 
-  const resetField = async (key: string) => {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: [key] }),
-      });
-      if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
-      toast.success('Reset to env default');
-      await refresh();
-    } catch (error) {
-      console.error(error);
-      toast.error('Reset failed');
-    } finally {
-      setSaving(false);
-    }
+  const resetField = (key: string) => {
+    if (saving) return;
+    resetMutation.mutate(key);
   };
 
-  const saveAll = async () => {
+  const saveAll = () => {
     if (saving || dirty.size === 0) return;
-    setSaving(true);
-    try {
-      const updates: Record<string, unknown> = {};
-      for (const key of dirty) updates[key] = draft[key];
-      const res = await fetch('/api/admin/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates }),
-      });
-      if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
-      toast.success('Settings saved');
-      await refresh();
-    } catch (error) {
-      console.error(error);
-      toast.error('Save failed');
-    } finally {
-      setSaving(false);
-    }
+    const updates: Record<string, unknown> = {};
+    for (const key of dirty) updates[key] = draft[key];
+    saveMutation.mutate(updates);
   };
 
   const discardAll = () => {
@@ -117,14 +118,11 @@ export function AdminFeaturesPanel() {
     setDirty(new Set());
   };
 
-  // --- Provider option resolution ---
-
   const providerOptions = useMemo<ProviderOption[]>(() => {
     return sharedProviders.map((entry) => ({
       id: entry.slug,
       name: `${entry.displayName} (shared)`,
       providerType: entry.providerType,
-      shared: true,
     }));
   }, [sharedProviders]);
 
@@ -141,7 +139,6 @@ export function AdminFeaturesPanel() {
       id: currentSharedEntry.slug,
       name: `${currentSharedEntry.displayName} (shared)`,
       providerType: currentSharedEntry.providerType,
-      shared: true,
     } as ProviderOption
     : fallbackShared;
   const selectedProviderOption = effectiveSelectedProvider;
@@ -149,8 +146,6 @@ export function AdminFeaturesPanel() {
   const handleProviderChange = (opt: ProviderOption) => {
     updateDraft('defaultTtsProvider', opt.id);
   };
-
-  // --- Renderers ---
 
   const renderSource = (key: string) => {
     const source = data?.sources?.[key] ?? 'default';
@@ -180,7 +175,6 @@ export function AdminFeaturesPanel() {
         title="TTS defaults"
         subtitle="What new users start with."
       >
-        {/* Provider picker */}
         <Card className="space-y-1.5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -241,7 +235,6 @@ export function AdminFeaturesPanel() {
           )}
         </Card>
 
-        {/* Boolean TTS toggles */}
         <ToggleRow
           label="Restrict user API keys (recommended)"
           description="When on, users cannot supply personal API keys/base URLs; TTS requests must use admin-configured shared providers."

@@ -3,32 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Input, Listbox, ListboxButton, ListboxOption, ListboxOptions, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronUpDownIcon, CheckIcon, PlusIcon } from '@/components/icons/Icons';
-import {
-  providerSupportsCustomModel,
-  resolveProviderModels,
-  type TtsModelDefinition,
-  type TtsProviderId,
-} from '@/lib/shared/tts-provider-catalog';
-import {
-  defaultBaseUrlForProviderType,
-  defaultModelForProviderType,
-  resolveTtsProviderModelPolicy,
-} from '@/lib/shared/tts-provider-policy';
+import { providerSupportsCustomModel, resolveProviderModels, type TtsModelDefinition, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { defaultBaseUrlForProviderType, defaultModelForProviderType, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import {
-  Badge,
-  Card,
-  Field,
-  Section,
-  ToggleRow,
-  btnDanger,
-  btnOutline,
-  btnPrimary,
-  btnSecondary,
-  inputClass,
-} from '@/components/admin/ui';
+import { Badge, Card, Field, Section, ToggleRow, btnDanger, btnOutline, btnPrimary, btnSecondary, inputClass } from '@/components/admin/ui';
 
 type ProviderType = TtsProviderId;
 
@@ -65,6 +46,7 @@ interface FormState {
 }
 
 const providerDefaultModel = defaultModelForProviderType;
+const ADMIN_PROVIDERS_QUERY_KEY = ['admin-providers'] as const;
 
 function createEmptyForm(): FormState {
   return {
@@ -79,33 +61,90 @@ function createEmptyForm(): FormState {
   };
 }
 
+async function fetchAdminProviders(): Promise<AdminProviderMasked[]> {
+  const res = await fetch('/api/admin/providers');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { providers: AdminProviderMasked[] };
+  return data.providers;
+}
+
+async function upsertAdminProvider(input: {
+  editingId: string | null;
+  form: FormState;
+}): Promise<void> {
+  const isNew = input.editingId === '__new';
+  const body = {
+    slug: input.form.slug.trim(),
+    displayName: input.form.displayName.trim(),
+    providerType: input.form.providerType,
+    baseUrl: input.form.baseUrl.trim() || null,
+    ...(input.form.apiKey.length > 0 ? { apiKey: input.form.apiKey } : {}),
+    defaultModel: input.form.defaultModel.trim() || null,
+    defaultInstructions: input.form.defaultInstructions.trim() || null,
+    enabled: input.form.enabled,
+  };
+  const url = isNew ? '/api/admin/providers' : `/api/admin/providers/${input.editingId}`;
+  const res = await fetch(url, {
+    method: isNew ? 'POST' : 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+}
+
+async function deleteAdminProvider(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/providers/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+}
+
 export function AdminProvidersPanel() {
   const runtimeConfig = useRuntimeConfig();
-  const [providers, setProviders] = useState<AdminProviderMasked[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null); // null = none, '__new' = create
+  const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => createEmptyForm());
   const [customModelInput, setCustomModelInput] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/admin/providers');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { providers: AdminProviderMasked[] };
-      setProviders(data.providers);
-    } catch (error) {
-      console.error('[AdminProvidersPanel] load failed:', error);
-      toast.error('Failed to load admin providers');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const { data: providers = [], isPending: isLoading, error } = useQuery({
+    queryKey: ADMIN_PROVIDERS_QUERY_KEY,
+    queryFn: fetchAdminProviders,
+  });
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!error) return;
+    console.error('[AdminProvidersPanel] load failed:', error);
+    toast.error('Failed to load admin providers');
+  }, [error]);
+
+  const saveMutation = useMutation({
+    mutationFn: upsertAdminProvider,
+    onSuccess: async (_data, variables) => {
+      toast.success(variables.editingId === '__new' ? 'Provider created' : 'Provider updated');
+      cancelEdit();
+      await queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY });
+    },
+    onError: (mutationError) => {
+      console.error('[AdminProvidersPanel] save failed:', mutationError);
+      toast.error((mutationError as Error).message || 'Save failed');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminProvider,
+    onSuccess: async () => {
+      toast.success('Provider deleted');
+      await queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY });
+    },
+    onError: (mutationError) => {
+      console.error('[AdminProvidersPanel] delete failed:', mutationError);
+      toast.error((mutationError as Error).message || 'Delete failed');
+    },
+  });
 
   const startCreate = () => {
     setForm(createEmptyForm());
@@ -128,62 +167,21 @@ export function AdminProvidersPanel() {
     setEditingId(provider.id);
   };
 
-  const cancelEdit = () => {
+  function cancelEdit() {
     setEditingId(null);
     setForm(createEmptyForm());
     setCustomModelInput('');
+  }
+
+  const submit = () => {
+    if (saveMutation.isPending) return;
+    saveMutation.mutate({ editingId, form });
   };
 
-  const submit = async () => {
-    if (saving) return;
-    setSaving(true);
-    const isNew = editingId === '__new';
-    try {
-      const body = {
-        slug: form.slug.trim(),
-        displayName: form.displayName.trim(),
-        providerType: form.providerType,
-        baseUrl: form.baseUrl.trim() || null,
-        ...(form.apiKey.length > 0 ? { apiKey: form.apiKey } : {}),
-        defaultModel: form.defaultModel.trim() || null,
-        defaultInstructions: form.defaultInstructions.trim() || null,
-        enabled: form.enabled,
-      };
-      const url = isNew ? '/api/admin/providers' : `/api/admin/providers/${editingId}`;
-      const res = await fetch(url, {
-        method: isNew ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      toast.success(isNew ? 'Provider created' : 'Provider updated');
-      cancelEdit();
-      await refresh();
-    } catch (error) {
-      console.error('[AdminProvidersPanel] save failed:', error);
-      toast.error((error as Error).message || 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const remove = async (id: string) => {
+  const remove = (id: string) => {
     if (!confirm('Delete this shared provider? Users selecting it will lose access until they switch.')) return;
-    try {
-      const res = await fetch(`/api/admin/providers/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      toast.success('Provider deleted');
-      await refresh();
-    } catch (error) {
-      console.error('[AdminProvidersPanel] delete failed:', error);
-      toast.error((error as Error).message || 'Delete failed');
-    }
+    if (deleteMutation.isPending) return;
+    deleteMutation.mutate(id);
   };
 
   const isEditingExisting = editingId !== null && editingId !== '__new';
@@ -191,7 +189,7 @@ export function AdminProvidersPanel() {
     ? providers.find((p) => p.id === editingId)
     : undefined;
   const submitDisabled =
-    saving ||
+    saveMutation.isPending ||
     !form.slug.trim() ||
     !form.displayName.trim();
 
@@ -213,11 +211,11 @@ export function AdminProvidersPanel() {
       ? 'custom'
       : modelDefinitions[0]?.id ?? '';
   const selectedModelDefinition = modelDefinitions.find((model) => model.id === selectedModelId);
-  const modelSupportsInstructions = (model: string) => resolveTtsProviderModelPolicy({
+  const modelSupportsInstructions = useCallback((model: string) => resolveTtsProviderModelPolicy({
     providerRef: form.slug,
     providerType: form.providerType,
     model,
-  }).supportsInstructions;
+  }).supportsInstructions, [form.slug, form.providerType]);
   const baseUrlPlaceholder = form.providerType === 'custom-openai'
     ? 'https://your-tts-host/v1'
     : defaultBaseUrlForProviderType(form.providerType);
@@ -241,7 +239,7 @@ export function AdminProvidersPanel() {
     if (modelSupportsInstructions(form.defaultModel)) return;
     if (!form.defaultInstructions) return;
     setForm((prev) => ({ ...prev, defaultInstructions: '' }));
-  }, [form.defaultModel, form.defaultInstructions, form.providerType, form.slug]);
+  }, [form.defaultModel, form.defaultInstructions, form.providerType, form.slug, modelSupportsInstructions]);
 
   return (
     <Section
@@ -492,7 +490,7 @@ export function AdminProvidersPanel() {
               disabled={submitDisabled}
               className={`${btnPrimary} px-4 py-1.5`}
             >
-              {saving ? 'Saving…' : isEditingExisting ? 'Save changes' : 'Create'}
+              {saveMutation.isPending ? 'Saving…' : isEditingExisting ? 'Save changes' : 'Create'}
             </Button>
           </div>
         </Card>
@@ -527,14 +525,14 @@ export function AdminProvidersPanel() {
                   <Button
                     onClick={() => startEdit(p)}
                     className={`${btnOutline} px-2.5 py-1 text-xs`}
-                    disabled={!!editingId}
+                    disabled={!!editingId || deleteMutation.isPending}
                   >
                     Edit
                   </Button>
                   <Button
                     onClick={() => remove(p.id)}
                     className={`${btnDanger} px-2.5 py-1 text-xs`}
-                    disabled={!!editingId}
+                    disabled={!!editingId || deleteMutation.isPending}
                   >
                     Delete
                   </Button>

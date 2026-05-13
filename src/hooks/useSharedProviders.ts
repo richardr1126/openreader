@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 
 export interface SharedProviderEntry {
@@ -11,45 +12,17 @@ export interface SharedProviderEntry {
   defaultInstructions: string | null;
 }
 
-interface State {
-  data: SharedProviderEntry[];
-  loaded: boolean;
-}
+export const SHARED_PROVIDERS_QUERY_KEY = ['tts-shared-providers'] as const;
 
-const EMPTY: State = { data: [], loaded: false };
-
-/**
- * Fetches the list of admin-configured shared TTS providers visible to the
- * current user. Cached in module-scope state to avoid refetching on every
- * mount. The list rarely changes during a session; admin edits land on the
- * next page load via `__OPENREADER_RUNTIME_CONFIG__`-style behavior.
- */
-let cached: State = EMPTY;
-let inflight: Promise<SharedProviderEntry[]> | null = null;
-const listeners = new Set<(s: State) => void>();
-
-function setCached(next: State) {
-  cached = next;
-  for (const fn of listeners) fn(next);
-}
-
-async function fetchOnce(): Promise<SharedProviderEntry[]> {
-  if (inflight) return inflight;
-  inflight = (async () => {
-    try {
-      const res = await fetch('/api/tts/shared-providers', { credentials: 'same-origin' });
-      if (!res.ok) return [];
-      const data = (await res.json()) as { providers?: SharedProviderEntry[] };
-      return data.providers ?? [];
-    } catch {
-      return [];
-    } finally {
-      inflight = null;
-    }
-  })();
-  const result = await inflight;
-  setCached({ data: result, loaded: true });
-  return result;
+async function fetchSharedProviders(): Promise<SharedProviderEntry[]> {
+  try {
+    const res = await fetch('/api/tts/shared-providers', { credentials: 'same-origin' });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { providers?: SharedProviderEntry[] };
+    return data.providers ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export function useSharedProviders(): {
@@ -57,26 +30,17 @@ export function useSharedProviders(): {
   isLoading: boolean;
   refresh: () => Promise<void>;
 } {
-  const [state, setState] = useState<State>(cached);
-
-  useEffect(() => {
-    listeners.add(setState);
-    if (!cached.loaded) {
-      void fetchOnce();
-    }
-    return () => {
-      listeners.delete(setState);
-    };
-  }, []);
+  const queryClient = useQueryClient();
+  const { data = [], isPending, refetch } = useQuery({
+    queryKey: SHARED_PROVIDERS_QUERY_KEY,
+    queryFn: fetchSharedProviders,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const refresh = useCallback(async () => {
-    setCached({ ...cached, loaded: false });
-    await fetchOnce();
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: SHARED_PROVIDERS_QUERY_KEY });
+    await refetch();
+  }, [queryClient, refetch]);
 
-  return { providers: state.data, isLoading: !state.loaded, refresh };
-}
-
-export function getCachedSharedProviders(): SharedProviderEntry[] {
-  return cached.data;
+  return { providers: data, isLoading: isPending, refresh };
 }
