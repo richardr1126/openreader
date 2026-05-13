@@ -8,6 +8,7 @@ import { scheduleUserPreferencesSync, cancelPendingPreferenceSync, getUserPrefer
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferenceKey, type SyncedPreferencesPatch } from '@/types/user-state';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
+import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { buildSyncedPreferencePatch } from '@/lib/client/config/preferences';
 import { applyConfigUpdate } from '@/lib/client/config/updates';
 import toast from 'react-hot-toast';
@@ -58,7 +59,8 @@ const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 export function ConfigProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isDBReady, setIsDBReady] = useState(false);
-  const ttsProvidersTabDisabled = process.env.NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB === 'false';
+  const ttsProvidersTabDisabled = !useFeatureFlag('enableTtsProvidersTab');
+  const restrictUserApiKeys = useFeatureFlag('restrictUserApiKeys');
   const didRunStartupMigrations = useRef(false);
   const didAttemptInitialPreferenceSeedForSession = useRef<string | null>(null);
   const syncedPreferenceKeys = useMemo(() => new Set<string>(SYNCED_PREFERENCE_KEYS), []);
@@ -229,6 +231,38 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     });
     queueSyncedPreferencePatch(resetPatch);
   }, [ttsProvidersTabDisabled, isDBReady, appConfig, queueSyncedPreferencePatch]);
+
+  useEffect(() => {
+    if (!restrictUserApiKeys || !isDBReady || !appConfig) return;
+
+    const resetPatch: Partial<AppConfigRow> = {};
+    const builtInProviderIds = new Set(['custom-openai', 'replicate', 'deepinfra', 'openai']);
+
+    if (appConfig.apiKey !== APP_CONFIG_DEFAULTS.apiKey) {
+      resetPatch.apiKey = APP_CONFIG_DEFAULTS.apiKey;
+    }
+    if (appConfig.baseUrl !== APP_CONFIG_DEFAULTS.baseUrl) {
+      resetPatch.baseUrl = APP_CONFIG_DEFAULTS.baseUrl;
+    }
+    if (builtInProviderIds.has(appConfig.ttsProvider)) {
+      if (appConfig.ttsProvider !== APP_CONFIG_DEFAULTS.ttsProvider) {
+        resetPatch.ttsProvider = APP_CONFIG_DEFAULTS.ttsProvider;
+      }
+      if (appConfig.ttsModel !== APP_CONFIG_DEFAULTS.ttsModel) {
+        resetPatch.ttsModel = APP_CONFIG_DEFAULTS.ttsModel;
+      }
+      if (appConfig.ttsInstructions !== APP_CONFIG_DEFAULTS.ttsInstructions) {
+        resetPatch.ttsInstructions = APP_CONFIG_DEFAULTS.ttsInstructions;
+      }
+    }
+
+    if (Object.keys(resetPatch).length === 0) return;
+
+    updateAppConfig(resetPatch).catch((error) => {
+      console.warn('Failed to enforce restricted user API key mode:', error);
+    });
+    queueSyncedPreferencePatch(resetPatch);
+  }, [restrictUserApiKeys, isDBReady, appConfig, queueSyncedPreferencePatch]);
 
   useEffect(() => {
     if (!isDBReady || !authEnabled || !appConfig || isSessionPending) return;

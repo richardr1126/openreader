@@ -158,6 +158,29 @@ export const ttsSegmentEntries = pgTable('tts_segment_entries', {
   ),
 ]);
 
+export const adminProviders = pgTable('admin_providers', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  providerType: text('provider_type').notNull(),
+  baseUrl: text('base_url'),
+  apiKeyCiphertext: text('api_key_ciphertext').notNull(),
+  apiKeyIv: text('api_key_iv').notNull(),
+  apiKeyLast4: text('api_key_last4'),
+  defaultModel: text('default_model'),
+  defaultInstructions: text('default_instructions'),
+  enabled: integer('enabled').notNull().default(1),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+});
+
+export const adminSettings = pgTable('admin_settings', {
+  key: text('key').primaryKey(),
+  valueJson: jsonb('value_json').notNull(),
+  source: text('source').notNull().default('admin'),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+});
+
 export const ttsSegmentVariants = pgTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

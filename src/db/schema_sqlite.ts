@@ -158,6 +158,29 @@ export const ttsSegmentEntries = sqliteTable('tts_segment_entries', {
   ),
 ]);
 
+export const adminProviders = sqliteTable('admin_providers', {
+  id: text('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  providerType: text('provider_type').notNull(),
+  baseUrl: text('base_url'),
+  apiKeyCiphertext: text('api_key_ciphertext').notNull(),
+  apiKeyIv: text('api_key_iv').notNull(),
+  apiKeyLast4: text('api_key_last4'),
+  defaultModel: text('default_model'),
+  defaultInstructions: text('default_instructions'),
+  enabled: integer('enabled').notNull().default(1),
+  createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
+});
+
+export const adminSettings = sqliteTable('admin_settings', {
+  key: text('key').primaryKey(),
+  valueJson: text('value_json').notNull(),
+  source: text('source').notNull().default('admin'),
+  updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
+});
+
 export const ttsSegmentVariants = sqliteTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

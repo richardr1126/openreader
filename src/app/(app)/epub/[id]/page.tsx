@@ -19,10 +19,10 @@ import type { AudiobookGenerationSettings } from '@/types/client';
 import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-
-const canExportAudiobook = process.env.NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT !== 'false';
+import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 
 export default function EPUBPage() {
+  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const router = useRouter();
   const { setCurrentDocument, currDocName, clearCurrDoc, createFullAudioBook: createEPUBAudioBook, regenerateChapter: regenerateEPUBChapter } = useEPUB();

@@ -29,6 +29,13 @@
       "when": 1778627816569,
       "tag": "0003_tts_segments_v2_split",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778644075378,
+      "tag": "0004_admin_panel",
+      "breakpoints": true
     }
   ]
 }

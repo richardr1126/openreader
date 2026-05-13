@@ -23,11 +23,14 @@ import {
 } from '@/lib/server/tts/segments';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import { rateLimiter, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
+import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem-response';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
 import { alignAudioWithText } from '@/lib/server/whisper/alignment';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import type {
   TTSSegmentInput,
   TTSSegmentManifestItem,
@@ -164,9 +167,40 @@ export async function POST(request: NextRequest) {
 
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
+    const runtimeConfig = await getResolvedRuntimeConfig();
+    const requestCreds = await resolveTtsCredentials({
+      providerHeader: parsed.settings.ttsProvider,
+      apiKeyHeader: request.headers.get('x-openai-key'),
+      baseUrlHeader: request.headers.get('x-openai-base-url'),
+      fallbackProvider: runtimeConfig.defaultTtsProvider,
+      restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
+    });
+    if ('error' in requestCreds) {
+      const status = requestCreds.error === 'no_shared_provider_configured' ? 503 : 404;
+      return NextResponse.json(
+        {
+          error: requestCreds.error === 'no_shared_provider_configured'
+            ? 'User API keys are restricted and no shared provider is configured.'
+            : `Unknown or disabled TTS provider: ${requestCreds.slug}`,
+        },
+        { status },
+      );
+    }
 
-    const settingsHash = buildTtsSegmentSettingsHash(parsed.settings);
-    const settingsJson = buildTtsSegmentSettingsJson(parsed.settings);
+    // Normalize request settings to the effective generation settings so cache
+    // keys and persisted metadata match what we actually synthesize.
+    const effectiveInstructions = resolveEffectiveTtsInstructions({
+      model: parsed.settings.ttsModel,
+      requestInstructions: parsed.settings.ttsInstructions,
+      sharedDefaultInstructions: requestCreds.adminRecord?.defaultInstructions,
+    }) ?? '';
+    const effectiveSettings: TTSSegmentSettings = {
+      ...parsed.settings,
+      ttsInstructions: effectiveInstructions,
+    };
+
+    const settingsHash = buildTtsSegmentSettingsHash(effectiveSettings);
+    const settingsJson = buildTtsSegmentSettingsJson(effectiveSettings);
     const nowMs = Date.now();
     const storagePrefix = getS3Config().prefix;
     const secret = textHmacSecret();
@@ -457,14 +491,14 @@ export async function POST(request: NextRequest) {
       try {
         const ttsBuffer = await generateTTSBuffer({
           text: segment.text,
-          voice: parsed.settings.voice,
-          speed: parsed.settings.nativeSpeed,
+          voice: effectiveSettings.voice,
+          speed: effectiveSettings.nativeSpeed,
           format: 'mp3',
-          model: parsed.settings.ttsModel,
-          instructions: parsed.settings.ttsInstructions,
-          provider: parsed.settings.ttsProvider,
-          apiKey: request.headers.get('x-openai-key') || process.env.API_KEY || 'none',
-          baseUrl: request.headers.get('x-openai-base-url') || process.env.API_BASE,
+          model: effectiveSettings.ttsModel,
+          instructions: effectiveSettings.ttsInstructions,
+          provider: requestCreds.provider,
+          apiKey: requestCreds.apiKey || 'none',
+          baseUrl: requestCreds.baseUrl,
           testNamespace: scope.testNamespace,
         }, request.signal);
 

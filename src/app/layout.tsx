@@ -4,6 +4,7 @@ import { Metadata } from "next";
 import { Figtree } from "next/font/google";
 import { ConsentAwareAnalytics } from "@/components/ConsentAwareAnalytics";
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
+import { getResolvedRuntimeConfig } from "@/lib/server/runtime-config";
 
 const figtree = Figtree({
   subsets: ["latin"],
@@ -40,11 +41,23 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+function jsonEmbedSafe(value: unknown): string {
+  // Prevent `</script>` and U+2028/U+2029 from breaking the inline script.
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const runtimeConfig = await getResolvedRuntimeConfig();
+  const runtimeConfigInit = `window.__OPENREADER_RUNTIME_CONFIG__=${jsonEmbedSafe(runtimeConfig)};`;
+
   return (
     <html lang="en" className={figtree.variable} suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
+        <script dangerouslySetInnerHTML={{ __html: runtimeConfigInit }} />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="antialiased">

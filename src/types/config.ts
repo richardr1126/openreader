@@ -1,8 +1,28 @@
 import type { DocumentListState } from '@/types/documents';
 
+// Runtime config (admin-controlled) is layered on top of the static defaults
+// below. We resolve it lazily so this module stays importable from non-React
+// contexts (Dexie, server routes). The actual values come from
+// `window.__OPENREADER_RUNTIME_CONFIG__` (SSR-injected) on the client, and
+// from the built-in defaults during SSR.
 
-const wordHighlightEnabledByDefault =
-  process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
+function readRuntimeFlag(key: string, defaultValue: boolean): boolean {
+  if (typeof window === 'undefined') return defaultValue;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const injected = (window as any).__OPENREADER_RUNTIME_CONFIG__;
+  if (!injected || typeof injected !== 'object') return defaultValue;
+  const value = injected[key];
+  return typeof value === 'boolean' ? value : defaultValue;
+}
+
+function readRuntimeString(key: string, defaultValue: string): string {
+  if (typeof window === 'undefined') return defaultValue;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const injected = (window as any).__OPENREADER_RUNTIME_CONFIG__;
+  if (!injected || typeof injected !== 'object') return defaultValue;
+  const value = injected[key];
+  return typeof value === 'string' && value ? value : defaultValue;
+}
 
 export type ViewType = 'single' | 'dual' | 'scroll';
 
@@ -62,43 +82,94 @@ export interface AppConfigValues {
   documentsMigrationPrompted: boolean;
 }
 
-export const APP_CONFIG_DEFAULTS: AppConfigValues = {
-  apiKey: '',
-  baseUrl: '',
-  viewType: 'single',
-  voiceSpeed: 1,
-  audioPlayerSpeed: 1,
-  voice: '',
-  skipBlank: true,
-  epubTheme: false,
-  headerMargin: 0,
-  footerMargin: 0,
-  leftMargin: 0,
-  rightMargin: 0,
-  ttsProvider: process.env.NEXT_PUBLIC_DEFAULT_TTS_PROVIDER || 'custom-openai',
-  ttsModel: process.env.NEXT_PUBLIC_DEFAULT_TTS_MODEL || 'kokoro',
-  ttsInstructions: '',
-  savedVoices: {},
-  smartSentenceSplitting: true,
-  segmentPreloadDepthPages: 1,
-  segmentPreloadSentenceLookahead: 3,
-  ttsSegmentMaxBlockLength: 450,
-  pdfHighlightEnabled: true,
-  pdfWordHighlightEnabled: wordHighlightEnabledByDefault,
-  epubHighlightEnabled: true,
-  epubWordHighlightEnabled: wordHighlightEnabledByDefault,
-  firstVisit: false,
-  documentListState: {
-    sortBy: 'name',
-    sortDirection: 'asc',
-    folders: [],
-    collapsedFolders: [],
-    showHint: true,
-    viewMode: 'grid',
-  },
-  privacyAccepted: false,
-  documentsMigrationPrompted: false,
-};
+/**
+ * Build defaults lazily so we can read SSR-injected admin overrides
+ * (`window.__OPENREADER_RUNTIME_CONFIG__`). Modules that need the defaults
+ * statically should call `getAppConfigDefaults()` at use time. The exported
+ * `APP_CONFIG_DEFAULTS` is a Proxy that re-resolves on each access so
+ * mutations to the runtime config (admin edits) are picked up by anything
+ * that reads through it.
+ */
+export function getAppConfigDefaults(): AppConfigValues {
+  const wordHighlightEnabledByDefault = readRuntimeFlag('enableWordHighlight', true);
+  return {
+    apiKey: '',
+    baseUrl: '',
+    viewType: 'single',
+    voiceSpeed: 1,
+    audioPlayerSpeed: 1,
+    voice: '',
+    skipBlank: true,
+    epubTheme: false,
+    headerMargin: 0,
+    footerMargin: 0,
+    leftMargin: 0,
+    rightMargin: 0,
+    ttsProvider: readRuntimeString('defaultTtsProvider', 'custom-openai'),
+    ttsModel: readRuntimeString('defaultTtsModel', 'kokoro'),
+    ttsInstructions: '',
+    savedVoices: {},
+    smartSentenceSplitting: true,
+    segmentPreloadDepthPages: 1,
+    segmentPreloadSentenceLookahead: 3,
+    ttsSegmentMaxBlockLength: 450,
+    pdfHighlightEnabled: true,
+    pdfWordHighlightEnabled: wordHighlightEnabledByDefault,
+    epubHighlightEnabled: true,
+    epubWordHighlightEnabled: wordHighlightEnabledByDefault,
+    firstVisit: false,
+    documentListState: {
+      sortBy: 'name',
+      sortDirection: 'asc',
+      folders: [],
+      collapsedFolders: [],
+      showHint: true,
+      viewMode: 'grid',
+    },
+    privacyAccepted: false,
+    documentsMigrationPrompted: false,
+  };
+}
+
+/**
+ * Static defaults snapshot resolved at first access. For callers that need
+ * fresh values after admin edits, prefer `getAppConfigDefaults()` directly.
+ * Most consumers just need a stable defaults object for spreads, so this is
+ * resolved once per process — admin overrides take effect on next page load
+ * (which is the SSR-injected behavior we want anyway).
+ */
+let cachedDefaults: AppConfigValues | null = null;
+export const APP_CONFIG_DEFAULTS: AppConfigValues = (() => {
+  // Return a getter-backed object that resolves on first access. On the
+  // server, this resolves to built-in defaults; on the client, to the
+  // SSR-injected admin values.
+  const handler: ProxyHandler<AppConfigValues> = {
+    get(_target, prop) {
+      if (!cachedDefaults) cachedDefaults = getAppConfigDefaults();
+      return (cachedDefaults as unknown as Record<string | symbol, unknown>)[prop as string];
+    },
+    has(_target, prop) {
+      if (!cachedDefaults) cachedDefaults = getAppConfigDefaults();
+      return prop in (cachedDefaults as object);
+    },
+    ownKeys() {
+      if (!cachedDefaults) cachedDefaults = getAppConfigDefaults();
+      return Reflect.ownKeys(cachedDefaults as object);
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      if (!cachedDefaults) cachedDefaults = getAppConfigDefaults();
+      const value = (cachedDefaults as unknown as Record<string | symbol, unknown>)[prop as string];
+      if (value === undefined && !(prop in (cachedDefaults as object))) return undefined;
+      return {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      };
+    },
+  };
+  return new Proxy({} as AppConfigValues, handler);
+})();
 
 export interface AppConfigRow extends AppConfigValues {
   id: string;

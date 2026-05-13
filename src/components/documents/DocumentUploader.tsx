@@ -5,8 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { uploadDocxAsPdf } from '@/lib/client/api/documents';
-
-const enableDocx = process.env.NEXT_PUBLIC_ENABLE_DOCX_CONVERSION !== 'false';
+import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 
 
 interface DocumentUploaderProps {
@@ -15,6 +14,7 @@ interface DocumentUploaderProps {
 }
 
 export function DocumentUploader({ className = '', variant = 'default' }: DocumentUploaderProps) {
+  const enableDocx = useFeatureFlag('enableDocxConversion');
   const {
     addPDFDocument: addPDF,
     addEPUBDocument: addEPUB,
@@ -57,7 +57,7 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
       setIsUploading(false);
       setIsConverting(false);
     }
-  }, [addHTML, addPDF, addEPUB, refreshDocuments]);
+  }, [addHTML, addPDF, addEPUB, refreshDocuments, enableDocx]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

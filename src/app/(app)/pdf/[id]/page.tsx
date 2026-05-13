@@ -19,8 +19,7 @@ import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-
-const canExportAudiobook = process.env.NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT !== 'false';
+import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 
 // Dynamic import for client-side rendering only
 const PDFViewer = dynamic(
@@ -32,6 +31,7 @@ const PDFViewer = dynamic(
 );
 
 export default function PDFViewerPage() {
+  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const router = useRouter();
   const { setCurrentDocument, currDocName, clearCurrDoc, currDocPage, currDocPages, createFullAudioBook: createPDFAudioBook, regenerateChapter: regeneratePDFChapter } = usePDF();

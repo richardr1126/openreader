@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import { APP_CONFIG_DEFAULTS, type ViewType, type SavedVoices, type AppConfigRow } from '@/types/config';
+import { APP_CONFIG_DEFAULTS, getAppConfigDefaults, type ViewType, type SavedVoices, type AppConfigRow } from '@/types/config';
 import {
   PDFDocument,
   EPUBDocument,
@@ -114,7 +114,7 @@ function inferProviderAndBaseUrl(raw: RawConfigMap): { provider: string; baseUrl
   let inferredProvider = raw.ttsProvider || '';
 
   if (!raw.ttsProvider) {
-    inferredProvider = process.env.NEXT_PUBLIC_DEFAULT_TTS_PROVIDER || 'custom-openai';
+    inferredProvider = getAppConfigDefaults().ttsProvider;
   } else if (!inferredProvider) {
     if (cachedBaseUrl) {
       const baseUrlLower = cachedBaseUrl.toLowerCase();

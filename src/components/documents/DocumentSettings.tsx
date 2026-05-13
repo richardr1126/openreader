@@ -15,8 +15,7 @@ import {
   clampSegmentPreloadSentenceLookahead,
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
-
-const canWordHighlight = process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
+import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 
 const viewTypeTextMapping = [
   { id: 'single', name: 'Single Page' },
@@ -105,6 +104,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
   epub?: boolean,
   html?: boolean
 }) {
+  const canWordHighlight = useFeatureFlag('enableWordHighlight');
   const {
     viewType,
     skipBlank,

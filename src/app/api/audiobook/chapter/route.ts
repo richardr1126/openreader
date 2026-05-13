@@ -29,8 +29,11 @@ import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/li
 import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
 import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
 import { generateTTSBuffer } from '@/lib/server/tts/generate';
+import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
+import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
-import { supportsNativeModelSpeed } from '@/lib/shared/tts-provider-catalog';
+import { supportsNativeModelSpeed, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
 
@@ -405,12 +408,33 @@ export async function POST(request: NextRequest) {
       chapterIndex = next;
     }
 
-    const provider = request.headers.get('x-tts-provider')
+    const requestedProvider = request.headers.get('x-tts-provider')
       || mergedSettings?.ttsProvider
       || 'openai';
-    providerForError = provider;
-    const openApiKey = request.headers.get('x-openai-key') || process.env.API_KEY || 'none';
-    const openApiBaseUrl = request.headers.get('x-openai-base-url') || process.env.API_BASE;
+    providerForError = requestedProvider;
+    const runtimeConfig = await getResolvedRuntimeConfig();
+    const credResolved = await resolveTtsCredentials({
+      providerHeader: requestedProvider,
+      apiKeyHeader: request.headers.get('x-openai-key'),
+      baseUrlHeader: request.headers.get('x-openai-base-url'),
+      fallbackProvider: runtimeConfig.defaultTtsProvider,
+      restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
+    });
+    if ('error' in credResolved) {
+      if (credResolved.error === 'no_shared_provider_configured') {
+        return NextResponse.json(
+          { error: 'User API keys are restricted and no shared provider is configured.' },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json(
+        { error: `Unknown or disabled TTS provider: ${credResolved.slug}` },
+        { status: 404 },
+      );
+    }
+    const provider = credResolved.provider;
+    const openApiKey = credResolved.apiKey || 'none';
+    const openApiBaseUrl = credResolved.baseUrl;
     const model = mergedSettings?.ttsModel;
     const voice = mergedSettings?.voice
       || (provider === 'openai'
@@ -420,7 +444,11 @@ export async function POST(request: NextRequest) {
           : 'af_sarah');
     const rawNativeSpeed = mergedSettings?.nativeSpeed ?? 1;
     const nativeSpeed = Number.isFinite(Number(rawNativeSpeed)) ? Number(rawNativeSpeed) : 1;
-    const instructions = mergedSettings?.ttsInstructions;
+    const instructions = resolveEffectiveTtsInstructions({
+      model,
+      requestInstructions: mergedSettings?.ttsInstructions,
+      sharedDefaultInstructions: credResolved.adminRecord?.defaultInstructions,
+    });
 
     if (authEnabled && userId && isTtsRateLimitEnabled()) {
       const isAnonymous = Boolean(user?.isAnonymous);
@@ -556,11 +584,17 @@ export async function POST(request: NextRequest) {
     await deleteAudiobookObject(bookId, storageUserId, 'complete.m4b.manifest.json', testNamespace).catch(() => {});
 
     if (!normalizedExistingSettings && incomingSettings) {
+      const settingsToPersist: AudiobookGenerationSettings = {
+        ...incomingSettings,
+        ...(supportsTtsInstructions(incomingSettings.ttsModel)
+          ? { ttsInstructions: instructions ?? '' }
+          : { ttsInstructions: '' }),
+      };
       await putAudiobookObject(
         bookId,
         storageUserId,
         'audiobook.meta.json',
-        Buffer.from(JSON.stringify(incomingSettings, null, 2), 'utf8'),
+        Buffer.from(JSON.stringify(settingsToPersist, null, 2), 'utf8'),
         'application/json; charset=utf-8',
         testNamespace,
       );

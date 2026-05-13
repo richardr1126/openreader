@@ -199,8 +199,19 @@ type JumpResolution =
 const LOOP_GUARD_MIN_INDEX = 2;
 const LOOP_GUARD_MIN_PROGRESS = 0.6;
 const AUDIO_CACHE_MAX_ITEMS = 25;
-const wordHighlightFeatureEnabled =
-  process.env.NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT?.toLowerCase() !== 'false';
+// Read once per module load from SSR-injected runtime config. This sits at
+// module scope because the highlight pipeline is constructed lazily and the
+// flag rarely changes within a session — admin toggling it picks up on
+// reload, matching the SSR-injection model.
+const wordHighlightFeatureEnabled = (() => {
+  if (typeof window === 'undefined') return true;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const injected = (window as any).__OPENREADER_RUNTIME_CONFIG__;
+  if (!injected || typeof injected !== 'object') return true;
+  return typeof injected.enableWordHighlight === 'boolean'
+    ? injected.enableWordHighlight
+    : true;
+})();
 
 // Tiny silent WAV used to unlock HTML5 audio on iOS/Safari.
 const SILENT_WAV_DATA_URI =

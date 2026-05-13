@@ -11,6 +11,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { HTMLProvider } from '@/contexts/HTMLContext';
 import { AuthRateLimitProvider } from '@/contexts/AuthRateLimitContext';
+import { RuntimeConfigProvider } from '@/contexts/RuntimeConfigContext';
 import { PrivacyModal } from '@/components/PrivacyModal';
 import { AuthLoader } from '@/components/auth/AuthLoader';
 import { DexieMigrationModal } from '@/components/documents/DexieMigrationModal';
@@ -29,6 +30,28 @@ export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAu
 
   if (isAuthPage) {
     return (
+      <RuntimeConfigProvider>
+        <AuthRateLimitProvider
+          authEnabled={authEnabled}
+          authBaseUrl={authBaseUrl}
+          allowAnonymousAuthSessions={allowAnonymousAuthSessions}
+          githubAuthEnabled={githubAuthEnabled}
+        >
+          <ThemeProvider>
+            <AuthLoader>
+              <>
+                {children}
+                {authEnabled && <PrivacyModal />}
+              </>
+            </AuthLoader>
+          </ThemeProvider>
+        </AuthRateLimitProvider>
+      </RuntimeConfigProvider>
+    );
+  }
+
+  return (
+    <RuntimeConfigProvider>
       <AuthRateLimitProvider
         authEnabled={authEnabled}
         authBaseUrl={authBaseUrl}
@@ -37,44 +60,26 @@ export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAu
       >
         <ThemeProvider>
           <AuthLoader>
-            <>
-              {children}
-              {authEnabled && <PrivacyModal />}
-            </>
+            <ConfigProvider>
+              <DocumentProvider>
+                <TTSProvider>
+                  <PDFProvider>
+                    <EPUBProvider>
+                      <HTMLProvider>
+                        <>
+                          {children}
+                          {authEnabled && <PrivacyModal />}
+                          <DexieMigrationModal />
+                        </>
+                      </HTMLProvider>
+                    </EPUBProvider>
+                  </PDFProvider>
+                </TTSProvider>
+              </DocumentProvider>
+            </ConfigProvider>
           </AuthLoader>
         </ThemeProvider>
       </AuthRateLimitProvider>
-    );
-  }
-
-  return (
-    <AuthRateLimitProvider
-      authEnabled={authEnabled}
-      authBaseUrl={authBaseUrl}
-      allowAnonymousAuthSessions={allowAnonymousAuthSessions}
-      githubAuthEnabled={githubAuthEnabled}
-    >
-      <ThemeProvider>
-        <AuthLoader>
-          <ConfigProvider>
-            <DocumentProvider>
-              <TTSProvider>
-                <PDFProvider>
-                  <EPUBProvider>
-                    <HTMLProvider>
-                      <>
-                        {children}
-                        {authEnabled && <PrivacyModal />}
-                        <DexieMigrationModal />
-                      </>
-                    </HTMLProvider>
-                  </EPUBProvider>
-                </PDFProvider>
-              </TTSProvider>
-            </DocumentProvider>
-          </ConfigProvider>
-        </AuthLoader>
-      </ThemeProvider>
-    </AuthRateLimitProvider>
+    </RuntimeConfigProvider>
   );
 }

@@ -37,10 +37,10 @@ import { cacheStoredDocumentFromBytes, clearDocumentCache } from '@/lib/client/c
 import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from '@/lib/client/cache/previews';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
 import { REPLICATE_KOKORO_82M_VERSIONED_MODEL, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
-
-const enableDestructiveDelete = process.env.NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS !== 'false';
-const showAllDeepInfra = process.env.NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS !== 'false';
-const enableTTSProvidersTab = process.env.NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB !== 'false';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
+import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
+import { useSharedProviders } from '@/hooks/useSharedProviders';
 
 // Hard-coded theme color palettes for the visual theme selector
 type ThemeColorSet = { background: string; base: string; offbase: string; accent: string; secondaryAccent: string; foreground: string; muted: string };
@@ -81,16 +81,32 @@ const CUSTOM_COLOR_FIELDS: { key: keyof CustomThemeColors; label: string }[] = [
   { key: 'muted', label: 'Muted' },
 ];
 
-type SectionId = 'api' | 'theme' | 'docs' | 'account';
+type SectionId = 'api' | 'theme' | 'docs' | 'account' | 'admin';
 
-const SIDEBAR_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; authOnly?: boolean }[] = [
+type SidebarSection = {
+  id: SectionId;
+  label: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  authOnly?: boolean;
+  adminOnly?: boolean;
+};
+
+const SIDEBAR_SECTIONS: SidebarSection[] = [
   { id: 'api', label: 'TTS Provider', icon: KeyIcon },
   { id: 'theme', label: 'Appearance', icon: PaletteIcon },
   { id: 'docs', label: 'Documents', icon: DocumentIcon },
   { id: 'account', label: 'Account', icon: UserIcon, authOnly: true },
+  { id: 'admin', label: 'Admin', icon: SettingsIcon, authOnly: true, adminOnly: true },
 ];
 
+type AdminSubTab = 'providers' | 'features';
+
 export function SettingsModal({ className = '' }: { className?: string }) {
+  const runtimeConfig = useRuntimeConfig();
+  const enableDestructiveDelete = runtimeConfig.enableDestructiveDeleteActions;
+  const showAllDeepInfra = runtimeConfig.showAllDeepInfraModels;
+  const enableTTSProvidersTab = runtimeConfig.enableTtsProvidersTab;
+  const restrictUserApiKeys = runtimeConfig.restrictUserApiKeys;
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>(enableTTSProvidersTab ? 'api' : 'theme');
 
@@ -130,19 +146,25 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const router = useRouter();
   const isBusy = isImportingLibrary;
 
+  const { providers: sharedProviders } = useSharedProviders();
   const {
     providers: ttsProviders,
     models: ttsModels,
     supportsCustomModel: supportsCustom,
     selectedModelId,
     canSubmit,
+    selectedSharedProvider,
   } = useMemo(() => resolveTtsSettingsViewModel({
     provider: localTTSProvider,
     apiKey: localApiKey,
     modelValue,
     customModelInput,
     showAllDeepInfra,
-  }), [localTTSProvider, localApiKey, modelValue, customModelInput]);
+    sharedProviders,
+    allowBuiltInProviders: !restrictUserApiKeys,
+  }), [localTTSProvider, localApiKey, modelValue, customModelInput, showAllDeepInfra, sharedProviders, restrictUserApiKeys]);
+  const isSharedSelected = Boolean(selectedSharedProvider);
+  const selectedProviderOption = ttsProviders.find((p) => p.id === localTTSProvider) ?? ttsProviders[0];
 
   const checkFirstVist = useCallback(async () => {
     const appConfig = await getAppConfig();
@@ -192,6 +214,14 @@ export function SettingsModal({ className = '' }: { className?: string }) {
       setCustomModelInput('');
     }
   }, [modelValue, ttsModels]);
+
+  useEffect(() => {
+    if (!restrictUserApiKeys) return;
+    if (selectedProviderOption) return;
+    if (ttsProviders.length > 0) {
+      setLocalTTSProvider(ttsProviders[0].id);
+    }
+  }, [restrictUserApiKeys, selectedProviderOption, ttsProviders]);
 
   const handleRefresh = async () => {
     try {
@@ -371,14 +401,20 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     return THEME_COLORS[id] || THEME_COLORS.light;
   }, [systemIsDark, customColors]);
 
+  const isAdmin = Boolean(
+    (session?.user as unknown as { isAdmin?: boolean } | undefined)?.isAdmin,
+  );
+  const [adminSubTab, setAdminSubTab] = useState<AdminSubTab>('providers');
   const visibleSections = useMemo(
     () => SIDEBAR_SECTIONS.filter((section) => {
       if (section.id === 'api' && !enableTTSProvidersTab) {
         return false;
       }
-      return !section.authOnly || authEnabled;
+      if (section.authOnly && !authEnabled) return false;
+      if (section.adminOnly && !isAdmin) return false;
+      return true;
     }),
-    [authEnabled]
+    [authEnabled, isAdmin, enableTTSProvidersTab]
   );
 
   useEffect(() => {
@@ -392,8 +428,12 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const btnPrimary = `${btnBase} bg-accent text-background hover:bg-secondary-accent hover:scale-[1.04]`;
   const btnSecondary = `${btnBase} bg-background text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.04]`;
   const btnOutline = `${btnBase} bg-background border border-offbase text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.02]`;
-  const shouldShowBaseUrl = localTTSProvider !== 'replicate'
-    && (localTTSProvider === 'custom-openai' || !localBaseUrl || localBaseUrl === '');
+  const effectiveProviderType = selectedSharedProvider?.providerType ?? localTTSProvider;
+  const shouldShowBaseUrl = !restrictUserApiKeys
+    && !isSharedSelected
+    && effectiveProviderType !== 'replicate'
+    && (effectiveProviderType === 'custom-openai' || !localBaseUrl || localBaseUrl === '');
+  const shouldShowApiKey = !restrictUserApiKeys && !isSharedSelected;
   const selectedModel = ttsModels.find(m => m.id === selectedModelId) || ttsModels[0];
   const selectedModelVersion = selectedModel?.id?.includes(':')
     ? selectedModel.id.slice(selectedModel.id.indexOf(':'))
@@ -503,70 +543,88 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                         <div className="space-y-4">
                           <div className="space-y-1.5">
                             <label className="block text-sm font-medium text-foreground">TTS Provider</label>
-                            <Listbox
-                              value={ttsProviders.find(p => p.id === localTTSProvider) || ttsProviders[0]}
-                              onChange={(provider) => {
-                                setLocalTTSProvider(provider.id);
-                                if (provider.id === 'openai') {
-                                  setModelValue('tts-1');
-                                  setLocalBaseUrl('https://api.openai.com/v1');
-                                } else if (provider.id === 'custom-openai') {
-                                  setModelValue('kokoro');
-                                  setLocalBaseUrl('');
-                                } else if (provider.id === 'replicate') {
-                                  setModelValue(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
-                                  setLocalBaseUrl('');
-                                } else if (provider.id === 'deepinfra') {
-                                  setModelValue('hexgrad/Kokoro-82M');
-                                  setLocalBaseUrl('https://api.deepinfra.com/v1/openai');
-                                }
-                                setCustomModelInput('');
-                              }}
-                            >
-                              <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-background py-2 pl-3 pr-10 text-left text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.005] hover:text-accent hover:bg-offbase">
-                                <span className="block truncate">
-                                  {ttsProviders.find(p => p.id === localTTSProvider)?.name || 'Select Provider'}
-                                </span>
-                                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                                  <ChevronUpDownIcon className="h-5 w-5 text-muted" />
-                                </span>
-                              </ListboxButton>
-                              <Transition
-                                as={Fragment}
-                                leave="transition ease-in duration-100"
-                                leaveFrom="opacity-100"
-                                leaveTo="opacity-0"
+                            {ttsProviders.length === 0 ? (
+                              <p className="text-xs text-amber-500">
+                                User API keys are restricted and no shared provider is configured. Ask an admin to add one.
+                              </p>
+                            ) : (
+                              <Listbox
+                                value={selectedProviderOption!}
+                                onChange={(provider) => {
+                                  setLocalTTSProvider(provider.id);
+                                  if (provider.shared) {
+                                    // Shared admin provider — credentials live on the server.
+                                    setLocalApiKey('');
+                                    setLocalBaseUrl('');
+                                    const shared = sharedProviders.find((p) => p.slug === provider.id);
+                                    if (shared?.defaultModel) setModelValue(shared.defaultModel);
+                                    setLocalTTSInstructions(shared?.defaultInstructions ?? '');
+                                  } else if (provider.id === 'openai') {
+                                    setModelValue('tts-1');
+                                    setLocalBaseUrl('https://api.openai.com/v1');
+                                  } else if (provider.id === 'custom-openai') {
+                                    setModelValue('kokoro');
+                                    setLocalBaseUrl('');
+                                  } else if (provider.id === 'replicate') {
+                                    setModelValue(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
+                                    setLocalBaseUrl('');
+                                  } else if (provider.id === 'deepinfra') {
+                                    setModelValue('hexgrad/Kokoro-82M');
+                                    setLocalBaseUrl('https://api.deepinfra.com/v1/openai');
+                                  }
+                                  setCustomModelInput('');
+                                }}
                               >
-                                <ListboxOptions
-                                  anchor="bottom start"
-                                  className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
+                                <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-background py-2 pl-3 pr-10 text-left text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.005] hover:text-accent hover:bg-offbase">
+                                  <span className="block truncate">
+                                    {selectedProviderOption?.name || 'Select Provider'}
+                                  </span>
+                                  <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                                    <ChevronUpDownIcon className="h-5 w-5 text-muted" />
+                                  </span>
+                                </ListboxButton>
+                                <Transition
+                                  as={Fragment}
+                                  leave="transition ease-in duration-100"
+                                  leaveFrom="opacity-100"
+                                  leaveTo="opacity-0"
                                 >
-                                  {ttsProviders.map((provider) => (
-                                    <ListboxOption
-                                      key={provider.id}
-                                      className={({ active }) =>
-                                        `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                                      }
-                                      value={provider}
-                                    >
-                                      {({ selected }) => (
-                                        <>
-                                          <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                                            {provider.name}
-                                          </span>
-                                          {selected && (
-                                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-accent">
-                                              <CheckIcon className="h-5 w-5" />
+                                  <ListboxOptions
+                                    anchor="bottom start"
+                                    className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
+                                  >
+                                    {ttsProviders.map((provider) => (
+                                      <ListboxOption
+                                        key={provider.id}
+                                        className={({ active }) =>
+                                          `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
+                                        }
+                                        value={provider}
+                                      >
+                                        {({ selected }) => (
+                                          <>
+                                            <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                              {provider.name}
                                             </span>
-                                          )}
-                                        </>
-                                      )}
-                                    </ListboxOption>
-                                  ))}
-                                </ListboxOptions>
-                              </Transition>
-                            </Listbox>
+                                            {selected && (
+                                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-accent">
+                                                <CheckIcon className="h-5 w-5" />
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
+                                      </ListboxOption>
+                                    ))}
+                                  </ListboxOptions>
+                                </Transition>
+                              </Listbox>
+                            )}
                           </div>
+                          {restrictUserApiKeys && (
+                            <p className="text-xs text-muted">
+                              This instance restricts user API keys. TTS runs through admin-configured shared providers only.
+                            </p>
+                          )}
 
                           {shouldShowBaseUrl && (
                             <div className="space-y-1.5">
@@ -584,19 +642,26 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                             </div>
                           )}
 
-                          <div className="space-y-1.5">
-                            <label className="block text-sm font-medium text-foreground">
-                              API Key
-                              {localApiKey && <span className="ml-2 text-xs text-accent">(Overriding env)</span>}
-                            </label>
-                            <Input
-                              type="password"
-                              value={localApiKey}
-                              onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                              placeholder={!showAllDeepInfra && localTTSProvider === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
-                              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                            />
-                          </div>
+                          {shouldShowApiKey && (
+                            <div className="space-y-1.5">
+                              <label className="block text-sm font-medium text-foreground">
+                                API Key
+                                {localApiKey && <span className="ml-2 text-xs text-accent">(Overriding env)</span>}
+                              </label>
+                              <Input
+                                type="password"
+                                value={localApiKey}
+                                onChange={(e) => handleInputChange('apiKey', e.target.value)}
+                                placeholder={!showAllDeepInfra && localTTSProvider === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
+                                className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                              />
+                            </div>
+                          )}
+                          {isSharedSelected && (
+                            <p className="text-xs text-muted">
+                              This is a shared provider configured by an admin. API key and base URL are managed server-side.
+                            </p>
+                          )}
 
                           <div className="space-y-1.5">
                             <label className="block text-sm font-medium text-foreground">TTS Model</label>
@@ -704,12 +769,15 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               type="button"
                               className={`${btnSecondary} px-4 py-2`}
                               onClick={async () => {
+                                const sharedDefault = sharedProviders.find(
+                                  (p) => p.slug === runtimeConfig.defaultTtsProvider,
+                                );
                                 setLocalApiKey('');
                                 setLocalBaseUrl('');
-                                setLocalTTSProvider('custom-openai');
-                                setModelValue('kokoro');
+                                setLocalTTSProvider(runtimeConfig.defaultTtsProvider);
+                                setModelValue(runtimeConfig.defaultTtsModel);
                                 setCustomModelInput('');
-                                setLocalTTSInstructions('');
+                                setLocalTTSInstructions(sharedDefault?.defaultInstructions ?? '');
                               }}
                             >
                               Reset
@@ -721,8 +789,8 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               disabled={!canSubmit}
                               onClick={async () => {
                                 await updateConfig({
-                                  apiKey: localApiKey || '',
-                                  baseUrl: localBaseUrl || '',
+                                  apiKey: restrictUserApiKeys ? '' : (localApiKey || ''),
+                                  baseUrl: restrictUserApiKeys ? '' : (localBaseUrl || ''),
                                 });
                                 await updateConfigKey('ttsProvider', localTTSProvider);
                                 const finalModel = selectedModelId === 'custom' ? customModelInput.trim() : modelValue;
@@ -1009,6 +1077,42 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               )}
                             </div>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Admin Section */}
+                      {activeSection === 'admin' && isAdmin && (
+                        <div className="space-y-4">
+                          <div
+                            role="radiogroup"
+                            aria-label="Admin tab"
+                            className="grid grid-cols-2 gap-1 rounded-full border border-offbase bg-background p-1"
+                          >
+                            {([
+                              { id: 'providers', label: 'Shared providers' },
+                              { id: 'features', label: 'Site features' },
+                            ] as { id: AdminSubTab; label: string }[]).map((tab) => {
+                              const active = adminSubTab === tab.id;
+                              return (
+                                <button
+                                  key={tab.id}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={active}
+                                  onClick={() => setAdminSubTab(tab.id)}
+                                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                                    active
+                                      ? 'bg-accent text-background shadow-sm'
+                                      : 'text-muted hover:bg-base hover:text-foreground'
+                                  }`}
+                                >
+                                  {tab.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {adminSubTab === 'providers' && <AdminProvidersPanel />}
+                          {adminSubTab === 'features' && <AdminFeaturesPanel />}
                         </div>
                       )}
 

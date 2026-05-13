@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@/db";
 import { isAuthEnabled, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
+import { isAdminEmail, syncAdminFlag } from "@/lib/server/admin/email-sync";
 import * as authSchemaSqlite from "@/db/schema_auth_sqlite";
 import * as authSchemaPostgres from "@/db/schema_auth_postgres";
 
@@ -72,6 +73,14 @@ const createAuth = () => betterAuth({
     },
   },
   user: {
+    additionalFields: {
+      isAdmin: {
+        type: 'boolean',
+        required: false,
+        defaultValue: false,
+        input: false, // never settable from the client; controlled by ADMIN_EMAILS
+      },
+    },
     deleteUser: {
       enabled: true,
       beforeDelete: async (user) => {
@@ -83,6 +92,22 @@ const createAuth = () => betterAuth({
           // Don't throw – allow the user deletion to proceed even if S3 cleanup fails.
           // Orphaned blobs are preferable to a blocked account deletion.
         }
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          // Stamp newly-created users with the correct isAdmin value if their
+          // email matches ADMIN_EMAILS. This avoids a follow-up UPDATE on
+          // first signup. The `input: false` above prevents clients from
+          // forcing isAdmin=true through signup payloads.
+          if (isAdminEmail(user.email)) {
+            return { data: { ...user, isAdmin: true } };
+          }
+          return { data: user };
+        },
       },
     },
   },
@@ -213,6 +238,17 @@ export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Pro
   const session = await auth.api.getSession({ headers: request.headers });
   const user = session?.user ?? null;
   const userId = user?.id ?? null;
+
+  // Keep user.isAdmin in sync with ADMIN_EMAILS on every session resolution.
+  // Cheap when nothing changes (no-ops at the DB layer); promotes/demotes
+  // when the env list is edited. Skips anonymous users (no real email).
+  if (user && userId && user.email && !user.isAnonymous) {
+    const current = (user as unknown as { isAdmin?: boolean }).isAdmin ?? false;
+    const resolved = await syncAdminFlag(userId, user.email, current);
+    if (resolved !== current) {
+      (user as unknown as { isAdmin: boolean }).isAdmin = resolved;
+    }
+  }
 
   return { authEnabled, session, user, userId };
 }

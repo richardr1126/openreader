@@ -15,3 +15,5 @@ export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentPro
 export const documentPreviews = usePostgres ? postgresSchema.documentPreviews : sqliteSchema.documentPreviews;
 export const ttsSegmentEntries = usePostgres ? postgresSchema.ttsSegmentEntries : sqliteSchema.ttsSegmentEntries;
 export const ttsSegmentVariants = usePostgres ? postgresSchema.ttsSegmentVariants : sqliteSchema.ttsSegmentVariants;
+export const adminProviders = usePostgres ? postgresSchema.adminProviders : sqliteSchema.adminProviders;
+export const adminSettings = usePostgres ? postgresSchema.adminSettings : sqliteSchema.adminSettings;
