@@ -75,7 +75,7 @@ import { isStableEpubLocator } from '@/types/client';
 /**
  * Resolves an EPUB segment's draft locator (typically `{ readerType: 'epub',
  * location: <CFI> }`) into a stable book coordinate. The resolver lives in
- * EPUBContext where the live `Book` instance is available; TTSContext calls it
+ * the route-local EPUB reader hook where the live `Book` instance is available; TTSContext calls it
  * just before posting segments to the server so what gets persisted is
  * viewport-independent. Returns null when the CFI can't be resolved.
  */
@@ -425,7 +425,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   /**
    * Resolves a CFI + segment text into stable EPUB coordinates. Registered by
-   * EPUBContext (which owns the live `Book` instance). Used at server-persist
+   * the route-local EPUB reader hook (which owns the live `Book` instance). Used at server-persist
    * time so the saved locator carries `spineHref`/`spineIndex`/`charOffset`
    * rather than the viewport-dependent CFI string. Returns null when the CFI
    * can't be resolved — callers should drop the segment from the persist
@@ -464,7 +464,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       }
       if (!resolver) {
         // No book available to resolve — drop. This can happen during early
-        // boot before EPUBContext has mounted.
+        // boot before the EPUB reader hook has mounted.
         continue;
       }
       const keyPrefix = buildSegmentKeyPrefix(documentId, 'epub');

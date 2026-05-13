@@ -8,7 +8,7 @@ import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { useEPUBTheme, getThemeStyles } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import { DotsVerticalIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
-import type { EPUBState } from '@/app/(app)/epub/[id]/useEpubDocument';
+import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
 
 const ReactReader = dynamic(() => import('react-reader').then(mod => mod.ReactReader), {
   ssr: false,
@@ -18,7 +18,7 @@ const ReactReader = dynamic(() => import('react-reader').then(mod => mod.ReactRe
 interface EPUBViewerProps {
   className?: string;
   epubState: Pick<
-    EPUBState,
+    EpubDocumentState,
     | 'currDocData'
     | 'currDocName'
     | 'currDocPage'

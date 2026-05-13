@@ -19,13 +19,14 @@ import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { useEPUB } from './useEpubDocument';
+import { useEpubDocument } from './useEpubDocument';
 
 export default function EPUBPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const router = useRouter();
-  const epubState = useEPUB();
+  const routeDocumentId = typeof id === 'string' ? id : undefined;
+  const epubState = useEpubDocument(routeDocumentId);
   const {
     setCurrentDocument,
     currDocName,
@@ -52,19 +53,19 @@ export default function EPUBPage() {
     setActiveSidebar(null);
     inFlightDocIdRef.current = null;
     loadedDocIdRef.current = null;
-  }, [id]);
+  }, [routeDocumentId]);
 
   const loadDocument = useCallback(async () => {
     console.log('Loading new epub (from page.tsx)');
     let didRedirect = false;
     let startedLoad = false;
     try {
-      if (!id) {
+      if (!routeDocumentId) {
         setError('Document not found');
         return;
       }
-      const resolved = await resolveDocumentId(id as string);
-      if (resolved !== (id as string)) {
+      const resolved = await resolveDocumentId(routeDocumentId);
+      if (resolved !== routeDocumentId) {
         didRedirect = true;
         router.replace(`/epub/${resolved}`);
         return;
@@ -93,7 +94,7 @@ export default function EPUBPage() {
         setIsLoading(false);
       }
     }
-  }, [id, router, setCurrentDocument, stop]);
+  }, [routeDocumentId, router, setCurrentDocument, stop]);
 
   useEffect(() => {
     if (!isLoading) return;
@@ -143,8 +144,8 @@ export default function EPUBPage() {
     onChapterComplete: (chapter: TTSAudiobookChapter) => void,
     settings: AudiobookGenerationSettings
   ) => {
-    return createEPUBAudioBook(onProgress, signal, onChapterComplete, id as string, settings.format, settings);
-  }, [createEPUBAudioBook, id]);
+    return createEPUBAudioBook(onProgress, signal, onChapterComplete, routeDocumentId, settings.format, settings);
+  }, [createEPUBAudioBook, routeDocumentId]);
 
   const handleRegenerateChapter = useCallback(async (
     chapterIndex: number,
@@ -226,7 +227,7 @@ export default function EPUBPage() {
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
           documentType="epub"
-          documentId={id as string}
+          documentId={routeDocumentId || ''}
           onGenerateAudiobook={handleGenerateAudiobook}
           onRegenerateChapter={handleRegenerateChapter}
         />
@@ -249,7 +250,7 @@ export default function EPUBPage() {
       <SegmentsSidebar
         isOpen={activeSidebar === 'segments'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'segments' : (prev === 'segments' ? null : prev))}
-        documentId={id as string}
+        documentId={routeDocumentId || ''}
         epubBookRef={bookRef}
       />
     </>
