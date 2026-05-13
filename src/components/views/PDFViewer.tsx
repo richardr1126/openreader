@@ -7,12 +7,25 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { useTTS } from '@/contexts/TTSContext';
-import { usePDF } from '@/contexts/PDFContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { usePDFResize } from '@/hooks/pdf/usePDFResize';
+import type { PdfDocumentState } from '@/app/(app)/pdf/[id]/usePdfDocument';
 
 interface PDFViewerProps {
   zoomLevel: number;
+  pdfState: Pick<
+    PdfDocumentState,
+    | 'highlightPattern'
+    | 'clearHighlights'
+    | 'clearWordHighlights'
+    | 'highlightWordIndex'
+    | 'onDocumentLoadSuccess'
+    | 'currDocId'
+    | 'currDocData'
+    | 'currDocPages'
+    | 'currDocText'
+    | 'currDocPage'
+  >;
 }
 
 interface PDFOnLinkClickArgs {
@@ -20,7 +33,7 @@ interface PDFOnLinkClickArgs {
   dest?: Dest;
 }
 
-export function PDFViewer({ zoomLevel }: PDFViewerProps) {
+export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
   const scaleRef = useRef<number>(1);
@@ -43,7 +56,6 @@ export function PDFViewer({ zoomLevel }: PDFViewerProps) {
     skipToLocation,
   } = useTTS();
 
-  // PDF context
   const {
     highlightPattern,
     clearHighlights,
@@ -55,7 +67,7 @@ export function PDFViewer({ zoomLevel }: PDFViewerProps) {
     currDocPages,
     currDocText,
     currDocPage,
-  } = usePDF();
+  } = pdfState;
 
   // IMPORTANT:
   // - pdf.js may transfer/detach ArrayBuffers when sending them to its worker, so we must clone.

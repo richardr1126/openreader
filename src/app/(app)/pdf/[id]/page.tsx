@@ -1,7 +1,6 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { usePDF } from '@/contexts/PDFContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +19,7 @@ import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
 const PDFViewer = dynamic(
@@ -34,7 +34,16 @@ export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const router = useRouter();
-  const { setCurrentDocument, currDocName, clearCurrDoc, currDocPage, currDocPages, createFullAudioBook: createPDFAudioBook, regenerateChapter: regeneratePDFChapter } = usePDF();
+  const pdfState = usePdfDocument();
+  const {
+    setCurrentDocument,
+    currDocName,
+    clearCurrDoc,
+    currDocPage,
+    currDocPages,
+    createFullAudioBook: createPDFAudioBook,
+    regenerateChapter: regeneratePDFChapter,
+  } = pdfState;
   const { stop } = useTTS();
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
@@ -197,7 +206,7 @@ export default function PDFViewerPage() {
             <DocumentSkeleton />
           </div>
         ) : (
-          <PDFViewer zoomLevel={zoomLevel} />
+          <PDFViewer zoomLevel={zoomLevel} pdfState={pdfState} />
         )}
       </div>
       {canExportAudiobook && (

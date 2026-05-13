@@ -1,23 +1,14 @@
 /**
- * PDF Context Provider
- * 
- * This module provides a React context for managing PDF document functionality.
- * It handles document loading, text extraction, highlighting, and integration with TTS.
- * 
- * Key features:
- * - PDF document management (add/remove/load)
- * - Text extraction and processing
- * - Text highlighting and navigation
- * - Document state management
+ * Route-local PDF document hook.
+ *
+ * This module owns PDF document loading, text extraction, highlighting, and
+ * audiobook integration for the `/pdf/[id]` route.
  */
 
 'use client';
 
 import {
-  createContext,
-  useContext,
   useState,
-  ReactNode,
   useEffect,
   useCallback,
   useMemo,
@@ -50,9 +41,9 @@ import type { AudiobookGenerationSettings } from '@/types/client';
 import { clampSegmentPreloadDepth } from '@/types/config';
 
 /**
- * Interface defining all available methods and properties in the PDF context
+ * Interface defining all available methods and properties for the PDF route.
  */
-interface PDFContextType {
+export interface PdfDocumentState {
   // Current document state
   currDocId: string | undefined;
   currDocData: ArrayBuffer | undefined;
@@ -93,22 +84,13 @@ interface PDFContextType {
   isAudioCombining: boolean;
 }
 
-// Create the context
-const PDFContext = createContext<PDFContextType | undefined>(undefined);
-
 const EMPTY_TEXT_RETRY_DELAY_MS = 120;
 const EMPTY_TEXT_MAX_RETRIES = 6;
 
 /**
- * PDFProvider Component
- * 
- * Main provider component that manages PDF state and functionality.
- * Handles document loading, text processing, and integration with TTS.
- * 
- * @param {Object} props - Component props
- * @param {ReactNode} props.children - Child components to be wrapped by the provider
+ * Main PDF route hook.
  */
-export function PDFProvider({ children }: { children: ReactNode }) {
+export function usePdfDocument(): PdfDocumentState {
   const {
     setText: setTTSText,
     stop,
@@ -507,8 +489,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
     };
   }, [registerVisualPageChangeHandler, currDocPages, pdfDocument]);
 
-  // Context value memoization
-  const contextValue = useMemo(
+  return useMemo(
     () => ({
       onDocumentLoadSuccess,
       setCurrentDocument,
@@ -544,25 +525,4 @@ export function PDFProvider({ children }: { children: ReactNode }) {
       isAudioCombining,
     ]
   );
-
-  return (
-    <PDFContext.Provider value={contextValue}>
-      {children}
-    </PDFContext.Provider>
-  );
-}
-
-/**
- * Custom hook to consume the PDF context
- * Ensures the context is used within a provider
- * 
- * @throws {Error} If used outside of PDFProvider
- * @returns {PDFContextType} The PDF context value containing all PDF-related functionality
- */
-export function usePDF() {
-  const context = useContext(PDFContext);
-  if (context === undefined) {
-    throw new Error('usePDF must be used within a PDFProvider');
-  }
-  return context;
 }
