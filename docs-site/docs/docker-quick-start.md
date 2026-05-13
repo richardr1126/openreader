@@ -40,6 +40,7 @@ docker run --name openreader \
   -e API_KEY=none \
   -e BASE_URL=http://localhost:3003 \
   -e AUTH_SECRET=$(openssl rand -hex 32) \
+  -e ADMIN_EMAILS=you@example.com \
   ghcr.io/richardr1126/openreader:latest
 ```
 
@@ -49,9 +50,9 @@ What this command enables:
 - `-p 8333:8333`: exposes embedded SeaweedFS S3 endpoint for direct browser presigned upload/download.
 - `-v openreader_docstore:/app/docstore`: persists SQLite metadata, SeaweedFS blob data, and migration/runtime state.
 - `-v /path/to/your/library:/app/docstore/library:ro`: mounts a read-only importable library source.
-- `-e API_BASE=...`: sets the server-side default TTS endpoint OpenReader calls.
-- `-e API_KEY=...`: sets the server-side default TTS API key (`none` is fine for local backends that do not require auth).
+- `-e API_BASE=...` / `-e API_KEY=...`: **first-boot seed only.** On the first container start, these are auto-migrated into a `default-openai` admin shared provider stored in the DB (key encrypted at rest). After that, the running app no longer reads them — manage the provider from **Settings → Admin → Shared providers**. See [Admin Panel](./configure/admin-panel).
 - `-e BASE_URL=...` and `-e AUTH_SECRET=...`: together they turn on auth/session mode for local sign-in flows.
+- `-e ADMIN_EMAILS=...`: (optional, requires auth) comma-separated emails auto-promoted to admin. Admins see the **Admin** tab in Settings.
 
 </TabItem>
 <TabItem value="local-network" label="LAN Host">
@@ -69,6 +70,7 @@ docker run --name openreader \
   -e AUTH_SECRET=$(openssl rand -hex 32) \
   -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003 \
   -e USE_ANONYMOUS_AUTH_SESSIONS=true \
+  -e ADMIN_EMAILS=you@example.com \
   ghcr.io/richardr1126/openreader:latest
 ```
 
@@ -80,7 +82,8 @@ What this command enables:
 - `BASE_URL` points auth/session cookies and callbacks at your LAN URL.
 - `AUTH_TRUSTED_ORIGINS` allows localhost loopback origins in addition to your primary LAN origin.
 - `USE_ANONYMOUS_AUTH_SESSIONS=true` allows guest sessions while auth is enabled.
-- `API_BASE` still sets the default server-side TTS endpoint.
+- `API_BASE` seeds the default TTS endpoint into the admin-managed `default-openai` shared provider on first boot. Edit it from **Settings → Admin → Shared providers** after that.
+- `ADMIN_EMAILS=...` (optional) auto-promotes the listed email(s) to admin so they can manage shared providers and site feature flags from the UI.
 - `openreader_docstore` volume keeps data persistent across restarts.
 
 </TabItem>
@@ -100,15 +103,17 @@ What this command enables:
 
 - Fastest startup with no extra env vars.
 - No persistent volume (`/app/docstore` stays container-local), so data is ephemeral unless you add a mount.
-- Auth remains disabled because `BASE_URL` and `AUTH_SECRET` are not set.
-- TTS endpoint/key are not preset server-side (`API_BASE`/`API_KEY` not set), so configure provider settings in the app UI.
+- Auth remains disabled because `BASE_URL` and `AUTH_SECRET` are not set. The admin panel requires auth, so it's unavailable in this mode.
+- No TTS provider preset by default. Configure `API_BASE`/`API_KEY` on first boot if you want a seeded shared provider, or run auth+admin mode and manage providers from the admin panel.
 
 </TabItem>
 </Tabs>
 
 :::tip Quick Tips
-- Set `API_BASE` to a TTS endpoint the container can reach (`host.docker.internal` works for host-local services).
-- Auth is enabled only when both `BASE_URL` and `AUTH_SECRET` are set.
+- Set `API_BASE` on first boot to a TTS endpoint the container can reach (`host.docker.internal` works for host-local services). After first boot, manage providers in **Settings → Admin → Shared providers**.
+- Auth is enabled only when both `BASE_URL` and `AUTH_SECRET` are set. The admin panel requires auth.
+- Set `ADMIN_EMAILS` to your email if you want the **Admin** tab in Settings.
+- `restrictUserApiKeys` controls shared-provider-only mode. For per-user BYOK in auth-enabled setups, toggle it off in **Settings → Admin → Site features**. Legacy first-boot seed via `NEXT_PUBLIC_RESTRICT_USER_API_KEYS=false` is still supported.
 - Use a `/app/docstore` mount if you want data to survive container/image replacement.
 - Startup automatically runs DB/storage migrations via the shared entrypoint.
 :::
@@ -123,9 +128,9 @@ If `8333` is not reachable from the browser, direct presigned access is unavaila
 
 Visit [http://localhost:3003](http://localhost:3003) after startup.
 
-- Set TTS provider and model in Settings
-- Set TTS API base URL and API key if needed
-- Select the model voice from the voice dropdown
+- If you set `ADMIN_EMAILS`, sign in with that email and open **Settings → Admin** to manage shared TTS providers and site feature flags for all users.
+- Per-user: set TTS provider/model in **Settings → TTS Provider**. API key/base URL inputs are shown only when `restrictUserApiKeys=false`.
+- Select the model voice from the voice dropdown.
 
 ## 3. Update Docker image
 
@@ -145,6 +150,7 @@ If you use a mounted volume for `/app/docstore`, your persisted data remains aft
 :::info Related Docs
 - [Environment Variables](./reference/environment-variables)
 - [Auth](./configure/auth)
+- [Admin Panel](./configure/admin-panel)
 - [Database](./configure/database)
 - [Object / Blob Storage](./configure/object-blob-storage)
 - [Migrations](./configure/migrations)

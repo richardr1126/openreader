@@ -6,21 +6,27 @@ Use Replicate's hosted TTS models as your provider.
 
 ## Setup
 
-**Environment variables (recommended for deployment):**
+**Recommended (auth + admin): Settings → Admin → Shared providers**
+
+1. Add a shared provider with type `replicate`.
+2. Enter your API key.
+3. Set default model to:
+   `alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5` (or your preferred model).
+
+**Legacy bootstrap seed (optional, first boot only):**
 
 ```env
 API_KEY=r8_...
-NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=replicate
 NEXT_PUBLIC_DEFAULT_TTS_MODEL=alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5
 ```
 
-**Or in-app via Settings -> TTS Provider:**
+**Per-user Settings → TTS Provider (only when `restrictUserApiKeys=false`):**
 
 1. Set provider to `Replicate`.
 2. Enter your `API_KEY`.
 3. Choose a model and voice.
 
-Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
+See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
 
 ## Notes
 

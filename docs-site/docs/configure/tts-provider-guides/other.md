@@ -15,7 +15,14 @@ Known compatible implementations: [Kokoro-FastAPI](./kokoro-fastapi), [KittenTTS
 
 ## Setup
 
-**Environment variables (recommended for deployment):**
+**Recommended (auth + admin): Settings → Admin → Shared providers**
+
+1. Add a shared provider with type `custom-openai`.
+2. Set `API_BASE` to your service base URL (typically ending in `/v1`).
+3. Set API key if your service requires authentication.
+4. Set a default model/voice supported by your backend.
+
+**Legacy bootstrap seed (optional, first boot only):**
 
 ```env
 API_BASE=http://your-tts-server/v1
@@ -29,7 +36,7 @@ API_KEY=optional-key-if-required
 3. Set `API_KEY` if your service requires authentication.
 4. Choose a model and voice supported by your backend.
 
-Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
+See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
 
 :::warning TTS requests are server-side
 `API_BASE` must be reachable from the **Next.js server**, not just the browser. In Docker, use container names or `host.docker.internal`.

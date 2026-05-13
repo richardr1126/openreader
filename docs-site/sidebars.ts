@@ -36,6 +36,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'configure/admin-panel',
+          label: '🛡️ Admin Panel',
+        },
+        {
+          type: 'doc',
           id: 'configure/server-library-import',
           label: '📥 Server Library Import',
         },

@@ -6,22 +6,28 @@ Use the OpenAI TTS API as your provider.
 
 ## Setup
 
-**Environment variables (recommended for deployment):**
+**Recommended (auth + admin): Settings → Admin → Shared providers**
+
+1. Add a shared provider with type `openai`.
+2. Keep base URL as `https://api.openai.com/v1`.
+3. Enter your API key.
+4. Set your preferred default model/voice.
+
+**Legacy bootstrap seed (optional, first boot only):**
 
 ```env
 API_BASE=https://api.openai.com/v1
 API_KEY=sk-...
-NEXT_PUBLIC_DEFAULT_TTS_PROVIDER=openai
 ```
 
-**Or in-app via Settings → TTS Provider:**
+**Per-user Settings → TTS Provider (only when `restrictUserApiKeys=false`):**
 
 1. Set provider to `OpenAI`.
 2. The base URL is pre-filled, no changes needed.
 3. Enter your `API_KEY`.
 4. Choose a model and voice.
 
-Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
+See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
 
 ## Notes
 

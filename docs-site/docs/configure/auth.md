@@ -12,6 +12,29 @@ This page covers application-level configuration for provider access and authent
 - Anonymous auth sessions are disabled by default.
 - Set `USE_ANONYMOUS_AUTH_SESSIONS=true` to enable anonymous session flows.
 
+## Runtime modes
+
+OpenReader effectively has three common runtime modes:
+
+- **Auth disabled** (`BASE_URL` or `AUTH_SECRET` unset): no admin panel. Shared providers can still exist via first-boot seeding (`API_KEY`/`API_BASE`), but you cannot manage them in-app.
+- **Auth enabled, non-admin user**: user account/session features are available, but no admin controls.
+- **Auth enabled, admin user**: full **Settings → Admin** access (shared providers + site features).
+
+## Admin role
+
+When auth is enabled, you can designate one or more users as admins via the `ADMIN_EMAILS` env var:
+
+```env
+ADMIN_EMAILS=alice@example.com,bob@example.com
+```
+
+Admins see a new **Admin** tab in **Settings** with two sub-tabs:
+
+- **Shared TTS providers** — server-managed TTS provider instances with encrypted keys, visible to all users.
+- **Site features** — runtime overrides for what were previously `NEXT_PUBLIC_*` build-time flags (default TTS provider/model, word highlighting, audiobook export, etc.).
+
+Admin assignment is reconciled on every session resolution, so removing an email from `ADMIN_EMAILS` demotes the user on next login without a restart. See [Admin Panel](./admin-panel) for the full reference.
+
 ## Route behavior
 
 - `/` is a public landing/onboarding page and remains indexable.
@@ -22,6 +45,7 @@ This page covers application-level configuration for provider access and authent
 ## Related docs
 
 - For auth environment variables: [Environment Variables](../reference/environment-variables#auth-and-identity)
+- For admin role and shared TTS provider config: [Admin Panel](./admin-panel)
 - For TTS character limits and quota behavior: [TTS Rate Limiting](./tts-rate-limiting)
 - For provider-specific guidance: [TTS Providers](./tts-providers)
 - For storage/S3/SeaweedFS behavior: [Object / Blob Storage](./object-blob-storage)

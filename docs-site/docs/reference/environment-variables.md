@@ -5,20 +5,18 @@ toc_max_heading_level: 3
 
 This is the single reference page for OpenReader environment variables.
 
+:::note Recommended configuration path
+For auth-enabled deployments, use **Settings → Admin** as the primary source of truth for shared TTS providers and site features. Legacy env vars (`API_KEY`, `API_BASE`, and `NEXT_PUBLIC_*`) are optional first-boot seeds only.
+:::
+
 ## Quick Reference Table
 
 | Variable | Area | Default | When to set |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_ENABLE_DOCX_CONVERSION` | Client feature flags | `true` unless set to `false` | Set `false` to hide DOCX support |
-| `NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS` | Client feature flags | `true` unless set to `false` | Set `false` to hide destructive actions |
-| `NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB` | Client feature flags | `true` unless set to `false` | Set `false` to hide the TTS Provider settings tab |
-| `NEXT_PUBLIC_DEFAULT_TTS_PROVIDER` | Client feature flags | `custom-openai` | Override default TTS provider |
-| `NEXT_PUBLIC_DEFAULT_TTS_MODEL` | Client feature flags | `kokoro` | Override default TTS model |
-| `NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS` | Client feature flags | `true` unless set to `false` | Set `false` to restrict DeepInfra models |
-| `NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT` | Client feature flags | `true` unless set to `false` | Set `false` to hide audiobook export UI |
-| `NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT` | Client feature flags | `true` unless set to `false` | Set `false` to disable word highlight + alignment |
-| `API_BASE` | TTS provider | none | Point to your OpenAI-compatible TTS base URL |
-| `API_KEY` | TTS provider | `none` fallback in TTS route | Set when provider requires auth |
+| `ADMIN_EMAILS` | Auth/Admin | empty | Comma-separated emails auto-promoted to admin (requires auth enabled) |
+| `API_BASE` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
+| `API_KEY` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
+| `NEXT_PUBLIC_*` runtime seeds | Legacy bootstrap seed | varies | Optional first-boot seeds for site features; then manage in Settings → Admin → Site features |
 | `TTS_CACHE_MAX_SIZE_BYTES` | TTS caching | `268435456` (256 MB) | Tune in-memory TTS cache size |
 | `TTS_CACHE_TTL_MS` | TTS caching | `1800000` (30 min) | Tune in-memory TTS cache TTL |
 | `TTS_MAX_RETRIES` | TTS retry | `2` | Tune retry attempts for upstream 429/5xx |
@@ -62,21 +60,19 @@ This is the single reference page for OpenReader environment variables.
 
 ### API_BASE
 
-Server-level default base URL for OpenAI-compatible TTS API requests.
+Bootstrap base URL for the legacy OpenAI-compatible TTS endpoint.
 
 - Example: `http://host.docker.internal:8880/v1`
-- Used when no `API_BASE` is set in the user's Settings modal
-- If the user sets `API_BASE` in **Settings → TTS Provider**, that value takes precedence
-- Related docs: [TTS Providers](../configure/tts-providers)
+- **Seeded on first boot** into the auto-created `default-openai` shared provider, then no longer read by the running app. Manage in **Settings → Admin → Shared providers** afterwards.
+- Related docs: [Admin Panel](../configure/admin-panel), [TTS Providers](../configure/tts-providers)
 
 ### API_KEY
 
-Server-level default API key for TTS provider requests.
+Bootstrap API key for the legacy OpenAI-compatible TTS endpoint.
 
 - Example: your provider token, or omit if the provider doesn't require auth
-- Used when no `API_KEY` is set in the user's Settings modal
-- If the user sets `API_KEY` in **Settings → TTS Provider**, that value takes precedence
-- Related docs: [TTS Providers](../configure/tts-providers)
+- **Seeded on first boot** into the auto-created `default-openai` shared provider (encrypted at rest), then no longer read by the running app. Manage in **Settings → Admin → Shared providers** afterwards.
+- Related docs: [Admin Panel](../configure/admin-panel), [TTS Providers](../configure/tts-providers)
 
 ### TTS_CACHE_MAX_SIZE_BYTES
 
@@ -210,6 +206,17 @@ Controls Better Auth rate limiting.
 - Set to `true` to disable auth-layer rate limiting
 - This does not affect TTS character rate limiting
 - Related docs: [Auth](../configure/auth)
+
+### ADMIN_EMAILS
+
+Comma-separated list of email addresses that are auto-promoted to admin.
+
+- Default: empty (no admins)
+- Requires auth to be enabled (`AUTH_SECRET` + `BASE_URL`).
+- Matched emails get `user.is_admin = true` on every session resolution; removed emails are demoted on the next session resolve.
+- Admins see a new **Admin** tab in Settings exposing shared TTS providers and site-wide feature toggles. Keys for shared providers are stored encrypted in the DB and never returned to the client.
+- Example: `ADMIN_EMAILS=alice@example.com,bob@example.com`
+- Related docs: [Admin Panel](../configure/admin-panel), [Auth](../configure/auth)
 
 ## Database and Object Blob Storage
 
@@ -351,66 +358,81 @@ Absolute path or executable name for the ffmpeg binary used by audiobook/process
 - Resolution order: `FFMPEG_BIN` -> `ffmpeg-static`
 - Example: `/var/task/node_modules/ffmpeg-static/ffmpeg`
 
-## Client Runtime and Feature Flags
+## Legacy First-Boot Runtime Seeds (optional)
+
+These variables exist only as **first-boot seeds** for the admin-managed runtime config. Prefer changing site features from **Settings → Admin → Site features**. Keep these only when you need bootstrap defaults before the first admin login. See [Admin Panel](../configure/admin-panel) for migration behavior.
+
+The values are SSR-injected via `window.__OPENREADER_RUNTIME_CONFIG__`, so admin edits take effect for all users on the next page load — no rebuild required (unlike the old `NEXT_PUBLIC_*` build-time pattern).
 
 ### NEXT_PUBLIC_ENABLE_DOCX_CONVERSION
- 
- Controls whether the experimental DOCX-to-PDF conversion and upload feature is enabled.
- 
- - Default: `true` (enabled)
- - Set `false` to hide DOCX support in the upload UI
- 
- ### NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS
- 
- Controls whether the "Delete all user docs" and other bulk-delete buttons are shown in Settings.
- 
- - Default: `true` (enabled)
- - Set `false` to hide destructive actions (recommended for production)
+
+Controls whether the experimental DOCX-to-PDF conversion and upload feature is enabled.
+
+- Default: `true` (enabled)
+- Runtime key: `enableDocxConversion`
+
+### NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS
+
+Controls whether the "Delete all user docs" and other bulk-delete buttons are shown in Settings.
+
+- Default: `true` (enabled)
+- Runtime key: `enableDestructiveDeleteActions`
 
 ### NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB
 
-Controls whether the **TTS Provider** section appears in the Settings modal.
+Controls whether the **TTS Provider** section appears in the user-facing Settings modal.
 
 - Default: `true` (enabled)
-- Set `false` to hide provider/model/API controls in Settings
-- Useful when you want provider config locked to environment defaults
- 
- ### NEXT_PUBLIC_DEFAULT_TTS_PROVIDER
- 
- Sets the default TTS provider for new users.
- 
- - Default: `custom-openai`
- - Example values: `replicate`, `deepinfra`, `openai`, `custom-openai`
- 
- ### NEXT_PUBLIC_DEFAULT_TTS_MODEL
- 
- Sets the default TTS model for new users.
- 
- - Default: `kokoro`
- - Example values: `hexgrad/Kokoro-82M`, `tts-1`
- 
- ### NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS
- 
- Controls whether the DeepInfra model list shows all models or just the free tier when no API key is set.
- 
- - Default: `true` (show all)
- - Set `false` to restrict to free tier models when no API key is provided
+- Set `false` to hide provider/model/API controls in the per-user Settings modal (the admin panel is unaffected).
+- Runtime key: `enableTtsProvidersTab`
+
+### NEXT_PUBLIC_RESTRICT_USER_API_KEYS
+
+Controls whether users can supply personal API keys/base URLs for built-in providers.
+
+- Default: runtime-dependent
+- When `true`, server routes only use admin-managed shared providers.
+- When `false`, users can use per-user BYOK credentials for built-in providers.
+- Runtime key: `restrictUserApiKeys`
+
+### NEXT_PUBLIC_DEFAULT_TTS_PROVIDER
+
+Sets the default TTS provider for new users.
+
+- Default: `custom-openai`
+- Example values: `replicate`, `deepinfra`, `openai`, `custom-openai`, or an admin-defined shared provider slug (e.g. `kokoro-prod`)
+- Runtime key: `defaultTtsProvider`
+
+### NEXT_PUBLIC_DEFAULT_TTS_MODEL
+
+Sets the default TTS model for new users.
+
+- Default: `kokoro`
+- Example values: `hexgrad/Kokoro-82M`, `tts-1`
+- Runtime key: `defaultTtsModel`
+
+### NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS
+
+Controls whether the DeepInfra model list shows all models or just the free tier when no API key is set.
+
+- Default: `true` (show all)
+- Runtime key: `showAllDeepInfraModels`
 
 ### NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT
 
 Controls whether audiobook export UI/actions are shown in the client.
 
-- Default behavior: enabled unless explicitly set to `false`
-- Applies in both development and production
+- Default: `true` (enabled)
 - Affects export entry points in PDF/EPUB pages and document settings UI
+- Runtime key: `enableAudiobookExport`
 
 ### NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT
 
 Controls word-by-word highlighting UI and timestamp-alignment behavior.
 
-- Default behavior: enabled unless explicitly set to `false`
-- Applies in both development and production
+- Default: `true` (enabled)
 - Requires working timestamp generation (for example `WHISPER_CPP_BIN`)
 - Affects:
   - Word-highlight toggles in document settings
   - Alignment requests during TTS playback
+- Runtime key: `enableWordHighlight`

@@ -194,7 +194,9 @@ Use one of these `.env` mode templates:
 ```env
 API_BASE=http://host.docker.internal:8880/v1
 API_KEY=none
-# Leave BASE_URL and AUTH_SECRET unset to keep auth disabled
+# Leave BASE_URL and AUTH_SECRET unset to keep auth disabled.
+# (Admin panel is unavailable without auth.)
+# API_BASE/API_KEY seed a shared default provider if you want shared mode.
 ```
 
   </TabItem>
@@ -207,6 +209,20 @@ BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # Optional when you need multiple local origins:
 # AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
+```
+
+  </TabItem>
+  <TabItem value="auth-with-admin" label="Auth + Admin Panel">
+
+```env
+# API_BASE / API_KEY are seeded into the admin "default-openai" shared provider
+# on first boot, then no longer read. Manage them in Settings → Admin afterwards.
+API_BASE=http://host.docker.internal:8880/v1
+API_KEY=none
+BASE_URL=http://localhost:3003
+AUTH_SECRET=<generate-with-openssl-rand-hex-32>
+# Comma-separated emails to auto-promote to admin on signin.
+ADMIN_EMAILS=you@example.com
 ```
 
   </TabItem>
@@ -228,11 +244,20 @@ S3_SECRET_ACCESS_KEY=your-secret-key
   </TabItem>
 </Tabs>
 
+:::note Env vars vs. admin panel
+On first boot, `API_KEY` / `API_BASE` and any `NEXT_PUBLIC_*` flags you've set get auto-seeded into the admin-managed runtime config (DB-backed, keys encrypted at rest). After that, the admin UI is authoritative and editing those env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
+:::
+
+:::note User BYOK restriction default
+If you want each user to enter personal provider credentials, set `restrictUserApiKeys=false` (from **Settings → Admin** when auth/admin is enabled, or via legacy first-boot seed `NEXT_PUBLIC_RESTRICT_USER_API_KEYS=false` for no-admin bootstrap flows).
+:::
+
 :::info
 For all environment variables, see [Environment Variables](../reference/environment-variables).
 :::
 
 See [Auth](../configure/auth) for app/auth behavior.
+See [Admin Panel](../configure/admin-panel) for the shared-provider and feature-flag management UI.
 Storage configuration details are in [Object / Blob Storage](../configure/object-blob-storage).
 Refer to [Database](../configure/database) for database modes.
 Learn about migration behavior and commands in [Migrations](../configure/migrations).

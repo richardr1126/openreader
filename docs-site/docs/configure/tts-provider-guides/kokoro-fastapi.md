@@ -44,7 +44,14 @@ docker run --name kokoro-tts \
 
 ## Connect to OpenReader
 
-**Environment variables (recommended for deployment):**
+**Recommended (auth + admin): Settings → Admin → Shared providers**
+
+1. Add a shared provider with type `custom-openai`.
+2. Set base URL to your Kokoro endpoint (e.g. `http://kokoro-tts:8880/v1`).
+3. Leave API key blank unless required by your deployment.
+4. Set default model to `Kokoro`.
+
+**Legacy bootstrap seed (optional, first boot only):**
 
 ```env
 API_BASE=http://kokoro-tts:8880/v1
@@ -59,7 +66,7 @@ API_BASE=http://kokoro-tts:8880/v1
 3. Leave `API_KEY` blank unless your deployment requires one.
 4. Choose model `Kokoro`.
 
-Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
+See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
 
 ## References
 

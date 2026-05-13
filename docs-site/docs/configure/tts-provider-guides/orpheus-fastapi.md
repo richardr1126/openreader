@@ -10,7 +10,14 @@ Refer to the upstream repository for Docker instructions: [Lex-au/Orpheus-FastAP
 
 ## Connect to OpenReader
 
-**Environment variables (recommended for deployment):**
+**Recommended (auth + admin): Settings → Admin → Shared providers**
+
+1. Add a shared provider with type `custom-openai`.
+2. Set base URL to your Orpheus endpoint (e.g. `http://orpheus:8000/v1`).
+3. Leave API key blank unless required by your deployment.
+4. Set default model to `Orpheus` (or your backend model id).
+
+**Legacy bootstrap seed (optional, first boot only):**
 
 ```env
 API_BASE=http://orpheus:8000/v1
@@ -25,7 +32,7 @@ API_BASE=http://orpheus:8000/v1
 3. Leave `API_KEY` blank unless your deployment requires one.
 4. Choose model `Orpheus` (or the model your deployment exposes).
 
-Settings modal values override env vars. See [TTS Providers](../tts-providers) for how the two layers interact.
+See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
 
 ## References
 
