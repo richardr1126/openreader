@@ -1,11 +1,11 @@
 import type { AppConfigRow, AppConfigValues, SavedVoices } from '@/types/config';
 
-export function getVoicePreferenceKey(provider: string, model: string): string {
-  return `${provider}:${model}`;
+export function getVoicePreferenceKey(providerRef: string, model: string): string {
+  return `${providerRef}:${model}`;
 }
 
 export function applyConfigUpdate<K extends keyof AppConfigValues>(
-  currentConfig: Pick<AppConfigValues, 'ttsProvider' | 'ttsModel' | 'savedVoices'>,
+  currentConfig: Pick<AppConfigValues, 'providerRef' | 'providerType' | 'ttsModel' | 'savedVoices'>,
   key: K,
   value: AppConfigValues[K],
 ): {
@@ -13,7 +13,7 @@ export function applyConfigUpdate<K extends keyof AppConfigValues>(
   syncPatch: Partial<AppConfigValues>;
 } {
   if (key === 'voice') {
-    const voiceKey = getVoicePreferenceKey(currentConfig.ttsProvider, currentConfig.ttsModel);
+    const voiceKey = getVoicePreferenceKey(currentConfig.providerRef, currentConfig.ttsModel);
     const updatedSavedVoices = { ...currentConfig.savedVoices, [voiceKey]: value as string };
     return {
       storagePatch: {
@@ -27,10 +27,10 @@ export function applyConfigUpdate<K extends keyof AppConfigValues>(
     };
   }
 
-  if (key === 'ttsProvider' || key === 'ttsModel') {
-    const newProvider = key === 'ttsProvider' ? (value as string) : currentConfig.ttsProvider;
+  if (key === 'providerRef' || key === 'ttsModel' || key === 'providerType') {
+    const newProviderRef = key === 'providerRef' ? (value as string) : currentConfig.providerRef;
     const newModel = key === 'ttsModel' ? (value as string) : currentConfig.ttsModel;
-    const voiceKey = getVoicePreferenceKey(newProvider, newModel);
+    const voiceKey = getVoicePreferenceKey(newProviderRef, newModel);
     const restoredVoice = currentConfig.savedVoices[voiceKey] || '';
 
     return {

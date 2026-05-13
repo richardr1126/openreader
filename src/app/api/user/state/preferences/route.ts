@@ -5,6 +5,10 @@ import { userPreferences } from '@/db/schema';
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/user-state';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
+import { isTtsProviderType, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { listAdminProviders } from '@/lib/server/admin/providers';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { normalizeLegacyProviderRef, resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,17 +21,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function parseStoredPreferences(value: unknown): SyncedPreferencesPatch {
-  if (!value) return {};
+interface PreferenceNormalizationContext {
+  defaultProviderRef: string;
+  showAllProviderModels: boolean;
+  sharedProviders: Array<{
+    slug: string;
+    providerType: TtsProviderId;
+    defaultModel: string | null;
+    defaultInstructions: string | null;
+  }>;
+}
+
+async function loadPreferenceNormalizationContext(): Promise<PreferenceNormalizationContext> {
+  const [runtimeConfig, providers] = await Promise.all([
+    getResolvedRuntimeConfig(),
+    listAdminProviders(),
+  ]);
+  return {
+    defaultProviderRef: runtimeConfig.defaultTtsProvider,
+    showAllProviderModels: runtimeConfig.showAllProviderModels,
+    sharedProviders: providers
+      .filter((entry) => entry.enabled)
+      .map((entry) => ({
+        slug: entry.slug,
+        providerType: entry.providerType,
+        defaultModel: entry.defaultModel,
+        defaultInstructions: entry.defaultInstructions,
+      })),
+  };
+}
+
+function parseStoredPreferences(
+  value: unknown,
+  context: PreferenceNormalizationContext,
+): { patch: SyncedPreferencesPatch; migrated: boolean } {
+  if (!value) return { patch: {}, migrated: false };
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
-      return isRecord(parsed) ? sanitizePreferencesPatch(parsed) : {};
+      return isRecord(parsed)
+        ? sanitizePreferencesPatch(parsed, context, { fillMissingProvider: true })
+        : { patch: {}, migrated: false };
     } catch {
-      return {};
+      return { patch: {}, migrated: false };
     }
   }
-  return isRecord(value) ? sanitizePreferencesPatch(value) : {};
+  return isRecord(value)
+    ? sanitizePreferencesPatch(value, context, { fillMissingProvider: true })
+    : { patch: {}, migrated: false };
 }
 
 function sanitizeSavedVoices(value: unknown): Record<string, string> {
@@ -41,24 +82,51 @@ function sanitizeSavedVoices(value: unknown): Record<string, string> {
   return out;
 }
 
-function sanitizePreferencesPatch(input: unknown): SyncedPreferencesPatch {
-  if (!isRecord(input)) return {};
+function sanitizePreferencesPatch(
+  input: unknown,
+  context: PreferenceNormalizationContext,
+  options: { fillMissingProvider: boolean },
+): { patch: SyncedPreferencesPatch; migrated: boolean } {
+  if (!isRecord(input)) return { patch: {}, migrated: false };
 
+  const rec = input as Record<string, unknown>;
   const out: SyncedPreferencesPatch = {};
+  let migrated = false;
+
+  const legacyProviderRef = typeof rec.ttsProvider === 'string'
+    ? rec.ttsProvider
+    : typeof rec.provider === 'string'
+      ? rec.provider
+      : '';
+  const rawProviderRef = typeof rec.providerRef === 'string' ? rec.providerRef : legacyProviderRef;
+  const normalizedProviderRef = normalizeLegacyProviderRef(rawProviderRef, context.defaultProviderRef);
+  const providerDefaults = resolveProviderDefaults({
+    providerRef: normalizedProviderRef || context.defaultProviderRef,
+    providerType: isTtsProviderType(rec.providerType) ? rec.providerType : 'unknown',
+    sharedProviders: context.sharedProviders,
+    fallbackProviderRef: context.defaultProviderRef,
+  });
+  const hasLegacyProviderKey = typeof rec.ttsProvider === 'string' || typeof rec.provider === 'string';
+  if (hasLegacyProviderKey || rawProviderRef !== providerDefaults.providerRef) migrated = true;
 
   for (const key of SYNCED_PREFERENCE_KEYS) {
-    if (!(key in input)) continue;
-    const value = input[key];
+    if (!(key in rec)) continue;
+    const value = rec[key];
 
     switch (key) {
       case 'viewType':
         if (value === 'single' || value === 'dual' || value === 'scroll') out[key] = value;
         break;
       case 'voice':
-      case 'ttsProvider':
       case 'ttsModel':
       case 'ttsInstructions':
         if (typeof value === 'string') out[key] = value;
+        break;
+      case 'providerRef':
+        out[key] = providerDefaults.providerRef;
+        break;
+      case 'providerType':
+        out[key] = providerDefaults.providerType;
         break;
       case 'voiceSpeed':
       case 'audioPlayerSpeed':
@@ -88,7 +156,40 @@ function sanitizePreferencesPatch(input: unknown): SyncedPreferencesPatch {
     }
   }
 
-  return out;
+  if ('providerRef' in out && !('providerType' in out)) {
+    out.providerType = providerDefaults.providerType;
+    migrated = true;
+  }
+
+  if (options.fillMissingProvider && !('providerRef' in out)) {
+    out.providerRef = providerDefaults.providerRef;
+    migrated = true;
+  }
+  if (options.fillMissingProvider && !('providerType' in out)) {
+    out.providerType = providerDefaults.providerType;
+    migrated = true;
+  }
+
+  const rawModel = typeof rec.ttsModel === 'string' ? rec.ttsModel.trim() : '';
+  const shouldNormalizeSharedDefaultModel =
+    !!providerDefaults.defaultModel
+    && context.sharedProviders.some((entry) => entry.slug === providerDefaults.providerRef)
+    && (rawModel.length === 0 || rawModel === 'kokoro')
+    && (hasLegacyProviderKey || rawProviderRef === 'default-openai');
+
+  if (options.fillMissingProvider && !('ttsModel' in out) && providerDefaults.defaultModel) {
+    out.ttsModel = providerDefaults.defaultModel;
+    migrated = true;
+  } else if (shouldNormalizeSharedDefaultModel && out.ttsModel !== providerDefaults.defaultModel) {
+    out.ttsModel = providerDefaults.defaultModel;
+    migrated = true;
+  }
+  if (!context.showAllProviderModels && providerDefaults.defaultModel && out.ttsModel !== providerDefaults.defaultModel) {
+    out.ttsModel = providerDefaults.defaultModel;
+    migrated = true;
+  }
+
+  return { patch: out, migrated };
 }
 
 function normalizeClientUpdatedAtMs(value: unknown): number {
@@ -99,6 +200,7 @@ function normalizeClientUpdatedAtMs(value: unknown): number {
 
 export async function GET(req: NextRequest) {
   try {
+    const normalizationContext = await loadPreferenceNormalizationContext();
     const scope = await resolveUserStateScope(req);
     if (scope instanceof Response) return scope;
 
@@ -112,8 +214,28 @@ export async function GET(req: NextRequest) {
       .limit(1);
 
     const row = rows[0];
-    const storedPatch = parseStoredPreferences(row?.dataJson);
+    const stored = parseStoredPreferences(row?.dataJson, normalizationContext);
+    const storedPatch = stored.patch;
     const clientUpdatedAtMs = Number(row?.clientUpdatedAtMs ?? 0);
+
+    if (row && stored.migrated) {
+      const updatedAt = nowTimestampMs();
+      await db
+        .insert(userPreferences)
+        .values({
+          userId: scope.ownerUserId,
+          dataJson: serializePreferencesForDb(storedPatch),
+          clientUpdatedAtMs: clientUpdatedAtMs > 0 ? clientUpdatedAtMs : updatedAt,
+          updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: [userPreferences.userId],
+          set: {
+            dataJson: serializePreferencesForDb(storedPatch),
+            updatedAt,
+          },
+        });
+    }
 
     return NextResponse.json({
       preferences: storedPatch,
@@ -128,13 +250,18 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const normalizationContext = await loadPreferenceNormalizationContext();
     const scope = await resolveUserStateScope(req);
     if (scope instanceof Response) return scope;
 
     const body = (await req.json().catch(() => null)) as
       | { patch?: unknown; clientUpdatedAtMs?: unknown }
       | null;
-    const patch = sanitizePreferencesPatch(body?.patch);
+    const patch = sanitizePreferencesPatch(
+      body?.patch,
+      normalizationContext,
+      { fillMissingProvider: false },
+    ).patch;
     const clientUpdatedAtMs = normalizeClientUpdatedAtMs(body?.clientUpdatedAtMs);
 
     if (Object.keys(patch).length === 0) {
@@ -151,7 +278,7 @@ export async function PUT(req: NextRequest) {
       .limit(1);
     const existing = existingRows[0];
     const existingUpdated = Number(existing?.clientUpdatedAtMs ?? 0);
-    const existingPatch = parseStoredPreferences(existing?.dataJson);
+    const existingPatch = parseStoredPreferences(existing?.dataJson, normalizationContext).patch;
 
     if (existing && clientUpdatedAtMs < existingUpdated) {
       return NextResponse.json({

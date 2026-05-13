@@ -1,4 +1,6 @@
 import type { DocumentListState } from '@/types/documents';
+import { isBuiltInTtsProviderId, type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import { defaultModelForProviderType, normalizeLegacyProviderRef } from '@/lib/shared/tts-provider-policy';
 
 // Runtime config (admin-controlled) is layered on top of the static defaults
 // below. We resolve it lazily so this module stays importable from non-React
@@ -64,7 +66,8 @@ export interface AppConfigValues {
   footerMargin: number;
   leftMargin: number;
   rightMargin: number;
-  ttsProvider: string;
+  providerRef: string;
+  providerType: TtsProviderType;
   ttsModel: string;
   ttsInstructions: string;
   savedVoices: SavedVoices;
@@ -92,6 +95,12 @@ export interface AppConfigValues {
  */
 export function getAppConfigDefaults(): AppConfigValues {
   const wordHighlightEnabledByDefault = readRuntimeFlag('enableWordHighlight', true);
+  const runtimeProviderRef = readRuntimeString('defaultTtsProvider', 'custom-openai');
+  const defaultProviderRef = normalizeLegacyProviderRef(runtimeProviderRef, 'custom-openai');
+  const defaultProviderType = isBuiltInTtsProviderId(defaultProviderRef) ? defaultProviderRef : 'unknown';
+  const defaultModel = isBuiltInTtsProviderId(defaultProviderType)
+    ? defaultModelForProviderType(defaultProviderType)
+    : 'kokoro';
   return {
     apiKey: '',
     baseUrl: '',
@@ -105,8 +114,9 @@ export function getAppConfigDefaults(): AppConfigValues {
     footerMargin: 0,
     leftMargin: 0,
     rightMargin: 0,
-    ttsProvider: readRuntimeString('defaultTtsProvider', 'custom-openai'),
-    ttsModel: readRuntimeString('defaultTtsModel', 'kokoro'),
+    providerRef: defaultProviderRef,
+    providerType: defaultProviderType,
+    ttsModel: defaultModel,
     ttsInstructions: '',
     savedVoices: {},
     smartSentenceSplitting: true,

@@ -20,8 +20,8 @@ export type RuntimeConfigSource = 'env-seed' | 'admin';
 export interface RuntimeConfigKeyDef<T> {
   /** TS-level default. Used when neither DB nor env have a value. */
   default: T;
-  /** Env var name to seed from on first run. */
-  envVar: string;
+  /** Env var name to seed from on first run. Omit for DB/admin-only keys. */
+  envVar?: string;
   /** Parse a string env value to T. Returns undefined to skip seeding. */
   parseEnv(raw: string): T | undefined;
   /** Validate an incoming admin-supplied value. */
@@ -37,6 +37,19 @@ function booleanFlag(defaultValue: boolean, envVar: string): RuntimeConfigKeyDef
       if (lower === '' ) return undefined;
       if (['1', 'true', 'yes', 'on'].includes(lower)) return true;
       if (['0', 'false', 'no', 'off'].includes(lower)) return false;
+      return undefined;
+    },
+    validate(value) {
+      if (typeof value === 'boolean') return value;
+      return undefined;
+    },
+  };
+}
+
+function runtimeBoolean(defaultValue: boolean): RuntimeConfigKeyDef<boolean> {
+  return {
+    default: defaultValue,
+    parseEnv() {
       return undefined;
     },
     validate(value) {
@@ -63,7 +76,6 @@ function stringValue(defaultValue: string, envVar: string): RuntimeConfigKeyDef<
 
 export const RUNTIME_CONFIG_SCHEMA = {
   defaultTtsProvider: stringValue('custom-openai', 'NEXT_PUBLIC_DEFAULT_TTS_PROVIDER'),
-  defaultTtsModel: stringValue('kokoro', 'NEXT_PUBLIC_DEFAULT_TTS_MODEL'),
   restrictUserApiKeys: booleanFlag(true, 'NEXT_PUBLIC_RESTRICT_USER_API_KEYS'),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
@@ -73,6 +85,7 @@ export const RUNTIME_CONFIG_SCHEMA = {
   enableDocxConversion: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_DOCX_CONVERSION'),
   enableDestructiveDeleteActions: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS'),
   showAllDeepInfraModels: booleanFlag(true, 'NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS'),
+  showAllProviderModels: runtimeBoolean(true),
 } as const satisfies Record<string, RuntimeConfigKeyDef<unknown>>;
 
 export type RuntimeConfigKey = keyof typeof RUNTIME_CONFIG_SCHEMA;
@@ -267,6 +280,7 @@ export async function seedRuntimeConfigFromEnv(): Promise<{ seeded: RuntimeConfi
   for (const key of RUNTIME_KEYS) {
     if (existing.has(key)) continue;
     const def = RUNTIME_CONFIG_SCHEMA[key];
+    if (!def.envVar) continue;
     const raw = process.env[def.envVar];
     if (raw === undefined || raw === null || raw === '') continue;
     const parsed = def.parseEnv(raw);

@@ -539,7 +539,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
   const {
     apiKey,
     baseUrl,
-    ttsProvider,
+    providerRef,
     ttsSegmentMaxBlockLength,
     smartSentenceSplitting,
     epubTheme,
@@ -878,7 +878,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
         adapter: audiobookAdapter,
         apiKey,
         baseUrl,
-        defaultProvider: ttsProvider,
+        defaultProvider: providerRef,
         onProgress,
         signal,
         onChapterComplete,
@@ -890,7 +890,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       console.error('Error creating audiobook:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, ttsProvider]);
+  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
 
   /**
    * Regenerates a specific chapter of the audiobook
@@ -911,7 +911,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
         signal,
         apiKey,
         baseUrl,
-        defaultProvider: ttsProvider,
+        defaultProvider: providerRef,
         settings,
       });
     } catch (error) {
@@ -921,7 +921,7 @@ export function EPUBProvider({ children }: { children: ReactNode }) {
       console.error('Error regenerating chapter:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, ttsProvider]);
+  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
 
   const setRendition = useCallback((rendition: Rendition) => {
     bookRef.current = rendition.book;

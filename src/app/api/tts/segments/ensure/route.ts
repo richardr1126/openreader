@@ -21,6 +21,7 @@ import {
   projectSegmentLocator,
   probeAudioDurationMsFromBuffer,
 } from '@/lib/server/tts/segments';
+import { isBuiltInTtsProviderId, isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import { rateLimiter, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
@@ -31,6 +32,7 @@ import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
 import { alignAudioWithText } from '@/lib/server/whisper/alignment';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
 import type {
   TTSSegmentInput,
   TTSSegmentManifestItem,
@@ -50,14 +52,16 @@ function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, d
 function parseSettings(value: unknown): TTSSegmentSettings | null {
   if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
-  if (typeof rec.ttsProvider !== 'string') return null;
+  if (typeof rec.providerRef !== 'string') return null;
+  if (!isTtsProviderType(rec.providerType)) return null;
   if (typeof rec.ttsModel !== 'string') return null;
   if (typeof rec.voice !== 'string') return null;
   if (!Number.isFinite(Number(rec.nativeSpeed))) return null;
   if (rec.ttsInstructions !== undefined && typeof rec.ttsInstructions !== 'string') return null;
 
   return {
-    ttsProvider: rec.ttsProvider,
+    providerRef: rec.providerRef,
+    providerType: rec.providerType,
     ttsModel: rec.ttsModel,
     voice: rec.voice,
     nativeSpeed: Number(rec.nativeSpeed),
@@ -169,7 +173,7 @@ export async function POST(request: NextRequest) {
     if (scope instanceof Response) return scope;
     const runtimeConfig = await getResolvedRuntimeConfig();
     const requestCreds = await resolveTtsCredentials({
-      providerHeader: parsed.settings.ttsProvider,
+      providerHeader: parsed.settings.providerRef,
       apiKeyHeader: request.headers.get('x-openai-key'),
       baseUrlHeader: request.headers.get('x-openai-base-url'),
       fallbackProvider: runtimeConfig.defaultTtsProvider,
@@ -189,13 +193,28 @@ export async function POST(request: NextRequest) {
 
     // Normalize request settings to the effective generation settings so cache
     // keys and persisted metadata match what we actually synthesize.
-    const effectiveInstructions = resolveEffectiveTtsInstructions({
+    const effectiveProviderRef = requestCreds.adminRecord?.slug || parsed.settings.providerRef;
+    const effectiveModel = resolveTtsModelForProvider({
+      providerRef: effectiveProviderRef,
+      providerType: isBuiltInTtsProviderId(requestCreds.provider) ? requestCreds.provider : 'unknown',
       model: parsed.settings.ttsModel,
+      sharedProviders: requestCreds.adminRecord ? [requestCreds.adminRecord] : [],
+      fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+      showAllProviderModels: runtimeConfig.showAllProviderModels,
+    });
+    const effectiveInstructions = resolveEffectiveTtsInstructions({
+      model: effectiveModel,
       requestInstructions: parsed.settings.ttsInstructions,
       sharedDefaultInstructions: requestCreds.adminRecord?.defaultInstructions,
     }) ?? '';
+    const resolvedProviderType = isBuiltInTtsProviderId(requestCreds.provider)
+      ? requestCreds.provider
+      : 'unknown';
     const effectiveSettings: TTSSegmentSettings = {
       ...parsed.settings,
+      providerRef: effectiveProviderRef,
+      providerType: resolvedProviderType,
+      ttsModel: effectiveModel,
       ttsInstructions: effectiveInstructions,
     };
 

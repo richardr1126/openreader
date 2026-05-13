@@ -17,8 +17,9 @@ Use Replicate's hosted TTS models as your provider.
 
 ```env
 API_KEY=r8_...
-NEXT_PUBLIC_DEFAULT_TTS_MODEL=alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5
 ```
+
+Then update the shared provider's **Default model** in **Settings → Admin → Shared providers**.
 
 **Per-user Settings → TTS Provider (only when `restrictUserApiKeys=false`):**
 

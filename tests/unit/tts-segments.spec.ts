@@ -14,14 +14,16 @@ import {
 test.describe('tts segment helpers', () => {
   test('builds stable settings hash', () => {
     const a = buildTtsSegmentSettingsHash({
-      ttsProvider: 'openai',
+      providerRef: 'openai',
+      providerType: 'openai',
       ttsModel: 'gpt-4o-mini-tts',
       voice: 'alloy',
       nativeSpeed: 1,
       ttsInstructions: 'calm',
     });
     const b = buildTtsSegmentSettingsHash({
-      ttsProvider: 'openai',
+      providerRef: 'openai',
+      providerType: 'openai',
       ttsModel: 'gpt-4o-mini-tts',
       voice: 'alloy',
       nativeSpeed: 1,

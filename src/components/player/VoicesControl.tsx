@@ -9,7 +9,7 @@ export const VoicesControl = ({ availableVoices, setVoiceAndRestart }: {
   availableVoices: string[];
   setVoiceAndRestart: (voice: string) => void;
 }) => {
-  const { ttsModel, ttsProvider } = useConfig();
+  const { ttsModel, providerType } = useConfig();
   const { voice } = useTTS();
   const onChangeVoice = useCallback((nextVoice: string) => setVoiceAndRestart(nextVoice), [setVoiceAndRestart]);
 
@@ -18,7 +18,7 @@ export const VoicesControl = ({ availableVoices, setVoiceAndRestart }: {
       availableVoices={availableVoices}
       voice={voice || ''}
       onChangeVoice={onChangeVoice}
-      ttsProvider={ttsProvider}
+      providerType={providerType}
       ttsModel={ttsModel}
     />
   );

@@ -8,11 +8,14 @@ import { ChevronUpDownIcon, CheckIcon, PlusIcon } from '@/components/icons/Icons
 import {
   providerSupportsCustomModel,
   resolveProviderModels,
-  REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-  supportsTtsInstructions,
   type TtsModelDefinition,
   type TtsProviderId,
 } from '@/lib/shared/tts-provider-catalog';
+import {
+  defaultBaseUrlForProviderType,
+  defaultModelForProviderType,
+  resolveTtsProviderModelPolicy,
+} from '@/lib/shared/tts-provider-policy';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import {
   Badge,
@@ -61,12 +64,7 @@ interface FormState {
   enabled: boolean;
 }
 
-function providerDefaultModel(providerType: ProviderType): string {
-  if (providerType === 'openai') return 'tts-1';
-  if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
-  if (providerType === 'replicate') return REPLICATE_KOKORO_82M_VERSIONED_MODEL;
-  return 'kokoro';
-}
+const providerDefaultModel = defaultModelForProviderType;
 
 function createEmptyForm(): FormState {
   return {
@@ -215,13 +213,16 @@ export function AdminProvidersPanel() {
       ? 'custom'
       : modelDefinitions[0]?.id ?? '';
   const selectedModelDefinition = modelDefinitions.find((model) => model.id === selectedModelId);
-  const baseUrlPlaceholder = form.providerType === 'openai'
-    ? 'https://api.openai.com/v1'
-    : form.providerType === 'deepinfra'
-      ? 'https://api.deepinfra.com/v1/openai'
-      : 'https://your-tts-host/v1';
+  const modelSupportsInstructions = (model: string) => resolveTtsProviderModelPolicy({
+    providerRef: form.slug,
+    providerType: form.providerType,
+    model,
+  }).supportsInstructions;
+  const baseUrlPlaceholder = form.providerType === 'custom-openai'
+    ? 'https://your-tts-host/v1'
+    : defaultBaseUrlForProviderType(form.providerType);
   const shouldShowBaseUrl = form.providerType === 'custom-openai';
-  const shouldShowInstructions = supportsTtsInstructions(form.defaultModel);
+  const shouldShowInstructions = modelSupportsInstructions(form.defaultModel);
 
   useEffect(() => {
     if (!supportsCustomModel) {
@@ -237,10 +238,10 @@ export function AdminProvidersPanel() {
   }, [supportsCustomModel, modelIsPreset, form.defaultModel, customModelInput]);
 
   useEffect(() => {
-    if (supportsTtsInstructions(form.defaultModel)) return;
+    if (modelSupportsInstructions(form.defaultModel)) return;
     if (!form.defaultInstructions) return;
     setForm((prev) => ({ ...prev, defaultInstructions: '' }));
-  }, [form.defaultModel, form.defaultInstructions]);
+  }, [form.defaultModel, form.defaultInstructions, form.providerType, form.slug]);
 
   return (
     <Section
@@ -299,7 +300,7 @@ export function AdminProvidersPanel() {
                     providerType: opt.value,
                     baseUrl: opt.value === 'custom-openai' ? form.baseUrl : '',
                     defaultModel: nextModel,
-                    defaultInstructions: supportsTtsInstructions(nextModel) ? form.defaultInstructions : '',
+                    defaultInstructions: modelSupportsInstructions(nextModel) ? form.defaultInstructions : '',
                   });
                   setCustomModelInput('');
                 }}
@@ -356,14 +357,14 @@ export function AdminProvidersPanel() {
                       setForm({
                         ...form,
                         defaultModel: nextModel,
-                        defaultInstructions: supportsTtsInstructions(nextModel) ? form.defaultInstructions : '',
+                        defaultInstructions: modelSupportsInstructions(nextModel) ? form.defaultInstructions : '',
                       });
                       return;
                     }
                     setForm({
                       ...form,
                       defaultModel: modelId,
-                      defaultInstructions: supportsTtsInstructions(modelId) ? form.defaultInstructions : '',
+                      defaultInstructions: modelSupportsInstructions(modelId) ? form.defaultInstructions : '',
                     });
                     setCustomModelInput('');
                   }}
@@ -426,7 +427,7 @@ export function AdminProvidersPanel() {
                       setForm({
                         ...form,
                         defaultModel: nextModel,
-                        defaultInstructions: supportsTtsInstructions(nextModel) ? form.defaultInstructions : '',
+                        defaultInstructions: modelSupportsInstructions(nextModel) ? form.defaultInstructions : '',
                       });
                     }}
                     placeholder="Enter custom model id"

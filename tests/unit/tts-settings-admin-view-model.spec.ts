@@ -23,10 +23,12 @@ const SHARED: SharedProviderEntry[] = [
 test.describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
   test('restrict mode exposes only shared providers', () => {
     const vm = resolveTtsSettingsViewModel({
-      provider: 'shared-openai',
+      providerRef: 'shared-openai',
+      providerType: 'unknown',
       modelValue: 'gpt-4o-mini-tts',
       customModelInput: '',
       showAllDeepInfra: false,
+      showAllProviderModels: true,
       sharedProviders: SHARED,
       allowBuiltInProviders: false,
     });
@@ -37,23 +39,28 @@ test.describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
 
   test('invalid provider falls back to first available option', () => {
     const vm = resolveTtsSettingsViewModel({
-      provider: 'missing-provider',
-      modelValue: 'gpt-4o-mini-tts',
+      providerRef: 'missing-provider',
+      providerType: 'unknown',
+      modelValue: 'kokoro',
       customModelInput: '',
       showAllDeepInfra: false,
+      showAllProviderModels: true,
       sharedProviders: SHARED,
       allowBuiltInProviders: false,
     });
 
     expect(vm.selectedSharedProvider?.slug).toBe('shared-openai');
+    expect(vm.selectedModelId).toBe('gpt-4o-mini-tts');
   });
 
   test('custom-model capable providers use custom mode for unknown model ids', () => {
     const vm = resolveTtsSettingsViewModel({
-      provider: 'shared-replicate',
+      providerRef: 'shared-replicate',
+      providerType: 'unknown',
       modelValue: 'my-custom-model',
       customModelInput: '',
       showAllDeepInfra: false,
+      showAllProviderModels: true,
       sharedProviders: SHARED,
       allowBuiltInProviders: false,
     });
@@ -65,10 +72,12 @@ test.describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
 
   test('non-custom providers fall back to preset model selection', () => {
     const vm = resolveTtsSettingsViewModel({
-      provider: 'shared-openai',
+      providerRef: 'shared-openai',
+      providerType: 'unknown',
       modelValue: 'not-in-presets',
       customModelInput: '',
       showAllDeepInfra: false,
+      showAllProviderModels: true,
       sharedProviders: SHARED,
       allowBuiltInProviders: false,
     });
@@ -76,5 +85,39 @@ test.describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
     expect(vm.supportsCustomModel).toBe(false);
     expect(vm.selectedModelId).not.toBe('custom');
     expect(vm.models.length).toBeGreaterThan(0);
+  });
+
+  test('legacy default-openai provider ref normalizes to first shared provider', () => {
+    const vm = resolveTtsSettingsViewModel({
+      providerRef: 'default-openai',
+      providerType: 'unknown',
+      modelValue: 'kokoro',
+      customModelInput: '',
+      showAllDeepInfra: false,
+      showAllProviderModels: true,
+      sharedProviders: SHARED,
+      allowBuiltInProviders: false,
+    });
+
+    expect(vm.selectedProviderRef).toBe('shared-openai');
+    expect(vm.selectedModelId).toBe('gpt-4o-mini-tts');
+  });
+
+  test('showAllProviderModels=false locks model picker to provider default', () => {
+    const vm = resolveTtsSettingsViewModel({
+      providerRef: 'shared-replicate',
+      providerType: 'unknown',
+      modelValue: 'my-custom-model',
+      customModelInput: 'my-custom-model',
+      showAllDeepInfra: false,
+      showAllProviderModels: false,
+      sharedProviders: SHARED,
+      allowBuiltInProviders: false,
+    });
+
+    expect(vm.models).toEqual([{ id: 'owner/model:ver', name: 'owner/model:ver' }]);
+    expect(vm.supportsCustomModel).toBe(false);
+    expect(vm.selectedModelId).toBe('owner/model:ver');
+    expect(vm.canSubmit).toBe(true);
   });
 });

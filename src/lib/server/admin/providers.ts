@@ -3,7 +3,8 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { adminProviders } from '@/db/schema';
 import { apiKeyLast4, decryptSecret, encryptSecret } from '@/lib/server/crypto/secrets';
-import { supportsTtsInstructions, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
 export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'custom-openai',
@@ -170,7 +171,11 @@ function normalizeOptionalText(value: string | null | undefined): string | null 
 
 function assertInstructionsCompatibility(model: string | null, instructions: string | null): void {
   if (!instructions) return;
-  if (!supportsTtsInstructions(model)) {
+  if (!resolveTtsProviderModelPolicy({
+    providerRef: '',
+    providerType: 'custom-openai',
+    model,
+  }).supportsInstructions) {
     throw new AdminProviderError(
       'defaultInstructions is only supported for models that support TTS instructions.',
       400,

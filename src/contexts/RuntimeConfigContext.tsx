@@ -13,7 +13,6 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
  */
 export interface RuntimeConfig {
   defaultTtsProvider: string;
-  defaultTtsModel: string;
   restrictUserApiKeys: boolean;
   enableTtsProvidersTab: boolean;
   enableWordHighlight: boolean;
@@ -21,11 +20,11 @@ export interface RuntimeConfig {
   enableDocxConversion: boolean;
   enableDestructiveDeleteActions: boolean;
   showAllDeepInfraModels: boolean;
+  showAllProviderModels: boolean;
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
   defaultTtsProvider: 'custom-openai',
-  defaultTtsModel: 'kokoro',
   restrictUserApiKeys: true,
   enableTtsProvidersTab: true,
   enableWordHighlight: true,
@@ -33,6 +32,7 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   enableDocxConversion: true,
   enableDestructiveDeleteActions: true,
   showAllDeepInfraModels: true,
+  showAllProviderModels: true,
 };
 
 declare global {

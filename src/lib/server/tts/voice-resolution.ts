@@ -1,11 +1,10 @@
 import { LRUCache } from 'lru-cache';
 import {
-  getDefaultVoices,
   resolveProviderModels,
-  resolveVoiceSource,
   type ReplicateVoiceInputKey,
   type ResolveVoicesOptions,
 } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -324,8 +323,13 @@ async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise
 }
 
 export async function resolveVoices({ provider, model, apiKey = '', baseUrl = '' }: ResolveVoicesOptions): Promise<string[]> {
-  const defaultVoices = getDefaultVoices(provider, model);
-  const voiceSource = resolveVoiceSource(provider, model);
+  const providerModelPolicy = resolveTtsProviderModelPolicy({
+    providerRef: provider,
+    providerType: provider,
+    model,
+  });
+  const defaultVoices = providerModelPolicy.defaultVoices;
+  const voiceSource = providerModelPolicy.voiceSource;
 
   if (voiceSource === 'deepinfra-api') {
     const apiVoices = await fetchDeepinfraVoices(apiKey);

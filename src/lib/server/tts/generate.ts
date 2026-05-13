@@ -1,12 +1,11 @@
 import OpenAI from 'openai';
 import Replicate from 'replicate';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
-import { isKokoroModel } from '@/lib/shared/kokoro';
 import {
+  isBuiltInTtsProviderId,
   REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-  supportsNativeModelSpeed,
-  supportsTtsInstructions,
 } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import { resolveReplicateVoiceInputKey } from '@/lib/server/tts/voice-resolution';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
 import { LRUCache } from 'lru-cache';
@@ -224,21 +223,27 @@ export function extractReplicateAudioUrl(output: unknown): string | null {
 
 function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
+  const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
     : provider === 'replicate' && !input.model ? REPLICATE_KOKORO_82M_VERSIONED_MODEL
     : input.model;
   const model = (rawModel ?? 'gpt-4o-mini-tts') as SpeechCreateParams['model'];
+  const providerModelPolicy = resolveTtsProviderModelPolicy({
+    providerRef: provider,
+    providerType,
+    model: model as string,
+  });
 
   const normalizedVoice = (
-    (provider === 'replicate' || !isKokoroModel(model as string)) && input.voice.includes('+')
+    (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
       ? input.voice.split('+')[0].trim()
       : input.voice
   ) as string;
 
   const format = input.format || 'mp3';
   const requestedSpeed = Number.isFinite(Number(input.speed)) ? Number(input.speed) : 1;
-  const speed = supportsNativeModelSpeed(provider, model as string) ? requestedSpeed : 1;
-  const instructions = supportsTtsInstructions(model as string) && input.instructions
+  const speed = providerModelPolicy.supportsNativeModelSpeed ? requestedSpeed : 1;
+  const instructions = providerModelPolicy.supportsInstructions && input.instructions
     ? input.instructions
     : undefined;
 

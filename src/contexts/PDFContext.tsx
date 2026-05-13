@@ -125,7 +125,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
     rightMargin,
     apiKey,
     baseUrl,
-    ttsProvider,
+    providerRef,
     smartSentenceSplitting,
     segmentPreloadDepthPages,
     ttsSegmentMaxBlockLength,
@@ -442,7 +442,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
         adapter: audiobookAdapter,
         apiKey,
         baseUrl,
-        defaultProvider: ttsProvider,
+        defaultProvider: providerRef,
         onProgress,
         signal,
         onChapterComplete,
@@ -454,7 +454,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
       console.error('Error creating audiobook:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, ttsProvider]);
+  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
 
   /**
    * Regenerates a specific chapter (page) of the PDF audiobook
@@ -475,7 +475,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
         signal,
         apiKey,
         baseUrl,
-        defaultProvider: ttsProvider,
+        defaultProvider: providerRef,
         settings,
       });
     } catch (error) {
@@ -485,7 +485,7 @@ export function PDFProvider({ children }: { children: ReactNode }) {
       console.error('Error regenerating page:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, ttsProvider]);
+  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
 
   /**
    * Effect hook to initialize TTS as non-EPUB mode

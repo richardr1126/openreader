@@ -52,7 +52,7 @@ export const isKokoroModel = (modelName: string | undefined): boolean => {
  * @param model - TTS model name
  * @returns Maximum number of voices (Infinity for unlimited)
  */
-export const getMaxVoicesForProvider = (provider: string, model: string): number => {
+export const getMaxVoicesForProvider = (provider: TtsProviderId, model: string): number => {
   if (!isKokoroModel(model)) return 1;
   
   // Deepinfra and Replicate Kokoro do not support multiple voices.
@@ -63,3 +63,4 @@ export const getMaxVoicesForProvider = (provider: string, model: string): number
   // Other providers with Kokoro support unlimited voices
   return Infinity;
 };
+import type { TtsProviderId } from '@/lib/shared/tts-provider-catalog';

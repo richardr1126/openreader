@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, initDB, migrateLegacyDexieDocumentIdsToSha, updateAppConfig } from '@/lib/client/dexie';
 import { APP_CONFIG_DEFAULTS, type ViewType, type SavedVoices, type AppConfigValues, type AppConfigRow } from '@/types/config';
+import { isBuiltInTtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { resolveEffectiveProviderType, resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
 import { scheduleUserPreferencesSync, cancelPendingPreferenceSync, getUserPreferences, putUserPreferences } from '@/lib/client/api/user-state';
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferenceKey, type SyncedPreferencesPatch } from '@/types/user-state';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -11,6 +13,7 @@ import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { buildSyncedPreferencePatch } from '@/lib/client/config/preferences';
 import { applyConfigUpdate } from '@/lib/client/config/updates';
+import { useSharedProviders } from '@/hooks/useSharedProviders';
 import toast from 'react-hot-toast';
 export type { ViewType } from '@/types/config';
 
@@ -34,7 +37,8 @@ interface ConfigContextType {
   footerMargin: number;
   leftMargin: number;
   rightMargin: number;
-  ttsProvider: string;
+  providerRef: string;
+  providerType: AppConfigValues['providerType'];
   ttsModel: string;
   ttsInstructions: string;
   savedVoices: SavedVoices;
@@ -61,12 +65,22 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [isDBReady, setIsDBReady] = useState(false);
   const ttsProvidersTabDisabled = !useFeatureFlag('enableTtsProvidersTab');
   const restrictUserApiKeys = useFeatureFlag('restrictUserApiKeys');
+  const showAllProviderModels = useFeatureFlag('showAllProviderModels');
   const didRunStartupMigrations = useRef(false);
   const didAttemptInitialPreferenceSeedForSession = useRef<string | null>(null);
   const syncedPreferenceKeys = useMemo(() => new Set<string>(SYNCED_PREFERENCE_KEYS), []);
   const { authEnabled } = useAuthConfig();
+  const { providers: sharedProviders } = useSharedProviders();
   const { data: sessionData, isPending: isSessionPending } = useAuthSession();
   const sessionKey = sessionData?.user?.id ?? 'no-session';
+  const providerResetDefaults = useMemo(() => {
+    return resolveProviderDefaults({
+      providerRef: APP_CONFIG_DEFAULTS.providerRef,
+      providerType: APP_CONFIG_DEFAULTS.providerType,
+      sharedProviders,
+      fallbackProviderRef: 'custom-openai',
+    });
+  }, [sharedProviders]);
 
   const queueSyncedPreferencePatch = useCallback((patch: Partial<AppConfigValues>) => {
     if (!authEnabled || sessionKey === 'no-session') return;
@@ -211,14 +225,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     if (appConfig.baseUrl !== APP_CONFIG_DEFAULTS.baseUrl) {
       resetPatch.baseUrl = APP_CONFIG_DEFAULTS.baseUrl;
     }
-    if (appConfig.ttsProvider !== APP_CONFIG_DEFAULTS.ttsProvider) {
-      resetPatch.ttsProvider = APP_CONFIG_DEFAULTS.ttsProvider;
+    if (appConfig.providerRef !== providerResetDefaults.providerRef) {
+      resetPatch.providerRef = providerResetDefaults.providerRef;
     }
-    if (appConfig.ttsModel !== APP_CONFIG_DEFAULTS.ttsModel) {
-      resetPatch.ttsModel = APP_CONFIG_DEFAULTS.ttsModel;
+    if (appConfig.providerType !== providerResetDefaults.providerType) {
+      resetPatch.providerType = providerResetDefaults.providerType;
     }
-    if (appConfig.ttsInstructions !== APP_CONFIG_DEFAULTS.ttsInstructions) {
-      resetPatch.ttsInstructions = APP_CONFIG_DEFAULTS.ttsInstructions;
+    if (appConfig.ttsModel !== providerResetDefaults.defaultModel) {
+      resetPatch.ttsModel = providerResetDefaults.defaultModel;
+    }
+    if (appConfig.ttsInstructions !== providerResetDefaults.defaultInstructions) {
+      resetPatch.ttsInstructions = providerResetDefaults.defaultInstructions;
     }
     // Keep voice selection state intact so player/Audiobook voice pickers still
     // work when the TTS providers tab is hidden. This reset is only for provider
@@ -230,13 +247,12 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       console.warn('Failed to clear hidden TTS provider settings:', error);
     });
     queueSyncedPreferencePatch(resetPatch);
-  }, [ttsProvidersTabDisabled, isDBReady, appConfig, queueSyncedPreferencePatch]);
+  }, [ttsProvidersTabDisabled, isDBReady, appConfig, queueSyncedPreferencePatch, providerResetDefaults]);
 
   useEffect(() => {
     if (!restrictUserApiKeys || !isDBReady || !appConfig) return;
 
     const resetPatch: Partial<AppConfigRow> = {};
-    const builtInProviderIds = new Set(['custom-openai', 'replicate', 'deepinfra', 'openai']);
 
     if (appConfig.apiKey !== APP_CONFIG_DEFAULTS.apiKey) {
       resetPatch.apiKey = APP_CONFIG_DEFAULTS.apiKey;
@@ -244,15 +260,18 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     if (appConfig.baseUrl !== APP_CONFIG_DEFAULTS.baseUrl) {
       resetPatch.baseUrl = APP_CONFIG_DEFAULTS.baseUrl;
     }
-    if (builtInProviderIds.has(appConfig.ttsProvider)) {
-      if (appConfig.ttsProvider !== APP_CONFIG_DEFAULTS.ttsProvider) {
-        resetPatch.ttsProvider = APP_CONFIG_DEFAULTS.ttsProvider;
+    if (isBuiltInTtsProviderId(appConfig.providerRef)) {
+      if (appConfig.providerRef !== providerResetDefaults.providerRef) {
+        resetPatch.providerRef = providerResetDefaults.providerRef;
       }
-      if (appConfig.ttsModel !== APP_CONFIG_DEFAULTS.ttsModel) {
-        resetPatch.ttsModel = APP_CONFIG_DEFAULTS.ttsModel;
+      if (appConfig.providerType !== providerResetDefaults.providerType) {
+        resetPatch.providerType = providerResetDefaults.providerType;
       }
-      if (appConfig.ttsInstructions !== APP_CONFIG_DEFAULTS.ttsInstructions) {
-        resetPatch.ttsInstructions = APP_CONFIG_DEFAULTS.ttsInstructions;
+      if (appConfig.ttsModel !== providerResetDefaults.defaultModel) {
+        resetPatch.ttsModel = providerResetDefaults.defaultModel;
+      }
+      if (appConfig.ttsInstructions !== providerResetDefaults.defaultInstructions) {
+        resetPatch.ttsInstructions = providerResetDefaults.defaultInstructions;
       }
     }
 
@@ -262,7 +281,24 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       console.warn('Failed to enforce restricted user API key mode:', error);
     });
     queueSyncedPreferencePatch(resetPatch);
-  }, [restrictUserApiKeys, isDBReady, appConfig, queueSyncedPreferencePatch]);
+  }, [restrictUserApiKeys, isDBReady, appConfig, queueSyncedPreferencePatch, providerResetDefaults]);
+
+  useEffect(() => {
+    if (showAllProviderModels || !isDBReady || !appConfig) return;
+    const providerDefaults = resolveProviderDefaults({
+      providerRef: appConfig.providerRef,
+      providerType: appConfig.providerType,
+      sharedProviders,
+      fallbackProviderRef: providerResetDefaults.providerRef,
+    });
+    if (!providerDefaults.defaultModel) return;
+    if (appConfig.ttsModel === providerDefaults.defaultModel) return;
+    const patch: Partial<AppConfigRow> = { ttsModel: providerDefaults.defaultModel };
+    updateAppConfig(patch).catch((error) => {
+      console.warn('Failed to enforce provider default model restriction:', error);
+    });
+    queueSyncedPreferencePatch(patch);
+  }, [showAllProviderModels, isDBReady, appConfig, sharedProviders, providerResetDefaults.providerRef, queueSyncedPreferencePatch]);
 
   useEffect(() => {
     if (!isDBReady || !authEnabled || !appConfig || isSessionPending) return;
@@ -310,7 +346,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     footerMargin,
     leftMargin,
     rightMargin,
-    ttsProvider,
+    providerRef,
+    providerType: _persistedProviderType,
     ttsModel,
     ttsInstructions,
     savedVoices,
@@ -323,6 +360,46 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     epubHighlightEnabled,
     epubWordHighlightEnabled,
   } = config || APP_CONFIG_DEFAULTS;
+  const providerType = useMemo(
+    () => resolveEffectiveProviderType({
+      providerRef,
+      providerType: _persistedProviderType,
+      sharedProviders,
+    }),
+    [providerRef, _persistedProviderType, sharedProviders],
+  );
+
+  useEffect(() => {
+    if (!isDBReady || !appConfig) return;
+    if (appConfig.providerType === providerType) return;
+    const patch: Partial<AppConfigRow> = { providerType };
+    updateAppConfig(patch).catch((error) => {
+      console.warn('Failed to persist resolved providerType:', error);
+    });
+    queueSyncedPreferencePatch(patch);
+  }, [isDBReady, appConfig, providerType, queueSyncedPreferencePatch]);
+  void _persistedProviderType;
+
+  useEffect(() => {
+    if (!isDBReady || !appConfig) return;
+    const providerDefaults = resolveProviderDefaults({
+      providerRef: appConfig.providerRef,
+      providerType: appConfig.providerType,
+      sharedProviders,
+      fallbackProviderRef: providerResetDefaults.providerRef,
+    });
+    if (!providerDefaults.defaultModel) return;
+    if (appConfig.ttsModel === providerDefaults.defaultModel) return;
+    // Heal stale fallback model values that were written while the provider UI
+    // was disabled and shared provider context was unavailable.
+    if (appConfig.ttsModel !== APP_CONFIG_DEFAULTS.ttsModel) return;
+
+    const patch: Partial<AppConfigRow> = { ttsModel: providerDefaults.defaultModel };
+    updateAppConfig(patch).catch((error) => {
+      console.warn('Failed to normalize shared-provider default model:', error);
+    });
+    queueSyncedPreferencePatch(patch);
+  }, [isDBReady, appConfig, sharedProviders, queueSyncedPreferencePatch, providerResetDefaults.providerRef]);
 
   /**
    * Updates multiple configuration values simultaneously
@@ -360,7 +437,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       const { storagePatch, syncPatch } = applyConfigUpdate({
-        ttsProvider,
+        providerRef,
+        providerType,
         ttsModel,
         savedVoices,
       }, key, value);
@@ -368,7 +446,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       await updateAppConfig(storagePatch);
       if (
         key === 'voice' ||
-        key === 'ttsProvider' ||
+        key === 'providerRef' ||
+        key === 'providerType' ||
         key === 'ttsModel' ||
         key === 'savedVoices' ||
         syncedPreferenceKeys.has(String(key))
@@ -401,7 +480,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       footerMargin,
       leftMargin,
       rightMargin,
-      ttsProvider,
+      providerRef,
+      providerType,
       ttsModel,
       ttsInstructions,
       savedVoices,

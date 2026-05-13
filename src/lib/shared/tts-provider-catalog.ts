@@ -1,8 +1,16 @@
 import { isKokoroModel } from '@/lib/shared/kokoro';
 
 export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai';
+export type TtsProviderType = TtsProviderId | 'unknown';
 export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
+
+export interface SharedProviderTypeResolverEntry {
+  slug: string;
+  providerType: TtsProviderId;
+  defaultModel?: string | null;
+  defaultInstructions?: string | null;
+}
 
 export interface TtsModelDefinition {
   id: string;
@@ -22,7 +30,7 @@ export interface ResolveProviderModelsContext {
 }
 
 export interface ResolveVoicesOptions {
-  provider: string;
+  provider: TtsProviderId;
   model: string;
   apiKey?: string;
   baseUrl?: string;
@@ -155,6 +163,14 @@ export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
   },
 ];
 
+const BUILT_IN_PROVIDER_ID_SET: ReadonlySet<TtsProviderId> = new Set(
+  TTS_PROVIDER_DEFINITIONS.map((definition) => definition.id),
+);
+const TTS_PROVIDER_TYPE_SET: ReadonlySet<TtsProviderType> = new Set([
+  ...TTS_PROVIDER_DEFINITIONS.map((definition) => definition.id),
+  'unknown',
+]);
+
 const MODELS_WITH_INSTRUCTIONS = new Set([
   'gpt-4o-mini-tts',
   'google/gemini-3.1-flash-tts',
@@ -170,7 +186,31 @@ export function supportsTtsInstructions(model: string | null | undefined): boole
   return !!model && MODELS_WITH_INSTRUCTIONS.has(model);
 }
 
-export function supportsNativeModelSpeed(provider: string | null | undefined, model: string | null | undefined): boolean {
+export function isBuiltInTtsProviderId(value: string | null | undefined): value is TtsProviderId {
+  return typeof value === 'string' && BUILT_IN_PROVIDER_ID_SET.has(value as TtsProviderId);
+}
+
+export function isTtsProviderType(value: unknown): value is TtsProviderType {
+  return typeof value === 'string' && TTS_PROVIDER_TYPE_SET.has(value as TtsProviderType);
+}
+
+export function resolveProviderType(
+  providerRef: string | null | undefined,
+  sharedProviders: readonly SharedProviderTypeResolverEntry[] = [],
+): TtsProviderType {
+  if (isBuiltInTtsProviderId(providerRef)) {
+    return providerRef;
+  }
+
+  if (!providerRef) {
+    return 'unknown';
+  }
+
+  const shared = sharedProviders.find((entry) => entry.slug === providerRef);
+  return shared ? shared.providerType : 'unknown';
+}
+
+export function supportsNativeModelSpeed(provider: TtsProviderId, model: string | null | undefined): boolean {
   if (!model) {
     return true;
   }
@@ -183,18 +223,20 @@ export function supportsNativeModelSpeed(provider: string | null | undefined, mo
 }
 
 export function getProviderDefinition(provider: string | null | undefined): TtsProviderDefinition | undefined {
-  return TTS_PROVIDER_DEFINITIONS.find((definition) => definition.id === provider);
+  return isBuiltInTtsProviderId(provider)
+    ? TTS_PROVIDER_DEFINITIONS.find((definition) => definition.id === provider)
+    : undefined;
 }
 
-export function resolveProviderModels(provider: string | null | undefined, context?: ResolveProviderModelsContext): TtsModelDefinition[] {
+export function resolveProviderModels(provider: TtsProviderId, context?: ResolveProviderModelsContext): TtsModelDefinition[] {
   return getProviderDefinition(provider)?.models(context) ?? DEFAULT_MODELS;
 }
 
-export function providerSupportsCustomModel(provider: string | null | undefined): boolean {
+export function providerSupportsCustomModel(provider: TtsProviderId): boolean {
   return getProviderDefinition(provider)?.supportsCustomModel ?? false;
 }
 
-export function getDefaultVoices(provider: string, model: string): string[] {
+export function getDefaultVoices(provider: TtsProviderId, model: string): string[] {
   if (provider === 'openai') {
     return supportsTtsInstructions(model) ? [...GPT4O_MINI_DEFAULT_VOICES] : [...OPENAI_DEFAULT_VOICES];
   }
@@ -237,7 +279,7 @@ function parseReplicateModelIdentifier(model: string): {
     : parsed;
 }
 
-export function resolveVoiceSource(provider: string, model: string): TtsVoiceSource {
+export function resolveVoiceSource(provider: TtsProviderId, model: string): TtsVoiceSource {
   if (provider === 'deepinfra' && DEEPINFRA_API_VOICE_MODELS.has(model)) {
     return 'deepinfra-api';
   }

@@ -403,13 +403,7 @@ Sets the default TTS provider for new users.
 - Example values: `replicate`, `deepinfra`, `openai`, `custom-openai`, or an admin-defined shared provider slug (e.g. `kokoro-prod`)
 - Runtime key: `defaultTtsProvider`
 
-### NEXT_PUBLIC_DEFAULT_TTS_MODEL
-
-Sets the default TTS model for new users.
-
-- Default: `kokoro`
-- Example values: `hexgrad/Kokoro-82M`, `tts-1`
-- Runtime key: `defaultTtsModel`
+`showAllProviderModels` is a runtime-only admin setting (no env seed). Configure it in **Settings → Admin → Site features**.
 
 ### NEXT_PUBLIC_SHOW_ALL_DEEPINFRA_MODELS
 

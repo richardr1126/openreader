@@ -2,20 +2,23 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { getVoices } from '@/lib/client/api/audiobooks';
-import { getDefaultVoices } from '@/lib/shared/tts-provider-catalog';
+import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
 /**
  * Custom hook for managing TTS voices
  * @param apiKey OpenAI API key
  * @param baseUrl OpenAI API base URL
- * @param ttsProvider TTS provider (openai, custom-openai, deepinfra)
+ * @param providerRef TTS provider routing reference (built-in id or shared slug)
+ * @param providerType Resolved provider type for capability/default logic
  * @param ttsModel TTS model name
  * @returns Object containing available voices and fetch function
  */
 export function useVoiceManagement(
   apiKey: string | undefined,
   baseUrl: string | undefined,
-  ttsProvider: string | undefined,
+  providerRef: string | undefined,
+  providerType: TtsProviderType | undefined,
   ttsModel: string | undefined
 ) {
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
@@ -28,20 +31,32 @@ export function useVoiceManagement(
       const data = await getVoices({
         'x-openai-key': apiKey || '',
         'x-openai-base-url': baseUrl || '',
-        'x-tts-provider': ttsProvider || 'openai',
+        'x-tts-provider': providerRef || 'openai',
         'x-tts-model': ttsModel || 'tts-1',
         'Content-Type': 'application/json',
       });
 
       // Ignore stale responses from older provider/model fetches.
       if (fetchSeq !== fetchSeqRef.current) return;
-      setAvailableVoices(data.voices || getDefaultVoices(ttsProvider || 'openai', ttsModel || 'tts-1'));
+      if (data.voices && data.voices.length > 0) {
+        setAvailableVoices(data.voices);
+        return;
+      }
+      setAvailableVoices(resolveTtsProviderModelPolicy({
+        providerRef: providerRef || '',
+        providerType,
+        model: ttsModel || 'tts-1',
+      }).defaultVoices);
     } catch (error) {
       console.error('Error fetching voices:', error);
       if (fetchSeq !== fetchSeqRef.current) return;
-      setAvailableVoices(getDefaultVoices(ttsProvider || 'openai', ttsModel || 'tts-1'));
+      setAvailableVoices(resolveTtsProviderModelPolicy({
+        providerRef: providerRef || '',
+        providerType,
+        model: ttsModel || 'tts-1',
+      }).defaultVoices);
     }
-  }, [apiKey, baseUrl, ttsProvider, ttsModel]);
+  }, [apiKey, baseUrl, providerRef, providerType, ttsModel]);
 
   return { availableVoices, fetchVoices };
 }

@@ -17,6 +17,8 @@ import type {
   TTSSegmentVariant,
   TTSSegmentsManifestResponse,
 } from '@/types/client';
+import { isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import { resolveEffectiveProviderType } from '@/lib/shared/tts-provider-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,20 +46,31 @@ function parseSettingsValue(value: unknown): TTSSegmentSettings | null {
   if (!raw || typeof raw !== 'object') return null;
   const rec = raw as Record<string, unknown>;
 
-  const ttsProvider = typeof rec.ttsProvider === 'string'
-    ? rec.ttsProvider
-    : typeof rec.provider === 'string' ? rec.provider : null;
+  // Accept both current settings shape and canonicalized legacy keys from
+  // persisted rows (e.g., SQLite stringified settings with `model/speed`).
+  const providerRef = typeof rec.providerRef === 'string'
+    ? rec.providerRef
+    : typeof rec.ttsProvider === 'string'
+      ? rec.ttsProvider
+      : typeof rec.provider === 'string'
+        ? rec.provider
+        : null;
+  const providerType = isTtsProviderType(rec.providerType)
+    ? rec.providerType
+    : resolveEffectiveProviderType({ providerRef });
   const ttsModel = typeof rec.ttsModel === 'string'
     ? rec.ttsModel
-    : typeof rec.model === 'string' ? rec.model : null;
+    : typeof rec.model === 'string'
+      ? rec.model
+      : null;
   const voice = typeof rec.voice === 'string' ? rec.voice : null;
   const speedSource = rec.nativeSpeed ?? rec.speed;
   const nativeSpeed = Number.isFinite(Number(speedSource)) ? Number(speedSource) : 1;
   const instructionsSource = rec.ttsInstructions ?? rec.instructions;
   const ttsInstructions = typeof instructionsSource === 'string' ? instructionsSource : '';
 
-  if (!ttsProvider || !ttsModel || !voice) return null;
-  return { ttsProvider, ttsModel, voice, nativeSpeed, ttsInstructions };
+  if (!providerRef || !providerType || !ttsModel || !voice) return null;
+  return { providerRef, providerType, ttsModel, voice, nativeSpeed, ttsInstructions };
 }
 
 function locatorFromProjection(row: ManifestGroupRow): TTSSegmentLocator | null {

@@ -1,6 +1,11 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { APP_CONFIG_DEFAULTS, getAppConfigDefaults, type ViewType, type SavedVoices, type AppConfigRow } from '@/types/config';
 import {
+  isTtsProviderType,
+  type TtsProviderType,
+} from '@/lib/shared/tts-provider-catalog';
+import { defaultModelForProviderType, normalizeLegacyProviderRef, resolveEffectiveProviderType } from '@/lib/shared/tts-provider-policy';
+import {
   PDFDocument,
   EPUBDocument,
   HTMLDocument,
@@ -14,7 +19,7 @@ import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
 
 const DB_NAME = 'openreader-db';
 // Managed via Dexie (version bumped from the original manual IndexedDB)
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 const PDF_TABLE = 'pdf-documents' as const;
 const EPUB_TABLE = 'epub-documents' as const;
@@ -108,50 +113,56 @@ const PROVIDER_DEFAULT_BASE_URL: Record<string, string> = {
 
 type RawConfigMap = Record<string, string | undefined>;
 
-function inferProviderAndBaseUrl(raw: RawConfigMap): { provider: string; baseUrl: string } {
+function inferProviderRefAndBaseUrl(raw: RawConfigMap): { providerRef: string; baseUrl: string } {
   const cachedApiKey = raw.apiKey;
   const cachedBaseUrl = raw.baseUrl;
-  let inferredProvider = raw.ttsProvider || '';
+  let inferredProviderRef = raw.providerRef || raw.ttsProvider || raw.provider || '';
+  inferredProviderRef = normalizeLegacyProviderRef(inferredProviderRef, getAppConfigDefaults().providerRef);
 
-  if (!raw.ttsProvider) {
-    inferredProvider = getAppConfigDefaults().ttsProvider;
-  } else if (!inferredProvider) {
+  if (!raw.providerRef && !raw.ttsProvider && !raw.provider) {
+    inferredProviderRef = getAppConfigDefaults().providerRef;
+  } else if (!inferredProviderRef) {
     if (cachedBaseUrl) {
       const baseUrlLower = cachedBaseUrl.toLowerCase();
       if (baseUrlLower.includes('deepinfra.com')) {
-        inferredProvider = 'deepinfra';
+        inferredProviderRef = 'deepinfra';
       } else if (baseUrlLower.includes('openai.com')) {
-        inferredProvider = 'openai';
+        inferredProviderRef = 'openai';
       } else if (
         baseUrlLower.includes('localhost') ||
         baseUrlLower.includes('127.0.0.1') ||
         baseUrlLower.includes('internal')
       ) {
-        inferredProvider = 'custom-openai';
+        inferredProviderRef = 'custom-openai';
       } else {
-        inferredProvider = cachedApiKey ? 'openai' : 'custom-openai';
+        inferredProviderRef = cachedApiKey ? 'openai' : 'custom-openai';
       }
     } else {
-      inferredProvider = cachedApiKey ? 'openai' : 'custom-openai';
+      inferredProviderRef = cachedApiKey ? 'openai' : 'custom-openai';
     }
   }
 
   let baseUrl = cachedBaseUrl || '';
   if (!baseUrl) {
-    if (inferredProvider === 'openai') {
+    if (inferredProviderRef === 'openai') {
       baseUrl = PROVIDER_DEFAULT_BASE_URL.openai;
-    } else if (inferredProvider === 'deepinfra') {
+    } else if (inferredProviderRef === 'deepinfra') {
       baseUrl = PROVIDER_DEFAULT_BASE_URL.deepinfra;
     } else {
       baseUrl = PROVIDER_DEFAULT_BASE_URL['custom-openai'];
     }
   }
 
-  return { provider: inferredProvider, baseUrl };
+  return { providerRef: inferredProviderRef, baseUrl };
 }
 
 function buildAppConfigFromRaw(raw: RawConfigMap): AppConfigRow {
-  const { provider, baseUrl } = inferProviderAndBaseUrl(raw);
+  const { providerRef, baseUrl } = inferProviderRefAndBaseUrl(raw);
+  const providerTypeRaw = raw.providerType;
+  const providerType: TtsProviderType =
+    isTtsProviderType(providerTypeRaw)
+      ? providerTypeRaw
+      : resolveEffectiveProviderType({ providerRef });
 
   let savedVoices: SavedVoices = {};
   if (raw.savedVoices) {
@@ -188,14 +199,9 @@ function buildAppConfigFromRaw(raw: RawConfigMap): AppConfigRow {
     footerMargin: raw.footerMargin ? parseFloat(raw.footerMargin) : APP_CONFIG_DEFAULTS.footerMargin,
     leftMargin: raw.leftMargin ? parseFloat(raw.leftMargin) : APP_CONFIG_DEFAULTS.leftMargin,
     rightMargin: raw.rightMargin ? parseFloat(raw.rightMargin) : APP_CONFIG_DEFAULTS.rightMargin,
-    ttsProvider: provider || APP_CONFIG_DEFAULTS.ttsProvider,
-    ttsModel:
-      raw.ttsModel ||
-      (provider === 'openai'
-        ? 'tts-1'
-        : provider === 'deepinfra'
-          ? 'hexgrad/Kokoro-82M'
-          : APP_CONFIG_DEFAULTS.ttsModel),
+    providerRef: providerRef || APP_CONFIG_DEFAULTS.providerRef,
+    providerType,
+    ttsModel: raw.ttsModel || (providerType === 'unknown' ? APP_CONFIG_DEFAULTS.ttsModel : defaultModelForProviderType(providerType)),
     ttsInstructions: raw.ttsInstructions ?? APP_CONFIG_DEFAULTS.ttsInstructions,
     savedVoices,
     pdfHighlightEnabled:
@@ -210,13 +216,13 @@ function buildAppConfigFromRaw(raw: RawConfigMap): AppConfigRow {
     documentListState,
   };
 
-  const voiceKey = `${config.ttsProvider}:${config.ttsModel}`;
+  const voiceKey = `${config.providerRef}:${config.ttsModel}`;
   config.voice = config.savedVoices[voiceKey] || '';
 
   return config;
 }
 
-// Version 8: add local cache metadata/indexes so document + preview caches can be bounded via LRU pruning.
+// Version 9: normalize app-config provider fields to providerRef/providerType.
 db.version(DB_VERSION).stores({
   [PDF_TABLE]: 'id, type, name, lastModified, size, folderId, cacheAccessedAt',
   [EPUB_TABLE]: 'id, type, name, lastModified, size, folderId, cacheAccessedAt',
@@ -229,8 +235,31 @@ db.version(DB_VERSION).stores({
   // but Dexie still lets us read it inside the upgrade transaction.
   [CONFIG_TABLE]: null,
 }).upgrade(async (trans) => {
-  const appConfig = await trans.table<AppConfigRow, string>(APP_CONFIG_TABLE).get('singleton');
+  const appConfigTable = trans.table<AppConfigRow, string>(APP_CONFIG_TABLE);
+  const appConfig = await appConfigTable.get('singleton');
   if (appConfig) {
+    const legacyProviderRef = (() => {
+      const providerRefRaw = (appConfig as unknown as { providerRef?: unknown }).providerRef;
+      if (typeof providerRefRaw === 'string' && providerRefRaw.trim()) return providerRefRaw;
+      const ttsProviderRaw = (appConfig as unknown as { ttsProvider?: unknown }).ttsProvider;
+      if (typeof ttsProviderRaw === 'string' && ttsProviderRaw.trim()) return ttsProviderRaw;
+      const providerRaw = (appConfig as unknown as { provider?: unknown }).provider;
+      if (typeof providerRaw === 'string' && providerRaw.trim()) return providerRaw;
+      return '';
+    })();
+    const providerRef = normalizeLegacyProviderRef(legacyProviderRef, APP_CONFIG_DEFAULTS.providerRef) || APP_CONFIG_DEFAULTS.providerRef;
+    const providerType = resolveEffectiveProviderType({ providerRef });
+    const savedVoices = appConfig.savedVoices && typeof appConfig.savedVoices === 'object'
+      ? appConfig.savedVoices
+      : {};
+    const resolvedVoiceKey = `${providerRef}:${appConfig.ttsModel || APP_CONFIG_DEFAULTS.ttsModel}`;
+    const resolvedVoice = savedVoices[resolvedVoiceKey] || '';
+    await appConfigTable.put({
+      ...appConfig,
+      providerRef,
+      providerType,
+      voice: appConfig.voice || resolvedVoice,
+    });
     return;
   }
 
@@ -242,7 +271,7 @@ db.version(DB_VERSION).stores({
   }
 
   const built = buildAppConfigFromRaw(raw);
-  await trans.table<AppConfigRow, string>(APP_CONFIG_TABLE).put(built);
+  await appConfigTable.put(built);
 
   // Migrate any legacy lastLocation_* keys into the dedicated last-locations table.
   const locationTable = trans.table<LastLocationRow, string>(LAST_LOCATION_TABLE);

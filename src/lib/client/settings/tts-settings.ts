@@ -1,19 +1,29 @@
 import {
+  isBuiltInTtsProviderId,
   TTS_PROVIDER_DEFINITIONS,
-  providerSupportsCustomModel,
   resolveProviderModels,
   type TtsModelDefinition,
   type TtsProviderDefinition,
   type TtsProviderId,
+  type TtsProviderType,
 } from '@/lib/shared/tts-provider-catalog';
+import {
+  normalizeLegacyProviderRef,
+  resolveEffectiveProviderType,
+  resolveProviderDefaults,
+  resolveTtsModelForProvider,
+  resolveTtsProviderModelPolicy,
+} from '@/lib/shared/tts-provider-policy';
 import type { SharedProviderEntry } from '@/hooks/useSharedProviders';
 
 export interface ResolveTtsSettingsViewModelOptions {
-  provider: string;
+  providerRef: string;
+  providerType: TtsProviderType;
   apiKey?: string;
   modelValue: string;
   customModelInput: string;
   showAllDeepInfra: boolean;
+  showAllProviderModels: boolean;
   sharedProviders?: SharedProviderEntry[];
   allowBuiltInProviders?: boolean;
 }
@@ -35,6 +45,8 @@ export interface TtsSettingsViewModel {
   canSubmit: boolean;
   /** The matched shared provider entry, if the current selection is a shared slug. */
   selectedSharedProvider: SharedProviderEntry | null;
+  selectedProviderRef: string;
+  selectedProviderType: TtsProviderType;
 }
 
 const BUILT_IN_DEFINITION_BY_ID: Map<string, TtsProviderDefinition> = new Map(
@@ -42,11 +54,13 @@ const BUILT_IN_DEFINITION_BY_ID: Map<string, TtsProviderDefinition> = new Map(
 );
 
 export function resolveTtsSettingsViewModel({
-  provider,
+  providerRef,
+  providerType,
   apiKey,
   modelValue,
   customModelInput,
   showAllDeepInfra,
+  showAllProviderModels,
   sharedProviders = [],
   allowBuiltInProviders = true,
 }: ResolveTtsSettingsViewModelOptions): TtsSettingsViewModel {
@@ -65,24 +79,69 @@ export function resolveTtsSettingsViewModel({
     shared: true,
   }));
   const providers = [...sharedOptions, ...builtInOptions];
-  const selectedProviderId = providers.some((opt) => opt.id === provider)
-    ? provider
+  const normalizedInputProviderRef = normalizeLegacyProviderRef(providerRef);
+  const selectedProviderRef = providers.some((opt) => opt.id === normalizedInputProviderRef)
+    ? normalizedInputProviderRef
     : providers[0]?.id ?? '';
+  const providerSelectionChanged = selectedProviderRef !== normalizedInputProviderRef;
 
-  // Determine the *effective* built-in provider type used for model resolution.
-  const selectedShared = sharedProviders.find((p) => p.slug === selectedProviderId) ?? null;
-  const effectiveProvider = selectedShared ? selectedShared.providerType : selectedProviderId;
+  const selectedShared = sharedProviders.find((p) => p.slug === selectedProviderRef) ?? null;
+  const selectedProviderType = resolveEffectiveProviderType({
+    providerRef: selectedProviderRef,
+    providerType,
+    sharedProviders,
+  });
+  const effectiveProviderType = selectedProviderType;
+  const knownProviderType = isBuiltInTtsProviderId(effectiveProviderType)
+    ? effectiveProviderType
+    : null;
 
-  const models = resolveProviderModels(effectiveProvider, {
+  const catalogModels = resolveProviderModels(knownProviderType ?? 'custom-openai', {
     apiKey,
     showAllDeepInfra,
   });
-  const supportsCustomModel =
-    BUILT_IN_DEFINITION_BY_ID.has(effectiveProvider) &&
-    providerSupportsCustomModel(effectiveProvider);
-  const isPreset = models.some((model) => model.id === modelValue);
+  const providerDefaults = resolveProviderDefaults({
+    providerRef: selectedProviderRef,
+    providerType: selectedProviderType,
+    sharedProviders,
+  });
+  const defaultModel = resolveTtsModelForProvider({
+    providerRef: selectedProviderRef,
+    providerType: selectedProviderType,
+    model: providerDefaults.defaultModel,
+    sharedProviders,
+    showAllProviderModels: false,
+  });
+  const models = (!showAllProviderModels && defaultModel)
+    ? [{
+      id: defaultModel,
+      name: catalogModels.find((model) => model.id === defaultModel)?.name ?? defaultModel,
+    }]
+    : catalogModels;
+  const supportsCustomModel = showAllProviderModels && knownProviderType
+    ? BUILT_IN_DEFINITION_BY_ID.has(knownProviderType) && resolveTtsProviderModelPolicy({
+      providerRef: selectedProviderRef,
+      providerType: knownProviderType,
+      model: modelValue,
+      sharedProviders,
+    }).supportsCustomModel
+    : false;
+  const normalizedModelValue = (() => {
+    if (!showAllProviderModels) {
+      return defaultModel;
+    }
+    const trimmedModel = modelValue.trim();
+    const sharedDefault = selectedShared?.defaultModel?.trim() || providerDefaults.defaultModel;
+    if (!sharedDefault) return trimmedModel;
+    if (!trimmedModel) return sharedDefault;
+    if ((providerSelectionChanged || normalizedInputProviderRef === 'default-openai') && trimmedModel === 'kokoro') {
+      return sharedDefault;
+    }
+    return trimmedModel;
+  })();
+  const isPreset = models.some((model) => model.id === normalizedModelValue);
   const selectedModelId = isPreset
-    ? modelValue
+    ? normalizedModelValue
     : supportsCustomModel
       ? 'custom'
       : models[0]?.id ?? '';
@@ -98,5 +157,7 @@ export function resolveTtsSettingsViewModel({
     selectedModelId,
     canSubmit,
     selectedSharedProvider: selectedShared,
+    selectedProviderRef,
+    selectedProviderType,
   };
 }

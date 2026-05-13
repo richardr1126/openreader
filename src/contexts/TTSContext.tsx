@@ -54,8 +54,7 @@ import {
   type CompletedEpubBoundarySegment,
 } from '@/lib/client/epub/tts-epub-handoff';
 import { normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
-import { isKokoroModel } from '@/lib/shared/kokoro';
-import { supportsNativeModelSpeed, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
   EpubRenderedLocationWalker,
@@ -355,7 +354,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     voiceSpeed,
     audioPlayerSpeed,
     voice: configVoice,
-    ttsProvider: configTTSProvider,
+    providerRef: configProviderRef,
+    providerType: configProviderType,
     ttsModel: configTTSModel,
     ttsInstructions: configTTSInstructions,
     updateConfigKey,
@@ -372,7 +372,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Audio and voice management hooks
   const audioContext = useAudioContext();
-  const { availableVoices, fetchVoices } = useVoiceManagement(openApiKey, openApiBaseUrl, configTTSProvider, configTTSModel);
+  const { availableVoices, fetchVoices } = useVoiceManagement(
+    openApiKey,
+    openApiBaseUrl,
+    configProviderRef,
+    configProviderType,
+    configTTSModel,
+  );
   const {
     authEnabled,
     onTTSStart,
@@ -536,9 +542,25 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [voice, setVoice] = useState(configVoice);
   const [ttsModel, setTTSModel] = useState(configTTSModel);
   const [ttsInstructions, setTTSInstructions] = useState(configTTSInstructions);
+  const providerModelPolicy = useMemo(
+    () => resolveTtsProviderModelPolicy({
+      providerRef: configProviderRef,
+      providerType: configProviderType,
+      model: ttsModel,
+    }),
+    [configProviderRef, configProviderType, ttsModel],
+  );
+  const configModelPolicy = useMemo(
+    () => resolveTtsProviderModelPolicy({
+      providerRef: configProviderRef,
+      providerType: configProviderType,
+      model: configTTSModel,
+    }),
+    [configProviderRef, configProviderType, configTTSModel],
+  );
   const effectiveNativeSpeed = useMemo(
-    () => (supportsNativeModelSpeed(configTTSProvider, ttsModel) ? speed : 1),
-    [configTTSProvider, ttsModel, speed],
+    () => (providerModelPolicy.supportsNativeModelSpeed ? speed : 1),
+    [providerModelPolicy.supportsNativeModelSpeed, speed],
   );
 
   // Track pending preload requests
@@ -1328,11 +1350,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   useEffect(() => {
     const signature = [
       documentId,
-      configTTSProvider,
+      configProviderRef,
       ttsModel,
       voice,
       effectiveNativeSpeed,
-      supportsTtsInstructions(ttsModel) ? ttsInstructions : '',
+      providerModelPolicy.supportsInstructions ? ttsInstructions : '',
       ttsSegmentMaxBlockLength,
     ].join('|');
 
@@ -1347,7 +1369,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     bumpEpubPreloadGeneration();
   }, [
     documentId,
-    configTTSProvider,
+    configProviderRef,
     ttsModel,
     voice,
     effectiveNativeSpeed,
@@ -1364,8 +1386,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   useEffect(() => {
     if (availableVoices.length > 0) {
       // Allow Kokoro multi-voice strings (e.g., "voice1(0.5)+voice2(0.5)") for any provider
-      const isKokoro = isKokoroModel(configTTSModel);
+      const isKokoro = configModelPolicy.isKokoroModel;
       const fallbackVoice = configVoice || availableVoices[0];
+      const providerUnresolved = !configModelPolicy.isResolvedProviderType;
+
+      if (isKokoro && providerUnresolved && voice.includes('+')) {
+        const firstVoice = voice.split('+')[0]?.replace(/\([^)]*\)/g, '').trim();
+        if (firstVoice) {
+          setVoice(firstVoice);
+        }
+        return;
+      }
 
       if (isKokoro) {
         // If Kokoro and we have any voice string (including plus/weights), don't override it.
@@ -1389,7 +1420,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         // Don't save to config - just use it temporarily until user explicitly selects one
       }
     }
-  }, [availableVoices, voice, configVoice, configTTSModel]);
+  }, [availableVoices, voice, configVoice, configModelPolicy]);
 
   const getSegmentPlaybackSource = useCallback(async (
     sentence: string,
@@ -1412,7 +1443,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       sentence,
       voice,
       effectiveNativeSpeed,
-      configTTSProvider,
+      configProviderRef,
       ttsModel,
       segmentKey,
     );
@@ -1445,7 +1476,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const reqHeaders: TTSRequestHeaders = {
       'Content-Type': 'application/json',
       'x-openai-key': openApiKey || '',
-      'x-tts-provider': configTTSProvider,
+      'x-tts-provider': configProviderRef,
     };
     if (openApiBaseUrl) {
       reqHeaders['x-openai-base-url'] = openApiBaseUrl;
@@ -1473,14 +1504,15 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         return undefined;
       }
       const ensured = await withRetry(
-        async () => ensureTtsSegments({
+          async () => ensureTtsSegments({
           documentId,
           settings: {
-            ttsProvider: configTTSProvider,
+            providerRef: configProviderRef,
+            providerType: configProviderType,
             ttsModel,
             voice,
             nativeSpeed: effectiveNativeSpeed,
-            ...(supportsTtsInstructions(ttsModel) && ttsInstructions ? { ttsInstructions } : {}),
+            ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
           },
           segments: persistSegments,
         }, reqHeaders, controller.signal),
@@ -1559,7 +1591,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsInstructions,
     openApiKey,
     openApiBaseUrl,
-    configTTSProvider,
+    configProviderRef,
     isEPUB,
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
@@ -2027,7 +2059,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       sentence,
       voice,
       effectiveNativeSpeed,
-      configTTSProvider,
+      configProviderRef,
       ttsModel,
       playbackSegment?.key,
     );
@@ -2061,7 +2093,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playSentenceWithHowl,
     voice,
     effectiveNativeSpeed,
-    configTTSProvider,
+    configProviderRef,
     ttsModel,
     isEPUB,
     currDocPage,
@@ -2133,11 +2165,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (isEPUB) {
       const generationAtStart = epubPreloadGenerationRef.current;
       const settingsHash = [
-        configTTSProvider,
+        configProviderRef,
         ttsModel,
         voice,
         effectiveNativeSpeed,
-        supportsTtsInstructions(ttsModel) ? ttsInstructions : '',
+        providerModelPolicy.supportsInstructions ? ttsInstructions : '',
       ].join('|');
       const walkStartKey = `${currDocPage}|${settingsHash}|${ttsSegmentMaxBlockLength}|${maxDepth}`;
 
@@ -2157,7 +2189,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           nextSentence,
           voice,
           effectiveNativeSpeed,
-          configTTSProvider,
+          configProviderRef,
           ttsModel,
           nextSegment?.key,
         );
@@ -2204,7 +2236,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       const reqHeaders: TTSRequestHeaders = {
         'Content-Type': 'application/json',
         'x-openai-key': openApiKey || '',
-        'x-tts-provider': configTTSProvider,
+        'x-tts-provider': configProviderRef,
       };
       if (openApiBaseUrl) {
         reqHeaders['x-openai-base-url'] = openApiBaseUrl;
@@ -2283,7 +2315,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
                 segment.text,
                 voice,
                 effectiveNativeSpeed,
-                configTTSProvider,
+                configProviderRef,
                 ttsModel,
                 segment.key,
               );
@@ -2321,11 +2353,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
               async () => ensureTtsSegments({
                 documentId,
                 settings: {
-                  ttsProvider: configTTSProvider,
+                  providerRef: configProviderRef,
+                  providerType: configProviderType,
                   ttsModel,
                   voice,
                   nativeSpeed: effectiveNativeSpeed,
-                  ...(supportsTtsInstructions(ttsModel) && ttsInstructions ? { ttsInstructions } : {}),
+                  ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
                 },
                 segments: persistPayload,
               }, reqHeaders, controller.signal),
@@ -2417,7 +2450,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         sentence,
         voice,
         effectiveNativeSpeed,
-        configTTSProvider,
+        configProviderRef,
         ttsModel,
         plannedSegment?.key,
       );
@@ -2446,7 +2479,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           sentence,
           voice,
           effectiveNativeSpeed,
-          configTTSProvider,
+          configProviderRef,
           ttsModel,
           segment.key,
         );
@@ -2471,7 +2504,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const reqHeaders: TTSRequestHeaders = {
       'Content-Type': 'application/json',
       'x-openai-key': openApiKey || '',
-      'x-tts-provider': configTTSProvider,
+      'x-tts-provider': configProviderRef,
     };
     if (openApiBaseUrl) {
       reqHeaders['x-openai-base-url'] = openApiBaseUrl;
@@ -2504,11 +2537,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           async () => ensureTtsSegments({
             documentId,
             settings: {
-              ttsProvider: configTTSProvider,
+              providerRef: configProviderRef,
+              providerType: configProviderType,
               ttsModel,
               voice,
               nativeSpeed: effectiveNativeSpeed,
-              ...(supportsTtsInstructions(ttsModel) && ttsInstructions ? { ttsInstructions } : {}),
+              ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
             },
             segments: persistPayload,
           }, reqHeaders, controller.signal),
@@ -2587,7 +2621,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSegments,
     voice,
     effectiveNativeSpeed,
-    configTTSProvider,
+    configProviderRef,
     ttsModel,
     openApiKey,
     openApiBaseUrl,

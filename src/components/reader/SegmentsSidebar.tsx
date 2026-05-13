@@ -88,7 +88,8 @@ function formatVoiceLabel(settings: TTSSegmentSettings | null): string {
 function settingsAreEqual(a: TTSSegmentSettings | null, b: TTSSegmentSettings | null): boolean {
   if (!a || !b) return false;
   return (
-    a.ttsProvider === b.ttsProvider
+    a.providerRef === b.providerRef
+    && a.providerType === b.providerType
     && a.ttsModel === b.ttsModel
     && a.voice === b.voice
     && Number(a.nativeSpeed) === Number(b.nativeSpeed)
@@ -182,7 +183,8 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
     activeReaderType,
   } = useTTS();
   const {
-    ttsProvider,
+    providerRef,
+    providerType,
     ttsModel,
     voice,
     voiceSpeed,
@@ -241,12 +243,13 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
   const didAutoScrollOnOpenRef = useRef(false);
 
   const activeSettings = useMemo<TTSSegmentSettings>(() => ({
-    ttsProvider,
+    providerRef,
+    providerType,
     ttsModel,
     voice,
     nativeSpeed: Number.isFinite(Number(voiceSpeed)) ? Number(voiceSpeed) : 1,
     ttsInstructions: ttsInstructions || '',
-  }), [ttsProvider, ttsModel, voice, voiceSpeed, ttsInstructions]);
+  }), [providerRef, providerType, ttsModel, voice, voiceSpeed, ttsInstructions]);
 
   const loadManifest = useCallback(async (
     mode: 'reset' | 'append' = 'reset',
@@ -381,7 +384,8 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
   const handleSelectVariant = useCallback(async (settings: TTSSegmentSettings | null) => {
     if (!settings) return;
     await Promise.all([
-      updateConfigKey('ttsProvider', settings.ttsProvider),
+      updateConfigKey('providerRef', settings.providerRef),
+      updateConfigKey('providerType', settings.providerType),
       updateConfigKey('ttsModel', settings.ttsModel),
       updateConfigKey('voice', settings.voice),
       updateConfigKey('voiceSpeed', Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1),
@@ -768,7 +772,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId }: SegmentsSideb
                                         onClick={() => void handleSelectVariant(variant.settings)}
                                         title={
                                           variant.settings
-                                            ? `${variant.settings.ttsProvider} · ${variant.settings.ttsModel} · ${variant.settings.voice}${variant.settings.nativeSpeed && variant.settings.nativeSpeed !== 1 ? ` · ${variant.settings.nativeSpeed}×` : ''}`
+                                            ? `${variant.settings.providerRef} · ${variant.settings.ttsModel} · ${variant.settings.voice}${variant.settings.nativeSpeed && variant.settings.nativeSpeed !== 1 ? ` · ${variant.settings.nativeSpeed}×` : ''}`
                                             : 'Unknown variant'
                                         }
                                         className={[
@@ -858,7 +862,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
                 <Row label="settings">
                   <span className="font-mono text-[10px] text-foreground">
                     {v.settings
-                      ? `${v.settings.ttsProvider} · ${v.settings.ttsModel} · ${formatVoiceLabel(v.settings)}`
+                      ? `${v.settings.providerRef} · ${v.settings.ttsModel} · ${formatVoiceLabel(v.settings)}`
                       : 'unknown'}
                   </span>
                 </Row>

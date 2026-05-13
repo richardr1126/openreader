@@ -32,7 +32,8 @@ import { generateTTSBuffer } from '@/lib/server/tts/generate';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
-import { supportsNativeModelSpeed, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
+import { defaultVoiceForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { isBuiltInTtsProviderId, isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
@@ -99,7 +100,11 @@ function s3NotConfiguredResponse(): NextResponse {
 }
 
 function normalizeNativeSpeedForSettings(settings: AudiobookGenerationSettings): AudiobookGenerationSettings {
-  return supportsNativeModelSpeed(settings.ttsProvider, settings.ttsModel)
+  return resolveTtsProviderModelPolicy({
+    providerRef: settings.providerRef,
+    providerType: settings.providerType,
+    model: settings.ttsModel,
+  }).supportsNativeModelSpeed
     ? settings
     : { ...settings, nativeSpeed: 1 };
 }
@@ -118,7 +123,8 @@ function isAudiobookGenerationSettings(value: unknown): value is AudiobookGenera
   }
 
   const record = value as Record<string, unknown>;
-  return typeof record.ttsProvider === 'string'
+  return typeof record.providerRef === 'string'
+    && isTtsProviderType(record.providerType)
     && typeof record.ttsModel === 'string'
     && typeof record.voice === 'string'
     && isFiniteNumber(record.nativeSpeed)
@@ -364,7 +370,8 @@ export async function POST(request: NextRequest) {
 
     if (normalizedExistingSettings && hasChapters && incomingSettings) {
       const mismatch =
-        normalizedExistingSettings.ttsProvider !== incomingSettings.ttsProvider ||
+        normalizedExistingSettings.providerRef !== incomingSettings.providerRef ||
+        normalizedExistingSettings.providerType !== incomingSettings.providerType ||
         normalizedExistingSettings.ttsModel !== incomingSettings.ttsModel ||
         normalizedExistingSettings.voice !== incomingSettings.voice ||
         normalizedExistingSettings.nativeSpeed !== incomingSettings.nativeSpeed ||
@@ -409,7 +416,7 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedProvider = request.headers.get('x-tts-provider')
-      || mergedSettings?.ttsProvider
+      || mergedSettings?.providerRef
       || 'openai';
     providerForError = requestedProvider;
     const runtimeConfig = await getResolvedRuntimeConfig();
@@ -433,15 +440,21 @@ export async function POST(request: NextRequest) {
       );
     }
     const provider = credResolved.provider;
+    if (!isBuiltInTtsProviderId(provider)) {
+      return NextResponse.json({ error: `Unsupported TTS provider type: ${provider}` }, { status: 500 });
+    }
     const openApiKey = credResolved.apiKey || 'none';
     const openApiBaseUrl = credResolved.baseUrl;
-    const model = mergedSettings?.ttsModel;
-    const voice = mergedSettings?.voice
-      || (provider === 'openai'
-        ? 'alloy'
-        : provider === 'deepinfra'
-          ? 'af_bella'
-          : 'af_sarah');
+    const effectiveProviderRef = credResolved.adminRecord?.slug || requestedProvider;
+    const model = resolveTtsModelForProvider({
+      providerRef: effectiveProviderRef,
+      providerType: provider,
+      model: mergedSettings?.ttsModel,
+      sharedProviders: credResolved.adminRecord ? [credResolved.adminRecord] : [],
+      fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+      showAllProviderModels: runtimeConfig.showAllProviderModels,
+    });
+    const voice = mergedSettings?.voice || defaultVoiceForProviderType(provider);
     const rawNativeSpeed = mergedSettings?.nativeSpeed ?? 1;
     const nativeSpeed = Number.isFinite(Number(rawNativeSpeed)) ? Number(rawNativeSpeed) : 1;
     const instructions = resolveEffectiveTtsInstructions({
@@ -586,7 +599,14 @@ export async function POST(request: NextRequest) {
     if (!normalizedExistingSettings && incomingSettings) {
       const settingsToPersist: AudiobookGenerationSettings = {
         ...incomingSettings,
-        ...(supportsTtsInstructions(incomingSettings.ttsModel)
+        providerRef: effectiveProviderRef,
+        providerType: provider,
+        ttsModel: model,
+        ...(resolveTtsProviderModelPolicy({
+          providerRef: effectiveProviderRef,
+          providerType: provider,
+          model,
+        }).supportsInstructions
           ? { ttsInstructions: instructions ?? '' }
           : { ttsInstructions: '' }),
       };

@@ -8,6 +8,7 @@ import {
   supportsNativeModelSpeed,
   supportsTtsInstructions,
 } from '../../src/lib/shared/tts-provider-catalog';
+import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '../../src/lib/shared/tts-provider-policy';
 import { resolveReplicateVoiceInputKey, resolveVoices } from '../../src/lib/server/tts/voice-resolution';
 import { applyConfigUpdate, getVoicePreferenceKey } from '../../src/lib/client/config/updates';
 import { buildSyncedPreferencePatch } from '../../src/lib/client/config/preferences';
@@ -57,6 +58,77 @@ test.describe('tts provider catalog', () => {
     expect(supportsNativeModelSpeed('replicate', 'acme/runtime-speed-model')).toBe(true);
     expect(supportsNativeModelSpeed('replicate', 'google/gemini-3.1-flash-tts')).toBe(false);
     expect(supportsNativeModelSpeed('replicate', 'qwen/qwen3-tts')).toBe(false);
+  });
+
+  test('normalizes legacy default-openai provider ref to fallback', () => {
+    expect(normalizeLegacyProviderRef('default-openai', 'shared-replicate')).toBe('shared-replicate');
+    expect(normalizeLegacyProviderRef('default-openai', '')).toBe('custom-openai');
+  });
+
+  test('resolves shared-provider default model as authoritative', () => {
+    const defaults = resolveProviderDefaults({
+      providerRef: 'shared-replicate',
+      providerType: 'unknown',
+      fallbackProviderRef: 'shared-replicate',
+      sharedProviders: [
+        {
+          slug: 'shared-replicate',
+          providerType: 'replicate',
+          defaultModel: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+          defaultInstructions: 'Narrate warmly',
+        },
+      ],
+    });
+    expect(defaults.providerRef).toBe('shared-replicate');
+    expect(defaults.providerType).toBe('replicate');
+    expect(defaults.defaultModel).toBe(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
+    expect(defaults.defaultInstructions).toBe('Narrate warmly');
+  });
+
+  test('resolveTtsModelForProvider enforces shared default model when showAllProviderModels is false', () => {
+    const resolved = resolveTtsModelForProvider({
+      providerRef: 'shared-replicate',
+      providerType: 'unknown',
+      model: 'acme/custom-model',
+      showAllProviderModels: false,
+      sharedProviders: [
+        {
+          slug: 'shared-replicate',
+          providerType: 'replicate',
+          defaultModel: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+          defaultInstructions: null,
+        },
+      ],
+    });
+    expect(resolved).toBe(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
+  });
+
+  test('resolveTtsModelForProvider keeps requested model when showAllProviderModels is true', () => {
+    const resolved = resolveTtsModelForProvider({
+      providerRef: 'shared-replicate',
+      providerType: 'unknown',
+      model: 'acme/custom-model',
+      showAllProviderModels: true,
+      sharedProviders: [
+        {
+          slug: 'shared-replicate',
+          providerType: 'replicate',
+          defaultModel: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+          defaultInstructions: null,
+        },
+      ],
+    });
+    expect(resolved).toBe('acme/custom-model');
+  });
+
+  test('resolveTtsModelForProvider falls back to built-in provider default model when locked', () => {
+    const resolved = resolveTtsModelForProvider({
+      providerRef: 'openai',
+      providerType: 'openai',
+      model: 'gpt-4o-mini-tts',
+      showAllProviderModels: false,
+    });
+    expect(resolved).toBe('tts-1');
   });
 
   test('keeps explicit empty custom-openai voices response', async () => {
@@ -319,7 +391,8 @@ test.describe('config helpers', () => {
     expect(getVoicePreferenceKey('openai', 'tts-1')).toBe('openai:tts-1');
 
     const voiceUpdate = applyConfigUpdate({
-      ttsProvider: 'openai',
+      providerRef: 'openai',
+      providerType: 'openai',
       ttsModel: 'tts-1',
       savedVoices: {},
     }, 'voice', 'alloy');
@@ -329,14 +402,15 @@ test.describe('config helpers', () => {
     });
 
     const providerUpdate = applyConfigUpdate({
-      ttsProvider: 'openai',
+      providerRef: 'openai',
+      providerType: 'openai',
       ttsModel: 'tts-1',
       savedVoices: {
         'deepinfra:hexgrad/Kokoro-82M': 'af_sarah',
       },
-    }, 'ttsProvider', 'deepinfra');
+    }, 'providerRef', 'deepinfra');
     expect(providerUpdate.storagePatch).toEqual({
-      ttsProvider: 'deepinfra',
+      providerRef: 'deepinfra',
       voice: '',
     });
   });

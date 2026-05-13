@@ -8,13 +8,15 @@ import {
 } from '@headlessui/react';
 import { ChevronUpDownIcon, AudioWaveIcon, CheckIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useState } from 'react';
-import { buildKokoroVoiceString, getMaxVoicesForProvider, isKokoroModel, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
+import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
+import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
 export function VoicesControlBase({
   availableVoices,
   voice,
   onChangeVoice,
-  ttsProvider,
+  providerType,
   ttsModel,
   dropdownDirection = 'up',
   variant = 'compact',
@@ -22,7 +24,7 @@ export function VoicesControlBase({
   availableVoices: string[];
   voice: string;
   onChangeVoice: (voice: string) => void;
-  ttsProvider: string;
+  providerType: TtsProviderType;
   ttsModel: string;
   dropdownDirection?: 'up' | 'down';
   variant?: 'compact' | 'field';
@@ -43,11 +45,16 @@ export function VoicesControlBase({
     ? 'h-4 w-4 text-muted'
     : 'h-2.5 w-2.5 sm:h-3 sm:w-3';
 
+  const providerModelPolicy = resolveTtsProviderModelPolicy({
+    providerRef: '',
+    providerType,
+    model: ttsModel,
+  });
   const dropdownWidth = variant === 'field'
     ? 'w-full'
-    : isKokoroModel(ttsModel) && getMaxVoicesForProvider(ttsProvider, ttsModel) > 1 ? 'w-40 sm:w-44' : 'w-28 sm:w-32';
-  const isKokoro = isKokoroModel(ttsModel);
-  const maxVoices = getMaxVoicesForProvider(ttsProvider, ttsModel);
+    : providerModelPolicy.isKokoroModel && providerModelPolicy.maxVoices > 1 ? 'w-40 sm:w-44' : 'w-28 sm:w-32';
+  const isKokoro = providerModelPolicy.isKokoroModel;
+  const maxVoices = providerModelPolicy.maxVoices;
 
   const [selectedVoices, setSelectedVoices] = useState<string[]>([]);
 

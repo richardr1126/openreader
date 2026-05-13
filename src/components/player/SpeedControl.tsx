@@ -4,7 +4,7 @@ import { Input, Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import { ChevronUpDownIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supportsNativeModelSpeed } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
 export const SpeedControl = ({ 
   setSpeedAndRestart, 
@@ -13,8 +13,12 @@ export const SpeedControl = ({
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
 }) => {
-  const { voiceSpeed, audioPlayerSpeed, ttsProvider, ttsModel } = useConfig();
-  const nativeSpeedSupported = supportsNativeModelSpeed(ttsProvider, ttsModel);
+  const { voiceSpeed, audioPlayerSpeed, providerType, ttsModel } = useConfig();
+  const nativeSpeedSupported = resolveTtsProviderModelPolicy({
+    providerRef: '',
+    providerType,
+    model: ttsModel,
+  }).supportsNativeModelSpeed;
 
   const [localVoiceSpeed, setLocalVoiceSpeed] = useState(voiceSpeed);
   const [localAudioSpeed, setLocalAudioSpeed] = useState(audioPlayerSpeed);

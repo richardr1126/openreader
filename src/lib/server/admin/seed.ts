@@ -47,6 +47,7 @@ async function runSeed(): Promise<void> {
   await seedRuntimeConfigFromEnv();
   await seedDefaultAdminProvider();
   await cleanupLegacyDefaultTtsProviderSeedRow();
+  await cleanupLegacyDefaultTtsModelRows();
 }
 
 async function seedDefaultAdminProvider(): Promise<void> {
@@ -64,17 +65,15 @@ async function seedDefaultAdminProvider(): Promise<void> {
 
   const baseUrl = process.env.API_BASE?.trim() || null;
   const now = Date.now();
-  const defaultModel = (() => {
-    const raw = process.env[RUNTIME_CONFIG_SCHEMA.defaultTtsModel.envVar];
-    return raw && raw.trim() ? raw.trim() : null;
-  })();
-
   let enc: ReturnType<typeof encryptSecret>;
   try {
     enc = encryptSecret(apiKey);
   } catch (error) {
     const hasExplicitRestriction =
-      Boolean(process.env[RUNTIME_CONFIG_SCHEMA.restrictUserApiKeys.envVar]?.trim());
+      Boolean(
+        RUNTIME_CONFIG_SCHEMA.restrictUserApiKeys.envVar
+        && process.env[RUNTIME_CONFIG_SCHEMA.restrictUserApiKeys.envVar]?.trim(),
+      );
     if (!hasExplicitRestriction) {
       try {
         await db
@@ -110,7 +109,7 @@ async function seedDefaultAdminProvider(): Promise<void> {
       apiKeyCiphertext: enc.ciphertext,
       apiKeyIv: enc.iv,
       apiKeyLast4: apiKeyLast4(apiKey),
-      defaultModel,
+      defaultModel: 'kokoro',
       enabled: 1,
       createdAt: now,
       updatedAt: now,
@@ -123,7 +122,9 @@ async function seedDefaultAdminProvider(): Promise<void> {
 
 async function cleanupLegacyDefaultTtsProviderSeedRow(): Promise<void> {
   // If an explicit env default exists, keep env-seeded behavior.
-  const explicit = process.env[RUNTIME_CONFIG_SCHEMA.defaultTtsProvider.envVar];
+  const explicit = RUNTIME_CONFIG_SCHEMA.defaultTtsProvider.envVar
+    ? process.env[RUNTIME_CONFIG_SCHEMA.defaultTtsProvider.envVar]
+    : undefined;
   if (explicit && explicit.trim()) return;
 
   const key = 'defaultTtsProvider';
@@ -140,5 +141,15 @@ async function cleanupLegacyDefaultTtsProviderSeedRow(): Promise<void> {
       );
   } catch (error) {
     console.warn('[admin-seed] failed to cleanup legacy defaultTtsProvider seed row', error);
+  }
+}
+
+async function cleanupLegacyDefaultTtsModelRows(): Promise<void> {
+  try {
+    await db
+      .delete(adminSettings)
+      .where(eq(adminSettings.key, 'defaultTtsModel'));
+  } catch (error) {
+    console.warn('[admin-seed] failed to cleanup legacy defaultTtsModel rows', error);
   }
 }

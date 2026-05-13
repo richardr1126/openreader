@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/server/auth/auth';
-import { getDefaultVoices } from '@/lib/shared/tts-provider-catalog';
+import { isBuiltInTtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { defaultModelForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import { resolveVoices } from '@/lib/server/tts/voice-resolution';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
@@ -38,9 +39,20 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const requestedModel = req.headers.get('x-tts-model')
-      || resolved.adminRecord?.defaultModel
-      || 'tts-1';
+    if (!isBuiltInTtsProviderId(resolved.provider)) {
+      return NextResponse.json({ error: `Unsupported provider type: ${resolved.provider}` }, { status: 500 });
+    }
+    const effectiveProviderRef = resolved.adminRecord?.slug
+      ?? req.headers.get('x-tts-provider')
+      ?? runtimeConfig.defaultTtsProvider;
+    const requestedModel = resolveTtsModelForProvider({
+      providerRef: effectiveProviderRef,
+      providerType: resolved.provider,
+      model: req.headers.get('x-tts-model'),
+      sharedProviders: resolved.adminRecord ? [resolved.adminRecord] : [],
+      fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+      showAllProviderModels: runtimeConfig.showAllProviderModels,
+    }) || defaultModelForProviderType(resolved.provider);
     const voices = await resolveVoices({
       provider: resolved.provider,
       model: requestedModel,
@@ -50,10 +62,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ voices });
   } catch (error) {
     console.error('Error in voices endpoint:', error);
-    const provider = req.headers.get('x-tts-provider') || 'openai';
+    const providerRef = req.headers.get('x-tts-provider') || 'openai';
     const model = req.headers.get('x-tts-model') || 'tts-1';
+    const provider = isBuiltInTtsProviderId(providerRef) ? providerRef : 'openai';
     return NextResponse.json(
-      { error: 'Failed to resolve voices', fallbackVoices: getDefaultVoices(provider, model) },
+      {
+        error: 'Failed to resolve voices',
+        fallbackVoices: resolveTtsProviderModelPolicy({
+          providerRef,
+          providerType: provider,
+          model,
+        }).defaultVoices,
+      },
       { status: 500 },
     );
   }

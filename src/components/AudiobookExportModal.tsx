@@ -12,7 +12,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { supportsNativeModelSpeed, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
 import { 
   getAudiobookStatus, 
@@ -49,7 +49,7 @@ export function AudiobookExportModal({
   onGenerateAudiobook,
   onRegenerateChapter
 }: AudiobookExportModalProps) {
-  const { isLoading, isDBReady, ttsProvider, ttsModel, ttsInstructions, voice: configVoice, voiceSpeed, audioPlayerSpeed } = useConfig();
+  const { isLoading, isDBReady, providerRef, providerType, ttsModel, ttsInstructions, voice: configVoice, voiceSpeed, audioPlayerSpeed } = useConfig();
   const { availableVoices } = useTTS();
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -74,7 +74,11 @@ export function AudiobookExportModal({
   const formatSpeed = useCallback((speed: number) => {
     return Number.isInteger(speed) ? speed.toString() : speed.toFixed(1);
   }, []);
-  const nativeSpeedSupported = useMemo(() => supportsNativeModelSpeed(ttsProvider, ttsModel), [ttsProvider, ttsModel]);
+  const providerModelPolicy = useMemo(
+    () => resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel }),
+    [providerRef, providerType, ttsModel],
+  );
+  const nativeSpeedSupported = providerModelPolicy.supportsNativeModelSpeed;
   const effectiveNativeSpeed = nativeSpeedSupported ? nativeSpeed : 1;
 
   const hasExistingAudiobook = Boolean(bookId) || chapters.length > 0;
@@ -113,15 +117,16 @@ export function AudiobookExportModal({
     const nextVoice = audiobookVoice || configVoice || availableVoices[0] || '';
     if (!nextVoice) return null;
     return {
-      ttsProvider,
+      providerRef,
+      providerType,
       ttsModel,
       voice: nextVoice,
       nativeSpeed: effectiveNativeSpeed,
       postSpeed,
       format,
-      ttsInstructions: supportsTtsInstructions(ttsModel) ? ttsInstructions : undefined,
+      ttsInstructions: providerModelPolicy.supportsInstructions ? ttsInstructions : undefined,
     };
-  }, [savedSettings, audiobookVoice, configVoice, availableVoices, ttsProvider, ttsModel, ttsInstructions, effectiveNativeSpeed, postSpeed, format]);
+  }, [savedSettings, audiobookVoice, configVoice, availableVoices, providerRef, providerType, ttsModel, ttsInstructions, effectiveNativeSpeed, postSpeed, format, providerModelPolicy.supportsInstructions]);
 
   const fetchExistingChapters = useCallback(async (soft: boolean = false) => {
     if (soft) {
@@ -514,7 +519,11 @@ export function AudiobookExportModal({
                                     <div className="rounded-lg bg-base p-3">
                                       <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Native speed</div>
                                       <div className="text-sm font-medium text-foreground">
-                                        {supportsNativeModelSpeed(savedSettings.ttsProvider, savedSettings.ttsModel)
+                                        {resolveTtsProviderModelPolicy({
+                                          providerRef: savedSettings.providerRef,
+                                          providerType: savedSettings.providerType,
+                                          model: savedSettings.ttsModel,
+                                        }).supportsNativeModelSpeed
                                           ? `${formatSpeed(savedSettings.nativeSpeed)}x`
                                           : 'Not supported'}
                                       </div>
@@ -538,7 +547,7 @@ export function AudiobookExportModal({
 			                                        availableVoices={availableVoices}
 			                                        voice={audiobookVoice}
 			                                        onChangeVoice={setAudiobookVoice}
-			                                        ttsProvider={ttsProvider}
+			                                        providerType={providerType}
 			                                        ttsModel={ttsModel}
 			                                        dropdownDirection="down"
 			                                        variant="field"

@@ -54,7 +54,7 @@ On first boot, if `admin_providers` is empty and the legacy `API_KEY` env var is
 
 - slug `default-openai`, displayName `Default (from env)`, providerType `custom-openai`
 - baseUrl from `API_BASE`, apiKey from `API_KEY` (encrypted)
-- defaultModel from `NEXT_PUBLIC_DEFAULT_TTS_MODEL` if set
+- defaultModel set to `kokoro` (you can edit it in Admin → Shared providers)
 
 After this seed runs, the legacy `API_KEY` / `API_BASE` env vars are no longer read by the TTS routes — the DB row is authoritative. You can rename, edit, disable, or delete this row like any other from the admin UI, and remove the env vars from your `.env` when convenient.
 
@@ -65,10 +65,10 @@ Runtime-editable settings, one row per key:
 | Key | What it controls |
 | --- | --- |
 | `defaultTtsProvider` | Default provider id new users start with (built-in id or shared slug). |
-| `defaultTtsModel` | Default model id new users start with. |
 | `restrictUserApiKeys` | Restrict user-supplied API keys/base URLs; when `true`, only admin shared providers are allowed. |
 | `enableTtsProvidersTab` | Whether the user-facing TTS Provider tab in Settings is shown. |
 | `showAllDeepInfraModels` | Show the full DeepInfra catalog vs. the Kokoro-only subset. |
+| `showAllProviderModels` | When `false`, users are restricted to each provider's default model (shared provider `defaultModel` or built-in provider default). |
 | `enableWordHighlight` | Enable whisper.cpp word-by-word highlighting during TTS playback. |
 | `enableAudiobookExport` | Show the audiobook export entry points on PDF/EPUB pages. |
 | `enableDocxConversion` | Accept .docx uploads (converted to PDF server-side). |

@@ -1,4 +1,4 @@
-import { supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
 function normalizeInstructionCandidate(value: string | null | undefined): string | undefined {
   if (value === null || value === undefined) return undefined;
@@ -21,11 +21,14 @@ export function resolveEffectiveTtsInstructions(opts: {
   requestInstructions?: string | null;
   sharedDefaultInstructions?: string | null;
 }): string | undefined {
-  if (!supportsTtsInstructions(opts.model)) {
+  if (!resolveTtsProviderModelPolicy({
+    providerRef: '',
+    providerType: 'custom-openai',
+    model: opts.model,
+  }).supportsInstructions) {
     return undefined;
   }
 
   return normalizeInstructionCandidate(opts.requestInstructions)
     ?? normalizeInstructionCandidate(opts.sharedDefaultInstructions);
 }
-

@@ -36,7 +36,17 @@ import { deleteDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/a
 import { cacheStoredDocumentFromBytes, clearDocumentCache } from '@/lib/client/cache/documents';
 import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from '@/lib/client/cache/previews';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
-import { REPLICATE_KOKORO_82M_VERSIONED_MODEL, supportsTtsInstructions } from '@/lib/shared/tts-provider-catalog';
+import {
+  isBuiltInTtsProviderId,
+  type TtsProviderType,
+} from '@/lib/shared/tts-provider-catalog';
+import {
+  defaultBaseUrlForProviderType,
+  defaultModelForProviderType,
+  resolveProviderDefaults,
+  resolveEffectiveProviderType,
+  resolveTtsProviderModelPolicy,
+} from '@/lib/shared/tts-provider-policy';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
@@ -105,6 +115,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const runtimeConfig = useRuntimeConfig();
   const enableDestructiveDelete = runtimeConfig.enableDestructiveDeleteActions;
   const showAllDeepInfra = runtimeConfig.showAllDeepInfraModels;
+  const showAllProviderModels = runtimeConfig.showAllProviderModels;
   const enableTTSProvidersTab = runtimeConfig.enableTtsProvidersTab;
   const restrictUserApiKeys = runtimeConfig.restrictUserApiKeys;
   const [isOpen, setIsOpen] = useState(false);
@@ -113,11 +124,12 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const { theme, setTheme, applyCustomColors } = useTheme();
   const [customColors, setCustomColors] = useState<CustomThemeColors>(getCustomThemeColors);
   const [isCustomExpanded, setIsCustomExpanded] = useState(false);
-  const { apiKey, baseUrl, ttsProvider, ttsModel, ttsInstructions, updateConfig, updateConfigKey } = useConfig();
+  const { apiKey, baseUrl, providerRef, providerType, ttsModel, ttsInstructions, updateConfig, updateConfigKey } = useConfig();
   const { refreshDocuments } = useDocuments();
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [localBaseUrl, setLocalBaseUrl] = useState(baseUrl);
-  const [localTTSProvider, setLocalTTSProvider] = useState(ttsProvider);
+  const [localProviderRef, setLocalProviderRef] = useState(providerRef);
+  const [localProviderType, setLocalProviderType] = useState<TtsProviderType>(providerType);
   const [modelValue, setModelValue] = useState(ttsModel);
   const [customModelInput, setCustomModelInput] = useState('');
   const [localTTSInstructions, setLocalTTSInstructions] = useState(ttsInstructions);
@@ -154,17 +166,21 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     selectedModelId,
     canSubmit,
     selectedSharedProvider,
+    selectedProviderRef,
+    selectedProviderType,
   } = useMemo(() => resolveTtsSettingsViewModel({
-    provider: localTTSProvider,
+    providerRef: localProviderRef,
+    providerType: localProviderType,
     apiKey: localApiKey,
     modelValue,
     customModelInput,
     showAllDeepInfra,
+    showAllProviderModels,
     sharedProviders,
     allowBuiltInProviders: !restrictUserApiKeys,
-  }), [localTTSProvider, localApiKey, modelValue, customModelInput, showAllDeepInfra, sharedProviders, restrictUserApiKeys]);
+  }), [localProviderRef, localProviderType, localApiKey, modelValue, customModelInput, showAllDeepInfra, showAllProviderModels, sharedProviders, restrictUserApiKeys]);
   const isSharedSelected = Boolean(selectedSharedProvider);
-  const selectedProviderOption = ttsProviders.find((p) => p.id === localTTSProvider) ?? ttsProviders[0];
+  const selectedProviderOption = ttsProviders.find((p) => p.id === localProviderRef) ?? ttsProviders[0];
 
   const checkFirstVist = useCallback(async () => {
     const appConfig = await getAppConfig();
@@ -187,10 +203,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   useEffect(() => {
     setLocalApiKey(apiKey);
     setLocalBaseUrl(baseUrl);
-    setLocalTTSProvider(ttsProvider);
+    setLocalProviderRef(providerRef);
+    setLocalProviderType(providerType);
     setModelValue(ttsModel);
     setLocalTTSInstructions(ttsInstructions);
-  }, [apiKey, baseUrl, ttsProvider, ttsModel, ttsInstructions]);
+  }, [apiKey, baseUrl, providerRef, providerType, ttsModel, ttsInstructions]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -216,12 +233,31 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   }, [modelValue, ttsModels]);
 
   useEffect(() => {
-    if (!restrictUserApiKeys) return;
     if (selectedProviderOption) return;
-    if (ttsProviders.length > 0) {
-      setLocalTTSProvider(ttsProviders[0].id);
+    if (ttsProviders.length === 0) return;
+
+    const fallback = ttsProviders[0];
+    setLocalProviderRef(fallback.id);
+    setLocalProviderType(fallback.providerType);
+
+    if (fallback.shared) {
+      const shared = sharedProviders.find((p) => p.slug === fallback.id);
+      if (shared?.defaultModel) {
+        setModelValue(shared.defaultModel);
+      }
+      setLocalTTSInstructions(shared?.defaultInstructions ?? '');
+      setLocalApiKey('');
+      setLocalBaseUrl('');
+      setCustomModelInput('');
+      return;
     }
-  }, [restrictUserApiKeys, selectedProviderOption, ttsProviders]);
+
+    if (isBuiltInTtsProviderId(fallback.providerType)) {
+      setModelValue(defaultModelForProviderType(fallback.providerType));
+      setLocalBaseUrl(defaultBaseUrlForProviderType(fallback.providerType));
+      setCustomModelInput('');
+    }
+  }, [selectedProviderOption, ttsProviders, sharedProviders]);
 
   const handleRefresh = async () => {
     try {
@@ -364,7 +400,8 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     setIsOpen(false);
     setLocalApiKey(apiKey);
     setLocalBaseUrl(baseUrl);
-    setLocalTTSProvider(ttsProvider);
+    setLocalProviderRef(providerRef);
+    setLocalProviderType(providerType);
     setModelValue(ttsModel);
     setLocalTTSInstructions(ttsInstructions);
     if (!ttsModels.some(m => m.id === ttsModel) && ttsModel !== '') {
@@ -372,7 +409,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     } else {
       setCustomModelInput('');
     }
-  }, [apiKey, baseUrl, ttsProvider, ttsModel, ttsInstructions, ttsModels]);
+  }, [apiKey, baseUrl, providerRef, providerType, ttsModel, ttsInstructions, ttsModels]);
 
   const [systemIsDark, setSystemIsDark] = useState(
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -428,11 +465,22 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const btnPrimary = `${btnBase} bg-accent text-background hover:bg-secondary-accent hover:scale-[1.04]`;
   const btnSecondary = `${btnBase} bg-background text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.04]`;
   const btnOutline = `${btnBase} bg-background border border-offbase text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.02]`;
-  const effectiveProviderType = selectedSharedProvider?.providerType ?? localTTSProvider;
+  const effectiveProviderType = resolveEffectiveProviderType({
+    providerRef: selectedProviderRef,
+    providerType: localProviderType,
+    sharedProviders,
+  });
+  const providerModelPolicy = resolveTtsProviderModelPolicy({
+    providerRef: selectedProviderRef,
+    providerType: effectiveProviderType,
+    model: modelValue,
+    sharedProviders,
+  });
   const shouldShowBaseUrl = !restrictUserApiKeys
     && !isSharedSelected
-    && effectiveProviderType !== 'replicate'
-    && (effectiveProviderType === 'custom-openai' || !localBaseUrl || localBaseUrl === '');
+    && providerModelPolicy.isResolvedProviderType
+    && providerModelPolicy.providerType !== 'replicate'
+    && (providerModelPolicy.providerType === 'custom-openai' || !localBaseUrl || localBaseUrl === '');
   const shouldShowApiKey = !restrictUserApiKeys && !isSharedSelected;
   const selectedModel = ttsModels.find(m => m.id === selectedModelId) || ttsModels[0];
   const selectedModelVersion = selectedModel?.id?.includes(':')
@@ -551,26 +599,21 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               <Listbox
                                 value={selectedProviderOption!}
                                 onChange={(provider) => {
-                                  setLocalTTSProvider(provider.id);
+                                  const defaults = resolveProviderDefaults({
+                                    providerRef: provider.id,
+                                    providerType: provider.providerType,
+                                    sharedProviders,
+                                  });
+                                  setLocalProviderRef(provider.id);
+                                  setLocalProviderType(defaults.providerType);
+                                  setModelValue(defaults.defaultModel);
+                                  setLocalTTSInstructions(defaults.defaultInstructions);
                                   if (provider.shared) {
                                     // Shared admin provider — credentials live on the server.
                                     setLocalApiKey('');
                                     setLocalBaseUrl('');
-                                    const shared = sharedProviders.find((p) => p.slug === provider.id);
-                                    if (shared?.defaultModel) setModelValue(shared.defaultModel);
-                                    setLocalTTSInstructions(shared?.defaultInstructions ?? '');
-                                  } else if (provider.id === 'openai') {
-                                    setModelValue('tts-1');
-                                    setLocalBaseUrl('https://api.openai.com/v1');
-                                  } else if (provider.id === 'custom-openai') {
-                                    setModelValue('kokoro');
-                                    setLocalBaseUrl('');
-                                  } else if (provider.id === 'replicate') {
-                                    setModelValue(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
-                                    setLocalBaseUrl('');
-                                  } else if (provider.id === 'deepinfra') {
-                                    setModelValue('hexgrad/Kokoro-82M');
-                                    setLocalBaseUrl('https://api.deepinfra.com/v1/openai');
+                                  } else if (isBuiltInTtsProviderId(provider.providerType)) {
+                                    setLocalBaseUrl(defaultBaseUrlForProviderType(provider.providerType));
                                   }
                                   setCustomModelInput('');
                                 }}
@@ -652,7 +695,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 type="password"
                                 value={localApiKey}
                                 onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                                placeholder={!showAllDeepInfra && localTTSProvider === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
+                                placeholder={!showAllDeepInfra && providerModelPolicy.providerType === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
                                 className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
                               />
                             </div>
@@ -665,6 +708,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
 
                           <div className="space-y-1.5">
                             <label className="block text-sm font-medium text-foreground">TTS Model</label>
+                            {!showAllProviderModels && (
+                              <p className="text-xs text-muted">
+                                This instance restricts model selection to each provider&apos;s default model.
+                              </p>
+                            )}
                             <div className="flex flex-col gap-2">
                               <Listbox
                                 value={ttsModels.find(m => m.id === selectedModelId) || ttsModels[0]}
@@ -752,7 +800,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                             </div>
                           </div>
 
-                          {supportsTtsInstructions(modelValue) && (
+                          {providerModelPolicy.supportsInstructions && (
                             <div className="space-y-1.5">
                               <label className="block text-sm font-medium text-foreground">TTS Instructions</label>
                               <textarea
@@ -769,15 +817,18 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               type="button"
                               className={`${btnSecondary} px-4 py-2`}
                               onClick={async () => {
-                                const sharedDefault = sharedProviders.find(
-                                  (p) => p.slug === runtimeConfig.defaultTtsProvider,
-                                );
+                                const defaults = resolveProviderDefaults({
+                                  providerRef: runtimeConfig.defaultTtsProvider,
+                                  sharedProviders,
+                                  fallbackProviderRef: 'custom-openai',
+                                });
                                 setLocalApiKey('');
                                 setLocalBaseUrl('');
-                                setLocalTTSProvider(runtimeConfig.defaultTtsProvider);
-                                setModelValue(runtimeConfig.defaultTtsModel);
+                                setLocalProviderRef(defaults.providerRef);
+                                setLocalProviderType(defaults.providerType);
+                                setModelValue(defaults.defaultModel);
                                 setCustomModelInput('');
-                                setLocalTTSInstructions(sharedDefault?.defaultInstructions ?? '');
+                                setLocalTTSInstructions(defaults.defaultInstructions);
                               }}
                             >
                               Reset
@@ -788,12 +839,20 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               className={`${btnPrimary} px-4 py-2`}
                               disabled={!canSubmit}
                               onClick={async () => {
+                                const defaults = resolveProviderDefaults({
+                                  providerRef: selectedProviderRef,
+                                  providerType: selectedProviderType,
+                                  sharedProviders,
+                                });
                                 await updateConfig({
                                   apiKey: restrictUserApiKeys ? '' : (localApiKey || ''),
                                   baseUrl: restrictUserApiKeys ? '' : (localBaseUrl || ''),
                                 });
-                                await updateConfigKey('ttsProvider', localTTSProvider);
-                                const finalModel = selectedModelId === 'custom' ? customModelInput.trim() : modelValue;
+                                await updateConfigKey('providerRef', selectedProviderRef);
+                                await updateConfigKey('providerType', selectedProviderType);
+                                const finalModel = showAllProviderModels
+                                  ? (selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
+                                  : defaults.defaultModel;
                                 await updateConfigKey('ttsModel', finalModel);
                                 await updateConfigKey('ttsInstructions', localTTSInstructions);
                                 setIsOpen(false);

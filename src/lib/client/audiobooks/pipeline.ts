@@ -54,7 +54,7 @@ interface RegenerateAudiobookChapterOptions {
 }
 
 interface ResolvedAudiobookRequestSettings {
-  effectiveProvider: string;
+  effectiveProviderRef: string;
   effectiveFormat: TTSAudiobookFormat;
 }
 
@@ -64,7 +64,7 @@ function resolveAudiobookRequestSettings(
   format: TTSAudiobookFormat,
 ): ResolvedAudiobookRequestSettings {
   return {
-    effectiveProvider: settings?.ttsProvider ?? defaultProvider,
+    effectiveProviderRef: settings?.providerRef ?? defaultProvider,
     effectiveFormat: settings?.format ?? format,
   };
 }
@@ -115,8 +115,8 @@ export async function runAudiobookGeneration({
     throw new Error(adapter.noContentMessage);
   }
 
-  const { effectiveProvider, effectiveFormat } = resolveAudiobookRequestSettings(settings, defaultProvider, format);
-  const reqHeaders = buildAudiobookRequestHeaders(apiKey, baseUrl, effectiveProvider);
+  const { effectiveProviderRef, effectiveFormat } = resolveAudiobookRequestSettings(settings, defaultProvider, format);
+  const reqHeaders = buildAudiobookRequestHeaders(apiKey, baseUrl, effectiveProviderRef);
   let processedLength = 0;
   let bookId = providedBookId;
 
@@ -233,8 +233,8 @@ export async function regenerateAudiobookChapter({
     throw new Error(adapter.noContentMessage);
   }
 
-  const { effectiveProvider, effectiveFormat } = resolveAudiobookRequestSettings(settings, defaultProvider, format);
-  const reqHeaders = buildAudiobookRequestHeaders(apiKey, baseUrl, effectiveProvider);
+  const { effectiveProviderRef, effectiveFormat } = resolveAudiobookRequestSettings(settings, defaultProvider, format);
+  const reqHeaders = buildAudiobookRequestHeaders(apiKey, baseUrl, effectiveProviderRef);
 
   return withRetry(
     async () => {

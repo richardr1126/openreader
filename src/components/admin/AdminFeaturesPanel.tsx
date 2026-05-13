@@ -3,7 +3,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
-  Input,
   Listbox,
   ListboxButton,
   ListboxOption,
@@ -19,13 +18,8 @@ import {
   ToggleRow,
   btnPrimary,
   btnSecondary,
-  inputClass,
 } from '@/components/admin/ui';
-import {
-  providerSupportsCustomModel,
-  resolveProviderModels,
-  type TtsProviderId,
-} from '@/lib/shared/tts-provider-catalog';
+import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 
 type RuntimeConfigSource = 'env-seed' | 'admin' | 'default';
@@ -47,7 +41,6 @@ export function AdminFeaturesPanel() {
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
-  const [customModelInput, setCustomModelInput] = useState('');
   const { providers: sharedProviders } = useSharedProviders();
 
   const refresh = useCallback(async () => {
@@ -87,7 +80,6 @@ export function AdminFeaturesPanel() {
       });
       if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
       toast.success('Reset to env default');
-      setCustomModelInput('');
       await refresh();
     } catch (error) {
       console.error(error);
@@ -123,10 +115,9 @@ export function AdminFeaturesPanel() {
     if (!data) return;
     setDraft({ ...data.values });
     setDirty(new Set());
-    setCustomModelInput('');
   };
 
-  // --- Provider + model option resolution (mirrors the user-facing TTS tab) ---
+  // --- Provider option resolution ---
 
   const providerOptions = useMemo<ProviderOption[]>(() => {
     return sharedProviders.map((entry) => ({
@@ -153,71 +144,10 @@ export function AdminFeaturesPanel() {
       shared: true,
     } as ProviderOption
     : fallbackShared;
-  const effectiveProviderType: TtsProviderId =
-    effectiveSelectedProvider?.providerType ?? 'custom-openai';
-
-  const showAllDeepInfra = Boolean(draft.showAllDeepInfraModels);
-  const modelDefinitions = useMemo(
-    () => resolveProviderModels(effectiveProviderType, { showAllDeepInfra }),
-    [effectiveProviderType, showAllDeepInfra],
-  );
-  const supportsCustomModel = providerSupportsCustomModel(effectiveProviderType);
-
-  const currentModelId =
-    typeof draft.defaultTtsModel === 'string' ? draft.defaultTtsModel : '';
-  const modelIsPreset = modelDefinitions.some((m) => m.id === currentModelId);
-  const selectedModelDropdownId = modelIsPreset
-    ? currentModelId
-    : supportsCustomModel && currentModelId
-      ? 'custom'
-      : modelDefinitions[0]?.id ?? '';
-
-  // Seed the custom input from the stored value the first time we land on a
-  // provider whose stored model isn't in the preset list.
-  useEffect(() => {
-    if (!modelIsPreset && supportsCustomModel && currentModelId && !customModelInput) {
-      setCustomModelInput(currentModelId);
-    }
-  }, [modelIsPreset, supportsCustomModel, currentModelId, customModelInput]);
-
   const selectedProviderOption = effectiveSelectedProvider;
-
-  const selectedModelDefinition = modelDefinitions.find(
-    (m) => m.id === selectedModelDropdownId,
-  );
 
   const handleProviderChange = (opt: ProviderOption) => {
     updateDraft('defaultTtsProvider', opt.id);
-
-    // Reset the model selection when the provider changes — try to keep the
-    // current id if it happens to exist in the new provider's catalog,
-    // otherwise fall back to the new provider's first preset.
-    const nextModels = resolveProviderModels(opt.providerType, { showAllDeepInfra });
-    const keepCurrent = nextModels.some((m) => m.id === currentModelId);
-    if (!keepCurrent) {
-      const sharedDefault = opt.shared ? sharedProviders.find((p) => p.slug === opt.id)?.defaultModel : null;
-      const fallback =
-        (sharedDefault && nextModels.some((m) => m.id === sharedDefault)
-          ? sharedDefault
-          : nextModels[0]?.id) ?? '';
-      updateDraft('defaultTtsModel', fallback);
-      setCustomModelInput('');
-    }
-  };
-
-  const handleModelChange = (modelId: string) => {
-    if (modelId === 'custom') {
-      // Switching to custom keeps whatever's already in the input
-      updateDraft('defaultTtsModel', customModelInput.trim());
-      return;
-    }
-    updateDraft('defaultTtsModel', modelId);
-    setCustomModelInput('');
-  };
-
-  const handleCustomModelInput = (value: string) => {
-    setCustomModelInput(value);
-    updateDraft('defaultTtsModel', value);
   };
 
   // --- Renderers ---
@@ -248,7 +178,7 @@ export function AdminFeaturesPanel() {
     <div className="space-y-4">
       <Section
         title="TTS defaults"
-        subtitle="What new users start with, and how they can override it."
+        subtitle="What new users start with."
       >
         {/* Provider picker */}
         <Card className="space-y-1.5">
@@ -256,7 +186,7 @@ export function AdminFeaturesPanel() {
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">Default TTS provider</p>
               <p className="text-xs text-muted mt-0.5">
-                Initial selection for new users. Only admin shared providers are selectable.
+                Initial selection for new users. Model and instructions come from that shared provider configuration.
               </p>
             </div>
             <div className="shrink-0">{renderSource('defaultTtsProvider')}</div>
@@ -311,80 +241,6 @@ export function AdminFeaturesPanel() {
           )}
         </Card>
 
-        {/* Model picker */}
-        <Card className="space-y-1.5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Default TTS model</p>
-              <p className="text-xs text-muted mt-0.5">
-                Model selected when a new user lands on the chosen provider.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('defaultTtsModel')}</div>
-          </div>
-          <Listbox
-            value={selectedModelDropdownId}
-            onChange={handleModelChange}
-          >
-            <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-base border border-offbase py-1.5 pl-3 pr-10 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent hover:bg-offbase hover:text-accent transition-colors">
-              <span className="block truncate">
-                {selectedModelDefinition?.name ?? 'Select model'}
-              </span>
-              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                <ChevronUpDownIcon className="h-4 w-4 text-muted" />
-              </span>
-            </ListboxButton>
-            <Transition
-              as={Fragment}
-              leave="transition ease-in duration-100"
-              leaveFrom="opacity-100"
-              leaveTo="opacity-0"
-            >
-              <ListboxOptions
-                anchor="bottom start"
-                className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
-              >
-                {modelDefinitions.map((model) => (
-                  <ListboxOption
-                    key={model.id}
-                    value={model.id}
-                    className={({ active }) =>
-                      `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                    }
-                  >
-                    {({ selected }) => (
-                      <>
-                        <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
-                          <span className="block truncate">{model.name}</span>
-                          {model.id.includes(':') && (
-                            <span className="block truncate text-xs text-muted">
-                              {model.id.slice(model.id.indexOf(':'))}
-                            </span>
-                          )}
-                        </span>
-                        {selected && (
-                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-accent">
-                            <CheckIcon className="h-5 w-5" />
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </ListboxOption>
-                ))}
-              </ListboxOptions>
-            </Transition>
-          </Listbox>
-          {supportsCustomModel && selectedModelDropdownId === 'custom' && (
-            <Input
-              type="text"
-              value={customModelInput}
-              onChange={(e) => handleCustomModelInput(e.target.value)}
-              placeholder="Enter custom model id"
-              className={inputClass}
-            />
-          )}
-        </Card>
-
         {/* Boolean TTS toggles */}
         <ToggleRow
           label="Restrict user API keys (recommended)"
@@ -414,6 +270,13 @@ export function AdminFeaturesPanel() {
           checked={Boolean(draft.showAllDeepInfraModels)}
           onChange={(checked) => updateDraft('showAllDeepInfraModels', checked)}
           right={renderSource('showAllDeepInfraModels')}
+        />
+        <ToggleRow
+          label="Show all provider models"
+          description="When off, users are restricted to each provider's default model."
+          checked={Boolean(draft.showAllProviderModels)}
+          onChange={(checked) => updateDraft('showAllProviderModels', checked)}
+          right={renderSource('showAllProviderModels')}
         />
       </Section>
 

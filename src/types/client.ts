@@ -4,6 +4,7 @@ import type {
   TTSAudioBytes,
   TTSAudiobookFormat,
 } from '@/types/tts';
+import type { TtsProviderType } from '@/lib/shared/tts-provider-catalog';
 
 // --- TTS Client Request Types ---
 
@@ -37,7 +38,8 @@ export interface AudiobookStatusResponse {
 }
 
 export interface AudiobookGenerationSettings {
-  ttsProvider: string;
+  providerRef: string;
+  providerType: TtsProviderType;
   ttsModel: string;
   voice: string;
   nativeSpeed: number;
@@ -74,7 +76,8 @@ export interface AlignmentResponse {
 }
 
 export interface TTSSegmentSettings {
-  ttsProvider: string;
+  providerRef: string;
+  providerType: TtsProviderType;
   ttsModel: string;
   voice: string;
   nativeSpeed: number;

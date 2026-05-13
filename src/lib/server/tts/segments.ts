@@ -26,7 +26,8 @@ function stableStringify(value: unknown): string {
 
 function settingsCanonical(settings: TTSSegmentSettings): string {
   return stableStringify({
-    provider: settings.ttsProvider,
+    providerRef: settings.providerRef,
+    providerType: settings.providerType,
     model: settings.ttsModel,
     voice: settings.voice,
     speed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
@@ -41,7 +42,8 @@ export function buildTtsSegmentSettingsHash(settings: TTSSegmentSettings): strin
 
 export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSegmentSettings | string {
   const canonical: TTSSegmentSettings = {
-    ttsProvider: settings.ttsProvider,
+    providerRef: settings.providerRef,
+    providerType: settings.providerType,
     ttsModel: settings.ttsModel,
     voice: settings.voice,
     nativeSpeed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,

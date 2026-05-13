@@ -55,7 +55,7 @@ After the first successful deploy and admin login, open **Settings → Admin** a
   - `enableTtsProvidersTab=false` if you want shared-provider-only UX.
   - `restrictUserApiKeys=true` to block user BYOK through the hosted server.
   - `defaultTtsProvider=replicate` (or your preferred shared slug).
-  - `defaultTtsModel=alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5`.
+  - `showAllProviderModels=false` if you want users locked to each provider's default model.
   - `showAllDeepInfraModels=false` if you want a narrower default catalog.
   - `enableAudiobookExport=true`.
   - `enableWordHighlight=false` unless your timestamp stack is configured.
