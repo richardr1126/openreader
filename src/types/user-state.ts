@@ -26,7 +26,7 @@ export const SYNCED_PREFERENCE_KEYS = [
 ] as const;
 
 export type SyncedPreferenceKey = (typeof SYNCED_PREFERENCE_KEYS)[number];
-export type SyncedPreferences = Pick<AppConfigValues, SyncedPreferenceKey>;
+type SyncedPreferences = Pick<AppConfigValues, SyncedPreferenceKey>;
 export type SyncedPreferencesPatch = Partial<SyncedPreferences>;
 
 export type ReaderType = 'pdf' | 'epub' | 'html';

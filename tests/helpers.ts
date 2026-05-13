@@ -4,30 +4,9 @@ import path from 'path';
 import { createHash } from 'crypto';
 
 const DIR = './tests/files/';
-const TTS_MOCK_PATH = path.join(__dirname, 'files', 'sample.mp3');
-let ttsMockBuffer: Buffer | null = null;
 
 function isAuthEnabledForTests() {
   return Boolean(process.env.AUTH_SECRET && process.env.BASE_URL);
-}
-
-async function ensureTtsRouteMock(page: Page) {
-  if (!ttsMockBuffer) {
-    ttsMockBuffer = fs.readFileSync(TTS_MOCK_PATH);
-  }
-
-  await page.route('**/api/tts', async (route) => {
-    // Only mock the POST TTS generation calls; let anything else pass through.
-    if (route.request().method().toUpperCase() !== 'POST') {
-      return route.continue();
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: 'audio/mpeg',
-      body: ttsMockBuffer as Buffer,
-    });
-  });
 }
 
 // Small util to safely use filenames inside regex patterns
@@ -255,9 +234,6 @@ export async function setupTest(page: Page, testInfo?: TestInfo) {
       throw new Error('Failed to clear server documents before test setup');
     }
   }
-
-  // Mock the TTS API so tests don't hit the real TTS service.
-  await ensureTtsRouteMock(page);
 
   // Pre-seed consent to prevent the cookie banner from blocking interactions.
   await page.addInitScript(() => {

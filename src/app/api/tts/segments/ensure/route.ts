@@ -26,6 +26,7 @@ import { rateLimiter, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem-response';
+import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
 import { alignAudioWithText } from '@/lib/server/whisper/alignment';
 import type {
   TTSSegmentInput,
@@ -520,11 +521,24 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to generate segment';
         const aborted = isAbortLikeError(error);
+        const upstreamStatus = getUpstreamStatus(error);
+        const retryAfterSeconds = upstreamStatus === 429
+          ? getUpstreamRetryAfterSeconds(error)
+          : undefined;
+        const errorCode = upstreamStatus === 429
+          ? 'UPSTREAM_RATE_LIMIT'
+          : upstreamStatus && upstreamStatus >= 500
+            ? 'UPSTREAM_TTS_ERROR'
+            : 'TTS_SEGMENT_GENERATION_FAILED';
         await db
           .update(ttsSegmentVariants)
           .set({
             status: aborted ? 'pending' : 'error',
-            error: aborted ? null : message,
+            error: aborted ? null : (
+              upstreamStatus
+                ? `${errorCode}${retryAfterSeconds ? ` (retry after ${retryAfterSeconds}s)` : ''}: ${message}`
+                : message
+            ),
             updatedAt: Date.now(),
           })
           .where(and(
@@ -542,6 +556,14 @@ export async function POST(request: NextRequest) {
           alignment: null,
           locator: segment.locator,
           status: aborted ? 'pending' : 'error',
+          error: aborted
+            ? null
+            : {
+              code: errorCode,
+              detail: message,
+              ...(typeof upstreamStatus === 'number' ? { upstreamStatus } : {}),
+              ...(typeof retryAfterSeconds === 'number' ? { retryAfterSeconds } : {}),
+            },
         });
       }
     }

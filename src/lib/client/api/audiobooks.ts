@@ -1,5 +1,4 @@
 import type {
-  TTSRequestPayload,
   TTSRequestHeaders,
   TTSRetryOptions,
   TTSRequestError,
@@ -11,7 +10,7 @@ import type {
   TTSSegmentsEnsureRequest,
   TTSSegmentsEnsureResponse,
 } from '@/types/client';
-import type { TTSAudiobookChapter, TTSAudioBuffer } from '@/types/tts';
+import type { TTSAudiobookChapter } from '@/types/tts';
 
 /**
  * Executes a function with exponential backoff retry logic
@@ -69,8 +68,8 @@ export const withRetry = async <T>(
       }
 
       // Narrow client retries to transport-level failures only.
-      // If we got an HTTP status from /api/tts, do not retry from the client.
-      // Server-side /api/tts already applies upstream retry logic.
+      // If we got an HTTP status from a server route, do not retry from the client.
+      // Server-side routes already apply upstream retry logic where needed.
       const message = lastError.message.toLowerCase();
       const isTransportFailure =
         status === undefined &&
@@ -144,8 +143,25 @@ export const createAudiobookChapter = async (
   }
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to convert audio chapter');
+    let problem: unknown = undefined;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/problem+json') || contentType.includes('application/json')) {
+      problem = await response.json().catch(() => null);
+    }
+
+    const err = new Error(`Audiobook chapter generation failed with status ${response.status}`) as TTSRequestError;
+    err.status = response.status;
+    if (typeof problem === 'object' && problem !== null) {
+      const rec = problem as Record<string, unknown>;
+      if (typeof rec.code === 'string') err.code = rec.code;
+      if (typeof rec.type === 'string') err.type = rec.type;
+      if (typeof rec.title === 'string') err.title = rec.title;
+      if (typeof rec.detail === 'string') err.detail = rec.detail;
+    } else {
+      err.detail = 'Failed to convert audio chapter';
+    }
+
+    throw err;
   }
 
   return await response.json();
@@ -190,55 +206,6 @@ export const getVoices = async (headers: HeadersInit): Promise<VoicesResponse> =
 
   if (!response.ok) throw new Error('Failed to fetch voices');
   return await response.json();
-};
-
-export const generateTTS = async (
-  payload: TTSRequestPayload,
-  headers: TTSRequestHeaders,
-  signal?: AbortSignal
-): Promise<TTSAudioBuffer> => {
-  const response = await fetch('/api/tts', {
-    method: 'POST',
-    headers: headers as HeadersInit,
-    body: JSON.stringify(payload),
-    signal
-  });
-
-  if (!response.ok) {
-    let problem: unknown = undefined;
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/problem+json') || contentType.includes('application/json')) {
-      try {
-        problem = await response.json();
-      } catch {
-        // ignore JSON parse errors
-      }
-    }
-
-    const err = new Error(`TTS processing failed with status ${response.status}`) as TTSRequestError;
-    err.status = response.status;
-
-    if (typeof problem === 'object' && problem !== null) {
-      const rec = problem as Record<string, unknown>;
-      if (typeof rec.code === 'string') err.code = rec.code;
-      if (typeof rec.type === 'string') err.type = rec.type;
-      if (typeof rec.title === 'string') err.title = rec.title;
-      if (typeof rec.detail === 'string') err.detail = rec.detail;
-    }
-
-    // Avoid noisy logs for expected user quota failures
-    if (!(err.status === 429 && err.code === 'USER_DAILY_QUOTA_EXCEEDED')) {
-      console.error(`TTS request failed: ${response.status}`, err.code ? { code: err.code } : undefined);
-    }
-
-    throw err;
-  }
-
-  const buffer = await response.arrayBuffer();
-  if (buffer.byteLength === 0) {
-    throw new Error('Received empty audio buffer from TTS');
-  }
-  return buffer;
 };
 
 // --- Whisper API ---

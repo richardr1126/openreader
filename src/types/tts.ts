@@ -6,21 +6,6 @@ export type TTSLocation = string | number;
 export type TTSAudioBuffer = ArrayBuffer;
 export type TTSAudioBytes = number[]; // JSON-safe representation (Array.from(new Uint8Array(buffer)))
 
-// Standardized error codes for the TTS API
-export type TTSErrorCode =
-  | 'MISSING_PARAMETERS'
-  | 'INVALID_REQUEST'
-  | 'TTS_GENERATION_FAILED'
-  | 'ABORTED'
-  | 'INTERNAL_ERROR';
-
-// Structured error object returned by the TTS API
-export interface TTSError {
-  code: TTSErrorCode;
-  message: string;
-  details?: unknown;
-}
-
 // Core playback state exposed by the TTS context
 export interface TTSPlaybackState {
   isPlaying: boolean;
@@ -55,7 +40,7 @@ export interface TTSSentenceAlignment {
   words: TTSSentenceWord[];
 }
 
-export interface EpubRenderedLocationWalkItem {
+interface EpubRenderedLocationWalkItem {
   /** Page-start CFI from the rendition — best-effort jump hint only. */
   cfi: string;
   /** Plain text content of the rendered page chunk. */

@@ -29,6 +29,7 @@ import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/li
 import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
 import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
 import { generateTTSBuffer } from '@/lib/server/tts/generate';
+import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
 import { supportsNativeModelSpeed } from '@/lib/shared/tts-provider-catalog';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
@@ -54,6 +55,7 @@ type ChapterObject = {
 const SAFE_ID_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const PROBLEM_TYPES = {
   dailyQuotaExceeded: 'https://openreader.app/problems/daily-quota-exceeded',
+  upstreamRateLimited: 'https://openreader.app/problems/upstream-rate-limited',
 } as const;
 
 type ProblemDetails = {
@@ -273,6 +275,7 @@ export async function POST(request: NextRequest) {
   let workDir: string | null = null;
   let didCreateDeviceIdCookie = false;
   let deviceIdToSet: string | null = null;
+  let providerForError: string | null = null;
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
@@ -405,6 +408,7 @@ export async function POST(request: NextRequest) {
     const provider = request.headers.get('x-tts-provider')
       || mergedSettings?.ttsProvider
       || 'openai';
+    providerForError = provider;
     const openApiKey = request.headers.get('x-openai-key') || process.env.API_KEY || 'none';
     const openApiBaseUrl = request.headers.get('x-openai-base-url') || process.env.API_BASE;
     const model = mergedSettings?.ttsModel;
@@ -595,6 +599,36 @@ export async function POST(request: NextRequest) {
       attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
       return response;
     }
+
+    const upstreamStatus = getUpstreamStatus(error);
+    if (upstreamStatus === 429) {
+      const retryAfterSeconds = getUpstreamRetryAfterSeconds(error);
+      const problem: ProblemDetails = {
+        type: PROBLEM_TYPES.upstreamRateLimited,
+        title: 'Upstream rate limited',
+        status: 429,
+        detail: retryAfterSeconds
+          ? `The TTS provider is rate limiting requests. Please retry in about ${retryAfterSeconds}s.`
+          : 'The TTS provider is rate limiting requests. Please try again shortly.',
+        code: 'UPSTREAM_RATE_LIMIT',
+        provider: providerForError ?? undefined,
+        upstreamStatus,
+        retryAfterSeconds,
+        instance: request.nextUrl.pathname,
+      };
+
+      const response = new NextResponse(JSON.stringify(problem), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/problem+json',
+          ...(retryAfterSeconds ? { 'Retry-After': String(retryAfterSeconds) } : {}),
+        },
+      });
+
+      attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+      return response;
+    }
+
     console.error('Error processing audio chapter:', error);
     const response = NextResponse.json({ error: 'Failed to process audio chapter' }, { status: 500 });
     attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);

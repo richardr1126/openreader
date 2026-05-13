@@ -7,20 +7,7 @@ import type {
 
 // --- TTS Client Request Types ---
 
-// Supported output formats for the TTS endpoint
-export type TTSRequestFormat = 'mp3';
-
-// JSON payload accepted by the /api/tts endpoint
-export interface TTSRequestPayload {
-  text: string;
-  voice: string;
-  speed: number;
-  model?: string | null;
-  format?: TTSRequestFormat;
-  instructions?: string;
-}
-
-// Headers used when calling the /api/tts endpoint from the client
+// Headers used when calling TTS-related endpoints from the client.
 export type TTSRequestHeaders = Record<string, string>;
 
 // Options for retrying TTS requests on failure in withRetry
@@ -94,7 +81,7 @@ export interface TTSSegmentSettings {
   ttsInstructions?: string;
 }
 
-export type TTSReaderType = 'pdf' | 'epub' | 'html';
+type TTSReaderType = 'pdf' | 'epub' | 'html';
 
 /**
  * Locator describing where a TTS segment came from inside a document.
@@ -191,6 +178,12 @@ export interface TTSSegmentManifestItem {
   alignment: TTSSentenceAlignment | null;
   locator: TTSSegmentLocator | null;
   status: 'pending' | 'completed' | 'error';
+  error?: {
+    code: string;
+    detail?: string;
+    upstreamStatus?: number;
+    retryAfterSeconds?: number;
+  } | null;
 }
 
 export interface TTSSegmentsEnsureResponse {

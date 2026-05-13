@@ -224,7 +224,8 @@ test('exports full MP3 audiobook for PDF using mocked 10s TTS sample', async ({ 
   // Choose MP3 so we can validate MP3 duration end-to-end.
   await setContainerFormatToMP3(page);
 
-  // Start generation; this will call the mocked /api/tts which returns a 10s sample.mp3 per page
+  // Start generation; in test namespace mode the server returns tests/files/sample.mp3
+  // for each generated chapter via generateTTSBuffer's test mock path.
   await startGeneration(page);
 
   // Wait for chapters list to appear and populate at least two items (Pages 1 and 2)
