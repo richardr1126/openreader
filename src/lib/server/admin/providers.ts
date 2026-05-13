@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { adminProviders } from '@/db/schema';
 import { apiKeyLast4, decryptSecret, encryptSecret } from '@/lib/server/crypto/secrets';
@@ -184,7 +184,14 @@ function assertInstructionsCompatibility(model: string | null, instructions: str
 }
 
 export async function listAdminProviders(): Promise<AdminProviderRecord[]> {
-  const rows = await db.select().from(adminProviders);
+  const rows = await db
+    .select()
+    .from(adminProviders)
+    .orderBy(
+      desc(adminProviders.updatedAt),
+      desc(adminProviders.createdAt),
+      asc(adminProviders.slug),
+    );
   return (rows as Array<Record<string, unknown>>).map(rowToRecord);
 }
 

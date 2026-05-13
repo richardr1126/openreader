@@ -60,9 +60,20 @@ test.describe('tts provider catalog', () => {
     expect(supportsNativeModelSpeed('replicate', 'qwen/qwen3-tts')).toBe(false);
   });
 
-  test('normalizes legacy default-openai provider ref to fallback', () => {
+  test('preserves default-openai unless explicit non-default fallback is provided', () => {
     expect(normalizeLegacyProviderRef('default-openai', 'shared-replicate')).toBe('shared-replicate');
-    expect(normalizeLegacyProviderRef('default-openai', '')).toBe('custom-openai');
+    expect(normalizeLegacyProviderRef('default-openai', '')).toBe('default-openai');
+    expect(normalizeLegacyProviderRef('default-openai', 'default-openai')).toBe('default-openai');
+    expect(normalizeLegacyProviderRef('default-openai')).toBe('default-openai');
+  });
+
+  test('resolveProviderDefaults keeps runtime/admin default provider ref when valid', () => {
+    const defaults = resolveProviderDefaults({
+      providerRef: 'default-openai',
+      providerType: 'unknown',
+    });
+    expect(defaults.providerRef).toBe('default-openai');
+    expect(defaults.providerType).toBe('unknown');
   });
 
   test('resolves shared-provider default model as authoritative', () => {

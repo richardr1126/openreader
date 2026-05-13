@@ -78,7 +78,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       providerRef: APP_CONFIG_DEFAULTS.providerRef,
       providerType: APP_CONFIG_DEFAULTS.providerType,
       sharedProviders,
-      fallbackProviderRef: 'custom-openai',
     });
   }, [sharedProviders]);
 

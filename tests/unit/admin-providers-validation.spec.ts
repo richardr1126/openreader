@@ -1,7 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { inArray } from 'drizzle-orm';
+import { db } from '../../src/db';
+import { adminProviders } from '../../src/db/schema';
 
 import {
   AdminProviderError,
+  listAdminProviders,
   toMasked,
   validateProviderType,
   validateSlug,
@@ -48,5 +52,87 @@ test.describe('admin provider validation', () => {
 
     expect(toMasked(record).apiKeyMask).toBe('••••abcd');
   });
-});
 
+  test('lists providers in deterministic updated/created/slug order', async () => {
+    const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    const inserted = [
+      {
+        id: `prov-aaa-${suffix}`,
+        slug: `ord-aaa-${suffix}`,
+        displayName: 'Order AAA',
+        providerType: 'openai' as const,
+        baseUrl: null,
+        apiKeyCiphertext: 'cipher',
+        apiKeyIv: 'iv',
+        apiKeyLast4: '1111',
+        defaultModel: null,
+        defaultInstructions: null,
+        enabled: 1,
+        createdAt: 200,
+        updatedAt: 300,
+      },
+      {
+        id: `prov-zzz-${suffix}`,
+        slug: `ord-zzz-${suffix}`,
+        displayName: 'Order ZZZ',
+        providerType: 'openai' as const,
+        baseUrl: null,
+        apiKeyCiphertext: 'cipher',
+        apiKeyIv: 'iv',
+        apiKeyLast4: '2222',
+        defaultModel: null,
+        defaultInstructions: null,
+        enabled: 1,
+        createdAt: 200,
+        updatedAt: 300,
+      },
+      {
+        id: `prov-mid-${suffix}`,
+        slug: `ord-mid-${suffix}`,
+        displayName: 'Order MID',
+        providerType: 'openai' as const,
+        baseUrl: null,
+        apiKeyCiphertext: 'cipher',
+        apiKeyIv: 'iv',
+        apiKeyLast4: '3333',
+        defaultModel: null,
+        defaultInstructions: null,
+        enabled: 1,
+        createdAt: 150,
+        updatedAt: 300,
+      },
+      {
+        id: `prov-old-${suffix}`,
+        slug: `ord-old-${suffix}`,
+        displayName: 'Order OLD',
+        providerType: 'openai' as const,
+        baseUrl: null,
+        apiKeyCiphertext: 'cipher',
+        apiKeyIv: 'iv',
+        apiKeyLast4: '4444',
+        defaultModel: null,
+        defaultInstructions: null,
+        enabled: 1,
+        createdAt: 999,
+        updatedAt: 200,
+      },
+    ];
+
+    try {
+      await db.insert(adminProviders).values(inserted);
+      const listed = await listAdminProviders();
+      const ordered = listed
+        .filter((row) => row.slug.endsWith(suffix))
+        .map((row) => row.slug);
+
+      expect(ordered).toEqual([
+        `ord-aaa-${suffix}`,
+        `ord-zzz-${suffix}`,
+        `ord-mid-${suffix}`,
+        `ord-old-${suffix}`,
+      ]);
+    } finally {
+      await db.delete(adminProviders).where(inArray(adminProviders.id, inserted.map((row) => row.id)));
+    }
+  });
+});

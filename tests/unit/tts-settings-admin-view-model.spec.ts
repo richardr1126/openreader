@@ -21,6 +21,32 @@ const SHARED: SharedProviderEntry[] = [
 ];
 
 test.describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
+  test('keeps default-openai selection when that shared provider exists', () => {
+    const vm = resolveTtsSettingsViewModel({
+      providerRef: 'default-openai',
+      providerType: 'unknown',
+      modelValue: 'kokoro',
+      customModelInput: '',
+      showAllDeepInfra: false,
+      showAllProviderModels: true,
+      sharedProviders: [
+        {
+          slug: 'default-openai',
+          displayName: 'Default OpenAI',
+          providerType: 'openai',
+          defaultModel: 'gpt-4o-mini-tts',
+          defaultInstructions: null,
+        },
+        ...SHARED,
+      ],
+      allowBuiltInProviders: false,
+    });
+
+    expect(vm.selectedProviderRef).toBe('default-openai');
+    expect(vm.selectedSharedProvider?.slug).toBe('default-openai');
+    expect(vm.selectedModelId).toBe('gpt-4o-mini-tts');
+  });
+
   test('restrict mode exposes only shared providers', () => {
     const vm = resolveTtsSettingsViewModel({
       providerRef: 'shared-openai',

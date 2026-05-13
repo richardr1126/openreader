@@ -1,6 +1,6 @@
 import type { DocumentListState } from '@/types/documents';
 import { isBuiltInTtsProviderId, type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
-import { defaultModelForProviderType, normalizeLegacyProviderRef } from '@/lib/shared/tts-provider-policy';
+import { defaultModelForProviderType } from '@/lib/shared/tts-provider-policy';
 
 // Runtime config (admin-controlled) is layered on top of the static defaults
 // below. We resolve it lazily so this module stays importable from non-React
@@ -96,7 +96,7 @@ export interface AppConfigValues {
 export function getAppConfigDefaults(): AppConfigValues {
   const wordHighlightEnabledByDefault = readRuntimeFlag('enableWordHighlight', true);
   const runtimeProviderRef = readRuntimeString('defaultTtsProvider', 'custom-openai');
-  const defaultProviderRef = normalizeLegacyProviderRef(runtimeProviderRef, 'custom-openai');
+  const defaultProviderRef = runtimeProviderRef.trim();
   const defaultProviderType = isBuiltInTtsProviderId(defaultProviderRef) ? defaultProviderRef : 'unknown';
   const defaultModel = isBuiltInTtsProviderId(defaultProviderType)
     ? defaultModelForProviderType(defaultProviderType)

@@ -820,7 +820,6 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 const defaults = resolveProviderDefaults({
                                   providerRef: runtimeConfig.defaultTtsProvider,
                                   sharedProviders,
-                                  fallbackProviderRef: 'custom-openai',
                                 });
                                 setLocalApiKey('');
                                 setLocalBaseUrl('');

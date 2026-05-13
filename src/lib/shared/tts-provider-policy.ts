@@ -84,7 +84,8 @@ export function normalizeLegacyProviderRef(
   if (!raw) return '';
   if (raw !== 'default-openai') return raw;
   const fallback = typeof fallbackProviderRef === 'string' ? fallbackProviderRef.trim() : '';
-  return fallback || 'custom-openai';
+  if (fallback && fallback !== 'default-openai') return fallback;
+  return raw;
 }
 
 export function resolveProviderDefaults(input: {
