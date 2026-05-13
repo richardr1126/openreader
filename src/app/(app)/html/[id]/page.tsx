@@ -3,7 +3,6 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useHTML } from '@/contexts/HTMLContext';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
@@ -16,11 +15,12 @@ import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
+import { useHtmlDocument } from './useHtmlDocument';
 
 export default function HTMLPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { setCurrentDocument, currDocName, clearCurrDoc } = useHTML();
+  const { setCurrentDocument, currDocData, currDocName, clearCurrDoc } = useHtmlDocument();
   const { stop } = useTTS();
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +168,7 @@ export default function HTMLPage() {
           </div>
         ) : (
           <div className="h-full w-full" style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}>
-            <HTMLViewer className="h-full" />
+            <HTMLViewer className="h-full" currDocData={currDocData} currDocName={currDocName} />
           </div>
         )}
       </div>

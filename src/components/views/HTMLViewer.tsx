@@ -3,15 +3,15 @@
 import { useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useHTML } from '@/contexts/HTMLContext';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 
 interface HTMLViewerProps {
   className?: string;
+  currDocData?: string;
+  currDocName?: string;
 }
 
-export function HTMLViewer({ className = '' }: HTMLViewerProps) {
-  const { currDocData, currDocName } = useHTML();
+export function HTMLViewer({ className = '', currDocData, currDocName }: HTMLViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (!currDocData) {
