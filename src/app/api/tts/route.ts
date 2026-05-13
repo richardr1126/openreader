@@ -3,10 +3,11 @@ import type { TTSRequestPayload } from '@/types/client';
 import type { TTSError } from '@/types/tts';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/server/auth/auth';
-import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { rateLimiter, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
+import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem-response';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import {
   buildTTSCacheKey,
@@ -26,7 +27,6 @@ function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, d
 }
 
 const PROBLEM_TYPES = {
-  dailyQuotaExceeded: 'https://openreader.app/problems/daily-quota-exceeded',
   upstreamRateLimited: 'https://openreader.app/problems/upstream-rate-limited',
 } as const;
 
@@ -39,16 +39,6 @@ type ProblemDetails = {
   code?: string;
   [key: string]: unknown;
 };
-
-function formatLimitForHint(limit: number): string {
-  if (!Number.isFinite(limit) || limit <= 0) return String(limit);
-  if (limit >= 1_000_000) {
-    const m = limit / 1_000_000;
-    return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
-  }
-  if (limit >= 1_000) return `${Math.round(limit / 1_000)}K`;
-  return String(limit);
-}
 
 export async function POST(req: NextRequest) {
   let providerForError: string | null = null;
@@ -99,35 +89,10 @@ export async function POST(req: NextRequest) {
         );
 
         if (!rateLimitResult.allowed) {
-          const resetTimeMs = rateLimitResult.resetTimeMs;
-          const retryAfterSeconds = Math.max(
-            0,
-            Math.ceil((resetTimeMs - Date.now()) / 1000)
-          );
-
-          const problem: ProblemDetails = {
-            type: PROBLEM_TYPES.dailyQuotaExceeded,
-            title: 'Daily quota exceeded',
-            status: 429,
-            detail: 'Daily character limit exceeded',
-            code: 'USER_DAILY_QUOTA_EXCEEDED',
-            currentCount: rateLimitResult.currentCount,
-            limit: rateLimitResult.limit,
-            remainingChars: rateLimitResult.remainingChars,
-            resetTimeMs,
-            userType: isAnonymous ? 'anonymous' : 'authenticated',
-            upgradeHint: isAnonymous
-              ? `Sign up to increase your limit from ${formatLimitForHint(RATE_LIMITS.ANONYMOUS)} to ${formatLimitForHint(RATE_LIMITS.AUTHENTICATED)} characters per day`
-              : undefined,
-            instance: req.nextUrl.pathname,
-          };
-
-          const response = new NextResponse(JSON.stringify(problem), {
-            status: 429,
-            headers: {
-              'Content-Type': 'application/problem+json',
-              'Retry-After': String(retryAfterSeconds),
-            },
+          const response = buildDailyQuotaExceededResponse({
+            rateLimitResult,
+            isAnonymousUser: isAnonymous,
+            pathname: req.nextUrl.pathname,
           });
 
           attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import {
   buildMonotonicWordToTokenMap,
   tokenizeCanonicalSegment,
-} from '../../src/lib/shared/epub-word-highlight';
+} from '../../src/lib/client/epub/epub-word-highlight';
 import type { CanonicalTtsSegment } from '../../src/lib/shared/tts-segment-plan';
 import type { TTSSentenceAlignment } from '../../src/types/tts';
 

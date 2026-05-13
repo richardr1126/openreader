@@ -4,7 +4,7 @@ import type { CanonicalTtsSourceUnit } from '../../src/lib/shared/tts-segment-pl
 import {
   buildWalkerPlanningSourceUnits,
   selectUpcomingWalkerItems,
-} from '../../src/lib/shared/tts-epub-preload';
+} from '../../src/lib/client/epub/tts-epub-preload';
 
 test.describe('EPUB walker preload helpers', () => {
   test('selectUpcomingWalkerItems honors depth as current + (depth-1) upcoming', () => {

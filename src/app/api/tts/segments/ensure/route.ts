@@ -22,9 +22,10 @@ import {
   probeAudioDurationMsFromBuffer,
 } from '@/lib/server/tts/segments';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { rateLimiter, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
+import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem-response';
 import { alignAudioWithText } from '@/lib/server/whisper/alignment';
 import type {
   TTSSegmentInput,
@@ -40,16 +41,6 @@ function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, d
   if (didCreate && deviceId) {
     setDeviceIdCookie(response, deviceId);
   }
-}
-
-function formatLimitForHint(limit: number): string {
-  if (!Number.isFinite(limit) || limit <= 0) return String(limit);
-  if (limit >= 1_000_000) {
-    const m = limit / 1_000_000;
-    return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
-  }
-  if (limit >= 1_000) return `${Math.round(limit / 1_000)}K`;
-  return String(limit);
 }
 
 function parseSettings(value: unknown): TTSSegmentSettings | null {
@@ -246,6 +237,44 @@ export async function POST(request: NextRequest) {
 
     const existingById = new Map(rows.map((row) => [row.segmentId, row]));
     const manifest: TTSSegmentManifestItem[] = [];
+    const upsertSegmentEntry = async (input: {
+      segmentEntryId: string;
+      segmentIndex: number;
+      segmentKey: string | null;
+      locatorProjection: ReturnType<typeof projectSegmentLocator>;
+      textHash: string;
+      textLength: number;
+    }): Promise<void> => {
+      await db
+        .insert(ttsSegmentEntries)
+        .values({
+          segmentEntryId: input.segmentEntryId,
+          userId: scope.storageUserId,
+          documentId: parsed.documentId,
+          readerType: scope.readerType,
+          documentVersion: scope.documentVersion,
+          segmentIndex: input.segmentIndex,
+          segmentKey: input.segmentKey,
+          ...input.locatorProjection,
+          textHash: input.textHash,
+          textLength: input.textLength,
+          updatedAt: nowMs,
+        })
+        .onConflictDoUpdate({
+          target: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
+          set: {
+            documentId: parsed.documentId,
+            readerType: scope.readerType,
+            documentVersion: scope.documentVersion,
+            segmentIndex: input.segmentIndex,
+            segmentKey: input.segmentKey,
+            ...input.locatorProjection,
+            textHash: input.textHash,
+            textLength: input.textLength,
+            updatedAt: nowMs,
+          },
+        });
+    };
 
     for (const segment of normalized) {
       const locatorProjection = projectSegmentLocator(segment.locator);
@@ -261,42 +290,21 @@ export async function POST(request: NextRequest) {
         textHash: segment.textHash,
       });
 
-      await db
-        .insert(ttsSegmentEntries)
-        .values({
-          segmentEntryId,
-          userId: scope.storageUserId,
-          documentId: parsed.documentId,
-          readerType: scope.readerType,
-          documentVersion: scope.documentVersion,
-          segmentIndex: segment.original.segmentIndex,
-          segmentKey: segmentKeyForRow,
-          ...locatorProjection,
-          textHash: segment.textHash,
-          textLength: segment.text.length,
-          updatedAt: nowMs,
-        })
-        .onConflictDoUpdate({
-          target: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
-          set: {
-            documentId: parsed.documentId,
-            readerType: scope.readerType,
-            documentVersion: scope.documentVersion,
-            segmentIndex: segment.original.segmentIndex,
-            segmentKey: segmentKeyForRow,
-            ...locatorProjection,
-            textHash: segment.textHash,
-            textLength: segment.text.length,
-            updatedAt: nowMs,
-          },
-        });
-
       const existing = existingById.get(segment.segmentId);
       const movedFromEntryId = existing && existing.segmentEntryId !== segmentEntryId
         ? existing.segmentEntryId
         : null;
 
       if (existing?.status === 'completed' && existing.audioKey) {
+        await upsertSegmentEntry({
+          segmentEntryId,
+          segmentIndex: segment.original.segmentIndex,
+          segmentKey: segmentKeyForRow,
+          locatorProjection,
+          textHash: segment.textHash,
+          textLength: segment.text.length,
+        });
+
         if (movedFromEntryId) {
           await db
             .update(ttsSegmentVariants)
@@ -375,6 +383,44 @@ export async function POST(request: NextRequest) {
         segmentId: segment.segmentId,
       });
 
+      if (scope.authEnabled && scope.userId && isTtsRateLimitEnabled()) {
+        const charCount = segment.text.length;
+        const ip = getClientIp(request);
+        const device = scope.isAnonymousUser ? getOrCreateDeviceId(request) : null;
+        if (device?.didCreate) {
+          didCreateDeviceIdCookie = true;
+          deviceIdToSet = device.deviceId;
+        }
+
+        const rateLimitResult = await rateLimiter.checkAndIncrementLimit(
+          { id: scope.userId, isAnonymous: scope.isAnonymousUser },
+          charCount,
+          {
+            deviceId: device?.deviceId ?? null,
+            ip,
+          },
+        );
+
+        if (!rateLimitResult.allowed) {
+          const response = buildDailyQuotaExceededResponse({
+            rateLimitResult,
+            isAnonymousUser: scope.isAnonymousUser,
+            pathname: request.nextUrl.pathname,
+          });
+          attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
+          return response;
+        }
+      }
+
+      await upsertSegmentEntry({
+        segmentEntryId,
+        segmentIndex: segment.original.segmentIndex,
+        segmentKey: segmentKeyForRow,
+        locatorProjection,
+        textHash: segment.textHash,
+        textLength: segment.text.length,
+      });
+
       await db
         .insert(ttsSegmentVariants)
         .values({
@@ -408,54 +454,6 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        if (scope.authEnabled && scope.userId && isTtsRateLimitEnabled()) {
-          const charCount = segment.text.length;
-          const ip = getClientIp(request);
-          const device = scope.isAnonymousUser ? getOrCreateDeviceId(request) : null;
-          if (device?.didCreate) {
-            didCreateDeviceIdCookie = true;
-            deviceIdToSet = device.deviceId;
-          }
-
-          const rateLimitResult = await rateLimiter.checkAndIncrementLimit(
-            { id: scope.userId, isAnonymous: scope.isAnonymousUser },
-            charCount,
-            {
-              deviceId: device?.deviceId ?? null,
-              ip,
-            },
-          );
-
-          if (!rateLimitResult.allowed) {
-            const resetTimeMs = rateLimitResult.resetTimeMs;
-            const retryAfterSeconds = Math.max(0, Math.ceil((resetTimeMs - Date.now()) / 1000));
-            const response = new NextResponse(JSON.stringify({
-              type: 'https://openreader.app/problems/daily-quota-exceeded',
-              title: 'Daily quota exceeded',
-              status: 429,
-              detail: 'Daily character limit exceeded',
-              code: 'USER_DAILY_QUOTA_EXCEEDED',
-              currentCount: rateLimitResult.currentCount,
-              limit: rateLimitResult.limit,
-              remainingChars: rateLimitResult.remainingChars,
-              resetTimeMs,
-              userType: scope.isAnonymousUser ? 'anonymous' : 'authenticated',
-              upgradeHint: scope.isAnonymousUser
-                ? `Sign up to increase your limit from ${formatLimitForHint(RATE_LIMITS.ANONYMOUS)} to ${formatLimitForHint(RATE_LIMITS.AUTHENTICATED)} characters per day`
-                : undefined,
-              instance: request.nextUrl.pathname,
-            }), {
-              status: 429,
-              headers: {
-                'Content-Type': 'application/problem+json',
-                'Retry-After': String(retryAfterSeconds),
-              },
-            });
-            attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
-            return response;
-          }
-        }
-
         const ttsBuffer = await generateTTSBuffer({
           text: segment.text,
           voice: parsed.settings.voice,

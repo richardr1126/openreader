@@ -5,7 +5,7 @@ import {
   resolveEpubBoundaryHandoffStartIndex,
   resolveEpubReplaySuppressionAction,
   shouldSuppressCompletedEpubBoundaryReplay,
-} from '../../src/lib/shared/tts-epub-handoff';
+} from '../../src/lib/client/epub/tts-epub-handoff';
 import type { CanonicalTtsSegment } from '../../src/lib/shared/tts-segment-plan';
 
 const segment = (
