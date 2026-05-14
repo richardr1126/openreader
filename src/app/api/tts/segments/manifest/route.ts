@@ -19,6 +19,7 @@ import type {
 } from '@/types/client';
 import { isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveEffectiveProviderType } from '@/lib/shared/tts-provider-policy';
+import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -89,18 +90,6 @@ function locatorFromProjection(row: ManifestGroupRow): TTSSegmentLocator | null 
     return { readerType: 'html', location: row.locatorLocation };
   }
   return null;
-}
-
-function buildSegmentAudioUrls(documentId: string, segmentId: string): {
-  audioPresignUrl: string;
-  audioFallbackUrl: string;
-} {
-  const encodedDocumentId = encodeURIComponent(documentId);
-  const encodedSegmentId = encodeURIComponent(segmentId);
-  return {
-    audioPresignUrl: `/api/tts/segments/audio/presign?documentId=${encodedDocumentId}&segmentId=${encodedSegmentId}`,
-    audioFallbackUrl: `/api/tts/segments/audio/fallback?documentId=${encodedDocumentId}&segmentId=${encodedSegmentId}`,
-  };
 }
 
 function isAbortLikeMessage(message: string | null | undefined): boolean {
@@ -297,6 +286,19 @@ export async function GET(request: NextRequest) {
       updatedAt: number | null;
     }>;
 
+    const audioUrlsBySegmentId = new Map<string, { audioPresignUrl: string | null; audioFallbackUrl: string | null }>();
+    await Promise.all(
+      variantRows.map(async (row) => {
+        if (row.status !== 'completed' || !row.audioKey) return;
+        const urls = await resolveSegmentAudioUrls({
+          documentId,
+          segmentId: row.segmentId,
+          audioKey: row.audioKey,
+        });
+        audioUrlsBySegmentId.set(row.segmentId, urls);
+      }),
+    );
+
     const grouped = new Map<string, Omit<TTSSegmentRow, 'variants'> & {
       variants: Array<{ dedupeKey: string; variant: TTSSegmentVariant }>;
     }>();
@@ -335,7 +337,7 @@ export async function GET(request: NextRequest) {
           : 'pending';
 
       const audioUrls = row.status === 'completed' && row.audioKey
-        ? buildSegmentAudioUrls(documentId, row.segmentId)
+        ? (audioUrlsBySegmentId.get(row.segmentId) ?? { audioPresignUrl: null, audioFallbackUrl: null })
         : { audioPresignUrl: null, audioFallbackUrl: null };
 
       entry.variants.push({

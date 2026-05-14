@@ -33,6 +33,7 @@ import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tt
 import { alignAudioWithText } from '@/lib/server/whisper/alignment';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
+import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
 import type {
   TTSSegmentInput,
   TTSSegmentManifestItem,
@@ -114,18 +115,6 @@ function s3NotConfiguredResponse(): NextResponse {
 function textHmacSecret(): string {
   return process.env.AUTH_SECRET?.trim()
     || 'openreader-default-tts-segment-secret';
-}
-
-function buildSegmentAudioUrls(documentId: string, segmentId: string): {
-  audioPresignUrl: string;
-  audioFallbackUrl: string;
-} {
-  const encodedDocumentId = encodeURIComponent(documentId);
-  const encodedSegmentId = encodeURIComponent(segmentId);
-  return {
-    audioPresignUrl: `/api/tts/segments/audio/presign?documentId=${encodedDocumentId}&segmentId=${encodedSegmentId}`,
-    audioFallbackUrl: `/api/tts/segments/audio/fallback?documentId=${encodedDocumentId}&segmentId=${encodedSegmentId}`,
-  };
 }
 
 function isAbortLikeError(error: unknown): boolean {
@@ -414,11 +403,17 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        const audioUrls = await resolveSegmentAudioUrls({
+          documentId: parsed.documentId,
+          segmentId: segment.segmentId,
+          audioKey: existing.audioKey,
+        });
+
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
           segmentKey: segmentKeyForRow,
-          ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
+          ...audioUrls,
           durationMs: existing.durationMs ?? 0,
           alignment,
           locator,
@@ -561,11 +556,17 @@ export async function POST(request: NextRequest) {
             eq(ttsSegmentVariants.userId, scope.storageUserId),
           ));
 
+        const audioUrls = await resolveSegmentAudioUrls({
+          documentId: parsed.documentId,
+          segmentId: segment.segmentId,
+          audioKey,
+        });
+
         manifest.push({
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
           segmentKey: segmentKeyForRow,
-          ...buildSegmentAudioUrls(parsed.documentId, segment.segmentId),
+          ...audioUrls,
           durationMs,
           alignment,
           locator: segment.locator,
