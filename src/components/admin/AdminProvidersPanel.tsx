@@ -502,7 +502,7 @@ export function AdminProvidersPanel() {
 
       <div className="space-y-0">
         {isLoading ? (
-          <p className="text-xs text-muted">Loading…</p>
+          <ProvidersListSkeleton />
         ) : providers.length === 0 ? (
           <p className="text-xs text-muted py-2">No shared providers configured yet.</p>
         ) : (
@@ -545,5 +545,30 @@ export function AdminProvidersPanel() {
         )}
       </div>
     </Section>
+  );
+}
+
+function ProvidersListSkeleton() {
+  const rows = Array.from({ length: 4 });
+  return (
+    <div className="animate-pulse space-y-0.5" aria-label="Loading shared providers" aria-busy="true">
+      {rows.map((_, index) => (
+        <div key={index} className="py-1.5 border-b border-offbase last:border-b-0">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-36 rounded bg-offbase" />
+                <div className="h-4 w-20 rounded bg-offbase" />
+              </div>
+              <div className="h-3 w-4/5 rounded bg-offbase" />
+            </div>
+            <div className="shrink-0 flex gap-1.5 pt-0.5">
+              <div className="h-7 w-14 rounded-md bg-offbase" />
+              <div className="h-7 w-16 rounded-md bg-offbase" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

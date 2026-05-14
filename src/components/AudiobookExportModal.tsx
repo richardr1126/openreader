@@ -7,7 +7,6 @@ import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
 import { DownloadIcon, CheckCircleIcon, XCircleIcon, ClockIcon, ChevronUpDownIcon, RefreshIcon, DotsVerticalIcon } from '@/components/icons/Icons';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { LoadingSpinner } from '@/components/Spinner';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { VoicesControlBase } from '@/components/player/VoicesControlBase';
@@ -472,9 +471,7 @@ export function AudiobookExportModal({
         subtitle="Only leaving the document cancels generation."
       >
                 {isLoadingExisting ? (
-                  <div className="flex justify-center py-8">
-                    <LoadingSpinner />
-                  </div>
+                  <AudiobookSettingsSkeleton />
                 ) : (
                   <>
 			                      <div className="space-y-4">
@@ -935,5 +932,52 @@ export function AudiobookExportModal({
         isDangerous={false}
       />
     </>
+  );
+}
+
+function AudiobookSettingsSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse" aria-label="Loading audiobook settings" aria-busy="true">
+      <div className="w-full rounded-xl border border-offbase bg-background overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-offbase bg-base">
+          <div className="h-4 w-40 rounded bg-offbase" />
+          <div className="h-5 w-14 rounded bg-offbase" />
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <div className="h-3 w-16 rounded bg-offbase" />
+              <div className="h-9 w-full rounded-md bg-offbase" />
+            </div>
+            <div className="space-y-1.5">
+              <div className="h-3 w-16 rounded bg-offbase" />
+              <div className="h-9 w-full rounded-md bg-offbase" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <div className="h-3 w-24 rounded bg-offbase" />
+              <div className="h-2 w-full rounded bg-offbase" />
+            </div>
+            <div className="space-y-1.5">
+              <div className="h-3 w-20 rounded bg-offbase" />
+              <div className="h-2 w-full rounded bg-offbase" />
+            </div>
+          </div>
+          <div className="h-9 w-full rounded-md bg-offbase" />
+        </div>
+      </div>
+
+      <div className="w-full rounded-xl border border-offbase bg-background overflow-hidden">
+        <div className="px-4 py-3 border-b border-offbase bg-base">
+          <div className="h-4 w-28 rounded bg-offbase" />
+        </div>
+        <div className="p-4 space-y-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-16 rounded-lg border border-offbase bg-base" />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

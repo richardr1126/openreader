@@ -164,7 +164,7 @@ export function DocumentSelectionModal({
 
                 <div className="flex-1 overflow-auto border border-offbase rounded-lg bg-background p-2 min-h-0">
                   {isLoading ? (
-                    <div className="flex items-center justify-center h-full text-muted">Loading documents...</div>
+                    <DocumentSelectionSkeleton />
                   ) : errorMessage ? (
                     <div className="flex items-center justify-center h-full text-red-500">{errorMessage}</div>
                   ) : files.length === 0 ? (
@@ -227,5 +227,20 @@ export function DocumentSelectionModal({
         </div>
       </Dialog>
     </Transition>
+  );
+}
+
+function DocumentSelectionSkeleton() {
+  const rows = Array.from({ length: 9 });
+  return (
+    <div className="h-full animate-pulse space-y-0.5" aria-label="Loading documents" aria-busy="true">
+      {rows.map((_, index) => (
+        <div key={index} className="flex items-center gap-3 px-3 py-2 rounded-md">
+          <div className="h-4 w-4 rounded-sm bg-offbase border border-offbase" />
+          <div className="h-3.5 flex-1 rounded bg-offbase" />
+          <div className="h-3 w-14 rounded bg-offbase" />
+        </div>
+      ))}
+    </div>
   );
 }

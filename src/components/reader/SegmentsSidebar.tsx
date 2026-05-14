@@ -631,7 +631,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
               ) : null}
             </>
           ) : isManifestLoading ? (
-            <span>Loading…</span>
+            <div className="animate-pulse h-3 w-36 rounded bg-offbase" aria-label="Loading segment summary" aria-busy="true" />
           ) : hasManifestError ? (
             <span className="text-red-500">error</span>
           ) : (
@@ -645,7 +645,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                 <div className="px-4 py-6 text-sm text-red-500">{manifestErrorMessage}</div>
               )}
               {isManifestLoading && (
-                <div className="px-4 py-6 text-sm text-muted">Loading segments…</div>
+                <SegmentsListSkeleton />
               )}
               {hasLoadedManifest && rowsToRender.length === 0 && (
                 <div className="px-4 py-10 flex flex-col items-center text-center gap-2">
@@ -787,10 +787,49 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                 </ul>
               )}
               {hasLoadedManifest && isLoadingMoreManifest && (
-                <div className="px-4 py-3 text-xs text-muted">Loading more segments…</div>
+                <SegmentsListSkeletonRows />
               )}
       </div>
     </ReaderSidebarShell>
+  );
+}
+
+function SegmentsListSkeleton() {
+  return (
+    <div className="px-4 py-3">
+      <div className="animate-pulse space-y-3" aria-label="Loading segments" aria-busy="true">
+        <div className="h-3 w-40 rounded bg-offbase" />
+        {Array.from({ length: 8 }).map((_, index) => (
+          <div key={index} className="rounded-md border border-offbase bg-base px-3 py-2.5">
+            <div className="flex items-start gap-3">
+              <div className="h-3.5 w-8 rounded bg-offbase mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-3.5 w-11/12 rounded bg-offbase" />
+                <div className="h-3.5 w-3/4 rounded bg-offbase" />
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-offbase" />
+                  <div className="h-3 w-12 rounded bg-offbase" />
+                  <div className="h-4 w-20 rounded bg-offbase" />
+                </div>
+              </div>
+              <div className="h-6 w-6 rounded bg-offbase shrink-0" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SegmentsListSkeletonRows() {
+  return (
+    <div className="px-4 py-3 animate-pulse" aria-label="Loading more segments" aria-busy="true">
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="h-12 rounded-md border border-offbase bg-base" />
+        ))}
+      </div>
+    </div>
   );
 }
 

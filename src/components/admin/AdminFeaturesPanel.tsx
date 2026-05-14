@@ -172,9 +172,7 @@ export function AdminFeaturesPanel() {
 
   if (!data) {
     return (
-      <Section title="TTS defaults" subtitle="Loading…">
-        <p className="text-xs text-muted">Fetching current values…</p>
-      </Section>
+      <AdminFeaturesSkeleton />
     );
   }
 
@@ -336,6 +334,46 @@ export function AdminFeaturesPanel() {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AdminFeaturesSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
+      <Section
+        title="TTS defaults"
+        subtitle="Defaults for new users."
+        action={<div className="h-4 w-16 rounded bg-offbase" />}
+      >
+        <div className="space-y-1.5 pb-2 border-b border-offbase">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <div className="h-4 w-40 rounded bg-offbase" />
+              <div className="h-3 w-56 rounded bg-offbase" />
+            </div>
+            <div className="h-5 w-20 rounded bg-offbase" />
+          </div>
+          <div className="h-9 w-full rounded-md bg-offbase" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
+          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
+          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
+        </div>
+      </Section>
+
+      <Section
+        title="Site features"
+        subtitle="Feature flags for all users."
+        action={<div className="h-4 w-24 rounded bg-offbase" />}
+      >
+        <div className="space-y-2">
+          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
+          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
+          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
+        </div>
+      </Section>
     </div>
   );
 }
