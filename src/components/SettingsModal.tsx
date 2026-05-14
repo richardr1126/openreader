@@ -567,17 +567,19 @@ export function SettingsModal({ className = '' }: { className?: string }) {
               >
                 <DialogPanel data-testid="settings-modal" className="relative w-full max-w-4xl transform rounded-xl bg-base text-left align-middle shadow-xl transition-all overflow-hidden border border-offbase">
                   {/* Header */}
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-offbase">
-                    <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground">
-                      Settings
-                    </DialogTitle>
-                    <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-offbase">
+                    <div className="flex items-baseline gap-4">
+                      <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground">
+                        Settings
+                      </DialogTitle>
                       <Button
                         onClick={() => setIsChangelogOpen(true)}
-                        className="text-sm font-medium text-muted hover:text-accent transition-colors"
+                        className="text-sm font-medium leading-6 text-muted hover:text-accent transition-colors"
                       >
                         {displayVersion ? `v${displayVersion} · Changelog` : 'Changelog'}
                       </Button>
+                    </div>
+                    <div className="flex items-center">
                       {authEnabled && (
                         <Button
                           onClick={() => showPrivacyModal({ authEnabled })}
@@ -646,7 +648,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                     {/* Content */}
                     <div className={`flex-1 min-w-0 p-3 overflow-y-auto ${
                       activeSection === 'admin'
-                        ? 'bg-[radial-gradient(circle_at_top_right,rgba(239,68,68,0.08),transparent_35%)]'
+                        ? 'bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]'
                         : ''
                     }`}>
                       {/* API Section */}

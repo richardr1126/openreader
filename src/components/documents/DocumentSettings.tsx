@@ -157,7 +157,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
       ariaLabel="Document settings"
       title="Reader Settings"
       subtitle="Tune layout, preloading, and playback."
-      bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,rgba(239,68,68,0.08),transparent_35%)]"
+      bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
       panelClassName="w-full sm:w-[30rem]"
     >
       <div className="space-y-4">
