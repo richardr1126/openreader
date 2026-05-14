@@ -3,11 +3,6 @@ name: Docs Deploy
 on:
   push:
     branches: [main]
-  release:
-    types: [published, edited, deleted]
-  workflow_run:
-    workflows: ["Version Docs on Tag"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       full_reconcile:
@@ -15,6 +10,14 @@ on:
         required: false
         default: false
         type: boolean
+      release_tag:
+        description: 'Optional release tag for incremental changelog sync (for release relay)'
+        required: false
+        type: string
+      release_action:
+        description: 'Optional release action (published, edited, deleted) for incremental sync'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,7 +30,6 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:

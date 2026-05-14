@@ -86,6 +86,15 @@ async function fetchGitHubReleases() {
   return out;
 }
 
+async function fetchGitHubReleaseByTag(tagName) {
+  const url = `https://api.github.com/repos/${REPO}/releases/tags/${encodeURIComponent(tagName)}`;
+  try {
+    return await fetchJson(url, { auth: true });
+  } catch {
+    return null;
+  }
+}
+
 async function readEventPayload() {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) return null;
@@ -179,6 +188,36 @@ async function buildState() {
         if (existingIdx >= 0) manifest.splice(existingIdx, 1);
         manifest.push(incoming);
         bodies.set(tagName, toBodyRecord(releaseEvent));
+      }
+    }
+
+    return { entries: applyBodyPath(sortEntries(manifest)), bodies, mode: 'incremental-upsert' };
+  }
+
+  const dispatchInputs = payload?.inputs;
+  const dispatchTag = String(dispatchInputs?.release_tag || '').trim();
+  const dispatchAction = String(dispatchInputs?.release_action || '').trim().toLowerCase();
+
+  if (eventName === 'workflow_dispatch' && dispatchTag) {
+    if (dispatchAction === 'deleted') {
+      const mutable = isMutable(manifest, dispatchTag);
+      if (mutable) {
+        const next = manifest.filter((entry) => entry.tag_name !== dispatchTag);
+        bodies.delete(dispatchTag);
+        return { entries: applyBodyPath(sortEntries(next)), bodies, mode: 'incremental-delete' };
+      }
+      return { entries: applyBodyPath(manifest), bodies, mode: 'incremental-delete-skipped' };
+    }
+
+    const release = await fetchGitHubReleaseByTag(dispatchTag);
+    if (release && !release.draft) {
+      const incoming = toManifestEntry(release);
+      const existingIdx = manifest.findIndex((entry) => entry.tag_name === dispatchTag);
+      const mutable = isMutable(manifest, dispatchTag);
+      if (existingIdx === -1 || mutable || existingIdx < MUTABLE_COUNT) {
+        if (existingIdx >= 0) manifest.splice(existingIdx, 1);
+        manifest.push(incoming);
+        bodies.set(dispatchTag, toBodyRecord(release));
       }
     }
 
