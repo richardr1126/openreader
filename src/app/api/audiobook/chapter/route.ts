@@ -33,10 +33,16 @@ import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
 import { defaultVoiceForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { isBuiltInTtsProviderId, isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import { isBuiltInTtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { listAdminProviders } from '@/lib/server/admin/providers';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
+import {
+  canonicalizeAudiobookSettingsForRuntime,
+  coerceAudiobookGenerationSettings,
+  type SharedProviderPolicyEntry,
+} from '@/lib/server/audiobooks/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,30 +113,6 @@ function normalizeNativeSpeedForSettings(settings: AudiobookGenerationSettings):
   }).supportsNativeModelSpeed
     ? settings
     : { ...settings, nativeSpeed: 1 };
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function isAudiobookFormat(value: unknown): value is TTSAudiobookFormat {
-  return value === 'mp3' || value === 'm4b';
-}
-
-function isAudiobookGenerationSettings(value: unknown): value is AudiobookGenerationSettings {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  return typeof record.providerRef === 'string'
-    && isTtsProviderType(record.providerType)
-    && typeof record.ttsModel === 'string'
-    && typeof record.voice === 'string'
-    && isFiniteNumber(record.nativeSpeed)
-    && isFiniteNumber(record.postSpeed)
-    && isAudiobookFormat(record.format)
-    && (record.ttsInstructions === undefined || typeof record.ttsInstructions === 'string');
 }
 
 function chapterFileMimeType(format: TTSAudiobookFormat): string {
@@ -298,6 +280,7 @@ export async function POST(request: NextRequest) {
     if (ctxOrRes instanceof Response) return ctxOrRes;
 
     const { userId, authEnabled, user } = ctxOrRes;
+    const runtimeConfig = await getResolvedRuntimeConfig();
     const testNamespace = getOpenReaderTestNamespace(request.headers);
     const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
     const { preferredUserId, allowedUserIds } = buildAllowedAudiobookUserIds(authEnabled, userId, unclaimedUserId);
@@ -333,15 +316,20 @@ export async function POST(request: NextRequest) {
     const hasChapters = existingChapters.length > 0;
 
     let normalizedExistingSettings: AudiobookGenerationSettings | undefined;
+    let existingSettingsNeedsMigration = false;
     try {
       const parsedSettings = JSON.parse(
         (await getAudiobookObjectBuffer(bookId, storageUserId, 'audiobook.meta.json', testNamespace)).toString('utf8'),
       ) as unknown;
-      if (!isAudiobookGenerationSettings(parsedSettings)) {
+      const existingResult = coerceAudiobookGenerationSettings(parsedSettings, {
+        fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+      });
+      if (!existingResult.settings) {
         console.error('Invalid audiobook.meta.json settings payload', { bookId, storageUserId });
         return NextResponse.json({ error: 'Invalid audiobook metadata settings' }, { status: 500 });
       }
-      normalizedExistingSettings = normalizeNativeSpeedForSettings(parsedSettings);
+      normalizedExistingSettings = normalizeNativeSpeedForSettings(existingResult.settings);
+      existingSettingsNeedsMigration = existingResult.migrated;
     } catch (error) {
       if (!isMissingBlobError(error)) throw error;
       normalizedExistingSettings = undefined;
@@ -351,33 +339,91 @@ export async function POST(request: NextRequest) {
       if (data.settings === undefined) {
         return undefined;
       }
-      if (!isAudiobookGenerationSettings(data.settings)) {
+      const incomingResult = coerceAudiobookGenerationSettings(data.settings, {
+        fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+      });
+      if (!incomingResult.settings) {
         return null;
       }
-      return normalizeNativeSpeedForSettings(data.settings);
+      return normalizeNativeSpeedForSettings(incomingResult.settings);
     })();
 
     if (incomingSettings === null) {
       return NextResponse.json({ error: 'Invalid audiobook settings payload' }, { status: 400 });
     }
 
-    const mergedSettings = normalizedExistingSettings && incomingSettings
+    const sharedProviders: SharedProviderPolicyEntry[] = runtimeConfig.restrictUserApiKeys
+      ? (await listAdminProviders())
+          .filter((entry) => entry.enabled)
+          .map((entry) => ({
+            slug: entry.slug,
+            providerType: entry.providerType,
+            defaultModel: entry.defaultModel,
+            defaultInstructions: entry.defaultInstructions,
+          }))
+      : [];
+
+    if (runtimeConfig.restrictUserApiKeys && normalizedExistingSettings) {
+      const next = canonicalizeAudiobookSettingsForRuntime({
+        settings: normalizedExistingSettings,
+        restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
+        fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+        showAllProviderModels: runtimeConfig.showAllProviderModels,
+        sharedProviders,
+      });
+      if (JSON.stringify(next) !== JSON.stringify(normalizedExistingSettings)) {
+        existingSettingsNeedsMigration = true;
+      }
+      normalizedExistingSettings = next;
+    }
+
+    let normalizedIncomingSettings = incomingSettings;
+    if (runtimeConfig.restrictUserApiKeys && normalizedIncomingSettings) {
+      normalizedIncomingSettings = canonicalizeAudiobookSettingsForRuntime({
+        settings: normalizedIncomingSettings,
+        restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
+        fallbackProviderRef: runtimeConfig.defaultTtsProvider,
+        showAllProviderModels: runtimeConfig.showAllProviderModels,
+        sharedProviders,
+      });
+    }
+
+    if (normalizedExistingSettings && existingSettingsNeedsMigration) {
+      try {
+        await putAudiobookObject(
+          bookId,
+          storageUserId,
+          'audiobook.meta.json',
+          Buffer.from(JSON.stringify(normalizedExistingSettings, null, 2), 'utf8'),
+          'application/json; charset=utf-8',
+          testNamespace,
+        );
+      } catch (error) {
+        console.warn('Failed to persist migrated audiobook metadata settings', {
+          bookId,
+          storageUserId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const mergedSettings = normalizedExistingSettings && normalizedIncomingSettings
       ? normalizeNativeSpeedForSettings({
           ...normalizedExistingSettings,
-          ...incomingSettings,
+          ...normalizedIncomingSettings,
         })
-      : normalizedExistingSettings ?? incomingSettings;
+      : normalizedExistingSettings ?? normalizedIncomingSettings;
 
-    if (normalizedExistingSettings && hasChapters && incomingSettings) {
+    if (normalizedExistingSettings && hasChapters && normalizedIncomingSettings) {
       const mismatch =
-        normalizedExistingSettings.providerRef !== incomingSettings.providerRef ||
-        normalizedExistingSettings.providerType !== incomingSettings.providerType ||
-        normalizedExistingSettings.ttsModel !== incomingSettings.ttsModel ||
-        normalizedExistingSettings.voice !== incomingSettings.voice ||
-        normalizedExistingSettings.nativeSpeed !== incomingSettings.nativeSpeed ||
-        normalizedExistingSettings.postSpeed !== incomingSettings.postSpeed ||
-        normalizedExistingSettings.format !== incomingSettings.format ||
-        (normalizedExistingSettings.ttsInstructions || '') !== (incomingSettings.ttsInstructions || '');
+        normalizedExistingSettings.providerRef !== normalizedIncomingSettings.providerRef ||
+        normalizedExistingSettings.providerType !== normalizedIncomingSettings.providerType ||
+        normalizedExistingSettings.ttsModel !== normalizedIncomingSettings.ttsModel ||
+        normalizedExistingSettings.voice !== normalizedIncomingSettings.voice ||
+        normalizedExistingSettings.nativeSpeed !== normalizedIncomingSettings.nativeSpeed ||
+        normalizedExistingSettings.postSpeed !== normalizedIncomingSettings.postSpeed ||
+        normalizedExistingSettings.format !== normalizedIncomingSettings.format ||
+        (normalizedExistingSettings.ttsInstructions || '') !== (normalizedIncomingSettings.ttsInstructions || '');
       if (mismatch) {
         return NextResponse.json({ error: 'Audiobook settings mismatch', settings: normalizedExistingSettings }, { status: 409 });
       }
@@ -419,7 +465,6 @@ export async function POST(request: NextRequest) {
       || mergedSettings?.providerRef
       || 'openai';
     providerForError = requestedProvider;
-    const runtimeConfig = await getResolvedRuntimeConfig();
     const credResolved = await resolveTtsCredentials({
       providerHeader: requestedProvider,
       apiKeyHeader: request.headers.get('x-openai-key'),
