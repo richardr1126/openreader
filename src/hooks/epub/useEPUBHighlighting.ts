@@ -167,7 +167,7 @@ export function useEPUBHighlighting({
   const setRenderedTextMaps = useCallback((maps: EpubRenderedTextMap[]) => {
     renderedTextMapsRef.current = maps;
     wordHighlightMapCacheRef.current = null;
-  }, []);
+  }, [renderedTextMapsRef, wordHighlightMapCacheRef]);
 
   const resetHighlightState = useCallback(() => {
     renderedTextMapsRef.current = [];

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const isAnonymous = Boolean(session.user.isAnonymous);
+    const isAnonymous = Boolean((session.user as { isAnonymous?: boolean }).isAnonymous);
 
     const ip = getClientIp(req);
     const device = isTtsRateLimitEnabled() ? (isAnonymous ? getOrCreateDeviceId(req) : null) : null;

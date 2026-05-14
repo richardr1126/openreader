@@ -159,10 +159,12 @@ export function useEPUBLocationController({
     bookRef,
     documentId,
     extractPageText,
+    isEpubSetOnceRef,
     locationRef,
     renditionRef,
     safeRenditionNavigate,
     setIsEpub,
+    shouldPauseRef,
     skipToLocation,
   ]);
 

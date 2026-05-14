@@ -226,7 +226,10 @@ export const auth = isAuthEnabled() ? createAuth() : null;
 
 type AuthInstance = ReturnType<typeof createAuth>;
 export type Session = AuthInstance["$Infer"]["Session"];
-export type User = AuthInstance["$Infer"]["Session"]["user"];
+type AuthSessionUser = AuthInstance["$Infer"]["Session"]["user"];
+export type User = AuthSessionUser & {
+  isAnonymous?: boolean;
+};
 
 export type AuthContext = {
   authEnabled: boolean;
@@ -243,7 +246,7 @@ export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Pro
   }
 
   const session = await auth.api.getSession({ headers: request.headers });
-  const user = session?.user ?? null;
+  const user = (session?.user ?? null) as User | null;
   const userId = user?.id ?? null;
 
   // Keep user.isAdmin in sync with ADMIN_EMAILS on every session resolution.

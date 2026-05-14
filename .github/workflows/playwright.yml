@@ -4,6 +4,7 @@ on:
     branches: [ main, master ]  
   pull_request:
     branches: [ main, master ]
+
 jobs:
   e2e-testing:
     timeout-minutes: 60
@@ -14,13 +15,12 @@ jobs:
       BASE_URL: http://127.0.0.1:3003
       S3_ENDPOINT: http://127.0.0.1:8333
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/checkout@v5
+    - uses: actions/setup-node@v5
       with:
         node-version: lts/*
-    - uses: pnpm/action-setup@v4
-      with:
-        version: 11
+        package-manager-cache: false
+    - uses: pnpm/action-setup@v6
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -45,7 +45,7 @@ jobs:
         API_BASE: https://api.deepinfra.com/v1/openai
         API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
       run: pnpm exec playwright test --reporter=list,github,html
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ !cancelled() }}
       with:
         name: playwright-report

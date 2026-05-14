@@ -32,24 +32,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: lts/*
           cache: pnpm
           cache-dependency-path: docs-site/pnpm-lock.yaml
 
       - name: Install docs dependencies
-        run: pnpm --ignore-workspace --dir docs-site install --frozen-lockfile
+        working-directory: docs-site
+        run: pnpm install --frozen-lockfile
 
       - name: Build changelog feed
         env:
@@ -59,10 +58,11 @@ jobs:
         run: node scripts/build-changelog-feed.mjs
 
       - name: Build docs
-        run: pnpm --ignore-workspace --dir docs-site build
+        working-directory: docs-site
+        run: pnpm build
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/build
 
@@ -76,4 +76,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
