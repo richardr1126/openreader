@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(null, {
         status: 416,
         headers: {
-          ...buildSegmentAudioCacheHeaders('fallback'),
+          ...buildSegmentAudioCacheHeaders(),
           'Accept-Ranges': 'bytes',
         },
       });
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const audio = await getTtsSegmentAudioObjectStream(resolved.audioKey, range ? { range } : undefined);
     const headers: Record<string, string> = {
       'Content-Type': audio.contentType || 'audio/mpeg',
-      ...buildSegmentAudioCacheHeaders('fallback'),
+      ...buildSegmentAudioCacheHeaders(),
       'Accept-Ranges': audio.acceptRanges || 'bytes',
     };
     if (audio.contentLength !== null) headers['Content-Length'] = String(audio.contentLength);
