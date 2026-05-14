@@ -1,4 +1,3 @@
-import 'server-only';
 import { ensureAdminSeed } from '@/lib/server/admin/seed';
 import {
   getRuntimeConfig,
@@ -10,12 +9,19 @@ import {
 
 export type ResolvedRuntimeConfig = RuntimeConfig;
 
+function assertServerRuntime(caller: string): void {
+  if (typeof window !== 'undefined') {
+    throw new Error(`${caller} must be called on the server`);
+  }
+}
+
 /**
  * Returns the resolved site-wide runtime config in the shape consumed by
  * the client via SSR injection. Triggers the boot-time seed on first call
  * so env values land in the DB before the first read.
  */
 export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig> {
+  assertServerRuntime('getResolvedRuntimeConfig');
   await ensureAdminSeed();
   return getRuntimeConfig();
 }
@@ -24,6 +30,7 @@ export async function getResolvedRuntimeConfigWithSources(): Promise<{
   values: RuntimeConfig;
   sources: Record<RuntimeConfigKey, RuntimeConfigSource | 'default'>;
 }> {
+  assertServerRuntime('getResolvedRuntimeConfigWithSources');
   await ensureAdminSeed();
   return getRuntimeConfigWithSources();
 }

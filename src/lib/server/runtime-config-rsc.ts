@@ -1,4 +1,3 @@
-import 'server-only';
 import { cache } from 'react';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 
@@ -8,6 +7,8 @@ import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
  * (e.g. layout + page) need the same config in one render.
  */
 export const getResolvedRuntimeConfigForRsc = cache(async () => {
+  if (typeof window !== 'undefined') {
+    throw new Error('getResolvedRuntimeConfigForRsc must be called on the server');
+  }
   return getResolvedRuntimeConfig();
 });
-
