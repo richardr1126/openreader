@@ -53,6 +53,11 @@ import {
   type WarmAudioCacheEntry,
 } from '@/lib/client/tts/audio-warm-cache';
 import {
+  isRetryableSegmentStatus,
+  resolveSegmentStatusRetryDelayMs,
+  shouldDeferSegmentRetry,
+} from '@/lib/client/tts/segment-retry-policy';
+import {
   completedEpubBoundarySegment,
   resolveEpubBoundaryHandoffStartIndex,
   resolveEpubReplaySuppressionAction,
@@ -571,6 +576,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Track pending preload requests
   const preloadRequests = useRef<Map<string, Promise<TTSSegmentPlaybackSource | null>>>(new Map());
+  const segmentRetryCooldownRef = useRef<Map<string, number>>(new Map());
   const warmAudioCacheRef = useRef<Map<string, WarmAudioCacheEntry>>(new Map());
   // Track active abort controllers for TTS requests
   const activeAbortControllers = useRef<Set<AbortController>>(new Set());
@@ -759,6 +765,37 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     return true;
   }, [setSegmentManifestCache]);
 
+  const setSegmentRetryCooldown = useCallback((cacheKey: string, delayMs: number) => {
+    const now = Date.now();
+    const retryAtMs = now + Math.max(0, delayMs);
+    const cooldowns = segmentRetryCooldownRef.current;
+    cooldowns.set(cacheKey, retryAtMs);
+    while (cooldowns.size > AUDIO_CACHE_MAX_ITEMS) {
+      const oldestKey = cooldowns.keys().next().value;
+      if (typeof oldestKey !== 'string') break;
+      cooldowns.delete(oldestKey);
+    }
+  }, []);
+
+  const waitForRetryDelayWithAbort = useCallback((delayMs: number, signal: AbortSignal): Promise<void> => {
+    if (!Number.isFinite(delayMs) || delayMs <= 0) return Promise.resolve();
+    if (signal.aborted) {
+      return Promise.reject(new DOMException('Aborted', 'AbortError'));
+    }
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, delayMs);
+      const onAbort = () => {
+        clearTimeout(timeout);
+        signal.removeEventListener('abort', onAbort);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }, []);
+
   const invalidatePlaybackRun = useCallback(() => {
     playbackRunIdRef.current += 1;
     playbackInFlightRef.current = false;
@@ -838,6 +875,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       });
       activeAbortControllers.current.clear();
       preloadRequests.current.clear();
+      segmentRetryCooldownRef.current.clear();
       clearWarmAudioCache();
     }
 
@@ -1509,6 +1547,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       return undefined;
     }
 
+    if (preload) {
+      const retryAtMs = segmentRetryCooldownRef.current.get(audioCacheKey);
+      if (shouldDeferSegmentRetry(Date.now(), retryAtMs)) {
+        return undefined;
+      }
+    }
+
     const controller = new AbortController();
     activeAbortControllers.current.add(controller);
 
@@ -1529,59 +1574,91 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     try {
       onTTSStart();
-      const persistResult = await resolveSegmentsForPersist([
-        {
-          segmentIndex: sentenceIndex,
-          ...(segmentKey ? { segmentKey } : {}),
-          text: sentence,
-          locator,
-        },
-      ]);
-      const persistSegments = persistResult.segments;
-      if (persistSegments.length === 0) {
-        if (!preload) setIsPlaying(false);
-        return undefined;
-      }
-      const ensured = await withRetry(
-          async () => ensureTtsSegments({
-          documentId,
-          settings: {
-            providerRef: configProviderRef,
-            providerType: configProviderType,
-            ttsModel,
-            voice,
-            nativeSpeed: effectiveNativeSpeed,
-            ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
-          },
-          segments: persistSegments,
-        }, reqHeaders, controller.signal),
-        retryOptions,
-      );
+      const maxStatusRetries = preload ? 1 : 3;
+      let statusAttempt = 0;
 
-      const segment = ensured.segments[0];
-      if (!segment || segment.status !== 'completed' || !segment.audioPresignUrl || !segment.audioFallbackUrl) {
-        const status = segment?.status ?? 'missing';
-        const maybeError = segment && 'error' in segment
-          ? (segment as { error?: unknown }).error
-          : undefined;
-        if (preload && status === 'pending') {
+      while (true) {
+        const persistResult = await resolveSegmentsForPersist([
+          {
+            segmentIndex: sentenceIndex,
+            ...(segmentKey ? { segmentKey } : {}),
+            text: sentence,
+            locator,
+          },
+        ]);
+        const persistSegments = persistResult.segments;
+        if (persistSegments.length === 0) {
+          if (!preload) setIsPlaying(false);
           return undefined;
         }
-        const detail = typeof maybeError === 'string' && maybeError.trim()
-          ? ` (${maybeError})`
-          : '';
+
+        const ensured = await withRetry(
+          async () => ensureTtsSegments({
+            documentId,
+            settings: {
+              providerRef: configProviderRef,
+              providerType: configProviderType,
+              ttsModel,
+              voice,
+              nativeSpeed: effectiveNativeSpeed,
+              ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
+            },
+            segments: persistSegments,
+          }, reqHeaders, controller.signal),
+          retryOptions,
+        );
+
+        const segment = ensured.segments[0];
+        if (segment?.status === 'completed' && segment.audioPresignUrl && segment.audioFallbackUrl) {
+          segmentRetryCooldownRef.current.delete(audioCacheKey);
+          setSegmentManifestCache(audioCacheKey, segment);
+          if (alignmentEnabledForCurrentDoc && segment.alignment) {
+            sentenceAlignmentCacheRef.current.set(audioCacheKey, segment.alignment);
+          }
+          return {
+            presignUrl: segment.audioPresignUrl,
+            fallbackUrl: segment.audioFallbackUrl,
+            manifest: segment,
+          };
+        }
+
+        const status = segment?.status ?? 'missing';
+        const retryAfterSeconds =
+          typeof segment?.error?.retryAfterSeconds === 'number'
+            ? segment.error.retryAfterSeconds
+            : undefined;
+        const delayMs = resolveSegmentStatusRetryDelayMs({
+          attempt: statusAttempt,
+          retryAfterSeconds,
+        });
+        const canRetryStatus = isRetryableSegmentStatus(status) && statusAttempt < maxStatusRetries;
+
+        if (preload) {
+          if (isRetryableSegmentStatus(status)) {
+            setSegmentRetryCooldown(audioCacheKey, delayMs);
+          }
+          if (canRetryStatus) {
+            statusAttempt += 1;
+            await waitForRetryDelayWithAbort(delayMs, controller.signal);
+            continue;
+          }
+          return undefined;
+        }
+
+        if (canRetryStatus) {
+          statusAttempt += 1;
+          await waitForRetryDelayWithAbort(delayMs, controller.signal);
+          continue;
+        }
+
+        const detail = (() => {
+          if (typeof segment?.error?.detail === 'string' && segment.error.detail.trim()) {
+            return ` (${segment.error.detail})`;
+          }
+          return '';
+        })();
         throw new Error(`Failed to prepare segment audio: ${status}${detail}`);
       }
-
-      setSegmentManifestCache(audioCacheKey, segment);
-      if (alignmentEnabledForCurrentDoc && segment.alignment) {
-        sentenceAlignmentCacheRef.current.set(audioCacheKey, segment.alignment);
-      }
-      return {
-        presignUrl: segment.audioPresignUrl,
-        fallbackUrl: segment.audioFallbackUrl,
-        manifest: segment,
-      };
     } catch (error) {
       if (isAbortLikeError(error)) {
         return undefined;
@@ -1648,6 +1725,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPageNumber,
     currentReaderType,
     setSegmentManifestCache,
+    setSegmentRetryCooldown,
+    waitForRetryDelayWithAbort,
     isAbortLikeError,
     resolveSegmentsForPersist,
   ]);
@@ -2241,6 +2320,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           preloadFromOffset(offset + 1);
           return;
         }
+        const cooldownRetryAtMs = segmentRetryCooldownRef.current.get(cacheKey);
+        if (shouldDeferSegmentRetry(Date.now(), cooldownRetryAtMs)) {
+          preloadFromOffset(offset + 1);
+          return;
+        }
         const pending = preloadRequests.current.get(requestKey);
         if (pending) {
           void pending
@@ -2366,6 +2450,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
               if (seenCandidates.has(requestKey)) continue;
               seenCandidates.add(requestKey);
               if (segmentManifestCacheRef.current.has(cacheKey)) continue;
+              const cooldownRetryAtMs = segmentRetryCooldownRef.current.get(cacheKey);
+              if (shouldDeferSegmentRetry(Date.now(), cooldownRetryAtMs)) continue;
               if (preloadRequests.current.has(requestKey)) continue;
               uniqueCandidates.push({
                 sentence: segment.text,
@@ -2539,6 +2625,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       if (seen.has(candidate.requestKey)) continue;
       seen.add(candidate.requestKey);
       if (segmentManifestCacheRef.current.has(candidate.cacheKey)) continue;
+      const cooldownRetryAtMs = segmentRetryCooldownRef.current.get(candidate.cacheKey);
+      if (shouldDeferSegmentRetry(Date.now(), cooldownRetryAtMs)) continue;
       if (preloadRequests.current.has(candidate.requestKey)) continue;
       uniqueCandidates.push(candidate);
     }
