@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import {
+  buildSegmentAudioCacheHeaders,
   resolveCompletedSegmentAudio,
   streamAudioBuffer,
   ttsSegmentsS3NotConfiguredResponse,
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(streamAudioBuffer(audio), {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'no-store',
+        ...buildSegmentAudioCacheHeaders('fallback'),
       },
     });
   } catch (error) {

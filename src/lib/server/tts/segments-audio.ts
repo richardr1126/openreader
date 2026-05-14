@@ -11,6 +11,10 @@ export type ResolvedSegmentAudio = {
   audioKey: string;
 };
 
+export const TTS_SEGMENT_REDIRECT_CACHE_CONTROL = 'private, max-age=60, stale-while-revalidate=30';
+export const TTS_SEGMENT_FALLBACK_CACHE_CONTROL = 'private, max-age=300, stale-while-revalidate=60';
+export const TTS_SEGMENT_AUDIO_VARY = 'Cookie, Authorization';
+
 export function ttsSegmentsS3NotConfiguredResponse(): NextResponse {
   return NextResponse.json(
     { error: 'TTS segments storage is not configured. Set S3_* environment variables.' },
@@ -25,6 +29,15 @@ export function streamAudioBuffer(buffer: Buffer): ReadableStream<Uint8Array> {
       controller.close();
     },
   });
+}
+
+export function buildSegmentAudioCacheHeaders(kind: 'redirect' | 'fallback'): Record<string, string> {
+  return {
+    'Cache-Control': kind === 'redirect'
+      ? TTS_SEGMENT_REDIRECT_CACHE_CONTROL
+      : TTS_SEGMENT_FALLBACK_CACHE_CONTROL,
+    Vary: TTS_SEGMENT_AUDIO_VARY,
+  };
 }
 
 export async function resolveCompletedSegmentAudio(

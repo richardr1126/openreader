@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import {
+  buildSegmentAudioCacheHeaders,
   resolveCompletedSegmentAudio,
   ttsSegmentsS3NotConfiguredResponse,
 } from '@/lib/server/tts/segments-audio';
@@ -24,13 +25,13 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.redirect(fallbackUrl, {
         status: 307,
-        headers: { 'Cache-Control': 'no-store' },
+        headers: buildSegmentAudioCacheHeaders('redirect'),
       });
     }
 
     return NextResponse.redirect(directUrl, {
       status: 307,
-      headers: { 'Cache-Control': 'no-store' },
+      headers: buildSegmentAudioCacheHeaders('redirect'),
     });
   } catch (error) {
     console.error('Error creating segment audio signature:', error);
