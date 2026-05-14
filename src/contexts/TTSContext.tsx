@@ -48,6 +48,11 @@ import {
   selectUpcomingWalkerItems,
 } from '@/lib/client/epub/tts-epub-preload';
 import {
+  releaseWarmAudio,
+  upsertWarmAudioEntry,
+  type WarmAudioCacheEntry,
+} from '@/lib/client/tts/audio-warm-cache';
+import {
   completedEpubBoundarySegment,
   resolveEpubBoundaryHandoffStartIndex,
   resolveEpubReplaySuppressionAction,
@@ -198,6 +203,7 @@ type JumpResolution =
 const LOOP_GUARD_MIN_INDEX = 2;
 const LOOP_GUARD_MIN_PROGRESS = 0.6;
 const AUDIO_CACHE_MAX_ITEMS = 25;
+const WARM_AUDIO_CACHE_MAX_ITEMS = 6;
 // Read once per module load from SSR-injected runtime config. This sits at
 // module scope because the highlight pipeline is constructed lazily and the
 // flag rarely changes within a session — admin toggling it picks up on
@@ -565,6 +571,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Track pending preload requests
   const preloadRequests = useRef<Map<string, Promise<TTSSegmentPlaybackSource | null>>>(new Map());
+  const warmAudioCacheRef = useRef<Map<string, WarmAudioCacheEntry>>(new Map());
   // Track active abort controllers for TTS requests
   const activeAbortControllers = useRef<Set<AbortController>>(new Set());
   // Synchronous guard to prevent duplicate playAudio calls from the main playback effect.
@@ -616,6 +623,36 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearInterval(rateWatchdogIntervalRef.current);
     rateWatchdogIntervalRef.current = null;
   }, []);
+
+  const clearWarmAudioCache = useCallback(() => {
+    warmAudioCacheRef.current.forEach((entry) => {
+      releaseWarmAudio(entry.audio);
+    });
+    warmAudioCacheRef.current.clear();
+  }, []);
+
+  const warmSegmentAudioUrl = useCallback((requestKey: string, primaryUrl: string | null, fallbackUrl: string | null) => {
+    const candidateUrl = primaryUrl || fallbackUrl;
+    if (!candidateUrl) return;
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return;
+
+    upsertWarmAudioEntry({
+      key: requestKey,
+      url: candidateUrl,
+      cache: warmAudioCacheRef.current,
+      maxEntries: WARM_AUDIO_CACHE_MAX_ITEMS,
+      createAudio: (url) => {
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        audio.load();
+        return audio;
+      },
+    });
+  }, []);
+
+  useEffect(() => () => {
+    clearWarmAudioCache();
+  }, [clearWarmAudioCache]);
 
   const applyPlaybackRateToHowl = useCallback((howl: Howl | null) => {
     if (!howl) return;
@@ -801,6 +838,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       });
       activeAbortControllers.current.clear();
       preloadRequests.current.clear();
+      clearWarmAudioCache();
     }
 
     if (pageTurnTimeoutRef.current) {
@@ -808,7 +846,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnTimeoutRef.current = null;
     }
     setCurrentWordIndex(null);
-  }, [activeHowl, clearRateWatchdog, invalidatePlaybackRun]);
+  }, [activeHowl, clearRateWatchdog, clearWarmAudioCache, invalidatePlaybackRun]);
 
   /**
    * Pauses the current audio playback while preserving seek position.
@@ -1653,6 +1691,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const processPromise = (async () => {
       try {
         const source = await getSegmentPlaybackSource(sentence, sentenceIndex, preload, locatorOverride, segmentKey);
+        if (preload && source) {
+          warmSegmentAudioUrl(requestKey, source.presignUrl, source.fallbackUrl);
+        }
         return source || null;
       } catch (error) {
         setIsProcessing(false);
@@ -1674,7 +1715,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     return processPromise;
-  }, [audioContext, getSegmentPlaybackSource, currDocPage, currDocPageNumber, currentReaderType, isEPUB]);
+  }, [audioContext, getSegmentPlaybackSource, currDocPage, currDocPageNumber, currentReaderType, isEPUB, warmSegmentAudioUrl]);
 
   /**
    * Plays the current sentence with Howl
@@ -2386,6 +2427,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
               if (!manifest || manifest.status !== 'completed' || !manifest.audioPresignUrl || !manifest.audioFallbackUrl) {
                 return null;
               }
+              warmSegmentAudioUrl(candidate.requestKey, manifest.audioPresignUrl, manifest.audioFallbackUrl);
               return {
                 presignUrl: manifest.audioPresignUrl,
                 fallbackUrl: manifest.audioFallbackUrl,
@@ -2572,6 +2614,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         if (!manifest || manifest.status !== 'completed' || !manifest.audioPresignUrl || !manifest.audioFallbackUrl) {
           return null;
         }
+        warmSegmentAudioUrl(candidate.requestKey, manifest.audioPresignUrl, manifest.audioFallbackUrl);
         return {
           presignUrl: manifest.audioPresignUrl,
           fallbackUrl: manifest.audioFallbackUrl,
@@ -2642,6 +2685,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     epubHighlightEnabled,
     epubWordHighlightEnabled,
     resolveSegmentsForPersist,
+    warmSegmentAudioUrl,
   ]);
 
   /**
@@ -2690,6 +2734,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Cancel any ongoing request
     invalidatePlaybackRun();
     abortAudio();
+    clearWarmAudioCache();
     playbackInFlightRef.current = false;
     pendingJumpTargetRef.current = null;
     clearPendingEpubJump();
@@ -2710,7 +2755,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-  }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, bumpEpubPreloadGeneration]);
+  }, [abortAudio, clearWarmAudioCache, invalidatePlaybackRun, clearPendingEpubJump, bumpEpubPreloadGeneration]);
 
   /**
    * Stops the current audio playback and starts playing from a specified index
