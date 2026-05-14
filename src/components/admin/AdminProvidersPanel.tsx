@@ -9,7 +9,20 @@ import { ChevronUpDownIcon, CheckIcon, PlusIcon } from '@/components/icons/Icons
 import { providerSupportsCustomModel, resolveProviderModels, type TtsModelDefinition, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { defaultBaseUrlForProviderType, defaultModelForProviderType, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { Badge, Card, Field, Section, ToggleRow, btnDanger, btnOutline, btnPrimary, btnSecondary, inputClass } from '@/components/admin/ui';
+import {
+  Badge,
+  Field,
+  Section,
+  ToggleRow,
+  btnDanger,
+  btnOutline,
+  btnPrimary,
+  btnSecondary,
+  inputClass,
+  listboxButtonClass,
+  listboxOptionClass,
+  listboxOptionsClass,
+} from '@/components/formPrimitives';
 
 type ProviderType = TtsProviderId;
 
@@ -246,20 +259,23 @@ export function AdminProvidersPanel() {
       title="Shared TTS providers"
       subtitle="Server-side providers visible to all users. API keys are encrypted at rest and never sent to the client."
       action={
-        !editingId ? (
-          <Button
-            onClick={startCreate}
-            className={`${btnPrimary} h-7 w-7 p-0 inline-flex items-center justify-center`}
-            aria-label="Add provider"
-            title="Add provider"
-          >
-            <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
-        ) : null
+        <div className="flex items-center gap-2">
+          <Badge tone="foreground">Shared</Badge>
+          {!editingId ? (
+            <Button
+              onClick={startCreate}
+              className={`${btnPrimary} h-7 w-7 p-0 inline-flex items-center justify-center`}
+              aria-label="Add provider"
+              title="Add provider"
+            >
+              <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       }
     >
       {editingId && (
-        <Card className="space-y-2.5">
+        <div className="space-y-2.5 pb-3 border-b border-offbase">
           <div className="flex items-baseline justify-between gap-3">
             <h4 className="text-sm font-semibold text-foreground">
               {isEditingExisting ? `Edit "${editingProvider?.slug}"` : 'New provider'}
@@ -303,7 +319,7 @@ export function AdminProvidersPanel() {
                   setCustomModelInput('');
                 }}
               >
-                <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-base border border-offbase py-1.5 pl-3 pr-10 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent hover:bg-offbase hover:text-accent transition-colors">
+                <ListboxButton className={listboxButtonClass}>
                   <span className="block truncate">{selectedProviderType.label}</span>
                   <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                     <ChevronUpDownIcon className="h-4 w-4 text-muted" />
@@ -315,17 +331,12 @@ export function AdminProvidersPanel() {
                   leaveFrom="opacity-100"
                   leaveTo="opacity-0"
                 >
-                  <ListboxOptions
-                    anchor="bottom start"
-                    className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
-                  >
+                  <ListboxOptions anchor="bottom start" className={listboxOptionsClass}>
                     {PROVIDER_TYPE_OPTIONS.map((opt) => (
                       <ListboxOption
                         key={opt.value}
                         value={opt}
-                        className={({ active }) =>
-                          `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                        }
+                        className={({ active }) => listboxOptionClass(active)}
                       >
                         {({ selected }) => (
                           <>
@@ -367,10 +378,10 @@ export function AdminProvidersPanel() {
                     setCustomModelInput('');
                   }}
                 >
-                  <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-base border border-offbase py-1.5 pl-3 pr-10 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent hover:bg-offbase hover:text-accent transition-colors">
-                    <span className="block truncate">
-                      {selectedModelDefinition?.name ?? 'Select model'}
-                    </span>
+                <ListboxButton className={listboxButtonClass}>
+                  <span className="block truncate">
+                    {selectedModelDefinition?.name ?? 'Select model'}
+                  </span>
                     <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                       <ChevronUpDownIcon className="h-4 w-4 text-muted" />
                     </span>
@@ -381,17 +392,12 @@ export function AdminProvidersPanel() {
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                   >
-                    <ListboxOptions
-                      anchor="bottom start"
-                      className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
-                    >
+                    <ListboxOptions anchor="bottom start" className={listboxOptionsClass}>
                       {modelDefinitions.map((model) => (
                         <ListboxOption
                           key={model.id}
                           value={model.id}
-                          className={({ active }) =>
-                            `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                          }
+                          className={({ active }) => listboxOptionClass(active)}
                         >
                           {({ selected }) => (
                             <>
@@ -479,6 +485,7 @@ export function AdminProvidersPanel() {
             description="When off, this provider is hidden from users without being deleted."
             checked={form.enabled}
             onChange={(checked) => setForm({ ...form, enabled: checked })}
+            variant="flat"
           />
 
           <div className="pt-1 flex justify-end gap-2">
@@ -493,19 +500,17 @@ export function AdminProvidersPanel() {
               {saveMutation.isPending ? 'Saving…' : isEditingExisting ? 'Save changes' : 'Create'}
             </Button>
           </div>
-        </Card>
+        </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-0">
         {isLoading ? (
           <p className="text-xs text-muted">Loading…</p>
         ) : providers.length === 0 ? (
-          <Card>
-            <p className="text-xs text-muted">No shared providers configured yet.</p>
-          </Card>
+          <p className="text-xs text-muted py-2">No shared providers configured yet.</p>
         ) : (
           providers.map((p) => (
-            <Card key={p.id}>
+            <div key={p.id} className="py-1.5 border-b border-offbase last:border-b-0">
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0 space-y-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -538,7 +543,7 @@ export function AdminProvidersPanel() {
                   </Button>
                 </div>
               </div>
-            </Card>
+            </div>
           ))
         )}
       </div>

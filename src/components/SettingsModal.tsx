@@ -14,7 +14,6 @@ import {
   Button,
   Input,
 } from '@headlessui/react';
-import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -52,6 +51,19 @@ import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
+import { useLibraryDocumentsQuery } from '@/hooks/useLibraryDocumentsQuery';
+import {
+  btnDanger,
+  btnOutline,
+  btnPrimary,
+  btnSecondary,
+  inputClass,
+  listboxButtonClass,
+  listboxOptionClass,
+  listboxOptionsClass,
+  segmentedButtonClass,
+  segmentedGroupClass,
+} from '@/components/formPrimitives';
 
 // Hard-coded theme color palettes for the visual theme selector
 type ThemeColorSet = { background: string; base: string; offbase: string; accent: string; secondaryAccent: string; foreground: string; muted: string };
@@ -111,17 +123,8 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
 ];
 
 type AdminSubTab = 'providers' | 'features';
-const LIBRARY_DOCUMENTS_QUERY_KEY = ['documents-library', 10000] as const;
-
-async function fetchLibraryDocuments(): Promise<BaseDocument[]> {
-  const res = await fetch('/api/documents/library?limit=10000');
-  if (!res.ok) throw new Error('Failed to list library documents');
-  const data = (await res.json()) as { documents?: BaseDocument[] };
-  return data.documents || [];
-}
 
 export function SettingsModal({ className = '' }: { className?: string }) {
-  const queryClient = useQueryClient();
   const runtimeConfig = useRuntimeConfig();
   const enableDestructiveDelete = runtimeConfig.enableDestructiveDeleteActions;
   const showAllDeepInfra = runtimeConfig.showAllDeepInfraModels;
@@ -149,8 +152,6 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     title: string;
     confirmLabel: string;
     defaultSelected: boolean;
-    initialFiles?: BaseDocument[];
-    fetcher?: () => Promise<BaseDocument[]>;
   }>({
     title: '',
     confirmLabel: '',
@@ -167,13 +168,12 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const { data: session } = useAuthSession();
   const router = useRouter();
   const isBusy = isImportingLibrary;
-  const fetchLibraryDocumentsCached = useCallback(async () => {
-    return queryClient.ensureQueryData({
-      queryKey: LIBRARY_DOCUMENTS_QUERY_KEY,
-      queryFn: fetchLibraryDocuments,
-      staleTime: 60 * 1000,
-    });
-  }, [queryClient]);
+  const {
+    documents: libraryDocuments,
+    isLoading: isLibraryDocumentsLoading,
+    errorMessage: libraryDocumentsErrorMessage,
+    prefetch: prefetchLibraryDocuments,
+  } = useLibraryDocumentsQuery(isSelectionModalOpen);
 
   const { providers: sharedProviders } = useSharedProviders();
   const {
@@ -299,17 +299,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const handleImportLibrary = async () => {
     // Start fetching as soon as the user opens the picker so cached data is
     // often ready before the modal asks for it.
-    void queryClient.prefetchQuery({
-      queryKey: LIBRARY_DOCUMENTS_QUERY_KEY,
-      queryFn: fetchLibraryDocuments,
-      staleTime: 60 * 1000,
-    });
+    void prefetchLibraryDocuments();
     setSelectionModalProps({
       title: 'Import from Library',
       confirmLabel: 'Import',
       defaultSelected: false,
-      initialFiles: queryClient.getQueryData(LIBRARY_DOCUMENTS_QUERY_KEY),
-      fetcher: fetchLibraryDocumentsCached,
     });
     setIsSelectionModalOpen(true);
   };
@@ -481,10 +475,13 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     setActiveSection(visibleSections[0]?.id ?? 'theme');
   }, [activeSection, visibleSections]);
 
-  const btnBase = "inline-flex items-center justify-center rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transform transition-transform duration-200 ease-in-out";
-  const btnPrimary = `${btnBase} bg-accent text-background hover:bg-secondary-accent hover:scale-[1.04]`;
-  const btnSecondary = `${btnBase} bg-background text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.04]`;
-  const btnOutline = `${btnBase} bg-background border border-offbase text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.02]`;
+  const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-muted';
+  const sectionShellClass = 'space-y-2 pb-3 border-b border-offbase px-0.5';
+  const sectionHeadingClass = 'text-sm font-semibold text-foreground';
+  const accountBtnBase = 'inline-flex items-center justify-center rounded-lg text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transform transition-transform duration-200 ease-in-out';
+  const accountBtnPrimary = `${accountBtnBase} bg-accent text-background hover:bg-secondary-accent hover:scale-[1.04]`;
+  const accountBtnOutline = `${accountBtnBase} bg-background border border-offbase text-foreground hover:bg-offbase hover:text-accent hover:scale-[1.04]`;
+  const accountBtnDanger = `${accountBtnBase} bg-red-600 text-white border border-red-700 hover:bg-red-700 hover:scale-[1.02]`;
   const effectiveProviderType = resolveEffectiveProviderType({
     providerRef: selectedProviderRef,
     providerType: localProviderType,
@@ -511,11 +508,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     <>
       <Button
         onClick={() => setIsOpen(true)}
-        className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.09] hover:text-accent ${className}`}
+        className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-200 ease-out hover:scale-[1.08] ${className}`}
         aria-label="Settings"
         tabIndex={0}
       >
-        <SettingsIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09] hover:rotate-45 hover:text-accent" />
+        <SettingsIcon className="w-4 h-4 transition-transform duration-200 ease-out hover:scale-[1.08] hover:rotate-45" />
       </Button>
 
       <Transition appear show={isOpen} as={Fragment}>
@@ -543,7 +540,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel data-testid="settings-modal" className="w-full max-w-3xl transform rounded-2xl bg-base text-left align-middle shadow-xl transition-all overflow-hidden">
+                <DialogPanel data-testid="settings-modal" className="w-full max-w-4xl transform rounded-xl bg-base text-left align-middle shadow-xl transition-all overflow-hidden border border-offbase">
                   {/* Header */}
                   <div className="flex items-center justify-between px-6 py-4 border-b border-offbase">
                     <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground">
@@ -552,7 +549,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                     {authEnabled && (
                       <Button
                         onClick={() => showPrivacyModal({ authEnabled })}
-                        className="text-sm font-medium text-muted hover:text-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.04]"
+                        className="text-sm font-medium text-muted hover:text-accent transition-colors"
                       >
                         Privacy
                       </Button>
@@ -567,11 +564,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                         <button
                           key={section.id}
                           onClick={() => setActiveSection(section.id)}
-                          className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors
-                            ${activeSection === section.id
+                          className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            activeSection === section.id
                               ? 'bg-accent text-background'
                               : 'text-foreground hover:bg-offbase hover:text-accent'
-                            }`}
+                          }`}
                         >
                           <Icon className="w-3.5 h-3.5" />
                           {section.label}
@@ -580,21 +577,22 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                     })}
                   </div>
 
-                  <div className="flex flex-row h-[450px]">
+                  <div className="flex flex-row h-[490px]">
                     {/* Desktop: vertical sidebar */}
-                    <nav className="hidden sm:block w-44 shrink-0 border-r border-offbase bg-background">
-                      <div className="flex flex-col p-2 gap-1">
+                    <nav className="hidden sm:block w-44 shrink-0 border-r border-offbase bg-background p-2">
+                      <div className="flex flex-col gap-1">
                         {visibleSections.map((section) => {
                           const Icon = section.icon;
+                          const active = activeSection === section.id;
                           return (
                             <button
                               key={section.id}
                               onClick={() => setActiveSection(section.id)}
-                              className={`w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap
-                                ${activeSection === section.id
+                              className={`w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                                active
                                   ? 'bg-accent text-background'
-                                  : 'text-foreground hover:bg-offbase hover:text-accent'
-                                }`}
+                                  : 'text-foreground hover:bg-base hover:text-accent'
+                              }`}
                             >
                               <Icon className="w-4 h-4 shrink-0" />
                               {section.label}
@@ -605,12 +603,16 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                     </nav>
 
                     {/* Content */}
-                    <div className="flex-1 min-w-0 p-4 overflow-y-auto">
+                    <div className={`flex-1 min-w-0 p-3 overflow-y-auto ${
+                      activeSection === 'admin'
+                        ? 'bg-[radial-gradient(circle_at_top_right,rgba(239,68,68,0.08),transparent_35%)]'
+                        : ''
+                    }`}>
                       {/* API Section */}
                       {activeSection === 'api' && (
                         <div className="space-y-4">
                           <div className="space-y-1.5">
-                            <label className="block text-sm font-medium text-foreground">TTS Provider</label>
+                            <label className={fieldLabelClass}>TTS Provider</label>
                             {ttsProviders.length === 0 ? (
                               <p className="text-xs text-amber-500">
                                 User API keys are restricted and no shared provider is configured. Ask an admin to add one.
@@ -638,7 +640,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                   setCustomModelInput('');
                                 }}
                               >
-                                <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-background py-2 pl-3 pr-10 text-left text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.005] hover:text-accent hover:bg-offbase">
+                                <ListboxButton className={listboxButtonClass}>
                                   <span className="block truncate">
                                     {selectedProviderOption?.name || 'Select Provider'}
                                   </span>
@@ -654,14 +656,12 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 >
                                   <ListboxOptions
                                     anchor="bottom start"
-                                    className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
+                                    className={listboxOptionsClass}
                                   >
                                     {ttsProviders.map((provider) => (
                                       <ListboxOption
                                         key={provider.id}
-                                        className={({ active }) =>
-                                          `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                                        }
+                                        className={({ active }) => listboxOptionClass(active)}
                                         value={provider}
                                       >
                                         {({ selected }) => (
@@ -691,7 +691,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
 
                           {shouldShowBaseUrl && (
                             <div className="space-y-1.5">
-                              <label className="block text-sm font-medium text-foreground">
+                              <label className={fieldLabelClass}>
                                 API Base URL
                                 {localBaseUrl && <span className="ml-2 text-xs text-accent">(Overriding env)</span>}
                               </label>
@@ -700,14 +700,14 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 value={localBaseUrl}
                                 onChange={(e) => handleInputChange('baseUrl', e.target.value)}
                                 placeholder="Using environment variable"
-                                className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                                className={inputClass}
                               />
                             </div>
                           )}
 
                           {shouldShowApiKey && (
                             <div className="space-y-1.5">
-                              <label className="block text-sm font-medium text-foreground">
+                              <label className={fieldLabelClass}>
                                 API Key
                                 {localApiKey && <span className="ml-2 text-xs text-accent">(Overriding env)</span>}
                               </label>
@@ -716,7 +716,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 value={localApiKey}
                                 onChange={(e) => handleInputChange('apiKey', e.target.value)}
                                 placeholder={!showAllDeepInfra && providerModelPolicy.providerType === 'deepinfra' ? "Deepinfra free or use your API key" : "Using environment variable"}
-                                className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                                className={inputClass}
                               />
                             </div>
                           )}
@@ -727,7 +727,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                           )}
 
                           <div className="space-y-1.5">
-                            <label className="block text-sm font-medium text-foreground">TTS Model</label>
+                            <label className={fieldLabelClass}>TTS Model</label>
                             {!showAllProviderModels && (
                               <p className="text-xs text-muted">
                                 This instance restricts model selection to each provider&apos;s default model.
@@ -745,7 +745,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                   }
                                 }}
                               >
-                                <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-background py-2 pl-3 pr-10 text-left text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.005] hover:text-accent hover:bg-offbase">
+                                <ListboxButton className={listboxButtonClass}>
                                   {selectedModel ? (
                                     <span className="block">
                                       <span className="block truncate">
@@ -772,14 +772,12 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 >
                                   <ListboxOptions
                                     anchor="bottom start"
-                                    className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
+                                    className={listboxOptionsClass}
                                   >
                                     {ttsModels.map((model) => (
                                       <ListboxOption
                                         key={model.id}
-                                        className={({ active }) =>
-                                          `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                                        }
+                                        className={({ active }) => listboxOptionClass(active)}
                                         value={model}
                                     >
                                       {({ selected }) => (
@@ -814,7 +812,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                     setModelValue(e.target.value);
                                   }}
                                   placeholder="Enter custom model name"
-                                  className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                                  className={inputClass}
                                 />
                               )}
                             </div>
@@ -822,12 +820,12 @@ export function SettingsModal({ className = '' }: { className?: string }) {
 
                           {providerModelPolicy.supportsInstructions && (
                             <div className="space-y-1.5">
-                              <label className="block text-sm font-medium text-foreground">TTS Instructions</label>
+                              <label className={fieldLabelClass}>TTS Instructions</label>
                               <textarea
                                 value={localTTSInstructions}
                                 onChange={(e) => setLocalTTSInstructions(e.target.value)}
                                 placeholder="Enter instructions for the TTS model"
-                                className="w-full h-24 rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                                className={`${inputClass} h-24 resize-none`}
                               />
                             </div>
                           )}
@@ -1116,8 +1114,8 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                       {/* Documents Section */}
                       {activeSection === 'docs' && (
                         <div className="space-y-5">
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-foreground">Server Library</label>
+                          <div className={sectionShellClass}>
+                            <h4 className={sectionHeadingClass}>Server Library</h4>
                             <Button
                               onClick={handleImportLibrary}
                               disabled={isBusy}
@@ -1127,8 +1125,8 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                             </Button>
                           </div>
 
-                          <div className="space-y-2">
-                            <label className="block text-sm font-medium text-foreground">Cache & Data</label>
+                          <div className={sectionShellClass}>
+                            <h4 className={sectionHeadingClass}>Cache & Data</h4>
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 onClick={handleRefresh}
@@ -1148,7 +1146,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 <Button
                                   onClick={() => setShowDeleteDocsConfirm(true)}
                                   disabled={isBusy}
-                                  className={`${btnBase} bg-red-600 text-white hover:bg-red-700 hover:scale-[1.04] px-4 py-2`}
+                                  className={`${btnDanger} px-4 py-2`}
                                 >
                                   Delete all data
                                 </Button>
@@ -1164,7 +1162,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                           <div
                             role="radiogroup"
                             aria-label="Admin tab"
-                            className="grid grid-cols-2 gap-1 rounded-full border border-offbase bg-background p-1"
+                            className={`${segmentedGroupClass} grid-cols-2`}
                           >
                             {([
                               { id: 'providers', label: 'Shared providers' },
@@ -1178,11 +1176,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                   role="radio"
                                   aria-checked={active}
                                   onClick={() => setAdminSubTab(tab.id)}
-                                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                                    active
-                                      ? 'bg-accent text-background shadow-sm'
-                                      : 'text-muted hover:bg-base hover:text-foreground'
-                                  }`}
+                                  className={segmentedButtonClass(active)}
                                 >
                                   {tab.label}
                                 </button>
@@ -1246,7 +1240,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                               <>
                                 <Button
                                   onClick={handleSignOut}
-                                  className={`${btnOutline} px-4 py-2`}
+                                  className={`${accountBtnOutline} px-4 py-2`}
                                 >
                                   Disconnect account
                                 </Button>
@@ -1255,7 +1249,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                   <label className="block text-sm font-medium text-red-500 mb-2">Danger Zone</label>
                                   <Button
                                     onClick={() => setShowDeleteAccountConfirm(true)}
-                                    className={`${btnBase} bg-red-600 text-white border border-red-700 hover:bg-red-700 hover:scale-[1.02] px-4 py-2`}
+                                    className={`${accountBtnDanger} px-4 py-2`}
                                   >
                                     Delete Account
                                   </Button>
@@ -1273,17 +1267,17 @@ export function SettingsModal({ className = '' }: { className?: string }) {
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                   <Link href="/signin">
-                                    <Button className={`${btnOutline} px-4 py-2`}>
+                                    <Button className={`${accountBtnOutline} px-4 py-2`}>
                                       Connect
                                     </Button>
                                   </Link>
                                   <Link href="/signup">
-                                    <Button className={`${btnPrimary} px-4 py-2`}>
+                                    <Button className={`${accountBtnPrimary} px-4 py-2`}>
                                       Create account
                                     </Button>
                                   </Link>
                                   <Link href="/?redirect=false">
-                                    <Button className={`${btnOutline} px-4 py-2`}>
+                                    <Button className={`${accountBtnOutline} px-4 py-2`}>
                                       Back to landing page
                                     </Button>
                                   </Link>
@@ -1348,8 +1342,9 @@ export function SettingsModal({ className = '' }: { className?: string }) {
         confirmLabel={selectionModalProps.confirmLabel}
         isProcessing={false}
         defaultSelected={selectionModalProps.defaultSelected}
-        initialFiles={selectionModalProps.initialFiles}
-        fetcher={selectionModalProps.fetcher}
+        files={libraryDocuments}
+        isLoading={isLibraryDocumentsLoading}
+        errorMessage={libraryDocumentsErrorMessage}
       />
     </>
   );

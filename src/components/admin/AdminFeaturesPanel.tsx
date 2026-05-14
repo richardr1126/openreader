@@ -5,7 +5,16 @@ import { Button, Listbox, ListboxButton, ListboxOption, ListboxOptions, Transiti
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronUpDownIcon, CheckIcon } from '@/components/icons/Icons';
-import { Badge, Card, Section, ToggleRow, btnPrimary, btnSecondary } from '@/components/admin/ui';
+import {
+  Badge,
+  Section,
+  ToggleRow,
+  btnPrimary,
+  btnSecondary,
+  listboxButtonClass,
+  listboxOptionClass,
+  listboxOptionsClass,
+} from '@/components/formPrimitives';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 
@@ -173,21 +182,22 @@ export function AdminFeaturesPanel() {
     <div className="space-y-4">
       <Section
         title="TTS defaults"
-        subtitle="What new users start with."
+        subtitle="Defaults for new users."
+        action={<Badge tone="foreground">Defaults</Badge>}
       >
-        <Card className="space-y-1.5">
+        <div className="space-y-1.5 pb-2 border-b border-offbase">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">Default TTS provider</p>
               <p className="text-xs text-muted mt-0.5">
-                Initial selection for new users. Model and instructions come from that shared provider configuration.
+                Starting provider for new users.
               </p>
             </div>
             <div className="shrink-0">{renderSource('defaultTtsProvider')}</div>
           </div>
           {providerOptions.length > 0 ? (
             <Listbox value={selectedProviderOption} onChange={handleProviderChange}>
-              <ListboxButton className="relative w-full cursor-pointer rounded-lg bg-base border border-offbase py-1.5 pl-3 pr-10 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent hover:bg-offbase hover:text-accent transition-colors">
+              <ListboxButton className={listboxButtonClass}>
                 <span className="block truncate">{selectedProviderOption?.name ?? 'Select provider'}</span>
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                   <ChevronUpDownIcon className="h-4 w-4 text-muted" />
@@ -199,17 +209,12 @@ export function AdminFeaturesPanel() {
                 leaveFrom="opacity-100"
                 leaveTo="opacity-0"
               >
-                <ListboxOptions
-                  anchor="bottom start"
-                  className="z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background py-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]"
-                >
+                <ListboxOptions anchor="bottom start" className={listboxOptionsClass}>
                   {providerOptions.map((opt) => (
                     <ListboxOption
                       key={opt.id}
                       value={opt}
-                      className={({ active }) =>
-                        `relative cursor-pointer select-none py-2 pl-10 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
-                      }
+                      className={({ active }) => listboxOptionClass(active)}
                     >
                       {({ selected }) => (
                         <>
@@ -229,15 +234,15 @@ export function AdminFeaturesPanel() {
               </Transition>
             </Listbox>
           ) : (
-            <div className="rounded-lg border border-offbase bg-base px-3 py-2 text-sm text-muted">
-              No shared providers configured. Add one in the Shared providers tab first.
+            <div className="px-0.5 py-2 text-sm text-muted">
+              No shared providers yet. Add one first.
             </div>
           )}
-        </Card>
+        </div>
 
         <ToggleRow
           label="Restrict user API keys (recommended)"
-          description="When on, users cannot supply personal API keys/base URLs; TTS requests must use admin-configured shared providers."
+          description="Only allow admin shared providers."
           checked={Boolean(draft.restrictUserApiKeys)}
           onChange={(checked) => {
             if (!checked) {
@@ -249,61 +254,70 @@ export function AdminFeaturesPanel() {
             updateDraft('restrictUserApiKeys', checked);
           }}
           right={renderSource('restrictUserApiKeys')}
+          variant="flat"
         />
         <ToggleRow
           label="Show TTS provider settings tab"
-          description="Lets users override the provider / API key per-user. Turn off to lock everyone to admin-configured shared default provider and model."
+          description="Allow per-user provider overrides."
           checked={Boolean(draft.enableTtsProvidersTab)}
           onChange={(checked) => updateDraft('enableTtsProvidersTab', checked)}
           right={renderSource('enableTtsProvidersTab')}
+          variant="flat"
         />
         <ToggleRow
           label="Show all Deepinfra models"
-          description="When off, restricts the Deepinfra picker to the free Kokoro-only subset for users without API keys."
+          description="Show full Deepinfra model list."
           checked={Boolean(draft.showAllDeepInfraModels)}
           onChange={(checked) => updateDraft('showAllDeepInfraModels', checked)}
           right={renderSource('showAllDeepInfraModels')}
+          variant="flat"
         />
         <ToggleRow
           label="Show all provider models"
-          description="When off, users are restricted to each provider's default model."
+          description="Allow model selection beyond defaults."
           checked={Boolean(draft.showAllProviderModels)}
           onChange={(checked) => updateDraft('showAllProviderModels', checked)}
           right={renderSource('showAllProviderModels')}
+          variant="flat"
         />
       </Section>
 
       <Section
         title="Site features"
-        subtitle="Toggle features site-wide. Changes take effect for all users on the next page load."
+        subtitle="Feature flags for all users."
+        action={<Badge tone="foreground">Feature Flags</Badge>}
       >
         <ToggleRow
           label="Word-level highlighting"
-          description="Use whisper.cpp alignment for word-by-word highlighting during TTS playback."
+          description="Highlight words during TTS playback."
           checked={Boolean(draft.enableWordHighlight)}
           onChange={(checked) => updateDraft('enableWordHighlight', checked)}
           right={renderSource('enableWordHighlight')}
+          variant="flat"
         />
         <ToggleRow
           label="Audiobook export"
-          description='Show the "Export audiobook" feature on PDF / EPUB pages.'
+          description='Show "Export audiobook" on PDF/EPUB pages.'
           checked={Boolean(draft.enableAudiobookExport)}
           onChange={(checked) => updateDraft('enableAudiobookExport', checked)}
           right={renderSource('enableAudiobookExport')}
+          variant="flat"
         />
         <ToggleRow
           label="DOCX upload conversion"
-          description="Accept .docx files in the document uploader (converted to PDF server-side)."
+          description="Allow DOCX uploads (converted to PDF)."
           checked={Boolean(draft.enableDocxConversion)}
           onChange={(checked) => updateDraft('enableDocxConversion', checked)}
           right={renderSource('enableDocxConversion')}
+          variant="flat"
         />
         <ToggleRow
           label="Destructive delete buttons"
-          description='Show "Delete all data" actions in the Documents tab (auth-disabled mode only).'
+          description='Show "Delete all data" actions (auth-off mode).'
           checked={Boolean(draft.enableDestructiveDeleteActions)}
           onChange={(checked) => updateDraft('enableDestructiveDeleteActions', checked)}
           right={renderSource('enableDestructiveDeleteActions')}
+          variant="flat"
         />
       </Section>
 

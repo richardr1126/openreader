@@ -16,6 +16,7 @@ import {
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { Section, ToggleRow, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
 
 const viewTypeTextMapping = [
   { id: 'single', name: 'Single Page' },
@@ -23,7 +24,7 @@ const viewTypeTextMapping = [
   { id: 'scroll', name: 'Continuous Scroll' },
 ];
 
-const rangeInputClassName = 'w-full bg-offbase rounded-lg appearance-none cursor-pointer accent-accent [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-lg [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-lg [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent';
+const rangeInputClassName = 'w-full bg-offbase rounded-md appearance-none cursor-pointer accent-accent [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-md [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent';
 
 type MarginKey = 'header' | 'footer' | 'left' | 'right';
 
@@ -52,7 +53,7 @@ function RangeSetting({
 }: RangeSettingProps) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-foreground">{label}</label>
+      <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label>
       <div className="flex items-center gap-3">
         <input
           type="range"
@@ -66,34 +67,6 @@ function RangeSetting({
         <span className={`${valueWidth} text-xs font-semibold text-right text-foreground`}>{formatter(value)}</span>
       </div>
       <p className="text-xs text-muted">{description}</p>
-    </div>
-  );
-}
-
-type ToggleRowProps = {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-};
-
-function ToggleRow({ label, description, checked, onChange, disabled = false }: ToggleRowProps) {
-  return (
-    <div className="rounded-xl border border-offbase bg-background px-3 py-2.5 shadow-sm">
-      <label className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
-          className="mt-0.5 form-checkbox h-4 w-4 text-accent rounded border-muted disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <span className="space-y-0.5">
-          <span className="block text-sm font-medium text-foreground">{label}</span>
-          <span className="block text-xs text-muted">{description}</span>
-        </span>
-      </label>
     </div>
   );
 }
@@ -183,40 +156,41 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
       onClose={() => setIsOpen(false)}
       ariaLabel="Document settings"
       title="Reader Settings"
-      subtitle="Configure layout, preloading, and playback behavior for this document."
+      subtitle="Tune layout, preloading, and playback."
       bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,rgba(239,68,68,0.08),transparent_35%)]"
       panelClassName="w-full sm:w-[30rem]"
     >
       <div className="space-y-4">
         {!html && (
-          <section className="rounded-2xl border border-offbase bg-base px-4 py-3 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Playback Flow</h3>
-              <p className="text-xs text-muted mt-0.5">Control segment generation and lookahead while audio is active.</p>
-            </div>
-
+          <Section
+            title="Playback Flow"
+            subtitle="Segment and queue behavior."
+            variant="flat"
+          >
             <ToggleRow
               label="Skip blank pages"
-              description="Automatically skip pages with no readable text."
+              description="Skip pages with no readable text."
               checked={skipBlank}
               onChange={(checked) => updateConfigKey('skipBlank', checked)}
+              variant="flat"
             />
 
             <ToggleRow
               label="Smart sentence splitting"
-              description="Merge sentence fragments across page or section boundaries."
+              description="Merge fragments across pages/sections."
               checked={smartSentenceSplitting}
               onChange={(checked) => updateConfigKey('smartSentenceSplitting', checked)}
+              variant="flat"
             />
 
-            <div className="rounded-xl border border-offbase bg-background px-3 py-3 space-y-3 shadow-sm">
+            <div className="space-y-3 pt-1">
               <RangeSetting
                 label="Segment preload depth"
                 value={localPreloadDepth}
                 min={SEGMENT_PRELOAD_DEPTH_MIN}
                 max={SEGMENT_PRELOAD_DEPTH_MAX}
                 step={1}
-                description="How many upcoming pages or locations to queue in the background."
+                description="Upcoming pages/locations to queue."
                 formatter={(value) => String(value)}
                 onChange={(value) => {
                   const next = clampSegmentPreloadDepth(value);
@@ -231,7 +205,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
                 min={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN}
                 max={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX}
                 step={1}
-                description="How many segments to ensure from each queued page or section."
+                description="Segments to prepare per queued page/section."
                 formatter={(value) => String(value)}
                 onChange={(value) => {
                   const next = clampSegmentPreloadSentenceLookahead(value);
@@ -246,7 +220,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
                 min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN}
                 max={TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX}
                 step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
-                description="Maximum character count used when chunking text into segment blocks."
+                description="Max characters per TTS segment block."
                 valueWidth="w-14"
                 formatter={(value) => String(value)}
                 onChange={(value) => {
@@ -256,22 +230,21 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
                 }}
               />
             </div>
-          </section>
+          </Section>
         )}
 
         {!epub && !html && (
-          <section className="rounded-2xl border border-offbase bg-base px-4 py-3 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">PDF Layout & Extraction</h3>
-              <p className="text-xs text-muted mt-0.5">Set viewer mode and trim page edges before extraction.</p>
-            </div>
-
+          <Section
+            title="PDF Layout & Extraction"
+            subtitle="Page mode and extraction bounds."
+            variant="flat"
+          >
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-foreground">Page mode</label>
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Page mode</label>
               <div
                 role="radiogroup"
                 aria-label="Page mode"
-                className="grid grid-cols-3 gap-1 rounded-full border border-offbase bg-background p-1"
+                className={`${segmentedGroupClass} grid-cols-3`}
               >
                 {viewTypeTextMapping.map((view) => {
                   const active = selectedView.id === view.id;
@@ -282,11 +255,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
                       role="radio"
                       aria-checked={active}
                       onClick={() => updateConfigKey('viewType', view.id as ViewType)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                        active
-                          ? 'bg-accent text-background shadow-sm'
-                          : 'text-muted hover:bg-base hover:text-foreground'
-                      }`}
+                      className={segmentedButtonClass(active)}
                     >
                       {view.name}
                     </button>
@@ -294,14 +263,14 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
                 })}
               </div>
               {selectedView.id === 'scroll' ? (
-                <p className="text-xs text-warning">Continuous scroll may perform poorly for very large PDFs.</p>
+                <p className="text-xs text-warning">Scroll mode may be slower on large PDFs.</p>
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-offbase bg-background px-3 py-3 shadow-sm">
-              <p className="text-xs font-medium text-foreground">Text extraction margins</p>
+            <div className="space-y-1.5 pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Text extraction margins</p>
               <p className="text-xs text-muted mt-0.5">
-                Exclude content near edges before sentence extraction.
+                Ignore edge content before extraction.
               </p>
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(['header', 'footer', 'left', 'right'] as MarginKey[]).map((margin) => (
@@ -326,57 +295,62 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
                 ))}
               </div>
             </div>
-          </section>
+          </Section>
         )}
 
         {!epub && !html && (
-          <section className="rounded-2xl border border-offbase bg-base px-4 py-3 space-y-2">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">PDF Highlighting</h3>
-              <p className="text-xs text-muted mt-0.5">Control playback highlighting behavior in PDF mode.</p>
-            </div>
+          <Section
+            title="PDF Highlighting"
+            subtitle="Playback highlighting in PDF mode."
+            variant="flat"
+          >
             <ToggleRow
               label="Highlight text during playback"
-              description="Visual sentence-level playback highlighting in the PDF viewer."
+              description="Highlight the current sentence in PDF."
               checked={pdfHighlightEnabled}
               onChange={(checked) => updateConfigKey('pdfHighlightEnabled', checked)}
+              variant="flat"
             />
             <ToggleRow
               label="Word-by-word highlighting"
-              description={`Use whisper.cpp timing data to highlight words as speech progresses${!canWordHighlight ? ' (disabled by configuration)' : ''}.`}
+              description={`Highlight words using timing data${!canWordHighlight ? ' (disabled by config)' : ''}.`}
               checked={pdfWordHighlightEnabled && pdfHighlightEnabled}
               disabled={!pdfHighlightEnabled || !canWordHighlight}
               onChange={(checked) => updateConfigKey('pdfWordHighlightEnabled', checked)}
+              variant="flat"
             />
-          </section>
+          </Section>
         )}
 
         {epub && (
-          <section className="rounded-2xl border border-offbase bg-base px-4 py-3 space-y-2">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">EPUB Appearance</h3>
-              <p className="text-xs text-muted mt-0.5">Apply app styling and playback highlighting in EPUB mode.</p>
-            </div>
+          <Section
+            title="EPUB Appearance"
+            subtitle="Theme and highlighting in EPUB mode."
+            variant="flat"
+          >
             <ToggleRow
               label="Apply app theme"
-              description="Use selected theme on EPUB documents. May require refresh."
+              description="Apply the app theme to EPUB (refresh may be needed)."
               checked={epubTheme}
               onChange={(checked) => updateConfigKey('epubTheme', checked)}
+              variant="flat"
             />
             <ToggleRow
               label="Highlight text during playback"
-              description="Visual sentence-level playback highlighting in the EPUB viewer."
+              description="Highlight the current sentence in EPUB."
               checked={epubHighlightEnabled}
               onChange={(checked) => updateConfigKey('epubHighlightEnabled', checked)}
+              variant="flat"
             />
             <ToggleRow
               label="Word-by-word highlighting"
-              description={`Use whisper.cpp timing data to highlight words as speech progresses${!canWordHighlight ? ' (disabled by configuration)' : ''}.`}
+              description={`Highlight words using timing data${!canWordHighlight ? ' (disabled by config)' : ''}.`}
               checked={epubWordHighlightEnabled && epubHighlightEnabled}
               disabled={!epubHighlightEnabled || !canWordHighlight}
               onChange={(checked) => updateConfigKey('epubWordHighlightEnabled', checked)}
+              variant="flat"
             />
-          </section>
+          </Section>
         )}
       </div>
     </ReaderSidebarShell>

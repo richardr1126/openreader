@@ -12,13 +12,9 @@ interface DocumentSelectionModalProps {
   confirmLabel: string;
   isProcessing: boolean;
   defaultSelected?: boolean;
-  /**
-   * Data source:
-   * 1. `initialFiles`: Pass local files directly (synchronous).
-   * 2. `fetcher`: Pass an async function to load files (e.g. from server).
-   */
-  initialFiles?: BaseDocument[];
-  fetcher?: () => Promise<BaseDocument[]>;
+  files: BaseDocument[];
+  isLoading?: boolean;
+  errorMessage?: string | null;
 }
 
 export function DocumentSelectionModal({
@@ -29,44 +25,22 @@ export function DocumentSelectionModal({
   confirmLabel,
   isProcessing,
   defaultSelected = false,
-  initialFiles,
-  fetcher,
+  files,
+  isLoading = false,
+  errorMessage = null,
 }: DocumentSelectionModalProps) {
-  const [files, setFiles] = useState<BaseDocument[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(false);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      if (initialFiles) {
-        setFiles(initialFiles);
-        if (defaultSelected) {
-          setSelectedIds(new Set(initialFiles.map((f) => f.id)));
-        } else {
-          setSelectedIds(new Set());
-        }
-        setLastSelectedId(null);
-      } else if (fetcher) {
-        setIsLoading(true);
-        fetcher()
-          .then((data) => {
-            setFiles(data);
-            if (defaultSelected) {
-              setSelectedIds(new Set(data.map((f) => f.id)));
-            } else {
-              setSelectedIds(new Set());
-            }
-            setLastSelectedId(null);
-          })
-          .catch((err) => console.error('Failed to load documents:', err))
-          .finally(() => setIsLoading(false));
-      } else {
-        setFiles([]);
-        setSelectedIds(new Set());
-      }
+    if (!isOpen) return;
+    if (defaultSelected) {
+      setSelectedIds(new Set(files.map((f) => f.id)));
+    } else {
+      setSelectedIds(new Set());
     }
-  }, [isOpen, initialFiles, fetcher, defaultSelected]);
+    setLastSelectedId(null);
+  }, [isOpen, files, defaultSelected]);
 
   const toggleSelection = (id: string, multiSelect: boolean, rangeSelect: boolean) => {
     const newSelected = new Set(multiSelect ? selectedIds : []);
@@ -191,6 +165,8 @@ export function DocumentSelectionModal({
                 <div className="flex-1 overflow-auto border border-offbase rounded-lg bg-background p-2 min-h-0">
                   {isLoading ? (
                     <div className="flex items-center justify-center h-full text-muted">Loading documents...</div>
+                  ) : errorMessage ? (
+                    <div className="flex items-center justify-center h-full text-red-500">{errorMessage}</div>
                   ) : files.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-muted">No documents found.</div>
                   ) : (
@@ -240,7 +216,7 @@ export function DocumentSelectionModal({
                     type="button"
                     className="inline-flex justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-background hover:bg-secondary-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={handleConfirmClick}
-                    disabled={selectedCount === 0 || isProcessing}
+                    disabled={isLoading || selectedCount === 0 || isProcessing}
                   >
                     {isProcessing ? 'Processing...' : `${confirmLabel} ${selectedCount > 0 ? `(${selectedCount})` : ''}`}
                   </button>
