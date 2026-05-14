@@ -2,7 +2,7 @@
   "name": "openreader",
   "version": "3.0.0",
   "private": true,
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@10.33.4",
   "scripts": {
     "dev": "node scripts/openreader-entrypoint.mjs -- pnpm dev:raw",
     "dev:raw": "next dev --turbopack -p 3003",

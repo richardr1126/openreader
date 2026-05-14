@@ -6,7 +6,13 @@ strictDepBuilds: false
 allowBuilds:
   '@napi-rs/canvas': true
   better-sqlite3: true
+  canvas: false
+  core-js: false
+  es5-ext: false
+  esbuild: false
   ffmpeg-static: true
+  sharp: false
+  unrs-resolver: false
 
 overrides:
   lodash: ^4.17.23
