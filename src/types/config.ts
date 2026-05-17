@@ -79,6 +79,8 @@ export interface AppConfigValues {
   pdfWordHighlightEnabled: boolean;
   epubHighlightEnabled: boolean;
   epubWordHighlightEnabled: boolean;
+  htmlHighlightEnabled: boolean;
+  htmlWordHighlightEnabled: boolean;
   firstVisit: boolean;
   documentListState: DocumentListState;
   privacyAccepted: boolean;
@@ -127,6 +129,8 @@ export function getAppConfigDefaults(): AppConfigValues {
     pdfWordHighlightEnabled: wordHighlightEnabledByDefault,
     epubHighlightEnabled: true,
     epubWordHighlightEnabled: wordHighlightEnabledByDefault,
+    htmlHighlightEnabled: true,
+    htmlWordHighlightEnabled: wordHighlightEnabledByDefault,
     firstVisit: false,
     documentListState: {
       sortBy: 'name',

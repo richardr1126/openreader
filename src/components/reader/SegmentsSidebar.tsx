@@ -117,6 +117,9 @@ function formatLocatorGroupLabel(locator: TTSSegmentLocator | null): string {
     return `Page ${Math.floor(locator.page)} · PDF`;
   }
   if (isHtmlLocator(locator)) {
+    if (/^\d+$/.test(locator.location)) {
+      return `Block ${locator.location} · HTML`;
+    }
     return `${locator.location} · HTML`;
   }
   return 'Unknown location';

@@ -50,6 +50,8 @@ interface ConfigContextType {
   pdfWordHighlightEnabled: boolean;
   epubHighlightEnabled: boolean;
   epubWordHighlightEnabled: boolean;
+  htmlHighlightEnabled: boolean;
+  htmlWordHighlightEnabled: boolean;
 }
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
@@ -358,6 +360,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     pdfWordHighlightEnabled,
     epubHighlightEnabled,
     epubWordHighlightEnabled,
+    htmlHighlightEnabled,
+    htmlWordHighlightEnabled,
   } = config || APP_CONFIG_DEFAULTS;
   const providerType = useMemo(
     () => resolveEffectiveProviderType({
@@ -491,7 +495,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       pdfHighlightEnabled,
       pdfWordHighlightEnabled,
       epubHighlightEnabled,
-      epubWordHighlightEnabled
+      epubWordHighlightEnabled,
+      htmlHighlightEnabled,
+      htmlWordHighlightEnabled,
     }}>
       {children}
     </ConfigContext.Provider>

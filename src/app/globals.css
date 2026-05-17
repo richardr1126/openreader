@@ -321,6 +321,28 @@ h1, h2, h3, h4, h5, h6 {
   100% { opacity: 0.8; }
 }
 
+/* Block container scroll target — keeps anchor scroll-into-view aligned with
+   the page padding when the reader has top header chrome. */
+.openreader-html-block {
+  scroll-margin-top: 4rem;
+  scroll-margin-bottom: 4rem;
+}
+
+/* HTML/TXT/MD reader sentence + word highlights. These are applied by
+   `src/lib/client/html/highlight.ts` wrapping the matched text in spans, so
+   they survive any browser quirks around the (still-spotty) CSS Custom
+   Highlight API. */
+.openreader-html-highlight-sentence {
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.openreader-html-highlight-word {
+  background-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 /* Static prism gradient divider (no animation) */
 .prism-divider {
   width: 100%;

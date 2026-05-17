@@ -24,7 +24,7 @@ import type { AudiobookGenerationSettings } from '@/types/client';
 interface AudiobookExportModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  documentType: 'epub' | 'pdf';
+  documentType: 'epub' | 'pdf' | 'html';
   documentId: string;
   onGenerateAudiobook: (
     onProgress: (progress: number) => void,

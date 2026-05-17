@@ -212,6 +212,10 @@ function buildAppConfigFromRaw(raw: RawConfigMap): AppConfigRow {
       raw.epubHighlightEnabled === 'false' ? false : APP_CONFIG_DEFAULTS.epubHighlightEnabled,
     epubWordHighlightEnabled:
       raw.epubWordHighlightEnabled === 'false' ? false : APP_CONFIG_DEFAULTS.epubWordHighlightEnabled,
+    htmlHighlightEnabled:
+      raw.htmlHighlightEnabled === 'false' ? false : APP_CONFIG_DEFAULTS.htmlHighlightEnabled,
+    htmlWordHighlightEnabled:
+      raw.htmlWordHighlightEnabled === 'false' ? false : APP_CONFIG_DEFAULTS.htmlWordHighlightEnabled,
     firstVisit: raw.firstVisit === 'true',
     documentListState,
   };

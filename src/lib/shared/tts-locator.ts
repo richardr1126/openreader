@@ -115,6 +115,14 @@ export function compareSegmentLocators(
     return Math.floor(a.page) - Math.floor(b.page);
   }
   if (isHtmlLocator(a) && isHtmlLocator(b)) {
+    // When both locations look like positive integers (HTML reader blocks),
+    // compare numerically so "10" sorts after "2" instead of between "1" and
+    // "2". Falls back to lexicographic for legacy free-form locations.
+    const an = /^\d+$/.test(a.location) ? Number(a.location) : NaN;
+    const bn = /^\d+$/.test(b.location) ? Number(b.location) : NaN;
+    if (Number.isFinite(an) && Number.isFinite(bn)) {
+      return an - bn;
+    }
     return a.location.localeCompare(b.location);
   }
   // One or both are legacy/draft — fall back to grouped-key compare so the

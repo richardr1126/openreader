@@ -24,6 +24,8 @@ export const SYNCED_PREFERENCE_KEYS = [
   'pdfWordHighlightEnabled',
   'epubHighlightEnabled',
   'epubWordHighlightEnabled',
+  'htmlHighlightEnabled',
+  'htmlWordHighlightEnabled',
 ] as const;
 
 export type SyncedPreferenceKey = (typeof SYNCED_PREFERENCE_KEYS)[number];

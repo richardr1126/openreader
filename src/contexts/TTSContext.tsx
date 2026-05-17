@@ -1036,6 +1036,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // For PDFs and other documents, check page bounds
     if (!isEPUB) {
+      // The HTML reader treats the entire document as a single page, so
+      // `currDocPages` is left `undefined`. In that mode there's nowhere to
+      // turn to — when we run past the last sentence, just stop playback.
+      // (We do this before the page-bound checks below so the `< undefined`
+      // / `>= undefined` NaN comparisons don't silently swallow the end.)
+      if (currDocPages === undefined) {
+        if (nextIndex >= sentences.length) {
+          setIsPlaying(false);
+        }
+        return;
+      }
+
       // Handle next/previous page transitions
       if ((nextIndex >= sentences.length && currDocPageNumber < currDocPages!) ||
         (nextIndex < 0 && currDocPageNumber > 1)) {

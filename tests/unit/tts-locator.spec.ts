@@ -112,6 +112,24 @@ test.describe('compareSegmentLocators', () => {
     expect(compareSegmentLocators(a, b)).toBeLessThan(0);
   });
 
+  test('orders HTML locators by location numerically when both look like integers', () => {
+    // Same regression class as the EPUB spineIndex test: "2" must come BEFORE
+    // "10" in the segments sidebar, not after it (lexicographic compare would
+    // sort "10" between "1" and "2").
+    const a: TTSSegmentLocator = { readerType: 'html', location: '2' };
+    const b: TTSSegmentLocator = { readerType: 'html', location: '10' };
+    expect(compareSegmentLocators(a, b)).toBeLessThan(0);
+    expect(compareSegmentLocators(b, a)).toBeGreaterThan(0);
+  });
+
+  test('falls back to lexicographic compare for free-form HTML locations', () => {
+    // Legacy / non-numeric HTML locations (e.g. anchor ids) should still
+    // produce a stable ordering.
+    const a: TTSSegmentLocator = { readerType: 'html', location: '#alpha' };
+    const b: TTSSegmentLocator = { readerType: 'html', location: '#beta' };
+    expect(compareSegmentLocators(a, b)).toBeLessThan(0);
+  });
+
   test('null locators sort last', () => {
     expect(compareSegmentLocators(null, { readerType: 'pdf', page: 1 })).toBeGreaterThan(0);
     expect(compareSegmentLocators({ readerType: 'pdf', page: 1 }, null)).toBeLessThan(0);

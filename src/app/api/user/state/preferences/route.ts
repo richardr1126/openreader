@@ -142,6 +142,8 @@ function sanitizePreferencesPatch(
       case 'pdfWordHighlightEnabled':
       case 'epubHighlightEnabled':
       case 'epubWordHighlightEnabled':
+      case 'htmlHighlightEnabled':
+      case 'htmlWordHighlightEnabled':
         if (typeof value === 'boolean') out[key] = value;
         break;
       case 'savedVoices':

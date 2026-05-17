@@ -95,6 +95,8 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
     epubHighlightEnabled,
     pdfWordHighlightEnabled,
     epubWordHighlightEnabled,
+    htmlHighlightEnabled,
+    htmlWordHighlightEnabled,
   } = useConfig();
   const [localMargins, setLocalMargins] = useState({
     header: headerMargin,
@@ -161,12 +163,12 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
       panelClassName="w-full sm:w-[30rem]"
     >
       <div className="space-y-4">
-        {!html && (
-          <Section
-            title="Playback Flow"
-            subtitle="Segment and queue behavior."
-            variant="flat"
-          >
+        <Section
+          title="Playback Flow"
+          subtitle="Segment and queue behavior."
+          variant="flat"
+        >
+          {!html && (
             <ToggleRow
               label="Skip blank pages"
               description="Skip pages with no readable text."
@@ -174,64 +176,64 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
               onChange={(checked) => updateConfigKey('skipBlank', checked)}
               variant="flat"
             />
+          )}
 
-            <ToggleRow
-              label="Smart sentence splitting"
-              description="Merge fragments across pages/sections."
-              checked={smartSentenceSplitting}
-              onChange={(checked) => updateConfigKey('smartSentenceSplitting', checked)}
-              variant="flat"
+          <ToggleRow
+            label="Smart sentence splitting"
+            description="Merge fragments across pages/sections."
+            checked={smartSentenceSplitting}
+            onChange={(checked) => updateConfigKey('smartSentenceSplitting', checked)}
+            variant="flat"
+          />
+
+          <div className="space-y-3 pt-1">
+            <RangeSetting
+              label="Segment preload depth"
+              value={localPreloadDepth}
+              min={SEGMENT_PRELOAD_DEPTH_MIN}
+              max={SEGMENT_PRELOAD_DEPTH_MAX}
+              step={1}
+              description="Upcoming pages/locations to queue."
+              formatter={(value) => String(value)}
+              onChange={(value) => {
+                const next = clampSegmentPreloadDepth(value);
+                setLocalPreloadDepth(next);
+                void updateConfigKey('segmentPreloadDepthPages', next);
+              }}
             />
 
-            <div className="space-y-3 pt-1">
-              <RangeSetting
-                label="Segment preload depth"
-                value={localPreloadDepth}
-                min={SEGMENT_PRELOAD_DEPTH_MIN}
-                max={SEGMENT_PRELOAD_DEPTH_MAX}
-                step={1}
-                description="Upcoming pages/locations to queue."
-                formatter={(value) => String(value)}
-                onChange={(value) => {
-                  const next = clampSegmentPreloadDepth(value);
-                  setLocalPreloadDepth(next);
-                  void updateConfigKey('segmentPreloadDepthPages', next);
-                }}
-              />
+            <RangeSetting
+              label="Segment lookahead per page/location"
+              value={localSentenceLookahead}
+              min={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN}
+              max={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX}
+              step={1}
+              description="Segments to prepare per queued page/section."
+              formatter={(value) => String(value)}
+              onChange={(value) => {
+                const next = clampSegmentPreloadSentenceLookahead(value);
+                setLocalSentenceLookahead(next);
+                void updateConfigKey('segmentPreloadSentenceLookahead', next);
+              }}
+            />
 
-              <RangeSetting
-                label="Segment lookahead per page/location"
-                value={localSentenceLookahead}
-                min={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN}
-                max={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX}
-                step={1}
-                description="Segments to prepare per queued page/section."
-                formatter={(value) => String(value)}
-                onChange={(value) => {
-                  const next = clampSegmentPreloadSentenceLookahead(value);
-                  setLocalSentenceLookahead(next);
-                  void updateConfigKey('segmentPreloadSentenceLookahead', next);
-                }}
-              />
-
-              <RangeSetting
-                label="TTS segment max block length"
-                value={localMaxBlockLength}
-                min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN}
-                max={TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX}
-                step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
-                description="Max characters per TTS segment block."
-                valueWidth="w-14"
-                formatter={(value) => String(value)}
-                onChange={(value) => {
-                  const next = clampTtsSegmentMaxBlockLength(value);
-                  setLocalMaxBlockLength(next);
-                  void updateConfigKey('ttsSegmentMaxBlockLength', next);
-                }}
-              />
-            </div>
-          </Section>
-        )}
+            <RangeSetting
+              label="TTS segment max block length"
+              value={localMaxBlockLength}
+              min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN}
+              max={TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX}
+              step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
+              description="Max characters per TTS segment block."
+              valueWidth="w-14"
+              formatter={(value) => String(value)}
+              onChange={(value) => {
+                const next = clampTtsSegmentMaxBlockLength(value);
+                setLocalMaxBlockLength(next);
+                void updateConfigKey('ttsSegmentMaxBlockLength', next);
+              }}
+            />
+          </div>
+        </Section>
 
         {!epub && !html && (
           <Section
@@ -348,6 +350,30 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
               checked={epubWordHighlightEnabled && epubHighlightEnabled}
               disabled={!epubHighlightEnabled || !canWordHighlight}
               onChange={(checked) => updateConfigKey('epubWordHighlightEnabled', checked)}
+              variant="flat"
+            />
+          </Section>
+        )}
+
+        {html && (
+          <Section
+            title="Text & Markdown Highlighting"
+            subtitle="Playback highlighting in text/markdown mode."
+            variant="flat"
+          >
+            <ToggleRow
+              label="Highlight text during playback"
+              description="Highlight the current sentence in the rendered text."
+              checked={htmlHighlightEnabled}
+              onChange={(checked) => updateConfigKey('htmlHighlightEnabled', checked)}
+              variant="flat"
+            />
+            <ToggleRow
+              label="Word-by-word highlighting"
+              description={`Highlight words using timing data${!canWordHighlight ? ' (disabled by config)' : ''}.`}
+              checked={htmlWordHighlightEnabled && htmlHighlightEnabled}
+              disabled={!htmlHighlightEnabled || !canWordHighlight}
+              onChange={(checked) => updateConfigKey('htmlWordHighlightEnabled', checked)}
               variant="flat"
             />
           </Section>
