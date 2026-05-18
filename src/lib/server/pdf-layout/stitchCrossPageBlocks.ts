@@ -28,6 +28,39 @@ function canStitch(a: ParsedPdfBlock, b: ParsedPdfBlock): boolean {
   return true;
 }
 
+function splitHeadContinuation(text: string): { continuation: string; remainder: string } {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return { continuation: '', remainder: '' };
+
+  const CLOSERS = new Set(['"', "'", '”', '’', ')', ']', '}']);
+  const isTerminal = (ch: string): boolean => ch === '.' || ch === '!' || ch === '?';
+
+  for (let i = 0; i < normalized.length; i += 1) {
+    const ch = normalized[i];
+    if (!isTerminal(ch)) continue;
+
+    const prev = i > 0 ? normalized[i - 1] : '';
+    const next = i + 1 < normalized.length ? normalized[i + 1] : '';
+    if (ch === '.' && /\d/.test(prev) && /\d/.test(next)) continue;
+
+    let cut = i + 1;
+    while (cut < normalized.length && CLOSERS.has(normalized[cut])) cut += 1;
+
+    const after = cut < normalized.length ? normalized[cut] : '';
+    if (!after || /\s/.test(after) || /[A-Z]/.test(after)) {
+      return {
+        continuation: normalized.slice(0, cut).trim(),
+        remainder: normalized.slice(cut).trim(),
+      };
+    }
+  }
+
+  return {
+    continuation: normalized,
+    remainder: '',
+  };
+}
+
 const HARD_BOUNDARY_KINDS = new Set<ParsedPdfBlock['kind']>([
   'paragraph_title',
   'doc_title',
@@ -81,9 +114,27 @@ export function stitchCrossPageBlocks(doc: ParsedPdfDocument): ParsedPdfDocument
     if (!tail || !head) continue;
     if (!canStitch(tail, head)) continue;
 
-    tail.fragments.push(...head.fragments);
-    tail.text = `${tail.text} ${head.text}`.replace(/\s+/g, ' ').trim();
-    next.blocks.splice(headIndex, 1);
+    const { continuation, remainder } = splitHeadContinuation(head.text);
+    if (!continuation) continue;
+
+    const continuationFragment = head.fragments[0]
+      ? { ...head.fragments[0], text: continuation }
+      : null;
+
+    if (continuationFragment) {
+      tail.fragments.push(continuationFragment);
+    }
+    tail.text = `${tail.text} ${continuation}`.replace(/\s+/g, ' ').trim();
+
+    if (!remainder) {
+      next.blocks.splice(headIndex, 1);
+      continue;
+    }
+
+    head.text = remainder;
+    if (head.fragments[0]) {
+      head.fragments[0].text = remainder;
+    }
   }
 
   return {

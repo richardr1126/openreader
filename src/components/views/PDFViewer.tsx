@@ -360,6 +360,37 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     }
 
     for (const list of map.values()) {
+      const geoKey = (entry: {
+        block: ParsedPdfBlock;
+        fragment: ParsedPdfBlock['fragments'][number];
+        isContinuation: boolean;
+      }): string => {
+        const [x0, y0, x1, y1] = entry.fragment.bbox;
+        const round = (value: number) => Math.round(value * 10) / 10;
+        return [
+          entry.block.kind,
+          round(x0),
+          round(y0),
+          round(x1),
+          round(y1),
+        ].join(':');
+      };
+
+      const continuationGeometry = new Set<string>();
+      for (const entry of list) {
+        if (entry.isContinuation) {
+          continuationGeometry.add(geoKey(entry));
+        }
+      }
+
+      const filtered = list.filter((entry) => {
+        if (entry.isContinuation) return true;
+        return !continuationGeometry.has(geoKey(entry));
+      });
+
+      list.length = 0;
+      list.push(...filtered);
+
       list.sort((a, b) => {
         if (a.fragment.readingOrder !== b.fragment.readingOrder) {
           return a.fragment.readingOrder - b.fragment.readingOrder;

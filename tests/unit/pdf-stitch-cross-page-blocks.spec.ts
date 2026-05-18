@@ -57,6 +57,27 @@ test.describe('stitchCrossPageBlocks', () => {
     expect(page2?.blocks.map((b) => b.id)).toEqual(['b3']);
   });
 
+  test('moves only the continuation sentence and keeps remaining text on next page', () => {
+    const doc = makeDoc(
+      [
+        makeBlock('b1', 'text', 'This sentence continues', 1, 0),
+      ],
+      [
+        makeBlock('b2', 'text', 'into the next page. This should stay on page two.', 2, 0),
+      ],
+    );
+
+    const stitched = stitchCrossPageBlocks(doc);
+    const page1 = stitched.pages[0];
+    const page2 = stitched.pages[1];
+
+    expect(page1?.blocks[0]?.text).toBe('This sentence continues into the next page.');
+    expect(page1?.blocks[0]?.fragments).toHaveLength(2);
+    expect(page2?.blocks).toHaveLength(1);
+    expect(page2?.blocks[0]?.id).toBe('b2');
+    expect(page2?.blocks[0]?.text).toBe('This should stay on page two.');
+  });
+
   test('does not stitch across paragraph-title boundary', () => {
     const doc = makeDoc(
       [

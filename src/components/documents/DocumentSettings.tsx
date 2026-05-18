@@ -16,8 +16,8 @@ import {
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { Section, ToggleRow, buttonClass, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
-import { RefreshIcon } from '@/components/icons/Icons';
+import { Section, ToggleRow, CheckItem, buttonClass, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
+import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 
 const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
@@ -422,19 +422,27 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
             title="PDF Structure"
             subtitle="Layout-aware parsing controls."
             variant="flat"
+            action={
+              <div className="flex flex-col items-end gap-1">
+                <span className="flex items-center gap-1 text-muted">
+                  <SparkleIcon className="h-3 w-3 text-accent/70" />
+                  <span className="text-xs">PP-DocLayout-V3</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs text-muted">
+                  <span>{pdf.parseStatus ?? 'pending'}</span>
+                  <button
+                    type="button"
+                    className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
+                    onClick={pdf.onForceReparse}
+                    disabled={!computeAvailable || pdf.parseStatus === 'running' || pdf.parseStatus === 'pending'}
+                    title="Force reparse"
+                  >
+                    <RefreshIcon className={`h-3 w-3 ${pdf.parseStatus === 'running' || pdf.parseStatus === 'pending' ? 'animate-spin' : ''}`} />
+                  </button>
+                </span>
+              </div>
+            }
           >
-            <div className="flex items-center gap-1.5 text-xs text-muted pb-1">
-              Parse status: <span className="text-foreground font-medium">{pdf.parseStatus ?? 'pending'}</span>
-              <button
-                type="button"
-                className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
-                onClick={pdf.onForceReparse}
-                disabled={!computeAvailable || pdf.parseStatus === 'running' || pdf.parseStatus === 'pending'}
-                title="Force reparse"
-              >
-                <RefreshIcon className="h-3 w-3" />
-              </button>
-            </div>
             <ToggleRow
               label="Show block overlay"
               description="Render detected block boxes and labels on the page."
@@ -451,21 +459,18 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
               disabled={!computeAvailable}
               variant="flat"
             />
-            <div className="space-y-2 pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Skip while reading aloud</p>
-              {PDF_SKIP_KIND_OPTIONS.map((option) => {
-                const checked = pdf.skipBlockKinds.includes(option.kind);
-                return (
-                  <ToggleRow
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted pb-1.5">Skip while reading aloud</p>
+              <div className="grid grid-cols-2 gap-x-3">
+                {PDF_SKIP_KIND_OPTIONS.map((option) => (
+                  <CheckItem
                     key={option.kind}
                     label={option.label}
-                    description={`Exclude ${option.label.toLowerCase()} from TTS/audiobook output.`}
-                    checked={checked}
+                    checked={pdf.skipBlockKinds.includes(option.kind)}
                     onChange={(enabled) => pdf.onToggleSkipKind(option.kind, enabled)}
-                    variant="flat"
                   />
-                );
-              })}
+                ))}
+              </div>
             </div>
           </Section>
         )}

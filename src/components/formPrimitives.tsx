@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 /**
  * Shared compact form primitives used by settings-like surfaces across
@@ -78,7 +78,7 @@ export function Section({
   variant = 'panel',
 }: {
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   children: ReactNode;
   action?: ReactNode;
   variant?: 'panel' | 'flat';
@@ -130,6 +130,65 @@ export function Card({
   );
 }
 
+export type SwitchSize = 'sm' | 'md';
+
+const SWITCH_SIZE: Record<SwitchSize, { track: string; thumb: string; on: string; off: string }> = {
+  sm: {
+    track: 'h-4 w-7',
+    thumb: 'h-3 w-3',
+    on: 'translate-x-3',
+    off: 'translate-x-0.5',
+  },
+  md: {
+    track: 'h-5 w-9',
+    thumb: 'h-4 w-4',
+    on: 'translate-x-4',
+    off: 'translate-x-0.5',
+  },
+};
+
+export function Switch({
+  checked,
+  onChange,
+  disabled = false,
+  size = 'md',
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  size?: SwitchSize;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+}) {
+  const s = SWITCH_SIZE[size];
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-offbase transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${s.track} ${
+        checked ? 'bg-accent' : 'bg-offbase'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none inline-block rounded-full bg-background shadow-sm ring-0 transition-transform duration-200 ease-out ${s.thumb} ${
+          checked ? s.on : s.off
+        }`}
+      />
+    </button>
+  );
+}
+
 export function ToggleRow({
   label,
   description,
@@ -147,28 +206,72 @@ export function ToggleRow({
   right?: ReactNode;
   variant?: 'card' | 'flat';
 }) {
+  const labelId = useId();
+  const descId = useId();
   const rowClass =
     variant === 'flat'
       ? 'px-0.5 pt-1 pb-2 border-b border-offbase last:border-b-0 transition-transform duration-200 ease-out hover:scale-[1.003]'
       : 'rounded-md border border-offbase bg-background px-2.5 py-1.5 transition-transform duration-200 ease-out hover:scale-[1.005]';
+  const handleTextToggle = () => {
+    if (!disabled) onChange(!checked);
+  };
   return (
     <div className={rowClass}>
       <div className="flex items-start gap-2.5">
-        <label className="flex items-start gap-2.5 flex-1 min-w-0">
-          <input
-            type="checkbox"
-            checked={checked}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.checked)}
-            className="shrink-0 form-checkbox h-4 w-4 text-accent rounded border-muted disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <span className="space-y-0.5 min-w-0">
-            <span className="block text-sm font-medium leading-5 text-foreground">{label}</span>
-            <span className="block text-xs leading-4 text-muted">{description}</span>
-          </span>
-        </label>
+        <div
+          className={`flex-1 min-w-0 space-y-0.5 ${disabled ? '' : 'cursor-pointer'}`}
+          onClick={handleTextToggle}
+        >
+          <span id={labelId} className="block text-sm font-medium leading-5 text-foreground">{label}</span>
+          <span id={descId} className="block text-xs leading-4 text-muted">{description}</span>
+        </div>
         {right ? <div className="shrink-0 self-start pl-1.5">{right}</div> : null}
+        <Switch
+          checked={checked}
+          onChange={onChange}
+          disabled={disabled}
+          size="md"
+          ariaLabelledBy={labelId}
+          ariaDescribedBy={descId}
+        />
       </div>
+    </div>
+  );
+}
+
+export function CheckItem({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  const labelId = useId();
+  const handleTextToggle = () => {
+    if (!disabled) onChange(!checked);
+  };
+  return (
+    <div className="flex items-center justify-between gap-2 py-0.5 group">
+      <span
+        id={labelId}
+        onClick={handleTextToggle}
+        className={`flex-1 min-w-0 truncate text-xs leading-4 text-foreground select-none transition-colors duration-200 ease-out group-hover:text-accent ${
+          disabled ? '' : 'cursor-pointer'
+        }`}
+      >
+        {label}
+      </span>
+      <Switch
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        size="sm"
+        ariaLabelledBy={labelId}
+      />
     </div>
   );
 }

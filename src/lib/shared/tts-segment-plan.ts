@@ -188,6 +188,7 @@ export function planCanonicalTtsSegments(
   const readerType = options.readerType ?? 'pdf';
   const enforceSourceBoundaries = Boolean(options.enforceSourceBoundaries);
   const keyPrefix = options.keyPrefix ?? TTS_SEGMENT_PLAN_VERSION;
+  const sourceSeparator = enforceSourceBoundaries ? '\n\n' : ' ';
   const preparedSources: PreparedSourceUnit[] = [];
   const textParts: string[] = [];
   let combinedLength = 0;
@@ -197,8 +198,8 @@ export function planCanonicalTtsSegments(
     if (!text) continue;
 
     if (textParts.length > 0) {
-      textParts.push(' ');
-      combinedLength += 1;
+      textParts.push(sourceSeparator);
+      combinedLength += sourceSeparator.length;
     }
 
     const startOffset = combinedLength;
@@ -215,9 +216,73 @@ export function planCanonicalTtsSegments(
 
   const canonicalText = textParts.join('');
   const splitOptions = { maxBlockLength: options.maxBlockLength };
-  const blocks = readerType === 'epub'
-    ? splitTextToTtsBlocksEPUB(canonicalText, splitOptions)
-    : splitTextToTtsBlocks(canonicalText, splitOptions);
+  const splitIntoBlocks = (text: string): string[] =>
+    readerType === 'epub'
+      ? splitTextToTtsBlocksEPUB(text, splitOptions)
+      : splitTextToTtsBlocks(text, splitOptions);
+
+  if (enforceSourceBoundaries) {
+    const segments: CanonicalTtsSegment[] = [];
+
+    for (const source of preparedSources) {
+      const localBlocks = splitIntoBlocks(source.text);
+      let localRawCursor = 0;
+      let localNormalizedCursor = 0;
+
+      for (const block of localBlocks) {
+        const text = block.trim();
+        if (!text) continue;
+
+        const exactStart = source.text.indexOf(text, localRawCursor);
+        let localStart: number;
+        let localEnd: number;
+
+        if (exactStart >= 0) {
+          localStart = exactStart;
+          localEnd = exactStart + text.length;
+          localRawCursor = localEnd;
+          localNormalizedCursor = normalizeWithRawMap(source.text.slice(0, localEnd)).text.length;
+        } else {
+          const flexible = findFlexibleOffset(source.text, text, localNormalizedCursor);
+          if (flexible) {
+            localStart = flexible.start;
+            localEnd = flexible.end;
+            localRawCursor = localEnd;
+            localNormalizedCursor = flexible.normalizedEnd;
+          } else {
+            // Never drop blocks in enforced boundary mode.
+            localStart = Math.max(0, Math.min(localRawCursor, source.text.length));
+            localEnd = Math.max(localStart, Math.min(source.text.length, localStart + text.length));
+            localRawCursor = localEnd;
+            localNormalizedCursor = normalizeWithRawMap(source.text.slice(0, localEnd)).text.length;
+          }
+        }
+
+        const absoluteStart = source.startOffset + localStart;
+        const absoluteEnd = source.startOffset + localEnd;
+        const ordinal = segments.length;
+        segments.push({
+          key: buildSegmentKey(keyPrefix, text),
+          ordinal,
+          text,
+          ownerSourceKey: source.sourceKey,
+          ownerLocator: source.locator,
+          startAnchor: anchorForOffset(source, absoluteStart),
+          endAnchor: anchorForOffset(source, absoluteEnd),
+          spansSourceBoundary: false,
+        });
+      }
+    }
+
+    return {
+      version: TTS_SEGMENT_PLAN_VERSION,
+      readerType,
+      text: canonicalText,
+      segments,
+    };
+  }
+
+  const blocks = splitIntoBlocks(canonicalText);
 
   let rawCursor = 0;
   let normalizedCursor = 0;
@@ -238,11 +303,33 @@ export function planCanonicalTtsSegments(
       normalizedCursor = normalizeWithRawMap(canonicalText.slice(0, endOffset)).text.length;
     } else {
       const flexible = findFlexibleOffset(canonicalText, text, normalizedCursor);
-      if (!flexible) continue;
-      startOffset = flexible.start;
-      endOffset = flexible.end;
-      rawCursor = endOffset;
-      normalizedCursor = flexible.normalizedEnd;
+      if (!flexible) {
+        if (!enforceSourceBoundaries) continue;
+
+        // In enforced-boundary mode (PDF block source units), never drop a
+        // split block just because canonical rematching failed. Prefer a
+        // best-effort anchor inside the source that the cursor currently sits
+        // in, then emit the segment text as-is.
+        const fallbackSource = findSourceForOffset(preparedSources, rawCursor, 'start')
+          ?? preparedSources[preparedSources.length - 1]
+          ?? null;
+        if (!fallbackSource) continue;
+
+        const fallbackStart = Math.max(fallbackSource.startOffset, Math.min(rawCursor, fallbackSource.endOffset));
+        const fallbackEnd = Math.max(
+          fallbackStart,
+          Math.min(fallbackSource.endOffset, fallbackStart + text.length),
+        );
+        startOffset = fallbackStart;
+        endOffset = fallbackEnd;
+        rawCursor = fallbackEnd;
+        normalizedCursor = normalizeWithRawMap(canonicalText.slice(0, fallbackEnd)).text.length;
+      } else {
+        startOffset = flexible.start;
+        endOffset = flexible.end;
+        rawCursor = endOffset;
+        normalizedCursor = flexible.normalizedEnd;
+      }
     }
 
     const ownerSource = findSourceForOffset(preparedSources, startOffset, 'start');
