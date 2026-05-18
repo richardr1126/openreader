@@ -56,6 +56,7 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     currentSentence,
     currentWordIndex,
     currentSentenceAlignment,
+    currentSegment,
     skipToLocation,
   } = useTTS();
 
@@ -148,6 +149,12 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     const seq = ++sentenceHighlightSeqRef.current;
     const isLayoutChange = layoutKey !== lastSentenceLayoutKeyRef.current;
     lastSentenceLayoutKeyRef.current = layoutKey;
+    const activeLocator = currentSegment?.ownerLocator ?? null;
+    const hasParsedBlockLocator =
+      !!parsedDocument
+      && activeLocator?.readerType === 'pdf'
+      && typeof activeLocator.blockId === 'string'
+      && activeLocator.blockId.length > 0;
 
     if (isLayoutChange) {
       clearHighlights();
@@ -157,6 +164,15 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
       if (seq !== sentenceHighlightSeqRef.current) return;
       const container = containerRef.current;
       if (!container) return;
+
+      if (hasParsedBlockLocator) {
+        highlightPattern(currDocText, currentSentence, containerRef as RefObject<HTMLDivElement>, {
+          parsedDocument,
+          locator: activeLocator,
+          useBlockGeometryOnly: !pdfWordHighlightEnabled,
+        });
+        return;
+      }
 
       const spans = container.querySelectorAll('.react-pdf__Page__textContent span');
       if (!spans.length) {
@@ -176,9 +192,12 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
   }, [
     currDocText,
     currentSentence,
+    currentSegment,
     highlightPattern,
     clearHighlights,
     pdfHighlightEnabled,
+    pdfWordHighlightEnabled,
+    parsedDocument,
     layoutKey,
     clearSentenceHighlightTimeouts,
     scheduleSentenceTimeout

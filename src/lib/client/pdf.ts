@@ -3,9 +3,10 @@ import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { type PDFDocumentProxy, TextLayer } from 'pdfjs-dist';
 import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
-import type { ParsedPdfPage, ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import type { ParsedPdfDocument, ParsedPdfPage, ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
 import { CmpStr } from 'cmpstr';
+import type { TTSSegmentLocator } from '@/types/client';
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 
@@ -320,14 +321,197 @@ export async function extractTextFromPDF(
 // Highlighting functions
 let highlightPatternSeq = 0;
 
-export function clearHighlights() {
-  const textNodes = document.querySelectorAll('.react-pdf__Page__textContent span');
-  textNodes.forEach((node) => {
-    const element = node as HTMLElement;
-    element.style.backgroundColor = '';
-    element.style.opacity = '1';
-  });
+type HighlightPatternOptions = {
+  parsedDocument?: ParsedPdfDocument | null;
+  locator?: TTSSegmentLocator | null;
+  useBlockGeometryOnly?: boolean;
+};
 
+function getHighlightLayerForPage(pageElement: HTMLElement): {
+  layer: HTMLElement;
+  pageRect: DOMRect;
+} {
+  let layer = pageElement.querySelector('.pdf-highlight-layer') as HTMLElement | null;
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.className = 'pdf-highlight-layer';
+    pageElement.appendChild(layer);
+  }
+
+  layer.style.position = 'absolute';
+  layer.style.inset = '0';
+  layer.style.pointerEvents = 'none';
+  layer.style.zIndex = '4';
+  layer.style.overflow = 'hidden';
+  layer.style.transform = 'translateZ(0)';
+
+  return { layer, pageRect: pageElement.getBoundingClientRect() };
+}
+
+function findRenderedPageElement(container: HTMLElement, pageNumber: number): HTMLElement | null {
+  const direct = container.querySelector(`.react-pdf__Page[data-page-number="${pageNumber}"]`) as HTMLElement | null;
+  if (direct) return direct;
+
+  const pageNodes = Array.from(container.querySelectorAll('.react-pdf__Page')) as HTMLElement[];
+  for (const pageNode of pageNodes) {
+    const attr = pageNode.getAttribute('data-page-number');
+    if (Number(attr) === pageNumber) return pageNode;
+  }
+  return null;
+}
+
+function highlightParsedBlockGeometry(
+  containerRef: React.RefObject<HTMLDivElement>,
+  parsedDocument: ParsedPdfDocument,
+  locator: TTSSegmentLocator,
+): boolean {
+  if (locator.readerType !== 'pdf') return false;
+  if (!locator.blockId) return false;
+  const container = containerRef.current;
+  if (!container) return false;
+
+  let targetBlock:
+    | ParsedPdfPage['blocks'][number]
+    | null = null;
+  for (const page of parsedDocument.pages) {
+    const found = page.blocks.find((block) => block.id === locator.blockId);
+    if (found) {
+      targetBlock = found;
+      break;
+    }
+  }
+  if (!targetBlock) return false;
+
+  let firstRect: { top: number; left: number } | null = null;
+  let drewAny = false;
+
+  for (const fragment of targetBlock.fragments) {
+    const parsedPage = parsedDocument.pages.find((page) => page.pageNumber === fragment.page);
+    if (!parsedPage || parsedPage.width <= 0 || parsedPage.height <= 0) continue;
+
+    const pageElement = findRenderedPageElement(container, fragment.page);
+    if (!pageElement) continue;
+
+    const { layer, pageRect } = getHighlightLayerForPage(pageElement);
+    const [x0, y0, x1, y1] = fragment.bbox;
+    const left = (x0 / parsedPage.width) * pageRect.width;
+    const top = (y0 / parsedPage.height) * pageRect.height;
+    const width = ((x1 - x0) / parsedPage.width) * pageRect.width;
+    const height = ((y1 - y0) / parsedPage.height) * pageRect.height;
+
+    if (!(width > 0 && height > 0)) continue;
+
+    const highlight = document.createElement('div');
+    highlight.className = 'pdf-text-highlight-overlay';
+    highlight.style.position = 'absolute';
+    highlight.style.backgroundColor = 'grey';
+    highlight.style.opacity = '0.4';
+    highlight.style.pointerEvents = 'none';
+    highlight.style.zIndex = '1';
+    highlight.style.left = `${left}px`;
+    highlight.style.top = `${top}px`;
+    highlight.style.width = `${width}px`;
+    highlight.style.height = `${height}px`;
+    layer.appendChild(highlight);
+
+    if (!firstRect) {
+      firstRect = { top: pageRect.top + top, left: pageRect.left + left };
+    }
+    drewAny = true;
+  }
+
+  if (!drewAny || !firstRect) return drewAny;
+
+  const containerRect = container.getBoundingClientRect();
+  const visibleTop = container.scrollTop;
+  const visibleBottom = visibleTop + containerRect.height;
+  const elementTop = firstRect.top - containerRect.top + container.scrollTop;
+
+  if (elementTop < visibleTop || elementTop > visibleBottom) {
+    container.scrollTo({
+      top: elementTop - containerRect.height / 3,
+      behavior: 'smooth',
+    });
+  }
+  return true;
+}
+
+function resolveParsedBlock(
+  parsedDocument: ParsedPdfDocument | null | undefined,
+  locator: TTSSegmentLocator | null | undefined,
+): ParsedPdfPage['blocks'][number] | null {
+  if (!parsedDocument || !locator || locator.readerType !== 'pdf' || !locator.blockId) {
+    return null;
+  }
+
+  for (const page of parsedDocument.pages) {
+    const found = page.blocks.find((block) => block.id === locator.blockId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function isRectOverlap(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function collectSpanNodesForParsedBlock(
+  container: HTMLElement,
+  parsedDocument: ParsedPdfDocument,
+  locator: TTSSegmentLocator,
+): HTMLElement[] | null {
+  const block = resolveParsedBlock(parsedDocument, locator);
+  if (!block) return null;
+
+  const collected: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+
+  for (const fragment of block.fragments) {
+    const parsedPage = parsedDocument.pages.find((page) => page.pageNumber === fragment.page);
+    if (!parsedPage || parsedPage.width <= 0 || parsedPage.height <= 0) continue;
+
+    const pageElement = findRenderedPageElement(container, fragment.page);
+    if (!pageElement) continue;
+
+    const textLayer = pageElement.querySelector('.react-pdf__Page__textContent') as HTMLElement | null;
+    if (!textLayer) continue;
+
+    const pageRect = pageElement.getBoundingClientRect();
+    const [x0, y0, x1, y1] = fragment.bbox;
+    const blockRect = {
+      left: (x0 / parsedPage.width) * pageRect.width,
+      top: (y0 / parsedPage.height) * pageRect.height,
+      right: (x1 / parsedPage.width) * pageRect.width,
+      bottom: (y1 / parsedPage.height) * pageRect.height,
+    };
+
+    const spans = Array.from(textLayer.querySelectorAll('span')) as HTMLElement[];
+    for (const span of spans) {
+      const node = span.firstChild;
+      if (!node || node.nodeType !== Node.TEXT_NODE) continue;
+
+      const rect = span.getBoundingClientRect();
+      const spanRect = {
+        left: rect.left - pageRect.left,
+        top: rect.top - pageRect.top,
+        right: rect.right - pageRect.left,
+        bottom: rect.bottom - pageRect.top,
+      };
+
+      if (!isRectOverlap(spanRect, blockRect)) continue;
+      if (seen.has(span)) continue;
+      seen.add(span);
+      collected.push(span);
+    }
+  }
+
+  return collected.length > 0 ? collected : null;
+}
+
+export function clearHighlights() {
   const overlays = document.querySelectorAll('.pdf-text-highlight-overlay');
   overlays.forEach((node) => {
     const element = node as HTMLElement;
@@ -357,7 +541,8 @@ export function clearWordHighlights() {
 export function highlightPattern(
   text: string,
   pattern: string,
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement>,
+  options?: HighlightPatternOptions,
 ) {
   const seq = ++highlightPatternSeq;
   clearHighlights();
@@ -371,10 +556,24 @@ export function highlightPattern(
   lastSentencePattern = cleanPattern;
   lastSentenceWordToTokenMap = null;
   lastSentenceTokenWindow = null;
+  const parsedDocument = options?.parsedDocument ?? null;
+  const locator = options?.locator ?? null;
 
-  const spanNodes = Array.from(
-    container.querySelectorAll('.react-pdf__Page__textContent span')
-  ) as HTMLElement[];
+  if (
+    parsedDocument
+    && locator
+    && options?.useBlockGeometryOnly
+    && highlightParsedBlockGeometry(containerRef, parsedDocument, locator)
+  ) {
+    return;
+  }
+
+  const spanNodes = (
+    parsedDocument && locator
+      ? (collectSpanNodesForParsedBlock(container, parsedDocument, locator)
+        ?? Array.from(container.querySelectorAll('.react-pdf__Page__textContent span')) as HTMLElement[])
+      : Array.from(container.querySelectorAll('.react-pdf__Page__textContent span')) as HTMLElement[]
+  );
 
   if (!spanNodes.length) return;
   lastSpanNodes = spanNodes;

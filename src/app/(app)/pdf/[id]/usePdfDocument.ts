@@ -77,7 +77,16 @@ export interface PdfDocumentState {
 
   // PDF functionality
   onDocumentLoadSuccess: (pdf: PDFDocumentProxy) => void;
-  highlightPattern: (text: string, pattern: string, containerRef: RefObject<HTMLDivElement>) => void;
+  highlightPattern: (
+    text: string,
+    pattern: string,
+    containerRef: RefObject<HTMLDivElement>,
+    options?: {
+      parsedDocument?: ParsedPdfDocument | null;
+      locator?: TTSSegmentLocator | null;
+      useBlockGeometryOnly?: boolean;
+    },
+  ) => void;
   clearHighlights: () => void;
   clearWordHighlights: () => void;
   highlightWordIndex: (
