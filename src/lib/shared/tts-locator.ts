@@ -70,7 +70,10 @@ export function locatorIdentityKey(locator: TTSSegmentLocator | null): string {
     return `epub:${locator.spineIndex}:${locator.spineHref}:${locator.charOffset}`;
   }
   if (isPdfLocator(locator)) {
-    return `pdf:${Math.floor(locator.page)}`;
+    const blockPart = typeof locator.blockId === 'string' && locator.blockId.trim()
+      ? `:${locator.blockId.trim()}`
+      : '';
+    return `pdf:${Math.floor(locator.page)}${blockPart}`;
   }
   if (isHtmlLocator(locator)) {
     return `html:${locator.location}`;
@@ -112,7 +115,11 @@ export function compareSegmentLocators(
     return a.spineHref.localeCompare(b.spineHref);
   }
   if (isPdfLocator(a) && isPdfLocator(b)) {
-    return Math.floor(a.page) - Math.floor(b.page);
+    const pageCmp = Math.floor(a.page) - Math.floor(b.page);
+    if (pageCmp !== 0) return pageCmp;
+    const aBlock = typeof a.blockId === 'string' ? a.blockId : '';
+    const bBlock = typeof b.blockId === 'string' ? b.blockId : '';
+    return aBlock.localeCompare(bBlock);
   }
   if (isHtmlLocator(a) && isHtmlLocator(b)) {
     // When both locations look like positive integers (HTML reader blocks),

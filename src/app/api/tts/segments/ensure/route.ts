@@ -30,7 +30,7 @@ import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem-response';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
-import { alignAudioWithText } from '@/lib/server/whisper/alignment';
+import { getCompute } from '@/lib/server/compute';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
@@ -374,12 +374,10 @@ export async function POST(request: NextRequest) {
           try {
             const audioBuffer = await getTtsSegmentAudioObject(existing.audioKey);
             const whisperBytes = Uint8Array.from(audioBuffer);
-            const aligned = await alignAudioWithText(
-              whisperBytes.buffer,
-              segment.text,
-              undefined,
-              { engine: 'whisper.cpp' },
-            );
+            const aligned = (await getCompute().alignWords({
+              audioBuffer: whisperBytes.buffer,
+              text: segment.text,
+            })).alignments;
             alignment = aligned[0] ? { ...aligned[0], sentenceIndex: segment.original.segmentIndex } : null;
 
             if (alignment) {
@@ -527,12 +525,10 @@ export async function POST(request: NextRequest) {
         let alignment: TTSSegmentManifestItem['alignment'] = null;
         try {
           const whisperBytes = Uint8Array.from(persistedBuffer);
-          const aligned = await alignAudioWithText(
-            whisperBytes.buffer,
-            segment.text,
-            undefined,
-            { engine: 'whisper.cpp' },
-          );
+          const aligned = (await getCompute().alignWords({
+            audioBuffer: whisperBytes.buffer,
+            text: segment.text,
+          })).alignments;
           alignment = aligned[0] ? { ...aligned[0], sentenceIndex: segment.original.segmentIndex } : null;
         } catch (alignError) {
           console.warn('Whisper alignment unavailable for segment; continuing without word highlights.', {

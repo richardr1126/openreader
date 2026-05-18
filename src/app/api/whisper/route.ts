@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { auth } from '@/lib/server/auth/auth';
-import {
-  alignAudioWithText,
-  makeWhisperCacheKey,
-  type WhisperRequestBody,
-} from '@/lib/server/whisper/alignment';
+import { makeWhisperCacheKey, type WhisperRequestBody } from '@/lib/server/whisper/alignment';
+import { getCompute } from '@/lib/server/compute';
 
 export const runtime = 'nodejs';
 
@@ -29,12 +26,12 @@ export async function POST(req: NextRequest) {
     const cacheKey = makeWhisperCacheKey(body);
     const audioBuffer = new Uint8Array(audio).buffer;
 
-    const alignments: TTSSentenceAlignment[] = await alignAudioWithText(
+    const alignments: TTSSentenceAlignment[] = (await getCompute().alignWords({
       audioBuffer,
       text,
       cacheKey,
-      { engine: 'whisper.cpp', lang }
-    );
+      lang,
+    })).alignments;
 
     return NextResponse.json({ alignments }, { status: 200 });
   } catch (error) {

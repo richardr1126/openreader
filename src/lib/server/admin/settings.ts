@@ -82,7 +82,6 @@ export const RUNTIME_CONFIG_SCHEMA = {
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
   enableTtsProvidersTab: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB'),
-  enableWordHighlight: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT'),
   enableAudiobookExport: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT'),
   enableDocxConversion: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_DOCX_CONVERSION'),
   enableDestructiveDeleteActions: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS'),

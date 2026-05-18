@@ -9,6 +9,7 @@ import {
   deleteDocumentPreviewRows,
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/parsePdfJob';
 import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
@@ -129,6 +130,8 @@ export async function POST(req: NextRequest) {
           size: headSize,
           lastModified: doc.lastModified,
           filePath: doc.id,
+          parseStatus: doc.type === 'pdf' ? 'pending' : null,
+          parsedJsonKey: null,
         })
         .onConflictDoUpdate({
           target: [documents.id, documents.userId],
@@ -138,6 +141,8 @@ export async function POST(req: NextRequest) {
             size: headSize,
             lastModified: doc.lastModified,
             filePath: doc.id,
+            parseStatus: doc.type === 'pdf' ? 'pending' : null,
+            parsedJsonKey: null,
           },
         });
 
@@ -160,6 +165,14 @@ export async function POST(req: NextRequest) {
       ).catch((error) => {
         console.error(`Failed to enqueue preview for document ${doc.id}:`, error);
       });
+
+      if (doc.type === 'pdf') {
+        enqueueParsePdfJob({
+          documentId: doc.id,
+          userId: storageUserId,
+          namespace: testNamespace,
+        });
+      }
     }
 
     return NextResponse.json({ success: true, stored });
@@ -206,9 +219,25 @@ export async function GET(req: NextRequest) {
       size: number;
       lastModified: number;
       filePath: string;
+      parseStatus: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null;
+      parsedJsonKey: string | null;
     }>;
 
-    const results: BaseDocument[] = rows.map((doc) => {
+    const preferredById = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      const existing = preferredById.get(row.id);
+      if (!existing) {
+        preferredById.set(row.id, row);
+        continue;
+      }
+      const isRowPrimary = row.userId === storageUserId;
+      const isExistingPrimary = existing.userId === storageUserId;
+      if (isRowPrimary && !isExistingPrimary) {
+        preferredById.set(row.id, row);
+      }
+    }
+
+    const results: BaseDocument[] = Array.from(preferredById.values()).map((doc) => {
       const type = normalizeDocumentType(doc.type, doc.name);
       return {
         id: doc.id,
@@ -216,6 +245,8 @@ export async function GET(req: NextRequest) {
         size: Number(doc.size),
         lastModified: Number(doc.lastModified),
         type,
+        parseStatus: doc.parseStatus,
+        parsedJsonKey: doc.parsedJsonKey,
         scope: doc.userId === unclaimedUserId ? 'unclaimed' : 'user',
       };
     });

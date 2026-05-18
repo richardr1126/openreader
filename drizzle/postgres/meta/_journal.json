@@ -36,6 +36,13 @@
       "when": 1778644075378,
       "tag": "0004_admin_panel",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779041718214,
+      "tag": "0005_pdf_layout_and_compute",
+      "breakpoints": true
     }
   ]
 }

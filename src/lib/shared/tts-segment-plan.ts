@@ -37,6 +37,7 @@ export interface CanonicalTtsSegmentPlanOptions {
   readerType?: ReaderType;
   maxBlockLength?: number;
   keyPrefix?: string;
+  enforceSourceBoundaries?: boolean;
 }
 
 interface PreparedSourceUnit {
@@ -185,6 +186,7 @@ export function planCanonicalTtsSegments(
   options: CanonicalTtsSegmentPlanOptions = {},
 ): CanonicalTtsSegmentPlan {
   const readerType = options.readerType ?? 'pdf';
+  const enforceSourceBoundaries = Boolean(options.enforceSourceBoundaries);
   const keyPrefix = options.keyPrefix ?? TTS_SEGMENT_PLAN_VERSION;
   const preparedSources: PreparedSourceUnit[] = [];
   const textParts: string[] = [];
@@ -263,6 +265,41 @@ export function planCanonicalTtsSegments(
         spansSourceBoundary: false,
       });
     } else {
+      const splitAcrossSourceBoundaries = () => {
+        const ownerIdx = preparedSources.indexOf(ownerSource);
+        const endIdx = preparedSources.indexOf(endSource);
+        if (ownerIdx < 0 || endIdx < 0) return;
+
+        let subStart = startOffset;
+        for (let srcIdx = ownerIdx; srcIdx <= endIdx; srcIdx += 1) {
+          const source = preparedSources[srcIdx];
+          const subEnd = srcIdx < endIdx ? source.endOffset : endOffset;
+          if (subEnd <= subStart) continue;
+
+          const subText = canonicalText.slice(subStart, subEnd).trim();
+          if (!subText) {
+            subStart = subEnd;
+            continue;
+          }
+
+          const nextSource = srcIdx < endIdx ? preparedSources[srcIdx + 1] : null;
+          const subStartAnchor = anchorForOffset(source, subStart);
+          const subEndAnchor = anchorForOffset(source, subEnd);
+          const ordinal = segments.length;
+          segments.push({
+            key: buildSegmentKey(keyPrefix, subText),
+            ordinal,
+            text: subText,
+            ownerSourceKey: source.sourceKey,
+            ownerLocator: source.locator,
+            startAnchor: subStartAnchor,
+            endAnchor: subEndAnchor,
+            spansSourceBoundary: false,
+          });
+          subStart = nextSource ? nextSource.startOffset : subEnd;
+        }
+      };
+
       // Block spans one or more source boundaries. Decide whether to keep it
       // as a single boundary-spanning segment or to split it at each boundary.
       //
@@ -286,6 +323,12 @@ export function planCanonicalTtsSegments(
       //      continuation, so it should be filtered out of the current page's
       //      segments.
       if (ownerSource.locator !== null) {
+        if (enforceSourceBoundaries) {
+          // PDF source units are logical layout blocks; never allow a segment
+          // to cross a block boundary.
+          splitAcrossSourceBoundaries();
+          continue;
+        }
         // Both sources carry locators → original unified boundary behavior.
         const ordinal = segments.length;
         const startAnchor = anchorForOffset(ownerSource, startOffset);
@@ -318,34 +361,7 @@ export function planCanonicalTtsSegments(
 
         if (isCleanBoundary) {
           // Clean boundary → split at each source boundary.
-          let subStart = startOffset;
-          for (let srcIdx = ownerIdx; srcIdx <= endIdx; srcIdx += 1) {
-            const source = preparedSources[srcIdx];
-            const subEnd = srcIdx < endIdx ? source.endOffset : endOffset;
-            if (subEnd <= subStart) continue;
-
-            const subText = canonicalText.slice(subStart, subEnd).trim();
-            if (!subText) {
-              subStart = subEnd;
-              continue;
-            }
-
-            const nextSource = srcIdx < endIdx ? preparedSources[srcIdx + 1] : null;
-            const subStartAnchor = anchorForOffset(source, subStart);
-            const subEndAnchor = anchorForOffset(source, subEnd);
-            const ordinal = segments.length;
-            segments.push({
-              key: buildSegmentKey(keyPrefix, subText),
-              ordinal,
-              text: subText,
-              ownerSourceKey: source.sourceKey,
-              ownerLocator: source.locator,
-              startAnchor: subStartAnchor,
-              endAnchor: subEndAnchor,
-              spansSourceBoundary: false,
-            });
-            subStart = nextSource ? nextSource.startOffset : subEnd;
-          }
+          splitAcrossSourceBoundaries();
         } else {
           // Overlapping sentence → keep unified, owned by the context-only
           // source. This segment will be filtered out of the current page's

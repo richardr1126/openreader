@@ -1,0 +1,3 @@
+Docling layout model assets are distributed under Apache-2.0 / CDLA terms by the model publisher.
+See the upstream release for the authoritative license text:
+https://huggingface.co/ds4sd/docling-layout-heron

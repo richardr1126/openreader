@@ -107,6 +107,8 @@ export interface TTSSegmentLocator {
   readerType?: TTSReaderType;
   // PDF / legacy
   page?: number;
+  // PDF block-level locator (structured parser path)
+  blockId?: string;
   // HTML / legacy EPUB CFI (kept for in-flight drafts; not persisted for EPUB)
   location?: string;
   // Stable EPUB coordinates

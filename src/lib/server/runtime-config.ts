@@ -6,8 +6,11 @@ import {
   type RuntimeConfigKey,
   type RuntimeConfigSource,
 } from '@/lib/server/admin/settings';
+import { isComputeAvailable } from '@/lib/server/compute';
 
-export type ResolvedRuntimeConfig = RuntimeConfig;
+export type ResolvedRuntimeConfig = RuntimeConfig & {
+  computeAvailable: boolean;
+};
 
 function assertServerRuntime(caller: string): void {
   if (typeof window !== 'undefined') {
@@ -23,7 +26,11 @@ function assertServerRuntime(caller: string): void {
 export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig> {
   assertServerRuntime('getResolvedRuntimeConfig');
   await ensureAdminSeed();
-  return getRuntimeConfig();
+  const values = await getRuntimeConfig();
+  return {
+    ...values,
+    computeAvailable: isComputeAvailable(),
+  };
 }
 
 export async function getResolvedRuntimeConfigWithSources(): Promise<{

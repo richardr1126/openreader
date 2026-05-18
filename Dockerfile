@@ -11,6 +11,7 @@ RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git && \
     cd whisper.cpp && \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF $( [ "$TARGETARCH" = "arm64" ] && echo "-DGGML_CPU_ARM_ARCH=armv8-a" || true ) && \
     cmake --build build -j
+RUN wget -qO /tmp/whisper.cpp-LICENSE.txt "https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/LICENSE"
 
 # Stage 1b: extract seaweedfs weed binary (for optional embedded weed mini)
 # Pin to 4.18 because CI observed upload regressions on 4.19.
@@ -71,10 +72,13 @@ COPY --from=app-builder /app ./
 COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
+# Include static model notices for runtime-downloaded assets.
+COPY src/lib/server/pdf-layout/model/LICENSE.txt /licenses/docling-layout-LICENSE.txt
 
 # Copy the compiled whisper.cpp build output into the runtime image
 # (includes whisper-cli and its shared libraries, e.g. libwhisper.so, libggml.so)
 COPY --from=whisper-builder /opt/whisper.cpp/build /opt/whisper.cpp/build
+COPY --from=whisper-builder /tmp/whisper.cpp-LICENSE.txt /licenses/whisper.cpp-LICENSE.txt
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed

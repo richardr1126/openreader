@@ -139,7 +139,6 @@ const createAuth = () => betterAuth({
     },
   },
   plugins: [
-    nextCookies(), // Enable Next.js cookie handling
     ...(isAnonymousAuthSessionsEnabled()
       ? [
         anonymous({
@@ -219,6 +218,9 @@ const createAuth = () => betterAuth({
         }),
       ]
       : []),
+    // Better Auth requires cookie integration plugins last so post-hooks can
+    // still append Set-Cookie headers that are forwarded to Next.js.
+    nextCookies(),
   ],
 });
 

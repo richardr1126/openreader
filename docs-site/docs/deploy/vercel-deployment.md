@@ -35,6 +35,11 @@ BASE_URL=https://your-app.vercel.app
 AUTH_SECRET=...
 ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in-app
 
+# Heavy compute (recommended on Vercel in v1)
+# local  = requires native binaries/models in-process
+# none   = disable whisper alignment + PDF layout parsing
+OPENREADER_COMPUTE_MODE=none
+
 # First-boot seed for the TTS shared provider (optional; manage in-app afterwards)
 API_KEY=your_replicate_key
 # API_BASE only needed for OpenAI-compatible self-hosted providers
@@ -58,7 +63,6 @@ After the first successful deploy and admin login, open **Settings → Admin** a
   - `defaultTtsProvider=replicate` (or your preferred shared slug).
   - `showAllProviderModels=false` if you want users locked to each provider's default model.
   - `enableAudiobookExport=true`.
-  - `enableWordHighlight=false` unless your timestamp stack is configured.
 
 ## 3. Legacy first-boot seed (optional)
 
@@ -126,4 +130,4 @@ Adjust memory per route if your files are larger or your plan differs.
 1. Upload and read a PDF/EPUB document.
 2. Confirm sync/blob fetch works across refreshes/devices.
 3. Generate at least one audiobook chapter and play/download it.
-4. If using word highlighting, verify timestamps are produced and rendered.
+4. If you later enable compute locally (`OPENREADER_COMPUTE_MODE=local`), verify word highlighting timestamps on a TTS run.

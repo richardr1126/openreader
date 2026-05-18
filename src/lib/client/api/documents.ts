@@ -1,5 +1,7 @@
 import { sha256HexFromArrayBuffer } from '@/lib/client/sha256';
 import type { BaseDocument, DocumentType } from '@/types/documents';
+import type { ParsedPdfDocument } from '@/types/parsed-pdf';
+import type { DocumentSettings } from '@/types/document-settings';
 
 export type UploadSource = {
   id: string;
@@ -74,6 +76,95 @@ export async function listDocuments(options?: { ids?: string[]; signal?: AbortSi
 export async function getDocumentMetadata(id: string, options?: { signal?: AbortSignal }): Promise<BaseDocument | null> {
   const docs = await listDocuments({ ids: [id], signal: options?.signal });
   return docs[0] ?? null;
+}
+
+export async function getParsedPdfDocument(
+  id: string,
+  options?: { signal?: AbortSignal; retryFailed?: boolean },
+): Promise<{ status: 'ready'; parsed: ParsedPdfDocument } | { status: 'pending' | 'running' | 'failed' | 'unsupported' }> {
+  const query = options?.retryFailed ? '?retry=1' : '';
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed${query}`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+
+  if (res.status === 202) {
+    const data = (await res.json().catch(() => null)) as { parseStatus?: string } | null;
+    const parseStatus = data?.parseStatus;
+    if (parseStatus === 'pending' || parseStatus === 'running' || parseStatus === 'failed' || parseStatus === 'unsupported') {
+      return { status: parseStatus };
+    }
+    return { status: 'pending' };
+  }
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to load parsed PDF');
+  }
+
+  const parsed = (await res.json()) as ParsedPdfDocument;
+  return { status: 'ready', parsed };
+}
+
+export async function forceReparsePdfDocument(
+  id: string,
+  options?: { signal?: AbortSignal },
+): Promise<'pending' | 'running'> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
+    method: 'POST',
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to force PDF reparse');
+  }
+
+  const data = (await res.json().catch(() => null)) as { parseStatus?: string } | null;
+  return data?.parseStatus === 'running' ? 'running' : 'pending';
+}
+
+type DocumentSettingsResponse = {
+  settings: DocumentSettings;
+  clientUpdatedAtMs: number;
+  hasStoredSettings?: boolean;
+};
+
+export async function getDocumentSettings(
+  id: string,
+  options?: { signal?: AbortSignal },
+): Promise<DocumentSettingsResponse> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/settings`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to load document settings');
+  }
+  return (await res.json()) as DocumentSettingsResponse;
+}
+
+export async function putDocumentSettings(
+  id: string,
+  settings: DocumentSettings,
+  options?: { signal?: AbortSignal; clientUpdatedAtMs?: number },
+): Promise<DocumentSettingsResponse & { applied: boolean }> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      settings,
+      clientUpdatedAtMs: options?.clientUpdatedAtMs ?? Date.now(),
+    }),
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to update document settings');
+  }
+  return (await res.json()) as DocumentSettingsResponse & { applied: boolean };
 }
 
 export async function uploadDocumentSources(sources: UploadSource[], options?: UploadOptions): Promise<BaseDocument[]> {

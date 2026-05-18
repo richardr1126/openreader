@@ -32,6 +32,7 @@ const PDFViewer = dynamic(
 
 export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
+  const computeAvailable = useFeatureFlag('computeAvailable');
   const { id } = useParams();
   const router = useRouter();
   const pdfState = usePdfDocument();
@@ -41,6 +42,12 @@ export default function PDFViewerPage() {
     clearCurrDoc,
     currDocPage,
     currDocPages,
+    parseStatus,
+    documentSettings,
+    updateDocumentSettings,
+    parsedOverlayEnabled,
+    setParsedOverlayEnabled,
+    forceReparseParsedPdf,
     createFullAudioBook: createPDFAudioBook,
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
@@ -232,6 +239,40 @@ export default function PDFViewerPage() {
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        pdf={{
+          computeAvailable,
+          parseStatus,
+          parsedOverlayEnabled,
+          skipBlockKinds: documentSettings.pdf?.skipBlockKinds ?? [],
+          chaptersFromSections: documentSettings.pdf?.chaptersFromSections ?? true,
+          onToggleOverlay: (enabled) => setParsedOverlayEnabled(enabled),
+          onToggleSkipKind: (kind, enabled) => {
+            const current = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
+            if (enabled) current.add(kind);
+            else current.delete(kind);
+            void updateDocumentSettings({
+              ...documentSettings,
+              schemaVersion: 1,
+              pdf: {
+                ...(documentSettings.pdf ?? { chaptersFromSections: true }),
+                skipBlockKinds: Array.from(current),
+                chaptersFromSections: documentSettings.pdf?.chaptersFromSections ?? true,
+              },
+            });
+          },
+          onToggleChaptersFromSections: (enabled) => {
+            void updateDocumentSettings({
+              ...documentSettings,
+              schemaVersion: 1,
+              pdf: {
+                ...(documentSettings.pdf ?? { skipBlockKinds: [] }),
+                skipBlockKinds: documentSettings.pdf?.skipBlockKinds ?? [],
+                chaptersFromSections: enabled,
+              },
+            });
+          },
+          onForceReparse: () => forceReparseParsedPdf(),
+        }}
       />
       <SegmentsSidebar
         isOpen={activeSidebar === 'segments'}

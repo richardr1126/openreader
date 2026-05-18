@@ -1,8 +1,6 @@
 packages:
   - .
 
-strictDepBuilds: false
-
 allowBuilds:
   '@napi-rs/canvas': true
   better-sqlite3: true
@@ -11,10 +9,13 @@ allowBuilds:
   es5-ext: false
   esbuild: false
   ffmpeg-static: true
+  onnxruntime-node: true
   sharp: false
   unrs-resolver: false
 
 overrides:
-  lodash: ^4.17.23
-  '@xmldom/xmldom': ^0.9.8
   '@types/localforage': npm:empty-module@0.0.2
+  '@xmldom/xmldom': ^0.9.8
+  lodash: ^4.17.23
+
+strictDepBuilds: false

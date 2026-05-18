@@ -16,7 +16,16 @@ import {
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { Section, ToggleRow, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
+import { Section, ToggleRow, buttonClass, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
+import { RefreshIcon } from '@/components/icons/Icons';
+import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
+
+const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
+  { kind: 'page-header', label: 'Page headers' },
+  { kind: 'page-footer', label: 'Page footers' },
+  { kind: 'footnote', label: 'Footnotes' },
+  { kind: 'caption', label: 'Captions' },
+];
 
 const viewTypeTextMapping = [
   { id: 'single', name: 'Single Page' },
@@ -71,13 +80,25 @@ function RangeSetting({
   );
 }
 
-export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
+export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
   isOpen: boolean,
   setIsOpen: (isOpen: boolean) => void,
   epub?: boolean,
-  html?: boolean
+  html?: boolean,
+  pdf?: {
+    computeAvailable: boolean;
+    parseStatus: PdfParseStatus | null;
+    parsedOverlayEnabled: boolean;
+    skipBlockKinds: ParsedPdfBlockKind[];
+    chaptersFromSections: boolean;
+    onToggleOverlay: (enabled: boolean) => void;
+    onToggleSkipKind: (kind: ParsedPdfBlockKind, enabled: boolean) => void;
+    onToggleChaptersFromSections: (enabled: boolean) => void;
+    onForceReparse: () => void;
+  }
 }) {
-  const canWordHighlight = useFeatureFlag('enableWordHighlight');
+  const computeAvailable = useFeatureFlag('computeAvailable');
+  const canWordHighlight = computeAvailable;
   const {
     viewType,
     skipBlank,
@@ -315,7 +336,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
             />
             <ToggleRow
               label="Word-by-word highlighting"
-              description={`Highlight words using timing data${!canWordHighlight ? ' (disabled by config)' : ''}.`}
+              description={`Highlight words using timing data${!canWordHighlight ? ' (not available on this server)' : ''}.`}
               checked={pdfWordHighlightEnabled && pdfHighlightEnabled}
               disabled={!pdfHighlightEnabled || !canWordHighlight}
               onChange={(checked) => updateConfigKey('pdfWordHighlightEnabled', checked)}
@@ -346,7 +367,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
             />
             <ToggleRow
               label="Word-by-word highlighting"
-              description={`Highlight words using timing data${!canWordHighlight ? ' (disabled by config)' : ''}.`}
+              description={`Highlight words using timing data${!canWordHighlight ? ' (not available on this server)' : ''}.`}
               checked={epubWordHighlightEnabled && epubHighlightEnabled}
               disabled={!epubHighlightEnabled || !canWordHighlight}
               onChange={(checked) => updateConfigKey('epubWordHighlightEnabled', checked)}
@@ -370,12 +391,65 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html }: {
             />
             <ToggleRow
               label="Word-by-word highlighting"
-              description={`Highlight words using timing data${!canWordHighlight ? ' (disabled by config)' : ''}.`}
+              description={`Highlight words using timing data${!canWordHighlight ? ' (not available on this server)' : ''}.`}
               checked={htmlWordHighlightEnabled && htmlHighlightEnabled}
               disabled={!htmlHighlightEnabled || !canWordHighlight}
               onChange={(checked) => updateConfigKey('htmlWordHighlightEnabled', checked)}
               variant="flat"
             />
+          </Section>
+        )}
+
+        {!epub && !html && pdf && (
+          <Section
+            title="PDF Structure"
+            subtitle="Layout-aware parsing controls."
+            variant="flat"
+          >
+            <div className="flex items-center gap-1.5 text-xs text-muted pb-1">
+              Parse status: <span className="text-foreground font-medium">{pdf.parseStatus ?? 'pending'}</span>
+              <button
+                type="button"
+                className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
+                onClick={pdf.onForceReparse}
+                disabled={!computeAvailable || pdf.parseStatus === 'running' || pdf.parseStatus === 'pending'}
+                title="Force reparse"
+              >
+                <RefreshIcon className="h-3 w-3" />
+              </button>
+            </div>
+            <ToggleRow
+              label="Show block overlay"
+              description="Render detected block boxes and labels on the page."
+              checked={pdf.parsedOverlayEnabled}
+              onChange={pdf.onToggleOverlay}
+              disabled={pdf.parseStatus !== 'ready'}
+              variant="flat"
+            />
+            <ToggleRow
+              label="Use detected sections as chapters"
+              description={computeAvailable ? 'Build audiobook chapters from section headers.' : 'Not available on this server.'}
+              checked={pdf.chaptersFromSections}
+              onChange={pdf.onToggleChaptersFromSections}
+              disabled={!computeAvailable}
+              variant="flat"
+            />
+            <div className="space-y-2 pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Skip while reading aloud</p>
+              {PDF_SKIP_KIND_OPTIONS.map((option) => {
+                const checked = pdf.skipBlockKinds.includes(option.kind);
+                return (
+                  <ToggleRow
+                    key={option.kind}
+                    label={option.label}
+                    description={`Exclude ${option.label.toLowerCase()} from TTS/audiobook output.`}
+                    checked={checked}
+                    onChange={(enabled) => pdf.onToggleSkipKind(option.kind, enabled)}
+                    variant="flat"
+                  />
+                );
+              })}
+            </div>
           </Section>
         )}
       </div>

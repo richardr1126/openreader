@@ -53,7 +53,11 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
-| `WHISPER_CPP_BIN` | Word timing | unset | Set to enable `whisper.cpp` timestamps |
+| `OPENREADER_COMPUTE_MODE` | Heavy compute backend | `local` | Set to `none` to disable whisper alignment + PDF layout parsing |
+| `OPENREADER_COMPUTE_WORKER_URL` | Heavy compute backend | unset | Reserved for future worker backend mode (`worker`) |
+| `OPENREADER_COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset | Reserved for future worker backend mode (`worker`) |
+| `OPENREADER_DOCLING_MODEL_URL` | PDF layout model | Docling HF URL | Override ONNX download URL for `ensureModel()` |
+| `WHISPER_CPP_BIN` | Word timing (local mode) | unset | Set to enable `whisper.cpp` timestamps in `OPENREADER_COMPUTE_MODE=local` |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 
 
@@ -346,6 +350,38 @@ Multiple library roots for server library import.
 
 ## Audio Tooling and Alignment
 
+### OPENREADER_COMPUTE_MODE
+
+Selects the backend for heavy compute features (word alignment + PDF layout parsing).
+
+- Default: `local`
+- Supported in v1:
+  - `local`: run compute in-process on the app server
+  - `none`: disable these features cleanly
+- `worker` is reserved for a future external worker backend and currently fails fast at startup if selected
+
+### OPENREADER_COMPUTE_WORKER_URL
+
+Reserved for future external compute worker mode.
+
+- Used only when `OPENREADER_COMPUTE_MODE=worker` (not implemented in v1)
+- Leave unset in v1
+
+### OPENREADER_COMPUTE_WORKER_TOKEN
+
+Reserved bearer token for future external compute worker mode.
+
+- Used only when `OPENREADER_COMPUTE_MODE=worker` (not implemented in v1)
+- Leave unset in v1
+
+### OPENREADER_DOCLING_MODEL_URL
+
+Override URL for the Docling ONNX layout model downloaded by `ensureModel()`.
+
+- Default: `https://huggingface.co/ds4sd/docling-layout-heron/resolve/main/model.onnx`
+- Optional for custom mirrors/air-gapped workflows
+- You can also pre-populate the model cache via `pnpm fetch-models`
+
 ### WHISPER_CPP_BIN
 
 Absolute path to compiled `whisper.cpp` binary for word-level timestamps.
@@ -432,14 +468,3 @@ Controls whether audiobook export UI/actions are shown in the client.
 - Default: `true` (enabled)
 - Affects export entry points in PDF/EPUB pages and document settings UI
 - Runtime key: `enableAudiobookExport`
-
-### NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT
-
-Controls word-by-word highlighting UI and timestamp-alignment behavior.
-
-- Default: `true` (enabled)
-- Requires working timestamp generation (for example `WHISPER_CPP_BIN`)
-- Affects:
-  - Word-highlight toggles in document settings
-  - Alignment requests during TTS playback
-- Runtime key: `enableWordHighlight`

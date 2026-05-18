@@ -18,11 +18,11 @@ export interface RuntimeConfig {
   enableUserSignups: boolean;
   restrictUserApiKeys: boolean;
   enableTtsProvidersTab: boolean;
-  enableWordHighlight: boolean;
   enableAudiobookExport: boolean;
   enableDocxConversion: boolean;
   enableDestructiveDeleteActions: boolean;
   showAllProviderModels: boolean;
+  computeAvailable: boolean;
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
@@ -32,11 +32,11 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   enableUserSignups: true,
   restrictUserApiKeys: true,
   enableTtsProvidersTab: true,
-  enableWordHighlight: true,
   enableAudiobookExport: true,
   enableDocxConversion: true,
   enableDestructiveDeleteActions: true,
   showAllProviderModels: true,
+  computeAvailable: true,
 };
 
 declare global {

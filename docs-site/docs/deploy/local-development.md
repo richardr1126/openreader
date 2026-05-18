@@ -156,7 +156,7 @@ If you are not on Debian/Ubuntu, install equivalent packages with your distro pa
 - Arch: use `pacman` (`base-devel cmake curl git tar xz`)
 
 :::tip
-Set `WHISPER_CPP_BIN` in your `.env` to enable word-by-word highlighting.
+Set `OPENREADER_COMPUTE_MODE=local` and `WHISPER_CPP_BIN` in your `.env` to enable word-by-word highlighting.
 :::
 
 </details>
@@ -194,6 +194,7 @@ Use one of these `.env` mode templates:
 ```env
 API_BASE=http://host.docker.internal:8880/v1
 API_KEY=none
+OPENREADER_COMPUTE_MODE=local
 # Leave BASE_URL and AUTH_SECRET unset to keep auth disabled.
 # (Admin panel is unavailable without auth.)
 # API_BASE/API_KEY seed a shared default provider if you want shared mode.
@@ -205,6 +206,7 @@ API_KEY=none
 ```env
 API_BASE=http://host.docker.internal:8880/v1
 API_KEY=none
+OPENREADER_COMPUTE_MODE=local
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # Optional when you need multiple local origins:
@@ -219,6 +221,7 @@ AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # on first boot, then no longer read. Manage them in Settings → Admin afterwards.
 API_BASE=http://host.docker.internal:8880/v1
 API_KEY=none
+OPENREADER_COMPUTE_MODE=local
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # Comma-separated emails to auto-promote to admin on signin.
@@ -231,6 +234,7 @@ ADMIN_EMAILS=you@example.com
 ```env
 API_BASE=http://host.docker.internal:8880/v1
 API_KEY=none
+OPENREADER_COMPUTE_MODE=local
 USE_EMBEDDED_WEED_MINI=false
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1
@@ -254,6 +258,10 @@ If you want each user to enter personal provider credentials, set `restrictUserA
 
 :::info
 For all environment variables, see [Environment Variables](../reference/environment-variables).
+:::
+
+:::tip Optional model prefetch
+To pre-populate the Docling ONNX model cache before first PDF parse, run `pnpm fetch-models`.
 :::
 
 See [Auth](../configure/auth) for app/auth behavior.

@@ -1,0 +1,21 @@
+{
+  "name": "docling-layout-heron",
+  "version": "docling-project/docling-layout-heron-onnx@main",
+  "files": [
+    {
+      "path": "model.onnx",
+      "sha256": "59c81a3a2923042d85034ffc487f8f47e4854117e879aef89b2b9f728fb4922a",
+      "size": 171220471
+    },
+    {
+      "path": "config.json",
+      "sha256": "c6e67b6cdf64fa245779d0409bb994aa96e8c1790e15ec07a65843628e232180",
+      "size": 878
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "8f5030e085c59609746fce1010230f12b4a565abb6bdc19a2c2d3735ba1710d9",
+      "size": 209
+    }
+  ]
+}

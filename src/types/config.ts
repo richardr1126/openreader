@@ -8,15 +8,6 @@ import { defaultModelForProviderType } from '@/lib/shared/tts-provider-policy';
 // `window.__OPENREADER_RUNTIME_CONFIG__` (SSR-injected) on the client, and
 // from the built-in defaults during SSR.
 
-function readRuntimeFlag(key: string, defaultValue: boolean): boolean {
-  if (typeof window === 'undefined') return defaultValue;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const injected = (window as any).__OPENREADER_RUNTIME_CONFIG__;
-  if (!injected || typeof injected !== 'object') return defaultValue;
-  const value = injected[key];
-  return typeof value === 'boolean' ? value : defaultValue;
-}
-
 function readRuntimeString(key: string, defaultValue: string): string {
   if (typeof window === 'undefined') return defaultValue;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,7 +87,6 @@ export interface AppConfigValues {
  * that reads through it.
  */
 export function getAppConfigDefaults(): AppConfigValues {
-  const wordHighlightEnabledByDefault = readRuntimeFlag('enableWordHighlight', true);
   const runtimeProviderRef = readRuntimeString('defaultTtsProvider', 'custom-openai');
   const defaultProviderRef = runtimeProviderRef.trim();
   const defaultProviderType = isBuiltInTtsProviderId(defaultProviderRef) ? defaultProviderRef : 'unknown';
@@ -126,11 +116,11 @@ export function getAppConfigDefaults(): AppConfigValues {
     segmentPreloadSentenceLookahead: 3,
     ttsSegmentMaxBlockLength: 450,
     pdfHighlightEnabled: true,
-    pdfWordHighlightEnabled: wordHighlightEnabledByDefault,
+    pdfWordHighlightEnabled: true,
     epubHighlightEnabled: true,
-    epubWordHighlightEnabled: wordHighlightEnabledByDefault,
+    epubWordHighlightEnabled: true,
     htmlHighlightEnabled: true,
-    htmlWordHighlightEnabled: wordHighlightEnabledByDefault,
+    htmlWordHighlightEnabled: true,
     firstVisit: false,
     documentListState: {
       sortBy: 'name',

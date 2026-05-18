@@ -74,10 +74,11 @@ Runtime-editable settings, one row per key:
 | `restrictUserApiKeys` | Restrict user-supplied API keys/base URLs; when `true`, only admin shared providers are allowed. |
 | `enableTtsProvidersTab` | Whether the user-facing TTS Provider tab in Settings is shown. |
 | `showAllProviderModels` | When `false`, users are restricted to each provider's default model (shared provider `defaultModel` or built-in provider default). |
-| `enableWordHighlight` | Enable whisper.cpp word-by-word highlighting during TTS playback. |
 | `enableAudiobookExport` | Show the audiobook export entry points on PDF/EPUB pages. |
 | `enableDocxConversion` | Accept .docx uploads (converted to PDF server-side). |
 | `enableDestructiveDeleteActions` | Show "Delete all data" buttons in the Documents tab (auth-disabled mode). |
+
+Word-by-word highlighting and PDF layout parsing capability are controlled by `OPENREADER_COMPUTE_MODE` (server env), not an admin runtime flag.
 
 Each row shows a source badge:
 

@@ -12,6 +12,8 @@ export const documents = pgTable('documents', {
   size: bigint('size', { mode: 'number' }).notNull(),
   lastModified: bigint('last_modified', { mode: 'number' }).notNull(),
   filePath: text('file_path').notNull(),
+  parseStatus: text('parse_status'),
+  parsedJsonKey: text('parsed_json_key'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
@@ -71,6 +73,18 @@ export const userPreferences = pgTable('user_preferences', {
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });
+
+export const documentSettings = pgTable('document_settings', {
+  documentId: text('document_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  dataJson: jsonb('data_json').notNull().default({}),
+  clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.documentId, table.userId] }),
+  index('idx_document_settings_user_id').on(table.userId),
+]);
 
 export const userDocumentProgress = pgTable('user_document_progress', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

@@ -10,6 +10,7 @@ import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { usePDFResize } from '@/hooks/pdf/usePDFResize';
 import type { PdfDocumentState } from '@/app/(app)/pdf/[id]/usePdfDocument';
+import type { ParsedPdfBlock, ParsedPdfPage } from '@/types/parsed-pdf';
 
 interface PDFViewerProps {
   zoomLevel: number;
@@ -25,6 +26,8 @@ interface PDFViewerProps {
     | 'currDocPages'
     | 'currDocText'
     | 'currDocPage'
+    | 'parsedDocument'
+    | 'parsedOverlayEnabled'
   >;
 }
 
@@ -67,6 +70,8 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     currDocPages,
     currDocText,
     currDocPage,
+    parsedDocument,
+    parsedOverlayEnabled,
   } = pdfState;
 
   // IMPORTANT:
@@ -299,6 +304,107 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     return scaleRef.current;
   }, [calculateScale]);
 
+  const parsedPageByNumber = useMemo(() => {
+    const map = new Map<number, ParsedPdfPage>();
+    for (const page of parsedDocument?.pages ?? []) {
+      map.set(page.pageNumber, page);
+    }
+    return map;
+  }, [parsedDocument]);
+
+  const parsedOverlayByPage = useMemo(() => {
+    const map = new Map<number, Array<{
+      block: ParsedPdfBlock;
+      fragment: ParsedPdfBlock['fragments'][number];
+      isContinuation: boolean;
+    }>>();
+
+    const seen = new Set<string>();
+    for (const page of parsedDocument?.pages ?? []) {
+      for (const block of page.blocks) {
+        for (let fragmentIndex = 0; fragmentIndex < block.fragments.length; fragmentIndex += 1) {
+          const fragment = block.fragments[fragmentIndex];
+          if (!fragment) continue;
+          const key = `${block.id}:${fragment.page}:${fragment.readingOrder}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const list = map.get(fragment.page) ?? [];
+          list.push({
+            block,
+            fragment,
+            isContinuation: fragmentIndex > 0,
+          });
+          map.set(fragment.page, list);
+        }
+      }
+    }
+
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        if (a.fragment.readingOrder !== b.fragment.readingOrder) {
+          return a.fragment.readingOrder - b.fragment.readingOrder;
+        }
+        return a.block.id.localeCompare(b.block.id);
+      });
+    }
+
+    return map;
+  }, [parsedDocument]);
+
+  const colorForKind = (kind: ParsedPdfBlock['kind']): string => {
+    switch (kind) {
+      case 'section-header': return 'rgba(34,197,94,0.20)';
+      case 'title': return 'rgba(16,185,129,0.20)';
+      case 'caption': return 'rgba(245,158,11,0.20)';
+      case 'table': return 'rgba(59,130,246,0.20)';
+      case 'picture': return 'rgba(139,92,246,0.20)';
+      case 'page-header':
+      case 'page-footer':
+      case 'footnote': return 'rgba(239,68,68,0.20)';
+      default: return 'rgba(14,165,233,0.18)';
+    }
+  };
+
+  const renderParsedOverlay = (pageNumber: number) => {
+    if (!parsedOverlayEnabled) return null;
+    const parsedPage = parsedPageByNumber.get(pageNumber);
+    if (!parsedPage) return null;
+    const overlayEntries = parsedOverlayByPage.get(pageNumber) ?? [];
+    return (
+      <div className="pointer-events-none absolute inset-0 z-20">
+        {overlayEntries.map(({ block, fragment, isContinuation }) => {
+          const [x0, y0, x1, y1] = fragment.bbox;
+          const width = parsedPage.width || 1;
+          const height = parsedPage.height || 1;
+          const leftPct = (x0 / width) * 100;
+          const boxWidthPct = Math.max(0, ((x1 - x0) / width) * 100);
+          // Parsed model bboxes are top-left based; use y0 directly.
+          const topPct = (y0 / height) * 100;
+          const boxHeightPct = Math.max(0, ((y1 - y0) / height) * 100);
+
+          return (
+            <div
+              key={`${block.id}:${fragment.page}:${fragment.readingOrder}`}
+              className="absolute border border-accent/70 rounded-[2px]"
+              style={{
+                left: `${leftPct}%`,
+                top: `${topPct}%`,
+                width: `${boxWidthPct}%`,
+                height: `${boxHeightPct}%`,
+                backgroundColor: colorForKind(block.kind),
+              }}
+            >
+              <span className="absolute -top-4 left-0 bg-black/75 text-white text-[10px] px-1 rounded-sm">
+                {isContinuation ? `${block.kind} (cont)` : block.kind}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={containerRef}
@@ -330,62 +436,71 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
             // Scroll mode: render all pages
             <div className="flex flex-col gap-4">
               {currDocPages && [...Array(currDocPages)].map((_, i) => (
-                <Page
-                  key={`page_${i + 1}`}
-                  pageNumber={i + 1}
-                  renderAnnotationLayer={true}
-                  renderTextLayer={i + 1 === currDocPage}
-                  className="shadow-lg"
-                  scale={currentScale()}
-                  onRenderSuccess={() => {
-                    lastRenderedLayoutKeyRef.current = layoutKey;
-                    setIsPageRendering(false);
-                  }}
-                  onLoadSuccess={(page) => {
-                    setPageWidth(page.originalWidth);
-                    setPageHeight(page.originalHeight);
-                  }}
-                />
+                <div key={`page_wrap_${i + 1}`} className="relative">
+                  <Page
+                    key={`page_${i + 1}`}
+                    pageNumber={i + 1}
+                    renderAnnotationLayer={true}
+                    renderTextLayer={i + 1 === currDocPage}
+                    className="shadow-lg"
+                    scale={currentScale()}
+                    onRenderSuccess={() => {
+                      lastRenderedLayoutKeyRef.current = layoutKey;
+                      setIsPageRendering(false);
+                    }}
+                    onLoadSuccess={(page) => {
+                      setPageWidth(page.originalWidth);
+                      setPageHeight(page.originalHeight);
+                    }}
+                  />
+                  {renderParsedOverlay(i + 1)}
+                </div>
               ))}
             </div>
           ) : (
             // Single/Dual page mode
             <div className="flex justify-center gap-4">
               {currDocPages && leftPage > 0 && (
-                <Page
-                  key={`page_${leftPage}`}
-                  pageNumber={leftPage}
-                  renderAnnotationLayer={true}
-                  renderTextLayer={leftPage === currDocPage}
-                  className="shadow-lg"
-                  scale={currentScale()}
-                  onRenderSuccess={() => {
-                    lastRenderedLayoutKeyRef.current = layoutKey;
-                    setIsPageRendering(false);
-                  }}
-                  onLoadSuccess={(page) => {
-                    setPageWidth(page.originalWidth);
-                    setPageHeight(page.originalHeight);
-                  }}
-                />
+                <div className="relative">
+                  <Page
+                    key={`page_${leftPage}`}
+                    pageNumber={leftPage}
+                    renderAnnotationLayer={true}
+                    renderTextLayer={leftPage === currDocPage}
+                    className="shadow-lg"
+                    scale={currentScale()}
+                    onRenderSuccess={() => {
+                      lastRenderedLayoutKeyRef.current = layoutKey;
+                      setIsPageRendering(false);
+                    }}
+                    onLoadSuccess={(page) => {
+                      setPageWidth(page.originalWidth);
+                      setPageHeight(page.originalHeight);
+                    }}
+                  />
+                  {renderParsedOverlay(leftPage)}
+                </div>
               )}
               {currDocPages && rightPage && rightPage <= currDocPages && viewType === 'dual' && (
-                <Page
-                  key={`page_${rightPage}`}
-                  pageNumber={rightPage}
-                  renderAnnotationLayer={true}
-                  renderTextLayer={rightPage === currDocPage}
-                  className="shadow-lg"
-                  scale={currentScale()}
-                  onRenderSuccess={() => {
-                    lastRenderedLayoutKeyRef.current = layoutKey;
-                    setIsPageRendering(false);
-                  }}
-                  onLoadSuccess={(page) => {
-                    setPageWidth(page.originalWidth);
-                    setPageHeight(page.originalHeight);
-                  }}
-                />
+                <div className="relative">
+                  <Page
+                    key={`page_${rightPage}`}
+                    pageNumber={rightPage}
+                    renderAnnotationLayer={true}
+                    renderTextLayer={rightPage === currDocPage}
+                    className="shadow-lg"
+                    scale={currentScale()}
+                    onRenderSuccess={() => {
+                      lastRenderedLayoutKeyRef.current = layoutKey;
+                      setIsPageRendering(false);
+                    }}
+                    onLoadSuccess={(page) => {
+                      setPageWidth(page.originalWidth);
+                      setPageHeight(page.originalHeight);
+                    }}
+                  />
+                  {renderParsedOverlay(rightPage)}
+                </div>
               )}
             </div>
           )}

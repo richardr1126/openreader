@@ -11,6 +11,7 @@ export const audiobooks = usePostgres ? postgresSchema.audiobooks : sqliteSchema
 export const audiobookChapters = usePostgres ? postgresSchema.audiobookChapters : sqliteSchema.audiobookChapters;
 export const userTtsChars = usePostgres ? postgresSchema.userTtsChars : sqliteSchema.userTtsChars;
 export const userPreferences = usePostgres ? postgresSchema.userPreferences : sqliteSchema.userPreferences;
+export const documentSettings = usePostgres ? postgresSchema.documentSettings : sqliteSchema.documentSettings;
 export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentProgress : sqliteSchema.userDocumentProgress;
 export const documentPreviews = usePostgres ? postgresSchema.documentPreviews : sqliteSchema.documentPreviews;
 export const ttsSegmentEntries = usePostgres ? postgresSchema.ttsSegmentEntries : sqliteSchema.ttsSegmentEntries;

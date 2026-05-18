@@ -12,6 +12,8 @@ export const documents = sqliteTable('documents', {
   size: integer('size').notNull(),
   lastModified: integer('last_modified').notNull(),
   filePath: text('file_path').notNull(),
+  parseStatus: text('parse_status'),
+  parsedJsonKey: text('parsed_json_key'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
@@ -71,6 +73,18 @@ export const userPreferences = sqliteTable('user_preferences', {
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });
+
+export const documentSettings = sqliteTable('document_settings', {
+  documentId: text('document_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  dataJson: text('data_json').notNull().default('{}'),
+  clientUpdatedAtMs: integer('client_updated_at_ms').notNull().default(0),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.documentId, table.userId] }),
+  index('idx_document_settings_user_id').on(table.userId),
+]);
 
 export const userDocumentProgress = sqliteTable('user_document_progress', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

@@ -3,6 +3,8 @@ import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { type PDFDocumentProxy, TextLayer } from 'pdfjs-dist';
 import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
+import type { ParsedPdfPage, ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
 import { CmpStr } from 'cmpstr';
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
@@ -80,18 +82,16 @@ function runHighlightTokenMatch(
 function shouldUseLegacyBuild() {
   try {
     if (typeof window === 'undefined') return false;
-    
+
     const ua = window.navigator.userAgent;
     const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-    
-    console.log(isSafari ? 'Running on Safari' : 'Not running on Safari');
+
     if (!isSafari) return false;
-    
+
     // Extract Safari version - matches "Version/18" format
     const match = ua.match(/Version\/(\d+)/i);
-    console.log('Safari version:', match);
     if (!match || !match[1]) return true; // If we can't determine version, use legacy to be safe
-    
+
     const version = parseInt(match[1]);
     return version < 18; // Use legacy build for Safari versions equal or below 18
   } catch (e) {
@@ -106,10 +106,9 @@ function initPDFWorker() {
     if (typeof window !== 'undefined') {
       const useLegacy = shouldUseLegacyBuild();
       // Use local worker file instead of unpkg
-      const workerSrc = useLegacy 
+      const workerSrc = useLegacy
         ? new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
         : new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
-      console.log('Setting PDF worker to:', workerSrc);
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
       pdfjs.GlobalWorkerOptions.workerPort = null;
     }
@@ -192,35 +191,38 @@ const normalizeWordForMatch = (text: string): string =>
 export async function extractTextFromPDF(
   pdf: PDFDocumentProxy, 
   pageNumber: number, 
-  margins = { header: 0.07, footer: 0.07, left: 0.07, right: 0.07 }
+  margins = { header: 0.07, footer: 0.07, left: 0.07, right: 0.07 },
+  parsed?: ParsedPdfPage,
+  skipKinds?: ParsedPdfBlockKind[],
 ): Promise<string> {
   try {
-    // Log pdf worker version
-    //console.log('PDF worker version:', pdfjs.GlobalWorkerOptions.workerSrc);
+    if (parsed) {
+      return buildPageTextFromBlocks(parsed, skipKinds ?? []);
+    }
 
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
-    
+
     const viewport = page.getViewport({ scale: 1.0 });
     const pageHeight = viewport.height;
     const pageWidth = viewport.width;
 
     const textItems = textContent.items.filter((item): item is TextItem => {
       if (!('str' in item && 'transform' in item)) return false;
-      
+
       const [scaleX, skewX, skewY, scaleY, x, y] = item.transform;
-      
+
       // Basic text filtering
       if (Math.abs(scaleX) < 1 || Math.abs(scaleX) > 20) return false;
       if (Math.abs(scaleY) < 1 || Math.abs(scaleY) > 20) return false;
       if (Math.abs(skewX) > 0.5 || Math.abs(skewY) > 0.5) return false;
-      
+
       // Calculate margins in PDF coordinate space (y=0 is at bottom)
       const headerY = pageHeight * (1 - margins.header); // Convert from top margin to bottom-based Y
       const footerY = pageHeight * margins.footer; // Footer Y stays as is since it's already bottom-based
       const leftX = pageWidth * margins.left;
       const rightX = pageWidth * (1 - margins.right);
-      
+
       // Check margins - remember y=0 is at bottom of page in PDF coordinates
       if (y > headerY || y < footerY) { // Y greater than headerY means it's in header area, less than footerY means footer area
         return false;
@@ -230,14 +232,12 @@ export async function extractTextFromPDF(
       if (x < leftX || x > rightX) {
         return false;
       }
-      
+
       // Sanity check for coordinates
       if (x < 0 || x > pageWidth) return false;
-      
+
       return item.str.trim().length > 0;
     });
-
-    //console.log('Filtered text items:', textItems);
 
     const tolerance = 2;
     const lines: TextItem[][] = [];
