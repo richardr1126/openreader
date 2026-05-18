@@ -2,25 +2,11 @@ import {
   DEFAULT_DOCUMENT_SETTINGS,
   type DocumentSettings,
 } from '@/types/document-settings';
-import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
-
-const PDF_BLOCK_KINDS: ParsedPdfBlockKind[] = [
-  'title',
-  'section-header',
-  'paragraph',
-  'list-item',
-  'caption',
-  'table',
-  'picture',
-  'page-header',
-  'page-footer',
-  'footnote',
-  'formula',
-];
+import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
   if (!Array.isArray(value)) return [...(DEFAULT_DOCUMENT_SETTINGS.pdf?.skipBlockKinds ?? [])];
-  const allow = new Set(PDF_BLOCK_KINDS);
+  const allow = new Set(PARSED_PDF_BLOCK_KINDS);
   const out: ParsedPdfBlockKind[] = [];
   for (const entry of value) {
     if (typeof entry !== 'string') continue;

@@ -39,12 +39,12 @@ test.describe('stitchCrossPageBlocks', () => {
   test('stitches paragraph continuation across footer/header noise', () => {
     const doc = makeDoc(
       [
-        makeBlock('b1', 'paragraph', 'This sentence continues', 1, 0),
-        makeBlock('b2', 'page-footer', 'Footer text', 1, 1),
+        makeBlock('b1', 'text', 'This sentence continues', 1, 0),
+        makeBlock('b2', 'footer', 'Footer text', 1, 1),
       ],
       [
-        makeBlock('b3', 'page-header', 'Header text', 2, 0),
-        makeBlock('b4', 'paragraph', 'into the next page.', 2, 1),
+        makeBlock('b3', 'header', 'Header text', 2, 0),
+        makeBlock('b4', 'text', 'into the next page.', 2, 1),
       ],
     );
 
@@ -57,14 +57,14 @@ test.describe('stitchCrossPageBlocks', () => {
     expect(page2?.blocks.map((b) => b.id)).toEqual(['b3']);
   });
 
-  test('does not stitch across section-header boundary', () => {
+  test('does not stitch across paragraph-title boundary', () => {
     const doc = makeDoc(
       [
-        makeBlock('b1', 'paragraph', 'This sentence continues', 1, 0),
+        makeBlock('b1', 'text', 'This sentence continues', 1, 0),
       ],
       [
-        makeBlock('b2', 'section-header', '2 New Section', 2, 0),
-        makeBlock('b3', 'paragraph', 'into the next page.', 2, 1),
+        makeBlock('b2', 'paragraph_title', '2 New Section', 2, 0),
+        makeBlock('b3', 'text', 'into the next page.', 2, 1),
       ],
     );
 
@@ -76,10 +76,10 @@ test.describe('stitchCrossPageBlocks', () => {
   test('does not stitch when tail has sentence terminal', () => {
     const doc = makeDoc(
       [
-        makeBlock('b1', 'paragraph', 'This sentence is complete.', 1, 0),
+        makeBlock('b1', 'text', 'This sentence is complete.', 1, 0),
       ],
       [
-        makeBlock('b2', 'paragraph', 'next sentence starts here', 2, 0),
+        makeBlock('b2', 'text', 'next sentence starts here', 2, 0),
       ],
     );
 
@@ -88,4 +88,3 @@ test.describe('stitchCrossPageBlocks', () => {
     expect(stitched.pages[1]?.blocks.map((b) => b.id)).toEqual(['b2']);
   });
 });
-

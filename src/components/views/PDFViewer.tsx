@@ -354,14 +354,26 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
 
   const colorForKind = (kind: ParsedPdfBlock['kind']): string => {
     switch (kind) {
-      case 'section-header': return 'rgba(34,197,94,0.20)';
-      case 'title': return 'rgba(16,185,129,0.20)';
-      case 'caption': return 'rgba(245,158,11,0.20)';
+      case 'paragraph_title': return 'rgba(34,197,94,0.20)';
+      case 'doc_title': return 'rgba(16,185,129,0.20)';
+      case 'figure_title': return 'rgba(245,158,11,0.20)';
       case 'table': return 'rgba(59,130,246,0.20)';
-      case 'picture': return 'rgba(139,92,246,0.20)';
-      case 'page-header':
-      case 'page-footer':
-      case 'footnote': return 'rgba(239,68,68,0.20)';
+      case 'chart':
+      case 'image': return 'rgba(139,92,246,0.20)';
+      case 'header':
+      case 'footer':
+      case 'footnote':
+      case 'vision_footnote': return 'rgba(239,68,68,0.20)';
+      case 'formula':
+      case 'formula_number': return 'rgba(251,146,60,0.22)';
+      case 'abstract':
+      case 'algorithm':
+      case 'aside_text':
+      case 'content':
+      case 'reference':
+      case 'reference_content':
+      case 'text':
+      case 'number': return 'rgba(14,165,233,0.18)';
       default: return 'rgba(14,165,233,0.18)';
     }
   };

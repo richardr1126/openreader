@@ -4,8 +4,8 @@ import { mergeTextWithRegions } from '../../src/lib/server/pdf-layout/mergeTextW
 test.describe('mergeTextWithRegions', () => {
   test('assigns text items to containing regions by centroid and joins in reading order', () => {
     const regions = [
-      { bbox: [0, 0, 100, 50] as [number, number, number, number], label: 'paragraph' as const },
-      { bbox: [0, 50, 100, 100] as [number, number, number, number], label: 'caption' as const },
+      { bbox: [0, 0, 100, 50] as [number, number, number, number], label: 'text' as const },
+      { bbox: [0, 50, 100, 100] as [number, number, number, number], label: 'figure_title' as const },
     ];
 
     const textItems = [

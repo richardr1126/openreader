@@ -1,8 +1,7 @@
 import * as ort from 'onnxruntime-node';
 import { readFile } from 'fs/promises';
-import path from 'path';
 import type { LayoutRegion, PdfTextItem } from '@/lib/server/pdf-layout/types';
-import { ensureModel } from '@/lib/server/pdf-layout/ensureModel';
+import { ensureModel, MODEL_CONFIG_PATH, MODEL_PREPROCESSOR_PATH } from '@/lib/server/pdf-layout/ensureModel';
 
 interface RunLayoutInput {
   pageWidth: number;
@@ -11,42 +10,74 @@ interface RunLayoutInput {
   pagePng: Buffer;
 }
 
-const INPUT_SIZE = 640;
-const MIN_SCORE = 0.6;
+const DEFAULT_INPUT_SIZE = 800;
+const MIN_SCORE = 0.5;
+const CLASS_MIN_SCORE: Partial<Record<LayoutRegion['label'], number>> = {
+  header: 0.4,
+  footer: 0.4,
+  figure_title: 0.45,
+  footnote: 0.45,
+  vision_footnote: 0.45,
+};
 
 const LABEL_MAP: Record<string, LayoutRegion['label'] | null> = {
-  caption: 'caption',
+  // PP-DocLayoutV3 labels
+  abstract: 'abstract',
+  algorithm: 'algorithm',
+  aside_text: 'aside_text',
+  chart: 'chart',
+  content: 'content',
+  display_formula: 'formula',
+  doc_title: 'doc_title',
+  figure_title: 'figure_title',
+  footer: 'footer',
+  footer_image: 'footer',
   footnote: 'footnote',
-  formula: 'formula',
-  list_item: 'list-item',
-  page_footer: 'page-footer',
-  page_header: 'page-header',
-  picture: 'picture',
-  section_header: 'section-header',
+  formula_number: 'formula_number',
+  header: 'header',
+  header_image: 'header',
+  image: 'image',
+  inline_formula: 'formula',
+  number: 'number',
+  paragraph_title: 'paragraph_title',
+  reference: 'reference',
+  reference_content: 'reference_content',
+  seal: 'seal',
   table: 'table',
-  text: 'paragraph',
-  title: 'title',
-  document_index: null,
-  code: null,
-  checkbox_selected: null,
-  checkbox_unselected: null,
-  form: null,
-  key_value_region: null,
+  text: 'text',
+  vertical_text: 'text',
+  vision_footnote: 'vision_footnote',
 };
 
 const MIN_REGION_SIZE: Partial<Record<LayoutRegion['label'], { minWidth: number; minHeight: number }>> = {
-  paragraph: { minWidth: 24, minHeight: 14 },
-  'section-header': { minWidth: 24, minHeight: 14 },
-  title: { minWidth: 24, minHeight: 14 },
-  'list-item': { minWidth: 18, minHeight: 12 },
-  caption: { minWidth: 18, minHeight: 10 },
+  abstract: { minWidth: 24, minHeight: 14 },
+  algorithm: { minWidth: 24, minHeight: 14 },
+  aside_text: { minWidth: 24, minHeight: 14 },
+  content: { minWidth: 24, minHeight: 14 },
+  text: { minWidth: 24, minHeight: 14 },
+  reference: { minWidth: 24, minHeight: 14 },
+  reference_content: { minWidth: 24, minHeight: 14 },
+  paragraph_title: { minWidth: 24, minHeight: 14 },
+  doc_title: { minWidth: 24, minHeight: 14 },
+  number: { minWidth: 18, minHeight: 12 },
+  figure_title: { minWidth: 18, minHeight: 10 },
   footnote: { minWidth: 18, minHeight: 10 },
-  'page-header': { minWidth: 18, minHeight: 10 },
-  'page-footer': { minWidth: 18, minHeight: 10 },
+  vision_footnote: { minWidth: 18, minHeight: 10 },
+  header: { minWidth: 18, minHeight: 10 },
+  footer: { minWidth: 18, minHeight: 10 },
 };
+
+interface ModelPreprocessor {
+  inputWidth: number;
+  inputHeight: number;
+  rescaleFactor: number;
+  mean: [number, number, number];
+  std: [number, number, number];
+}
 
 let sessionPromise: Promise<ort.InferenceSession> | null = null;
 let idToLabelPromise: Promise<Record<number, string>> | null = null;
+let preprocessorPromise: Promise<ModelPreprocessor> | null = null;
 let canvasFnsPromise: Promise<{
   createCanvasFn: (width: number, height: number) => { getContext: (kind: '2d') => CanvasRenderingContext2D };
   loadImageFn: (src: Buffer) => Promise<{ width: number; height: number } & CanvasImageSource>;
@@ -96,14 +127,13 @@ async function getSession(): Promise<ort.InferenceSession> {
 async function getIdToLabel(): Promise<Record<number, string>> {
   if (!idToLabelPromise) {
     idToLabelPromise = (async () => {
-      const modelPath = await ensureModel();
-      const configPath = path.join(path.dirname(modelPath), 'docling-layout-heron.config.json');
-      const raw = await readFile(configPath, 'utf8');
+      await ensureModel();
+      const raw = await readFile(MODEL_CONFIG_PATH, 'utf8');
       const parsed = JSON.parse(raw) as { id2label?: Record<string, string> };
       const out: Record<number, string> = {};
       for (const [key, value] of Object.entries(parsed.id2label ?? {})) {
         const n = Number(key);
-        if (Number.isFinite(n)) out[n] = value;
+        if (Number.isFinite(n)) out[n] = String(value ?? '').trim();
       }
       return out;
     })();
@@ -111,49 +141,74 @@ async function getIdToLabel(): Promise<Record<number, string>> {
   return idToLabelPromise;
 }
 
-function preprocessLetterboxed(
-  image: CanvasImageSource,
-  createCanvasFn: (width: number, height: number) => { getContext: (kind: '2d') => CanvasRenderingContext2D },
-): {
-  tensor: ort.Tensor;
-  scale: number;
-  padX: number;
-  padY: number;
-} {
-  const sourceWidth = Math.max(1, Number((image as { width?: number }).width ?? INPUT_SIZE));
-  const sourceHeight = Math.max(1, Number((image as { height?: number }).height ?? INPUT_SIZE));
-  const scale = Math.min(INPUT_SIZE / sourceWidth, INPUT_SIZE / sourceHeight);
-  const drawWidth = Math.max(1, Math.round(sourceWidth * scale));
-  const drawHeight = Math.max(1, Math.round(sourceHeight * scale));
-  const padX = Math.floor((INPUT_SIZE - drawWidth) / 2);
-  const padY = Math.floor((INPUT_SIZE - drawHeight) / 2);
+async function getPreprocessor(): Promise<ModelPreprocessor> {
+  if (!preprocessorPromise) {
+    preprocessorPromise = (async () => {
+      await ensureModel();
+      const raw = await readFile(MODEL_PREPROCESSOR_PATH, 'utf8');
+      const parsed = JSON.parse(raw) as {
+        size?: { width?: number; height?: number };
+        rescale_factor?: number;
+        image_mean?: number[];
+        image_std?: number[];
+      };
 
-  const canvas = createCanvasFn(INPUT_SIZE, INPUT_SIZE);
+      const inputWidth = Math.max(1, Number(parsed.size?.width ?? DEFAULT_INPUT_SIZE));
+      const inputHeight = Math.max(1, Number(parsed.size?.height ?? DEFAULT_INPUT_SIZE));
+      const rescaleFactor = Number.isFinite(parsed.rescale_factor) ? Number(parsed.rescale_factor) : (1 / 255);
+      const mean = [
+        Number(parsed.image_mean?.[0] ?? 0),
+        Number(parsed.image_mean?.[1] ?? 0),
+        Number(parsed.image_mean?.[2] ?? 0),
+      ] as [number, number, number];
+      const std = [
+        Number(parsed.image_std?.[0] ?? 1),
+        Number(parsed.image_std?.[1] ?? 1),
+        Number(parsed.image_std?.[2] ?? 1),
+      ] as [number, number, number];
+
+      return {
+        inputWidth,
+        inputHeight,
+        rescaleFactor,
+        mean,
+        std,
+      };
+    })();
+  }
+  return preprocessorPromise;
+}
+
+function preprocessResized(
+  image: CanvasImageSource,
+  preprocessor: ModelPreprocessor,
+  createCanvasFn: (width: number, height: number) => { getContext: (kind: '2d') => CanvasRenderingContext2D },
+): ort.Tensor {
+  const canvas = createCanvasFn(preprocessor.inputWidth, preprocessor.inputHeight);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
+  ctx.fillRect(0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(image, padX, padY, drawWidth, drawHeight);
+  ctx.drawImage(image, 0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
 
-  const imageData = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
-  const data = new Uint8Array(1 * 3 * INPUT_SIZE * INPUT_SIZE);
-  for (let y = 0; y < INPUT_SIZE; y += 1) {
-    for (let x = 0; x < INPUT_SIZE; x += 1) {
-      const pixelIndex = (y * INPUT_SIZE + x) * 4;
-      const chwIndex = y * INPUT_SIZE + x;
-      data[0 * INPUT_SIZE * INPUT_SIZE + chwIndex] = imageData.data[pixelIndex];
-      data[1 * INPUT_SIZE * INPUT_SIZE + chwIndex] = imageData.data[pixelIndex + 1];
-      data[2 * INPUT_SIZE * INPUT_SIZE + chwIndex] = imageData.data[pixelIndex + 2];
+  const imageData = ctx.getImageData(0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
+  const chw = new Float32Array(1 * 3 * preprocessor.inputWidth * preprocessor.inputHeight);
+  const channelSize = preprocessor.inputWidth * preprocessor.inputHeight;
+  for (let y = 0; y < preprocessor.inputHeight; y += 1) {
+    for (let x = 0; x < preprocessor.inputWidth; x += 1) {
+      const pixelIndex = (y * preprocessor.inputWidth + x) * 4;
+      const idx = y * preprocessor.inputWidth + x;
+      const r = imageData.data[pixelIndex] * preprocessor.rescaleFactor;
+      const g = imageData.data[pixelIndex + 1] * preprocessor.rescaleFactor;
+      const b = imageData.data[pixelIndex + 2] * preprocessor.rescaleFactor;
+
+      chw[idx] = (r - preprocessor.mean[0]) / Math.max(1e-8, preprocessor.std[0]);
+      chw[channelSize + idx] = (g - preprocessor.mean[1]) / Math.max(1e-8, preprocessor.std[1]);
+      chw[channelSize * 2 + idx] = (b - preprocessor.mean[2]) / Math.max(1e-8, preprocessor.std[2]);
     }
   }
-
-  return {
-    tensor: new ort.Tensor('uint8', data, [1, 3, INPUT_SIZE, INPUT_SIZE]),
-    scale,
-    padX,
-    padY,
-  };
+  return new ort.Tensor('float32', chw, [1, 3, preprocessor.inputHeight, preprocessor.inputWidth]);
 }
 
 function clampBox(
@@ -169,6 +224,36 @@ function clampBox(
   return [x0, y0, x1, y1];
 }
 
+function softmaxMax(logits: Float32Array, offset: number, count: number): { index: number; score: number } {
+  let maxLogit = Number.NEGATIVE_INFINITY;
+  let maxIndex = 0;
+  for (let i = 0; i < count; i += 1) {
+    const value = logits[offset + i];
+    if (value > maxLogit) {
+      maxLogit = value;
+      maxIndex = i;
+    }
+  }
+
+  let sum = 0;
+  for (let i = 0; i < count; i += 1) {
+    sum += Math.exp(logits[offset + i] - maxLogit);
+  }
+
+  const score = sum > 0 ? (1 / sum) : 0;
+  return { index: maxIndex, score };
+}
+
+function normalizeModelLabel(rawLabel: string): string {
+  const normalized = rawLabel.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized.endsWith('_image')) {
+    const base = normalized.slice(0, -'_image'.length);
+    if (base === 'header' || base === 'footer') return normalized;
+  }
+  // Some exports suffix duplicate classes (e.g. header_1, footer_1, text_1).
+  return normalized.replace(/_\d+$/g, '');
+}
+
 export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegion[]> {
   const { pageWidth, pageHeight, textItems, pagePng } = input;
   if (!textItems.length) return [];
@@ -177,44 +262,49 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
   }
 
   try {
-    const [session, idToLabel, canvasFns] = await Promise.all([getSession(), getIdToLabel(), getCanvasFns()]);
-    const pageImage = await canvasFns.loadImageFn(pagePng);
-    const preprocess = preprocessLetterboxed(pageImage, canvasFns.createCanvasFn);
-    const targetSizes = new ort.Tensor('int64', new BigInt64Array([BigInt(INPUT_SIZE), BigInt(INPUT_SIZE)]), [1, 2]);
-    const output = await session.run({
-      images: preprocess.tensor,
-      orig_target_sizes: targetSizes,
-    });
+    const [session, idToLabel, preprocessor, canvasFns] = await Promise.all([
+      getSession(),
+      getIdToLabel(),
+      getPreprocessor(),
+      getCanvasFns(),
+    ]);
 
-    const labels = output.labels?.data as BigInt64Array | Int32Array | undefined;
-    const boxes = output.boxes?.data as Float32Array | undefined;
-    const scores = output.scores?.data as Float32Array | undefined;
-    if (!labels || !boxes || !scores) return [];
+    const pageImage = await canvasFns.loadImageFn(pagePng);
+    const pixelValues = preprocessResized(pageImage, preprocessor, canvasFns.createCanvasFn);
+    const output = await session.run({ pixel_values: pixelValues });
+
+    const logits = output.logits?.data as Float32Array | undefined;
+    const predBoxes = output.pred_boxes?.data as Float32Array | undefined;
+    if (!logits || !predBoxes) return [];
+
+    const numQueries = Math.floor(predBoxes.length / 4);
+    if (numQueries <= 0) return [];
+    const classCount = Math.floor(logits.length / numQueries);
+    if (classCount <= 0) return [];
 
     const regions: LayoutRegion[] = [];
-    const count = Math.min(scores.length, Math.floor(boxes.length / 4), labels.length);
-    for (let i = 0; i < count; i += 1) {
-      const score = scores[i];
-      if (!Number.isFinite(score) || score < MIN_SCORE) continue;
 
-      const rawLabel = Number(labels[i]);
-      const labelName = idToLabel[rawLabel];
-      if (!labelName) continue;
-      const mapped = LABEL_MAP[labelName];
+    for (let queryIdx = 0; queryIdx < numQueries; queryIdx += 1) {
+      const cls = softmaxMax(logits, queryIdx * classCount, classCount);
+      const rawLabel = idToLabel[cls.index];
+      if (!rawLabel) continue;
+      const mapped = LABEL_MAP[normalizeModelLabel(rawLabel)];
       if (!mapped) continue;
 
-      const modelBox: [number, number, number, number] = [
-        boxes[i * 4 + 0],
-        boxes[i * 4 + 1],
-        boxes[i * 4 + 2],
-        boxes[i * 4 + 3],
-      ];
+      const minScore = CLASS_MIN_SCORE[mapped] ?? MIN_SCORE;
+      if (!Number.isFinite(cls.score) || cls.score < minScore) continue;
+
+      const cx = predBoxes[queryIdx * 4 + 0] * pageWidth;
+      const cy = predBoxes[queryIdx * 4 + 1] * pageHeight;
+      const w = predBoxes[queryIdx * 4 + 2] * pageWidth;
+      const h = predBoxes[queryIdx * 4 + 3] * pageHeight;
       const rawBox: [number, number, number, number] = [
-        (modelBox[0] - preprocess.padX) / preprocess.scale,
-        (modelBox[1] - preprocess.padY) / preprocess.scale,
-        (modelBox[2] - preprocess.padX) / preprocess.scale,
-        (modelBox[3] - preprocess.padY) / preprocess.scale,
+        cx - w / 2,
+        cy - h / 2,
+        cx + w / 2,
+        cy + h / 2,
       ];
+
       const clamped = clampBox(rawBox, pageWidth, pageHeight);
       if (!clamped) continue;
 
@@ -228,7 +318,7 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
       regions.push({
         bbox: clamped,
         label: mapped,
-        confidence: score,
+        confidence: cls.score,
       });
     }
 

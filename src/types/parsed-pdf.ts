@@ -1,15 +1,49 @@
 export type ParsedPdfBlockKind =
-  | 'title'
-  | 'section-header'
-  | 'paragraph'
-  | 'list-item'
-  | 'caption'
-  | 'table'
-  | 'picture'
-  | 'page-header'
-  | 'page-footer'
+  | 'abstract'
+  | 'algorithm'
+  | 'aside_text'
+  | 'chart'
+  | 'content'
+  | 'formula'
+  | 'doc_title'
+  | 'figure_title'
+  | 'footer'
   | 'footnote'
-  | 'formula';
+  | 'formula_number'
+  | 'header'
+  | 'image'
+  | 'number'
+  | 'paragraph_title'
+  | 'reference'
+  | 'reference_content'
+  | 'seal'
+  | 'table'
+  | 'text'
+  | 'vision_footnote';
+
+export const PARSED_PDF_BLOCK_KINDS: ParsedPdfBlockKind[] = [
+  'abstract',
+  'algorithm',
+  'aside_text',
+  'chart',
+  'content',
+  'formula',
+  'doc_title',
+  'figure_title',
+  'footer',
+  'footnote',
+  'formula_number',
+  'header',
+  'image',
+  'number',
+  'paragraph_title',
+  'reference',
+  'reference_content',
+  'seal',
+  'table',
+  'text',
+  'vision_footnote',
+];
 
 export interface ParsedPdfBlockFragment {
   page: number;

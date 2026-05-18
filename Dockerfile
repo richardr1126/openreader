@@ -73,7 +73,7 @@ COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
 # Include static model notices for runtime-downloaded assets.
-COPY src/lib/server/pdf-layout/model/LICENSE.txt /licenses/docling-layout-LICENSE.txt
+COPY src/lib/server/pdf-layout/model/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
 
 # Copy the compiled whisper.cpp build output into the runtime image
 # (includes whisper-cli and its shared libraries, e.g. libwhisper.so, libggml.so)

@@ -60,6 +60,8 @@ function prepareParsedChapters({
   let currentTitle = 'Introduction';
   let currentBlocks: ParsedPdfBlock[] = [];
 
+  const chapterBoundaryKinds = new Set<string>(['paragraph_title', 'doc_title']);
+
   const flush = () => {
     if (!currentBlocks.length) return;
     const text = chapterTextFromBlocks(currentBlocks, smartSentenceSplitting, maxBlockLength);
@@ -74,7 +76,7 @@ function prepareParsedChapters({
   };
 
   for (const block of allBlocks) {
-    if (block.kind === 'section-header') {
+    if (chapterBoundaryKinds.has(block.kind)) {
       flush();
       currentTitle = block.text.trim() || `Chapter ${chapters.length + 1}`;
       currentBlocks.push(block);

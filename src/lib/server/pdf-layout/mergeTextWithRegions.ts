@@ -1,15 +1,23 @@
 import type { LayoutRegion, PdfTextItem } from '@/lib/server/pdf-layout/types';
 
-const NON_TEXT_REGION_LABELS = new Set<LayoutRegion['label']>(['picture', 'table']);
+const NON_TEXT_REGION_LABELS = new Set<LayoutRegion['label']>(['chart', 'image', 'table', 'seal']);
 const TEXT_ASSIGNABLE_LABELS = new Set<LayoutRegion['label']>([
-  'title',
-  'section-header',
-  'paragraph',
-  'list-item',
-  'caption',
-  'page-header',
-  'page-footer',
+  'abstract',
+  'algorithm',
+  'aside_text',
+  'content',
+  'doc_title',
+  'figure_title',
+  'footer',
   'footnote',
+  'formula_number',
+  'header',
+  'number',
+  'paragraph_title',
+  'reference',
+  'reference_content',
+  'text',
+  'vision_footnote',
   'formula',
 ]);
 

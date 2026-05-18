@@ -56,7 +56,10 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `OPENREADER_COMPUTE_MODE` | Heavy compute backend | `local` | Set to `none` to disable whisper alignment + PDF layout parsing |
 | `OPENREADER_COMPUTE_WORKER_URL` | Heavy compute backend | unset | Reserved for future worker backend mode (`worker`) |
 | `OPENREADER_COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset | Reserved for future worker backend mode (`worker`) |
-| `OPENREADER_DOCLING_MODEL_URL` | PDF layout model | Docling HF URL | Override ONNX download URL for `ensureModel()` |
+| `OPENREADER_PDF_LAYOUT_MODEL_URL` | PDF layout model | PP-DocLayoutV3 ONNX URL | Override ONNX model URL for `ensureModel()` |
+| `OPENREADER_PDF_LAYOUT_MODEL_DATA_URL` | PDF layout model | PP-DocLayoutV3 ONNX data URL | Override ONNX external data URL for `ensureModel()` |
+| `OPENREADER_PDF_LAYOUT_CONFIG_URL` | PDF layout model | PP-DocLayoutV3 config URL | Override model config URL for `ensureModel()` |
+| `OPENREADER_PDF_LAYOUT_PREPROCESSOR_URL` | PDF layout model | PP-DocLayoutV3 preprocessor URL | Override model preprocessor URL for `ensureModel()` |
 | `WHISPER_CPP_BIN` | Word timing (local mode) | unset | Set to enable `whisper.cpp` timestamps in `OPENREADER_COMPUTE_MODE=local` |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 
@@ -374,13 +377,31 @@ Reserved bearer token for future external compute worker mode.
 - Used only when `OPENREADER_COMPUTE_MODE=worker` (not implemented in v1)
 - Leave unset in v1
 
-### OPENREADER_DOCLING_MODEL_URL
+### OPENREADER_PDF_LAYOUT_MODEL_URL
 
-Override URL for the Docling ONNX layout model downloaded by `ensureModel()`.
+Override URL for the PP-DocLayoutV3 ONNX model downloaded by `ensureModel()`.
 
-- Default: `https://huggingface.co/ds4sd/docling-layout-heron/resolve/main/model.onnx`
+- Default: `https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main/PP-DocLayoutV3.onnx`
 - Optional for custom mirrors/air-gapped workflows
-- You can also pre-populate the model cache via `pnpm fetch-models`
+
+### OPENREADER_PDF_LAYOUT_MODEL_DATA_URL
+
+Override URL for the PP-DocLayoutV3 ONNX external data file downloaded by `ensureModel()`.
+
+- Default: `https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main/PP-DocLayoutV3.onnx.data`
+
+### OPENREADER_PDF_LAYOUT_CONFIG_URL
+
+Override URL for the PP-DocLayoutV3 `config.json` downloaded by `ensureModel()`.
+
+- Default: `https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main/config.json`
+
+### OPENREADER_PDF_LAYOUT_PREPROCESSOR_URL
+
+Override URL for the PP-DocLayoutV3 `preprocessor_config.json` downloaded by `ensureModel()`.
+
+- Default: `https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main/preprocessor_config.json`
+- You can pre-populate the model cache via `pnpm fetch-models`
 
 ### WHISPER_CPP_BIN
 

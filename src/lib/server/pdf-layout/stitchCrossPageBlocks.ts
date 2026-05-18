@@ -1,5 +1,15 @@
 import type { ParsedPdfDocument, ParsedPdfBlock } from '@/types/parsed-pdf';
 
+const STITCHABLE_KINDS = new Set<ParsedPdfBlock['kind']>([
+  'text',
+  'content',
+  'reference_content',
+  'aside_text',
+  'abstract',
+  'algorithm',
+  'reference',
+]);
+
 function stripTrailingClosers(text: string): string {
   return text.trim().replace(/[\"'”’\]\)]+$/g, '');
 }
@@ -9,7 +19,7 @@ function isSentenceTerminal(text: string): boolean {
 }
 
 function canStitch(a: ParsedPdfBlock, b: ParsedPdfBlock): boolean {
-  if (!['paragraph', 'list-item'].includes(a.kind)) return false;
+  if (!STITCHABLE_KINDS.has(a.kind)) return false;
   if (a.kind !== b.kind) return false;
   if (isSentenceTerminal(a.text)) return false;
   const next = b.text.trim();
@@ -18,13 +28,16 @@ function canStitch(a: ParsedPdfBlock, b: ParsedPdfBlock): boolean {
   return true;
 }
 
-const HARD_BOUNDARY_KINDS = new Set<ParsedPdfBlock['kind']>(['section-header', 'title']);
+const HARD_BOUNDARY_KINDS = new Set<ParsedPdfBlock['kind']>([
+  'paragraph_title',
+  'doc_title',
+]);
 
 function findTailCandidateIndex(blocks: ParsedPdfBlock[]): number {
   for (let i = blocks.length - 1; i >= 0; i -= 1) {
     const block = blocks[i];
     if (!block || !block.text.trim()) continue;
-    if (block.kind === 'paragraph' || block.kind === 'list-item') return i;
+    if (STITCHABLE_KINDS.has(block.kind)) return i;
   }
   return -1;
 }
@@ -33,7 +46,7 @@ function findHeadCandidateIndex(blocks: ParsedPdfBlock[]): number {
   for (let i = 0; i < blocks.length; i += 1) {
     const block = blocks[i];
     if (!block || !block.text.trim()) continue;
-    if (block.kind === 'paragraph' || block.kind === 'list-item') return i;
+    if (STITCHABLE_KINDS.has(block.kind)) return i;
   }
   return -1;
 }

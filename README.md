@@ -21,7 +21,7 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 - 🎯 **Multi-provider TTS** with OpenAI-compatible endpoints and cloud providers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI or OpenAI, Replicate, DeepInfra).
 - 📖 **Read-along playback** for PDF/EPUB with sentence-aware narration.
 - ⏱️ **Word-by-word highlighting** via optional `whisper.cpp` timestamps (`OPENREADER_COMPUTE_MODE=local` + `WHISPER_CPP_BIN`).
-- 🧱 **Layout-aware PDF parsing** (Docling ONNX) with structured blocks for cleaner TTS/chaptering.
+- 🧱 **Layout-aware PDF parsing** (PP-DocLayoutV3 ONNX) with structured blocks for cleaner TTS/chaptering.
 - 🛜 **Sync + library import** to bring docs across devices and from server-mounted folders.
 - 🗂️ **Flexible storage** with embedded SeaweedFS or external S3-compatible backends.
 - 🎧 **Audiobook export** in `m4b`/`mp3` with resumable chapter processing.

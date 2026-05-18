@@ -21,10 +21,27 @@ import { RefreshIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 
 const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
-  { kind: 'page-header', label: 'Page headers' },
-  { kind: 'page-footer', label: 'Page footers' },
-  { kind: 'footnote', label: 'Footnotes' },
-  { kind: 'caption', label: 'Captions' },
+  { kind: 'header', label: 'Header' },
+  { kind: 'footer', label: 'Footer' },
+  { kind: 'footnote', label: 'Footnote' },
+  { kind: 'vision_footnote', label: 'Vision footnote' },
+  { kind: 'figure_title', label: 'Figure title' },
+  { kind: 'doc_title', label: 'Document title' },
+  { kind: 'paragraph_title', label: 'Paragraph title' },
+  { kind: 'abstract', label: 'Abstract' },
+  { kind: 'algorithm', label: 'Algorithm' },
+  { kind: 'aside_text', label: 'Aside text' },
+  { kind: 'content', label: 'Content' },
+  { kind: 'reference', label: 'Reference' },
+  { kind: 'reference_content', label: 'Reference content' },
+  { kind: 'text', label: 'Text' },
+  { kind: 'number', label: 'Number' },
+  { kind: 'formula', label: 'Formula' },
+  { kind: 'formula_number', label: 'Formula number' },
+  { kind: 'table', label: 'Table' },
+  { kind: 'chart', label: 'Chart' },
+  { kind: 'image', label: 'Image' },
+  { kind: 'seal', label: 'Seal' },
 ];
 
 const viewTypeTextMapping = [

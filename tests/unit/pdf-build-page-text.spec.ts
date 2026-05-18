@@ -11,26 +11,26 @@ test.describe('buildPageTextFromBlocks', () => {
       blocks: [
         {
           id: 'b2',
-          kind: 'page-header',
+          kind: 'header',
           text: 'Copyright Header',
           fragments: [{ page: 1, bbox: [0, 90, 100, 100], text: 'Copyright Header', readingOrder: 0 }],
         },
         {
           id: 'b1',
-          kind: 'paragraph',
+          kind: 'text',
           text: 'Body text',
           fragments: [{ page: 1, bbox: [0, 20, 100, 80], text: 'Body text', readingOrder: 1 }],
         },
         {
           id: 'b3',
-          kind: 'caption',
+          kind: 'figure_title',
           text: 'Figure caption',
           fragments: [{ page: 1, bbox: [0, 5, 100, 19], text: 'Figure caption', readingOrder: 2 }],
         },
       ],
     };
 
-    expect(buildPageTextFromBlocks(page, ['page-header'])).toBe('Body text Figure caption');
-    expect(buildPageTextFromBlocks(page, ['page-header', 'caption'])).toBe('Body text');
+    expect(buildPageTextFromBlocks(page, ['header'])).toBe('Body text Figure caption');
+    expect(buildPageTextFromBlocks(page, ['header', 'figure_title'])).toBe('Body text');
   });
 });

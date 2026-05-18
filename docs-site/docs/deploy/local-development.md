@@ -261,7 +261,7 @@ For all environment variables, see [Environment Variables](../reference/environm
 :::
 
 :::tip Optional model prefetch
-To pre-populate the Docling ONNX model cache before first PDF parse, run `pnpm fetch-models`.
+To pre-populate the PDF layout ONNX model cache before first PDF parse, run `pnpm fetch-models`.
 :::
 
 See [Auth](../configure/auth) for app/auth behavior.

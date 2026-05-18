@@ -12,7 +12,7 @@ export interface DocumentSettings {
 export const DEFAULT_DOCUMENT_SETTINGS: DocumentSettings = {
   schemaVersion: 1,
   pdf: {
-    skipBlockKinds: ['page-header', 'page-footer', 'footnote'],
+    skipBlockKinds: ['header', 'footer', 'footnote', 'vision_footnote'],
     chaptersFromSections: true,
   },
 };

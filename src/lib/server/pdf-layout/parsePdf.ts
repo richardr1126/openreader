@@ -140,7 +140,7 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
     const doc: ParsedPdfDocument = {
       schemaVersion: 1,
       documentId: input.documentId,
-      parserVersion: 'docling-layout-heron@v1+pdfjs@4.8.69',
+      parserVersion: 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69',
       parsedAt: Date.now(),
       pages,
     };
