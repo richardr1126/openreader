@@ -114,50 +114,13 @@ sudo apt install -y libreoffice
 </details>
 
 <details>
-<summary><strong>whisper.cpp (optional, for word-by-word highlighting)</strong></summary>
+<summary><strong>Word-by-word highlighting (optional)</strong></summary>
 
-Install build dependencies:
+No extra native Whisper CLI build step is required.
 
-<Tabs groupId="local-dev-whisper-deps-os">
-<TabItem value="macos" label="macOS" default>
+Set `OPENREADER_COMPUTE_MODE=local` to enable built-in ONNX word alignment in-process.
 
-```bash
-brew install cmake
-```
-
-</TabItem>
-<TabItem value="linux" label="Linux">
-
-```bash
-# Debian/Ubuntu example
-sudo apt update
-sudo apt install -y git build-essential cmake
-```
-
-</TabItem>
-</Tabs>
-
-Build whisper.cpp:
-
-```bash
-# clone and build whisper.cpp (no model download needed – OpenReader handles that)
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
-cmake -B build
-cmake --build build -j --config Release
-
-# point OpenReader to the compiled whisper-cli binary
-echo WHISPER_CPP_BIN="$(pwd)/build/bin/whisper-cli"
-```
-
-If you are not on Debian/Ubuntu, install equivalent packages with your distro package manager:
-
-- Fedora/RHEL: use `dnf` (`gcc gcc-c++ make cmake curl git tar xz`)
-- Arch: use `pacman` (`base-devel cmake curl git tar xz`)
-
-:::tip
-Set `OPENREADER_COMPUTE_MODE=local` and `WHISPER_CPP_BIN` in your `.env` to enable word-by-word highlighting.
-:::
+If you need mirrors or pinned artifact locations, set `OPENREADER_WHISPER_MODEL_*_URL` overrides in `.env`.
 
 </details>
 

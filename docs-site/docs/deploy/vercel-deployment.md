@@ -37,7 +37,7 @@ ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in
 
 # Heavy compute (recommended on Vercel in v1)
 # local  = requires native binaries/models in-process
-# none   = disable whisper alignment + PDF layout parsing
+# none   = disable ONNX whisper alignment + PDF layout parsing
 OPENREADER_COMPUTE_MODE=none
 
 # First-boot seed for the TTS shared provider (optional; manage in-app afterwards)
@@ -95,8 +95,7 @@ Vercel deployments do not run `scripts/openreader-entrypoint.mjs`, so automatic 
 
 - `/api/audiobook`
 - `/api/audiobook/chapter`
-- `/api/audiobook/status`
-- `/api/whisper`
+- `/api/tts/segments/ensure`
 
 :::info
 `serverExternalPackages` should include `ffmpeg-static` so package paths resolve at runtime instead of being bundled into route output.
@@ -113,7 +112,7 @@ FFmpeg workloads benefit from more memory/CPU. This repo includes:
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app/api/audiobook/route.ts": { "memory": 3009 },
-    "app/api/whisper/route.ts": { "memory": 3009 }
+    "app/api/tts/segments/ensure/route.ts": { "memory": 3009 }
   }
 }
 ```
@@ -130,4 +129,4 @@ Adjust memory per route if your files are larger or your plan differs.
 1. Upload and read a PDF/EPUB document.
 2. Confirm sync/blob fetch works across refreshes/devices.
 3. Generate at least one audiobook chapter and play/download it.
-4. If you later enable compute locally (`OPENREADER_COMPUTE_MODE=local`), verify word highlighting timestamps on a TTS run.
+4. If you run with local compute (`OPENREADER_COMPUTE_MODE=local`) outside Vercel, verify word highlighting timestamps on a TTS run.

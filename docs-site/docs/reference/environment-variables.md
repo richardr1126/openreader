@@ -53,14 +53,14 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
-| `OPENREADER_COMPUTE_MODE` | Heavy compute backend | `local` | Set to `none` to disable whisper alignment + PDF layout parsing |
+| `OPENREADER_COMPUTE_MODE` | Heavy compute backend | `local` | Set to `none` to disable ONNX word alignment + PDF layout parsing |
 | `OPENREADER_COMPUTE_WORKER_URL` | Heavy compute backend | unset | Reserved for future worker backend mode (`worker`) |
 | `OPENREADER_COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset | Reserved for future worker backend mode (`worker`) |
 | `OPENREADER_PDF_LAYOUT_MODEL_URL` | PDF layout model | PP-DocLayoutV3 ONNX URL | Override ONNX model URL for `ensureModel()` |
 | `OPENREADER_PDF_LAYOUT_MODEL_DATA_URL` | PDF layout model | PP-DocLayoutV3 ONNX data URL | Override ONNX external data URL for `ensureModel()` |
 | `OPENREADER_PDF_LAYOUT_CONFIG_URL` | PDF layout model | PP-DocLayoutV3 config URL | Override model config URL for `ensureModel()` |
 | `OPENREADER_PDF_LAYOUT_PREPROCESSOR_URL` | PDF layout model | PP-DocLayoutV3 preprocessor URL | Override model preprocessor URL for `ensureModel()` |
-| `WHISPER_CPP_BIN` | Word timing (local mode) | unset | Set to enable `whisper.cpp` timestamps in `OPENREADER_COMPUTE_MODE=local` |
+| `OPENREADER_WHISPER_MODEL_*_URL` | Whisper ONNX model | onnx-community defaults | Optional per-artifact URL overrides for ONNX whisper-base_timestamped int8 downloads |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 
 
@@ -355,7 +355,7 @@ Multiple library roots for server library import.
 
 ### OPENREADER_COMPUTE_MODE
 
-Selects the backend for heavy compute features (word alignment + PDF layout parsing).
+Selects the backend for heavy compute features (ONNX word alignment + PDF layout parsing).
 
 - Default: `local`
 - Supported in v1:
@@ -403,12 +403,29 @@ Override URL for the PP-DocLayoutV3 `preprocessor_config.json` downloaded by `en
 - Default: `https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main/preprocessor_config.json`
 - You can pre-populate the model cache via `pnpm fetch-models`
 
-### WHISPER_CPP_BIN
+### OPENREADER_WHISPER_MODEL_*_URL
 
-Absolute path to compiled `whisper.cpp` binary for word-level timestamps.
+Optional per-artifact override URLs for the built-in ONNX Whisper alignment model downloader.
 
-- Example: `/whisper.cpp/build/bin/whisper-cli`
-- Required only for optional word-by-word highlighting
+- Default base: `https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main`
+- Default model variant: int8 (`encoder_model_int8.onnx`, `decoder_model_merged_int8.onnx`, `decoder_with_past_model_int8.onnx`)
+- Use these when you need mirrors, pinned snapshots, or air-gapped fetch routing.
+
+Supported override vars:
+
+- `OPENREADER_WHISPER_MODEL_CONFIG_URL`
+- `OPENREADER_WHISPER_MODEL_GENERATION_CONFIG_URL`
+- `OPENREADER_WHISPER_MODEL_TOKENIZER_URL`
+- `OPENREADER_WHISPER_MODEL_TOKENIZER_CONFIG_URL`
+- `OPENREADER_WHISPER_MODEL_MERGES_URL`
+- `OPENREADER_WHISPER_MODEL_VOCAB_URL`
+- `OPENREADER_WHISPER_MODEL_NORMALIZER_URL`
+- `OPENREADER_WHISPER_MODEL_ADDED_TOKENS_URL`
+- `OPENREADER_WHISPER_MODEL_PREPROCESSOR_URL`
+- `OPENREADER_WHISPER_MODEL_SPECIAL_TOKENS_MAP_URL`
+- `OPENREADER_WHISPER_MODEL_ENCODER_URL`
+- `OPENREADER_WHISPER_MODEL_DECODER_MERGED_URL`
+- `OPENREADER_WHISPER_MODEL_DECODER_WITH_PAST_URL`
 
 ### FFMPEG_BIN
 

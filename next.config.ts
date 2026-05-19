@@ -14,7 +14,6 @@ const securityHeaders = [
     value: 'max-age=63072000; includeSubDomains; preload',
   },
 ];
-
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -30,7 +29,13 @@ const nextConfig: NextConfig = {
       canvas: '@napi-rs/canvas',
     },
   },
-  serverExternalPackages: ["@napi-rs/canvas", "ffmpeg-static", "better-sqlite3"],
+  serverExternalPackages: [
+    "@napi-rs/canvas",
+    "ffmpeg-static",
+    "better-sqlite3",
+    "onnxruntime-node",
+    "@huggingface/tokenizers",
+  ],
   outputFileTracingIncludes: {
     '/api/audiobook': [
       './node_modules/ffmpeg-static/ffmpeg',
@@ -38,7 +43,7 @@ const nextConfig: NextConfig = {
     '/api/audiobook/chapter': [
       './node_modules/ffmpeg-static/ffmpeg',
     ],
-    '/api/whisper': [
+    '/api/tts/segments/ensure': [
       './node_modules/ffmpeg-static/ffmpeg',
     ],
     '/api/documents/blob/preview/ensure': [

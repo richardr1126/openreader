@@ -1,0 +1,76 @@
+{
+  "name": "whisper-base_timestamped-int8",
+  "version": "onnx-community/whisper-base_timestamped@608c49e61301901684bc36cac8f74b95ff6b5a8e",
+  "files": [
+    {
+      "path": "config.json",
+      "sha256": "f4d0608f7d918166da7edb3e188de5ef1bfe70d9802e785d271fd88111e9cf4b",
+      "size": 2243
+    },
+    {
+      "path": "generation_config.json",
+      "sha256": "61070cf8de25b1e9256e8e102ded49d8d24a8369ed36ef84fdf21549e68125a0",
+      "size": 3832
+    },
+    {
+      "path": "tokenizer.json",
+      "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566",
+      "size": 2480466
+    },
+    {
+      "path": "tokenizer_config.json",
+      "sha256": "2e036e4dbacfdeb7242c7d4ec4149f4a16e86026048f94d1637e3a8ee9c6a573",
+      "size": 282682
+    },
+    {
+      "path": "merges.txt",
+      "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+      "size": 493869
+    },
+    {
+      "path": "vocab.json",
+      "sha256": "50d6a919f0a0601d56a04eb583c780d18553aa388254ba3158eb6a00f13e2c1a",
+      "size": 1036584
+    },
+    {
+      "path": "normalizer.json",
+      "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+      "size": 52666
+    },
+    {
+      "path": "added_tokens.json",
+      "sha256": "9715fd2243b6f06a5858b5e32950d2853f73dd5bc201aafcf76f5082a2d8acd1",
+      "size": 34604
+    },
+    {
+      "path": "preprocessor_config.json",
+      "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d",
+      "size": 339
+    },
+    {
+      "path": "special_tokens_map.json",
+      "sha256": "e67ae3a0aaa99abcd9f187138e12db1f65c16a14761c50ef10eef2c174a7a691",
+      "size": 2194
+    },
+    {
+      "path": "onnx/encoder_model_int8.onnx",
+      "sha256": "152da96dd8ff3f28f3fadabc2e8960405a277846453ff94ed411fe935a72917f",
+      "size": 23159150
+    },
+    {
+      "path": "onnx/decoder_model_merged_int8.onnx",
+      "sha256": "cf9a8d5bcddc0917a0078135b484cedcaf44f28909cd91910abd29dced9171db",
+      "size": 53712708
+    },
+    {
+      "path": "onnx/decoder_with_past_model_int8.onnx",
+      "sha256": "bdd92860d0ed7dff2aca623963378cbba1b617bfae127356db1c8aa8baa930ef",
+      "size": 50131672
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "size": 1063
+    }
+  ]
+}

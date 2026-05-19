@@ -1,8 +1,7 @@
 import type {
   TTSAudiobookChapter,
-  TTSSentenceAlignment,
-  TTSAudioBytes,
   TTSAudiobookFormat,
+  TTSSentenceAlignment,
 } from '@/types/tts';
 import type { TtsProviderType } from '@/lib/shared/tts-provider-catalog';
 
@@ -62,17 +61,6 @@ export interface CreateChapterPayload {
 
 export interface VoicesResponse {
   voices: string[];
-}
-
-// --- Whisper API Types ---
-
-export interface AlignmentPayload {
-  text: string;
-  audio: TTSAudioBytes; // Array.from(new Uint8Array(arrayBuffer))
-}
-
-export interface AlignmentResponse {
-  alignments: TTSSentenceAlignment[];
 }
 
 export interface TTSSegmentSettings {

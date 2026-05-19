@@ -22,7 +22,7 @@ It supports multiple TTS providers including OpenAI, Replicate, DeepInfra, and c
     - [**DeepInfra**](https://deepinfra.com/models/text-to-speech): Kokoro-82M and other hosted models
     - [**OpenAI API**](https://platform.openai.com/docs/pricing#transcription-and-speech): `tts-1`, `tts-1-hd`, and `gpt-4o-mini-tts`
 - 📖 **Read Along Experience**
-  - Real-time highlighting for PDF/EPUB, with optional word-level [whisper.cpp](https://github.com/ggml-org/whisper.cpp) timestamps
+  - Real-time highlighting for PDF/EPUB, with built-in ONNX Whisper word-level timestamps in local compute mode
 - 🛜 **Document Storage**
   - Documents are persisted in server blob/object storage for consistent access
 - ⚡ **Segment-based TTS Playback** for reusable generation + preloading

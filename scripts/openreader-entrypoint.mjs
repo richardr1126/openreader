@@ -181,19 +181,20 @@ function spawnMainCommand(command, env) {
   const exitPromise = new Promise((resolve) => {
     child.on('error', (error) => {
       console.error('Failed to launch command:', error);
-      resolve(1);
+      resolve({ code: 1, signal: null, launchError: true });
     });
 
     child.on('exit', (code, signal) => {
+      console.error(`Main command exit event: code=${code ?? 'null'} signal=${signal ?? 'null'}.`);
       if (typeof code === 'number') {
-        resolve(code);
+        resolve({ code, signal: null, launchError: false });
         return;
       }
       if (signal) {
-        resolve(1);
+        resolve({ code: 1, signal, launchError: false });
         return;
       }
-      resolve(0);
+      resolve({ code: 0, signal: null, launchError: false });
     });
   });
 
@@ -421,7 +422,11 @@ async function main() {
 
     const { child, exitPromise } = spawnMainCommand(command, runtimeEnv);
     appProc = child;
-    const exitCode = await exitPromise;
+    const exitInfo = await exitPromise;
+    const exitCode = typeof exitInfo?.code === 'number' ? exitInfo.code : 1;
+    console.error(
+      `Main command finished with code=${exitInfo?.code ?? 'null'} signal=${exitInfo?.signal ?? 'null'} launchError=${Boolean(exitInfo?.launchError)}.`,
+    );
 
     await shutdown('SIGTERM');
     exitOnce(exitCode);
