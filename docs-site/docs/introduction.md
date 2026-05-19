@@ -12,28 +12,19 @@ It supports multiple TTS providers including OpenAI, Replicate, DeepInfra, and c
 
 ## ✨ Highlights
 
+- 🧱 **Layout-aware PDF Parsing**
+  - PP-DocLayoutV3 (ONNX) detects structured blocks with cross-page stitching and geometry-based highlighting for precise read-along sync and clean TTS segmentation
+- ⏱️ **Word-by-word Highlighting** via ONNX Whisper alignment
+  - No external dependencies — runs in-process (`COMPUTE_MODE=local`) or offloaded to a scalable Redis-backed worker (`COMPUTE_MODE=worker`)
+- ⚡ **Segment-based TTS Playback**
+  - Sentence-aware generation with cached audio segments, background preloading, and resumable playback across EPUB, PDF, TXT, MD, and DOCX
 - 🎯 **Multi-Provider TTS Support**
-  - [**Kokoro-FastAPI**](https://github.com/remsky/Kokoro-FastAPI): supports multi-voice combinations (for example `af_heart+af_bella`)
-  - [**KittenTTS-FastAPI**](https://github.com/richardr1126/KittenTTS-FastAPI): lightweight, CPU-friendly self-hosted TTS
-  - [**Orpheus-FastAPI**](https://github.com/Lex-au/Orpheus-FastAPI)
-  - **Custom OpenAI-compatible**: any TTS API with `/v1/audio/voices` and `/v1/audio/speech` endpoints
-  - **Cloud TTS providers**:
-    - [**Replicate**](https://replicate.com/explore): includes a built-in catalog and supports any Replicate model ID via `Other`
-    - [**DeepInfra**](https://deepinfra.com/models/text-to-speech): Kokoro-82M and other hosted models
-    - [**OpenAI API**](https://platform.openai.com/docs/pricing#transcription-and-speech): `tts-1`, `tts-1-hd`, and `gpt-4o-mini-tts`
-- 📖 **Read Along Experience**
-  - Real-time highlighting for PDF/EPUB, with built-in ONNX Whisper word-level timestamps in local compute mode
-- 🛜 **Document Storage**
-  - Documents are persisted in server blob/object storage for consistent access
-- ⚡ **Segment-based TTS Playback** for reusable generation + preloading
-  - Stores segment audio in object storage for fast replay/resume
+  - Self-hosted: [**Kokoro-FastAPI**](https://github.com/remsky/Kokoro-FastAPI) (multi-voice combinations), [**KittenTTS-FastAPI**](https://github.com/richardr1126/KittenTTS-FastAPI), [**Orpheus-FastAPI**](https://github.com/Lex-au/Orpheus-FastAPI), or any custom OpenAI-compatible endpoint
+  - Cloud: [**OpenAI**](https://platform.openai.com/docs/pricing#transcription-and-speech) (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`), [**Replicate**](https://replicate.com/explore) (built-in catalog + any model ID), [**DeepInfra**](https://deepinfra.com/models/text-to-speech) (Kokoro-82M and others)
 - 🎧 **Audiobook Export** in `m4b`/`mp3` with resumable chapter generation
-- 🔐 **Auth Optional by Design**
-  - Run no-auth for local use, or enable auth with user isolation and claim flow
-- 🗂️ **Flexible Storage and Database Modes** with embedded defaults or external S3/Postgres
-- 🚀 **Production-ready Server Behavior** with TTS caching/retries/rate limits and startup migrations
-- 🎨 **Customizable Experience**
-  - 13 built-in themes (light and dark palettes), TTS, and document handling controls
+- 🗂️ **Flexible Backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync
+- 🔐 **Auth Optional** — run no-auth for local use, or enable full user isolation with a claim flow for multi-user deployments
+- 🎨 **Customizable** — 13 built-in themes (light and dark palettes), per-user TTS settings, and document handling controls
 
 ## 🧭 Key Docs
 
