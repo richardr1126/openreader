@@ -31,6 +31,7 @@ export interface WhisperAlignJobRequest {
 
 export interface WhisperAlignJobResult {
   alignments: TTSSentenceAlignment[];
+  timing?: WorkerJobTiming;
 }
 
 export interface PdfLayoutJobRequest {
@@ -41,6 +42,7 @@ export interface PdfLayoutJobRequest {
 
 export interface PdfLayoutJobResult {
   parsed: ParsedPdfDocument;
+  timing?: WorkerJobTiming;
 }
 
 export type WorkerJobState = 'queued' | 'running' | 'succeeded' | 'failed';
@@ -50,10 +52,17 @@ export interface WorkerJobErrorShape {
   code?: string;
 }
 
+export interface WorkerJobTiming {
+  queueWaitMs?: number;
+  s3FetchMs?: number;
+  computeMs?: number;
+}
+
 export interface WorkerJobStatusResponse<Result> {
   status: WorkerJobState;
   result?: Result;
   error?: WorkerJobErrorShape;
+  timing?: WorkerJobTiming;
 }
 
 export async function ensureComputeModels(): Promise<void> {

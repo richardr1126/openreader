@@ -13,6 +13,7 @@ import {
   type WhisperAlignJobRequest,
   type WhisperAlignJobResult,
   type WorkerJobStatusResponse,
+  type WorkerJobTiming,
 } from '@openreader/compute-core';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
@@ -152,23 +153,68 @@ const layoutSchema = z.object({
 });
 
 function mapJobState<Result>(job: Job): WorkerJobStatusResponse<Result> {
+  const result = job.returnvalue as Result | undefined;
+  const resultTiming = readResultTiming(result);
+  const timing = buildJobTimingSnapshot(job, resultTiming);
+
   if (job.failedReason) {
     return {
       status: 'failed',
       error: {
         message: job.failedReason || 'Worker job failed',
       },
+      ...(timing ? { timing } : {}),
     };
   }
   if (typeof job.returnvalue !== 'undefined' && job.finishedOn) {
     return {
       status: 'succeeded',
       result: job.returnvalue as Result,
+      ...(timing ? { timing } : {}),
     };
   }
 
-  if (job.processedOn) return { status: 'running' };
-  return { status: 'queued' };
+  if (job.processedOn) {
+    return {
+      status: 'running',
+      ...(timing ? { timing } : {}),
+    };
+  }
+  return {
+    status: 'queued',
+    ...(timing ? { timing } : {}),
+  };
+}
+
+function readResultTiming<Result>(result: Result | undefined): WorkerJobTiming | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const maybe = result as { timing?: WorkerJobTiming };
+  if (!maybe.timing || typeof maybe.timing !== 'object') return undefined;
+  return maybe.timing;
+}
+
+function toSafeDurationMs(start: number | undefined, end: number | undefined): number | undefined {
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
+  return Math.max(0, Math.floor((end as number) - (start as number)));
+}
+
+function buildJobTimingSnapshot(job: Job, base?: WorkerJobTiming): WorkerJobTiming | undefined {
+  const now = Date.now();
+  const timestamp = typeof job.timestamp === 'number' ? job.timestamp : undefined;
+  const processedOn = typeof job.processedOn === 'number' ? job.processedOn : undefined;
+
+  const timing: WorkerJobTiming = {
+    ...(base ?? {}),
+  };
+
+  if (typeof timing.queueWaitMs !== 'number') {
+    timing.queueWaitMs = processedOn
+      ? toSafeDurationMs(timestamp, processedOn)
+      : toSafeDurationMs(timestamp, now);
+  }
+
+  const hasAnyTiming = Object.values(timing).some((value) => typeof value === 'number' && Number.isFinite(value));
+  return hasAnyTiming ? timing : undefined;
 }
 
 async function getQueueDepth(queue: Queue): Promise<number> {
@@ -246,9 +292,16 @@ async function main(): Promise<void> {
   const alignWorker = new Worker<WhisperAlignJobRequest, WhisperAlignJobResult>(
     ALIGN_QUEUE_NAME,
     async (job) => {
+      const processingStartedAt = Date.now();
+      const queueWaitMs = typeof job.timestamp === 'number'
+        ? Math.max(0, processingStartedAt - job.timestamp)
+        : undefined;
       const parsed = alignSchema.parse(job.data);
+      const s3FetchStartedAt = Date.now();
       const audioBuffer = await readObjectByKey(parsed.audioObjectKey);
-      return withTimeout(
+      const s3FetchMs = Date.now() - s3FetchStartedAt;
+      const computeStartedAt = Date.now();
+      const result = await withTimeout(
         runWhisperAlignmentFromAudioBuffer({
           audioBuffer,
           text: parsed.text,
@@ -258,6 +311,16 @@ async function main(): Promise<void> {
         whisperTimeoutMs,
         'whisper alignment job',
       );
+      const computeMs = Date.now() - computeStartedAt;
+      return {
+        ...result,
+        timing: {
+          ...(result.timing ?? {}),
+          queueWaitMs,
+          s3FetchMs,
+          computeMs,
+        },
+      };
     },
     {
       connection: redis,
@@ -268,9 +331,16 @@ async function main(): Promise<void> {
   const layoutWorker = new Worker<PdfLayoutJobRequest, PdfLayoutJobResult>(
     PDF_LAYOUT_QUEUE_NAME,
     async (job) => {
+      const processingStartedAt = Date.now();
+      const queueWaitMs = typeof job.timestamp === 'number'
+        ? Math.max(0, processingStartedAt - job.timestamp)
+        : undefined;
       const parsed = layoutSchema.parse(job.data);
+      const s3FetchStartedAt = Date.now();
       const pdfBytes = await readObjectByKey(parsed.documentObjectKey);
-      return withTimeout(
+      const s3FetchMs = Date.now() - s3FetchStartedAt;
+      const computeStartedAt = Date.now();
+      const result = await withTimeout(
         runPdfLayoutFromPdfBuffer({
           documentId: parsed.documentId,
           pdfBytes,
@@ -278,6 +348,16 @@ async function main(): Promise<void> {
         pdfTimeoutMs,
         'pdf layout job',
       );
+      const computeMs = Date.now() - computeStartedAt;
+      return {
+        ...result,
+        timing: {
+          ...(result.timing ?? {}),
+          queueWaitMs,
+          s3FetchMs,
+          computeMs,
+        },
+      };
     },
     {
       connection: redis,
@@ -285,26 +365,46 @@ async function main(): Promise<void> {
     },
   );
 
-  alignWorker.on('failed', (job, err) => {
-    console.error('[compute-worker] align job failed', {
-      jobId: job?.id,
-      error: err.message,
-    });
-  });
-
-  layoutWorker.on('failed', (job, err) => {
-    console.error('[compute-worker] layout job failed', {
-      jobId: job?.id,
-      error: err.message,
-    });
-  });
-
   if (prewarmModels) {
     await ensureComputeModels();
   }
 
   const app = Fastify({
     logger: buildLoggerConfig(),
+  });
+
+  alignWorker.on('completed', (job, result) => {
+    app.log.info({
+      queue: ALIGN_QUEUE_NAME,
+      jobId: job.id,
+      timing: buildJobTimingSnapshot(job, readResultTiming(result)),
+    }, 'whisper align job completed');
+  });
+
+  alignWorker.on('failed', (job, err) => {
+    app.log.error({
+      queue: ALIGN_QUEUE_NAME,
+      jobId: job?.id,
+      error: err.message,
+      timing: job ? buildJobTimingSnapshot(job) : undefined,
+    }, 'whisper align job failed');
+  });
+
+  layoutWorker.on('completed', (job, result) => {
+    app.log.info({
+      queue: PDF_LAYOUT_QUEUE_NAME,
+      jobId: job.id,
+      timing: buildJobTimingSnapshot(job, readResultTiming(result)),
+    }, 'pdf layout job completed');
+  });
+
+  layoutWorker.on('failed', (job, err) => {
+    app.log.error({
+      queue: PDF_LAYOUT_QUEUE_NAME,
+      jobId: job?.id,
+      error: err.message,
+      timing: job ? buildJobTimingSnapshot(job) : undefined,
+    }, 'pdf layout job failed');
   });
 
   app.addHook('onRequest', async (request, reply) => {

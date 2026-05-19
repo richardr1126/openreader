@@ -7,5 +7,6 @@ export {
   type WhisperAlignJobResult,
   type WorkerJobErrorShape,
   type WorkerJobState,
+  type WorkerJobTiming,
   type WorkerJobStatusResponse,
 } from '@openreader/compute-core';
