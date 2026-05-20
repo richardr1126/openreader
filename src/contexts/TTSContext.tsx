@@ -146,6 +146,7 @@ interface TTSContextType extends TTSPlaybackState {
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   setVoiceAndRestart: (voice: string) => void;
+  clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   registerEpubLocationWalker: (walker: EpubRenderedLocationWalker | null) => void;
@@ -2896,6 +2897,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentWordIndex(null);
   }, [abortAudio, clearWarmAudioCache, invalidatePlaybackRun, clearPendingEpubJump, bumpEpubPreloadGeneration]);
 
+  const clearSegmentCaches = useCallback(() => {
+    // Keep the current viewport/sentence list intact, but force all audio/manifest
+    // state to be re-resolved after a server-side clear.
+    abortAudio(true);
+    segmentManifestCacheRef.current.clear();
+    sentenceAlignmentCacheRef.current.clear();
+    setCurrentSentenceAlignment(undefined);
+    setCurrentWordIndex(null);
+  }, [abortAudio]);
+
   /**
    * Stops the current audio playback and starts playing from a specified index
    * 
@@ -3107,6 +3118,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    clearSegmentCaches,
     skipToLocation,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
@@ -3137,6 +3149,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    clearSegmentCaches,
     skipToLocation,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
