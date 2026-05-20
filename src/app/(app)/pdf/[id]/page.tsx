@@ -79,6 +79,7 @@ export default function PDFViewerPage() {
     console.log('Loading new document (from page.tsx)');
     let didRedirect = false;
     let startedLoad = false;
+    let loadSucceeded = false;
     try {
       if (!id) {
         setError('Document not found');
@@ -101,8 +102,20 @@ export default function PDFViewerPage() {
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
       stop(); // Reset TTS when loading new document
-      await setCurrentDocument(resolved);
-      loadedDocIdRef.current = resolved;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const loaded = await setCurrentDocument(resolved);
+        if (loaded) {
+          loadSucceeded = true;
+          loadedDocIdRef.current = resolved;
+          break;
+        }
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+      if (!loadSucceeded) {
+        throw new Error(`Failed to load PDF document ${resolved}`);
+      }
     } catch (err) {
       console.error('Error loading document:', err);
       setError('Failed to load document');
@@ -110,7 +123,7 @@ export default function PDFViewerPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad) {
+      if (!didRedirect && startedLoad && loadSucceeded) {
         setIsLoading(false);
       }
     }
@@ -148,12 +161,21 @@ export default function PDFViewerPage() {
       const ttsH = ttsbar ? ttsbar.getBoundingClientRect().height : 0;
       const vh = window.innerHeight;
       const h = Math.max(0, vh - headerH - ttsH);
-      setContainerHeight(`${h}px`);
+      // Avoid locking the reader at 0px during transient startup layout states.
+      if (h > 0) {
+        setContainerHeight(`${h}px`);
+      }
     };
     compute();
+    const settleT1 = window.setTimeout(compute, 0);
+    const settleT2 = window.setTimeout(compute, 120);
     window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.clearTimeout(settleT1);
+      window.clearTimeout(settleT2);
+    };
+  }, [isLoading, isParseReady, isAtLimit, activeSidebar]);
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 10, 300));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 10, 50));

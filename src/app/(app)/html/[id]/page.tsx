@@ -111,7 +111,9 @@ export default function HTMLPage() {
       const ttsH = ttsbar ? ttsbar.getBoundingClientRect().height : 0;
       const vh = window.innerHeight;
       const h = Math.max(0, vh - headerH - ttsH);
-      setContainerHeight(`${h}px`);
+      if (h > 0) {
+        setContainerHeight(`${h}px`);
+      }
 
       // Adaptive minimum content width: allow some padding on narrow screens
       const vw = window.innerWidth;
@@ -121,9 +123,15 @@ export default function HTMLPage() {
       setMaxPadPx(maxPad);
     };
     compute();
+    const settleT1 = window.setTimeout(compute, 0);
+    const settleT2 = window.setTimeout(compute, 120);
     window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.clearTimeout(settleT1);
+      window.clearTimeout(settleT2);
+    };
+  }, [isLoading, activeSidebar]);
 
   const handleGenerateAudiobook = useCallback(async (
     onProgress: (progress: number) => void,

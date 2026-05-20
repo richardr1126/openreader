@@ -73,4 +73,67 @@ test.describe('pdf audiobook adapter', () => {
     expect(chapters[1].title).toBe('Second');
     expect(chapters[1].text).toContain('More body.');
   });
+
+  test('keeps a single section chapter when only one heading is present', async () => {
+    const parsed: ParsedPdfDocument = {
+      schemaVersion: 1,
+      documentId: 'doc-2',
+      parserVersion: 'test',
+      parsedAt: Date.now(),
+      pages: [
+        {
+          pageNumber: 1,
+          width: 100,
+          height: 100,
+          blocks: [
+            {
+              id: 'p1-title',
+              kind: 'doc_title',
+              text: 'Sample PDF',
+              fragments: [{ page: 1, bbox: [0, 80, 100, 90], text: 'Sample PDF', readingOrder: 0 }],
+            },
+            {
+              id: 'p1-text',
+              kind: 'text',
+              text: 'First page body.',
+              fragments: [{ page: 1, bbox: [0, 50, 100, 79], text: 'First page body.', readingOrder: 1 }],
+            },
+          ],
+        },
+        {
+          pageNumber: 2,
+          width: 100,
+          height: 100,
+          blocks: [
+            {
+              id: 'p2-text',
+              kind: 'text',
+              text: 'Second page body.',
+              fragments: [{ page: 2, bbox: [0, 50, 100, 79], text: 'Second page body.', readingOrder: 0 }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const settings: DocumentSettings = {
+      schemaVersion: 1,
+      pdf: {
+        skipBlockKinds: [],
+        chaptersFromSections: true,
+      },
+    };
+
+    const adapter = createPdfAudiobookSourceAdapter({
+      parsed,
+      settings,
+      smartSentenceSplitting: false,
+    });
+
+    const chapters = await adapter.prepareChapters();
+    expect(chapters).toHaveLength(1);
+    expect(chapters[0].title).toBe('Sample PDF');
+    expect(chapters[0].text).toContain('First page body.');
+    expect(chapters[0].text).toContain('Second page body.');
+  });
 });

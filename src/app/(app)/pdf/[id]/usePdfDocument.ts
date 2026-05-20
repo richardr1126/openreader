@@ -37,7 +37,6 @@ import {
   highlightWordIndex,
 } from '@/lib/client/pdf';
 import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
-import type { CanonicalTtsSourceUnit } from '@/lib/shared/tts-segment-plan';
 import {
   DEFAULT_DOCUMENT_SETTINGS,
   type DocumentSettings,
@@ -72,7 +71,7 @@ export interface PdfDocumentState {
   parsedOverlayEnabled: boolean;
   setParsedOverlayEnabled: (enabled: boolean) => void;
   forceReparseParsedPdf: () => Promise<void>;
-  setCurrentDocument: (id: string) => Promise<void>;
+  setCurrentDocument: (id: string) => Promise<boolean>;
   clearCurrDoc: () => void;
 
   // PDF functionality
@@ -264,24 +263,6 @@ export function usePdfDocument(): PdfDocumentState {
         return;
       }
 
-      const sourceUnitsFromParsedPage = (pageNum: number): CanonicalTtsSourceUnit[] => {
-        const page = pageFromParsed(pageNum);
-        if (!page) return [];
-        const skipKinds = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
-        return page.blocks
-          .filter((block) => !skipKinds.has(block.kind))
-          .map((block) => ({
-            sourceKey: `pdf:${pageNum}:${block.id}`,
-            text: block.text,
-            locator: {
-              readerType: 'pdf',
-              page: block.fragments[0]?.page ?? pageNum,
-              blockId: block.id,
-            } as TTSSegmentLocator,
-          }))
-          .filter((unit) => unit.text.trim().length > 0);
-      };
-
       const getPageText = async (pageNumber: number, shouldCache = false): Promise<string> => {
         // Ignore stale/in-flight work if the document or worker changed.
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
@@ -345,14 +326,12 @@ export function usePdfDocument(): PdfDocumentState {
 
       if (text !== currDocText || text === '') {
         setCurrDocText(text);
-        const sourceUnits = sourceUnitsFromParsedPage(currDocPageNumber);
         setTTSText(text, {
           location: currDocPageNumber,
           previousText: prevText,
           nextLocation: nextPageNumber,
           nextText: nextText,
           upcomingLocations: additionalUpcoming,
-          ...(sourceUnits.length > 0 ? { sourceUnits } : {}),
         });
       }
     } catch (error) {
@@ -389,7 +368,7 @@ export function usePdfDocument(): PdfDocumentState {
    * @param {string} id - The unique identifier of the document to set
    * @returns {Promise<void>}
    */
-  const setCurrentDocument = useCallback(async (id: string): Promise<void> => {
+  const setCurrentDocument = useCallback(async (id: string): Promise<boolean> => {
     // --- race-condition guard ---
     const seq = ++docLoadSeqRef.current;
     docLoadAbortRef.current?.abort();
@@ -416,10 +395,10 @@ export function usePdfDocument(): PdfDocumentState {
       setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
 
       const meta = await getDocumentMetadata(id, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return; // stale
+      if (seq !== docLoadSeqRef.current) return false; // stale
       if (!meta) {
         console.error('Document not found on server');
-        return;
+        return false;
       }
       if (meta.type === 'pdf') {
         startParsedPolling(id, (meta.parseStatus ?? null) as PdfParseStatus | null);
@@ -427,25 +406,28 @@ export function usePdfDocument(): PdfDocumentState {
       }
 
       const doc = await ensureCachedDocument(meta, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return; // stale
+      if (seq !== docLoadSeqRef.current) return false; // stale
       if (doc.type !== 'pdf') {
         console.error('Document is not a PDF');
-        return;
+        return false;
       }
 
       setCurrDocName(doc.name);
       // IMPORTANT: keep an immutable copy. pdf.js may transfer/detach the
       // buffer passed into the worker; we always pass clones to react-pdf.
       setCurrDocData(doc.data.slice(0));
+      return true;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (error instanceof DOMException && error.name === 'AbortError') return false;
       console.error('Failed to get document:', error);
+      return false;
     } finally {
       // Clean up the controller only if it's still ours (a newer call hasn't replaced it).
       if (docLoadAbortRef.current === controller) {
         docLoadAbortRef.current = null;
       }
     }
+    return false;
   }, [
     setCurrDocId,
     setCurrDocName,

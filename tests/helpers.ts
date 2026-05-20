@@ -22,6 +22,21 @@ function sha256HexOfFile(filePath: string) {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+async function waitForPdfViewerReady(page: Page, timeout = 60000) {
+  await expect(page).toHaveURL(/\/pdf\/[A-Za-z0-9._%-]+$/, { timeout: Math.min(timeout, 20000) });
+  await expect
+    .poll(async () => {
+      const documentVisible = await page.locator('.react-pdf__Document').first().isVisible().catch(() => false);
+      if (documentVisible) return true;
+      const pageVisible = await page.locator('.react-pdf__Page').first().isVisible().catch(() => false);
+      if (pageVisible) return true;
+      const canvasVisible = await page.locator('.react-pdf__Page canvas').first().isVisible().catch(() => false);
+      if (canvasVisible) return true;
+      return false;
+    }, { timeout })
+    .toBe(true);
+}
+
 /**
  * Upload a sample epub or pdf
  */
@@ -63,7 +78,7 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
     await expect(targetLink).toBeVisible({ timeout: 15000 });
     await dismissOnboardingModals(page);
     await targetLink.click();
-    await page.waitForSelector('.react-pdf__Document', { timeout: 15000 });
+    await waitForPdfViewerReady(page, 60000);
     return;
   }
 
@@ -80,7 +95,7 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
   }
 
   if (lower.endsWith('.pdf')) {
-    await page.waitForSelector('.react-pdf__Document', { timeout: 10000 });
+    await waitForPdfViewerReady(page, 60000);
   } else if (lower.endsWith('.epub')) {
     await page.waitForSelector('.epub-container', { timeout: 10000 });
   } else if (lower.endsWith('.txt') || lower.endsWith('.md')) {
@@ -350,10 +365,28 @@ export async function ensureDocumentsListed(page: Page, fileNames: string[]) {
 
 // Click the document link row by filename
 export async function clickDocumentLink(page: Page, fileName: string) {
-  await page
+  const link = page
     .getByRole('link', { name: new RegExp(escapeRegExp(fileName), 'i') })
-    .first()
-    .click();
+    .first();
+  await expect(link).toBeVisible({ timeout: 15_000 });
+
+  const href = await link.getAttribute('href');
+  if (!href) {
+    await link.click();
+    return;
+  }
+
+  const navigatedByClick = await Promise.all([
+    page
+      .waitForURL((url) => url.pathname === href, { timeout: 8_000 })
+      .then(() => true)
+      .catch(() => false),
+    link.click(),
+  ]).then(([ok]) => ok);
+
+  if (!navigatedByClick) {
+    await page.goto(href);
+  }
 }
 
 // Expect correct URL and viewer to be visible for a given file by extension

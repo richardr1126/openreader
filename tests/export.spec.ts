@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import type { APIResponse } from '@playwright/test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -7,6 +8,35 @@ import { execFile } from 'child_process';
 import { setupTest, uploadAndDisplay } from './helpers';
 
 const execFileAsync = util.promisify(execFile);
+
+function isTransientRequestError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message || '';
+  return (
+    msg.includes('ECONNRESET') ||
+    msg.includes('socket hang up') ||
+    msg.includes('ERR_SOCKET_CLOSED') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('fetch failed')
+  );
+}
+
+async function requestWithRetry(
+  fn: () => Promise<APIResponse>,
+  { attempts = 4, backoffMs = 200 }: { attempts?: number; backoffMs?: number } = {},
+): Promise<APIResponse> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientRequestError(error) || attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs * attempt));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Request failed');
+}
 
 async function getBookIdFromUrl(page: Page, expectedPrefix: 'pdf' | 'epub') {
   const url = new URL(page.url());
@@ -103,7 +133,7 @@ async function getAudioDurationSeconds(filePath: string) {
 }
 
 async function expectChaptersBackendState(page: Page, bookId: string) {
-  const res = await page.request.get(`/api/audiobook/status?bookId=${bookId}`);
+  const res = await requestWithRetry(() => page.request.get(`/api/audiobook/status?bookId=${bookId}`));
   expect(res.ok()).toBeTruthy();
   const json = await res.json();
   return json;
@@ -184,11 +214,20 @@ async function cancelGenerationIfVisible(page: Page): Promise<void> {
 }
 
 async function resetAudiobookById(page: Page, bookId: string) {
-  const res = await page.request.delete(`/api/audiobook?bookId=${bookId}`);
+  const res = await requestWithRetry(() => page.request.delete(`/api/audiobook?bookId=${bookId}`));
   expect(res.ok() || res.status() === 404).toBeTruthy();
 }
 
-async function resetAudiobookIfPresent(page: Page) {
+async function resetAudiobookIfPresent(page: Page, bookId?: string) {
+  // Prefer backend reset when bookId is available: deterministic and independent of modal timing.
+  if (bookId) {
+    await resetAudiobookById(page, bookId);
+    await page.reload();
+    await openExportModal(page);
+    await expect(page.getByRole('button', { name: 'Start Generation' })).toBeVisible({ timeout: 60_000 });
+    return;
+  }
+
   const resetButtons = page.getByRole('button', { name: 'Reset' });
   const count = await resetButtons.count();
 
@@ -199,8 +238,12 @@ async function resetAudiobookIfPresent(page: Page) {
   const resetButton = resetButtons.first();
   await resetButton.click();
 
-  await expect(page.getByRole('heading', { name: 'Reset Audiobook' })).toBeVisible({ timeout: 15_000 });
-  const confirmReset = page.getByRole('button', { name: 'Reset' }).last();
+  const resetDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Reset Audiobook' }) })
+    .first();
+  await expect(resetDialog).toBeVisible({ timeout: 15_000 });
+  const confirmReset = resetDialog.getByRole('button', { name: 'Reset' });
   await confirmReset.click();
 
   await expect(page.getByRole('button', { name: 'Start Generation' })).toBeVisible({ timeout: 60_000 });
@@ -256,7 +299,7 @@ test('exports full MP3 audiobook for PDF using mocked 10s TTS sample', async ({ 
     expect(ch.duration).toBeGreaterThan(0);
   }
 
-  await resetAudiobookIfPresent(page);
+  await resetAudiobookIfPresent(page, bookId);
 });
 
 test('exports partial MP3 audiobook for EPUB using mocked 10s TTS sample', async ({ page }, testInfo) => {
@@ -312,7 +355,7 @@ test('exports partial MP3 audiobook for EPUB using mocked 10s TTS sample', async
     expect(durationSeconds).toBeLessThan(300);
   });
 
-  await resetAudiobookIfPresent(page);
+  await resetAudiobookIfPresent(page, bookId);
 });
 
 test('exports a single MP3 audiobook PDF page via chapters menu', async ({ page }, testInfo) => {
@@ -343,7 +386,7 @@ test('exports a single MP3 audiobook PDF page via chapters menu', async ({ page 
     expect(durationSeconds).toBeLessThan(300);
   });
 
-  await resetAudiobookIfPresent(page);
+  await resetAudiobookIfPresent(page, bookId);
 });
 
 test('resets all MP3 audiobook PDF pages', async ({ page }, testInfo) => {
@@ -455,7 +498,7 @@ test('regenerates a single MP3 audiobook PDF page and exports full audiobook', a
     expect(ch.duration).toBeGreaterThan(0);
   }
 
-  await resetAudiobookIfPresent(page);
+  await resetAudiobookIfPresent(page, bookId);
 });
 
 test('resumes audiobook when a chapter is missing and full download succeeds (PDF)', async ({ page }, testInfo) => {
@@ -476,7 +519,9 @@ test('resumes audiobook when a chapter is missing and full download succeeds (PD
 
   // Delete the first chapter via the backend API so the audiobook has a missing index (0).
   // This is more reliable than clicking through the chapter actions menu in headless runs.
-  const deleteRes = await page.request.delete(`/api/audiobook/chapter?bookId=${bookId}&chapterIndex=0`);
+  const deleteRes = await requestWithRetry(() =>
+    page.request.delete(`/api/audiobook/chapter?bookId=${bookId}&chapterIndex=0`)
+  );
   expect(deleteRes.ok()).toBeTruthy();
 
   // Wait for backend to reflect only one remaining chapter (index 1).
@@ -534,5 +579,5 @@ test('resumes audiobook when a chapter is missing and full download succeeds (PD
     expect(ch.duration).toBeGreaterThan(0);
   }
 
-  await resetAudiobookIfPresent(page);
+  await resetAudiobookIfPresent(page, bookId);
 });
