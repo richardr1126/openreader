@@ -21,6 +21,7 @@ const computeMode = computeModeRaw === 'none' || computeModeRaw === 'worker' || 
   ? computeModeRaw
   : 'local';
 const computeLocal = computeMode === 'local';
+const isVercel = process.env.VERCEL === '1';
 const serverExternalPackages = [
   '@napi-rs/canvas',
   'ffmpeg-static',
@@ -29,7 +30,7 @@ const serverExternalPackages = [
 ];
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  ...(isVercel ? {} : { output: 'standalone' }),
   async headers() {
     return [
       {
@@ -66,16 +67,17 @@ const nextConfig: NextConfig = {
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
     ],
   },
-  ...(!computeLocal
-    ? {
-        outputFileTracingExcludes: {
-          '/*': [
+  outputFileTracingExcludes: {
+    '/*': [
+      './docstore/**/*',
+      ...(!computeLocal
+        ? [
             './node_modules/onnxruntime-node/**/*',
             './node_modules/@huggingface/tokenizers/**/*',
-          ],
-        },
-      }
-    : {}),
+          ]
+        : []),
+    ],
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       // Use runtime require to avoid adding an explicit webpack TS dependency.
