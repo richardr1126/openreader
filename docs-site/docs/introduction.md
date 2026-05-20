@@ -15,7 +15,7 @@ It supports multiple TTS providers including OpenAI, Replicate, DeepInfra, and c
 - 🧱 **Layout-aware PDF Parsing**
   - PP-DocLayoutV3 (ONNX) detects structured blocks with cross-page stitching and geometry-based highlighting for precise read-along sync and clean TTS segmentation
 - ⏱️ **Word-by-word Highlighting** via ONNX Whisper alignment
-  - No external dependencies — runs in-process (`COMPUTE_MODE=local`) or offloaded to a scalable Redis-backed worker (`COMPUTE_MODE=worker`)
+  - No external dependencies — runs in-process (`COMPUTE_MODE=local`) or offloaded to a scalable NATS JetStream-backed worker (`COMPUTE_MODE=worker`)
 - ⚡ **Segment-based TTS Playback**
   - Sentence-aware generation with cached audio segments, background preloading, and resumable playback across EPUB, PDF, TXT, MD, and DOCX
 - 🎯 **Multi-Provider TTS Support**

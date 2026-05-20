@@ -9,7 +9,7 @@ This guide covers deploying OpenReader to Vercel with external Postgres and S3-c
 - Documents (PDF/EPUB/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
 - Audiobook routes work on Node.js serverless functions using `ffmpeg-static`.
 - Heavy compute features (Whisper alignment + PDF layout parsing) work through `COMPUTE_MODE=worker` with an external compute worker service.
-- For worker setup details and worker-specific env vars, see [Compute Worker (Redis + BullMQ)](./compute-worker).
+- For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
 
 :::warning DOCX Conversion Limitation
 `docx` conversion requires `soffice` (LibreOffice), which is not available in a standard Vercel runtime.

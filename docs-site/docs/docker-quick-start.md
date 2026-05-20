@@ -141,7 +141,7 @@ Visit [http://localhost:3003](http://localhost:3003) after startup.
 ## 3. Update Docker image
 
 Legacy image compatibility: `ghcr.io/richardr1126/openreader-webui:latest` remains available as an alias.
-For external compute mode image details, see [Compute Worker (Redis + BullMQ)](./deploy/compute-worker).
+For external compute mode image details, see [Compute Worker (NATS JetStream)](./deploy/compute-worker).
 
 ```bash
 docker stop openreader || true && \

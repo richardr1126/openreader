@@ -357,11 +357,11 @@ Selects the backend for heavy compute features (ONNX word alignment + PDF layout
 - Default: `local`
 - Supported in v1:
   - `local`: run compute in-process on the app server
-  - `worker`: enqueue async jobs in an external durable compute worker (Redis + BullMQ)
+  - `worker`: enqueue async jobs in an external durable compute worker (NATS JetStream + NATS KV)
 - `worker` requires `COMPUTE_WORKER_URL` and `COMPUTE_WORKER_TOKEN`
 - `worker` assumes the external worker can directly reach shared object storage (S3-compatible endpoint)
 - `worker` is not compatible with non-exposed embedded `weed mini` storage topologies
-- Worker service env vars are documented in [Compute Worker (Redis + BullMQ)](../deploy/compute-worker)
+- Worker service env vars are documented in [Compute Worker (NATS JetStream)](../deploy/compute-worker)
 
 ### COMPUTE_WORKER_URL
 

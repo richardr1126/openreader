@@ -1,5 +1,4 @@
----
-title: Compute Worker (Redis + BullMQ)
+title: Compute Worker (NATS JetStream)
 ---
 
 Use this guide for `COMPUTE_MODE=worker` deployments where heavy compute runs outside the Next.js app server.
@@ -11,7 +10,7 @@ The compute worker handles:
 - Whisper word alignment (`/align/whisper/jobs`)
 - PDF layout parsing (`/layout/pdf/jobs`)
 
-The app server enqueues jobs and polls status. Queue durability and retries are backed by Redis + BullMQ.
+The app server enqueues jobs and polls status. Queue durability and retries are backed by NATS JetStream WorkQueue consumers and NATS KV.
 
 ## Published image
 
@@ -23,7 +22,7 @@ The app server enqueues jobs and polls status. Queue durability and retries are 
 Required:
 
 - `COMPUTE_WORKER_TOKEN`: bearer token expected by worker routes
-- `REDIS_URL`: BullMQ Redis connection string
+- `NATS_URL`: NATS server connection string (JetStream enabled)
 - `S3_BUCKET`
 - `S3_REGION`
 - `S3_ACCESS_KEY_ID`
@@ -37,7 +36,6 @@ Common optional:
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `COMPUTE_WORKER_PORT=8081`
 - `COMPUTE_LOG_FORMAT=pretty` (default) or `json`
-- `COMPUTE_QUEUE_MAX_DEPTH=64`
 - `COMPUTE_PREWARM_MODELS=true`
 
 ## App server environment variables (worker mode)

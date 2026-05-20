@@ -1,9 +1,13 @@
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: openreader-compute-redis
+  nats:
+    image: nats:2.14-alpine
+    container_name: openreader-compute-nats
+    command: ["-js", "-sd", "/data"]
     ports:
-      - "6379:6379"
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
 
   compute-worker:
     build:
@@ -11,11 +15,11 @@ services:
       dockerfile: compute/worker/Dockerfile
     container_name: openreader-compute-worker
     depends_on:
-      - redis
+      - nats
     env_file:
       - ./.env
     environment:
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
       COMPUTE_WORKER_HOST: ${COMPUTE_WORKER_HOST:-0.0.0.0}
       COMPUTE_WORKER_PORT: ${COMPUTE_WORKER_PORT:-8081}
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
@@ -39,3 +43,6 @@ services:
           path: ../../pnpm-lock.yaml
         - action: rebuild
           path: ../../pnpm-workspace.yaml
+
+volumes:
+  nats-data:

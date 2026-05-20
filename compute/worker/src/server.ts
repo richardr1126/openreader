@@ -1,10 +1,25 @@
-import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { Queue, Worker, type Job, type JobsOptions } from 'bullmq';
-import IORedis from 'ioredis';
+import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
-  ALIGN_QUEUE_NAME,
-  PDF_LAYOUT_QUEUE_NAME,
+  connect,
+  nanos,
+  type NatsConnection,
+} from '@nats-io/transport-node';
+import {
+  AckPolicy,
+  DeliverPolicy,
+  ReplayPolicy,
+  RetentionPolicy,
+  StorageType,
+  jetstream,
+  jetstreamManager,
+  type Consumer,
+  type JetStreamClient,
+  type JetStreamManager,
+  type JsMsg,
+} from '@nats-io/jetstream';
+import { Kvm, type KV } from '@nats-io/kv';
+import {
   ensureComputeModels,
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
@@ -16,6 +31,33 @@ import {
   type WorkerJobTiming,
 } from '@openreader/compute-core';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+
+const JOBS_STREAM_NAME = 'compute_jobs';
+const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
+const LAYOUT_JOBS_SUBJECT = 'jobs.layout';
+const WHISPER_CONSUMER_NAME = 'compute_whisper';
+const LAYOUT_CONSUMER_NAME = 'compute_layout';
+const JOB_STATES_BUCKET = 'job_states';
+const JOB_STATES_TTL_MS = 24 * 60 * 60 * 1000;
+const PULL_EXPIRES_MS = 1000;
+const LOOP_ERROR_BACKOFF_MS = 500;
+
+interface QueuedJob<TPayload> {
+  jobId: string;
+  queuedAt: number;
+  payload: TPayload;
+}
+
+interface StoredJobState<Result> extends WorkerJobStatusResponse<Result> {
+  timestamp: number;
+  startedAt?: number;
+  updatedAt: number;
+}
+
+type JsonCodec<T> = {
+  encode(value: T): Uint8Array;
+  decode(data: Uint8Array): T;
+};
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -126,17 +168,39 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
-function parseRetryAfterSeconds(raw: string | undefined): number {
-  const parsed = Number(raw ?? '');
-  if (!Number.isFinite(parsed) || parsed <= 0) return 2;
-  return Math.max(1, Math.floor(parsed));
-}
-
 function isAuthed(request: FastifyRequest, expectedToken: string): boolean {
   const auth = request.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return false;
   const token = auth.slice('Bearer '.length).trim();
   return token === expectedToken;
+}
+
+function safeDurationMs(start: number | undefined, end: number | undefined): number | undefined {
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
+  return Math.max(0, Math.floor((end as number) - (start as number)));
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  const message = toErrorMessage(error).toLowerCase();
+  return message.includes('already in use') || message.includes('already exists');
+}
+
+function createJsonCodec<T>(): JsonCodec<T> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  return {
+    encode(value: T): Uint8Array {
+      return encoder.encode(JSON.stringify(value));
+    },
+    decode(data: Uint8Array): T {
+      return JSON.parse(decoder.decode(data)) as T;
+    },
+  };
 }
 
 const alignSchema = z.object({
@@ -152,83 +216,194 @@ const layoutSchema = z.object({
   documentObjectKey: z.string().trim().min(1).max(2048),
 });
 
-function mapJobState<Result>(job: Job): WorkerJobStatusResponse<Result> {
-  const result = job.returnvalue as Result | undefined;
-  const resultTiming = readResultTiming(result);
-  const timing = buildJobTimingSnapshot(job, resultTiming);
-
-  if (job.failedReason) {
-    return {
-      status: 'failed',
-      error: {
-        message: job.failedReason || 'Worker job failed',
-      },
-      ...(timing ? { timing } : {}),
-    };
-  }
-  if (typeof job.returnvalue !== 'undefined' && job.finishedOn) {
-    return {
-      status: 'succeeded',
-      result: job.returnvalue as Result,
-      ...(timing ? { timing } : {}),
-    };
-  }
-
-  if (job.processedOn) {
-    return {
-      status: 'running',
-      ...(timing ? { timing } : {}),
-    };
-  }
-  return {
-    status: 'queued',
-    ...(timing ? { timing } : {}),
-  };
+async function putState<Result>(
+  kv: KV,
+  codec: JsonCodec<StoredJobState<Result>>,
+  jobId: string,
+  state: StoredJobState<Result>,
+): Promise<void> {
+  await kv.put(jobId, codec.encode(state));
 }
 
-function readResultTiming<Result>(result: Result | undefined): WorkerJobTiming | undefined {
-  if (!result || typeof result !== 'object') return undefined;
-  const maybe = result as { timing?: WorkerJobTiming };
-  if (!maybe.timing || typeof maybe.timing !== 'object') return undefined;
-  return maybe.timing;
+async function getState<Result>(
+  kv: KV,
+  codec: JsonCodec<StoredJobState<Result>>,
+  jobId: string,
+): Promise<StoredJobState<Result> | null> {
+  const entry = await kv.get(jobId);
+  if (!entry || entry.operation !== 'PUT') return null;
+  return codec.decode(entry.value);
 }
 
-function toSafeDurationMs(start: number | undefined, end: number | undefined): number | undefined {
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
-  return Math.max(0, Math.floor((end as number) - (start as number)));
-}
-
-function buildJobTimingSnapshot(job: Job, base?: WorkerJobTiming): WorkerJobTiming | undefined {
-  const now = Date.now();
-  const timestamp = typeof job.timestamp === 'number' ? job.timestamp : undefined;
-  const processedOn = typeof job.processedOn === 'number' ? job.processedOn : undefined;
-
-  const timing: WorkerJobTiming = {
-    ...(base ?? {}),
+async function ensureJetStreamResources(
+  jsm: JetStreamManager,
+  whisperTimeoutMs: number,
+  pdfTimeoutMs: number,
+  attempts: number,
+): Promise<void> {
+  const streamConfig = {
+    name: JOBS_STREAM_NAME,
+    subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
+    retention: RetentionPolicy.Workqueue,
+    storage: StorageType.File,
   };
 
-  if (typeof timing.queueWaitMs !== 'number') {
-    timing.queueWaitMs = processedOn
-      ? toSafeDurationMs(timestamp, processedOn)
-      : toSafeDurationMs(timestamp, now);
+  try {
+    await jsm.streams.add(streamConfig);
+  } catch (error) {
+    if (!isAlreadyExistsError(error)) throw error;
+    await jsm.streams.update(JOBS_STREAM_NAME, {
+      subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
+    });
   }
 
-  const hasAnyTiming = Object.values(timing).some((value) => typeof value === 'number' && Number.isFinite(value));
-  return hasAnyTiming ? timing : undefined;
+  const ensureConsumer = async (name: string, subject: string, ackWaitMs: number): Promise<void> => {
+    const config = {
+      durable_name: name,
+      ack_policy: AckPolicy.Explicit,
+      deliver_policy: DeliverPolicy.All,
+      replay_policy: ReplayPolicy.Instant,
+      filter_subject: subject,
+      ack_wait: nanos(Math.max(ackWaitMs, 1_000)),
+      max_deliver: attempts,
+    };
+
+    try {
+      await jsm.consumers.add(JOBS_STREAM_NAME, config);
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) throw error;
+      await jsm.consumers.update(JOBS_STREAM_NAME, name, {
+        filter_subject: subject,
+        ack_wait: nanos(Math.max(ackWaitMs, 1_000)),
+        max_deliver: attempts,
+      });
+    }
+  };
+
+  await Promise.all([
+    ensureConsumer(WHISPER_CONSUMER_NAME, WHISPER_JOBS_SUBJECT, whisperTimeoutMs + 15_000),
+    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, pdfTimeoutMs + 15_000),
+  ]);
 }
 
-async function getQueueDepth(queue: Queue): Promise<number> {
-  const counts = await queue.getJobCounts('waiting', 'active', 'prioritized', 'delayed');
-  return (counts.waiting ?? 0) + (counts.active ?? 0) + (counts.prioritized ?? 0) + (counts.delayed ?? 0);
+async function createWorkerLoop<TPayload, TResult>(input: {
+  consumer: Consumer;
+  kv: KV;
+  stateCodec: JsonCodec<StoredJobState<TResult>>;
+  jobCodec: JsonCodec<QueuedJob<TPayload>>;
+  run: (payload: TPayload, queueWaitMs: number) => Promise<TResult>;
+  maxAttempts: number;
+  logLabel: string;
+  shouldStop: () => boolean;
+  log: {
+    error: (obj: Record<string, unknown>, msg: string) => void;
+    info: (obj: Record<string, unknown>, msg: string) => void;
+  };
+}): Promise<void> {
+  while (!input.shouldStop()) {
+    let msg: JsMsg | null = null;
+    try {
+      msg = await input.consumer.next({ expires: PULL_EXPIRES_MS });
+    } catch (error) {
+      if (input.shouldStop()) return;
+      input.log.error({ error: toErrorMessage(error), worker: input.logLabel }, 'worker pull failed');
+      await new Promise((resolve) => setTimeout(resolve, LOOP_ERROR_BACKOFF_MS));
+      continue;
+    }
+
+    if (!msg) continue;
+
+    let decoded: QueuedJob<TPayload> | null = null;
+    try {
+      const job = input.jobCodec.decode(msg.data);
+      decoded = job;
+      const startedAt = Date.now();
+      const queueWaitMs = safeDurationMs(job.queuedAt, startedAt);
+
+      await putState(input.kv, input.stateCodec, job.jobId, {
+        status: 'running',
+        timestamp: job.queuedAt,
+        startedAt,
+        updatedAt: startedAt,
+        ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+      });
+
+      const result = await input.run(job.payload, queueWaitMs ?? 0);
+      const resultTiming = result && typeof result === 'object' && 'timing' in result
+        ? (result as { timing?: WorkerJobTiming }).timing
+        : undefined;
+
+      await putState(input.kv, input.stateCodec, job.jobId, {
+        status: 'succeeded',
+        timestamp: job.queuedAt,
+        startedAt,
+        updatedAt: Date.now(),
+        result,
+        ...(resultTiming ? { timing: resultTiming } : {}),
+      });
+
+      msg.ack();
+      input.log.info({ worker: input.logLabel, jobId: job.jobId, timing: resultTiming }, 'job succeeded');
+    } catch (error) {
+      const message = toErrorMessage(error);
+      const deliveryCount = msg.info.deliveryCount;
+      const hasRetriesLeft = deliveryCount < input.maxAttempts;
+
+      if (decoded?.jobId) {
+        const now = Date.now();
+        const queueWaitMs = safeDurationMs(decoded.queuedAt, now);
+        const state: StoredJobState<TResult> = hasRetriesLeft
+          ? {
+            status: 'running',
+            timestamp: decoded.queuedAt,
+            updatedAt: now,
+            ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          }
+          : {
+            status: 'failed',
+            timestamp: decoded.queuedAt,
+            updatedAt: now,
+            error: { message },
+            ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          };
+
+        await putState(input.kv, input.stateCodec, decoded.jobId, state).catch((stateError) => {
+          input.log.error({
+            worker: input.logLabel,
+            jobId: decoded?.jobId,
+            error: toErrorMessage(stateError),
+          }, 'failed to persist failed state');
+        });
+      }
+
+      if (hasRetriesLeft) {
+        msg.nak();
+        input.log.error({
+          worker: input.logLabel,
+          jobId: decoded?.jobId,
+          error: message,
+          deliveryCount,
+          maxAttempts: input.maxAttempts,
+        }, 'job failed, nacked for retry');
+      } else {
+        msg.term(message);
+        input.log.error({
+          worker: input.logLabel,
+          jobId: decoded?.jobId,
+          error: message,
+          deliveryCount,
+          maxAttempts: input.maxAttempts,
+        }, 'job failed, max attempts reached');
+      }
+    }
+  }
 }
 
 async function main(): Promise<void> {
   const port = readIntEnv('COMPUTE_WORKER_PORT', 8081);
   const host = process.env.COMPUTE_WORKER_HOST?.trim() || '0.0.0.0';
   const workerToken = requireEnv('COMPUTE_WORKER_TOKEN');
-  const redisUrl = requireEnv('REDIS_URL');
-  const queueMaxDepth = readIntEnv('COMPUTE_QUEUE_MAX_DEPTH', 64);
-  const retryAfterSec = parseRetryAfterSeconds(process.env.COMPUTE_QUEUE_RETRY_AFTER_SEC);
+  const natsUrl = requireEnv('NATS_URL');
 
   const whisperConcurrency = readIntEnv('COMPUTE_WHISPER_CONCURRENCY', 1);
   const pdfConcurrency = readIntEnv('COMPUTE_PDF_CONCURRENCY', 2);
@@ -237,34 +412,15 @@ async function main(): Promise<void> {
   const attempts = readIntEnv('COMPUTE_JOB_ATTEMPTS', 2);
   const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', true);
 
-  const redis = new IORedis(redisUrl, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: true,
-  });
+  const nc: NatsConnection = await connect({ servers: natsUrl });
+  const js: JetStreamClient = jetstream(nc);
+  const jsm: JetStreamManager = await jetstreamManager(nc);
 
-  const queueDefaults: JobsOptions = {
-    attempts,
-    backoff: {
-      type: 'exponential',
-      delay: 500,
-    },
-    removeOnComplete: {
-      age: 60 * 60,
-      count: 1000,
-    },
-    removeOnFail: {
-      age: 24 * 60 * 60,
-      count: 5000,
-    },
-  };
+  await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, attempts);
 
-  const alignQueue = new Queue<WhisperAlignJobRequest, WhisperAlignJobResult>(ALIGN_QUEUE_NAME, {
-    connection: redis,
-    defaultJobOptions: queueDefaults,
-  });
-  const layoutQueue = new Queue<PdfLayoutJobRequest, PdfLayoutJobResult>(PDF_LAYOUT_QUEUE_NAME, {
-    connection: redis,
-    defaultJobOptions: queueDefaults,
+  const kv = await new Kvm(js).create(JOB_STATES_BUCKET, {
+    history: 1,
+    ttl: JOB_STATES_TTL_MS,
   });
 
   const s3 = buildS3Client();
@@ -289,123 +445,16 @@ async function main(): Promise<void> {
     return toArrayBuffer(new Uint8Array(bytes));
   };
 
-  const alignWorker = new Worker<WhisperAlignJobRequest, WhisperAlignJobResult>(
-    ALIGN_QUEUE_NAME,
-    async (job) => {
-      const processingStartedAt = Date.now();
-      const queueWaitMs = typeof job.timestamp === 'number'
-        ? Math.max(0, processingStartedAt - job.timestamp)
-        : undefined;
-      const parsed = alignSchema.parse(job.data);
-      const s3FetchStartedAt = Date.now();
-      const audioBuffer = await readObjectByKey(parsed.audioObjectKey);
-      const s3FetchMs = Date.now() - s3FetchStartedAt;
-      const computeStartedAt = Date.now();
-      const result = await withTimeout(
-        runWhisperAlignmentFromAudioBuffer({
-          audioBuffer,
-          text: parsed.text,
-          cacheKey: parsed.cacheKey,
-          lang: parsed.lang,
-        }),
-        whisperTimeoutMs,
-        'whisper alignment job',
-      );
-      const computeMs = Date.now() - computeStartedAt;
-      return {
-        ...result,
-        timing: {
-          ...(result.timing ?? {}),
-          queueWaitMs,
-          s3FetchMs,
-          computeMs,
-        },
-      };
-    },
-    {
-      connection: redis,
-      concurrency: whisperConcurrency,
-    },
-  );
-
-  const layoutWorker = new Worker<PdfLayoutJobRequest, PdfLayoutJobResult>(
-    PDF_LAYOUT_QUEUE_NAME,
-    async (job) => {
-      const processingStartedAt = Date.now();
-      const queueWaitMs = typeof job.timestamp === 'number'
-        ? Math.max(0, processingStartedAt - job.timestamp)
-        : undefined;
-      const parsed = layoutSchema.parse(job.data);
-      const s3FetchStartedAt = Date.now();
-      const pdfBytes = await readObjectByKey(parsed.documentObjectKey);
-      const s3FetchMs = Date.now() - s3FetchStartedAt;
-      const computeStartedAt = Date.now();
-      const result = await withTimeout(
-        runPdfLayoutFromPdfBuffer({
-          documentId: parsed.documentId,
-          pdfBytes,
-        }),
-        pdfTimeoutMs,
-        'pdf layout job',
-      );
-      const computeMs = Date.now() - computeStartedAt;
-      return {
-        ...result,
-        timing: {
-          ...(result.timing ?? {}),
-          queueWaitMs,
-          s3FetchMs,
-          computeMs,
-        },
-      };
-    },
-    {
-      connection: redis,
-      concurrency: pdfConcurrency,
-    },
-  );
-
   if (prewarmModels) {
     await ensureComputeModels();
   }
 
-  const app = Fastify({
-    logger: buildLoggerConfig(),
-  });
+  const app = Fastify({ logger: buildLoggerConfig() });
 
-  alignWorker.on('completed', (job, result) => {
-    app.log.info({
-      queue: ALIGN_QUEUE_NAME,
-      jobId: job.id,
-      timing: buildJobTimingSnapshot(job, readResultTiming(result)),
-    }, 'whisper align job completed');
-  });
-
-  alignWorker.on('failed', (job, err) => {
-    app.log.error({
-      queue: ALIGN_QUEUE_NAME,
-      jobId: job?.id,
-      error: err.message,
-      timing: job ? buildJobTimingSnapshot(job) : undefined,
-    }, 'whisper align job failed');
-  });
-
-  layoutWorker.on('completed', (job, result) => {
-    app.log.info({
-      queue: PDF_LAYOUT_QUEUE_NAME,
-      jobId: job.id,
-      timing: buildJobTimingSnapshot(job, readResultTiming(result)),
-    }, 'pdf layout job completed');
-  });
-
-  layoutWorker.on('failed', (job, err) => {
-    app.log.error({
-      queue: PDF_LAYOUT_QUEUE_NAME,
-      jobId: job?.id,
-      error: err.message,
-      timing: job ? buildJobTimingSnapshot(job) : undefined,
-    }, 'pdf layout job failed');
-  });
+  const whisperStateCodec = createJsonCodec<StoredJobState<WhisperAlignJobResult>>();
+  const layoutStateCodec = createJsonCodec<StoredJobState<PdfLayoutJobResult>>();
+  const whisperJobCodec = createJsonCodec<QueuedJob<WhisperAlignJobRequest>>();
+  const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
 
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url.split('?')[0] ?? request.url;
@@ -420,29 +469,16 @@ async function main(): Promise<void> {
 
   app.get('/health/ready', async (_request, reply) => {
     try {
-      await redis.ping();
+      await nc.flush();
       return { ok: true };
     } catch (error) {
       reply.code(503);
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       };
     }
   });
-
-  const rejectIfSaturated = async (queue: Queue, reply: FastifyReply): Promise<boolean> => {
-    const depth = await getQueueDepth(queue);
-    if (depth < queueMaxDepth) return false;
-    reply.header('Retry-After', String(retryAfterSec));
-    reply.code(429).send({
-      error: 'Queue is saturated',
-      retryAfterSeconds: retryAfterSec,
-      queueDepth: depth,
-      queueMaxDepth,
-    });
-    return true;
-  };
 
   app.post('/align/whisper/jobs', async (request, reply) => {
     const parsed = alignSchema.safeParse(request.body);
@@ -453,11 +489,24 @@ async function main(): Promise<void> {
         issues: parsed.error.issues,
       };
     }
-    if (await rejectIfSaturated(alignQueue, reply)) return;
 
-    const job = await alignQueue.add('align', parsed.data);
+    const jobId = crypto.randomUUID();
+    const queuedAt = Date.now();
+
+    await putState(kv, whisperStateCodec, jobId, {
+      status: 'queued',
+      timestamp: queuedAt,
+      updatedAt: queuedAt,
+    });
+
+    await js.publish(WHISPER_JOBS_SUBJECT, whisperJobCodec.encode({
+      jobId,
+      queuedAt,
+      payload: parsed.data,
+    }));
+
     reply.code(202);
-    return { jobId: String(job.id) };
+    return { jobId };
   });
 
   app.get('/align/whisper/jobs/:jobId', async (request, reply) => {
@@ -466,12 +515,21 @@ async function main(): Promise<void> {
       reply.code(400);
       return { error: 'Invalid job id' };
     }
-    const job = await alignQueue.getJob(params.data.jobId);
-    if (!job) {
+
+    const state = await getState(kv, whisperStateCodec, params.data.jobId);
+    if (!state) {
       reply.code(404);
       return { error: 'Job not found' };
     }
-    return mapJobState<WhisperAlignJobResult>(job);
+
+    const response: WorkerJobStatusResponse<WhisperAlignJobResult> = {
+      status: state.status,
+      ...(state.result ? { result: state.result } : {}),
+      ...(state.error ? { error: state.error } : {}),
+      ...(state.timing ? { timing: state.timing } : {}),
+    };
+
+    return response;
   });
 
   app.post('/layout/pdf/jobs', async (request, reply) => {
@@ -483,11 +541,24 @@ async function main(): Promise<void> {
         issues: parsed.error.issues,
       };
     }
-    if (await rejectIfSaturated(layoutQueue, reply)) return;
 
-    const job = await layoutQueue.add('layout', parsed.data);
+    const jobId = crypto.randomUUID();
+    const queuedAt = Date.now();
+
+    await putState(kv, layoutStateCodec, jobId, {
+      status: 'queued',
+      timestamp: queuedAt,
+      updatedAt: queuedAt,
+    });
+
+    await js.publish(LAYOUT_JOBS_SUBJECT, layoutJobCodec.encode({
+      jobId,
+      queuedAt,
+      payload: parsed.data,
+    }));
+
     reply.code(202);
-    return { jobId: String(job.id) };
+    return { jobId };
   });
 
   app.get('/layout/pdf/jobs/:jobId', async (request, reply) => {
@@ -496,28 +567,136 @@ async function main(): Promise<void> {
       reply.code(400);
       return { error: 'Invalid job id' };
     }
-    const job = await layoutQueue.getJob(params.data.jobId);
-    if (!job) {
+
+    const state = await getState(kv, layoutStateCodec, params.data.jobId);
+    if (!state) {
       reply.code(404);
       return { error: 'Job not found' };
     }
-    return mapJobState<PdfLayoutJobResult>(job);
+
+    const response: WorkerJobStatusResponse<PdfLayoutJobResult> = {
+      status: state.status,
+      ...(state.result ? { result: state.result } : {}),
+      ...(state.error ? { error: state.error } : {}),
+      ...(state.timing ? { timing: state.timing } : {}),
+    };
+
+    return response;
   });
 
+  const whisperConsumer = await js.consumers.get(JOBS_STREAM_NAME, WHISPER_CONSUMER_NAME);
+  const layoutConsumer = await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME);
+
+  let stopping = false;
+
+  const runWhisper = async (
+    payload: WhisperAlignJobRequest,
+    queueWaitMs: number,
+  ): Promise<WhisperAlignJobResult> => {
+    const parsed = alignSchema.parse(payload);
+
+    const s3FetchStartedAt = Date.now();
+    const audioBuffer = await readObjectByKey(parsed.audioObjectKey);
+    const s3FetchMs = Date.now() - s3FetchStartedAt;
+
+    const computeStartedAt = Date.now();
+    const result = await withTimeout(
+      runWhisperAlignmentFromAudioBuffer({
+        audioBuffer,
+        text: parsed.text,
+        cacheKey: parsed.cacheKey,
+        lang: parsed.lang,
+      }),
+      whisperTimeoutMs,
+      'whisper alignment job',
+    );
+
+    const computeMs = Date.now() - computeStartedAt;
+    return {
+      ...result,
+      timing: {
+        ...(result.timing ?? {}),
+        queueWaitMs,
+        s3FetchMs,
+        computeMs,
+      },
+    };
+  };
+
+  const runLayout = async (
+    payload: PdfLayoutJobRequest,
+    queueWaitMs: number,
+  ): Promise<PdfLayoutJobResult> => {
+    const parsed = layoutSchema.parse(payload);
+
+    const s3FetchStartedAt = Date.now();
+    const pdfBytes = await readObjectByKey(parsed.documentObjectKey);
+    const s3FetchMs = Date.now() - s3FetchStartedAt;
+
+    const computeStartedAt = Date.now();
+    const result = await withTimeout(
+      runPdfLayoutFromPdfBuffer({
+        documentId: parsed.documentId,
+        pdfBytes,
+      }),
+      pdfTimeoutMs,
+      'pdf layout job',
+    );
+
+    const computeMs = Date.now() - computeStartedAt;
+    return {
+      ...result,
+      timing: {
+        ...(result.timing ?? {}),
+        queueWaitMs,
+        s3FetchMs,
+        computeMs,
+      },
+    };
+  };
+
+  const workerLoops: Promise<void>[] = [];
+
+  for (let i = 0; i < whisperConcurrency; i += 1) {
+    workerLoops.push(createWorkerLoop({
+      consumer: whisperConsumer,
+      kv,
+      stateCodec: whisperStateCodec,
+      jobCodec: whisperJobCodec,
+      run: runWhisper,
+      maxAttempts: attempts,
+      logLabel: `whisper-${i + 1}`,
+      shouldStop: () => stopping,
+      log: app.log,
+    }));
+  }
+
+  for (let i = 0; i < pdfConcurrency; i += 1) {
+    workerLoops.push(createWorkerLoop({
+      consumer: layoutConsumer,
+      kv,
+      stateCodec: layoutStateCodec,
+      jobCodec: layoutJobCodec,
+      run: runLayout,
+      maxAttempts: attempts,
+      logLabel: `layout-${i + 1}`,
+      shouldStop: () => stopping,
+      log: app.log,
+    }));
+  }
+
   const close = async (): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
     await app.close();
-    await Promise.allSettled([
-      alignWorker.close(),
-      layoutWorker.close(),
-      alignQueue.close(),
-      layoutQueue.close(),
-      redis.quit(),
-    ]);
+    await Promise.allSettled(workerLoops);
+    await nc.drain();
   };
 
   process.once('SIGINT', () => {
     void close().finally(() => process.exit(0));
   });
+
   process.once('SIGTERM', () => {
     void close().finally(() => process.exit(0));
   });

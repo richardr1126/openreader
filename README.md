@@ -19,7 +19,7 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 ## ✨ Highlights
 
 - 🧱 **Layout-aware PDF parsing** with PP-DocLayoutV3 (ONNX) — structured block detection, cross-page stitching, and geometry-based highlighting for precise read-along sync.
-- ⏱️ **Word-by-word highlighting** via built-in ONNX Whisper alignment — no external dependencies, runs in-process (`COMPUTE_MODE=local`) or offloaded to a scalable Redis-backed worker (`COMPUTE_MODE=worker`).
+- ⏱️ **Word-by-word highlighting** via built-in ONNX Whisper alignment — no external dependencies, runs in-process (`COMPUTE_MODE=local`) or offloaded to a scalable NATS JetStream-backed worker (`COMPUTE_MODE=worker`).
 - ⚡ **Segment-based read-along** for EPUB, PDF, TXT, MD, and DOCX — sentence-aware TTS with cached audio segments, background preloading, and resumable playback.
 - 🎯 **Multi-provider TTS** — self-hosted OpenAI-compatible servers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI) or cloud APIs (OpenAI, Replicate, DeepInfra).
 - 🎧 **Audiobook export** in `m4b`/`mp3` with resumable chapter processing.
@@ -32,7 +32,7 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 | --- | --- |
 | Run with Docker | [Docker Quick Start](https://docs.openreader.richardr.dev/docker-quick-start) |
 | Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
-| Deploy external compute worker | [Compute Worker (Redis + BullMQ)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
+| Deploy external compute worker | [Compute Worker (NATS JetStream)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
 | Develop locally | [Local Development](https://docs.openreader.richardr.dev/deploy/local-development) |
 | Configure auth | [Auth](https://docs.openreader.richardr.dev/configure/auth) |
 | Configure SQL database | [Database and Migrations](https://docs.openreader.richardr.dev/configure/database) |

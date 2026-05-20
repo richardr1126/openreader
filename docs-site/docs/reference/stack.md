@@ -55,11 +55,11 @@ Monorepo packages under `compute/`:
   - Utilities: `jszip`, `ffmpeg-static`
 - **`@openreader/compute-worker`** — standalone Node.js worker service
   - HTTP server: [Fastify](https://fastify.dev/) v5
-  - Job queue: [BullMQ](https://bullmq.io/) + [ioredis](https://github.com/redis/ioredis) (queues: `whisper-align`, `pdf-layout`)
+  - Job queue + state: [NATS](https://nats.io/) JetStream WorkQueue pull consumers + NATS KV (`jobs.whisper`, `jobs.layout`)
   - Storage: AWS SDK v3 S3 client for reading/writing blobs
   - Logging: [Pino](https://getpino.io/)
   - Validation: [Zod](https://zod.dev/)
-- Compute mode is controlled by `COMPUTE_MODE` env var: `local` (in-process) or `worker` (remote queue via HTTP + Redis)
+- Compute mode is controlled by `COMPUTE_MODE` env var: `local` (in-process) or `worker` (remote queue via HTTP + NATS)
 
 ## Tooling and testing
 

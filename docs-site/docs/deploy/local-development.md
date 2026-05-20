@@ -127,10 +127,10 @@ If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` i
 <details>
 <summary><strong>External compute worker dev stack (optional)</strong></summary>
 
-Use this when you want durable compute with Redis/BullMQ while keeping Next.js on native host `pnpm dev`.
-Full worker deployment details are in [Compute Worker (Redis + BullMQ)](./compute-worker).
+Use this when you want durable compute with NATS JetStream + KV while keeping Next.js on native host `pnpm dev`.
+Full worker deployment details are in [Compute Worker (NATS JetStream)](./compute-worker).
 
-Start only Redis + compute-worker via compose watch:
+Start only NATS + compute-worker via compose watch:
 
 ```bash
 docker compose --env-file compute/worker/.env -f compute/worker/docker-compose.yml up --watch
@@ -243,7 +243,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 ```
 
   </TabItem>
-  <TabItem value="worker-mode" label="External Worker + Redis">
+  <TabItem value="worker-mode" label="External Worker + NATS">
 
 ```env
 API_BASE=http://host.docker.internal:8880/v1
