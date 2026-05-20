@@ -77,7 +77,8 @@ test.describe('Document Upload Tests', () => {
     await expectViewerForFile(page, 'sample.pdf');
     // Additional content checks specific to the sample PDF
     await expect(page.locator('.react-pdf__Page')).toBeVisible();
-    await expect(page.getByText('Sample PDF')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'sample.pdf' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /1\s*\/\s*2/ })).toBeVisible();
   });
 
   test('displays an EPUB document', async ({ page }) => {
