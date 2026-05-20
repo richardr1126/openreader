@@ -1,7 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
-import { UnsupportedComputeError } from '@/lib/server/compute/types';
 import { documentKey, putParsedDocumentBlob } from '@/lib/server/documents/blobstore';
 import { getCompute } from '@/lib/server/compute';
 import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
@@ -58,7 +57,7 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     const cause = error instanceof Error ? error.cause : undefined;
-    const parseStatus = error instanceof UnsupportedComputeError ? 'unsupported' : 'failed';
+    const parseStatus = 'failed';
     try {
       await db
         .update(documents)

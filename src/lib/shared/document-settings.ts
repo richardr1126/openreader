@@ -16,19 +16,6 @@ function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
   return Array.from(new Set(out));
 }
 
-type PdfMargins = { header: number; footer: number; left: number; right: number };
-
-function normalizeMargins(value: unknown): PdfMargins | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const rec = value as Record<string, unknown>;
-  const header = Number(rec.header);
-  const footer = Number(rec.footer);
-  const left = Number(rec.left);
-  const right = Number(rec.right);
-  if (![header, footer, left, right].every((n) => Number.isFinite(n))) return undefined;
-  return { header, footer, left, right };
-}
-
 export function mergeDocumentSettings(
   defaults: DocumentSettings = DEFAULT_DOCUMENT_SETTINGS,
   stored: unknown,
@@ -38,7 +25,6 @@ export function mergeDocumentSettings(
     pdf: {
       skipBlockKinds: [...(defaults.pdf?.skipBlockKinds ?? [])],
       chaptersFromSections: defaults.pdf?.chaptersFromSections ?? true,
-      ...(defaults.pdf?.margins ? { margins: defaults.pdf.margins } : {}),
     },
   };
 
@@ -56,7 +42,6 @@ export function mergeDocumentSettings(
         typeof pdfRec.chaptersFromSections === 'boolean'
           ? pdfRec.chaptersFromSections
           : (base.pdf?.chaptersFromSections ?? true),
-      ...(normalizeMargins(pdfRec.margins) ? { margins: normalizeMargins(pdfRec.margins) } : {}),
     },
   };
 }

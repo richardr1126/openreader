@@ -23,6 +23,13 @@ function hasAnyParsedBlocks(doc: ParsedPdfDocument | null): boolean {
   return doc.pages.some((page) => Array.isArray(page.blocks) && page.blocks.length > 0);
 }
 
+function normalizeParseStatus(
+  status: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null,
+): 'pending' | 'running' | 'ready' | 'failed' {
+  if (status === 'unsupported' || status === null) return 'pending';
+  return status;
+}
+
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
@@ -60,7 +67,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    if (row.parseStatus === 'failed' && retryFailed) {
+    if (row.parseStatus === 'unsupported') {
       await db
         .update(documents)
         .set({ parseStatus: 'pending' })
@@ -73,15 +80,30 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ parseStatus: 'pending' }, { status: 202 });
     }
 
-    if (row.parseStatus !== 'ready') {
-      if (row.parseStatus === 'pending' || row.parseStatus === 'running' || row.parseStatus === null) {
+    const effectiveStatus = normalizeParseStatus(row.parseStatus);
+
+    if (effectiveStatus === 'failed' && retryFailed) {
+      await db
+        .update(documents)
+        .set({ parseStatus: 'pending' })
+        .where(and(eq(documents.id, id), eq(documents.userId, row.userId)));
+      enqueueParsePdfJob({
+        documentId: id,
+        userId: row.userId,
+        namespace: testNamespace,
+      });
+      return NextResponse.json({ parseStatus: 'pending' }, { status: 202 });
+    }
+
+    if (effectiveStatus !== 'ready') {
+      if (effectiveStatus === 'pending' || effectiveStatus === 'running') {
         enqueueParsePdfJob({
           documentId: id,
           userId: row.userId,
           namespace: testNamespace,
         });
       }
-      return NextResponse.json({ parseStatus: row.parseStatus ?? 'pending' }, { status: 202 });
+      return NextResponse.json({ parseStatus: effectiveStatus }, { status: 202 });
     }
 
     try {
@@ -161,7 +183,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    if (row.parseStatus !== 'running') {
+    const effectiveStatus = normalizeParseStatus(row.parseStatus);
+
+    if (effectiveStatus !== 'running') {
       await db
         .update(documents)
         .set({ parseStatus: 'pending' })
@@ -175,7 +199,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     });
 
     return NextResponse.json(
-      { parseStatus: row.parseStatus === 'running' ? 'running' : 'pending' },
+      { parseStatus: effectiveStatus === 'running' ? 'running' : 'pending' },
       { status: 202 },
     );
   } catch (error) {

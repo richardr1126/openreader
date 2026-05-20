@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { useConfig, ViewType } from '@/contexts/ConfigContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import {
@@ -15,7 +15,6 @@ import {
   clampSegmentPreloadSentenceLookahead,
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
-import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { Section, ToggleRow, CheckItem, buttonClass, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
@@ -51,8 +50,6 @@ const viewTypeTextMapping = [
 ];
 
 const rangeInputClassName = 'w-full bg-offbase rounded-md appearance-none cursor-pointer accent-accent [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-md [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent';
-
-type MarginKey = 'header' | 'footer' | 'left' | 'right';
 
 type RangeSettingProps = {
   label: string;
@@ -103,7 +100,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
   epub?: boolean,
   html?: boolean,
   pdf?: {
-    computeAvailable: boolean;
     parseStatus: PdfParseStatus | null;
     parsedOverlayEnabled: boolean;
     skipBlockKinds: ParsedPdfBlockKind[];
@@ -114,8 +110,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
     onForceReparse: () => void;
   }
 }) {
-  const computeAvailable = useFeatureFlag('computeAvailable');
-  const canWordHighlight = computeAvailable;
+  const canWordHighlight = true;
   const {
     viewType,
     skipBlank,
@@ -124,10 +119,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
     segmentPreloadDepthPages,
     segmentPreloadSentenceLookahead,
     ttsSegmentMaxBlockLength,
-    headerMargin,
-    footerMargin,
-    leftMargin,
-    rightMargin,
     updateConfigKey,
     pdfHighlightEnabled,
     epubHighlightEnabled,
@@ -136,31 +127,11 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
     htmlHighlightEnabled,
     htmlWordHighlightEnabled,
   } = useConfig();
-  const [localMargins, setLocalMargins] = useState({
-    header: headerMargin,
-    footer: footerMargin,
-    left: leftMargin,
-    right: rightMargin
-  });
   const selectedView = viewTypeTextMapping.find(v => v.id === viewType) || viewTypeTextMapping[0];
+  const isPdfMode = !epub && !html && !!pdf;
   const [localPreloadDepth, setLocalPreloadDepth] = useState(segmentPreloadDepthPages);
   const [localSentenceLookahead, setLocalSentenceLookahead] = useState(segmentPreloadSentenceLookahead);
   const [localMaxBlockLength, setLocalMaxBlockLength] = useState(ttsSegmentMaxBlockLength);
-  const marginValues: Record<MarginKey, number> = {
-    header: headerMargin,
-    footer: footerMargin,
-    left: leftMargin,
-    right: rightMargin,
-  };
-
-  useEffect(() => {
-    setLocalMargins({
-      header: headerMargin,
-      footer: footerMargin,
-      left: leftMargin,
-      right: rightMargin
-    });
-  }, [headerMargin, footerMargin, leftMargin, rightMargin]);
 
   useEffect(() => {
     setLocalPreloadDepth(segmentPreloadDepthPages);
@@ -174,22 +145,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
     setLocalMaxBlockLength(ttsSegmentMaxBlockLength);
   }, [ttsSegmentMaxBlockLength]);
 
-  // Handler for slider release
-  const handleMarginChangeComplete = (margin: MarginKey) => () => {
-    const value = localMargins[margin];
-    const configKey = `${margin}Margin`;
-    if (value !== marginValues[margin]) {
-      updateConfigKey(configKey as 'headerMargin' | 'footerMargin' | 'leftMargin' | 'rightMargin', value);
-    }
-  };
-
-  const handleMarginSliderChange = (margin: MarginKey) => (event: ChangeEvent<HTMLInputElement>) => {
-    setLocalMargins((previous) => ({
-      ...previous,
-      [margin]: Number(event.target.value),
-    }));
-  };
-
   return (
     <ReaderSidebarShell
       isOpen={isOpen}
@@ -201,6 +156,116 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
       panelClassName="w-full sm:w-[30rem]"
     >
       <div className="space-y-4">
+        {isPdfMode && pdf && (
+          <Section
+            title="PDF Essentials"
+            subtitle="Critical parsing and playback controls."
+            variant="flat"
+          >
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Page mode</label>
+              <div
+                role="radiogroup"
+                aria-label="Page mode"
+                className={`${segmentedGroupClass} grid-cols-3`}
+              >
+                {viewTypeTextMapping.map((view) => {
+                  const active = selectedView.id === view.id;
+                  return (
+                    <button
+                      key={view.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => updateConfigKey('viewType', view.id as ViewType)}
+                      className={segmentedButtonClass(active)}
+                    >
+                      {view.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedView.id === 'scroll' ? (
+                <p className="text-xs text-warning">Scroll mode may be slower on large PDFs.</p>
+              ) : null}
+            </div>
+            <ToggleRow
+              label="Highlight text during playback"
+              description="Highlight the current sentence in PDF."
+              checked={pdfHighlightEnabled}
+              onChange={(checked) => updateConfigKey('pdfHighlightEnabled', checked)}
+              variant="flat"
+            />
+            <ToggleRow
+              label="Word-by-word highlighting"
+              description={`Highlight words using timing data${!canWordHighlight ? ' (not available on this server)' : ''}.`}
+              checked={pdfWordHighlightEnabled && pdfHighlightEnabled}
+              disabled={!pdfHighlightEnabled || !canWordHighlight}
+              onChange={(checked) => updateConfigKey('pdfWordHighlightEnabled', checked)}
+              variant="flat"
+            />
+            <ToggleRow
+              label="Use detected sections as chapters"
+              description="Build audiobook chapters from section headers."
+              checked={pdf.chaptersFromSections}
+              onChange={pdf.onToggleChaptersFromSections}
+              variant="flat"
+            />
+          </Section>
+        )}
+
+        {isPdfMode && pdf && (
+          <Section
+            title="PDF Advanced"
+            subtitle="Optional visual and structural tuning."
+            variant="flat"
+            action={
+              <div className="flex flex-col items-end gap-1">
+                <span className="flex items-center gap-1 text-muted">
+                  <SparkleIcon className="h-3 w-3 text-accent/70" />
+                  <span className="text-xs">PP-DocLayout-V3</span>
+                </span>
+                <span className="flex items-center gap-1 text-xs text-muted">
+                  <span>{pdf.parseStatus ?? 'pending'}</span>
+                  <button
+                    type="button"
+                    className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
+                    onClick={pdf.onForceReparse}
+                    disabled={pdf.parseStatus === 'running' || pdf.parseStatus === 'pending'}
+                    title="Force reparse"
+                  >
+                    <RefreshIcon className={`h-3 w-3 ${pdf.parseStatus === 'running' || pdf.parseStatus === 'pending' ? 'animate-spin' : ''}`} />
+                  </button>
+                </span>
+              </div>
+            }
+          >
+            <ToggleRow
+              label="Show block overlay"
+              description="Render detected block boxes and labels on the page."
+              checked={pdf.parsedOverlayEnabled}
+              onChange={pdf.onToggleOverlay}
+              disabled={pdf.parseStatus !== 'ready'}
+              variant="flat"
+            />
+            <details className="rounded-md border border-offbase bg-base/50 px-3 py-2">
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted">
+                Skip Block Kinds While Reading Aloud
+              </summary>
+              <div className="grid grid-cols-2 gap-x-3 pt-2">
+                {PDF_SKIP_KIND_OPTIONS.map((option) => (
+                  <CheckItem
+                    key={option.kind}
+                    label={option.label}
+                    checked={pdf.skipBlockKinds.includes(option.kind)}
+                    onChange={(enabled) => pdf.onToggleSkipKind(option.kind, enabled)}
+                  />
+                ))}
+              </div>
+            </details>
+          </Section>
+        )}
+
         <Section
           title="Playback Flow"
           subtitle="Segment and queue behavior."
@@ -273,95 +338,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
           </div>
         </Section>
 
-        {!epub && !html && (
-          <Section
-            title="PDF Layout & Extraction"
-            subtitle="Page mode and extraction bounds."
-            variant="flat"
-          >
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Page mode</label>
-              <div
-                role="radiogroup"
-                aria-label="Page mode"
-                className={`${segmentedGroupClass} grid-cols-3`}
-              >
-                {viewTypeTextMapping.map((view) => {
-                  const active = selectedView.id === view.id;
-                  return (
-                    <button
-                      key={view.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => updateConfigKey('viewType', view.id as ViewType)}
-                      className={segmentedButtonClass(active)}
-                    >
-                      {view.name}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedView.id === 'scroll' ? (
-                <p className="text-xs text-warning">Scroll mode may be slower on large PDFs.</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5 pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Text extraction margins</p>
-              <p className="text-xs text-muted mt-0.5">
-                Ignore edge content before extraction.
-              </p>
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(['header', 'footer', 'left', 'right'] as MarginKey[]).map((margin) => (
-                  <div key={margin} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="capitalize text-foreground">{margin}</span>
-                      <span className="font-semibold text-foreground">{Math.round(localMargins[margin] * 100)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="0.2"
-                      step="0.01"
-                      value={localMargins[margin]}
-                      onChange={handleMarginSliderChange(margin)}
-                      onMouseUp={handleMarginChangeComplete(margin)}
-                      onKeyUp={handleMarginChangeComplete(margin)}
-                      onTouchEnd={handleMarginChangeComplete(margin)}
-                      className={rangeInputClassName}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Section>
-        )}
-
-        {!epub && !html && (
-          <Section
-            title="PDF Highlighting"
-            subtitle="Playback highlighting in PDF mode."
-            variant="flat"
-          >
-            <ToggleRow
-              label="Highlight text during playback"
-              description="Highlight the current sentence in PDF."
-              checked={pdfHighlightEnabled}
-              onChange={(checked) => updateConfigKey('pdfHighlightEnabled', checked)}
-              variant="flat"
-            />
-            <ToggleRow
-              label="Word-by-word highlighting"
-              description={`Highlight words using timing data${!canWordHighlight ? ' (not available on this server)' : ''}.`}
-              checked={pdfWordHighlightEnabled && pdfHighlightEnabled}
-              disabled={!pdfHighlightEnabled || !canWordHighlight}
-              onChange={(checked) => updateConfigKey('pdfWordHighlightEnabled', checked)}
-              variant="flat"
-            />
-          </Section>
-        )}
-
         {epub && (
           <Section
             title="EPUB Appearance"
@@ -414,64 +390,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
               onChange={(checked) => updateConfigKey('htmlWordHighlightEnabled', checked)}
               variant="flat"
             />
-          </Section>
-        )}
-
-        {!epub && !html && pdf && (
-          <Section
-            title="PDF Structure"
-            subtitle="Layout-aware parsing controls."
-            variant="flat"
-            action={
-              <div className="flex flex-col items-end gap-1">
-                <span className="flex items-center gap-1 text-muted">
-                  <SparkleIcon className="h-3 w-3 text-accent/70" />
-                  <span className="text-xs">PP-DocLayout-V3</span>
-                </span>
-                <span className="flex items-center gap-1 text-xs text-muted">
-                  <span>{pdf.parseStatus ?? 'pending'}</span>
-                  <button
-                    type="button"
-                    className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
-                    onClick={pdf.onForceReparse}
-                    disabled={!computeAvailable || pdf.parseStatus === 'running' || pdf.parseStatus === 'pending'}
-                    title="Force reparse"
-                  >
-                    <RefreshIcon className={`h-3 w-3 ${pdf.parseStatus === 'running' || pdf.parseStatus === 'pending' ? 'animate-spin' : ''}`} />
-                  </button>
-                </span>
-              </div>
-            }
-          >
-            <ToggleRow
-              label="Show block overlay"
-              description="Render detected block boxes and labels on the page."
-              checked={pdf.parsedOverlayEnabled}
-              onChange={pdf.onToggleOverlay}
-              disabled={pdf.parseStatus !== 'ready'}
-              variant="flat"
-            />
-            <ToggleRow
-              label="Use detected sections as chapters"
-              description={computeAvailable ? 'Build audiobook chapters from section headers.' : 'Not available on this server.'}
-              checked={pdf.chaptersFromSections}
-              onChange={pdf.onToggleChaptersFromSections}
-              disabled={!computeAvailable}
-              variant="flat"
-            />
-            <div className="pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted pb-1.5">Skip while reading aloud</p>
-              <div className="grid grid-cols-2 gap-x-3">
-                {PDF_SKIP_KIND_OPTIONS.map((option) => (
-                  <CheckItem
-                    key={option.kind}
-                    label={option.label}
-                    checked={pdf.skipBlockKinds.includes(option.kind)}
-                    onChange={(enabled) => pdf.onToggleSkipKind(option.kind, enabled)}
-                  />
-                ))}
-              </div>
-            </div>
           </Section>
         )}
       </div>

@@ -120,6 +120,13 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
   }, []);
 
   useEffect(() => {
+    return () => {
+      clearHighlights();
+      clearWordHighlights();
+    };
+  }, [clearHighlights, clearWordHighlights]);
+
+  useEffect(() => {
     /*
      * Handles highlighting the current sentence being read by TTS.
      * Includes a small delay for smooth highlighting and cleans up on unmount.
@@ -146,6 +153,12 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
       return;
     }
 
+    // Root-cause guard: do not repaint highlights while react-pdf is still
+    // replacing page/text layers for a new page or viewport layout.
+    if (isPageRendering) {
+      return;
+    }
+
     const seq = ++sentenceHighlightSeqRef.current;
     const isLayoutChange = layoutKey !== lastSentenceLayoutKeyRef.current;
     lastSentenceLayoutKeyRef.current = layoutKey;
@@ -156,38 +169,40 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
       && typeof activeLocator.blockId === 'string'
       && activeLocator.blockId.length > 0;
 
-    if (isLayoutChange) {
+    if (isLayoutChange || !hasParsedBlockLocator) {
       clearHighlights();
     }
+
+    if (!hasParsedBlockLocator) {
+      return;
+    }
+
+    const useBlockGeometryOnly = !pdfWordHighlightEnabled;
 
     const tryApply = (attempt: number) => {
       if (seq !== sentenceHighlightSeqRef.current) return;
       const container = containerRef.current;
       if (!container) return;
 
-      if (hasParsedBlockLocator) {
-        highlightPattern(currDocText, currentSentence, containerRef as RefObject<HTMLDivElement>, {
-          parsedDocument,
-          locator: activeLocator,
-          useBlockGeometryOnly: !pdfWordHighlightEnabled,
-        });
-        return;
+      if (!useBlockGeometryOnly) {
+        const spans = container.querySelectorAll('.react-pdf__Page__textContent span');
+        if (!spans.length) {
+          if (attempt < 1) scheduleSentenceTimeout(() => tryApply(attempt + 1), 90);
+          return;
+        }
       }
 
-      const spans = container.querySelectorAll('.react-pdf__Page__textContent span');
-      if (!spans.length) {
-        if (attempt < 10) scheduleSentenceTimeout(() => tryApply(attempt + 1), 75);
-        return;
-      }
-
-      highlightPattern(currDocText, currentSentence, containerRef as RefObject<HTMLDivElement>);
+      highlightPattern(currDocText, currentSentence, containerRef as RefObject<HTMLDivElement>, {
+        parsedDocument,
+        locator: activeLocator,
+        useBlockGeometryOnly,
+      });
     };
 
-    scheduleSentenceTimeout(() => tryApply(0), 200);
+    scheduleSentenceTimeout(() => tryApply(0), useBlockGeometryOnly ? 80 : 120);
 
     return () => {
       clearSentenceHighlightTimeouts();
-      clearHighlights();
     };
   }, [
     currDocText,
@@ -199,6 +214,7 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     pdfWordHighlightEnabled,
     parsedDocument,
     layoutKey,
+    isPageRendering,
     clearSentenceHighlightTimeouts,
     scheduleSentenceTimeout
   ]);
@@ -225,6 +241,10 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
 
     if (!wordText) {
       clearWordHighlights();
+      return;
+    }
+
+    if (isPageRendering) {
       return;
     }
 
@@ -276,7 +296,8 @@ export function PDFViewer({ zoomLevel, pdfState }: PDFViewerProps) {
     highlightWordIndex,
     layoutKey,
     clearWordHighlightTimeouts,
-    scheduleWordTimeout
+    scheduleWordTimeout,
+    isPageRendering
   ]);
 
   // Add page dimensions state

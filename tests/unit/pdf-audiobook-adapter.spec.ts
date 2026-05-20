@@ -62,7 +62,6 @@ test.describe('pdf audiobook adapter', () => {
     const adapter = createPdfAudiobookSourceAdapter({
       parsed,
       settings,
-      margins: { header: 0.07, footer: 0.07, left: 0.07, right: 0.07 },
       smartSentenceSplitting: false,
     });
 

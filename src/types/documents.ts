@@ -6,7 +6,7 @@ export interface BaseDocument {
   size: number;
   lastModified: number;
   type: DocumentType;
-  parseStatus?: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null;
+  parseStatus?: 'pending' | 'running' | 'ready' | 'failed' | null;
   parsedJsonKey?: string | null;
   scope?: 'user' | 'unclaimed';
   folderId?: string;

@@ -559,23 +559,20 @@ export function highlightPattern(
   const parsedDocument = options?.parsedDocument ?? null;
   const locator = options?.locator ?? null;
 
-  if (
-    parsedDocument
-    && locator
-    && options?.useBlockGeometryOnly
-    && highlightParsedBlockGeometry(containerRef, parsedDocument, locator)
-  ) {
+  // Canonical path: parsed block locator is required for PDF sentence
+  // highlighting. Avoid broad full-page text matching fallbacks.
+  if (!parsedDocument || !locator || locator.readerType !== 'pdf' || !locator.blockId) {
     return;
   }
 
-  const spanNodes = (
-    parsedDocument && locator
-      ? (collectSpanNodesForParsedBlock(container, parsedDocument, locator)
-        ?? Array.from(container.querySelectorAll('.react-pdf__Page__textContent span')) as HTMLElement[])
-      : Array.from(container.querySelectorAll('.react-pdf__Page__textContent span')) as HTMLElement[]
-  );
+  const spanNodes = collectSpanNodesForParsedBlock(container, parsedDocument, locator) ?? [];
 
-  if (!spanNodes.length) return;
+  if (!spanNodes.length) {
+    if (options?.useBlockGeometryOnly) {
+      highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    }
+    return;
+  }
   lastSpanNodes = spanNodes;
 
   const tokens: PDFToken[] = [];
@@ -603,6 +600,15 @@ export function highlightPattern(
 
   if (!tokens.length) return;
   lastTokens = tokens;
+
+  if (options?.useBlockGeometryOnly) {
+    lastSentenceTokenWindow = {
+      start: 0,
+      end: tokens.length - 1,
+    };
+    highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    return;
+  }
 
   const patternLen = cleanPattern.length;
 

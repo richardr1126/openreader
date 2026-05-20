@@ -53,7 +53,7 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
-| `COMPUTE_MODE` | Heavy compute backend | `local` | Set to `none` to disable ONNX word alignment + PDF layout parsing |
+| `COMPUTE_MODE` | Heavy compute backend | `local` | Select `local` (in-process) or `worker` (external worker service) |
 | `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Required when `COMPUTE_MODE=worker`; base URL for external compute worker |
 | `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset | Required bearer token for external compute worker auth |
 | `PDF_LAYOUT_MODEL_BASE_URL` | PDF layout model | PP-DocLayoutV3 ONNX base URL | Optional base URL override for `ensureModel()` |
@@ -358,7 +358,6 @@ Selects the backend for heavy compute features (ONNX word alignment + PDF layout
 - Supported in v1:
   - `local`: run compute in-process on the app server
   - `worker`: enqueue async jobs in an external durable compute worker (Redis + BullMQ)
-  - `none`: disable these features cleanly
 - `worker` requires `COMPUTE_WORKER_URL` and `COMPUTE_WORKER_TOKEN`
 - `worker` assumes the external worker can directly reach shared object storage (S3-compatible endpoint)
 - `worker` is not compatible with non-exposed embedded `weed mini` storage topologies

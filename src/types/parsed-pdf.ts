@@ -76,4 +76,4 @@ export interface ParsedPdfDocument {
   pages: ParsedPdfPage[];
 }
 
-export type PdfParseStatus = 'pending' | 'running' | 'ready' | 'failed' | 'unsupported';
+export type PdfParseStatus = 'pending' | 'running' | 'ready' | 'failed';

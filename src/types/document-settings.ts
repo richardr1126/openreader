@@ -4,7 +4,6 @@ export interface DocumentSettings {
   schemaVersion: 1;
   pdf?: {
     skipBlockKinds: ParsedPdfBlockKind[];
-    margins?: { header: number; footer: number; left: number; right: number };
     chaptersFromSections: boolean;
   };
 }

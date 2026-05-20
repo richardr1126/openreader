@@ -81,7 +81,7 @@ export async function getDocumentMetadata(id: string, options?: { signal?: Abort
 export async function getParsedPdfDocument(
   id: string,
   options?: { signal?: AbortSignal; retryFailed?: boolean },
-): Promise<{ status: 'ready'; parsed: ParsedPdfDocument } | { status: 'pending' | 'running' | 'failed' | 'unsupported' }> {
+): Promise<{ status: 'ready'; parsed: ParsedPdfDocument } | { status: 'pending' | 'running' | 'failed' }> {
   const query = options?.retryFailed ? '?retry=1' : '';
   const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed${query}`, {
     signal: options?.signal,
@@ -91,7 +91,7 @@ export async function getParsedPdfDocument(
   if (res.status === 202) {
     const data = (await res.json().catch(() => null)) as { parseStatus?: string } | null;
     const parseStatus = data?.parseStatus;
-    if (parseStatus === 'pending' || parseStatus === 'running' || parseStatus === 'failed' || parseStatus === 'unsupported') {
+    if (parseStatus === 'pending' || parseStatus === 'running' || parseStatus === 'failed') {
       return { status: parseStatus };
     }
     return { status: 'pending' };

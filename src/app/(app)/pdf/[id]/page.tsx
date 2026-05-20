@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
@@ -19,6 +19,7 @@ import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { LoadingSpinner } from '@/components/Spinner';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -32,7 +33,6 @@ const PDFViewer = dynamic(
 
 export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
-  const computeAvailable = useFeatureFlag('computeAvailable');
   const { id } = useParams();
   const router = useRouter();
   const pdfState = usePdfDocument();
@@ -60,6 +60,11 @@ export default function PDFViewerPage() {
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
+  const backNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearCurrDocRef = useRef(clearCurrDoc);
+  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
+  const parseState = parseStatus ?? 'pending';
+  const isParseReady = parseState === 'ready';
 
   useEffect(() => {
     setIsLoading(true);
@@ -115,6 +120,25 @@ export default function PDFViewerPage() {
     loadDocument();
   }, [loadDocument]);
 
+  useEffect(() => {
+    clearCurrDocRef.current = clearCurrDoc;
+  }, [clearCurrDoc]);
+
+  useEffect(() => {
+    return () => {
+      if (backNavTimeoutRef.current) {
+        clearTimeout(backNavTimeoutRef.current);
+      }
+      clearCurrDocRef.current();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isParseReady) return;
+    stop();
+  }, [isLoading, isParseReady, stop]);
+
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
     const compute = () => {
@@ -134,14 +158,33 @@ export default function PDFViewerPage() {
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 10, 300));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 10, 50));
 
+  const handleBackToDocuments = useCallback((event?: MouseEvent) => {
+    event?.preventDefault();
+    if (isNavigatingBack) return;
+    setIsNavigatingBack(true);
+    stop();
+    const hadOpenSidebar = activeSidebar !== null;
+    setActiveSidebar(null);
+    const delayMs = hadOpenSidebar ? 220 : 0;
+    if (backNavTimeoutRef.current) {
+      clearTimeout(backNavTimeoutRef.current);
+    }
+    backNavTimeoutRef.current = setTimeout(() => {
+      router.push('/app');
+    }, delayMs);
+  }, [isNavigatingBack, stop, activeSidebar, router]);
+
   const handleGenerateAudiobook = useCallback(async (
     onProgress: (progress: number) => void,
     signal: AbortSignal,
     onChapterComplete: (chapter: TTSAudiobookChapter) => void,
     settings: AudiobookGenerationSettings
   ) => {
+    if (!isParseReady) {
+      throw new Error('PDF parsing is not ready yet.');
+    }
     return createPDFAudioBook(onProgress, signal, onChapterComplete, id as string, settings.format, settings);
-  }, [createPDFAudioBook, id]);
+  }, [createPDFAudioBook, id, isParseReady]);
 
   const handleRegenerateChapter = useCallback(async (
     chapterIndex: number,
@@ -149,8 +192,11 @@ export default function PDFViewerPage() {
     settings: AudiobookGenerationSettings,
     signal: AbortSignal
   ) => {
+    if (!isParseReady) {
+      throw new Error('PDF parsing is not ready yet.');
+    }
     return regeneratePDFChapter(chapterIndex, bookId, settings.format, signal, settings);
-  }, [regeneratePDFChapter]);
+  }, [regeneratePDFChapter, isParseReady]);
 
   if (error) {
     return (
@@ -158,7 +204,7 @@ export default function PDFViewerPage() {
         <p className="text-red-500 mb-4">{error}</p>
         <Link
           href="/app"
-          onClick={() => { clearCurrDoc(); }}
+          onClick={handleBackToDocuments}
           className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
         >
           <svg className="w-4 h-4 mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -170,13 +216,42 @@ export default function PDFViewerPage() {
     );
   }
 
+  const renderPdfStatusLoader = () => {
+    let statusText = 'Loading PDF...';
+    if (!isLoading) {
+      if (parseState === 'pending') {
+        statusText = 'Preparing PDF layout...';
+      } else if (parseState === 'running') {
+        statusText = 'Parsing PDF layout blocks...';
+      } else if (parseState === 'failed') {
+        statusText = 'PDF parsing failed. Retry to continue.';
+      }
+    }
+
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-base">
+        <LoadingSpinner className="w-8 h-8 text-accent" />
+        <p className="text-sm text-muted animate-pulse">{statusText}</p>
+        {!isLoading && parseState === 'failed' ? (
+          <button
+            type="button"
+            onClick={() => forceReparseParsedPdf()}
+            className="inline-flex items-center rounded-md border border-offbase bg-offbase px-2.5 py-1 text-xs text-foreground hover:text-accent transition-colors"
+          >
+            Retry Parse
+          </button>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <>
       <Header
         left={
           <Link
             href="/app"
-            onClick={() => clearCurrDoc()}
+            onClick={handleBackToDocuments}
             className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
             aria-label="Back to documents"
           >
@@ -207,11 +282,8 @@ export default function PDFViewerPage() {
         }
       />
       <div className="overflow-hidden" style={{ height: containerHeight }}>
-
-        {isLoading ? (
-          <div className="p-4">
-            <DocumentSkeleton />
-          </div>
+        {isLoading || !isParseReady ? (
+          renderPdfStatusLoader()
         ) : (
           <PDFViewer zoomLevel={zoomLevel} pdfState={pdfState} />
         )}
@@ -233,14 +305,13 @@ export default function PDFViewerPage() {
             <RateLimitBanner />
           </div>
         </div>
-      ) : (
+      ) : isParseReady ? (
         <TTSPlayer currentPage={currDocPage} numPages={currDocPages} />
-      )}
+      ) : null}
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         pdf={{
-          computeAvailable,
           parseStatus,
           parsedOverlayEnabled,
           skipBlockKinds: documentSettings.pdf?.skipBlockKinds ?? [],

@@ -31,12 +31,12 @@ import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
-  extractTextFromPDF,
   highlightPattern,
   clearHighlights,
   clearWordHighlights,
   highlightWordIndex,
 } from '@/lib/client/pdf';
+import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
 import type { CanonicalTtsSourceUnit } from '@/lib/shared/tts-segment-plan';
 import {
   DEFAULT_DOCUMENT_SETTINGS,
@@ -113,9 +113,6 @@ export interface PdfDocumentState {
   isAudioCombining: boolean;
 }
 
-const EMPTY_TEXT_RETRY_DELAY_MS = 120;
-const EMPTY_TEXT_MAX_RETRIES = 6;
-
 /**
  * Main PDF route hook.
  */
@@ -130,10 +127,6 @@ export function usePdfDocument(): PdfDocumentState {
     registerVisualPageChangeHandler,
   } = useTTS();
   const {
-    headerMargin,
-    footerMargin,
-    leftMargin,
-    rightMargin,
     apiKey,
     baseUrl,
     providerRef,
@@ -154,18 +147,11 @@ export function usePdfDocument(): PdfDocumentState {
   const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
   const [isAudioCombining] = useState(false);
   const audiobookAdapter = useMemo(() => createPdfAudiobookSourceAdapter({
-    pdfDocument,
     parsed: parsedDocument ?? undefined,
     settings: documentSettings,
-    margins: {
-      header: documentSettings.pdf?.margins?.header ?? headerMargin,
-      footer: documentSettings.pdf?.margins?.footer ?? footerMargin,
-      left: documentSettings.pdf?.margins?.left ?? leftMargin,
-      right: documentSettings.pdf?.margins?.right ?? rightMargin,
-    },
     smartSentenceSplitting,
     maxBlockLength: ttsSegmentMaxBlockLength,
-  }), [pdfDocument, parsedDocument, documentSettings, headerMargin, footerMargin, leftMargin, rightMargin, smartSentenceSplitting, ttsSegmentMaxBlockLength]);
+  }), [pdfDocument, parsedDocument, documentSettings, smartSentenceSplitting, ttsSegmentMaxBlockLength]);
   const pageTextCacheRef = useRef<Map<number, string>>(new Map());
   const [currDocPage, setCurrDocPage] = useState<number>(currDocPageNumber);
 
@@ -174,7 +160,6 @@ export function usePdfDocument(): PdfDocumentState {
   const pdfDocGenerationRef = useRef(0);
   const pdfDocumentRef = useRef<PDFDocumentProxy | undefined>(undefined);
   const loadSeqRef = useRef(0);
-  const emptyRetryRef = useRef<{ page: number; attempt: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
 
   // Guards for setCurrentDocument to prevent stale loads from overwriting newer selections.
   const docLoadSeqRef = useRef(0);
@@ -190,10 +175,6 @@ export function usePdfDocument(): PdfDocumentState {
     // document backfills parse output via the parsed endpoint polling path.
     const effectiveInitialStatus: PdfParseStatus = initialStatus ?? 'pending';
     setParseStatus(effectiveInitialStatus);
-    if (effectiveInitialStatus === 'unsupported') {
-      setParsedDocument(null);
-      return;
-    }
 
     const maxAttempts = 25;
     const delayMs = 1200;
@@ -210,7 +191,7 @@ export function usePdfDocument(): PdfDocumentState {
         return;
       }
       setParseStatus(result.status);
-      if (result.status === 'failed' || result.status === 'unsupported') {
+      if (result.status === 'failed') {
         setParsedDocument(null);
         return;
       }
@@ -262,7 +243,7 @@ export function usePdfDocument(): PdfDocumentState {
 
   /**
    * Loads and processes text from the current document page
-   * Extracts text from the PDF and updates both document text and TTS text states
+   * Uses parsed PDF blocks only and updates both document text and TTS text states.
    * 
    * @returns {Promise<void>}
    */
@@ -274,30 +255,14 @@ export function usePdfDocument(): PdfDocumentState {
       const seq = ++loadSeqRef.current;
       const pageNumber = currDocPageNumber;
 
-      const existingRetry = emptyRetryRef.current;
-      if (existingRetry?.timer) {
-        clearTimeout(existingRetry.timer);
-      }
-      emptyRetryRef.current =
-        existingRetry && existingRetry.page === pageNumber
-          ? { ...existingRetry, timer: null }
-          : null;
-
-      const margins = {
-        header: documentSettings.pdf?.margins?.header ?? headerMargin,
-        footer: documentSettings.pdf?.margins?.footer ?? footerMargin,
-        left: documentSettings.pdf?.margins?.left ?? leftMargin,
-        right: documentSettings.pdf?.margins?.right ?? rightMargin
-      };
-
       const pageFromParsed = (pageNum: number): ParsedPdfPage | undefined =>
         parsedDocument?.pages.find((page) => page.pageNumber === pageNum);
 
-      const hasUsableParsedBlocks = (page: ParsedPdfPage | undefined): page is ParsedPdfPage => {
-        if (!page) return false;
-        const skipKinds = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
-        return page.blocks.some((block) => !skipKinds.has(block.kind) && block.text.trim().length > 0);
-      };
+      if (parseStatus !== 'ready' || !parsedDocument) {
+        setCurrDocText(undefined);
+        setTTSText('', { location: currDocPageNumber });
+        return;
+      }
 
       const sourceUnitsFromParsedPage = (pageNum: number): CanonicalTtsSourceUnit[] => {
         const page = pageFromParsed(pageNum);
@@ -332,14 +297,9 @@ export function usePdfDocument(): PdfDocumentState {
         }
 
         const parsedPage = pageFromParsed(pageNumber);
-        const useParsedPage = hasUsableParsedBlocks(parsedPage) ? parsedPage : undefined;
-        const extracted = await extractTextFromPDF(
-          currentPdf,
-          pageNumber,
-          margins,
-          useParsedPage,
-          useParsedPage ? documentSettings.pdf?.skipBlockKinds : undefined,
-        );
+        const extracted = parsedPage
+          ? buildPageTextFromBlocks(parsedPage, documentSettings.pdf?.skipBlockKinds ?? [])
+          : '';
 
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
           throw new DOMException('Stale PDF extraction', 'AbortError');
@@ -383,44 +343,15 @@ export function usePdfDocument(): PdfDocumentState {
         return;
       }
 
-      const trimmed = text.trim();
-      if (!trimmed) {
-        const prevAttempt = emptyRetryRef.current?.page === pageNumber ? emptyRetryRef.current.attempt : 0;
-        const attempt = prevAttempt + 1;
-
-        // Avoid pushing empty text into TTS immediately; transient empty extractions can happen
-        // during page turns or react-pdf worker churn. Retry a few times before treating it as
-        // a truly blank page.
-        if (attempt <= EMPTY_TEXT_MAX_RETRIES) {
-          const timer = setTimeout(() => {
-            if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
-              return;
-            }
-            if (pageNumber !== currDocPageNumber) {
-              return;
-            }
-            void loadCurrDocText();
-          }, EMPTY_TEXT_RETRY_DELAY_MS);
-
-          emptyRetryRef.current = { page: pageNumber, attempt, timer };
-          return;
-        }
-      } else {
-        emptyRetryRef.current = null;
-      }
-
       if (text !== currDocText || text === '') {
         setCurrDocText(text);
         const sourceUnits = sourceUnitsFromParsedPage(currDocPageNumber);
-        const useBlockStructuredPlanning = sourceUnits.length > 0;
         setTTSText(text, {
           location: currDocPageNumber,
-          ...(!useBlockStructuredPlanning ? {
-            previousText: prevText,
-            nextLocation: nextPageNumber,
-            nextText: nextText,
-            upcomingLocations: additionalUpcoming,
-          } : {}),
+          previousText: prevText,
+          nextLocation: nextPageNumber,
+          nextText: nextText,
+          upcomingLocations: additionalUpcoming,
           ...(sourceUnits.length > 0 ? { sourceUnits } : {}),
         });
       }
@@ -435,12 +366,9 @@ export function usePdfDocument(): PdfDocumentState {
     currDocPages,
     setTTSText,
     currDocText,
-    headerMargin,
-    footerMargin,
-    leftMargin,
-    rightMargin,
     segmentPreloadDepthPages,
     parsedDocument,
+    parseStatus,
     documentSettings,
   ]);
 
@@ -474,10 +402,6 @@ export function usePdfDocument(): PdfDocumentState {
       // or fast refresh.
       pdfDocGenerationRef.current += 1;
       loadSeqRef.current += 1;
-      if (emptyRetryRef.current?.timer) {
-        clearTimeout(emptyRetryRef.current.timer);
-      }
-      emptyRetryRef.current = null;
       parsePollAbortRef.current?.abort();
       parsePollAbortRef.current = null;
       pageTextCacheRef.current.clear();
@@ -570,10 +494,6 @@ export function usePdfDocument(): PdfDocumentState {
     docLoadAbortRef.current = null;
     parsePollAbortRef.current?.abort();
     parsePollAbortRef.current = null;
-    if (emptyRetryRef.current?.timer) {
-      clearTimeout(emptyRetryRef.current.timer);
-    }
-    emptyRetryRef.current = null;
     setCurrDocId(undefined);
     setCurrDocName(undefined);
     setCurrDocData(undefined);

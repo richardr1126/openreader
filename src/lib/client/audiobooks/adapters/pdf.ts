@@ -1,5 +1,3 @@
-import type { PDFDocumentProxy } from 'pdfjs-dist';
-
 import type { AudiobookSourceAdapter, PreparedAudiobookChapter } from '@/lib/client/audiobooks/pipeline';
 import { normalizeTextForTts } from '@/lib/shared/nlp';
 import type { ParsedPdfDocument, ParsedPdfBlock } from '@/types/parsed-pdf';
@@ -7,15 +5,8 @@ import type { DocumentSettings } from '@/types/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 
 interface PdfAudiobookAdapterOptions {
-  pdfDocument?: PDFDocumentProxy;
   parsed?: ParsedPdfDocument;
   settings?: DocumentSettings;
-  margins: {
-    header: number;
-    footer: number;
-    left: number;
-    right: number;
-  };
   smartSentenceSplitting: boolean;
   maxBlockLength?: number;
 }
@@ -90,47 +81,21 @@ function prepareParsedChapters({
 }
 
 async function extractPreparedPdfChapters({
-  pdfDocument,
   parsed,
   settings = DEFAULT_DOCUMENT_SETTINGS,
-  margins,
   smartSentenceSplitting,
   maxBlockLength,
 }: PdfAudiobookAdapterOptions): Promise<PreparedAudiobookChapter[]> {
-  if (parsed) {
-    const parsedChapters = prepareParsedChapters({
-      parsed,
-      settings,
-      smartSentenceSplitting,
-      maxBlockLength,
-    });
-    if (parsedChapters.length > 0) {
-      return parsedChapters;
-    }
+  if (!parsed) {
+    throw new Error('PDF parsing is not ready yet.');
   }
 
-  if (!pdfDocument) {
-    throw new Error('No PDF document loaded');
-  }
-
-  const { extractTextFromPDF } = await import('@/lib/client/pdf');
-
-  const chapters: PreparedAudiobookChapter[] = [];
-  for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-    const rawText = await extractTextFromPDF(pdfDocument, pageNum, margins);
-    const trimmedText = rawText.trim();
-    if (!trimmedText) {
-      continue;
-    }
-
-    chapters.push({
-      index: chapters.length,
-      title: `Page ${chapters.length + 1}`,
-      text: smartSentenceSplitting ? normalizeTextForTts(trimmedText, { maxBlockLength }) : trimmedText,
-    });
-  }
-
-  return chapters;
+  return prepareParsedChapters({
+    parsed,
+    settings,
+    smartSentenceSplitting,
+    maxBlockLength,
+  });
 }
 
 export function createPdfAudiobookSourceAdapter(options: PdfAudiobookAdapterOptions): AudiobookSourceAdapter {

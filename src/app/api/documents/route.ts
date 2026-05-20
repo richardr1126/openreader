@@ -25,6 +25,13 @@ type RegisterDocument = {
   lastModified: number;
 };
 
+function normalizeParseStatus(
+  status: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null,
+): 'pending' | 'running' | 'ready' | 'failed' | null {
+  if (status === 'unsupported') return 'pending';
+  return status;
+}
+
 function s3NotConfiguredResponse(): NextResponse {
   return NextResponse.json(
     { error: 'Documents storage is not configured. Set S3_* environment variables.' },
@@ -245,7 +252,7 @@ export async function GET(req: NextRequest) {
         size: Number(doc.size),
         lastModified: Number(doc.lastModified),
         type,
-        parseStatus: doc.parseStatus,
+        parseStatus: normalizeParseStatus(doc.parseStatus),
         parsedJsonKey: doc.parsedJsonKey,
         scope: doc.userId === unclaimedUserId ? 'unclaimed' : 'user',
       };

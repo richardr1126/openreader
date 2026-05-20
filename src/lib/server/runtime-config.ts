@@ -6,7 +6,7 @@ import {
   type RuntimeConfigKey,
   type RuntimeConfigSource,
 } from '@/lib/server/admin/settings';
-import { isComputeModeAvailable, readComputeMode } from '@/lib/server/compute/mode';
+import { isComputeModeAvailable } from '@/lib/server/compute/mode';
 
 export type ResolvedRuntimeConfig = RuntimeConfig & {
   computeAvailable: boolean;
@@ -29,7 +29,7 @@ export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig>
   const values = await getRuntimeConfig();
   return {
     ...values,
-    computeAvailable: isComputeModeAvailable(readComputeMode()),
+    computeAvailable: isComputeModeAvailable(),
   };
 }
 

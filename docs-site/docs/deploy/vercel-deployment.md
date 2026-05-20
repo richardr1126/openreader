@@ -40,7 +40,6 @@ ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in
 # Heavy compute (recommended on Vercel in v1)
 # local  = requires native binaries/models in-process (not recommended on Vercel)
 # worker = external durable compute worker (recommended)
-# none   = disable ONNX whisper alignment + PDF layout parsing
 COMPUTE_MODE=worker
 COMPUTE_WORKER_URL=https://your-compute-worker.example.com
 COMPUTE_WORKER_TOKEN=...

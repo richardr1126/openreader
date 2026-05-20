@@ -1,6 +1,6 @@
 import type { TTSAudioBuffer, TTSSentenceAlignment, ParsedPdfDocument } from '@openreader/compute-core';
 
-export type ComputeMode = 'local' | 'worker' | 'none';
+export type ComputeMode = 'local' | 'worker';
 
 export interface WhisperAlignInput {
   audioBuffer?: TTSAudioBuffer;
@@ -25,11 +25,4 @@ export interface ComputeBackend {
   mode: ComputeMode;
   alignWords(input: WhisperAlignInput): Promise<WhisperAlignResult>;
   parsePdfLayout(input: PdfLayoutInput): Promise<ParsedPdfDocument>;
-}
-
-export class UnsupportedComputeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'UnsupportedComputeError';
-  }
 }
