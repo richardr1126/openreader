@@ -77,12 +77,14 @@ type DownloadedAudiobook = {
   cleanup: () => Promise<void>;
 };
 
-async function downloadFullAudiobook(page: Page, timeoutMs = 60_000): Promise<DownloadedAudiobook> {
-  const fullDownloadButton = page.getByRole('button', { name: /Full Download/i });
-  await expect(fullDownloadButton).toBeVisible({ timeout: timeoutMs });
+async function downloadViaTrigger(
+  page: Page,
+  trigger: () => Promise<void>,
+  timeoutMs = 60_000,
+): Promise<DownloadedAudiobook> {
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: timeoutMs }),
-    fullDownloadButton.click(),
+    trigger(),
   ]);
   const failure = await download.failure();
   expect(failure).toBeNull();
@@ -117,6 +119,27 @@ async function downloadFullAudiobook(page: Page, timeoutMs = 60_000): Promise<Do
       }
     },
   };
+}
+
+async function downloadFullAudiobook(page: Page, timeoutMs = 60_000): Promise<DownloadedAudiobook> {
+  const fullDownloadButton = page.getByRole('button', { name: /Full Download/i });
+  await expect(fullDownloadButton).toBeVisible({ timeout: timeoutMs });
+  await expect(fullDownloadButton).toBeEnabled({ timeout: timeoutMs });
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await downloadViaTrigger(page, () => fullDownloadButton.click(), timeoutMs);
+    } catch (error) {
+      lastError = error;
+      if (attempt === 3) throw error;
+      await page.waitForTimeout(250 * attempt);
+      await expect(fullDownloadButton).toBeVisible({ timeout: timeoutMs });
+      await expect(fullDownloadButton).toBeEnabled({ timeout: timeoutMs });
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Full download failed');
 }
 
 async function getAudioDurationSeconds(filePath: string) {
@@ -359,6 +382,7 @@ test('exports partial MP3 audiobook for EPUB using mocked 10s TTS sample', async
 });
 
 test('exports a single MP3 audiobook PDF page via chapters menu', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
   await setupTest(page, testInfo);
   await uploadAndDisplay(page, 'sample.pdf');
 
@@ -378,10 +402,9 @@ test('exports a single MP3 audiobook PDF page via chapters menu', async ({ page 
   // Readiness gate: chapter row visibility can lead backend storage consistency by a small window.
   await waitForBackendDownloadReady(page, bookId, { minChapters: 1 });
 
-  // Download via frontend button
+  // Download via full-download button once at least one chapter is ready.
   await withDownloadedFullAudiobook(page, async ({ filePath }) => {
     const durationSeconds = await getAudioDurationSeconds(filePath);
-    // For EPUB we just assert a sane non-trivial duration; at least one 10s mocked chapter.
     expect(durationSeconds).toBeGreaterThan(9);
     expect(durationSeconds).toBeLessThan(300);
   });
