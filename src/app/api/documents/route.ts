@@ -26,10 +26,13 @@ type RegisterDocument = {
 };
 
 function normalizeParseStatus(
-  status: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null,
+  status: string | null,
 ): 'pending' | 'running' | 'ready' | 'failed' | null {
-  if (status === 'unsupported') return 'pending';
-  return status;
+  if (status === null) return null;
+  if (status === 'pending' || status === 'running' || status === 'ready' || status === 'failed') {
+    return status;
+  }
+  return 'pending';
 }
 
 function s3NotConfiguredResponse(): NextResponse {
@@ -226,7 +229,7 @@ export async function GET(req: NextRequest) {
       size: number;
       lastModified: number;
       filePath: string;
-      parseStatus: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null;
+      parseStatus: string | null;
       parsedJsonKey: string | null;
     }>;
 

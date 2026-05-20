@@ -1,10 +1,8 @@
 import { pdfjs } from 'react-pdf';
-import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { type PDFDocumentProxy, TextLayer } from 'pdfjs-dist';
+import { TextLayer } from 'pdfjs-dist';
 import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
-import type { ParsedPdfDocument, ParsedPdfPage, ParsedPdfBlockKind } from '@/types/parsed-pdf';
-import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
+import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 import { CmpStr } from 'cmpstr';
 import type { TTSSegmentLocator } from '@/types/client';
 
@@ -187,136 +185,6 @@ const normalizeWordForMatch = (text: string): string =>
     .trim()
     .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
     .toLowerCase();
-
-// Text Processing functions
-export async function extractTextFromPDF(
-  pdf: PDFDocumentProxy, 
-  pageNumber: number, 
-  margins = { header: 0.07, footer: 0.07, left: 0.07, right: 0.07 },
-  parsed?: ParsedPdfPage,
-  skipKinds?: ParsedPdfBlockKind[],
-): Promise<string> {
-  try {
-    if (parsed) {
-      return buildPageTextFromBlocks(parsed, skipKinds ?? []);
-    }
-
-    const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-
-    const viewport = page.getViewport({ scale: 1.0 });
-    const pageHeight = viewport.height;
-    const pageWidth = viewport.width;
-
-    const textItems = textContent.items.filter((item): item is TextItem => {
-      if (!('str' in item && 'transform' in item)) return false;
-
-      const [scaleX, skewX, skewY, scaleY, x, y] = item.transform;
-
-      // Basic text filtering
-      if (Math.abs(scaleX) < 1 || Math.abs(scaleX) > 20) return false;
-      if (Math.abs(scaleY) < 1 || Math.abs(scaleY) > 20) return false;
-      if (Math.abs(skewX) > 0.5 || Math.abs(skewY) > 0.5) return false;
-
-      // Calculate margins in PDF coordinate space (y=0 is at bottom)
-      const headerY = pageHeight * (1 - margins.header); // Convert from top margin to bottom-based Y
-      const footerY = pageHeight * margins.footer; // Footer Y stays as is since it's already bottom-based
-      const leftX = pageWidth * margins.left;
-      const rightX = pageWidth * (1 - margins.right);
-
-      // Check margins - remember y=0 is at bottom of page in PDF coordinates
-      if (y > headerY || y < footerY) { // Y greater than headerY means it's in header area, less than footerY means footer area
-        return false;
-      }
-
-      // Check horizontal margins
-      if (x < leftX || x > rightX) {
-        return false;
-      }
-
-      // Sanity check for coordinates
-      if (x < 0 || x > pageWidth) return false;
-
-      return item.str.trim().length > 0;
-    });
-
-    const tolerance = 2;
-    const lines: TextItem[][] = [];
-    let currentLine: TextItem[] = [];
-    let currentY: number | null = null;
-
-    textItems.forEach((item) => {
-      const y = item.transform[5];
-      if (currentY === null) {
-        currentY = y;
-        currentLine.push(item);
-      } else if (Math.abs(y - currentY) < tolerance) {
-        currentLine.push(item);
-      } else {
-        lines.push(currentLine);
-        currentLine = [item];
-        currentY = y;
-      }
-    });
-    lines.push(currentLine);
-
-    let pageText = '';
-    for (const line of lines) {
-      line.sort((a, b) => a.transform[4] - b.transform[4]);
-      let lineText = '';
-      let prevItem: TextItem | null = null;
-
-      for (const item of line) {
-        if (!prevItem) {
-          lineText = item.str;
-        } else {
-          const prevEndX = prevItem.transform[4] + (prevItem.width ?? 0);
-          const currentStartX = item.transform[4];
-          const space = currentStartX - prevEndX;
-          
-          // Get average character width as fallback
-          const avgCharWidth = (item.width ?? 0) / Math.max(1, item.str.length);
-          
-          // Multiple conditions for space detection
-          const needsSpace = 
-              // Primary check: significant gap between items
-              space > Math.max(avgCharWidth * 0.3, 2) ||
-              // Secondary check: natural word boundary
-              (!/^\W/.test(item.str) && !/\W$/.test(prevItem.str)) ||
-              // Tertiary check: items are far enough apart relative to their size
-              (space > ((prevItem.width ?? 0) * 0.25));
-
-          if (needsSpace) {
-              lineText += ' ' + item.str;
-          } else {
-              lineText += item.str;
-          }
-        }
-        prevItem = item;
-      }
-      pageText += lineText + ' ';
-    }
-
-    return pageText.replace(/\s+/g, ' ').trim();
-  } catch (error) {
-    // During Next.js fast refresh / route transitions, react-pdf can tear down the
-    // underlying worker and pdf.js may throw a TypeError like:
-    // "null is not an object (evaluating 'this.messageHandler.sendWithPromise')".
-    // Treat this as a cancellation so the app can ignore it.
-    if (
-      error instanceof TypeError &&
-      typeof error.message === 'string' &&
-      error.message.includes('messageHandler') &&
-      error.message.includes('sendWithPromise')
-    ) {
-      throw new DOMException('PDF worker torn down', 'AbortError');
-    }
-
-    console.error('Error extracting text from PDF:', error);
-    // Preserve the original error so callers can decide whether to retry/ignore.
-    throw error;
-  }
-}
 
 // Highlighting functions
 let highlightPatternSeq = 0;

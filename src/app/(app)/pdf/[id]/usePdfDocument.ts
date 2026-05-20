@@ -151,7 +151,7 @@ export function usePdfDocument(): PdfDocumentState {
     settings: documentSettings,
     smartSentenceSplitting,
     maxBlockLength: ttsSegmentMaxBlockLength,
-  }), [pdfDocument, parsedDocument, documentSettings, smartSentenceSplitting, ttsSegmentMaxBlockLength]);
+  }), [parsedDocument, documentSettings, smartSentenceSplitting, ttsSegmentMaxBlockLength]);
   const pageTextCacheRef = useRef<Map<number, string>>(new Map());
   const [currDocPage, setCurrDocPage] = useState<number>(currDocPageNumber);
 

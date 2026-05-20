@@ -24,10 +24,12 @@ function hasAnyParsedBlocks(doc: ParsedPdfDocument | null): boolean {
 }
 
 function normalizeParseStatus(
-  status: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null,
+  status: string | null,
 ): 'pending' | 'running' | 'ready' | 'failed' {
-  if (status === 'unsupported' || status === null) return 'pending';
-  return status;
+  if (status === 'pending' || status === 'running' || status === 'ready' || status === 'failed') {
+    return status;
+  }
+  return 'pending';
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -59,7 +61,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       .where(and(eq(documents.id, id), inArray(documents.userId, allowedUserIds)))) as Array<{
       id: string;
       userId: string;
-      parseStatus: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null;
+      parseStatus: string | null;
     }>;
 
     const row = rows.find((candidate) => candidate.userId === storageUserId) ?? rows[0];
@@ -67,7 +69,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    if (row.parseStatus === 'unsupported') {
+    const effectiveStatus = normalizeParseStatus(row.parseStatus);
+    if (row.parseStatus !== effectiveStatus) {
       await db
         .update(documents)
         .set({ parseStatus: 'pending' })
@@ -79,8 +82,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       });
       return NextResponse.json({ parseStatus: 'pending' }, { status: 202 });
     }
-
-    const effectiveStatus = normalizeParseStatus(row.parseStatus);
 
     if (effectiveStatus === 'failed' && retryFailed) {
       await db
@@ -175,7 +176,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       .where(and(eq(documents.id, id), inArray(documents.userId, allowedUserIds)))) as Array<{
       id: string;
       userId: string;
-      parseStatus: 'pending' | 'running' | 'ready' | 'failed' | 'unsupported' | null;
+      parseStatus: string | null;
     }>;
 
     const row = rows.find((candidate) => candidate.userId === storageUserId) ?? rows[0];
