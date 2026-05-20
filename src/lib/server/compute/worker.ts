@@ -30,6 +30,29 @@ function readRequiredEnv(name: string): string {
   return value;
 }
 
+function normalizeWorkerBaseUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) throw new Error('COMPUTE_WORKER_URL is empty');
+
+  const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)
+    ? trimmed
+    : (/^(localhost|127(?:\.\d{1,3}){3})(:\d+)?(\/|$)/.test(trimmed)
+      ? `http://${trimmed}`
+      : `https://${trimmed}`);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    throw new Error(
+      `Invalid COMPUTE_WORKER_URL="${raw}". Expected full URL like https://example.com (or http://localhost:4000).`,
+    );
+  }
+
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  return parsed.toString().replace(/\/+$/, '');
+}
+
 function parseRetryAfterMs(value: string | null): number | null {
   if (!value) return null;
   const asNum = Number(value);
@@ -82,7 +105,7 @@ export class WorkerComputeBackend implements ComputeBackend {
   private readonly retries: number;
 
   constructor() {
-    this.baseUrl = readRequiredEnv('COMPUTE_WORKER_URL').replace(/\/+$/, '');
+    this.baseUrl = normalizeWorkerBaseUrl(readRequiredEnv('COMPUTE_WORKER_URL'));
     this.token = readRequiredEnv('COMPUTE_WORKER_TOKEN');
     this.waitTimeoutMs = DEFAULT_WAIT_TIMEOUT_MS;
     this.retries = DEFAULT_RETRIES;

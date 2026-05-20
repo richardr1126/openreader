@@ -422,7 +422,8 @@ async function createWorkerLoop<TPayload, TResult>(input: {
 }
 
 async function main(): Promise<void> {
-  const port = readIntEnv('COMPUTE_WORKER_PORT', 8081);
+  const platformPort = readIntEnv('PORT', 8081);
+  const port = readIntEnv('COMPUTE_WORKER_PORT', platformPort);
   const host = process.env.COMPUTE_WORKER_HOST?.trim() || '0.0.0.0';
   const workerToken = requireEnv('COMPUTE_WORKER_TOKEN');
   const natsUrl = requireEnv('NATS_URL');
