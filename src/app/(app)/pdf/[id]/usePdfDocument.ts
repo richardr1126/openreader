@@ -37,6 +37,7 @@ import {
   highlightWordIndex,
 } from '@/lib/client/pdf';
 import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
+import type { CanonicalTtsSourceUnit } from '@/lib/shared/tts-segment-plan';
 import {
   DEFAULT_DOCUMENT_SETTINGS,
   type DocumentSettings,
@@ -263,6 +264,24 @@ export function usePdfDocument(): PdfDocumentState {
         return;
       }
 
+      const sourceUnitsFromParsedPage = (pageNum: number): CanonicalTtsSourceUnit[] => {
+        const page = pageFromParsed(pageNum);
+        if (!page) return [];
+        const skipKinds = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
+        return page.blocks
+          .filter((block) => !skipKinds.has(block.kind))
+          .map((block) => ({
+            sourceKey: `pdf:${pageNum}:${block.id}`,
+            text: block.text,
+            locator: {
+              readerType: 'pdf',
+              page: block.fragments[0]?.page ?? pageNum,
+              blockId: block.id,
+            } as TTSSegmentLocator,
+          }))
+          .filter((unit) => unit.text.trim().length > 0);
+      };
+
       const getPageText = async (pageNumber: number, shouldCache = false): Promise<string> => {
         // Ignore stale/in-flight work if the document or worker changed.
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
@@ -326,12 +345,14 @@ export function usePdfDocument(): PdfDocumentState {
 
       if (text !== currDocText || text === '') {
         setCurrDocText(text);
+        const sourceUnits = sourceUnitsFromParsedPage(currDocPageNumber);
         setTTSText(text, {
           location: currDocPageNumber,
           previousText: prevText,
           nextLocation: nextPageNumber,
           nextText: nextText,
           upcomingLocations: additionalUpcoming,
+          ...(sourceUnits.length > 0 ? { sourceUnits } : {}),
         });
       }
     } catch (error) {
