@@ -45,31 +45,45 @@ FROM node:lts-alpine AS runner
 # ffmpeg is provided by ffmpeg-static from node_modules.
 RUN apk add --no-cache ca-certificates libreoffice-writer
 
-# Install pnpm globally for running the app
-RUN npm install -g pnpm@11.1.2
+# drizzle-kit is used by scripts/openreader-entrypoint.mjs for startup migrations.
+RUN npm install -g drizzle-kit@0.31.10
 
 # App runtime directory
 WORKDIR /app
 
-# Copy built app and dependencies from the builder stage
-COPY --from=app-builder /app ./
+# Entry-point and migration scripts import dotenv directly.
+RUN npm install --no-save dotenv@17.4.2
+
+# Copy standalone Next.js server and required static assets.
+COPY --from=app-builder /app/.next/standalone ./
+COPY --from=app-builder /app/.next/static ./.next/static
+COPY --from=app-builder /app/public ./public
+# Copy startup/migration scripts and migration files used by openreader-entrypoint.
+COPY --from=app-builder /app/scripts/openreader-entrypoint.mjs ./scripts/openreader-entrypoint.mjs
+COPY --from=app-builder /app/scripts/migrate-fs-v2.mjs ./scripts/migrate-fs-v2.mjs
+COPY --from=app-builder /app/drizzle/scripts/migrate.mjs ./drizzle/scripts/migrate.mjs
+COPY --from=app-builder /app/drizzle/sqlite ./drizzle/sqlite
+COPY --from=app-builder /app/drizzle/postgres ./drizzle/postgres
+COPY --from=app-builder /app/drizzle.config.sqlite.ts ./drizzle.config.sqlite.ts
+COPY --from=app-builder /app/drizzle.config.pg.ts ./drizzle.config.pg.ts
+COPY --from=app-builder /app/src/db ./src/db
 # Include third-party license report and copied license texts at a stable path in the image.
 COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
 # Include static model notices for runtime-downloaded assets.
-COPY src/lib/server/pdf-layout/model/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
+COPY --from=app-builder /app/src/lib/server/pdf-layout/model/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
 
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
-COPY src/lib/server/whisper/model/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+COPY --from=app-builder /app/src/lib/server/whisper/model/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
 
 # Expose the port the app runs on
 EXPOSE 3003
 
 # Start the application
 ENTRYPOINT ["node", "scripts/openreader-entrypoint.mjs", "--"]
-CMD ["pnpm", "start:raw"]
+CMD ["node", "server.js"]

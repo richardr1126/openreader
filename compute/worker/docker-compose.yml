@@ -31,10 +31,9 @@ services:
       watch:
         - action: sync+restart
           path: .
-          target: /workspace/compute/worker
-        - action: sync+restart
+          target: /workspace
+        - action: rebuild
           path: ../../compute/core
-          target: /workspace/compute/core
         - action: rebuild
           path: ./package.json
         - action: rebuild
