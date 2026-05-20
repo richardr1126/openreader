@@ -21,8 +21,12 @@ export interface PdfLayoutInput {
   pdfBytes?: ArrayBuffer;
 }
 
+export type PdfLayoutResult =
+  | { parsed: ParsedPdfDocument; parsedObjectKey?: never }
+  | { parsed?: never; parsedObjectKey: string };
+
 export interface ComputeBackend {
   mode: ComputeMode;
   alignWords(input: WhisperAlignInput): Promise<WhisperAlignResult>;
-  parsePdfLayout(input: PdfLayoutInput): Promise<ParsedPdfDocument>;
+  parsePdfLayout(input: PdfLayoutInput): Promise<PdfLayoutResult>;
 }

@@ -36,10 +36,17 @@ export interface PdfLayoutJobRequest {
   documentObjectKey: string;
 }
 
-export interface PdfLayoutJobResult {
-  parsed: ParsedPdfDocument;
-  timing?: WorkerJobTiming;
-}
+export type PdfLayoutJobResult =
+  | {
+    parsed: ParsedPdfDocument;
+    parsedObjectKey?: never;
+    timing?: WorkerJobTiming;
+  }
+  | {
+    parsed?: never;
+    parsedObjectKey: string;
+    timing?: WorkerJobTiming;
+  };
 
 export type WorkerJobState = 'queued' | 'running' | 'succeeded' | 'failed';
 

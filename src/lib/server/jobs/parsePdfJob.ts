@@ -29,14 +29,18 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
       .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)));
 
     const compute = await getCompute();
-    const parsed = await compute.parsePdfLayout({
+    const layout = await compute.parsePdfLayout({
       documentId: input.documentId,
       namespace: input.namespace,
       documentObjectKey: documentKey(input.documentId, input.namespace),
     });
 
-    const parsedJson = Buffer.from(JSON.stringify(parsed));
-    const parsedJsonKey = await putParsedDocumentBlob(input.documentId, parsedJson, input.namespace);
+    let parsedJsonKey = layout.parsedObjectKey ?? null;
+    if (!parsedJsonKey) {
+      if (!layout.parsed) throw new Error('Compute backend did not return parsed result');
+      const parsedJson = Buffer.from(JSON.stringify(layout.parsed));
+      parsedJsonKey = await putParsedDocumentBlob(input.documentId, parsedJson, input.namespace);
+    }
 
     const cleared = await clearTtsSegmentCache({
       userId: input.userId,

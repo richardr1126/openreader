@@ -124,7 +124,13 @@ export class WorkerComputeBackend implements ComputeBackend {
       if (status.status !== 'succeeded' || !status.result) {
         throw new Error(status.error?.message || 'PDF layout worker job did not complete');
       }
-      return status.result.parsed;
+      if (status.result.parsedObjectKey) {
+        return { parsedObjectKey: status.result.parsedObjectKey };
+      }
+      if (status.result.parsed) {
+        return { parsed: status.result.parsed };
+      }
+      throw new Error('PDF layout worker job completed without parsed output');
     });
   }
 

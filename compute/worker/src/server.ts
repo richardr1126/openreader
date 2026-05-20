@@ -33,7 +33,7 @@ import {
   type WorkerJobStatusResponse,
   type WorkerJobTiming,
 } from '@openreader/compute-core/contracts';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const JOBS_STREAM_NAME = 'compute_jobs';
 const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
@@ -44,6 +44,8 @@ const JOB_STATES_BUCKET = 'job_states';
 const JOB_STATES_TTL_MS = 24 * 60 * 60 * 1000;
 const PULL_EXPIRES_MS = 1000;
 const LOOP_ERROR_BACKOFF_MS = 500;
+const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
+const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 
 interface QueuedJob<TPayload> {
   jobId: string;
@@ -102,6 +104,20 @@ function buildLoggerConfig(): boolean | Record<string, unknown> {
 function normalizeS3Prefix(prefix: string | undefined): string {
   const value = (prefix || 'openreader').trim();
   return value ? value.replace(/^\/+|\/+$/g, '') : 'openreader';
+}
+
+function sanitizeNamespace(namespace: string | null): string | null {
+  if (!namespace) return null;
+  return SAFE_NAMESPACE_REGEX.test(namespace) ? namespace : null;
+}
+
+function documentParsedKey(id: string, namespace: string | null, prefix: string): string {
+  if (!DOCUMENT_ID_REGEX.test(id)) {
+    throw new Error(`Invalid document id: ${id}`);
+  }
+  const ns = sanitizeNamespace(namespace);
+  const nsSegment = ns ? `ns/${ns}/` : '';
+  return `${prefix}/documents_v1/parsed_v1/${nsSegment}${id}.json`;
 }
 
 function buildS3Client(): S3Client {
@@ -468,6 +484,19 @@ async function main(): Promise<void> {
     return toArrayBuffer(new Uint8Array(bytes));
   };
 
+  const putParsedObject = async (documentId: string, namespace: string | null, parsed: unknown): Promise<string> => {
+    const key = documentParsedKey(documentId, namespace, s3Prefix);
+    const body = Buffer.from(JSON.stringify(parsed));
+    await s3.send(new PutObjectCommand({
+      Bucket: s3Bucket,
+      Key: key,
+      Body: body,
+      ContentType: 'application/json',
+      ServerSideEncryption: 'AES256',
+    }));
+    return key;
+  };
+
   if (prewarmModels) {
     await ensureComputeModels();
   }
@@ -638,7 +667,6 @@ async function main(): Promise<void> {
     return {
       ...result,
       timing: {
-        ...(result.timing ?? {}),
         queueWaitMs,
         s3FetchMs,
         computeMs,
@@ -667,10 +695,10 @@ async function main(): Promise<void> {
     );
 
     const computeMs = Date.now() - computeStartedAt;
+    const parsedObjectKey = await putParsedObject(parsed.documentId, parsed.namespace, result.parsed);
     return {
-      ...result,
+      parsedObjectKey,
       timing: {
-        ...(result.timing ?? {}),
         queueWaitMs,
         s3FetchMs,
         computeMs,
