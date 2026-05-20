@@ -7,8 +7,11 @@ declare const __OPENREADER_COMPUTE_MODE__: 'local' | 'worker' | 'none';
 let backendPromise: Promise<ComputeBackend> | null = null;
 
 async function createBackend(): Promise<ComputeBackend> {
-  if (__OPENREADER_COMPUTE_MODE__ === 'worker') return new WorkerComputeBackend();
-  if (__OPENREADER_COMPUTE_MODE__ === 'local') {
+  const bundledMode =
+    typeof __OPENREADER_COMPUTE_MODE__ === 'undefined' ? 'none' : __OPENREADER_COMPUTE_MODE__;
+
+  if (bundledMode === 'worker') return new WorkerComputeBackend();
+  if (bundledMode === 'local') {
     const { LocalComputeBackend } = await import('@/lib/server/compute/local');
     return new LocalComputeBackend();
   }
