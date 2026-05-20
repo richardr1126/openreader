@@ -243,12 +243,14 @@ async function ensureJetStreamResources(
   whisperTimeoutMs: number,
   pdfTimeoutMs: number,
   attempts: number,
+  maxBytes: number,
 ): Promise<void> {
   const streamConfig = {
     name: JOBS_STREAM_NAME,
     subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
+    max_bytes: maxBytes,
   };
 
   try {
@@ -257,6 +259,7 @@ async function ensureJetStreamResources(
     if (!isAlreadyExistsError(error)) throw error;
     await jsm.streams.update(JOBS_STREAM_NAME, {
       subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
+      max_bytes: maxBytes,
     });
   }
 
@@ -414,6 +417,8 @@ async function main(): Promise<void> {
   const pdfTimeoutMs = readIntEnv('COMPUTE_PDF_TIMEOUT_MS', 90_000);
   const attempts = readIntEnv('COMPUTE_JOB_ATTEMPTS', 2);
   const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', true);
+  const jobsStreamMaxBytes = readIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
+  const jobStatesMaxBytes = readIntEnv('COMPUTE_JOB_STATES_MAX_BYTES', 64 * 1024 * 1024);
 
   const connectOpts: any = { servers: natsUrl };
   const natsCreds = process.env.NATS_CREDS?.trim();
@@ -433,11 +438,12 @@ async function main(): Promise<void> {
   const js: JetStreamClient = jetstream(nc);
   const jsm: JetStreamManager = await jetstreamManager(nc);
 
-  await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, attempts);
+  await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, attempts, jobsStreamMaxBytes);
 
   const kv = await new Kvm(js).create(JOB_STATES_BUCKET, {
     history: 1,
     ttl: JOB_STATES_TTL_MS,
+    max_bytes: jobStatesMaxBytes,
   });
 
   const s3 = buildS3Client();

@@ -45,6 +45,8 @@ Common optional:
 - `COMPUTE_WORKER_PORT=8081`
 - `COMPUTE_LOG_FORMAT=pretty` (default) or `json`
 - `COMPUTE_PREWARM_MODELS=true`
+- `COMPUTE_JOBS_STREAM_MAX_BYTES=268435456` (256MB JetStream jobs stream cap)
+- `COMPUTE_JOB_STATES_MAX_BYTES=67108864` (64MB JetStream KV bucket cap)
 
 ## App server environment variables (worker mode)
 
@@ -102,6 +104,8 @@ Set these in the Railway worker service:
 COMPUTE_WORKER_HOST=0.0.0.0
 COMPUTE_WORKER_PORT=8081
 COMPUTE_WORKER_TOKEN=<long-random-shared-token>
+COMPUTE_JOBS_STREAM_MAX_BYTES=268435456
+COMPUTE_JOB_STATES_MAX_BYTES=67108864
 
 NATS_URL=tls://connect.ngs.global:4222
 NATS_CREDS="-----BEGIN NATS USER JWT-----
@@ -122,6 +126,7 @@ Notes:
 - `NATS_CREDS` should be the full Synadia `.creds` file content, including begin/end markers.
 - Keep `COMPUTE_WORKER_TOKEN` identical between app server and worker.
 - If your platform supports mounted files, you can use `NATS_CREDS_FILE` instead of `NATS_CREDS`.
+- `COMPUTE_JOBS_STREAM_MAX_BYTES` and `COMPUTE_JOB_STATES_MAX_BYTES` are optional; defaults are `268435456` (256MiB) and `67108864` (64MiB).
 
 ### 4. Configure the OpenReader app server (worker mode)
 
