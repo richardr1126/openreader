@@ -10,6 +10,7 @@ import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import TTSPlayer from '@/components/player/TTSPlayer';
@@ -19,6 +20,12 @@ import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { LoadingSpinner } from '@/components/Spinner';
+import {
+  FORCE_REPARSE_CONFIRM_MESSAGE,
+  FORCE_REPARSE_CONFIRM_TEXT,
+  FORCE_REPARSE_CONFIRM_TITLE,
+  isForceReparseDisabled,
+} from '@/lib/client/pdf/force-reparse';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -58,6 +65,7 @@ export default function PDFViewerPage() {
   const [isPdfViewerReady, setIsPdfViewerReady] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'segments'>(null);
+  const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
@@ -66,6 +74,7 @@ export default function PDFViewerPage() {
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   const parseState = parseStatus ?? 'pending';
   const isParseReady = parseState === 'ready';
+  const forceReparseDisabled = isForceReparseDisabled(parseStatus);
 
   useEffect(() => {
     setIsLoading(true);
@@ -197,6 +206,16 @@ export default function PDFViewerPage() {
       router.push('/app');
     }, delayMs);
   }, [isNavigatingBack, stop, activeSidebar, router]);
+
+  const requestForceReparse = useCallback(() => {
+    if (forceReparseDisabled) return;
+    setShowForceReparseConfirm(true);
+  }, [forceReparseDisabled]);
+
+  const confirmForceReparse = useCallback(() => {
+    setShowForceReparseConfirm(false);
+    void forceReparseParsedPdf();
+  }, [forceReparseParsedPdf]);
 
   const handleGenerateAudiobook = useCallback(async (
     onProgress: (progress: number) => void,
@@ -339,7 +358,7 @@ export default function PDFViewerPage() {
               <div className="flex justify-start">
                 <button
                   type="button"
-                  onClick={() => forceReparseParsedPdf()}
+                  onClick={requestForceReparse}
                   className="inline-flex items-center rounded-md border border-offbase bg-offbase px-2.5 py-1 text-xs text-foreground hover:text-accent transition-colors"
                 >
                   Retry Parse
@@ -445,8 +464,17 @@ export default function PDFViewerPage() {
               },
             });
           },
-          onForceReparse: () => forceReparseParsedPdf(),
+          onForceReparse: requestForceReparse,
         }}
+      />
+      <ConfirmDialog
+        isOpen={showForceReparseConfirm}
+        onClose={() => setShowForceReparseConfirm(false)}
+        onConfirm={confirmForceReparse}
+        title={FORCE_REPARSE_CONFIRM_TITLE}
+        message={FORCE_REPARSE_CONFIRM_MESSAGE}
+        confirmText={FORCE_REPARSE_CONFIRM_TEXT}
+        cancelText="Cancel"
       />
       <SegmentsSidebar
         isOpen={activeSidebar === 'segments'}

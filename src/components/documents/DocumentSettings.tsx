@@ -18,6 +18,7 @@ import {
 import { Section, ToggleRow, CheckItem, buttonClass, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
+import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
 
 const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
   { kind: 'header', label: 'Header' },
@@ -221,10 +222,10 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
                     type="button"
                     className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
                     onClick={pdf.onForceReparse}
-                    disabled={pdf.parseStatus === 'running' || pdf.parseStatus === 'pending'}
+                    disabled={isForceReparseDisabled(pdf.parseStatus)}
                     title="Force reparse"
                   >
-                    <RefreshIcon className={`h-3 w-3 ${pdf.parseStatus === 'running' || pdf.parseStatus === 'pending' ? 'animate-spin' : ''}`} />
+                    <RefreshIcon className={`h-3 w-3 ${isForceReparseDisabled(pdf.parseStatus) ? 'animate-spin' : ''}`} />
                   </button>
                 </span>
               </div>
