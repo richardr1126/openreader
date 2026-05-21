@@ -75,14 +75,14 @@ export default function PDFViewerPage() {
   const backNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearCurrDocRef = useRef(clearCurrDoc);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
-  const parseUiState: 'unknown' | NonNullable<typeof parseStatus> = parseStatus ?? 'unknown';
+  const parseUiState: NonNullable<typeof parseStatus> = parseStatus ?? 'pending';
   const isParseReady = parseUiState === 'ready';
   const forceReparseDisabled = isForceReparseDisabled(parseStatus);
   const hasRealParseProgress = !!parseProgress
     && parseProgress.totalPages > 0
     && parseProgress.pagesParsed >= 0;
   const shouldShowExpandedParseLoader = !isLoading
-    && (parseUiState === 'failed' || hasRealParseProgress);
+    && (parseUiState === 'pending' || parseUiState === 'running' || parseUiState === 'failed' || hasRealParseProgress);
 
   useEffect(() => {
     setIsLoading(true);
@@ -286,10 +286,10 @@ export default function PDFViewerPage() {
   const renderPdfStatusLoader = () => {
     const compactLabel = isLoading
       ? 'Opening PDF...'
-      : (parseUiState === 'ready' ? 'Rendering pages...' : 'Checking parse state...');
+      : (parseUiState === 'ready' ? 'Rendering pages...' : 'Preparing PDF layout...');
     const compactSubLabel = isLoading
       ? 'Loading document data'
-      : (parseUiState === 'ready' ? 'Preparing first frame' : 'Waiting for parse status');
+      : (parseUiState === 'ready' ? 'Preparing first frame' : 'Queueing parser and preparing page extraction');
 
     const totalPages = parseProgress?.totalPages ?? 0;
     const pagesParsed = parseProgress?.pagesParsed ?? 0;
@@ -302,10 +302,7 @@ export default function PDFViewerPage() {
     let statusText = 'Loading PDF...';
     let statusSubText = 'Initializing document renderer';
     if (!isLoading) {
-      if (parseUiState === 'unknown') {
-        statusText = 'Checking parse state...';
-        statusSubText = 'Waiting for server status snapshot';
-      } else if (parseUiState === 'pending') {
+      if (parseUiState === 'pending') {
         statusText = 'Preparing PDF layout...';
         statusSubText = parseProgress?.phase === 'merge'
           ? 'Finalizing stitched block structure'
@@ -321,9 +318,7 @@ export default function PDFViewerPage() {
       }
     }
 
-    const stageLabel = parseUiState === 'unknown'
-      ? 'Stage: checking'
-      : parseUiState === 'failed'
+    const stageLabel = parseUiState === 'failed'
       ? 'Stage: blocked'
       : (parseUiState === 'pending'
         ? 'Stage: prepare'

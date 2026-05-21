@@ -55,6 +55,8 @@ const RUNNING_HEARTBEAT_MS = 5000;
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
+const PDF_LAYOUT_HARD_CAP_MS = 24 * 60 * 60 * 1000;
+const NATS_API_TIMEOUT_MS = 60_000;
 
 interface QueuedJob<TPayload> {
   jobId: string;
@@ -209,6 +211,59 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+async function withIdleTimeoutAndHardCap<T>(input: {
+  run: (touchProgress: () => void) => Promise<T>;
+  idleTimeoutMs: number;
+  hardCapMs: number;
+  label: string;
+}): Promise<T> {
+  let idleTimer: NodeJS.Timeout | null = null;
+  let hardCapTimer: NodeJS.Timeout | null = null;
+  let settled = false;
+  let rejectTimeout!: (reason: unknown) => void;
+
+  const clearTimers = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    if (hardCapTimer) {
+      clearTimeout(hardCapTimer);
+      hardCapTimer = null;
+    }
+  };
+
+  const failTimeout = (kind: 'idle' | 'hard cap', timeoutMs: number) => {
+    if (settled) return;
+    settled = true;
+    clearTimers();
+    rejectTimeout(new Error(`${input.label} ${kind} timed out after ${timeoutMs}ms`));
+  };
+
+  const touchProgress = () => {
+    if (settled) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => failTimeout('idle', input.idleTimeoutMs), input.idleTimeoutMs);
+  };
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    rejectTimeout = reject;
+    hardCapTimer = setTimeout(() => failTimeout('hard cap', input.hardCapMs), input.hardCapMs);
+    touchProgress();
+  });
+
+  try {
+    const result = await Promise.race([input.run(touchProgress), timeoutPromise]);
+    settled = true;
+    clearTimers();
+    return result as T;
+  } catch (error) {
+    settled = true;
+    clearTimers();
+    throw error;
   }
 }
 
@@ -401,8 +456,8 @@ async function main(): Promise<void> {
   }
 
   const nc: NatsConnection = await connect(connectOpts);
-  const js: JetStreamClient = jetstream(nc);
-  const jsm: JetStreamManager = await jetstreamManager(nc);
+  const js: JetStreamClient = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
+  const jsm: JetStreamManager = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
 
   await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, pdfAttempts, jobsStreamMaxBytes);
 
@@ -710,6 +765,7 @@ async function main(): Promise<void> {
     reply.raw.setHeader('X-Accel-Buffering', 'no');
 
     const writeSnapshot = (snapshot: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>): void => {
+      if (closed || reply.raw.writableEnded) return;
       reply.raw.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`);
     };
 
@@ -718,25 +774,34 @@ async function main(): Promise<void> {
       closed = true;
     });
 
-    let current = initial;
-    writeSnapshot(current);
-    let signature = JSON.stringify(current);
+    try {
+      let current = initial;
+      writeSnapshot(current);
+      let signature = JSON.stringify(current);
 
-    while (!closed && !isTerminalStatus(current.status)) {
-      await sleep(SSE_POLL_INTERVAL_MS);
-      const next = await getOpState(params.data.opId);
-      if (!next) break;
-      const nextSignature = JSON.stringify(next);
-      if (nextSignature !== signature) {
-        current = next;
-        signature = nextSignature;
-        writeSnapshot(current);
+      while (!closed && !isTerminalStatus(current.status)) {
+        await sleep(SSE_POLL_INTERVAL_MS);
+        const next = await getOpState(params.data.opId);
+        if (!next) break;
+        const nextSignature = JSON.stringify(next);
+        if (nextSignature !== signature) {
+          current = next;
+          signature = nextSignature;
+          writeSnapshot(current);
+        }
       }
+    } catch (error) {
+      app.log.warn({
+        opId: params.data.opId,
+        error: toErrorMessage(error),
+      }, 'op events stream loop error');
     }
 
     if (!reply.raw.writableEnded) {
       reply.raw.end();
     }
+
+    return reply;
   });
 
   const whisperConsumer = await js.consumers.get(JOBS_STREAM_NAME, WHISPER_CONSUMER_NAME);
@@ -791,11 +856,15 @@ async function main(): Promise<void> {
     let lastTotalPages = 0;
     let lastPagesParsed = 0;
     const computeStartedAt = Date.now();
-    const result = await withTimeout(
-      runPdfLayoutFromPdfBuffer({
+    const result = await withIdleTimeoutAndHardCap({
+      idleTimeoutMs: Math.max(pdfTimeoutMs, 1_000),
+      hardCapMs: PDF_LAYOUT_HARD_CAP_MS,
+      label: 'pdf layout job',
+      run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
         documentId: parsed.documentId,
         pdfBytes,
         onPageParsed: async ({ pageNumber, totalPages }) => {
+          touchProgress();
           lastTotalPages = totalPages;
           lastPagesParsed = pageNumber;
           if (!hooks?.onProgress) return;
@@ -807,9 +876,7 @@ async function main(): Promise<void> {
           });
         },
       }),
-      pdfTimeoutMs,
-      'pdf layout job',
-    );
+    });
 
     const computeMs = Date.now() - computeStartedAt;
     if (hooks?.onProgress && lastTotalPages > 0) {

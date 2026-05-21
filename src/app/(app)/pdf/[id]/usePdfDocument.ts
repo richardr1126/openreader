@@ -450,7 +450,7 @@ export function usePdfDocument(): PdfDocumentState {
       setCurrDocName(undefined);
       setCurrDocData(undefined);
       setParsedDocument(null);
-      setParseStatus(null);
+      setParseStatus('pending');
       setParseProgress(null);
       setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
 
