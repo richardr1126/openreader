@@ -11,6 +11,12 @@ export type ComputeTimeoutConfig = {
 };
 
 export type ComputeOperationKind = 'whisper_align' | 'pdf_layout';
+export type IdleTimeoutAndHardCapInput<T> = {
+  run: (touchProgress: () => void) => Promise<T>;
+  idleTimeoutMs: number;
+  hardCapMs: number;
+  label: string;
+};
 
 function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -36,4 +42,66 @@ export function getWorkerClientWaitTimeoutMs(kind: ComputeOperationKind): number
   const config = getComputeTimeoutConfig();
   const timeoutMs = kind === 'pdf_layout' ? config.pdfTimeoutMs : config.whisperTimeoutMs;
   return Math.max(DEFAULT_WORKER_WAIT_MIN_MS, timeoutMs + DEFAULT_WORKER_WAIT_BUFFER_MS);
+}
+
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export async function withIdleTimeoutAndHardCap<T>(input: IdleTimeoutAndHardCapInput<T>): Promise<T> {
+  let idleTimer: NodeJS.Timeout | null = null;
+  let hardCapTimer: NodeJS.Timeout | null = null;
+  let settled = false;
+  let rejectTimeout!: (reason: unknown) => void;
+
+  const clearTimers = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    if (hardCapTimer) {
+      clearTimeout(hardCapTimer);
+      hardCapTimer = null;
+    }
+  };
+
+  const failTimeout = (kind: 'idle' | 'hard cap', timeoutMs: number) => {
+    if (settled) return;
+    settled = true;
+    clearTimers();
+    rejectTimeout(new Error(`${input.label} ${kind} timed out after ${timeoutMs}ms`));
+  };
+
+  const touchProgress = () => {
+    if (settled) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => failTimeout('idle', input.idleTimeoutMs), input.idleTimeoutMs);
+  };
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    rejectTimeout = reject;
+    hardCapTimer = setTimeout(() => failTimeout('hard cap', input.hardCapMs), input.hardCapMs);
+    touchProgress();
+  });
+
+  try {
+    const result = await Promise.race([input.run(touchProgress), timeoutPromise]);
+    settled = true;
+    clearTimers();
+    return result as T;
+  } catch (error) {
+    settled = true;
+    clearTimers();
+    throw error;
+  }
 }

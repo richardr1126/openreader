@@ -2,79 +2,16 @@ import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignRes
 import { LOCAL_COMPUTE_LIMITER } from '@/lib/server/compute/concurrency-limiter';
 import { getDocumentBlob } from '@/lib/server/documents/blobstore';
 import { getTtsSegmentAudioObject } from '@/lib/server/tts/segments-blobstore';
-import { getComputeTimeoutConfig } from '@openreader/compute-core/runtime/timeout-config';
+import {
+  getComputeTimeoutConfig,
+  withIdleTimeoutAndHardCap,
+  withTimeout,
+} from '@openreader/compute-core/runtime/timeout-config';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
 } from '@openreader/compute-core/local-runtime';
 import type { PdfLayoutProgress } from '@openreader/compute-core/contracts';
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  let timer: NodeJS.Timeout | null = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-async function withIdleTimeoutAndHardCap<T>(input: {
-  run: (touchProgress: () => void) => Promise<T>;
-  idleTimeoutMs: number;
-  hardCapMs: number;
-  label: string;
-}): Promise<T> {
-  let idleTimer: NodeJS.Timeout | null = null;
-  let hardCapTimer: NodeJS.Timeout | null = null;
-  let settled = false;
-  let rejectTimeout!: (reason: unknown) => void;
-
-  const clearTimers = () => {
-    if (idleTimer) {
-      clearTimeout(idleTimer);
-      idleTimer = null;
-    }
-    if (hardCapTimer) {
-      clearTimeout(hardCapTimer);
-      hardCapTimer = null;
-    }
-  };
-
-  const failTimeout = (kind: 'idle' | 'hard cap', timeoutMs: number) => {
-    if (settled) return;
-    settled = true;
-    clearTimers();
-    rejectTimeout(new Error(`${input.label} ${kind} timed out after ${timeoutMs}ms`));
-  };
-
-  const touchProgress = () => {
-    if (settled) return;
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => failTimeout('idle', input.idleTimeoutMs), input.idleTimeoutMs);
-  };
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    rejectTimeout = reject;
-    hardCapTimer = setTimeout(() => failTimeout('hard cap', input.hardCapMs), input.hardCapMs);
-    touchProgress();
-  });
-
-  try {
-    const result = await Promise.race([input.run(touchProgress), timeoutPromise]);
-    settled = true;
-    clearTimers();
-    return result as T;
-  } catch (error) {
-    settled = true;
-    clearTimers();
-    throw error;
-  }
-}
 
 export class LocalComputeBackend implements ComputeBackend {
   readonly mode = 'local' as const;
