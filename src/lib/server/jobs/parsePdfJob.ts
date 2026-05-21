@@ -2,8 +2,10 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { documentKey, putParsedDocumentBlob } from '@/lib/server/documents/blobstore';
+import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getCompute } from '@/lib/server/compute';
 import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
+import type { PdfLayoutProgress } from '@openreader/compute-core/contracts';
 
 interface ParsePdfJobInput {
   documentId: string;
@@ -23,16 +25,41 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
   running.add(key);
 
   try {
+    const now = Date.now();
     await db
       .update(documents)
-      .set({ parseStatus: 'running' })
+      .set({
+        parseState: stringifyDocumentParseState({
+          status: 'running',
+          progress: null,
+          updatedAt: now,
+        }),
+      })
       .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)));
 
     const compute = await getCompute();
+    const writeProgress = async (progress: PdfLayoutProgress): Promise<void> => {
+      await db
+        .update(documents)
+        .set({
+          parseState: stringifyDocumentParseState({
+            status: 'running',
+            progress: {
+              totalPages: progress.totalPages,
+              pagesParsed: progress.pagesParsed,
+              currentPage: progress.currentPage,
+              phase: progress.phase,
+            },
+            updatedAt: Date.now(),
+          }),
+        })
+        .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)));
+    };
     const layout = await compute.parsePdfLayout({
       documentId: input.documentId,
       namespace: input.namespace,
       documentObjectKey: documentKey(input.documentId, input.namespace),
+      onProgress: writeProgress,
     });
 
     let parsedJsonKey = layout.parsedObjectKey ?? null;
@@ -56,7 +83,14 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
 
     await db
       .update(documents)
-      .set({ parseStatus: 'ready', parsedJsonKey })
+      .set({
+        parseState: stringifyDocumentParseState({
+          status: 'ready',
+          progress: null,
+          updatedAt: Date.now(),
+        }),
+        parsedJsonKey,
+      })
       .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -66,7 +100,14 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
     try {
       await db
         .update(documents)
-        .set({ parseStatus })
+        .set({
+          parseState: stringifyDocumentParseState({
+            status: 'failed',
+            progress: null,
+            updatedAt: Date.now(),
+            error: message,
+          }),
+        })
         .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)));
     } catch (statusError) {
       console.error('[parsePdfJob] failed to write parse status', {

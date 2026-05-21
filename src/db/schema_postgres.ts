@@ -12,7 +12,7 @@ export const documents = pgTable('documents', {
   size: bigint('size', { mode: 'number' }).notNull(),
   lastModified: bigint('last_modified', { mode: 'number' }).notNull(),
   filePath: text('file_path').notNull(),
-  parseStatus: text('parse_status'),
+  parseState: text('parse_state'),
   parsedJsonKey: text('parsed_json_key'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [

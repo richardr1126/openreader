@@ -61,6 +61,15 @@ export interface WorkerJobTiming {
   computeMs?: number;
 }
 
+export type PdfLayoutProgressPhase = 'infer' | 'merge';
+
+export interface PdfLayoutProgress {
+  totalPages: number;
+  pagesParsed: number;
+  currentPage?: number;
+  phase: PdfLayoutProgressPhase;
+}
+
 export interface WorkerJobStatusResponse<Result> {
   status: WorkerJobState;
   result?: Result;
@@ -96,4 +105,5 @@ export interface WorkerOperationState<Result = unknown> {
   result?: Result;
   error?: WorkerJobErrorShape;
   timing?: WorkerJobTiming;
+  progress?: PdfLayoutProgress;
 }

@@ -10,6 +10,11 @@ import {
   isValidDocumentId,
 } from '@/lib/server/documents/blobstore';
 import { enqueueParsePdfJob } from '@/lib/server/jobs/parsePdfJob';
+import {
+  normalizeParseStatus,
+  parseDocumentParseState,
+  stringifyDocumentParseState,
+} from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
@@ -26,15 +31,6 @@ function s3NotConfiguredResponse(): NextResponse {
 function hasAnyParsedBlocks(doc: ParsedPdfDocument | null): boolean {
   if (!doc || !Array.isArray(doc.pages)) return false;
   return doc.pages.some((page) => Array.isArray(page.blocks) && page.blocks.length > 0);
-}
-
-function normalizeParseStatus(
-  status: string | null,
-): 'pending' | 'running' | 'ready' | 'failed' {
-  if (status === 'pending' || status === 'running' || status === 'ready' || status === 'failed') {
-    return status;
-  }
-  return 'pending';
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -60,14 +56,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       .select({
         id: documents.id,
         userId: documents.userId,
-        parseStatus: documents.parseStatus,
+        parseState: documents.parseState,
         parsedJsonKey: documents.parsedJsonKey,
       })
       .from(documents)
       .where(and(eq(documents.id, id), inArray(documents.userId, allowedUserIds)))) as Array<{
       id: string;
       userId: string;
-      parseStatus: string | null;
+      parseState: string | null;
       parsedJsonKey: string | null;
     }>;
 
@@ -76,31 +72,26 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const effectiveStatus = normalizeParseStatus(row.parseStatus);
-    if (row.parseStatus !== effectiveStatus) {
-      await db
-        .update(documents)
-        .set({ parseStatus: 'pending' })
-        .where(and(eq(documents.id, id), eq(documents.userId, row.userId)));
-      enqueueParsePdfJob({
-        documentId: id,
-        userId: row.userId,
-        namespace: testNamespace,
-      });
-      return NextResponse.json({ parseStatus: 'pending' }, { status: 202 });
-    }
+    const state = parseDocumentParseState(row.parseState);
+    const effectiveStatus = normalizeParseStatus(state.status);
 
     if (effectiveStatus === 'failed' && retryFailed) {
       await db
         .update(documents)
-        .set({ parseStatus: 'pending' })
+        .set({
+          parseState: stringifyDocumentParseState({
+            status: 'pending',
+            progress: null,
+            updatedAt: Date.now(),
+          }),
+        })
         .where(and(eq(documents.id, id), eq(documents.userId, row.userId)));
       enqueueParsePdfJob({
         documentId: id,
         userId: row.userId,
         namespace: testNamespace,
       });
-      return NextResponse.json({ parseStatus: 'pending' }, { status: 202 });
+      return NextResponse.json({ parseStatus: 'pending', parseProgress: null }, { status: 202 });
     }
 
     if (effectiveStatus !== 'ready') {
@@ -111,7 +102,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           namespace: testNamespace,
         });
       }
-      return NextResponse.json({ parseStatus: effectiveStatus }, { status: 202 });
+      return NextResponse.json({
+        parseStatus: effectiveStatus,
+        parseProgress: state.progress ?? null,
+      }, { status: 202 });
     }
 
     try {
@@ -174,14 +168,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       .select({
         id: documents.id,
         userId: documents.userId,
-        parseStatus: documents.parseStatus,
+        parseState: documents.parseState,
         parsedJsonKey: documents.parsedJsonKey,
       })
       .from(documents)
       .where(and(eq(documents.id, id), inArray(documents.userId, allowedUserIds)))) as Array<{
       id: string;
       userId: string;
-      parseStatus: string | null;
+      parseState: string | null;
       parsedJsonKey: string | null;
     }>;
 
@@ -190,12 +184,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const effectiveStatus = normalizeParseStatus(row.parseStatus);
+    const state = parseDocumentParseState(row.parseState);
+    const effectiveStatus = normalizeParseStatus(state.status);
 
     if (effectiveStatus !== 'running') {
       await db
         .update(documents)
-        .set({ parseStatus: 'pending' })
+        .set({
+          parseState: stringifyDocumentParseState({
+            status: 'pending',
+            progress: null,
+            updatedAt: Date.now(),
+          }),
+        })
         .where(and(eq(documents.id, id), eq(documents.userId, row.userId)));
     }
 
@@ -206,7 +207,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     });
 
     return NextResponse.json(
-      { parseStatus: effectiveStatus === 'running' ? 'running' : 'pending' },
+      {
+        parseStatus: effectiveStatus === 'running' ? 'running' : 'pending',
+        parseProgress: effectiveStatus === 'running' ? (state.progress ?? null) : null,
+      },
       { status: 202 },
     );
   } catch (error) {

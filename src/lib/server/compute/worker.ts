@@ -375,6 +375,11 @@ export class WorkerComputeBackend implements ComputeBackend {
             opKeyHash,
             documentId: input.documentId,
             attempt,
+            onSnapshot: (snapshot) => {
+              if (snapshot.progress) {
+                void input.onProgress?.(snapshot.progress);
+              }
+            },
           });
 
         if (final.status !== 'succeeded' || !final.result) {
@@ -482,7 +487,9 @@ export class WorkerComputeBackend implements ComputeBackend {
 
   private async waitForOperation<Result>(
     opId: string,
-    context: Record<string, unknown> = {},
+    context: Record<string, unknown> & {
+      onSnapshot?: (snapshot: WorkerOperationState<Result>) => void
+    } = {},
   ): Promise<WorkerOperationState<Result>> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.waitTimeoutMs);
@@ -577,6 +584,7 @@ export class WorkerComputeBackend implements ComputeBackend {
 
           eventCount += 1;
           latest = snapshot;
+          context.onSnapshot?.(snapshot);
           if (snapshot.status !== lastStatus) {
             lastStatus = snapshot.status;
             logWorker('info', 'sse.wait.status', {

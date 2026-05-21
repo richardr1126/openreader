@@ -37,6 +37,7 @@ import {
   type WorkerOperationKind,
   type WorkerOperationRequest,
   type WorkerOperationState,
+  type PdfLayoutProgress,
 } from '@openreader/compute-core/contracts';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
@@ -75,6 +76,7 @@ interface StoredJobState<Result> {
   result?: Result;
   error?: WorkerJobErrorShape;
   timing?: WorkerJobTiming;
+  progress?: PdfLayoutProgress;
 }
 
 interface OpIndexEntry {
@@ -772,6 +774,7 @@ async function main(): Promise<void> {
   const runLayout = async (
     payload: PdfLayoutJobRequest,
     queueWaitMs: number,
+    hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
   ): Promise<PdfLayoutJobResult> => {
     const parsed = layoutSchema.parse(payload);
 
@@ -779,17 +782,38 @@ async function main(): Promise<void> {
     const pdfBytes = await readObjectByKey(parsed.documentObjectKey);
     const s3FetchMs = Date.now() - s3FetchStartedAt;
 
+    let lastTotalPages = 0;
+    let lastPagesParsed = 0;
     const computeStartedAt = Date.now();
     const result = await withTimeout(
       runPdfLayoutFromPdfBuffer({
         documentId: parsed.documentId,
         pdfBytes,
+        onPageParsed: async ({ pageNumber, totalPages }) => {
+          lastTotalPages = totalPages;
+          lastPagesParsed = pageNumber;
+          if (!hooks?.onProgress) return;
+          await hooks.onProgress({
+            totalPages,
+            pagesParsed: pageNumber,
+            currentPage: pageNumber,
+            phase: 'infer',
+          });
+        },
       }),
       pdfTimeoutMs,
       'pdf layout job',
     );
 
     const computeMs = Date.now() - computeStartedAt;
+    if (hooks?.onProgress && lastTotalPages > 0) {
+      await hooks.onProgress({
+        totalPages: lastTotalPages,
+        pagesParsed: lastPagesParsed,
+        currentPage: lastPagesParsed || undefined,
+        phase: 'merge',
+      });
+    }
     const parsedObjectKey = await putParsedObject(parsed.documentId, parsed.namespace, result.parsed);
     return {
       parsedObjectKey,
@@ -804,11 +828,16 @@ async function main(): Promise<void> {
   async function processMessage<TPayload, TResult>(input: {
     msg: JsMsg;
     codec: JsonCodec<QueuedJob<TPayload>>;
-    run: (payload: TPayload, queueWaitMs: number) => Promise<TResult>;
+    run: (
+      payload: TPayload,
+      queueWaitMs: number,
+      hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
+    ) => Promise<TResult>;
     workerLabel: string;
   }): Promise<void> {
     let decoded: QueuedJob<TPayload> | null = null;
     let heartbeat: NodeJS.Timeout | null = null;
+    let latestProgress: PdfLayoutProgress | undefined;
     try {
       decoded = input.codec.decode(input.msg.data);
       const startedAt = Date.now();
@@ -824,6 +853,7 @@ async function main(): Promise<void> {
         startedAt,
         updatedAt: startedAt,
         ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+        ...(latestProgress ? { progress: latestProgress } : {}),
       };
 
       await putOpState(runningState);
@@ -837,11 +867,11 @@ async function main(): Promise<void> {
         startedAt,
         updatedAt: startedAt,
         ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+        ...(latestProgress ? { progress: latestProgress } : {}),
       });
 
-      heartbeat = setInterval(() => {
-        const now = Date.now();
-        const heartbeatState: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> = {
+      const persistRunningState = async (updatedAt: number): Promise<void> => {
+        const runningOpState: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> = {
           opId: decoded!.opId,
           opKey: decoded!.opKey,
           kind: decoded!.kind,
@@ -849,18 +879,13 @@ async function main(): Promise<void> {
           status: 'running',
           queuedAt: decoded!.queuedAt,
           startedAt,
-          updatedAt: now,
+          updatedAt,
           ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          ...(latestProgress ? { progress: latestProgress } : {}),
         };
-        void putOpState(heartbeatState).catch((stateError) => {
-          app.log.error({
-            worker: input.workerLabel,
-            opId: decoded?.opId,
-            jobId: decoded?.jobId,
-            error: toErrorMessage(stateError),
-          }, 'failed to persist running heartbeat op state');
-        });
-        void putJobState({
+
+        await putOpState(runningOpState);
+        await putJobState({
           jobId: decoded!.jobId,
           opId: decoded!.opId,
           opKey: decoded!.opKey,
@@ -868,19 +893,30 @@ async function main(): Promise<void> {
           status: 'running',
           timestamp: decoded!.queuedAt,
           startedAt,
-          updatedAt: now,
+          updatedAt,
           ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
-        }).catch((stateError) => {
+          ...(latestProgress ? { progress: latestProgress } : {}),
+        });
+      };
+
+      heartbeat = setInterval(() => {
+        const now = Date.now();
+        void persistRunningState(now).catch((stateError) => {
           app.log.error({
             worker: input.workerLabel,
             opId: decoded?.opId,
             jobId: decoded?.jobId,
             error: toErrorMessage(stateError),
-          }, 'failed to persist running heartbeat job state');
+          }, 'failed to persist running heartbeat state');
         });
       }, RUNNING_HEARTBEAT_MS);
 
-      const result = await input.run(decoded.payload, queueWaitMs ?? 0);
+      const result = await input.run(decoded.payload, queueWaitMs ?? 0, {
+        onProgress: async (progress) => {
+          latestProgress = progress;
+          await persistRunningState(Date.now());
+        },
+      });
       const resultTiming = result && typeof result === 'object' && 'timing' in result
         ? (result as { timing?: WorkerJobTiming }).timing
         : undefined;
@@ -897,6 +933,7 @@ async function main(): Promise<void> {
         updatedAt: now,
         result: result as WhisperAlignJobResult | PdfLayoutJobResult,
         ...(resultTiming ? { timing: resultTiming } : {}),
+        ...(latestProgress ? { progress: latestProgress } : {}),
       };
 
       await putOpState(succeededState);
@@ -911,6 +948,7 @@ async function main(): Promise<void> {
         updatedAt: now,
         result: result as WhisperAlignJobResult | PdfLayoutJobResult,
         ...(resultTiming ? { timing: resultTiming } : {}),
+        ...(latestProgress ? { progress: latestProgress } : {}),
       });
 
       input.msg.ack();
@@ -941,6 +979,7 @@ async function main(): Promise<void> {
           updatedAt: now,
           ...(status === 'failed' ? { error: { message } } : {}),
           ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          ...(latestProgress ? { progress: latestProgress } : {}),
         };
 
         await putOpState(opState).catch((stateError) => {
@@ -962,6 +1001,7 @@ async function main(): Promise<void> {
           updatedAt: now,
           ...(status === 'failed' ? { error: { message } } : {}),
           ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          ...(latestProgress ? { progress: latestProgress } : {}),
         }).catch((stateError) => {
           app.log.error({
             worker: input.workerLabel,
@@ -1001,7 +1041,11 @@ async function main(): Promise<void> {
   async function createWorkerLoop<TPayload, TResult>(input: {
     consumer: Consumer;
     codec: JsonCodec<QueuedJob<TPayload>>;
-    run: (payload: TPayload, queueWaitMs: number) => Promise<TResult>;
+    run: (
+      payload: TPayload,
+      queueWaitMs: number,
+      hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
+    ) => Promise<TResult>;
     workerLabel: string;
   }): Promise<void> {
     while (!stopping) {

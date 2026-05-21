@@ -1,4 +1,9 @@
-import type { TTSAudioBuffer, TTSSentenceAlignment, ParsedPdfDocument } from '@openreader/compute-core/contracts';
+import type {
+  TTSAudioBuffer,
+  TTSSentenceAlignment,
+  ParsedPdfDocument,
+  PdfLayoutProgress,
+} from '@openreader/compute-core/contracts';
 
 export type ComputeMode = 'local' | 'worker';
 
@@ -19,6 +24,7 @@ export interface PdfLayoutInput {
   namespace?: string | null;
   documentObjectKey?: string;
   pdfBytes?: ArrayBuffer;
+  onProgress?: (progress: PdfLayoutProgress) => void | Promise<void>;
 }
 
 export type PdfLayoutResult =

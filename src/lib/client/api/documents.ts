@@ -1,6 +1,6 @@
 import { sha256HexFromArrayBuffer } from '@/lib/client/sha256';
 import type { BaseDocument, DocumentType } from '@/types/documents';
-import type { ParsedPdfDocument } from '@/types/parsed-pdf';
+import type { ParsedPdfDocument, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { DocumentSettings } from '@/types/document-settings';
 
 export type UploadSource = {
@@ -81,7 +81,10 @@ export async function getDocumentMetadata(id: string, options?: { signal?: Abort
 export async function getParsedPdfDocument(
   id: string,
   options?: { signal?: AbortSignal; retryFailed?: boolean },
-): Promise<{ status: 'ready'; parsed: ParsedPdfDocument } | { status: 'pending' | 'running' | 'failed' }> {
+): Promise<
+  | { status: 'ready'; parsed: ParsedPdfDocument }
+  | { status: 'pending' | 'running' | 'failed'; parseProgress?: PdfParseProgress | null }
+> {
   const query = options?.retryFailed ? '?retry=1' : '';
   const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed${query}`, {
     signal: options?.signal,
@@ -89,12 +92,12 @@ export async function getParsedPdfDocument(
   });
 
   if (res.status === 202) {
-    const data = (await res.json().catch(() => null)) as { parseStatus?: string } | null;
+    const data = (await res.json().catch(() => null)) as { parseStatus?: string; parseProgress?: PdfParseProgress | null } | null;
     const parseStatus = data?.parseStatus;
     if (parseStatus === 'pending' || parseStatus === 'running' || parseStatus === 'failed') {
-      return { status: parseStatus };
+      return { status: parseStatus, parseProgress: data?.parseProgress ?? null };
     }
-    return { status: 'pending' };
+    return { status: 'pending', parseProgress: data?.parseProgress ?? null };
   }
 
   if (!res.ok) {
@@ -104,6 +107,31 @@ export async function getParsedPdfDocument(
 
   const parsed = (await res.json()) as ParsedPdfDocument;
   return { status: 'ready', parsed };
+}
+
+export function subscribeParsedPdfDocumentEvents(
+  id: string,
+  handlers: {
+    onSnapshot: (snapshot: { parseStatus: PdfParseStatus; parseProgress: PdfParseProgress | null }) => void;
+    onError?: (error: Event) => void;
+  },
+): () => void {
+  const source = new EventSource(`/api/documents/${encodeURIComponent(id)}/parsed/events`);
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const payload = JSON.parse(event.data) as { parseStatus: PdfParseStatus; parseProgress: PdfParseProgress | null };
+      handlers.onSnapshot(payload);
+    } catch {
+      // Ignore malformed payloads to avoid breaking active streams.
+    }
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(event);
+  });
+  return () => {
+    source.close();
+  };
 }
 
 export async function forceReparsePdfDocument(

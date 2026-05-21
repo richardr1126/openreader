@@ -25,10 +25,16 @@ export async function runWhisperAlignmentFromAudioBuffer(input: {
 export async function runPdfLayoutFromPdfBuffer(input: {
   documentId: string;
   pdfBytes: ArrayBuffer;
+  onPageParsed?: (input: {
+    pageNumber: number;
+    totalPages: number;
+    pageMs: number;
+  }) => void | Promise<void>;
 }) {
   const parsed = await parsePdf({
     documentId: input.documentId,
     pdfBytes: input.pdfBytes,
+    onPageParsed: input.onPageParsed,
   });
   return { parsed };
 }

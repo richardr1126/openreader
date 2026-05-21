@@ -11,6 +11,11 @@ import {
 } from '@/lib/server/documents/previews';
 import { enqueueParsePdfJob } from '@/lib/server/jobs/parsePdfJob';
 import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
+import {
+  normalizeParseStatus,
+  parseDocumentParseState,
+  stringifyDocumentParseState,
+} from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
@@ -24,16 +29,6 @@ type RegisterDocument = {
   size: number;
   lastModified: number;
 };
-
-function normalizeParseStatus(
-  status: string | null,
-): 'pending' | 'running' | 'ready' | 'failed' | null {
-  if (status === null) return null;
-  if (status === 'pending' || status === 'running' || status === 'ready' || status === 'failed') {
-    return status;
-  }
-  return 'pending';
-}
 
 function s3NotConfiguredResponse(): NextResponse {
   return NextResponse.json(
@@ -140,7 +135,9 @@ export async function POST(req: NextRequest) {
           size: headSize,
           lastModified: doc.lastModified,
           filePath: doc.id,
-          parseStatus: doc.type === 'pdf' ? 'pending' : null,
+          parseState: doc.type === 'pdf'
+            ? stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() })
+            : null,
           parsedJsonKey: null,
         })
         .onConflictDoUpdate({
@@ -151,7 +148,9 @@ export async function POST(req: NextRequest) {
             size: headSize,
             lastModified: doc.lastModified,
             filePath: doc.id,
-            parseStatus: doc.type === 'pdf' ? 'pending' : null,
+            parseState: doc.type === 'pdf'
+              ? stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() })
+              : null,
             parsedJsonKey: null,
           },
         });
@@ -229,7 +228,7 @@ export async function GET(req: NextRequest) {
       size: number;
       lastModified: number;
       filePath: string;
-      parseStatus: string | null;
+      parseState: string | null;
       parsedJsonKey: string | null;
     }>;
 
@@ -255,7 +254,7 @@ export async function GET(req: NextRequest) {
         size: Number(doc.size),
         lastModified: Number(doc.lastModified),
         type,
-        parseStatus: normalizeParseStatus(doc.parseStatus),
+        parseStatus: type === 'pdf' ? normalizeParseStatus(parseDocumentParseState(doc.parseState).status) : null,
         parsedJsonKey: doc.parsedJsonKey,
         scope: doc.userId === unclaimedUserId ? 'unclaimed' : 'user',
       };

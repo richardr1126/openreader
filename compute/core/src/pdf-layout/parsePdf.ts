@@ -11,6 +11,11 @@ import { renderPage } from './renderPage';
 interface ParsePdfInput {
   documentId: string;
   pdfBytes: ArrayBuffer;
+  onPageParsed?: (input: {
+    pageNumber: number;
+    totalPages: number;
+    pageMs: number;
+  }) => void | Promise<void>;
 }
 
 const LAYOUT_RENDER_SCALE = 1.5;
@@ -80,6 +85,7 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
     let sawText = false;
 
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const pageStartedAt = Date.now();
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1.0 });
       const textContent = await page.getTextContent();
@@ -143,6 +149,14 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
         height: viewport.height,
         blocks,
       });
+
+      if (input.onPageParsed) {
+        await input.onPageParsed({
+          pageNumber,
+          totalPages: pdf.numPages,
+          pageMs: Date.now() - pageStartedAt,
+        });
+      }
     }
 
     if (!sawText) {

@@ -50,6 +50,13 @@
       "when": 1779102950385,
       "tag": "0006_preview-defaults-cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1779378125905,
+      "tag": "0007_pdf_parse_progress",
+      "breakpoints": true
     }
   ]
 }

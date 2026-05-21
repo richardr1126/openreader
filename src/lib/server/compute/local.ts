@@ -35,6 +35,17 @@ export class LocalComputeBackend implements ComputeBackend {
     if (!pdfBytes) {
       throw new Error('Local compute PDF layout requires pdfBytes or (documentId + namespace)');
     }
-    return { parsed: (await runPdfLayoutFromPdfBuffer({ documentId: input.documentId, pdfBytes })).parsed };
+    return {
+      parsed: (await runPdfLayoutFromPdfBuffer({
+        documentId: input.documentId,
+        pdfBytes,
+        onPageParsed: (page) => input.onProgress?.({
+          totalPages: page.totalPages,
+          pagesParsed: page.pageNumber,
+          currentPage: page.pageNumber,
+          phase: 'infer',
+        }),
+      })).parsed,
+    };
   }
 }

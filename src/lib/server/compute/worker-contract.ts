@@ -1,6 +1,8 @@
 export {
   type PdfLayoutJobRequest,
   type PdfLayoutJobResult,
+  type PdfLayoutProgress,
+  type PdfLayoutProgressPhase,
   type PdfLayoutOperationRequest,
   type WhisperAlignJobRequest,
   type WhisperAlignJobResult,

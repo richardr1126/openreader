@@ -12,7 +12,7 @@ export const documents = sqliteTable('documents', {
   size: integer('size').notNull(),
   lastModified: integer('last_modified').notNull(),
   filePath: text('file_path').notNull(),
-  parseStatus: text('parse_status'),
+  parseState: text('parse_state'),
   parsedJsonKey: text('parsed_json_key'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
 }, (table) => [
