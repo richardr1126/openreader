@@ -35,6 +35,7 @@ import { getCompute } from '@/lib/server/compute';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
+import { getComputeTimeoutConfig } from '@openreader/compute-core/runtime/timeout-config';
 import type {
   TTSSegmentInput,
   TTSSegmentManifestItem,
@@ -45,8 +46,7 @@ import type {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const GENERATING_STALE_MS = 360_000;
-const LOCAL_ALIGNMENT_TIMEOUT_MS = 30_000;
-const WORKER_ALIGNMENT_TIMEOUT_MS = 60_000;
+const SHARED_ALIGNMENT_TIMEOUT_MS = getComputeTimeoutConfig().whisperTimeoutMs;
 
 function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, didCreate: boolean) {
   if (didCreate && deviceId) {
@@ -143,10 +143,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-function getAlignmentTimeoutMs(mode: 'local' | 'worker'): number {
-  return mode === 'worker' ? WORKER_ALIGNMENT_TIMEOUT_MS : LOCAL_ALIGNMENT_TIMEOUT_MS;
 }
 
 async function deleteEntryIfUnused(userId: string, segmentEntryId: string): Promise<void> {
@@ -411,7 +407,7 @@ export async function POST(request: NextRequest) {
                 audioObjectKey: existing.audioKey,
                 text: segment.text,
               }),
-              getAlignmentTimeoutMs(computeBackend.mode),
+              SHARED_ALIGNMENT_TIMEOUT_MS,
               `Whisper alignment (${computeBackend.mode})`,
             )).alignments;
             stageTimings.selfHealAlignMs = Date.now() - alignStartedAt;
@@ -665,7 +661,7 @@ export async function POST(request: NextRequest) {
               audioObjectKey: audioKey,
               text: segment.text,
             }),
-            getAlignmentTimeoutMs(computeBackend.mode),
+            SHARED_ALIGNMENT_TIMEOUT_MS,
             `Whisper alignment (${computeBackend.mode})`,
           )).alignments;
           stageTimings.whisperAlignMs = Date.now() - alignStartedAt;

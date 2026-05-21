@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
+import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core/runtime/timeout-config';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
@@ -20,7 +21,6 @@ class WorkerHttpError extends Error {
   }
 }
 
-const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
 const DEFAULT_RETRIES = 2;
 const LOG_PREFIX = '[compute-worker-client]';
 const MAX_LOG_DETAIL_CHARS = 600;
@@ -236,13 +236,16 @@ export class WorkerComputeBackend implements ComputeBackend {
   readonly mode = 'worker' as const;
   private readonly baseUrl: string;
   private readonly token: string;
-  private readonly waitTimeoutMs: number;
+  private readonly waitTimeoutMsByKind: Record<'whisper_align' | 'pdf_layout', number>;
   private readonly retries: number;
 
   constructor() {
     this.baseUrl = normalizeWorkerBaseUrl(readRequiredEnv('COMPUTE_WORKER_URL'));
     this.token = readRequiredEnv('COMPUTE_WORKER_TOKEN');
-    this.waitTimeoutMs = DEFAULT_WAIT_TIMEOUT_MS;
+    this.waitTimeoutMsByKind = {
+      whisper_align: getWorkerClientWaitTimeoutMs('whisper_align'),
+      pdf_layout: getWorkerClientWaitTimeoutMs('pdf_layout'),
+    };
     this.retries = DEFAULT_RETRIES;
   }
 
@@ -268,7 +271,7 @@ export class WorkerComputeBackend implements ComputeBackend {
       cacheKey: input.cacheKey ?? null,
       lang: input.lang ?? null,
       textLength: input.text.length,
-      waitTimeoutMs: this.waitTimeoutMs,
+      waitTimeoutMs: this.waitTimeoutMsByKind.whisper_align,
       maxRetries: this.retries,
     });
 
@@ -292,6 +295,7 @@ export class WorkerComputeBackend implements ComputeBackend {
             kind: 'whisper_align',
             opKeyHash,
             attempt,
+            waitTimeoutMs: this.waitTimeoutMsByKind.whisper_align,
           });
 
         if (final.status !== 'succeeded' || !final.result) {
@@ -350,7 +354,7 @@ export class WorkerComputeBackend implements ComputeBackend {
       documentId: input.documentId,
       namespace: input.namespace ?? null,
       documentObjectKey: input.documentObjectKey,
-      waitTimeoutMs: this.waitTimeoutMs,
+      waitTimeoutMs: this.waitTimeoutMsByKind.pdf_layout,
       maxRetries: this.retries,
     });
 
@@ -376,6 +380,7 @@ export class WorkerComputeBackend implements ComputeBackend {
             opKeyHash,
             documentId: input.documentId,
             attempt,
+            waitTimeoutMs: this.waitTimeoutMsByKind.pdf_layout,
             onSnapshot: (snapshot) => {
               if (snapshot.progress) {
                 void input.onProgress?.(snapshot.progress);
@@ -489,18 +494,22 @@ export class WorkerComputeBackend implements ComputeBackend {
   private async waitForOperation<Result>(
     opId: string,
     context: Record<string, unknown> & {
+      waitTimeoutMs?: number;
       onSnapshot?: (snapshot: WorkerOperationState<Result>) => void
     } = {},
   ): Promise<WorkerOperationState<Result>> {
+    const waitTimeoutMs = typeof context.waitTimeoutMs === 'number'
+      ? context.waitTimeoutMs
+      : this.waitTimeoutMsByKind.whisper_align;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.waitTimeoutMs);
+    const timeout = setTimeout(() => controller.abort(), waitTimeoutMs);
     const startedAt = Date.now();
     const traceId = typeof context.traceId === 'string' ? context.traceId : randomUUID();
     logWorker('info', 'sse.wait.start', {
       ...context,
       traceId,
       opId,
-      waitTimeoutMs: this.waitTimeoutMs,
+      waitTimeoutMs,
     });
 
     try {
