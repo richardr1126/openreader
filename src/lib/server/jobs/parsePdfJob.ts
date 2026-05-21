@@ -11,6 +11,7 @@ interface ParsePdfJobInput {
   documentId: string;
   userId: string;
   namespace: string | null;
+  forceToken?: string;
 }
 
 const running = new Set<string>();
@@ -59,6 +60,7 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
       documentId: input.documentId,
       namespace: input.namespace,
       documentObjectKey: documentKey(input.documentId, input.namespace),
+      forceToken: input.forceToken,
       onProgress: writeProgress,
     });
 

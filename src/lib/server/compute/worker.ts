@@ -166,13 +166,14 @@ function buildWhisperOpKey(input: WhisperAlignInput): string {
   ].join('|');
 }
 
-function buildPdfOpKey(input: PdfLayoutInput): string {
+export function buildPdfOpKey(input: PdfLayoutInput): string {
   return [
     'pdf_layout',
     'v1',
     input.documentId,
     input.namespace ?? '',
     input.documentObjectKey ?? '',
+    input.forceToken?.trim() || '',
   ].join('|');
 }
 

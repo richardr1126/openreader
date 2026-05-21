@@ -24,6 +24,7 @@ export interface PdfLayoutInput {
   namespace?: string | null;
   documentObjectKey?: string;
   pdfBytes?: ArrayBuffer;
+  forceToken?: string;
   onProgress?: (progress: PdfLayoutProgress) => void | Promise<void>;
 }
 

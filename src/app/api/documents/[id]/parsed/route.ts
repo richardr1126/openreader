@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
@@ -204,6 +205,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       documentId: id,
       userId: row.userId,
       namespace: testNamespace,
+      forceToken: randomUUID(),
     });
 
     return NextResponse.json(
