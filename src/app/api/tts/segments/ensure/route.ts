@@ -44,7 +44,9 @@ import type {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-const GENERATING_STALE_MS = 45_000;
+const GENERATING_STALE_MS = 360_000;
+const LOCAL_ALIGNMENT_TIMEOUT_MS = 30_000;
+const WORKER_ALIGNMENT_TIMEOUT_MS = 60_000;
 
 function attachDeviceIdCookie(response: NextResponse, deviceId: string | null, didCreate: boolean) {
   if (didCreate && deviceId) {
@@ -127,6 +129,24 @@ function isAbortLikeError(error: unknown): boolean {
       : '';
   if (!message) return false;
   return /abort/i.test(message);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function getAlignmentTimeoutMs(mode: 'local' | 'worker'): number {
+  return mode === 'worker' ? WORKER_ALIGNMENT_TIMEOUT_MS : LOCAL_ALIGNMENT_TIMEOUT_MS;
 }
 
 async function deleteEntryIfUnused(userId: string, segmentEntryId: string): Promise<void> {
@@ -386,10 +406,14 @@ export async function POST(request: NextRequest) {
           try {
             const alignStartedAt = Date.now();
             const computeBackend = await getComputeBackend();
-            const aligned = (await computeBackend.alignWords({
-              audioObjectKey: existing.audioKey,
-              text: segment.text,
-            })).alignments;
+            const aligned = (await withTimeout(
+              computeBackend.alignWords({
+                audioObjectKey: existing.audioKey,
+                text: segment.text,
+              }),
+              getAlignmentTimeoutMs(computeBackend.mode),
+              `Whisper alignment (${computeBackend.mode})`,
+            )).alignments;
             stageTimings.selfHealAlignMs = Date.now() - alignStartedAt;
             alignment = aligned[0] ? { ...aligned[0], sentenceIndex: segment.original.segmentIndex } : null;
 
@@ -636,10 +660,14 @@ export async function POST(request: NextRequest) {
           failedStage = 'whisper.align';
           const alignStartedAt = Date.now();
           const computeBackend = await getComputeBackend();
-          const aligned = (await computeBackend.alignWords({
-            audioObjectKey: audioKey,
-            text: segment.text,
-          })).alignments;
+          const aligned = (await withTimeout(
+            computeBackend.alignWords({
+              audioObjectKey: audioKey,
+              text: segment.text,
+            }),
+            getAlignmentTimeoutMs(computeBackend.mode),
+            `Whisper alignment (${computeBackend.mode})`,
+          )).alignments;
           stageTimings.whisperAlignMs = Date.now() - alignStartedAt;
           alignment = aligned[0] ? { ...aligned[0], sentenceIndex: segment.original.segmentIndex } : null;
         } catch (alignError) {

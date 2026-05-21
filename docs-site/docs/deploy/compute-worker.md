@@ -44,9 +44,18 @@ Common optional:
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `PORT=8081` (local/manual; on Railway platform injects this)
 - `COMPUTE_LOG_FORMAT=pretty` (default) or `json`
+
+Advanced tuning (usually leave unset unless you need overrides):
+
 - `COMPUTE_PREWARM_MODELS=true`
+- `COMPUTE_WHISPER_CONCURRENCY=1`
+- `COMPUTE_PDF_CONCURRENCY=2`
+- `COMPUTE_WHISPER_TIMEOUT_MS=30000`
+- `COMPUTE_PDF_TIMEOUT_MS=90000`
+- `COMPUTE_PDF_JOB_ATTEMPTS=2` (PDF layout retry attempts)
 - `COMPUTE_JOBS_STREAM_MAX_BYTES=268435456` (256MB JetStream jobs stream cap)
 - `COMPUTE_JOB_STATES_MAX_BYTES=67108864` (64MB JetStream KV bucket cap)
+- `COMPUTE_OP_STALE_MS=1800000` (stale op replacement window)
 
 ## App server environment variables (worker mode)
 
@@ -110,8 +119,15 @@ COMPUTE_WORKER_HOST=0.0.0.0
 # PORT=8081
 # Railway: rely on injected PORT
 COMPUTE_WORKER_TOKEN=<long-random-shared-token>
-COMPUTE_JOBS_STREAM_MAX_BYTES=268435456
-COMPUTE_JOB_STATES_MAX_BYTES=67108864
+# Optional advanced tuning overrides (defaults shown):
+# COMPUTE_PREWARM_MODELS=true
+# COMPUTE_WHISPER_CONCURRENCY=1
+# COMPUTE_PDF_CONCURRENCY=2
+# COMPUTE_WHISPER_TIMEOUT_MS=30000
+# COMPUTE_PDF_TIMEOUT_MS=90000
+# COMPUTE_PDF_JOB_ATTEMPTS=2
+# COMPUTE_JOBS_STREAM_MAX_BYTES=268435456
+# COMPUTE_JOB_STATES_MAX_BYTES=67108864
 
 NATS_URL=tls://connect.ngs.global:4222
 NATS_CREDS="-----BEGIN NATS USER JWT-----

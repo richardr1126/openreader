@@ -54,6 +54,7 @@ const SSE_POLL_INTERVAL_MS = 400;
 const RUNNING_HEARTBEAT_MS = 5000;
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
+const WHISPER_MAX_DELIVER = 1;
 
 interface QueuedJob<TPayload> {
   jobId: string;
@@ -311,7 +312,7 @@ async function ensureJetStreamResources(
   jsm: JetStreamManager,
   whisperTimeoutMs: number,
   pdfTimeoutMs: number,
-  attempts: number,
+  pdfAttempts: number,
   maxBytes: number,
 ): Promise<void> {
   const streamConfig = {
@@ -332,7 +333,12 @@ async function ensureJetStreamResources(
     });
   }
 
-  const ensureConsumer = async (name: string, subject: string, ackWaitMs: number): Promise<void> => {
+  const ensureConsumer = async (
+    name: string,
+    subject: string,
+    ackWaitMs: number,
+    maxDeliver: number,
+  ): Promise<void> => {
     const config = {
       durable_name: name,
       ack_policy: AckPolicy.Explicit,
@@ -340,7 +346,7 @@ async function ensureJetStreamResources(
       replay_policy: ReplayPolicy.Instant,
       filter_subject: subject,
       ack_wait: nanos(Math.max(ackWaitMs, 1_000)),
-      max_deliver: attempts,
+      max_deliver: maxDeliver,
     };
 
     try {
@@ -350,14 +356,14 @@ async function ensureJetStreamResources(
       await jsm.consumers.update(JOBS_STREAM_NAME, name, {
         filter_subject: subject,
         ack_wait: nanos(Math.max(ackWaitMs, 1_000)),
-        max_deliver: attempts,
+        max_deliver: maxDeliver,
       });
     }
   };
 
   await Promise.all([
-    ensureConsumer(WHISPER_CONSUMER_NAME, WHISPER_JOBS_SUBJECT, whisperTimeoutMs + 15_000),
-    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, pdfTimeoutMs + 15_000),
+    ensureConsumer(WHISPER_CONSUMER_NAME, WHISPER_JOBS_SUBJECT, whisperTimeoutMs + 15_000, WHISPER_MAX_DELIVER),
+    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, pdfTimeoutMs + 15_000, pdfAttempts),
   ]);
 }
 
@@ -371,7 +377,7 @@ async function main(): Promise<void> {
   const pdfConcurrency = readIntEnv('COMPUTE_PDF_CONCURRENCY', 2);
   const whisperTimeoutMs = readIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', 30_000);
   const pdfTimeoutMs = readIntEnv('COMPUTE_PDF_TIMEOUT_MS', 90_000);
-  const attempts = readIntEnv('COMPUTE_JOB_ATTEMPTS', 2);
+  const pdfAttempts = readIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 2);
   const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', true);
   const jobsStreamMaxBytes = readIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
   const jobStatesMaxBytes = readIntEnv('COMPUTE_JOB_STATES_MAX_BYTES', 64 * 1024 * 1024);
@@ -398,7 +404,7 @@ async function main(): Promise<void> {
   const js: JetStreamClient = jetstream(nc);
   const jsm: JetStreamManager = await jetstreamManager(nc);
 
-  await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, attempts, jobsStreamMaxBytes);
+  await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, pdfAttempts, jobsStreamMaxBytes);
 
   const kv = await new Kvm(js).create(COMPUTE_STATE_BUCKET, {
     history: 1,
@@ -962,7 +968,9 @@ async function main(): Promise<void> {
     } catch (error) {
       const message = toErrorMessage(error);
       const deliveryCount = input.msg.info.deliveryCount;
-      const hasRetriesLeft = deliveryCount < attempts;
+      const isWhisperAlign = decoded?.kind === 'whisper_align';
+      const maxAttempts = isWhisperAlign ? WHISPER_MAX_DELIVER : pdfAttempts;
+      const hasRetriesLeft = !isWhisperAlign && deliveryCount < maxAttempts;
 
       if (decoded) {
         const now = Date.now();
@@ -1020,7 +1028,7 @@ async function main(): Promise<void> {
           jobId: decoded?.jobId,
           error: message,
           deliveryCount,
-          maxAttempts: attempts,
+          maxAttempts,
         }, 'job failed, nacked for retry');
       } else {
         input.msg.term(message);
@@ -1030,7 +1038,8 @@ async function main(): Promise<void> {
           jobId: decoded?.jobId,
           error: message,
           deliveryCount,
-          maxAttempts: attempts,
+          maxAttempts,
+          retrySuppressed: isWhisperAlign ? 'whisper_align' : undefined,
         }, 'job failed, max attempts reached');
       }
     } finally {
