@@ -1,4 +1,5 @@
 import path from 'path';
+import { createRequire } from 'node:module';
 import type { Canvas } from '@napi-rs/canvas';
 
 type CanvasRuntime = {
@@ -8,6 +9,13 @@ type CanvasRuntime = {
 };
 
 let canvasRuntimePromise: Promise<CanvasRuntime> | null = null;
+const require = createRequire(import.meta.url);
+
+function resolvePdfjsStandardFontDataUrl(): string {
+  const pdfjsPackageJson = require.resolve('pdfjs-dist/package.json');
+  const standardFontDir = path.join(path.dirname(pdfjsPackageJson), 'standard_fonts');
+  return `${standardFontDir.replace(/\/?$/, '/')}`;
+}
 
 async function loadCanvasRuntime(): Promise<CanvasRuntime> {
   if (!canvasRuntimePromise) {
@@ -112,8 +120,7 @@ export async function renderPage({
     pdfjs.GlobalWorkerOptions.workerPort = null;
   }
 
-  const standardFontDir = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts');
-  const standardFontDataUrl = `${standardFontDir.replace(/\/?$/, '/')}`;
+  const standardFontDataUrl = resolvePdfjsStandardFontDataUrl();
 
   const loadingTask = pdfjs.getDocument({
     data: isolatedBytes,

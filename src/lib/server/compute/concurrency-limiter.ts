@@ -1,3 +1,5 @@
+import { getComputeJobConcurrency } from '@/lib/server/compute/cpu-budget';
+
 export class ConcurrencyLimiter {
   private readonly maxInFlight: number;
   private inFlight = 0;
@@ -36,5 +38,4 @@ export class ConcurrencyLimiter {
   }
 }
 
-export const LOCAL_PDF_LIMITER = new ConcurrencyLimiter(2);
-export const LOCAL_WHISPER_LIMITER = new ConcurrencyLimiter(1);
+export const LOCAL_COMPUTE_LIMITER = new ConcurrencyLimiter(getComputeJobConcurrency());

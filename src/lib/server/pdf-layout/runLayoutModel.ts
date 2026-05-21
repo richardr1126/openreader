@@ -2,6 +2,7 @@ import * as ort from 'onnxruntime-node';
 import { readFile } from 'fs/promises';
 import type { LayoutRegion, PdfTextItem } from '@/lib/server/pdf-layout/types';
 import { ensureModel, MODEL_CONFIG_PATH, MODEL_PREPROCESSOR_PATH } from '@/lib/server/pdf-layout/ensureModel';
+import { getOnnxThreadsPerJob } from '@/lib/server/compute/cpu-budget';
 
 interface RunLayoutInput {
   pageWidth: number;
@@ -115,9 +116,16 @@ async function getSession(): Promise<ort.InferenceSession> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
       const modelPath = await ensureModel();
-      return ort.InferenceSession.create(modelPath, {
+      const onnxThreadsPerJob = getOnnxThreadsPerJob();
+      const stableSessionOptions: ort.InferenceSession.SessionOptions = {
         executionProviders: ['cpu'],
         graphOptimizationLevel: 'all',
+        intraOpNumThreads: onnxThreadsPerJob,
+        interOpNumThreads: 1,
+        executionMode: 'sequential',
+      };
+      return ort.InferenceSession.create(modelPath, {
+        ...stableSessionOptions,
       });
     })();
   }

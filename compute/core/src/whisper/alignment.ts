@@ -9,6 +9,7 @@ import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
 import type { TTSAudioBuffer, TTSAudioBytes, TTSSentenceAlignment } from '../types/tts';
 import { getFFmpegPath } from '../runtime/ffmpeg';
+import { getOnnxThreadsPerJob } from '../runtime/cpu-budget';
 import {
   mapWordsToSentenceOffsets,
   type WhisperWord,
@@ -575,10 +576,11 @@ async function getRuntime(): Promise<WhisperRuntime> {
     const defaultLanguageToken = Number(defaultLanguageFromForced ?? tokenizer.token_to_id('<|en|>') ?? 50259);
     const transcribeToken = Number(transcribeFromForced ?? tokenizer.token_to_id('<|transcribe|>') ?? 50359);
 
+    const onnxThreadsPerJob = getOnnxThreadsPerJob();
     const stableSessionOptions: ort.InferenceSession.SessionOptions = {
       executionProviders: ['cpu'],
       graphOptimizationLevel: 'disabled',
-      intraOpNumThreads: 1,
+      intraOpNumThreads: onnxThreadsPerJob,
       interOpNumThreads: 1,
       executionMode: 'sequential',
       enableCpuMemArena: false,

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import os from 'node:os';
 import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -110,6 +111,20 @@ function parseBoolEnv(name: string, fallback: boolean): boolean {
   if (!raw) return fallback;
   const normalized = raw.toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function getAvailableCpuCores(): number {
+  if (typeof os.availableParallelism === 'function') {
+    const value = os.availableParallelism();
+    if (Number.isFinite(value) && value >= 1) return Math.floor(value);
+  }
+  const fallback = os.cpus().length;
+  return Number.isFinite(fallback) && fallback >= 1 ? Math.floor(fallback) : 1;
+}
+
+function getOnnxThreadsPerJob(jobConcurrency: number): number {
+  const usableCores = Math.max(1, getAvailableCpuCores() - 1);
+  return Math.max(1, Math.floor(usableCores / Math.max(1, jobConcurrency)));
 }
 
 function buildLoggerConfig(): boolean | Record<string, unknown> {
@@ -311,6 +326,36 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+class ConcurrencyGate {
+  private readonly maxInFlight: number;
+  private inFlight = 0;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(limit: number) {
+    this.maxInFlight = Number.isFinite(limit) && limit >= 1 ? Math.floor(limit) : 1;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.inFlight < this.maxInFlight) {
+      this.inFlight += 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.queue.push(() => {
+        this.inFlight += 1;
+        resolve();
+      });
+    });
+  }
+
+  release(): void {
+    this.inFlight = Math.max(0, this.inFlight - 1);
+    const next = this.queue.shift();
+    if (next) next();
+  }
+}
+
 function isTerminalStatus(status: WorkerJobState): boolean {
   return status === 'succeeded' || status === 'failed';
 }
@@ -428,10 +473,9 @@ async function main(): Promise<void> {
   const workerToken = requireEnv('COMPUTE_WORKER_TOKEN');
   const natsUrl = requireEnv('NATS_URL');
 
-  const whisperConcurrency = readIntEnv('COMPUTE_WHISPER_CONCURRENCY', 1);
-  const pdfConcurrency = readIntEnv('COMPUTE_PDF_CONCURRENCY', 2);
+  const jobConcurrency = readIntEnv('COMPUTE_JOB_CONCURRENCY', 1);
   const whisperTimeoutMs = readIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', 30_000);
-  const pdfTimeoutMs = readIntEnv('COMPUTE_PDF_TIMEOUT_MS', 90_000);
+  const pdfTimeoutMs = readIntEnv('COMPUTE_PDF_TIMEOUT_MS', 5 * 60_000);
   const pdfAttempts = readIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 2);
   const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', true);
   const jobsStreamMaxBytes = readIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
@@ -507,6 +551,17 @@ async function main(): Promise<void> {
   }
 
   const app = Fastify({ logger: buildLoggerConfig() });
+  app.log.info({
+    jobConcurrency,
+    whisperTimeoutMs,
+    pdfTimeoutMs,
+    pdfAttempts,
+    opStaleMs,
+    availableCpuCores: getAvailableCpuCores(),
+    onnxThreadsPerJob: getOnnxThreadsPerJob(jobConcurrency),
+    natsApiTimeoutMs: NATS_API_TIMEOUT_MS,
+    pdfLayoutHardCapMs: PDF_LAYOUT_HARD_CAP_MS,
+  }, 'compute runtime config');
 
   const opIndexCodec = createJsonCodec<OpIndexEntry>();
   const opStateCodec = createJsonCodec<WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>>();
@@ -806,6 +861,7 @@ async function main(): Promise<void> {
 
   const whisperConsumer = await js.consumers.get(JOBS_STREAM_NAME, WHISPER_CONSUMER_NAME);
   const layoutConsumer = await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME);
+  const jobGate = new ConcurrencyGate(jobConcurrency);
 
   let stopping = false;
 
@@ -1125,29 +1181,39 @@ async function main(): Promise<void> {
     workerLabel: string;
   }): Promise<void> {
     while (!stopping) {
-      let msg: JsMsg | null = null;
-      try {
-        msg = await input.consumer.next({ expires: PULL_EXPIRES_MS });
-      } catch (error) {
-        if (stopping) return;
-        app.log.error({ error: toErrorMessage(error), worker: input.workerLabel }, 'worker pull failed');
-        await sleep(LOOP_ERROR_BACKOFF_MS);
-        continue;
+      await jobGate.acquire();
+      if (stopping) {
+        jobGate.release();
+        return;
       }
 
-      if (!msg) continue;
-      await processMessage({
-        msg,
-        codec: input.codec,
-        run: input.run,
-        workerLabel: input.workerLabel,
-      });
+      let msg: JsMsg | null = null;
+      try {
+        try {
+          msg = await input.consumer.next({ expires: PULL_EXPIRES_MS });
+        } catch (error) {
+          if (stopping) return;
+          app.log.error({ error: toErrorMessage(error), worker: input.workerLabel }, 'worker pull failed');
+          await sleep(LOOP_ERROR_BACKOFF_MS);
+          continue;
+        }
+
+        if (!msg) continue;
+        await processMessage({
+          msg,
+          codec: input.codec,
+          run: input.run,
+          workerLabel: input.workerLabel,
+        });
+      } finally {
+        jobGate.release();
+      }
     }
   }
 
   const workerLoops: Promise<void>[] = [];
 
-  for (let i = 0; i < whisperConcurrency; i += 1) {
+  for (let i = 0; i < jobConcurrency; i += 1) {
     workerLoops.push(createWorkerLoop({
       consumer: whisperConsumer,
       codec: whisperJobCodec,
@@ -1156,7 +1222,7 @@ async function main(): Promise<void> {
     }));
   }
 
-  for (let i = 0; i < pdfConcurrency; i += 1) {
+  for (let i = 0; i < jobConcurrency; i += 1) {
     workerLoops.push(createWorkerLoop({
       consumer: layoutConsumer,
       codec: layoutJobCodec,

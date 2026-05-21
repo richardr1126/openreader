@@ -1,5 +1,5 @@
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
-import { LOCAL_PDF_LIMITER, LOCAL_WHISPER_LIMITER } from '@/lib/server/compute/concurrency-limiter';
+import { LOCAL_COMPUTE_LIMITER } from '@/lib/server/compute/concurrency-limiter';
 import { getDocumentBlob } from '@/lib/server/documents/blobstore';
 import { getTtsSegmentAudioObject } from '@/lib/server/tts/segments-blobstore';
 import {
@@ -11,7 +11,7 @@ export class LocalComputeBackend implements ComputeBackend {
   readonly mode = 'local' as const;
 
   async alignWords(input: WhisperAlignInput): Promise<WhisperAlignResult> {
-    return LOCAL_WHISPER_LIMITER.run(async () => {
+    return LOCAL_COMPUTE_LIMITER.run(async () => {
       let audioBuffer = input.audioBuffer ?? null;
       if (!audioBuffer && input.audioObjectKey) {
         const bytes = new Uint8Array(await getTtsSegmentAudioObject(input.audioObjectKey));
@@ -30,7 +30,7 @@ export class LocalComputeBackend implements ComputeBackend {
   }
 
   async parsePdfLayout(input: PdfLayoutInput) {
-    return LOCAL_PDF_LIMITER.run(async () => {
+    return LOCAL_COMPUTE_LIMITER.run(async () => {
       let pdfBytes = input.pdfBytes ?? null;
       if (!pdfBytes && input.documentId && typeof input.namespace !== 'undefined') {
         const bytes = new Uint8Array(await getDocumentBlob(input.documentId, input.namespace));
