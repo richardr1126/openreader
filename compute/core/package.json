@@ -14,6 +14,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./contracts": "./src/contracts.ts",
-    "./local-runtime": "./src/local-runtime.ts"
+    "./local-runtime": "./src/local-runtime.ts",
+    "./runtime/timeout-config": "./src/runtime/timeout-config.ts"
   }
 }

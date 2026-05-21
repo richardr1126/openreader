@@ -27,6 +27,7 @@ import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
 } from '@openreader/compute-core/local-runtime';
+import { getComputeTimeoutConfig } from '@openreader/compute-core/runtime/timeout-config';
 import {
   type PdfLayoutJobRequest,
   type PdfLayoutJobResult,
@@ -56,7 +57,6 @@ const RUNNING_HEARTBEAT_MS = 5000;
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
-const PDF_LAYOUT_HARD_CAP_MS = 24 * 60 * 60 * 1000;
 const NATS_API_TIMEOUT_MS = 60_000;
 
 interface QueuedJob<TPayload> {
@@ -472,10 +472,12 @@ async function main(): Promise<void> {
   const host = process.env.COMPUTE_WORKER_HOST?.trim() || '0.0.0.0';
   const workerToken = requireEnv('COMPUTE_WORKER_TOKEN');
   const natsUrl = requireEnv('NATS_URL');
+  const timeoutConfig = getComputeTimeoutConfig();
 
   const jobConcurrency = readIntEnv('COMPUTE_JOB_CONCURRENCY', 1);
-  const whisperTimeoutMs = readIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', 30_000);
-  const pdfTimeoutMs = readIntEnv('COMPUTE_PDF_TIMEOUT_MS', 5 * 60_000);
+  const whisperTimeoutMs = timeoutConfig.whisperTimeoutMs;
+  const pdfTimeoutMs = timeoutConfig.pdfTimeoutMs;
+  const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
   const pdfAttempts = readIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
   const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', true);
   const jobsStreamMaxBytes = readIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
@@ -560,7 +562,7 @@ async function main(): Promise<void> {
     availableCpuCores: getAvailableCpuCores(),
     onnxThreadsPerJob: getOnnxThreadsPerJob(jobConcurrency),
     natsApiTimeoutMs: NATS_API_TIMEOUT_MS,
-    pdfLayoutHardCapMs: PDF_LAYOUT_HARD_CAP_MS,
+    pdfLayoutHardCapMs: pdfHardCapMs,
   }, 'compute runtime config');
 
   const opIndexCodec = createJsonCodec<OpIndexEntry>();
@@ -914,7 +916,7 @@ async function main(): Promise<void> {
     const computeStartedAt = Date.now();
     const result = await withIdleTimeoutAndHardCap({
       idleTimeoutMs: Math.max(pdfTimeoutMs, 1_000),
-      hardCapMs: PDF_LAYOUT_HARD_CAP_MS,
+      hardCapMs: pdfHardCapMs,
       label: 'pdf layout job',
       run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
         documentId: parsed.documentId,
