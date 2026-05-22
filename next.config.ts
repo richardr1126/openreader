@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 import path from "node:path";
-import { DefinePlugin } from "webpack";
+import { createRequire } from "node:module";
+
+type DefinePluginCtor = new (defs: Record<string, string>) => unknown;
+const require = createRequire(import.meta.url);
+const { DefinePlugin } = require('webpack') as { DefinePlugin: DefinePluginCtor };
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },

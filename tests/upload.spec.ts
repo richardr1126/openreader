@@ -8,7 +8,7 @@ interface HtmlDocumentRow {
 
 type HashCheckResult =
   | { ok: true; storedId: string; computedId: string }
-  | { ok: false; reason: 'Missing stored html document' };
+  | { ok: false; reason: 'Missing stored html document' | 'Hash mismatch'; storedId?: string; computedId?: string };
 
 test.describe('Document Upload Tests', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -60,7 +60,10 @@ test.describe('Document Upload Tests', () => {
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('');
 
-        return { ok: computedId === docs[0].id, storedId: docs[0].id as string, computedId };
+        if (computedId === docs[0].id) {
+          return { ok: true as const, storedId: docs[0].id as string, computedId };
+        }
+        return { ok: false as const, reason: 'Hash mismatch', storedId: docs[0].id as string, computedId };
       } finally {
         idb.close();
       }
