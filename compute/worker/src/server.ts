@@ -488,7 +488,10 @@ async function main(): Promise<void> {
     await ensureComputeModels();
   }
 
-  const app = Fastify({ logger: buildLoggerConfig() });
+  const app = Fastify({
+    logger: buildLoggerConfig(),
+    disableRequestLogging: true,
+  });
   app.log.info({
     jobConcurrency,
     whisperTimeoutMs,
@@ -686,6 +689,7 @@ async function main(): Promise<void> {
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url.split('?')[0] ?? request.url;
     if (path === '/health/live' || path === '/health/ready') return;
+    app.log.info(`request reqId=${request.id} method=${request.method} path=${path}`);
     if (!isAuthed(request, workerToken)) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
