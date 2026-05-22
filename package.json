@@ -2,9 +2,6 @@
   "name": "openreader",
   "version": "3.0.0",
   "private": true,
-  "engines": {
-    "node": "22.x"
-  },
   "packageManager": "pnpm@10.33.4",
   "scripts": {
     "dev": "node scripts/openreader-entrypoint.mjs -- pnpm dev:raw",

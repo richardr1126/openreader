@@ -10,6 +10,7 @@ import JSZip from 'jszip';
 import type { TTSAudioBuffer, TTSAudioBytes, TTSSentenceAlignment } from '../types/tts';
 import { getFFmpegPath } from '../runtime/ffmpeg';
 import { getOnnxThreadsPerJob } from '../runtime/cpu-budget';
+import { getComputeTimeoutConfig } from '../runtime/timeout-config';
 import {
   mapWordsToSentenceOffsets,
   type WhisperWord,
@@ -92,8 +93,10 @@ const alignmentCache = state.alignmentCache;
 const alignmentInFlight = state.alignmentInFlight;
 const ALIGNMENT_CACHE_MAX_ENTRIES = 256;
 const MAX_DECODE_STEPS_CAP = 128;
-const ALIGNMENT_TIMEOUT_MS = 25000;
-const FFMPEG_DECODE_TIMEOUT_MS = 10000;
+const ALIGNMENT_TIMEOUT_BUFFER_MS = 2_000;
+const MIN_ALIGNMENT_TIMEOUT_MS = 5_000;
+const MIN_FFMPEG_DECODE_TIMEOUT_MS = 10_000;
+const MAX_FFMPEG_DECODE_TIMEOUT_MS = 60_000;
 
 const SAMPLE_RATE = 16000;
 const N_FFT = 400;
@@ -284,7 +287,22 @@ function computeLogMelSpectrogram(audioSamples: Float32Array): ort.Tensor {
   return new ort.Tensor('float32', flattened, [1, N_MELS, frameCount]);
 }
 
+function getAlignmentTimeoutMs(): number {
+  const whisperTimeoutMs = getComputeTimeoutConfig().whisperTimeoutMs;
+  return Math.max(MIN_ALIGNMENT_TIMEOUT_MS, whisperTimeoutMs - ALIGNMENT_TIMEOUT_BUFFER_MS);
+}
+
+function getFfmpegDecodeTimeoutMs(): number {
+  const whisperTimeoutMs = getComputeTimeoutConfig().whisperTimeoutMs;
+  const halfBudgetMs = Math.floor(whisperTimeoutMs * 0.5);
+  return Math.max(
+    MIN_FFMPEG_DECODE_TIMEOUT_MS,
+    Math.min(MAX_FFMPEG_DECODE_TIMEOUT_MS, halfBudgetMs),
+  );
+}
+
 async function decodeToPcm16(inputPath: string, outputPath: string): Promise<void> {
+  const ffmpegDecodeTimeoutMs = getFfmpegDecodeTimeoutMs();
   await new Promise<void>((resolve, reject) => {
     const ffmpeg = spawn(getFFmpegPath(), [
       '-y',
@@ -304,7 +322,7 @@ async function decodeToPcm16(inputPath: string, outputPath: string): Promise<voi
     const timer = setTimeout(() => {
       timedOut = true;
       ffmpeg.kill('SIGKILL');
-    }, FFMPEG_DECODE_TIMEOUT_MS);
+    }, ffmpegDecodeTimeoutMs);
     ffmpeg.stderr.on('data', (data) => {
       stderr += data.toString();
     });
@@ -317,7 +335,7 @@ async function decodeToPcm16(inputPath: string, outputPath: string): Promise<voi
     ffmpeg.on('close', (code) => {
       clearTimeout(timer);
       if (timedOut) {
-        reject(new Error(`ffmpeg decode timed out after ${FFMPEG_DECODE_TIMEOUT_MS}ms`));
+        reject(new Error(`ffmpeg decode timed out after ${ffmpegDecodeTimeoutMs}ms`));
         return;
       }
       if (code === 0) {
@@ -368,9 +386,9 @@ function computeAdaptiveDecodeStepLimit(maxDecodeSteps: number, textHint?: strin
   return adaptive;
 }
 
-function assertWithinDeadline(deadlineMs: number): void {
+function assertWithinDeadline(deadlineMs: number, timeoutMs: number): void {
   if (Date.now() > deadlineMs) {
-    throw new Error(`Whisper alignment timed out after ${ALIGNMENT_TIMEOUT_MS}ms`);
+    throw new Error(`Whisper alignment timed out after ${timeoutMs}ms`);
   }
 }
 
@@ -657,8 +675,9 @@ async function runWhisperOnnx(
   opts: WhisperAlignmentOptions,
   numFrames: number,
   deadlineMs: number,
+  timeoutMs: number,
 ): Promise<WhisperWord[]> {
-  assertWithinDeadline(deadlineMs);
+  assertWithinDeadline(deadlineMs, timeoutMs);
   const runtime = await getRuntime();
   const decodeStepLimit = computeAdaptiveDecodeStepLimit(runtime.maxDecodeSteps, opts.textHint);
   const mel = computeLogMelSpectrogram(audioSamples);
@@ -740,7 +759,7 @@ async function runWhisperOnnx(
       ...emptyPastFeeds,
     };
     try {
-      assertWithinDeadline(deadlineMs);
+      assertWithinDeadline(deadlineMs, timeoutMs);
       outputs = await runtime.decoderMerged.run(prefillFeeds, runtime.prefillFetches);
     } finally {
       disposeTensor(prefillInputIds);
@@ -756,7 +775,7 @@ async function runWhisperOnnx(
     }
 
     for (let step = 0; step < decodeStepLimit; step += 1) {
-      assertWithinDeadline(deadlineMs);
+      assertWithinDeadline(deadlineMs, timeoutMs);
       if (!outputs) break;
       const logits = outputs.logits;
       const logitsData = logits.data as Float32Array;
@@ -791,7 +810,7 @@ async function runWhisperOnnx(
       };
       let nextOutputs: Record<string, ort.Tensor>;
       try {
-        assertWithinDeadline(deadlineMs);
+        assertWithinDeadline(deadlineMs, timeoutMs);
         nextOutputs = await runtime.decoderWithPast.run(stepFeeds, runtime.stepFetches);
       } finally {
         disposeTensor(stepInputIds);
@@ -924,7 +943,8 @@ export async function alignAudioWithText(
 
   state.pendingAlignments += 1;
   const run = (async (): Promise<TTSSentenceAlignment[]> => {
-    const deadlineMs = Date.now() + ALIGNMENT_TIMEOUT_MS;
+    const alignmentTimeoutMs = getAlignmentTimeoutMs();
+    const deadlineMs = Date.now() + alignmentTimeoutMs;
     const previous = state.alignMutex;
     let release!: () => void;
     state.alignMutex = new Promise<void>((resolve) => {
@@ -966,6 +986,7 @@ export async function alignAudioWithText(
         { ...opts, textHint: text },
         effectiveFrameCount,
         deadlineMs,
+        alignmentTimeoutMs,
       );
       const alignment = mapWordsToSentenceOffsets(text, words);
       const result: TTSSentenceAlignment[] = [alignment];
