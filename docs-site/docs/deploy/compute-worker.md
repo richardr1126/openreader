@@ -51,6 +51,8 @@ Advanced tuning (usually leave unset unless you need overrides):
 - `COMPUTE_JOB_CONCURRENCY=1` (shared total compute jobs across whisper + PDF)
 - `COMPUTE_WHISPER_TIMEOUT_MS=30000`
 - `COMPUTE_PDF_TIMEOUT_MS=300000`
+- `WHISPER_MODEL_BASE_URL=https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main` (optional override)
+- `PDF_LAYOUT_MODEL_BASE_URL=https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main` (optional override)
 - `COMPUTE_PDF_JOB_ATTEMPTS=1` (PDF layout retry attempts)
 - `COMPUTE_JOBS_STREAM_MAX_BYTES=268435456` (256MB JetStream jobs stream cap)
 - `COMPUTE_JOB_STATES_MAX_BYTES=67108864` (64MB JetStream KV bucket cap)
@@ -126,6 +128,8 @@ COMPUTE_WORKER_TOKEN=<long-random-shared-token>
 # COMPUTE_JOB_CONCURRENCY=1
 # COMPUTE_WHISPER_TIMEOUT_MS=30000
 # COMPUTE_PDF_TIMEOUT_MS=300000
+# WHISPER_MODEL_BASE_URL=https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main
+# PDF_LAYOUT_MODEL_BASE_URL=https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main
 # COMPUTE_PDF_JOB_ATTEMPTS=1
 # COMPUTE_JOBS_STREAM_MAX_BYTES=268435456
 # COMPUTE_JOB_STATES_MAX_BYTES=67108864
