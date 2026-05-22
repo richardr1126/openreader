@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mergeTextWithRegions } from '@openreader/compute-core/pdf-layout/mergeTextWithRegions';
+import { mergeTextWithRegions } from '@openreader/compute-core/pdf-layout';
 
 test.describe('mergeTextWithRegions', () => {
   test('assigns text items to containing regions by centroid and joins in reading order', () => {

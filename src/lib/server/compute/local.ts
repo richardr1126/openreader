@@ -6,7 +6,7 @@ import {
   getComputeTimeoutConfig,
   withIdleTimeoutAndHardCap,
   withTimeout,
-} from '@openreader/compute-core/runtime/timeout-config';
+} from '@openreader/compute-core/runtime';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,

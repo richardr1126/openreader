@@ -24,8 +24,8 @@
       "@openreader/compute-core/contracts": ["./compute/core/src/contracts.ts"],
       "@openreader/compute-core/local-runtime": ["./compute/core/src/local-runtime.ts"],
       "@openreader/compute-core/runtime": ["./compute/core/src/runtime/index.ts"],
-      "@openreader/compute-core/runtime/timeout-config": ["./compute/core/src/runtime/timeout-config.ts"],
-      "@openreader/compute-core/pdf-layout/*": ["./compute/core/src/pdf-layout/*"]
+      "@openreader/compute-core/pdf-layout": ["./compute/core/src/pdf-layout/index.ts"],
+      "@openreader/compute-core/pdf-layout/parse": ["./compute/core/src/pdf-layout/parsePdf.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

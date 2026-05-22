@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { normalizeTextItemsForLayout } from '@openreader/compute-core/pdf-layout/parsePdf';
+import { normalizeTextItemsForLayout } from '@openreader/compute-core/pdf-layout/parse';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 function makeTextItem(
