@@ -61,7 +61,16 @@ const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
 const NATS_API_TIMEOUT_MS = 60_000;
+// Disconnect from NATS after this much continuous idle so the worker stops
+// generating outbound traffic (pull polling + keepalive PINGs) and Railway can
+// put it to sleep. Reconnect happens lazily on the next inbound request.
+const IDLE_DISCONNECT_MS = 120_000;
+const IDLE_CHECK_INTERVAL_MS = 5_000;
+// Bounded pull window so consumer loops yield periodically and can be stopped
+// cleanly when going idle, instead of blocking on a long-lived pull.
+const PULL_EXPIRES_MS = 5_000;
 const REQUEST_STARTED_AT_MS_KEY = Symbol('request-started-at-ms');
+const REQUEST_COUNTED_KEY = Symbol('request-activity-counted');
 
 interface QueuedJob<TPayload> {
   jobId: string;
@@ -89,6 +98,15 @@ interface StoredJobState<Result> {
 
 interface OpIndexEntry {
   opId: string;
+}
+
+interface NatsSession {
+  nc: NatsConnection;
+  js: JetStreamClient;
+  jsm: JetStreamManager;
+  kv: Awaited<ReturnType<Kvm['create']>>;
+  whisperConsumer: Consumer;
+  layoutConsumer: Consumer;
 }
 
 type JsonCodec<T> = {
@@ -449,17 +467,100 @@ async function main(): Promise<void> {
     connectOpts.authenticator = credsAuthenticator(credsData);
   }
 
-  const nc: NatsConnection = await connect(connectOpts);
-  const js: JetStreamClient = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
-  const jsm: JetStreamManager = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
+  // Lazy NATS connection lifecycle. The worker connects on demand (first request
+  // that needs the queue/KV) and disconnects after IDLE_DISCONNECT_MS of full idle
+  // so it stops emitting outbound traffic and Railway can sleep it. Reconnect is
+  // transparent: any inbound /ops request both wakes the container and re-establishes
+  // the session via ensureConnected().
+  let session: NatsSession | null = null;
+  let connecting: Promise<NatsSession> | null = null;
+  let workerLoops: Promise<void>[] = [];
+  let idleTimer: NodeJS.Timeout | null = null;
+  let stopping = false;
+  let loopStopRequested = false;
 
-  await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, pdfAttempts, jobsStreamMaxBytes);
+  // Activity accounting feeding the idle detector. The worker is considered idle
+  // only when no HTTP request is in flight, no SSE stream is open, no job is
+  // processing, and nothing has happened for IDLE_DISCONNECT_MS.
+  let inFlightHttp = 0;
+  let activeSse = 0;
+  let inFlightJobs = 0;
+  let lastActivityAt = Date.now();
+  const jobGate = new ConcurrencyGate(jobConcurrency);
 
-  const kv = await new Kvm(js).create(COMPUTE_STATE_BUCKET, {
-    history: 1,
-    ttl: COMPUTE_STATE_TTL_MS,
-    max_bytes: jobStatesMaxBytes,
-  });
+  const markActivity = (): void => {
+    lastActivityAt = Date.now();
+  };
+
+  function startIdleTimer(): void {
+    if (idleTimer) return;
+    idleTimer = setInterval(() => {
+      if (!session || stopping) return;
+      if (inFlightHttp > 0 || activeSse > 0 || inFlightJobs > 0) return;
+      if (Date.now() - lastActivityAt < IDLE_DISCONNECT_MS) return;
+      void disconnect('idle');
+    }, IDLE_CHECK_INTERVAL_MS);
+    // Don't let the idle checker keep the process alive on its own.
+    idleTimer.unref?.();
+  }
+
+  async function disconnect(reason: string): Promise<void> {
+    const current = session;
+    if (!current) return;
+    // Clear synchronously (before any await) so concurrent requests reconnect a
+    // fresh session instead of using the connection we're about to close.
+    session = null;
+    loopStopRequested = true;
+    if (idleTimer) {
+      clearInterval(idleTimer);
+      idleTimer = null;
+    }
+    try {
+      await current.nc.close();
+    } catch {
+      // ignore close errors
+    }
+    await Promise.allSettled(workerLoops);
+    workerLoops = [];
+    loopStopRequested = false;
+    app.log.info({ reason }, 'nats disconnected');
+  }
+
+  async function ensureConnected(): Promise<NatsSession> {
+    if (session) return session;
+    if (connecting) return connecting;
+    connecting = (async () => {
+      const nc: NatsConnection = await connect(connectOpts);
+      const js: JetStreamClient = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
+      const jsm: JetStreamManager = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
+      await ensureJetStreamResources(jsm, whisperTimeoutMs, pdfTimeoutMs, pdfAttempts, jobsStreamMaxBytes);
+      const kv = await new Kvm(js).create(COMPUTE_STATE_BUCKET, {
+        history: 1,
+        ttl: COMPUTE_STATE_TTL_MS,
+        max_bytes: jobStatesMaxBytes,
+      });
+      const whisperConsumer = await js.consumers.get(JOBS_STREAM_NAME, WHISPER_CONSUMER_NAME);
+      const layoutConsumer = await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME);
+      const next: NatsSession = { nc, js, jsm, kv, whisperConsumer, layoutConsumer };
+      session = next;
+      markActivity();
+      startWorkerLoops(next);
+      startIdleTimer();
+      // Safety net: if the connection closes for any reason (network drop after
+      // exhausting reconnects, or our own disconnect), drop the stale session so
+      // the next request reconnects cleanly.
+      void nc.closed().then(() => {
+        if (session?.nc === nc) session = null;
+      });
+      app.log.info('nats connected');
+      return next;
+    })();
+    try {
+      return await connecting;
+    } finally {
+      connecting = null;
+    }
+  }
 
   const s3 = buildS3Client();
   const s3Bucket = requireEnv('S3_BUCKET');
@@ -523,16 +624,19 @@ async function main(): Promise<void> {
   const jobStateCodec = createJsonCodec<StoredJobState<WhisperAlignJobResult | PdfLayoutJobResult>>();
 
   const putOpState = async (state: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>): Promise<void> => {
+    const { kv } = await ensureConnected();
     await kv.put(opStateKvKey(state.opId), opStateCodec.encode(state));
   };
 
   const getOpState = async (opId: string): Promise<WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> | null> => {
+    const { kv } = await ensureConnected();
     const entry = await kv.get(opStateKvKey(opId));
     if (!entry || entry.operation !== 'PUT') return null;
     return opStateCodec.decode(entry.value);
   };
 
   const putJobState = async (state: StoredJobState<WhisperAlignJobResult | PdfLayoutJobResult>): Promise<void> => {
+    const { kv } = await ensureConnected();
     await kv.put(jobStateKvKey(state.jobId), jobStateCodec.encode(state));
   };
 
@@ -540,6 +644,7 @@ async function main(): Promise<void> {
     op: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>,
     payload: WhisperAlignJobRequest | PdfLayoutJobRequest,
   ): Promise<void> => {
+    const { js } = await ensureConnected();
     if (op.kind === 'whisper_align') {
       await js.publish(WHISPER_JOBS_SUBJECT, whisperJobCodec.encode({
         jobId: op.jobId,
@@ -567,6 +672,7 @@ async function main(): Promise<void> {
   ): Promise<WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>> => {
     const opKey = req.opKey.trim();
     const indexKey = opIndexKvKey(opKey);
+    const { kv } = await ensureConnected();
 
     for (let attemptNo = 0; attemptNo < 10; attemptNo += 1) {
       const indexEntry = await kv.get(indexKey);
@@ -698,9 +804,23 @@ async function main(): Promise<void> {
     throw new Error('Unable to reserve operation after repeated CAS conflicts');
   };
 
+  const releaseHttp = (request: FastifyRequest): void => {
+    const counted = request as FastifyRequest & { [REQUEST_COUNTED_KEY]?: boolean };
+    if (!counted[REQUEST_COUNTED_KEY]) return;
+    counted[REQUEST_COUNTED_KEY] = false;
+    inFlightHttp = Math.max(0, inFlightHttp - 1);
+    markActivity();
+  };
+
   app.addHook('onRequest', async (request, reply) => {
     const path = requestPath(request);
     (request as FastifyRequest & { [REQUEST_STARTED_AT_MS_KEY]?: number })[REQUEST_STARTED_AT_MS_KEY] = Date.now();
+    // Count every request as in-flight activity so the idle detector never
+    // disconnects mid-request. Released in onResponse, or manually after hijack
+    // for SSE streams (where onResponse does not fire).
+    (request as FastifyRequest & { [REQUEST_COUNTED_KEY]?: boolean })[REQUEST_COUNTED_KEY] = true;
+    inFlightHttp += 1;
+    markActivity();
     if (isHealthPath(path)) return;
     if (!isAuthed(request, workerToken)) {
       return reply.code(401).send({ error: 'Unauthorized' });
@@ -709,6 +829,7 @@ async function main(): Promise<void> {
   });
 
   app.addHook('onResponse', async (request, reply) => {
+    releaseHttp(request);
     const path = requestPath(request);
     if (isHealthPath(path)) return;
 
@@ -725,18 +846,11 @@ async function main(): Promise<void> {
 
   app.get('/health/live', async () => ({ ok: true }));
 
-  app.get('/health/ready', async (_request, reply) => {
-    try {
-      await nc.flush();
-      return { ok: true };
-    } catch (error) {
-      reply.code(503);
-      return {
-        ok: false,
-        error: toErrorMessage(error),
-      };
-    }
-  });
+  // Reports readiness without forcing a NATS round-trip. Probing NATS here would
+  // reconnect (and keep) the connection open, defeating idle sleep, so we only
+  // report the current connection state. The worker reconnects lazily on the next
+  // /ops request regardless of what this returns.
+  app.get('/health/ready', async () => ({ ok: true, natsConnected: session !== null }));
 
   app.post('/ops', async (request, reply) => {
     const parsed = operationCreateSchema.safeParse(request.body);
@@ -783,6 +897,11 @@ async function main(): Promise<void> {
     }
 
     reply.hijack();
+    // onResponse will not fire for a hijacked reply, so release the HTTP in-flight
+    // count here and track the long-lived stream via activeSse instead.
+    releaseHttp(request);
+    activeSse += 1;
+    markActivity();
     reply.raw.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
     reply.raw.setHeader('Connection', 'keep-alive');
@@ -796,6 +915,8 @@ async function main(): Promise<void> {
     let closed = false;
     request.raw.on('close', () => {
       closed = true;
+      activeSse = Math.max(0, activeSse - 1);
+      markActivity();
     });
 
     try {
@@ -827,12 +948,6 @@ async function main(): Promise<void> {
 
     return reply;
   });
-
-  const whisperConsumer = await js.consumers.get(JOBS_STREAM_NAME, WHISPER_CONSUMER_NAME);
-  const layoutConsumer = await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME);
-  const jobGate = new ConcurrencyGate(jobConcurrency);
-
-  let stopping = false;
 
   const runWhisper = async (
     payload: WhisperAlignJobRequest,
@@ -1140,6 +1255,7 @@ async function main(): Promise<void> {
   }
 
   async function createWorkerLoop<TPayload, TResult>(input: {
+    owner: NatsSession;
     consumer: Consumer;
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: (
@@ -1149,22 +1265,29 @@ async function main(): Promise<void> {
     ) => Promise<TResult>;
     workerLabel: string;
   }): Promise<void> {
-    while (!stopping) {
+    // Exit when the loop's connection is no longer the active session (idle
+    // disconnect, unexpected close, or replaced by a reconnect).
+    const detached = (): boolean => stopping || loopStopRequested || session !== input.owner;
+    while (!detached()) {
       let msg: JsMsg | null = null;
       try {
         try {
-          msg = await input.consumer.next();
+          // Bounded pull so the loop yields periodically and exits promptly when
+          // the session is torn down for idle (nc.close() rejects the pending pull).
+          msg = await input.consumer.next({ expires: PULL_EXPIRES_MS });
         } catch (error) {
-          if (stopping) return;
+          if (detached()) return;
           app.log.error({ error: toErrorMessage(error), worker: input.workerLabel }, 'worker pull failed');
           await sleep(LOOP_ERROR_BACKOFF_MS);
           continue;
         }
 
+        // An empty pull is not activity; let the idle window advance.
         if (!msg) continue;
+        markActivity();
+        inFlightJobs += 1;
         await jobGate.acquire();
-        if (stopping) {
-          jobGate.release();
+        if (detached()) {
           return;
         }
         await processMessage({
@@ -1176,37 +1299,60 @@ async function main(): Promise<void> {
       } finally {
         if (msg) {
           jobGate.release();
+          inFlightJobs = Math.max(0, inFlightJobs - 1);
+          markActivity();
         }
       }
     }
   }
 
-  const workerLoops: Promise<void>[] = [];
-
-  for (let i = 0; i < jobConcurrency; i += 1) {
-    workerLoops.push(createWorkerLoop({
-      consumer: whisperConsumer,
-      codec: whisperJobCodec,
-      run: runWhisper,
-      workerLabel: `whisper-${i + 1}`,
-    }));
-  }
-
-  for (let i = 0; i < jobConcurrency; i += 1) {
-    workerLoops.push(createWorkerLoop({
-      consumer: layoutConsumer,
-      codec: layoutJobCodec,
-      run: runLayout,
-      workerLabel: `layout-${i + 1}`,
-    }));
+  function startWorkerLoops(active: NatsSession): void {
+    // Always starts a fresh set bound to the new session. Any loops from a prior
+    // session self-terminate once they observe session !== their owner.
+    workerLoops = [];
+    loopStopRequested = false;
+    for (let i = 0; i < jobConcurrency; i += 1) {
+      workerLoops.push(createWorkerLoop({
+        owner: active,
+        consumer: active.whisperConsumer,
+        codec: whisperJobCodec,
+        run: runWhisper,
+        workerLabel: `whisper-${i + 1}`,
+      }));
+    }
+    for (let i = 0; i < jobConcurrency; i += 1) {
+      workerLoops.push(createWorkerLoop({
+        owner: active,
+        consumer: active.layoutConsumer,
+        codec: layoutJobCodec,
+        run: runLayout,
+        workerLabel: `layout-${i + 1}`,
+      }));
+    }
   }
 
   const close = async (): Promise<void> => {
     if (stopping) return;
     stopping = true;
+    if (idleTimer) {
+      clearInterval(idleTimer);
+      idleTimer = null;
+    }
     await app.close();
     await Promise.allSettled(workerLoops);
-    await nc.drain();
+    const current = session;
+    session = null;
+    if (current) {
+      try {
+        await current.nc.drain();
+      } catch {
+        try {
+          await current.nc.close();
+        } catch {
+          // ignore close errors
+        }
+      }
+    }
   };
 
   process.once('SIGINT', () => {

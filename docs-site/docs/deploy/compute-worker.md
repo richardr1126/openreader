@@ -92,10 +92,25 @@ Set the same value on app + worker envs.
 - Non-exposed embedded `weed mini` is not supported with external worker mode.
 - Protect `COMPUTE_WORKER_TOKEN` and avoid exposing worker routes publicly without auth.
 
+## Railway sleep & idle behavior
+
+The worker connects to NATS lazily (on the first request needing the queue/KV) and
+disconnects after **120s** of full idle — no in-flight request, SSE stream, job, or
+queued work. This stops outbound pull polling and keepalive PINGs so Railway can sleep
+it; the next inbound request transparently reconnects, re-ensures the stream/consumers
+and KV (idempotent), and drains anything pending. No separate mode, no extra env vars,
+and the `/ops*` contract is unchanged.
+
+Caveats: inbound HTTP is the wake signal (in OpenReader the app server only enqueues via
+`POST /ops`, so this is always satisfied); a continuous external `/health/*` probe keeps
+it awake and prevents sleep; and the first request after a cold start re-runs model
+prewarm, so it's slower.
+
 ## Health endpoints
 
-- `GET /health/live`
-- `GET /health/ready`
+- `GET /health/live` — liveness; always returns `{ ok: true }`.
+- `GET /health/ready` — returns `{ ok: true, natsConnected }`. It does not probe NATS (that
+  would reconnect and prevent idle sleep); `natsConnected` just reflects the current session.
 
 ## Synadia Cloud + Railway Setup (Complete Guide)
 
