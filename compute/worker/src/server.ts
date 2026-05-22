@@ -1167,12 +1167,6 @@ async function main(): Promise<void> {
     workerLabel: string;
   }): Promise<void> {
     while (!stopping) {
-      await jobGate.acquire();
-      if (stopping) {
-        jobGate.release();
-        return;
-      }
-
       let msg: JsMsg | null = null;
       try {
         try {
@@ -1185,6 +1179,11 @@ async function main(): Promise<void> {
         }
 
         if (!msg) continue;
+        await jobGate.acquire();
+        if (stopping) {
+          jobGate.release();
+          return;
+        }
         await processMessage({
           msg,
           codec: input.codec,
@@ -1192,7 +1191,9 @@ async function main(): Promise<void> {
           workerLabel: input.workerLabel,
         });
       } finally {
-        jobGate.release();
+        if (msg) {
+          jobGate.release();
+        }
       }
     }
   }
