@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   setupTest,
   uploadFiles,
@@ -11,7 +11,7 @@ import {
 } from './helpers';
 
 // Single-spec helpers kept local to avoid cluttering shared helpers:
-async function navigateToPdfPageViaNavigator(page: any, targetPage: number) {
+async function navigateToPdfPageViaNavigator(page: Page, targetPage: number) {
   // Navigator popover shows "X / Y"
   const navTrigger = page.getByRole('button', { name: /\d+\s*\/\s*\d+/ });
   await expect(navTrigger).toBeVisible({ timeout: 10000 });
@@ -23,11 +23,11 @@ async function navigateToPdfPageViaNavigator(page: any, targetPage: number) {
   await input.press('Enter');
 }
 
-async function countRenderedPdfPages(page: any): Promise<number> {
+async function countRenderedPdfPages(page: Page): Promise<number> {
   return await page.locator('.react-pdf__Page').count();
 }
 
-async function triggerViewportResize(page: any, width: number, height: number) {
+async function triggerViewportResize(page: Page, width: number, height: number) {
   await page.setViewportSize({ width, height });
 }
 

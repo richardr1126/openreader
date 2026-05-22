@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { DefinePlugin } from "webpack";
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -78,8 +79,6 @@ const nextConfig: NextConfig = {
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Use runtime require to avoid adding an explicit webpack TS dependency.
-      const { DefinePlugin } = require('webpack') as { DefinePlugin: new (defs: Record<string, string>) => unknown };
       config.plugins = config.plugins || [];
       config.plugins.push(
         new DefinePlugin({

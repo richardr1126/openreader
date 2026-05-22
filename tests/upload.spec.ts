@@ -1,6 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { uploadFile, uploadAndDisplay, setupTest, expectDocumentListed, uploadFiles, ensureDocumentsListed, clickDocumentLink, expectViewerForFile } from './helpers';
 
+interface HtmlDocumentRow {
+  id?: string;
+  data?: string;
+}
+
+type HashCheckResult =
+  | { ok: true; storedId: string; computedId: string }
+  | { ok: false; reason: 'Missing stored html document' };
+
 test.describe('Document Upload Tests', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await setupTest(page, testInfo);
@@ -25,7 +34,7 @@ test.describe('Document Upload Tests', () => {
     await uploadFile(page, 'sample.txt');
     await expectDocumentListed(page, 'sample.txt');
 
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate<HashCheckResult>(async () => {
       const idb = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open('openreader-db');
         request.onerror = () => reject(request.error);
@@ -33,12 +42,12 @@ test.describe('Document Upload Tests', () => {
       });
 
       try {
-        const docs = await new Promise<any[]>((resolve, reject) => {
+        const docs = await new Promise<HtmlDocumentRow[]>((resolve, reject) => {
           const tx = idb.transaction('html-documents', 'readonly');
           const store = tx.objectStore('html-documents');
           const request = store.getAll();
           request.onerror = () => reject(request.error);
-          request.onsuccess = () => resolve(request.result as any[]);
+          request.onsuccess = () => resolve(request.result as HtmlDocumentRow[]);
         });
 
         if (!docs[0]?.data || !docs[0]?.id) {
@@ -57,7 +66,10 @@ test.describe('Document Upload Tests', () => {
       }
     });
 
-    expect(result.ok, `Expected storedId=${(result as any).storedId} computedId=${(result as any).computedId}`).toBeTruthy();
+    const detail = result.ok
+      ? `Expected storedId=${result.storedId} computedId=${result.computedId}`
+      : `Expected valid stored html document but got reason=${result.reason}`;
+    expect(result.ok, detail).toBeTruthy();
   });
 
   test('uploads and converts a DOCX document', async ({ page }) => {

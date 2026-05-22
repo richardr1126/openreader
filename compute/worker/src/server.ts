@@ -20,7 +20,7 @@ import {
   type JetStreamManager,
   type JsMsg,
 } from '@nats-io/jetstream';
-import { Kvm, type KV } from '@nats-io/kv';
+import { Kvm } from '@nats-io/kv';
 import {
   ensureComputeModels,
   runPdfLayoutFromPdfBuffer,
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
     Math.max(30 * 60_000, Math.max(whisperTimeoutMs, pdfTimeoutMs) * 4),
   );
 
-  const connectOpts: any = { servers: natsUrl };
+  const connectOpts: Parameters<typeof connect>[0] = { servers: natsUrl };
   const natsCreds = process.env.NATS_CREDS?.trim();
   const natsCredsFile = process.env.NATS_CREDS_FILE?.trim();
 
