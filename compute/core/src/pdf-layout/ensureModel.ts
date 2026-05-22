@@ -1,5 +1,4 @@
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { access, mkdir, rename, writeFile, readFile, unlink, copyFile } from 'fs/promises';
 import { DOCSTORE_DIR } from '../runtime/docstore';
@@ -13,8 +12,7 @@ export const MODEL_DATA_PATH = path.join(MODEL_DIR, 'PP-DocLayoutV3.onnx.data');
 export const MODEL_CONFIG_PATH = path.join(MODEL_DIR, 'pp-doclayoutv3.config.json');
 export const MODEL_PREPROCESSOR_PATH = path.join(MODEL_DIR, 'pp-doclayoutv3.preprocessor_config.json');
 const LICENSE_PATH = path.join(MODEL_DIR, 'pp-doclayoutv3.LICENSE.txt');
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const STATIC_LICENSE_PATH = path.join(MODULE_DIR, 'model', 'LICENSE.txt');
+const STATIC_LICENSE_PATH = path.join(process.cwd(), 'compute/core/src/pdf-layout/model/LICENSE.txt');
 
 let inflight: Promise<string> | null = null;
 

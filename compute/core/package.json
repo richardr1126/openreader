@@ -15,6 +15,7 @@
     ".": "./src/index.ts",
     "./contracts": "./src/contracts.ts",
     "./local-runtime": "./src/local-runtime.ts",
-    "./runtime/timeout-config": "./src/runtime/timeout-config.ts"
+    "./runtime/timeout-config": "./src/runtime/timeout-config.ts",
+    "./pdf-layout/*": "./src/pdf-layout/*.ts"
   }
 }

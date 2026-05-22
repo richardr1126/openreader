@@ -1,5 +1,4 @@
 import path from 'path';
-import { createRequire } from 'node:module';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import type { ParsedPdfDocument, ParsedPdfPage } from '../types/parsed-pdf';
 import type { PdfTextItem } from './types';
@@ -20,11 +19,9 @@ interface ParsePdfInput {
 }
 
 const LAYOUT_RENDER_SCALE = 1.5;
-const require = createRequire(import.meta.url);
 
 function resolvePdfjsStandardFontDataUrl(): string {
-  const pdfjsPackageJson = require.resolve('pdfjs-dist/package.json');
-  const standardFontDir = path.join(path.dirname(pdfjsPackageJson), 'standard_fonts');
+  const standardFontDir = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts');
   return `${standardFontDir.replace(/\/?$/, '/')}`;
 }
 

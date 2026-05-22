@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { stitchCrossPageBlocks } from '../../src/lib/server/pdf-layout/stitchCrossPageBlocks';
+import { stitchCrossPageBlocks } from '@openreader/compute-core/pdf-layout/stitchCrossPageBlocks';
 import type { ParsedPdfBlock, ParsedPdfDocument, ParsedPdfBlockKind } from '../../src/types/parsed-pdf';
 
 function makeBlock(

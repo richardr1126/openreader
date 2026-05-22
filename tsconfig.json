@@ -23,7 +23,8 @@
       "@openreader/compute-core": ["./compute/core/src/index.ts"],
       "@openreader/compute-core/contracts": ["./compute/core/src/contracts.ts"],
       "@openreader/compute-core/local-runtime": ["./compute/core/src/local-runtime.ts"],
-      "@openreader/compute-core/runtime/timeout-config": ["./compute/core/src/runtime/timeout-config.ts"]
+      "@openreader/compute-core/runtime/timeout-config": ["./compute/core/src/runtime/timeout-config.ts"],
+      "@openreader/compute-core/pdf-layout/*": ["./compute/core/src/pdf-layout/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

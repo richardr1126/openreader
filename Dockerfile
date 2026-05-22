@@ -45,36 +45,20 @@ FROM node:lts-alpine AS runner
 # ffmpeg is provided by ffmpeg-static from node_modules.
 RUN apk add --no-cache ca-certificates libreoffice-writer
 
-# Install pnpm and production deps from the repository lockfile.
+# Install pnpm for runtime process commands.
 RUN npm install -g pnpm@10.33.4
 
 # App runtime directory
 WORKDIR /app
 
-# Copy standalone Next.js server and required static assets.
-COPY --from=app-builder /app/.next/standalone ./
-COPY --from=app-builder /app/.next/static ./.next/static
-COPY --from=app-builder /app/public ./public
-# Install runtime dependencies from lockfile (no Dockerfile version pin drift).
-COPY --from=app-builder /app/package.json ./package.json
-COPY --from=app-builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=app-builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-RUN CI=true pnpm install --prod --frozen-lockfile --config.confirmModulesPurge=false
-# Copy startup/migration scripts and migration files used by openreader-entrypoint.
-COPY --from=app-builder /app/scripts/openreader-entrypoint.mjs ./scripts/openreader-entrypoint.mjs
-COPY --from=app-builder /app/scripts/migrate-fs-v2.mjs ./scripts/migrate-fs-v2.mjs
-COPY --from=app-builder /app/drizzle/scripts/migrate.mjs ./drizzle/scripts/migrate.mjs
-COPY --from=app-builder /app/drizzle/sqlite ./drizzle/sqlite
-COPY --from=app-builder /app/drizzle/postgres ./drizzle/postgres
-COPY --from=app-builder /app/drizzle.config.sqlite.ts ./drizzle.config.sqlite.ts
-COPY --from=app-builder /app/drizzle.config.pg.ts ./drizzle.config.pg.ts
-COPY --from=app-builder /app/src/db ./src/db
+# Copy built app and runtime files from the builder stage (non-standalone runtime).
+COPY --from=app-builder /app ./
 # Include third-party license report and copied license texts at a stable path in the image.
 COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
 # Include static model notices for runtime-downloaded assets.
-COPY --from=app-builder /app/src/lib/server/pdf-layout/model/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
+COPY --from=app-builder /app/compute/core/src/pdf-layout/model/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
 
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
@@ -88,4 +72,4 @@ EXPOSE 3003
 
 # Start the application
 ENTRYPOINT ["node", "scripts/openreader-entrypoint.mjs", "--"]
-CMD ["node", "server.js"]
+CMD ["pnpm", "start:raw"]

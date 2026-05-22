@@ -21,7 +21,6 @@ const computeMode = computeModeRaw === 'none' || computeModeRaw === 'worker' || 
   ? computeModeRaw
   : 'local';
 const computeLocal = computeMode === 'local';
-const isVercel = process.env.VERCEL === '1';
 const serverExternalPackages = [
   '@napi-rs/canvas',
   'better-sqlite3',
@@ -30,7 +29,6 @@ const serverExternalPackages = [
 ];
 
 const nextConfig: NextConfig = {
-  ...(isVercel ? {} : { output: 'standalone' }),
   async headers() {
     return [
       {

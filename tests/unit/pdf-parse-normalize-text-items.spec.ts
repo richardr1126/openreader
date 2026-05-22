@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { normalizeTextItemsForLayout } from '../../src/lib/server/pdf-layout/parsePdf';
+import { normalizeTextItemsForLayout } from '@openreader/compute-core/pdf-layout/parsePdf';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 function makeTextItem(
@@ -37,4 +37,3 @@ test.describe('normalizeTextItemsForLayout', () => {
     expect(normalized[0]?.text).toBe('Powered by large language models');
   });
 });
-
