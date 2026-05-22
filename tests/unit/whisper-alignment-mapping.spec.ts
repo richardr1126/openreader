@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   mapWordsToSentenceOffsets,
-} from '@openreader/compute-core/whisper';
+} from '../../compute/core/src/whisper/alignment-mapping';
 
 test.describe('whisper alignment mapping', () => {
   test('maps words to sentence offsets with punctuation and repeated spaces', () => {

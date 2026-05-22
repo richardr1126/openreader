@@ -5,7 +5,7 @@ import { documentKey, putParsedDocumentBlob } from '@/lib/server/documents/blobs
 import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getCompute } from '@/lib/server/compute';
 import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
-import type { PdfLayoutProgress } from '@openreader/compute-core/contracts';
+import type { PdfLayoutProgress } from '@openreader/compute-core';
 
 interface ParsePdfJobInput {
   documentId: string;

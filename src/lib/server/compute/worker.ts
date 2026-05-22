@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
-import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core/runtime';
+import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,

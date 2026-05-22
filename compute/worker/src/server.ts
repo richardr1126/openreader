@@ -32,8 +32,6 @@ import {
   getOnnxThreadsPerJob,
   withIdleTimeoutAndHardCap,
   withTimeout,
-} from '@openreader/compute-core/runtime';
-import {
   type PdfLayoutJobRequest,
   type PdfLayoutJobResult,
   type WhisperAlignJobRequest,
@@ -45,7 +43,7 @@ import {
   type WorkerOperationRequest,
   type WorkerOperationState,
   type PdfLayoutProgress,
-} from '@openreader/compute-core/contracts';
+} from '@openreader/compute-core';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const JOBS_STREAM_NAME = 'compute_jobs';

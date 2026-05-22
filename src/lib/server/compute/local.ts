@@ -6,12 +6,12 @@ import {
   getComputeTimeoutConfig,
   withIdleTimeoutAndHardCap,
   withTimeout,
-} from '@openreader/compute-core/runtime';
+  type PdfLayoutProgress,
+} from '@openreader/compute-core';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
 } from '@openreader/compute-core/local-runtime';
-import type { PdfLayoutProgress } from '@openreader/compute-core/contracts';
 
 export class LocalComputeBackend implements ComputeBackend {
   readonly mode = 'local' as const;

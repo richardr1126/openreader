@@ -1,4 +1,4 @@
-import { getComputeJobConcurrency } from '@openreader/compute-core/runtime';
+import { getComputeJobConcurrency } from '@openreader/compute-core';
 
 export class ConcurrencyLimiter {
   private readonly maxInFlight: number;

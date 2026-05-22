@@ -21,12 +21,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@openreader/compute-core": ["./compute/core/src/index.ts"],
-      "@openreader/compute-core/contracts": ["./compute/core/src/contracts.ts"],
-      "@openreader/compute-core/local-runtime": ["./compute/core/src/local-runtime.ts"],
-      "@openreader/compute-core/runtime": ["./compute/core/src/runtime/index.ts"],
-      "@openreader/compute-core/whisper": ["./compute/core/src/whisper/index.ts"],
-      "@openreader/compute-core/pdf-layout": ["./compute/core/src/pdf-layout/index.ts"],
-      "@openreader/compute-core/pdf-layout/parse": ["./compute/core/src/pdf-layout/parsePdf.ts"]
+      "@openreader/compute-core/local-runtime": ["./compute/core/src/local-runtime.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

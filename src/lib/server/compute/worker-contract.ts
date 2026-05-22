@@ -14,4 +14,4 @@ export {
   type WorkerJobState,
   type WorkerJobTiming,
   type WorkerJobStatusResponse,
-} from '@openreader/compute-core/contracts';
+} from '@openreader/compute-core';

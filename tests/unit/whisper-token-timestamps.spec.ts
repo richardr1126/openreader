@@ -3,7 +3,7 @@ import * as ort from 'onnxruntime-node';
 import {
   buildWordsFromTimestampedTokens,
   extractTokenStartTimestamps,
-} from '@openreader/compute-core/whisper';
+} from '../../compute/core/src/whisper/token-timestamps';
 
 test.describe('whisper token timestamp alignment', () => {
   test('extracts monotonic token timestamps from cross-attention maps', () => {
