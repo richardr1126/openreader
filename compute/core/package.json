@@ -16,6 +16,7 @@
     "./contracts": "./src/contracts.ts",
     "./local-runtime": "./src/local-runtime.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./whisper": "./src/whisper/index.ts",
     "./pdf-layout": "./src/pdf-layout/index.ts",
     "./pdf-layout/parse": "./src/pdf-layout/parsePdf.ts"
   }

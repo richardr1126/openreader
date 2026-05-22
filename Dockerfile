@@ -65,7 +65,7 @@ COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
-COPY --from=app-builder /app/src/lib/server/whisper/model/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+COPY --from=app-builder /app/compute/core/src/whisper/model/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
 
 # Expose the port the app runs on
 EXPOSE 3003

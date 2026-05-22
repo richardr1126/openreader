@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import os from 'node:os';
 import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -29,6 +28,8 @@ import {
 } from '@openreader/compute-core/local-runtime';
 import {
   getComputeTimeoutConfig,
+  getAvailableCpuCores,
+  getOnnxThreadsPerJob,
   withIdleTimeoutAndHardCap,
   withTimeout,
 } from '@openreader/compute-core/runtime';
@@ -115,20 +116,6 @@ function parseBoolEnv(name: string, fallback: boolean): boolean {
   if (!raw) return fallback;
   const normalized = raw.toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
-}
-
-function getAvailableCpuCores(): number {
-  if (typeof os.availableParallelism === 'function') {
-    const value = os.availableParallelism();
-    if (Number.isFinite(value) && value >= 1) return Math.floor(value);
-  }
-  const fallback = os.cpus().length;
-  return Number.isFinite(fallback) && fallback >= 1 ? Math.floor(fallback) : 1;
-}
-
-function getOnnxThreadsPerJob(jobConcurrency: number): number {
-  const usableCores = Math.max(1, getAvailableCpuCores() - 1);
-  return Math.max(1, Math.floor(usableCores / Math.max(1, jobConcurrency)));
 }
 
 function buildLoggerConfig(): boolean | Record<string, unknown> {
@@ -528,7 +515,7 @@ async function main(): Promise<void> {
     pdfAttempts,
     opStaleMs,
     availableCpuCores: getAvailableCpuCores(),
-    onnxThreadsPerJob: getOnnxThreadsPerJob(jobConcurrency),
+    onnxThreadsPerJob: getOnnxThreadsPerJob(),
     natsApiTimeoutMs: NATS_API_TIMEOUT_MS,
     pdfLayoutHardCapMs: pdfHardCapMs,
   }, 'compute runtime config');

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { alignAudioWithText } from '../../src/lib/server/whisper/alignment';
+import { alignAudioWithText } from '@openreader/compute-core/whisper';
 
 test.describe('whisper alignment smoke', () => {
   test('runs ONNX alignment end-to-end without decoder reshape errors', async () => {
