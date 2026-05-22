@@ -61,6 +61,7 @@ const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
 const NATS_API_TIMEOUT_MS = 60_000;
+const REQUEST_STARTED_AT_MS_KEY = Symbol('request-started-at-ms');
 
 interface QueuedJob<TPayload> {
   jobId: string;
@@ -233,6 +234,34 @@ function safeDurationMs(start: number | undefined, end: number | undefined): num
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return String(error);
+}
+
+function requestPath(request: FastifyRequest): string {
+  return request.url.split('?')[0] ?? request.url;
+}
+
+function isHealthPath(path: string): boolean {
+  return path === '/health/live' || path === '/health/ready';
+}
+
+function extractTraceId(request: FastifyRequest): string | null {
+  const header = request.headers['x-openreader-trace-id'];
+  if (Array.isArray(header)) return header[0] ?? null;
+  return typeof header === 'string' ? header : null;
+}
+
+function extractOpId(request: FastifyRequest, path: string): string | null {
+  const params = request.params as { opId?: unknown } | undefined;
+  if (params && typeof params.opId === 'string' && params.opId.trim()) {
+    return params.opId.trim();
+  }
+  const match = path.match(/^\/ops\/([^/]+)/);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }
 
 function isAlreadyExistsError(error: unknown): boolean {
@@ -687,13 +716,28 @@ async function main(): Promise<void> {
   };
 
   app.addHook('onRequest', async (request, reply) => {
-    const path = request.url.split('?')[0] ?? request.url;
-    if (path === '/health/live' || path === '/health/ready') return;
-    app.log.info(`request reqId=${request.id} method=${request.method} path=${path}`);
+    const path = requestPath(request);
+    (request as FastifyRequest & { [REQUEST_STARTED_AT_MS_KEY]?: number })[REQUEST_STARTED_AT_MS_KEY] = Date.now();
+    if (isHealthPath(path)) return;
     if (!isAuthed(request, workerToken)) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
     return;
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    const path = requestPath(request);
+    if (isHealthPath(path)) return;
+
+    const startedAt = (request as FastifyRequest & { [REQUEST_STARTED_AT_MS_KEY]?: number })[REQUEST_STARTED_AT_MS_KEY];
+    const durationMs = Number.isFinite(startedAt) ? Math.max(0, Date.now() - (startedAt as number)) : -1;
+    const traceId = extractTraceId(request) ?? '-';
+    const opId = extractOpId(request, path) ?? '-';
+    const remoteIp = request.ip || request.raw.socket.remoteAddress || '-';
+
+    app.log.info(
+      `request reqId=${request.id} method=${request.method} path=${path} status=${reply.statusCode} durationMs=${durationMs} traceId=${traceId} opId=${opId} remoteIp=${remoteIp}`,
+    );
   });
 
   app.get('/health/live', async () => ({ ok: true }));
