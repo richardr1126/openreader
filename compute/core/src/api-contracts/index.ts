@@ -18,10 +18,13 @@ export type {
 export const ALIGN_QUEUE_NAME = 'whisper-align';
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
 
-export interface WhisperAlignJobRequest {
+export interface WhisperAlignJobBase {
   text: string;
   lang?: string;
   cacheKey?: string;
+}
+
+export interface WhisperAlignJobRequest extends WhisperAlignJobBase {
   audioObjectKey: string;
 }
 
@@ -30,9 +33,12 @@ export interface WhisperAlignJobResult {
   timing?: WorkerJobTiming;
 }
 
-export interface PdfLayoutJobRequest {
+export interface PdfLayoutJobBase {
   documentId: string;
   namespace: string | null;
+}
+
+export interface PdfLayoutJobRequest extends PdfLayoutJobBase {
   documentObjectKey: string;
 }
 

@@ -3,7 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { enqueueParsePdfJob } from '@/lib/server/jobs/parsePdfJob';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';

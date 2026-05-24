@@ -7,7 +7,7 @@ import type {
   WhisperAlignJobRequest,
   WhisperAlignJobResult,
   WorkerOperationState,
-} from '@openreader/compute-core/types';
+} from '@openreader/compute-core/api-contracts';
 
 class WorkerHttpError extends Error {
   status: number;

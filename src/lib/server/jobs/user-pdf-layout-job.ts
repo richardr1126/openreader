@@ -5,22 +5,20 @@ import { documentKey, putParsedDocumentBlob } from '@/lib/server/documents/blobs
 import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getCompute } from '@/lib/server/compute';
 import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
-import type { PdfLayoutProgress } from '@openreader/compute-core/types';
+import type { PdfLayoutJobBase, PdfLayoutProgress } from '@openreader/compute-core/api-contracts';
 
-interface ParsePdfJobInput {
-  documentId: string;
+type UserPdfLayoutJobRequest = PdfLayoutJobBase & {
   userId: string;
-  namespace: string | null;
   forceToken?: string;
-}
+};
 
 const running = new Set<string>();
 
-function keyFor(input: ParsePdfJobInput): string {
+function keyFor(input: UserPdfLayoutJobRequest): string {
   return `${input.userId}:${input.documentId}:${input.namespace || ''}`;
 }
 
-export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
+export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void> {
   const key = keyFor(input);
   if (running.has(key)) return;
   running.add(key);
@@ -137,7 +135,7 @@ export async function parsePdfJob(input: ParsePdfJobInput): Promise<void> {
   }
 }
 
-export function enqueueParsePdfJob(input: ParsePdfJobInput): void {
+export function enqueueParsePdfJob(input: UserPdfLayoutJobRequest): void {
   Promise.resolve()
     .then(() => parsePdfJob(input))
     .catch((error) => {

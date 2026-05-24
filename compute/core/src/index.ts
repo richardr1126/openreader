@@ -1,4 +1,4 @@
-export * from './contracts';
+export * from './api-contracts';
 export {
   getComputeJobConcurrency,
   getAvailableCpuCores,

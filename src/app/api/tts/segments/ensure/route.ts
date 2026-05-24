@@ -31,7 +31,7 @@ import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { buildDailyQuotaExceededResponse } from '@/lib/server/rate-limit/problem-response';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
-import { getCompute } from '@/lib/server/compute';
+import { userWhisperAlignJob } from '@/lib/server/jobs/user-whisper-align-job';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
@@ -154,11 +154,6 @@ export async function POST(request: NextRequest) {
   let deviceIdToSet: string | null = null;
   const requestId = randomUUID();
   const requestStartedAt = Date.now();
-  let computeBackendPromise: ReturnType<typeof getCompute> | null = null;
-  const getComputeBackend = async () => {
-    if (!computeBackendPromise) computeBackendPromise = getCompute();
-    return computeBackendPromise;
-  };
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
@@ -395,13 +390,12 @@ export async function POST(request: NextRequest) {
         if (!alignment && !request.signal.aborted) {
           try {
             const alignStartedAt = Date.now();
-            const computeBackend = await getComputeBackend();
-            const aligned = (await computeBackend.alignWords({
+            alignment = await userWhisperAlignJob({
               audioObjectKey: existing.audioKey,
               text: segment.text,
-            })).alignments;
+              sentenceIndex: segment.original.segmentIndex,
+            });
             stageTimings.selfHealAlignMs = Date.now() - alignStartedAt;
-            alignment = aligned[0] ? { ...aligned[0], sentenceIndex: segment.original.segmentIndex } : null;
 
             if (alignment) {
               await db
@@ -649,13 +643,12 @@ export async function POST(request: NextRequest) {
           try {
             failedStage = 'whisper.align';
             const alignStartedAt = Date.now();
-            const computeBackend = await getComputeBackend();
-            const aligned = (await computeBackend.alignWords({
+            alignment = await userWhisperAlignJob({
               audioObjectKey: audioKey,
               text: segment.text,
-            })).alignments;
+              sentenceIndex: segment.original.segmentIndex,
+            });
             stageTimings.whisperAlignMs = Date.now() - alignStartedAt;
-            alignment = aligned[0] ? { ...aligned[0], sentenceIndex: segment.original.segmentIndex } : null;
           } catch (alignError) {
             const aborted = isAbortLikeError(alignError) || request.signal.aborted;
             const log = aborted ? console.info : console.warn;

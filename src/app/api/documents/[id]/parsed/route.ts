@@ -10,7 +10,7 @@ import {
   isMissingBlobError,
   isValidDocumentId,
 } from '@/lib/server/documents/blobstore';
-import { enqueueParsePdfJob } from '@/lib/server/jobs/parsePdfJob';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import {
   normalizeParseStatus,
   parseDocumentParseState,

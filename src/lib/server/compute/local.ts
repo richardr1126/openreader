@@ -6,8 +6,8 @@ import {
   getComputeTimeoutConfig,
   withIdleTimeoutAndHardCap,
   withTimeout,
-  type PdfLayoutProgress,
 } from '@openreader/compute-core';
+import type { PdfLayoutProgress } from '@openreader/compute-core/api-contracts';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,

@@ -9,7 +9,7 @@ import {
   deleteDocumentPreviewRows,
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
-import { enqueueParsePdfJob } from '@/lib/server/jobs/parsePdfJob';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
 import {
   normalizeParseStatus,

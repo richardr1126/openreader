@@ -2,17 +2,14 @@ import type {
   TTSAudioBuffer,
   TTSSentenceAlignment,
   ParsedPdfDocument,
-  PdfLayoutProgress,
 } from '@openreader/compute-core/types';
+import type { PdfLayoutProgress, WhisperAlignJobBase } from '@openreader/compute-core/api-contracts';
 
 export type ComputeMode = 'local' | 'worker';
 
-export interface WhisperAlignInput {
+export interface WhisperAlignInput extends WhisperAlignJobBase {
   audioBuffer?: TTSAudioBuffer;
   audioObjectKey?: string;
-  text: string;
-  cacheKey?: string;
-  lang?: string;
 }
 
 export interface WhisperAlignResult {
