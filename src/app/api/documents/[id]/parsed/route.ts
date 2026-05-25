@@ -102,13 +102,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
 
     if (effectiveStatus !== 'ready') {
-      if (effectiveStatus === 'pending') {
-        enqueueParsePdfJob({
-          documentId: id,
-          userId: row.userId,
-          namespace: testNamespace,
-        });
-      }
       return NextResponse.json({
         parseStatus: effectiveStatus,
         parseProgress: state.progress ?? null,

@@ -10,6 +10,8 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { safeDocumentName } from '@/lib/server/documents/utils';
 import { enqueueDocumentPreview } from '@/lib/server/documents/previews';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
+import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { putDocumentBlob } from '@/lib/server/documents/blobstore';
@@ -136,6 +138,8 @@ export async function POST(req: NextRequest) {
           size: pdfContent.length,
           lastModified,
           filePath: id,
+          parseState: stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() }),
+          parsedJsonKey: null,
         })
         .onConflictDoUpdate({
           target: [documents.id, documents.userId],
@@ -145,6 +149,8 @@ export async function POST(req: NextRequest) {
             size: pdfContent.length,
             lastModified,
             filePath: id,
+            parseState: stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() }),
+            parsedJsonKey: null,
           },
         });
 
@@ -157,6 +163,12 @@ export async function POST(req: NextRequest) {
         testNamespace,
       ).catch((error) => {
         console.error(`Failed to enqueue preview for converted DOCX ${id}:`, error);
+      });
+
+      enqueueParsePdfJob({
+        documentId: id,
+        userId: storageUserId,
+        namespace: testNamespace,
       });
 
       return NextResponse.json({

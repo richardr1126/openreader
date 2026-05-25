@@ -3,7 +3,6 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
@@ -96,13 +95,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
 
     const initial = await toSnapshot(row);
-    if (initial.parseStatus === 'pending') {
-      enqueueParsePdfJob({
-        documentId: id,
-        userId: row.userId,
-        namespace: testNamespace,
-      });
-    }
 
     const encoder = new TextEncoder();
 
@@ -132,13 +124,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             if (!nextRow) break;
 
             const next = await toSnapshot(nextRow);
-            if (next.parseStatus === 'pending') {
-              enqueueParsePdfJob({
-                documentId: id,
-                userId: nextRow.userId,
-                namespace: testNamespace,
-              });
-            }
 
             const nextSignature = JSON.stringify(next);
             if (nextSignature !== signature) {
