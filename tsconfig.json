@@ -22,6 +22,7 @@
       "@/*": ["./src/*"],
       "@openreader/compute-core": ["./compute/core/src/index.ts"],
       "@openreader/compute-core/api-contracts": ["./compute/core/src/api-contracts/index.ts"],
+      "@openreader/compute-core/control-plane": ["./compute/core/src/control-plane/index.ts"],
       "@openreader/compute-core/local-runtime": ["./compute/core/src/local-runtime.ts"],
       "@openreader/compute-core/types": ["./compute/core/src/types/index.ts"]
     }
