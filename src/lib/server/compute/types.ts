@@ -6,7 +6,7 @@ import type {
 import type { PdfLayoutProgress, WhisperAlignJobBase } from '@openreader/compute-core/api-contracts';
 import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
-export type ComputeMode = 'local' | 'worker';
+export type ComputeMode = 'worker';
 
 export interface WhisperAlignInput extends WhisperAlignJobBase {
   audioBuffer?: TTSAudioBuffer;
@@ -32,7 +32,7 @@ export type PdfLayoutResult =
   | { parsed?: never; parsedObjectKey: string };
 
 export interface ComputeBackend {
-  mode: ComputeMode;
+  mode: 'worker';
   alignWords(input: WhisperAlignInput): Promise<WhisperAlignResult>;
   parsePdfLayout(input: PdfLayoutInput): Promise<PdfLayoutResult>;
 }

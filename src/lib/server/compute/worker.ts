@@ -93,7 +93,7 @@ function opSummary(value: unknown): Record<string, unknown> {
 
 function readRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required when COMPUTE_MODE=worker`);
+  if (!value) throw new Error(`${name} is required for compute worker client`);
   return value;
 }
 
@@ -125,6 +125,15 @@ export function getWorkerClientConfigFromEnv(): { baseUrl: string; token: string
     baseUrl: normalizeWorkerBaseUrl(readRequiredEnv('COMPUTE_WORKER_URL')),
     token: readRequiredEnv('COMPUTE_WORKER_TOKEN'),
   };
+}
+
+export function isWorkerClientConfigAvailable(): boolean {
+  try {
+    getWorkerClientConfigFromEnv();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function parseRetryAfterMs(value: string | null): number | null {
