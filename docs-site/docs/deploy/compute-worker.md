@@ -1,7 +1,8 @@
 title: Compute Worker (NATS JetStream)
 ---
 
-Use this guide for worker-backed deployments where heavy compute runs outside the Next.js app server.
+Use this guide when compute-worker runs as a standalone service outside the Next.js app server.
+For embedded/local startup (`pnpm dev` / `pnpm start` without `COMPUTE_WORKER_URL`), use root `.env` instead.
 
 ## Overview
 
@@ -30,9 +31,12 @@ Required:
 - `S3_SECRET_ACCESS_KEY`
 
 > [!IMPORTANT]
-> **S3 credentials cannot be left blank/empty** when running in worker mode.
-> While the main Next.js server can generate random, dynamic S3 keys on-the-fly when `USE_EMBEDDED_WEED_MINI=true` and `S3_*` vars are blank, the compute worker runs in a separate process and cannot connect to SeaweedFS using those dynamically generated keys. 
-> To use the compute worker with the embedded SeaweedFS, you **must configure identical, stable S3 credentials** (e.g. `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`) in both the root `.env` and the compute worker `.env` files.
+> This file (`compute/worker/.env*`) is only for standalone worker deployments.
+> In embedded/local startup, app entrypoint spawns worker with the already-resolved root `.env` values.
+> For standalone worker deployments, keep shared app/worker values aligned:
+> - `COMPUTE_WORKER_TOKEN`
+> - shared object storage settings (`S3_*`)
+> - shared timeout/stale settings (`COMPUTE_WHISPER_TIMEOUT_MS`, `COMPUTE_PDF_TIMEOUT_MS`, `COMPUTE_OP_STALE_MS`)
 
 Common optional:
 
@@ -85,6 +89,16 @@ Model artifact overrides (`WHISPER_MODEL_BASE_URL`, `PDF_LAYOUT_MODEL_BASE_URL`)
 Set the same value on app + worker envs.
 
 There is no app-local compute fallback. If worker is unavailable, affected requests fail.
+
+## Config ownership summary
+
+- Embedded/local startup (`pnpm dev` / `pnpm start`, no `COMPUTE_WORKER_URL`):
+  - Configure root `.env` only.
+  - `compute/worker/.env*` is ignored.
+- Standalone external worker service:
+  - Configure app root `.env` with `COMPUTE_WORKER_URL` + `COMPUTE_WORKER_TOKEN`.
+  - Configure worker service env (`compute/worker/.env*` or platform env).
+  - Keep shared values aligned (`COMPUTE_WORKER_TOKEN`, `S3_*`, timeout/stale values).
 
 ## Production notes
 

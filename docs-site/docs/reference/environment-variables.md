@@ -53,8 +53,14 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
-| `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Required; base URL for external compute worker |
-| `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset | Required bearer token for external compute worker auth |
+| `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Set only for standalone external compute worker; leave unset for embedded worker startup |
+| `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset (auto-generated in embedded startup) | Required for standalone external compute worker auth; must match worker |
+| `START_EMBEDDED_COMPUTE_WORKER` | Heavy compute backend | auto (`true` when `COMPUTE_WORKER_URL` unset) | Set `false` to disable embedded worker startup and require external worker URL/token |
+| `EMBEDDED_COMPUTE_WORKER_PORT` | Heavy compute backend | `8081` | Override embedded worker bind port |
+| `EMBEDDED_NATS_PORT` | Heavy compute backend | `4222` | Override embedded NATS client port |
+| `EMBEDDED_NATS_MONITOR_PORT` | Heavy compute backend | `8222` | Override embedded NATS monitor port |
+| `EMBEDDED_NATS_STORE_DIR` | Heavy compute backend | `docstore/nats/jetstream` | Override embedded JetStream storage directory |
+| `NATS_URL` | Heavy compute backend | `nats://127.0.0.1:4222` in embedded startup | Optional override for embedded startup or required on standalone worker service |
 | `COMPUTE_JOB_CONCURRENCY` | Heavy compute backend | `1` | Worker-side shared compute concurrency cap |
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Heavy compute backend | `30000` | Shared whisper alignment timeout budget (worker + worker client wait budget) |
 | `COMPUTE_PDF_TIMEOUT_MS` | Heavy compute backend | `300000` | Shared PDF idle-timeout budget (worker + worker client wait budget) |
@@ -355,17 +361,57 @@ Multiple library roots for server library import.
 
 ### COMPUTE_WORKER_URL
 
-Base URL for external compute worker mode.
+Base URL for standalone external compute worker mode.
 
-- Required
+- Leave unset for embedded/local startup (`pnpm dev` / `pnpm start`) so entrypoint can start embedded worker+NATS.
+- Required only when using a standalone external worker service.
 - Example: `http://localhost:8081`
 
 ### COMPUTE_WORKER_TOKEN
 
-Bearer token for external compute worker auth.
+Bearer token for compute-worker auth.
 
-- Required
-- Must match worker service `COMPUTE_WORKER_TOKEN`
+- Required for standalone external worker service mode.
+- Must match worker service `COMPUTE_WORKER_TOKEN`.
+- In embedded startup, entrypoint auto-generates one if unset.
+
+### START_EMBEDDED_COMPUTE_WORKER
+
+Controls whether entrypoint auto-starts embedded compute-worker + NATS.
+
+- Default behavior: enabled when `COMPUTE_WORKER_URL` is unset
+- Set `false` to disable embedded startup and require external worker URL/token
+
+### EMBEDDED_COMPUTE_WORKER_PORT
+
+Embedded compute-worker HTTP port.
+
+- Default: `8081`
+
+### EMBEDDED_NATS_PORT
+
+Embedded NATS client port.
+
+- Default: `4222`
+
+### EMBEDDED_NATS_MONITOR_PORT
+
+Embedded NATS monitor (`/healthz`) port.
+
+- Default: `8222`
+
+### EMBEDDED_NATS_STORE_DIR
+
+Embedded JetStream storage directory.
+
+- Default: `docstore/nats/jetstream`
+
+### NATS_URL
+
+NATS connection URL used by compute worker runtime.
+
+- Embedded startup default: `nats://127.0.0.1:4222`
+- Standalone worker service: set in worker service env (`compute/worker/.env*` or platform env)
 
 ### COMPUTE_JOB_CONCURRENCY
 

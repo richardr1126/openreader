@@ -127,7 +127,8 @@ If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` i
 <details>
 <summary><strong>External compute worker dev stack (optional)</strong></summary>
 
-Use this when you want durable compute with NATS JetStream + KV while keeping Next.js on native host `pnpm dev`.
+Use this only when you intentionally run compute-worker as a separate service.
+Default local flow does not need `compute/worker/.env`; embedded worker startup reads root `.env`.
 Full worker deployment details are in [Compute Worker (NATS JetStream)](./compute-worker).
 
 Start only NATS + compute-worker via compose watch:
@@ -137,7 +138,7 @@ docker compose --env-file compute/worker/.env -f compute/worker/docker-compose.y
 # or: pnpm compute:dev:watch
 ```
 
-`compute/worker/.env.example` contains a starter config. Copy it to `compute/worker/.env` and adjust values for your environment.
+`compute/worker/.env.example` contains a starter config for standalone worker service deployments.
 
 Run the main app separately on the host:
 
@@ -145,7 +146,7 @@ Run the main app separately on the host:
 pnpm dev
 ```
 
-For app server worker mode, set:
+For app -> external worker routing, set in root `.env`:
 
 ```env
 COMPUTE_WORKER_URL=http://localhost:8081
@@ -153,7 +154,7 @@ COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
 ```
 
 Worker mode requires worker-reachable shared object storage (S3-compatible endpoint).
-Non-exposed embedded `weed mini` is not a supported topology for external worker mode.
+For external worker mode, object storage must be shared/reachable by both app and worker services.
 
 </details>
 
@@ -182,7 +183,15 @@ cp .env.example .env
 
 Then edit `.env`.
 
-Required compute worker connectivity (all modes):
+Default embedded worker flow (no external worker URL):
+
+```env
+# Leave COMPUTE_WORKER_URL unset.
+# Entry point auto-starts embedded worker+NATS when available.
+START_EMBEDDED_COMPUTE_WORKER=
+```
+
+External worker flow:
 
 ```env
 COMPUTE_WORKER_URL=http://localhost:8081
@@ -245,7 +254,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 ```
 
   </TabItem>
-  <TabItem value="worker-mode" label="External Worker + NATS">
+  <TabItem value="worker-mode" label="External Worker Service">
 
 ```env
 API_BASE=http://host.docker.internal:8880/v1
@@ -291,6 +300,9 @@ Learn about migration behavior and commands in [Migrations](../configure/migrati
 ```bash
 pnpm dev
 ```
+
+If you use embedded worker startup (no `COMPUTE_WORKER_URL`) and the host is missing `nats-server`,
+install `nats-server` locally or switch to external worker mode.
 
   </TabItem>
   <TabItem value="prod" label="Build + Start">
