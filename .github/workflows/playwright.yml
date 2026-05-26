@@ -36,6 +36,10 @@ jobs:
         weed version
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
+    - name: Build app and enforce bundle guard
+      run: |
+        pnpm build
+        pnpm build:bundle-guard
     - name: Verify ffprobe
       run: ffprobe -version
     - name: Install Playwright Browsers

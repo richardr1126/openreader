@@ -7,6 +7,7 @@
     "dev": "node scripts/openreader-entrypoint.mjs -- pnpm dev:raw",
     "dev:raw": "next dev --turbopack -p 3003",
     "build": "next build",
+    "build:bundle-guard": "node scripts/check-next-server-bundle.mjs",
     "start": "node scripts/openreader-entrypoint.mjs -- pnpm start:raw",
     "start:raw": "next start -p 3003",
     "lint": "next lint",

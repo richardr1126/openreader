@@ -1,10 +1,4 @@
 import type { NextConfig } from "next";
-import path from "node:path";
-import { createRequire } from "node:module";
-
-type DefinePluginCtor = new (defs: Record<string, string>) => unknown;
-const require = createRequire(import.meta.url);
-const { DefinePlugin } = require('webpack') as { DefinePlugin: DefinePluginCtor };
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -21,11 +15,7 @@ const securityHeaders = [
   },
 ];
 
-const computeModeRaw = (process.env.COMPUTE_MODE || 'local').trim().toLowerCase();
-const computeMode = computeModeRaw === 'none' || computeModeRaw === 'worker' || computeModeRaw === 'local'
-  ? computeModeRaw
-  : 'local';
-const bundleWorkerCompute = computeMode === 'worker';
+const bundleWorkerCompute = true;
 const serverExternalPackages = [
   '@napi-rs/canvas',
   'better-sqlite3',
@@ -48,7 +38,7 @@ const nextConfig: NextConfig = {
       canvas: '@napi-rs/canvas',
     },
   },
-  transpilePackages: !bundleWorkerCompute ? ['@openreader/compute-core'] : [],
+  transpilePackages: [],
   serverExternalPackages,
   outputFileTracingIncludes: {
     '/api/audiobook': [
@@ -73,35 +63,14 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     '/*': [
       './docstore/**/*',
-      ...(bundleWorkerCompute
-        ? [
-            './node_modules/onnxruntime-node/**/*',
-            './node_modules/@huggingface/tokenizers/**/*',
-          ]
-        : []),
+      './node_modules/onnxruntime-node/**/*',
+      './node_modules/@huggingface/tokenizers/**/*',
     ],
   },
   webpack: (config, { isServer }) => {
     if (isServer && bundleWorkerCompute) {
-      config.plugins = config.plugins || [];
-      config.plugins.push(
-        new DefinePlugin({
-          __OPENREADER_COMPUTE_MODE__: JSON.stringify('worker'),
-        }),
-      );
-    }
-    if (isServer && bundleWorkerCompute) {
-      const workerComputeEntry = path.resolve(__dirname, 'src/lib/server/compute/index.worker.ts');
-      const computeIndexTs = path.resolve(__dirname, 'src/lib/server/compute/index.ts');
-      const computeIndexNoExt = path.resolve(__dirname, 'src/lib/server/compute/index');
-      const computeDir = path.resolve(__dirname, 'src/lib/server/compute');
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
-        '@/lib/server/compute$': workerComputeEntry,
-        '@/lib/server/compute/index$': workerComputeEntry,
-        [`${computeIndexTs}$`]: workerComputeEntry,
-        [`${computeIndexNoExt}$`]: workerComputeEntry,
-        [`${computeDir}$`]: workerComputeEntry,
         '@openreader/compute-core/local-runtime$': false,
         'onnxruntime-node$': false,
         '@huggingface/tokenizers$': false,
