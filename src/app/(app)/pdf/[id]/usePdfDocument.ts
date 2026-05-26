@@ -216,7 +216,7 @@ export function usePdfDocument(): PdfDocumentState {
     }
   }, []);
 
-  const startParsedPolling = useCallback((documentId: string, initialStatus: PdfParseStatus | null) => {
+  const startParsedPolling = useCallback((documentId: string) => {
     parsePollAbortRef.current?.abort();
     parseSseCloseRef.current?.();
     parseSseCloseRef.current = null;
@@ -244,15 +244,8 @@ export function usePdfDocument(): PdfDocumentState {
         }
       },
       onError: () => {
-        // Fall back to parsed polling if browser SSE disconnects.
+        // EventSource reconnects automatically. Keep stream open.
         if (controller.signal.aborted) return;
-        closeSse();
-        parseSseCloseRef.current = null;
-        void fetchParsedDocument(documentId, initialStatus, controller.signal).finally(() => {
-          if (parsePollAbortRef.current === controller) {
-            parsePollAbortRef.current = null;
-          }
-        });
       },
     });
     parseSseCloseRef.current = closeSse;
@@ -464,7 +457,7 @@ export function usePdfDocument(): PdfDocumentState {
         const initialParseStatus = (meta.parseStatus ?? null) as PdfParseStatus | null;
         setParseStatus(initialParseStatus);
         setParseProgress(null);
-        startParsedPolling(id, initialParseStatus);
+        startParsedPolling(id);
         void fetchDocumentSettings(id, controller.signal);
       }
 
@@ -520,7 +513,7 @@ export function usePdfDocument(): PdfDocumentState {
       setParsedDocument(null);
       setParseStatus('pending');
       setParseProgress(null);
-      startParsedPolling(currDocId, 'pending');
+      startParsedPolling(currDocId);
     } catch (error) {
       console.error('Failed to force PDF reparse:', error);
     }
