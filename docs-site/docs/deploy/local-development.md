@@ -90,6 +90,41 @@ OpenReader currently pins `4.18` in CI and Docker builds while `4.19` compatibil
 </details>
 
 <details>
+<summary><strong>NATS Server <code>nats-server</code> (required for embedded compute mode)</strong></summary>
+
+If `COMPUTE_WORKER_URL` is unset, startup launches embedded compute worker + NATS, so `nats-server` must be available on host PATH.
+
+If you always use an external worker (`COMPUTE_WORKER_URL` set), this is not required.
+
+<Tabs groupId="local-dev-nats-os">
+<TabItem value="macos" label="macOS" default>
+
+```bash
+brew install nats-server
+nats-server -v
+```
+
+</TabItem>
+<TabItem value="linux" label="Linux">
+
+```bash
+# Linux amd64 example
+mkdir -p "$HOME/.local/bin"
+curl -fsSL -o /tmp/nats-server.zip \
+  https://github.com/nats-io/nats-server/releases/latest/download/nats-server-v2.12.1-linux-amd64.zip
+unzip -j /tmp/nats-server.zip '*/nats-server' -d /tmp
+install -m 0755 /tmp/nats-server "$HOME/.local/bin/nats-server"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+export PATH="$HOME/.local/bin:$PATH"
+nats-server -v
+```
+
+</TabItem>
+</Tabs>
+
+</details>
+
+<details>
 <summary><strong>LibreOffice (optional, for DOCX conversion)</strong></summary>
 
 <Tabs groupId="local-dev-libreoffice-os">
@@ -188,7 +223,6 @@ Default embedded worker flow (no external worker URL):
 ```env
 # Leave COMPUTE_WORKER_URL unset.
 # Entry point auto-starts embedded worker+NATS when available.
-START_EMBEDDED_COMPUTE_WORKER=
 ```
 
 External worker flow:

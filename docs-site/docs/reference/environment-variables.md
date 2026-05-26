@@ -55,7 +55,6 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
 | `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Set only for standalone external compute worker; leave unset for embedded worker startup |
 | `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset (auto-generated in embedded startup) | Required for standalone external compute worker auth; must match worker |
-| `START_EMBEDDED_COMPUTE_WORKER` | Heavy compute backend | auto (`true` when `COMPUTE_WORKER_URL` unset) | Set `false` to disable embedded worker startup and require external worker URL/token |
 | `EMBEDDED_COMPUTE_WORKER_PORT` | Heavy compute backend | `8081` | Override embedded worker bind port |
 | `EMBEDDED_NATS_PORT` | Heavy compute backend | `4222` | Override embedded NATS client port |
 | `EMBEDDED_NATS_MONITOR_PORT` | Heavy compute backend | `8222` | Override embedded NATS monitor port |
@@ -364,6 +363,7 @@ Multiple library roots for server library import.
 Base URL for standalone external compute worker mode.
 
 - Leave unset for embedded/local startup (`pnpm dev` / `pnpm start`) so entrypoint can start embedded worker+NATS.
+- Embedded startup requires `nats-server` available on host PATH.
 - Required only when using a standalone external worker service.
 - Example: `http://localhost:8081`
 
@@ -374,13 +374,6 @@ Bearer token for compute-worker auth.
 - Required for standalone external worker service mode.
 - Must match worker service `COMPUTE_WORKER_TOKEN`.
 - In embedded startup, entrypoint auto-generates one if unset.
-
-### START_EMBEDDED_COMPUTE_WORKER
-
-Controls whether entrypoint auto-starts embedded compute-worker + NATS.
-
-- Default behavior: enabled when `COMPUTE_WORKER_URL` is unset
-- Set `false` to disable embedded startup and require external worker URL/token
 
 ### EMBEDDED_COMPUTE_WORKER_PORT
 
@@ -412,6 +405,7 @@ NATS connection URL used by compute worker runtime.
 
 - Embedded startup default: `nats://127.0.0.1:4222`
 - Standalone worker service: set in worker service env (`compute/worker/.env*` or platform env)
+- For embedded startup, this is optional; startup supplies the default value.
 
 ### COMPUTE_JOB_CONCURRENCY
 
