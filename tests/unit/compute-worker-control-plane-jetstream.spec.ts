@@ -10,7 +10,7 @@ import {
   opStateKvKey,
   type KvEntryLike,
   type KvStoreLike,
-} from '../../compute/worker/src/control-plane-jetstream';
+} from '../../compute/worker/src/control-plane/jetstream';
 
 class FakeKvStore implements KvStoreLike {
   private readonly data = new Map<string, KvEntryLike>();
@@ -64,6 +64,11 @@ class FakeKvStore implements KvStoreLike {
 class FakeJetStream {
   private seq = 0;
   readonly published: Array<{ subject: string; payload: unknown; seq: number }> = [];
+  readonly consumers = {
+    get: async () => {
+      throw new Error('not implemented in fake');
+    },
+  };
 
   async publish(subject: string, data: Uint8Array): Promise<{ seq: number }> {
     this.seq += 1;
@@ -127,6 +132,13 @@ test.describe('worker jetstream control-plane adapters', () => {
     });
     const events = new JetStreamOperationEventStream({
       getJs: async () => js,
+      getJsm: async () => ({
+        consumers: {
+          add: async () => ({ name: 'noop' }),
+          delete: async () => true,
+        },
+      }),
+      eventsStreamName: 'compute_events',
     });
 
     await queue.enqueue({
@@ -157,7 +169,16 @@ test.describe('worker jetstream control-plane adapters', () => {
     const js = new FakeJetStream();
 
     const store = new JetStreamOperationStateStore({ getKv: async () => kv });
-    const events = new JetStreamOperationEventStream({ getJs: async () => js });
+    const events = new JetStreamOperationEventStream({
+      getJs: async () => js,
+      getJsm: async () => ({
+        consumers: {
+          add: async () => ({ name: 'noop' }),
+          delete: async () => true,
+        },
+      }),
+      eventsStreamName: 'compute_events',
+    });
     const queue = new JetStreamOperationQueue({
       getJs: async () => js,
       whisperSubject: 'jobs.whisper',

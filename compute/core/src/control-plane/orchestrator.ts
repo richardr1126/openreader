@@ -6,6 +6,13 @@ import type {
   WorkerOperationRequest,
   WorkerOperationState,
 } from '../api-contracts';
+import {
+  buildQueuedState,
+  createErrorShape,
+  explainReplacementReason,
+  isTerminalStatus,
+  shouldReuseExistingOperation,
+} from './state-machine';
 import type {
   OperationClock,
   OperationEventStream,
@@ -20,51 +27,6 @@ const RETRY_DELAY_MS = 25;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isTerminalStatus(status: WorkerOperationState['status']): boolean {
-  return status === 'succeeded' || status === 'failed';
-}
-
-function isInflightStatus(status: WorkerOperationState['status']): boolean {
-  return status === 'queued' || status === 'running';
-}
-
-function createErrorShape(error: unknown): WorkerJobErrorShape {
-  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
-    return { message: (error as { message: string }).message };
-  }
-  return { message: String(error) };
-}
-
-function queuedStateFromRequest(input: {
-  request: WorkerOperationRequest;
-  opId: string;
-  jobId: string;
-  queuedAt: number;
-}): WorkerOperationState {
-  return {
-    opId: input.opId,
-    opKey: input.request.opKey,
-    kind: input.request.kind,
-    jobId: input.jobId,
-    status: 'queued',
-    queuedAt: input.queuedAt,
-    updatedAt: input.queuedAt,
-  };
-}
-
-function mapReplacementReason(input: {
-  current: WorkerOperationState;
-  requestKind: WorkerOperationKind;
-  now: number;
-  opStaleMs: number;
-}): string {
-  if (input.current.kind !== input.requestKind) return 'kind_mismatch';
-  const ageMs = input.now - input.current.updatedAt;
-  if (isInflightStatus(input.current.status) && ageMs > input.opStaleMs) return 'stale_running';
-  if (input.current.status === 'failed') return 'failed_prior';
-  return `status_${input.current.status}`;
 }
 
 export interface OperationOrchestratorDeps {
@@ -127,15 +89,16 @@ export class OperationOrchestrator {
         }
 
         const now = this.clock.now();
-        const ageMs = now - current.updatedAt;
-        if (current.kind === request.kind) {
-          if (current.status === 'succeeded') return current;
-          if (isInflightStatus(current.status) && ageMs <= this.opStaleMs) {
-            return current;
-          }
+        if (shouldReuseExistingOperation({
+          current,
+          requestKind: request.kind,
+          now,
+          opStaleMs: this.opStaleMs,
+        })) {
+          return current;
         }
 
-        const replacement = queuedStateFromRequest({
+        const replacement = buildQueuedState({
           request,
           opId: this.ids.opId(),
           jobId: this.ids.jobId(),
@@ -170,7 +133,7 @@ export class OperationOrchestrator {
       }
 
       const now = this.clock.now();
-      const created = queuedStateFromRequest({
+      const created = buildQueuedState({
         request,
         opId: this.ids.opId(),
         jobId: this.ids.jobId(),
@@ -304,7 +267,7 @@ export class OperationOrchestrator {
     current: WorkerOperationState;
     requestKind: WorkerOperationKind;
   }): Promise<string> {
-    return mapReplacementReason({
+    return explainReplacementReason({
       current: input.current,
       requestKind: input.requestKind,
       now: this.clock.now(),

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { JetStreamClient } from '@nats-io/jetstream';
+import { AckPolicy, DeliverPolicy, ReplayPolicy, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
+import { nanos } from '@nats-io/transport-node';
 import type {
   OperationEvent,
   OperationEventStream,
@@ -148,14 +149,24 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
 }
 
 export interface JetStreamOperationEventStreamDeps {
-  getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
+  getJs: () => Promise<Pick<JetStreamClient, 'publish' | 'consumers'>>;
+  getJsm: () => Promise<Pick<JetStreamManager, 'consumers'>>;
+  eventsStreamName: string;
+  inactiveThresholdMs?: number;
 }
 
 export class JetStreamOperationEventStream<Result = unknown> implements OperationEventStream<Result> {
-  private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
+  private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish' | 'consumers'>>;
+  private readonly getJsm: () => Promise<Pick<JetStreamManager, 'consumers'>>;
+  private readonly eventsStreamName: string;
+  private readonly inactiveThresholdNanos: number;
+  private readonly opStateCodec = createJsonCodec<OperationState<Result>>();
 
   constructor(deps: JetStreamOperationEventStreamDeps) {
     this.getJs = deps.getJs;
+    this.getJsm = deps.getJsm;
+    this.eventsStreamName = deps.eventsStreamName;
+    this.inactiveThresholdNanos = nanos((deps.inactiveThresholdMs ?? 60_000));
   }
 
   async append(opId: string, snapshot: OperationState<Result>): Promise<OperationEvent<Result>> {
@@ -168,12 +179,103 @@ export class JetStreamOperationEventStream<Result = unknown> implements Operatio
     };
   }
 
-  async listSince(): Promise<OperationEvent<Result>[]> {
-    return [];
+  private async createConsumer(input: {
+    opId: string;
+    sinceEventId?: number;
+    replayOnly: boolean;
+  }): Promise<{ name: string; js: Pick<JetStreamClient, 'publish' | 'consumers'> }> {
+    const js = await this.getJs();
+    const jsm = await this.getJsm();
+    const subject = opEventsSubject(input.opId);
+    const since = Math.max(0, Math.floor(input.sinceEventId ?? 0));
+    const name = `op_events_${input.opId.slice(0, 12)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const config = {
+      name,
+      ack_policy: AckPolicy.None,
+      deliver_policy: since > 0 ? DeliverPolicy.StartSequence : (input.replayOnly ? DeliverPolicy.All : DeliverPolicy.New),
+      replay_policy: ReplayPolicy.Instant,
+      filter_subject: subject,
+      max_deliver: 1,
+      inactive_threshold: this.inactiveThresholdNanos,
+      ...(since > 0 ? { opt_start_seq: since + 1 } : {}),
+    };
+    await jsm.consumers.add(this.eventsStreamName, config);
+    return { name, js };
   }
 
-  async subscribe(): Promise<() => void> {
-    return () => undefined;
+  private async deleteConsumer(name: string): Promise<void> {
+    const jsm = await this.getJsm();
+    await jsm.consumers.delete(this.eventsStreamName, name).catch(() => undefined);
+  }
+
+  async listSince(opId: string, sinceEventId: number, limit = 200): Promise<OperationEvent<Result>[]> {
+    const boundedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 200;
+    const { name, js } = await this.createConsumer({
+      opId,
+      sinceEventId,
+      replayOnly: true,
+    });
+    try {
+      const consumer = await js.consumers.get(this.eventsStreamName, name);
+      const output: OperationEvent<Result>[] = [];
+      while (output.length < boundedLimit) {
+        const msg = await consumer.next({ expires: 250 });
+        if (!msg) break;
+        output.push({
+          eventId: msg.seq,
+          snapshot: this.opStateCodec.decode(msg.data),
+        });
+      }
+      return output;
+    } finally {
+      await this.deleteConsumer(name);
+    }
+  }
+
+  async subscribe(input: {
+    opId: string;
+    sinceEventId?: number;
+    onEvent: (event: OperationEvent<Result>) => void | Promise<void>;
+    onError?: (error: unknown) => void;
+  }): Promise<() => void> {
+    const { name, js } = await this.createConsumer({
+      opId: input.opId,
+      sinceEventId: input.sinceEventId,
+      replayOnly: false,
+    });
+    const consumer = await js.consumers.get(this.eventsStreamName, name);
+    const messages = await consumer.consume();
+    let closed = false;
+
+    void (async () => {
+      try {
+        for await (const msg of messages) {
+          if (closed) break;
+          try {
+            await input.onEvent({
+              eventId: msg.seq,
+              snapshot: this.opStateCodec.decode(msg.data),
+            });
+          } catch (error) {
+            input.onError?.(error);
+          }
+        }
+      } catch (error) {
+        if (!closed) input.onError?.(error);
+      } finally {
+        if (!closed) {
+          closed = true;
+          await this.deleteConsumer(name);
+        }
+      }
+    })();
+
+    return () => {
+      if (closed) return;
+      closed = true;
+      void messages.close().catch(() => undefined);
+      void this.deleteConsumer(name);
+    };
   }
 }
 

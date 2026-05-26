@@ -1,10 +1,15 @@
 import { expect, test } from '@playwright/test';
 import type { WorkerOperationRequest, WorkerOperationState } from '../../compute/core/src/api-contracts';
 import {
+  encodeSseFrame,
+  explainReplacementReason,
   InMemoryOperationEventStream,
   InMemoryOperationQueue,
   InMemoryOperationStateStore,
   OperationOrchestrator,
+  parseSseEventId,
+  parseSsePayload,
+  shouldReuseExistingOperation,
 } from '../../compute/core/src/control-plane';
 
 function buildPdfLayoutRequest(opKey: string): WorkerOperationRequest {
@@ -149,5 +154,48 @@ test.describe('compute control-plane', () => {
     const op2Events = await eventStream.listSince('op-2', 0);
     expect(op1Events.map((event) => event.eventId)).toEqual([1, 2]);
     expect(op2Events.map((event) => event.eventId)).toEqual([1]);
+  });
+
+  test('state-machine helpers return consistent reuse/replacement decisions', () => {
+    const current: WorkerOperationState = {
+      opId: 'op-1',
+      opKey: 'same-op-key',
+      kind: 'pdf_layout',
+      jobId: 'job-1',
+      status: 'running',
+      queuedAt: 1000,
+      updatedAt: 2000,
+    };
+
+    expect(shouldReuseExistingOperation({
+      current,
+      requestKind: 'pdf_layout',
+      now: 2500,
+      opStaleMs: 1_000,
+    })).toBeTruthy();
+
+    expect(shouldReuseExistingOperation({
+      current,
+      requestKind: 'pdf_layout',
+      now: 4005,
+      opStaleMs: 1_000,
+    })).toBeFalsy();
+
+    expect(explainReplacementReason({
+      current,
+      requestKind: 'pdf_layout',
+      now: 4005,
+      opStaleMs: 1_000,
+    })).toBe('stale_running');
+  });
+
+  test('sse helpers encode and decode frame payload and id', () => {
+    const frame = encodeSseFrame({
+      id: 42,
+      event: 'snapshot',
+      data: { ok: true },
+    });
+    expect(parseSseEventId(frame)).toBe(42);
+    expect(parseSsePayload(frame)).toBe('{"ok":true}');
   });
 });

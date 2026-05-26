@@ -13,12 +13,12 @@ import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
+import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
 import type { PdfLayoutJobResult, WorkerOperationEvent, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const SSE_POLL_INTERVAL_MS = 1200;
 const SSE_KEEPALIVE_MS = 15_000;
 const SSE_RESYNC_INTERVAL_MS = 30_000;
 
@@ -47,29 +47,6 @@ function s3NotConfiguredResponse(): NextResponse {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parseSsePayload(frame: string): string | null {
-  const lines = frame.replace(/\r\n/g, '\n').split('\n');
-  const dataLines: string[] = [];
-  for (const line of lines) {
-    if (!line.startsWith('data:')) continue;
-    dataLines.push(line.slice('data:'.length).trimStart());
-  }
-  if (dataLines.length === 0) return null;
-  return dataLines.join('\n');
-}
-
-function parseSseEventId(frame: string): number | null {
-  const lines = frame.replace(/\r\n/g, '\n').split('\n');
-  for (const line of lines) {
-    if (!line.startsWith('id:')) continue;
-    const value = Number(line.slice('id:'.length).trim());
-    if (Number.isFinite(value) && value > 0) {
-      return Math.floor(value);
-    }
-  }
-  return null;
 }
 
 function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']): PdfParseStatus {
@@ -361,7 +338,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
           while (!closed) {
             if (!currentOpId) {
-              await sleep(SSE_POLL_INTERVAL_MS);
+              await sleep(SSE_RESYNC_INTERVAL_MS);
               const next = await syncFromDb({
                 documentId: id,
                 storageUserId,

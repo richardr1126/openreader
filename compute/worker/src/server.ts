@@ -33,7 +33,7 @@ import {
   withIdleTimeoutAndHardCap,
   withTimeout,
 } from '@openreader/compute-core';
-import { OperationOrchestrator } from '@openreader/compute-core/control-plane';
+import { encodeSseFrame, OperationOrchestrator } from '@openreader/compute-core/control-plane';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
@@ -54,8 +54,7 @@ import {
   JetStreamOperationQueue,
   JetStreamOperationStateStore,
   hashOpKey,
-  opEventsSubject,
-} from './control-plane-jetstream';
+} from './control-plane/jetstream';
 
 const JOBS_STREAM_NAME = 'compute_jobs';
 const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
@@ -667,7 +666,6 @@ async function main(): Promise<void> {
   const whisperJobCodec = createJsonCodec<QueuedJob<WhisperAlignJobRequest>>();
   const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
   const jobStateCodec = createJsonCodec<StoredJobState<WhisperAlignJobResult | PdfLayoutJobResult>>();
-  const opEventCodec = createJsonCodec<StreamedOperationState>();
 
   const putJobState = async (state: StoredJobState<WhisperAlignJobResult | PdfLayoutJobResult>): Promise<void> => {
     const { kv } = await ensureConnected();
@@ -680,6 +678,8 @@ async function main(): Promise<void> {
 
   const operationEventStream = new JetStreamOperationEventStream<WhisperAlignJobResult | PdfLayoutJobResult>({
     getJs: async () => (await ensureConnected()).js,
+    getJsm: async () => (await ensureConnected()).jsm,
+    eventsStreamName: EVENTS_STREAM_NAME,
   });
 
   const operationQueue = new JetStreamOperationQueue({
@@ -708,19 +708,6 @@ async function main(): Promise<void> {
       maxCasRetries: 10,
     },
   });
-
-  const putOpState = async (state: StreamedOperationState): Promise<void> => {
-    await operationStateStore.putOpState(state);
-    try {
-      await operationEventStream.append(state.opId, state);
-    } catch (error) {
-      app.log.warn({
-        opId: state.opId,
-        status: state.status,
-        error: toErrorMessage(error),
-      }, 'failed to publish op event');
-    }
-  };
 
   const getOpState = async (opId: string): Promise<StreamedOperationState | null> => {
     return await operationStateStore.getOpState(opId);
@@ -852,22 +839,38 @@ async function main(): Promise<void> {
     reply.raw.setHeader('Connection', 'keep-alive');
     reply.raw.setHeader('X-Accel-Buffering', 'no');
 
+    let closed = false;
+    let unsubscribe: (() => void) | null = null;
+
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
       const frameEvent: WorkerOperationEvent<WhisperAlignJobResult | PdfLayoutJobResult> = {
         eventId,
         snapshot,
       };
-      reply.raw.write(`id: ${eventId}\nevent: snapshot\ndata: ${JSON.stringify(frameEvent)}\n\n`);
+      reply.raw.write(encodeSseFrame({
+        id: eventId,
+        event: 'snapshot',
+        data: frameEvent,
+      }));
     };
 
-    let closed = false;
-    let consumerName: string | null = null;
-    let messages: Awaited<ReturnType<Consumer['consume']>> | null = null;
-    request.raw.on('close', () => {
+    const closeStream = (): void => {
+      if (closed) return;
       closed = true;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
       activeSse = Math.max(0, activeSse - 1);
       markActivity();
+      if (!reply.raw.writableEnded) {
+        reply.raw.end();
+      }
+    };
+
+    request.raw.on('close', () => {
+      closeStream();
     });
 
     try {
@@ -878,52 +881,41 @@ async function main(): Promise<void> {
         return reply;
       }
 
-      const { jsm, js } = await ensureConnected();
-      const consumerConfig = {
-        name: `op_events_${params.data.opId.slice(0, 12)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`,
-        ack_policy: AckPolicy.None,
-        deliver_policy: sinceEventId > 0 ? DeliverPolicy.StartSequence : DeliverPolicy.New,
-        replay_policy: ReplayPolicy.Instant,
-        filter_subject: opEventsSubject(params.data.opId),
-        max_deliver: 1,
-        inactive_threshold: nanos(60_000_000_000),
-        ...(sinceEventId > 0 ? { opt_start_seq: sinceEventId + 1 } : {}),
-      };
-      const info = await jsm.consumers.add(EVENTS_STREAM_NAME, consumerConfig);
-      consumerName = info.name;
-      const consumer = await js.consumers.get(EVENTS_STREAM_NAME, info.name);
-      messages = await consumer.consume();
+      unsubscribe = await operationEventStream.subscribe({
+        opId: params.data.opId,
+        sinceEventId,
+        onEvent: (event) => {
+          if (closed) return;
+          if (event.snapshot.opId !== params.data.opId) return;
+          const nextSignature = JSON.stringify(event.snapshot);
+          if (nextSignature !== signature) {
+            current = event.snapshot;
+            signature = nextSignature;
+            writeSnapshot(current, event.eventId);
+          }
+          if (isTerminalStatus(event.snapshot.status)) {
+            closeStream();
+          }
+        },
+        onError: (error) => {
+          app.log.warn({
+            opId: params.data.opId,
+            error: toErrorMessage(error),
+          }, 'op events stream loop error');
+          closeStream();
+        },
+      });
 
-      for await (const msg of messages) {
-        if (closed) break;
-        const state = opEventCodec.decode(msg.data);
-        if (state.opId !== params.data.opId) continue;
-
-        const nextSignature = JSON.stringify(state);
-        if (nextSignature !== signature) {
-          current = state;
-          signature = nextSignature;
-          writeSnapshot(current, msg.seq);
-        }
-        if (isTerminalStatus(state.status)) break;
-      }
+      await new Promise<void>((resolve) => {
+        request.raw.once('close', () => resolve());
+      });
     } catch (error) {
       app.log.warn({
         opId: params.data.opId,
         error: toErrorMessage(error),
       }, 'op events stream loop error');
     } finally {
-      if (messages) {
-        await messages.close().catch(() => undefined);
-      }
-      if (consumerName) {
-        const { jsm } = await ensureConnected();
-        await jsm.consumers.delete(EVENTS_STREAM_NAME, consumerName).catch(() => undefined);
-      }
-    }
-
-    if (!reply.raw.writableEnded) {
-      reply.raw.end();
+      closeStream();
     }
 
     return reply;
@@ -1035,21 +1027,14 @@ async function main(): Promise<void> {
       decoded = input.codec.decode(input.msg.data);
       const startedAt = Date.now();
       const queueWaitMs = safeDurationMs(decoded.queuedAt, startedAt);
+      const queueWaitTiming = typeof queueWaitMs === 'number' ? { queueWaitMs } : undefined;
 
-      const runningState: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> = {
+      await orchestrator.markRunning({
         opId: decoded.opId,
-        opKey: decoded.opKey,
-        kind: decoded.kind,
-        jobId: decoded.jobId,
-        status: 'running',
-        queuedAt: decoded.queuedAt,
         startedAt,
         updatedAt: startedAt,
-        ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
-        ...(latestProgress ? { progress: latestProgress } : {}),
-      };
-
-      await putOpState(runningState);
+        ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+      });
       await putJobState({
         jobId: decoded.jobId,
         opId: decoded.opId,
@@ -1059,7 +1044,7 @@ async function main(): Promise<void> {
         timestamp: decoded.queuedAt,
         startedAt,
         updatedAt: startedAt,
-        ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+        ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
         ...(latestProgress ? { progress: latestProgress } : {}),
       });
       app.log.info({
@@ -1072,20 +1057,21 @@ async function main(): Promise<void> {
       }, 'job.started');
 
       const persistRunningState = async (updatedAt: number): Promise<void> => {
-        const runningOpState: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> = {
-          opId: decoded!.opId,
-          opKey: decoded!.opKey,
-          kind: decoded!.kind,
-          jobId: decoded!.jobId,
-          status: 'running',
-          queuedAt: decoded!.queuedAt,
-          startedAt,
-          updatedAt,
-          ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
-          ...(latestProgress ? { progress: latestProgress } : {}),
-        };
-
-        await putOpState(runningOpState);
+        if (latestProgress) {
+          await orchestrator.markProgress({
+            opId: decoded!.opId,
+            progress: latestProgress,
+            updatedAt,
+            ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+          });
+        } else {
+          await orchestrator.markRunning({
+            opId: decoded!.opId,
+            startedAt,
+            updatedAt,
+            ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+          });
+        }
         await putJobState({
           jobId: decoded!.jobId,
           opId: decoded!.opId,
@@ -1095,7 +1081,7 @@ async function main(): Promise<void> {
           timestamp: decoded!.queuedAt,
           startedAt,
           updatedAt,
-          ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
           ...(latestProgress ? { progress: latestProgress } : {}),
         });
       };
@@ -1123,21 +1109,12 @@ async function main(): Promise<void> {
         : undefined;
       const now = Date.now();
 
-      const succeededState: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> = {
+      await orchestrator.markSucceeded({
         opId: decoded.opId,
-        opKey: decoded.opKey,
-        kind: decoded.kind,
-        jobId: decoded.jobId,
-        status: 'succeeded',
-        queuedAt: decoded.queuedAt,
-        startedAt,
-        updatedAt: now,
         result: result as WhisperAlignJobResult | PdfLayoutJobResult,
+        updatedAt: now,
         ...(resultTiming ? { timing: resultTiming } : {}),
-        ...(latestProgress ? { progress: latestProgress } : {}),
-      };
-
-      await putOpState(succeededState);
+      });
       await putJobState({
         jobId: decoded.jobId,
         opId: decoded.opId,
@@ -1185,22 +1162,30 @@ async function main(): Promise<void> {
       if (decoded) {
         const now = Date.now();
         const queueWaitMs = safeDurationMs(decoded.queuedAt, now);
+        const queueWaitTiming = typeof queueWaitMs === 'number' ? { queueWaitMs } : undefined;
 
         const status: WorkerJobState = hasRetriesLeft ? 'running' : 'failed';
-        const opState: WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult> = {
-          opId: decoded.opId,
-          opKey: decoded.opKey,
-          kind: decoded.kind,
-          jobId: decoded.jobId,
-          status,
-          queuedAt: decoded.queuedAt,
-          updatedAt: now,
-          ...(status === 'failed' ? { error: { message } } : {}),
-          ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
-          ...(latestProgress ? { progress: latestProgress } : {}),
-        };
+        const persistOpUpdate = hasRetriesLeft
+          ? (latestProgress
+            ? orchestrator.markProgress({
+              opId: decoded.opId,
+              progress: latestProgress,
+              updatedAt: now,
+              ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+            })
+            : orchestrator.markRunning({
+              opId: decoded.opId,
+              updatedAt: now,
+              ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+            }))
+          : orchestrator.markFailed({
+            opId: decoded.opId,
+            error: { message },
+            updatedAt: now,
+            ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+          });
 
-        await putOpState(opState).catch((stateError) => {
+        await persistOpUpdate.catch((stateError) => {
           app.log.error({
             worker: input.workerLabel,
             opId: decoded?.opId,
@@ -1218,7 +1203,7 @@ async function main(): Promise<void> {
           timestamp: decoded.queuedAt,
           updatedAt: now,
           ...(status === 'failed' ? { error: { message } } : {}),
-          ...(typeof queueWaitMs === 'number' ? { timing: { queueWaitMs } } : {}),
+          ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
           ...(latestProgress ? { progress: latestProgress } : {}),
         }).catch((stateError) => {
           app.log.error({

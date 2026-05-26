@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
+import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
 import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core';
 import type {
   PdfLayoutJobRequest,
@@ -183,30 +184,6 @@ export function buildPdfOpKey(input: PdfLayoutInput): string {
     input.documentObjectKey ?? '',
     input.forceToken?.trim() || '',
   ].join('|');
-}
-
-function extractSsePayload(frame: string): string | null {
-  const dataLines: string[] = [];
-  const normalized = frame.replace(/\r\n/g, '\n');
-  for (const line of normalized.split('\n')) {
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice('data:'.length).trimStart());
-    }
-  }
-  if (dataLines.length === 0) return null;
-  return dataLines.join('\n');
-}
-
-function extractSseId(frame: string): number | null {
-  const normalized = frame.replace(/\r\n/g, '\n');
-  for (const line of normalized.split('\n')) {
-    if (!line.startsWith('id:')) continue;
-    const value = Number(line.slice('id:'.length).trim());
-    if (Number.isFinite(value) && value > 0) {
-      return Math.floor(value);
-    }
-  }
-  return null;
 }
 
 type RetryMeta = {
@@ -606,11 +583,11 @@ export class WorkerComputeBackend implements ComputeBackend {
             const frame = buffer.slice(0, frameEnd);
             buffer = buffer.slice(frameEnd + 2);
 
-            const eventId = extractSseId(frame);
+            const eventId = parseSseEventId(frame);
             if (eventId && eventId > 0) {
               lastEventId = eventId;
             }
-            const payload = extractSsePayload(frame);
+            const payload = parseSsePayload(frame);
             if (!payload) continue;
 
             let event: WorkerOperationEvent<Result> | WorkerOperationState<Result>;
