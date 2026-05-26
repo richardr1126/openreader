@@ -15,6 +15,7 @@
     ".": "./src/index.ts",
     "./local-runtime": "./src/local-runtime.ts",
     "./api-contracts": "./src/api-contracts/index.ts",
+    "./control-plane": "./src/control-plane/index.ts",
     "./types": "./src/types/index.ts"
   }
 }
