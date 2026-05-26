@@ -5,6 +5,10 @@ RUN cp "$(command -v weed)" /tmp/weed && \
     (wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/LICENSE" || \
      wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/main/LICENSE")
 
+# Stage 1b: extract nats-server binary for embedded single-container worker mode.
+FROM nats:2.11-alpine AS nats-builder
+RUN cp "$(command -v nats-server)" /tmp/nats-server
+
 
 # Stage 2: build the Next.js app
 FROM node:lts-alpine AS app-builder
@@ -63,6 +67,9 @@ COPY --from=app-builder /app/compute/core/src/pdf/assets/LICENSE.txt /licenses/p
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed
+# Copy nats-server binary for embedded local JetStream.
+COPY --from=nats-builder /tmp/nats-server /usr/local/bin/nats-server
+RUN chmod +x /usr/local/bin/nats-server
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
 COPY --from=app-builder /app/compute/core/src/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt

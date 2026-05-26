@@ -137,6 +137,12 @@ function hasWeedBinary() {
   return true;
 }
 
+function hasNatsBinary() {
+  const probe = spawnSync('nats-server', ['-v'], { stdio: 'ignore' });
+  if (probe.error) return false;
+  return true;
+}
+
 async function waitForEndpoint(url, timeoutSeconds) {
   const waitMs = Math.max(1, timeoutSeconds) * 1000;
   const deadline = Date.now() + waitMs;
@@ -314,10 +320,18 @@ async function main() {
   const runtimeEnv = { ...process.env };
   let weedProc = null;
   let weedExitPromise = Promise.resolve();
+  let natsProc = null;
+  let natsExitPromise = Promise.resolve();
+  let workerProc = null;
+  let workerExitPromise = Promise.resolve();
   let appProc = null;
   let shutdownPromise = null;
   let stopWeedStdoutForward = () => { };
   let stopWeedStderrForward = () => { };
+  let stopNatsStdoutForward = () => { };
+  let stopNatsStderrForward = () => { };
+  let stopWorkerStdoutForward = () => { };
+  let stopWorkerStderrForward = () => { };
   let didExit = false;
 
   const exitOnce = (code) => {
@@ -331,11 +345,19 @@ async function main() {
     shutdownPromise = (async () => {
       await Promise.all([
         terminateChild(appProc, signal, 4000),
+        terminateChild(workerProc, 'SIGTERM', 4000, true),
+        terminateChild(natsProc, 'SIGTERM', 4000),
         terminateChild(weedProc, 'SIGTERM', 4000),
       ]);
       await weedExitPromise;
+      await natsExitPromise;
+      await workerExitPromise;
       stopWeedStdoutForward();
       stopWeedStderrForward();
+      stopNatsStdoutForward();
+      stopNatsStderrForward();
+      stopWorkerStdoutForward();
+      stopWorkerStderrForward();
     })();
     return shutdownPromise;
   };
@@ -418,6 +440,101 @@ async function main() {
       } else {
         console.warn('Skipping storage migrations: S3 configuration is incomplete.');
       }
+    }
+
+    const embeddedWorkerPort = Number.parseInt(withDefault(runtimeEnv.EMBEDDED_COMPUTE_WORKER_PORT, '8081'), 10);
+    const embeddedNatsPort = Number.parseInt(withDefault(runtimeEnv.EMBEDDED_NATS_PORT, '4222'), 10);
+    const embeddedNatsMonitorPort = Number.parseInt(withDefault(runtimeEnv.EMBEDDED_NATS_MONITOR_PORT, '8222'), 10);
+    const shouldStartEmbeddedWorker = resolveBooleanEnv(
+      runtimeEnv,
+      'START_EMBEDDED_COMPUTE_WORKER',
+      isRunningInDocker() && !Boolean(runtimeEnv.COMPUTE_WORKER_URL?.trim()),
+    );
+
+    if (shouldStartEmbeddedWorker) {
+      if (!hasNatsBinary()) {
+        throw new Error('START_EMBEDDED_COMPUTE_WORKER=true but `nats-server` binary is not available in PATH.');
+      }
+
+      runtimeEnv.NATS_URL = withDefault(runtimeEnv.NATS_URL, `nats://127.0.0.1:${embeddedNatsPort}`);
+      runtimeEnv.COMPUTE_WORKER_URL = withDefault(runtimeEnv.COMPUTE_WORKER_URL, `http://127.0.0.1:${embeddedWorkerPort}`);
+      runtimeEnv.COMPUTE_WORKER_TOKEN = withDefault(
+        runtimeEnv.COMPUTE_WORKER_TOKEN,
+        randomBytes(24).toString('base64url'),
+      );
+      runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
+      runtimeEnv.COMPUTE_NATS_REPLICAS = withDefault(runtimeEnv.COMPUTE_NATS_REPLICAS, '1');
+
+      const natsStoreDir = withDefault(runtimeEnv.EMBEDDED_NATS_STORE_DIR, 'docstore/nats/jetstream');
+      fs.mkdirSync(natsStoreDir, { recursive: true });
+
+      console.log(`Starting embedded nats-server on 127.0.0.1:${embeddedNatsPort}...`);
+      natsProc = spawn(
+        'nats-server',
+        [
+          '-js',
+          '-sd', natsStoreDir,
+          '-a', '127.0.0.1',
+          '-p', String(embeddedNatsPort),
+          '-m', String(embeddedNatsMonitorPort),
+        ],
+        {
+          env: runtimeEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      stopNatsStdoutForward = forwardChildStream(natsProc.stdout, process.stdout);
+      stopNatsStderrForward = forwardChildStream(natsProc.stderr, process.stderr);
+      natsExitPromise = once(natsProc, 'exit').then(() => undefined).catch(() => undefined);
+      natsProc.on('exit', (code, signal) => {
+        if (typeof code === 'number' && code !== 0) {
+          console.error(`Embedded nats-server exited with code ${code}.`);
+          return;
+        }
+        if (signal) {
+          console.error(`Embedded nats-server exited due to signal ${signal}.`);
+        }
+      });
+      natsProc.on('error', (error) => {
+        console.error(`Embedded nats-server failed to start: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      await waitForEndpoint(`http://127.0.0.1:${embeddedNatsMonitorPort}/healthz`, 20);
+      console.log(`Embedded nats-server is ready at nats://127.0.0.1:${embeddedNatsPort}`);
+
+      console.log(`Starting embedded compute-worker on 127.0.0.1:${embeddedWorkerPort}...`);
+      const workerEnv = {
+        ...runtimeEnv,
+        PORT: String(embeddedWorkerPort),
+      };
+      workerProc = spawn(
+        'pnpm',
+        ['--filter', '@openreader/compute-worker', 'start'],
+        {
+          env: workerEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: process.platform === 'win32',
+          detached: process.platform !== 'win32',
+        },
+      );
+      stopWorkerStdoutForward = forwardChildStream(workerProc.stdout, process.stdout);
+      stopWorkerStderrForward = forwardChildStream(workerProc.stderr, process.stderr);
+      workerExitPromise = once(workerProc, 'exit').then(() => undefined).catch(() => undefined);
+      workerProc.on('exit', (code, signal) => {
+        if (typeof code === 'number' && code !== 0) {
+          console.error(`Embedded compute-worker exited with code ${code}.`);
+          return;
+        }
+        if (signal) {
+          console.error(`Embedded compute-worker exited due to signal ${signal}.`);
+        }
+      });
+      workerProc.on('error', (error) => {
+        console.error(`Embedded compute-worker failed to start: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30);
+      console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
+    } else if (!runtimeEnv.COMPUTE_WORKER_URL?.trim() || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()) {
+      throw new Error('COMPUTE_WORKER_URL and COMPUTE_WORKER_TOKEN are required when embedded compute worker startup is disabled.');
     }
 
     const { child, exitPromise } = spawnMainCommand(command, runtimeEnv);
