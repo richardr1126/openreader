@@ -40,7 +40,6 @@ import type {
   WorkerOperationEvent,
   WhisperAlignJobRequest,
   WhisperAlignJobResult,
-  WorkerJobErrorShape,
   WorkerJobState,
   WorkerJobTiming,
   WorkerOperationKind,
@@ -93,21 +92,6 @@ interface QueuedJob<TPayload> {
   kind: WorkerOperationKind;
   queuedAt: number;
   payload: TPayload;
-}
-
-interface StoredJobState<Result> {
-  jobId: string;
-  opId: string;
-  opKey: string;
-  kind: WorkerOperationKind;
-  status: WorkerJobState;
-  timestamp: number;
-  startedAt?: number;
-  updatedAt: number;
-  result?: Result;
-  error?: WorkerJobErrorShape;
-  timing?: WorkerJobTiming;
-  progress?: PdfLayoutProgress;
 }
 
 interface NatsSession {
@@ -346,10 +330,6 @@ class ConcurrencyGate {
 
 function isTerminalStatus(status: WorkerJobState): boolean {
   return status === 'succeeded' || status === 'failed';
-}
-
-function jobStateKvKey(jobId: string): string {
-  return `job_state.${jobId}`;
 }
 
 function extractResultRef(kind: WorkerOperationKind, result: unknown): string | undefined {
@@ -665,12 +645,6 @@ async function main(): Promise<void> {
 
   const whisperJobCodec = createJsonCodec<QueuedJob<WhisperAlignJobRequest>>();
   const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
-  const jobStateCodec = createJsonCodec<StoredJobState<WhisperAlignJobResult | PdfLayoutJobResult>>();
-
-  const putJobState = async (state: StoredJobState<WhisperAlignJobResult | PdfLayoutJobResult>): Promise<void> => {
-    const { kv } = await ensureConnected();
-    await kv.put(jobStateKvKey(state.jobId), jobStateCodec.encode(state));
-  };
 
   const operationStateStore = new JetStreamOperationStateStore<WhisperAlignJobResult | PdfLayoutJobResult>({
     getKv: async () => (await ensureConnected()).kv,
@@ -686,17 +660,6 @@ async function main(): Promise<void> {
     getJs: async () => (await ensureConnected()).js,
     whisperSubject: WHISPER_JOBS_SUBJECT,
     layoutSubject: LAYOUT_JOBS_SUBJECT,
-    onEnqueued: async (job) => {
-      await putJobState({
-        jobId: job.jobId,
-        opId: job.opId,
-        opKey: job.opKey,
-        kind: job.kind,
-        status: 'queued',
-        timestamp: job.queuedAt,
-        updatedAt: job.queuedAt,
-      });
-    },
   });
 
   const orchestrator = new OperationOrchestrator({
@@ -1035,18 +998,6 @@ async function main(): Promise<void> {
         updatedAt: startedAt,
         ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
       });
-      await putJobState({
-        jobId: decoded.jobId,
-        opId: decoded.opId,
-        opKey: decoded.opKey,
-        kind: decoded.kind,
-        status: 'running',
-        timestamp: decoded.queuedAt,
-        startedAt,
-        updatedAt: startedAt,
-        ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-        ...(latestProgress ? { progress: latestProgress } : {}),
-      });
       app.log.info({
         worker: input.workerLabel,
         kind: decoded.kind,
@@ -1072,18 +1023,6 @@ async function main(): Promise<void> {
             ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
           });
         }
-        await putJobState({
-          jobId: decoded!.jobId,
-          opId: decoded!.opId,
-          opKey: decoded!.opKey,
-          kind: decoded!.kind,
-          status: 'running',
-          timestamp: decoded!.queuedAt,
-          startedAt,
-          updatedAt,
-          ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-          ...(latestProgress ? { progress: latestProgress } : {}),
-        });
       };
 
       heartbeat = setInterval(() => {
@@ -1094,7 +1033,7 @@ async function main(): Promise<void> {
             opId: decoded?.opId,
             jobId: decoded?.jobId,
             error: toErrorMessage(stateError),
-          }, 'failed to persist running heartbeat state');
+          }, 'failed to persist operation heartbeat state');
         });
       }, RUNNING_HEARTBEAT_MS);
 
@@ -1114,19 +1053,6 @@ async function main(): Promise<void> {
         result: result as WhisperAlignJobResult | PdfLayoutJobResult,
         updatedAt: now,
         ...(resultTiming ? { timing: resultTiming } : {}),
-      });
-      await putJobState({
-        jobId: decoded.jobId,
-        opId: decoded.opId,
-        opKey: decoded.opKey,
-        kind: decoded.kind,
-        status: 'succeeded',
-        timestamp: decoded.queuedAt,
-        startedAt,
-        updatedAt: now,
-        result: result as WhisperAlignJobResult | PdfLayoutJobResult,
-        ...(resultTiming ? { timing: resultTiming } : {}),
-        ...(latestProgress ? { progress: latestProgress } : {}),
       });
 
       input.msg.ack();
@@ -1164,7 +1090,6 @@ async function main(): Promise<void> {
         const queueWaitMs = safeDurationMs(decoded.queuedAt, now);
         const queueWaitTiming = typeof queueWaitMs === 'number' ? { queueWaitMs } : undefined;
 
-        const status: WorkerJobState = hasRetriesLeft ? 'running' : 'failed';
         const persistOpUpdate = hasRetriesLeft
           ? (latestProgress
             ? orchestrator.markProgress({
@@ -1192,26 +1117,6 @@ async function main(): Promise<void> {
             jobId: decoded?.jobId,
             error: toErrorMessage(stateError),
           }, 'failed to persist operation state');
-        });
-
-        await putJobState({
-          jobId: decoded.jobId,
-          opId: decoded.opId,
-          opKey: decoded.opKey,
-          kind: decoded.kind,
-          status,
-          timestamp: decoded.queuedAt,
-          updatedAt: now,
-          ...(status === 'failed' ? { error: { message } } : {}),
-          ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-          ...(latestProgress ? { progress: latestProgress } : {}),
-        }).catch((stateError) => {
-          app.log.error({
-            worker: input.workerLabel,
-            opId: decoded?.opId,
-            jobId: decoded?.jobId,
-            error: toErrorMessage(stateError),
-          }, 'failed to persist job state');
         });
       }
 
