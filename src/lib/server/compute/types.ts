@@ -6,8 +6,6 @@ import type {
 import type { PdfLayoutProgress, WhisperAlignJobBase } from '@openreader/compute-core/api-contracts';
 import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
-export type ComputeMode = 'worker';
-
 export interface WhisperAlignInput extends WhisperAlignJobBase {
   audioBuffer?: TTSAudioBuffer;
   audioObjectKey?: string;

@@ -1,11 +1,9 @@
 import type {
   WorkerOperationEvent,
   WorkerOperationKind,
-  WorkerOperationRequest,
   WorkerOperationState,
 } from '../api-contracts';
 
-export type OperationRequest = WorkerOperationRequest;
 export type OperationState<Result = unknown> = WorkerOperationState<Result>;
 export type OperationEvent<Result = unknown> = WorkerOperationEvent<Result>;
 
@@ -63,5 +61,3 @@ export interface OperationLifecycleConfig {
   opStaleMs: number;
   maxCasRetries?: number;
 }
-
-export type OperationTransitionStatus = 'queued' | 'running' | 'succeeded' | 'failed';

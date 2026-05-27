@@ -19,7 +19,3 @@ function resolveDocstoreDir(): string {
 }
 
 export const DOCSTORE_DIR = resolveDocstoreDir();
-
-export function getDocstoreDir(): string {
-  return DOCSTORE_DIR;
-}

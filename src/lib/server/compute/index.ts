@@ -3,13 +3,9 @@ import { isWorkerClientConfigAvailable, WorkerComputeBackend } from '@/lib/serve
 
 let backendPromise: Promise<ComputeBackend> | null = null;
 
-async function createBackend(): Promise<ComputeBackend> {
-  return new WorkerComputeBackend();
-}
-
 export async function getCompute(): Promise<ComputeBackend> {
   if (!backendPromise) {
-    backendPromise = createBackend().catch((error) => {
+    backendPromise = Promise.resolve(new WorkerComputeBackend()).catch((error) => {
       backendPromise = null;
       throw error;
     });
