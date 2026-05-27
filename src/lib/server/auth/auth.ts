@@ -11,6 +11,7 @@ import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { assertUserSignupAllowed } from '@/lib/server/auth/signup-policy';
 import * as authSchemaSqlite from "@/db/schema_auth_sqlite";
 import * as authSchemaPostgres from "@/db/schema_auth_postgres";
+import { serverLogger } from '@/lib/server/logger';
 
 // Heavy modules (S3 SDK, blobstore, rate-limiter, claim-data) are loaded
 // lazily via dynamic import() inside the beforeDelete / onLinkAccount
@@ -71,7 +72,7 @@ const createAuth = () => betterAuth({
     requireEmailVerification: false, // Set to true in production
     async sendResetPassword(data) {
       // Send an email to the user with a link to reset their password
-      console.log("Password reset requested for:", data.user.email);
+      serverLogger.info({ err: data.user.email }, "Password reset requested for:");
     },
   },
   user: {
@@ -90,7 +91,7 @@ const createAuth = () => betterAuth({
           const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
           await deleteUserStorageData(user.id, null);
         } catch (error) {
-          console.error('[auth] Failed to clean up user storage before deletion:', error);
+          serverLogger.error({ err: error }, '[auth] Failed to clean up user storage before deletion:');
           // Don't throw – allow the user deletion to proceed even if S3 cleanup fails.
           // Orphaned blobs are preferable to a blocked account deletion.
         }
@@ -145,11 +146,11 @@ const createAuth = () => betterAuth({
           onLinkAccount: async ({ anonymousUser, newUser }) => {
             try {
               // Log when anonymous user links to a real account
-              console.log("Anonymous user linked to account:", {
+              serverLogger.info({
                 anonymousUserId: anonymousUser.user.id,
                 newUserId: newUser.user.id,
                 newUserEmail: newUser.user.email,
-              });
+              }, "Anonymous user linked to account:");
 
               // Lazy-load heavy modules only when account linking actually happens
               const [{ rateLimiter }, claimData] = await Promise.all([
@@ -160,9 +161,9 @@ const createAuth = () => betterAuth({
               // Transfer rate limiting data (TTS char counts) from anonymous user to authenticated user
               try {
                 await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
-                console.log(`Successfully transferred rate limit data from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+                serverLogger.info(`Successfully transferred rate limit data from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
               } catch (error) {
-                console.error("Error transferring rate limit data during account linking:", error);
+                serverLogger.error({ err: error }, "Error transferring rate limit data during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -170,10 +171,10 @@ const createAuth = () => betterAuth({
               try {
                 const transferred = await claimData.transferUserAudiobooks(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
-                  console.log(`Successfully transferred ${transferred} audiobook(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+                  serverLogger.info(`Successfully transferred ${transferred} audiobook(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                console.error("Error transferring audiobooks during account linking:", error);
+                serverLogger.error({ err: error }, "Error transferring audiobooks during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -181,10 +182,10 @@ const createAuth = () => betterAuth({
               try {
                 const transferred = await claimData.transferUserDocuments(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
-                  console.log(`Successfully transferred ${transferred} document(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+                  serverLogger.info(`Successfully transferred ${transferred} document(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                console.error("Error transferring documents during account linking:", error);
+                serverLogger.error({ err: error }, "Error transferring documents during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -192,10 +193,10 @@ const createAuth = () => betterAuth({
               try {
                 const transferred = await claimData.transferUserPreferences(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
-                  console.log(`Successfully transferred preferences from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+                  serverLogger.info(`Successfully transferred preferences from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                console.error("Error transferring preferences during account linking:", error);
+                serverLogger.error({ err: error }, "Error transferring preferences during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -203,14 +204,14 @@ const createAuth = () => betterAuth({
               try {
                 const transferred = await claimData.transferUserProgress(anonymousUser.user.id, newUser.user.id);
                 if (transferred > 0) {
-                  console.log(`Successfully transferred ${transferred} progress row(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+                  serverLogger.info(`Successfully transferred ${transferred} progress row(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                console.error("Error transferring reading progress during account linking:", error);
+                serverLogger.error({ err: error }, "Error transferring reading progress during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
             } catch (error) {
-              console.error("Error in onLinkAccount callback:", error);
+              serverLogger.error({ err: error }, "Error in onLinkAccount callback:");
               // Don't throw here to prevent blocking the account linking process
             }
             // Note: Anonymous user will be automatically deleted after this callback completes

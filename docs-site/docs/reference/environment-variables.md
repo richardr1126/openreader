@@ -13,12 +13,10 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 
 | Variable | Area | Default | When to set |
 | --- | --- | --- | --- |
-| `ADMIN_EMAILS` | Auth/Admin | empty | Comma-separated emails auto-promoted to admin (requires auth enabled) |
+| `LOG_FORMAT` | Runtime logging | `pretty` | Set `json` for structured logs; shared by app server + compute worker |
+| `LOG_LEVEL` | Runtime logging | `info` | Set app server log level |
 | `API_BASE` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
 | `API_KEY` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
-| `RUNTIME_SEED_*` runtime seeds | Legacy bootstrap seed | varies | Optional first-boot seeds for site features; then manage in Settings → Admin → Site features |
-| `RUNTIME_SEED_CHANGELOG_FEED_URL` | Legacy bootstrap seed | `https://docs.openreader.richardr.dev/changelog/manifest.json` | Optional first-boot seed for changelog feed URL; then manage in Settings → Admin → Site features |
-| `RUNTIME_SEED_ENABLE_USER_SIGNUPS` | Legacy bootstrap seed | `true` | Optional first-boot seed for whether new accounts can be created; then manage in Settings → Admin → Site features |
 | `TTS_CACHE_MAX_SIZE_BYTES` | TTS caching | `268435456` (256 MB) | Tune in-memory TTS cache size |
 | `TTS_CACHE_TTL_MS` | TTS caching | `1800000` (30 min) | Tune in-memory TTS cache TTL |
 | `TTS_MAX_RETRIES` | TTS retry | `2` | Tune retry attempts for upstream 429/5xx |
@@ -38,6 +36,7 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `DISABLE_AUTH_RATE_LIMIT` | Rate limiting | `false` | Set `true` to disable auth-layer rate limiting |
+| `ADMIN_EMAILS` | Auth/Admin | empty | Comma-separated emails auto-promoted to admin (requires auth enabled) |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
 | `WEED_MINI_DIR` | Storage | `docstore/seaweedfs` | Override embedded SeaweedFS data directory |
@@ -60,6 +59,7 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `EMBEDDED_NATS_MONITOR_PORT` | Heavy compute backend | `8222` | Override embedded NATS monitor port |
 | `EMBEDDED_NATS_STORE_DIR` | Heavy compute backend | `docstore/nats/jetstream` | Override embedded JetStream storage directory |
 | `NATS_URL` | Heavy compute backend | `nats://127.0.0.1:4222` in embedded startup | Optional override for embedded startup or required on standalone worker service |
+| `COMPUTE_LOG_LEVEL` | Heavy compute backend | `info` | Compute worker log level |
 | `COMPUTE_JOB_CONCURRENCY` | Heavy compute backend | `1` | Worker-side shared compute concurrency cap |
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Heavy compute backend | `30000` | Shared whisper alignment timeout budget (worker + worker client wait budget) |
 | `COMPUTE_PDF_TIMEOUT_MS` | Heavy compute backend | `300000` | Shared PDF idle-timeout budget (worker + worker client wait budget) |
@@ -67,8 +67,34 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `PDF_LAYOUT_MODEL_BASE_URL` | PDF layout model | PP-DocLayoutV3 ONNX base URL | Optional base URL override for `ensureModel()` |
 | `WHISPER_MODEL_BASE_URL` | Whisper ONNX model | onnx-community defaults | Optional base URL override for ONNX whisper-base_timestamped q4 downloads |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
+| `RUNTIME_SEED_*` runtime seeds | Legacy bootstrap seed | varies | Optional first-boot seeds for site features; then manage in Settings → Admin → Site features |
+| `RUNTIME_SEED_ENABLE_DOCX_CONVERSION` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable/disable DOCX conversion UI |
+| `RUNTIME_SEED_ENABLE_DESTRUCTIVE_DELETE_ACTIONS` | Legacy bootstrap seed | `true` | Optional first-boot seed to show/hide destructive delete actions |
+| `RUNTIME_SEED_ENABLE_TTS_PROVIDERS_TAB` | Legacy bootstrap seed | `true` | Optional first-boot seed to show/hide user TTS providers tab |
+| `RUNTIME_SEED_CHANGELOG_FEED_URL` | Legacy bootstrap seed | `https://docs.openreader.richardr.dev/changelog/manifest.json` | Optional first-boot seed for changelog feed URL; then manage in Settings → Admin → Site features |
+| `RUNTIME_SEED_ENABLE_USER_SIGNUPS` | Legacy bootstrap seed | `true` | Optional first-boot seed for whether new accounts can be created; then manage in Settings → Admin → Site features |
+| `RUNTIME_SEED_RESTRICT_USER_API_KEYS` | Legacy bootstrap seed | runtime-dependent | Optional first-boot seed to restrict per-user BYOK |
+| `RUNTIME_SEED_DEFAULT_TTS_PROVIDER` | Legacy bootstrap seed | `custom-openai` | Optional first-boot seed for default TTS provider slug |
+| `RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable audiobook export UI |
 
 
+
+## Runtime Logging
+
+### LOG_FORMAT
+
+Controls log output format for server-side Pino loggers.
+
+- Default: `pretty`
+- Allowed values: `pretty`, `json`
+- Applies to app server and compute worker
+- Recommended in production (Vercel + external worker): `json`
+
+### LOG_LEVEL
+
+App server log level.
+
+- Default: `info`
 
 ## TTS Provider and Request Behavior
 
@@ -242,6 +268,8 @@ Switches metadata/auth storage from SQLite to Postgres.
 - Set: Postgres mode
 - Related docs: [Database](../configure/database)
 
+### Embedded SeaweedFS weed mini config
+
 ### USE_EMBEDDED_WEED_MINI
 
 Controls embedded SeaweedFS startup.
@@ -263,6 +291,8 @@ Maximum seconds to wait for embedded SeaweedFS startup.
 
 - Default: `20`
 - Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+
+### S3 storage config
 
 ### S3_ACCESS_KEY_ID
 
@@ -409,6 +439,13 @@ NATS connection URL used by compute worker runtime.
 - Standalone worker service: set in worker service env (`compute/worker/.env*` or platform env)
 - For embedded startup, this is optional; startup supplies the default value.
 - Worker-side only in external mode: set on worker service env, not app/root `.env`.
+
+### COMPUTE_LOG_LEVEL
+
+Compute worker log level.
+
+- Default: `info`
+- In standalone mode, set this on the worker service env.
 
 ### COMPUTE_JOB_CONCURRENCY
 

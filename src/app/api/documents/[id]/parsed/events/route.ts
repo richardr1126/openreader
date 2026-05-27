@@ -11,6 +11,7 @@ import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/docu
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { createRequestLogger, errorToLog, hashForLog } from '@/lib/server/logger';
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
 import type { PdfLayoutJobResult, WorkerOperationEvent, WorkerOperationState } from '@openreader/compute-core/api-contracts';
@@ -134,6 +135,10 @@ async function syncFromDb(input: {
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { logger, requestId } = createRequestLogger({
+    route: '/api/documents/[id]/parsed/events',
+    request: req,
+  });
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
@@ -153,6 +158,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
     const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
     const storageUserId = authCtxOrRes.userId ?? unclaimedUserId;
+    const storageUserIdHash = hashForLog(storageUserId);
     const allowedUserIds = authCtxOrRes.authEnabled ? [storageUserId, unclaimedUserId] : [unclaimedUserId];
 
     const row = await loadPreferredRow({
@@ -261,9 +267,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               }
             }).catch((error) => {
               if (closed) return;
-              console.warn('[parsed/events] db resync failed', {
+              logger.warn({
+                event: 'documents.parsed.events.db_resync_failed',
                 documentId: id,
-                storageUserId,
+                storageUserIdHash,
+                requestId,
                 error: error instanceof Error ? error.message : String(error),
               });
               controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`));
@@ -292,9 +300,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               if (!currentOpId) {
                 if (!loggedMissingOpId) {
                   loggedMissingOpId = true;
-                  console.warn('[parsed/events] missing worker opId while parse is non-terminal', {
+                  logger.warn({
+                    event: 'documents.parsed.events.missing_opid_non_terminal',
                     documentId: id,
-                    storageUserId,
+                    storageUserIdHash,
                     parseStatus: current.parseStatus,
                     requestedOpId,
                   });
@@ -331,7 +340,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
             if (!response.ok) {
               const detail = await response.text().catch(() => '');
-              console.warn('[parsed/events] worker stream request failed', {
+              logger.warn({
+                event: 'documents.parsed.events.worker_stream_request_failed',
                 documentId: id,
                 opId: currentOpId,
                 status: response.status,
@@ -341,7 +351,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               continue;
             }
             if (!response.body) {
-              console.warn('[parsed/events] worker stream response missing body', {
+              logger.warn({
+                event: 'documents.parsed.events.worker_stream_missing_body',
                 documentId: id,
                 opId: currentOpId,
               });
@@ -441,9 +452,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
         void runWorkerProxy()
           .catch((error) => {
-            console.error('[parsed/events] worker proxy crashed', {
+            logger.error({
+              event: 'documents.parsed.events.worker_proxy_crashed',
               documentId: id,
-              error: error instanceof Error ? error.message : String(error),
+              error: errorToLog(error),
             });
             if (!closed) {
               controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`));
@@ -471,7 +483,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       },
     });
   } catch (error) {
-    console.error('Error streaming parsed PDF progress:', error);
+    logger.error({
+      event: 'documents.parsed.events.route_failed',
+      error: errorToLog(error),
+    });
     return NextResponse.json({ error: 'Failed to stream parsed PDF progress' }, { status: 500 });
   }
 }

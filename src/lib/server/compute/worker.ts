@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
 import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
 import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core';
+import { serverLogger } from '@/lib/server/logger';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
@@ -70,14 +71,14 @@ function logWorker(level: WorkerLogLevel, event: string, fields: Record<string, 
   };
   const line = `${LOG_PREFIX} ${JSON.stringify(payload)}`;
   if (level === 'error') {
-    console.error(line);
+    serverLogger.error(line);
     return;
   }
   if (level === 'warn') {
-    console.warn(line);
+    serverLogger.warn(line);
     return;
   }
-  console.info(line);
+  serverLogger.info(line);
 }
 
 function opSummary(value: unknown): Record<string, unknown> {

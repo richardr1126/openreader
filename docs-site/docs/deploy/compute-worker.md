@@ -50,7 +50,7 @@ Common optional:
 - `S3_PREFIX=openreader`
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `PORT=8081` (local/manual; on Railway platform injects this)
-- `COMPUTE_LOG_FORMAT=pretty` (default) or `json`
+- `LOG_FORMAT=pretty` (default) or `json`
 
 Advanced tuning (usually leave unset unless you need overrides):
 

@@ -318,6 +318,7 @@ async function main() {
   }
 
   const runtimeEnv = { ...process.env };
+  runtimeEnv.LOG_FORMAT = withDefault(runtimeEnv.LOG_FORMAT, 'pretty');
   let weedProc = null;
   let weedExitPromise = Promise.resolve();
   let natsProc = null;

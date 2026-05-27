@@ -11,6 +11,7 @@ import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/li
 import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,7 +156,7 @@ export async function GET(request: NextRequest) {
       settings,
     });
   } catch (error) {
-    console.error('Error fetching chapters:', error);
+    serverLogger.error({ err: error }, 'Error fetching chapters:');
     return NextResponse.json({ error: 'Failed to fetch chapters' }, { status: 500 });
   }
 }

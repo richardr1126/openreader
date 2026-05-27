@@ -11,6 +11,7 @@ import { getAudiobookObjectStream, listAudiobookObjects } from '@/lib/server/aud
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
 
   archive.on('warning', (warning) => {
     if ((warning as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error('User export warning:', warning);
+      serverLogger.error({ err: warning }, 'User export warning:');
     }
   });
 
@@ -129,7 +130,7 @@ export async function GET(req: NextRequest) {
         await archive.finalize();
       }
     } catch (error) {
-      console.error('Export generation failed:', error);
+      serverLogger.error({ err: error }, 'Export generation failed:');
       archive.abort();
       output.destroy(error instanceof Error ? error : new Error('Failed to generate export archive'));
     } finally {

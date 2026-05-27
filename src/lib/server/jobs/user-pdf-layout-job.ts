@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { documentKey, putParsedDocumentBlob } from '@/lib/server/documents/blobstore';
+import { serverLogger } from '@/lib/server/logger';
 import {
   parseDocumentParseState,
   stringifyDocumentParseState,
@@ -348,18 +349,18 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
         readerType: 'pdf',
       }).then((cleared) => {
         if (cleared.warning) {
-          console.warn('[parsePdfJob] cache invalidation warning', {
+          serverLogger.warn({
             documentId: input.documentId,
             userId,
             warning: cleared.warning,
-          });
+          }, '[parsePdfJob] cache invalidation warning');
         }
       }).catch((cacheError) => {
-        console.warn('[parsePdfJob] cache invalidation failed', {
+        serverLogger.warn({
           documentId: input.documentId,
           userId,
           error: cacheError instanceof Error ? cacheError.message : String(cacheError),
-        });
+        }, '[parsePdfJob] cache invalidation failed');
       });
     }
   } catch (error) {
@@ -383,19 +384,19 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
         parseState: stringifyDocumentParseState(failedState),
       });
     } catch (statusError) {
-      console.error('[parsePdfJob] failed to write parse status', {
+      serverLogger.error({
         documentId: input.documentId,
         parseStatus,
         error: statusError instanceof Error ? statusError.message : String(statusError),
-      });
+      }, '[parsePdfJob] failed to write parse status');
     }
-    console.error('[parsePdfJob] failed', {
+    serverLogger.error({
       documentId: input.documentId,
       parseStatus,
       error: message,
       ...(stack ? { stack } : {}),
       ...(cause ? { cause: String(cause) } : {}),
-    });
+    }, '[parsePdfJob] failed');
   } finally {
     running.delete(key);
   }
@@ -405,6 +406,6 @@ export function enqueueParsePdfJob(input: UserPdfLayoutJobRequest): void {
   Promise.resolve()
     .then(() => parsePdfJob(input))
     .catch((error) => {
-      console.error('[parsePdfJob] uncaught error', error);
+      serverLogger.error({ err: error }, '[parsePdfJob] uncaught error');
     });
 }

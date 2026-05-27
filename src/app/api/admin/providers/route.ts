@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminContext } from '@/lib/server/auth/admin';
+import { serverLogger } from '@/lib/server/logger';
 import {
   AdminProviderError,
   createAdminProvider,
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof AdminProviderError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error('[admin/providers] create failed:', error);
+    serverLogger.error({ err: error }, '[admin/providers] create failed:');
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

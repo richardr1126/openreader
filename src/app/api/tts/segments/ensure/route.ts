@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
@@ -35,6 +34,7 @@ import { userWhisperAlignJob } from '@/lib/server/jobs/user-whisper-align-job';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
+import { createRequestLogger, errorToLog } from '@/lib/server/logger';
 import type {
   TTSSegmentInput,
   TTSSegmentManifestItem,
@@ -152,7 +152,10 @@ async function deleteEntryIfUnused(userId: string, segmentEntryId: string): Prom
 export async function POST(request: NextRequest) {
   let didCreateDeviceIdCookie = false;
   let deviceIdToSet: string | null = null;
-  const requestId = randomUUID();
+  const { logger, requestId } = createRequestLogger({
+    route: '/api/tts/segments/ensure',
+    request,
+  });
   const requestStartedAt = Date.now();
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
@@ -326,7 +329,8 @@ export async function POST(request: NextRequest) {
 
     for (const segment of normalized) {
       if (request.signal.aborted) {
-        console.info('[tts-segments/ensure] request aborted; stopping remaining segment processing', {
+        logger.info({
+          event: 'tts.segments.ensure.request_aborted',
           requestId,
           documentId: parsed.documentId,
           completedSoFar: manifest.length,
@@ -412,9 +416,11 @@ export async function POST(request: NextRequest) {
             }
           } catch (alignError) {
             const aborted = isAbortLikeError(alignError) || request.signal.aborted;
-            const log = aborted ? console.info : console.warn;
-            log('Whisper alignment still unavailable for completed segment; continuing without word highlights.', {
+            const level = aborted ? 'info' : 'warn';
+            logger[level]({
+              event: 'tts.segments.ensure.self_heal_alignment_unavailable',
               requestId,
+              documentId: parsed.documentId,
               segmentId: segment.segmentId,
               aborted,
               error: alignError instanceof Error ? alignError.message : String(alignError),
@@ -652,9 +658,11 @@ export async function POST(request: NextRequest) {
             stageTimings.whisperAlignMs = Date.now() - alignStartedAt;
           } catch (alignError) {
             const aborted = isAbortLikeError(alignError) || request.signal.aborted;
-            const log = aborted ? console.info : console.warn;
-            log('Whisper alignment unavailable for segment; continuing without word highlights.', {
+            const level = aborted ? 'info' : 'warn';
+            logger[level]({
+              event: 'tts.segments.ensure.alignment_unavailable',
               requestId,
+              documentId: parsed.documentId,
               segmentId: segment.segmentId,
               aborted,
               error: alignError instanceof Error ? alignError.message : String(alignError),
@@ -711,8 +719,9 @@ export async function POST(request: NextRequest) {
           : upstreamStatus && upstreamStatus >= 500
             ? 'UPSTREAM_TTS_ERROR'
             : 'TTS_SEGMENT_GENERATION_FAILED';
-        const segmentFailureLog = aborted ? console.info : console.error;
-        segmentFailureLog('[tts-segments/ensure] segment failed', {
+        const level = aborted ? 'info' : 'error';
+        logger[level]({
+          event: 'tts.segments.ensure.segment_failed',
           requestId,
           documentId: parsed.documentId,
           segmentId: segment.segmentId,
@@ -762,7 +771,8 @@ export async function POST(request: NextRequest) {
         });
 
         if (aborted || request.signal.aborted) {
-          console.info('[tts-segments/ensure] stopping remaining segments after abort', {
+          logger.info({
+            event: 'tts.segments.ensure.stop_after_abort',
             requestId,
             documentId: parsed.documentId,
             segmentId: segment.segmentId,
@@ -778,7 +788,8 @@ export async function POST(request: NextRequest) {
     const pendingCount = manifest.filter((s) => s.status === 'pending').length;
     const errorItems = manifest.filter((s) => s.status === 'error');
     if (errorItems.length > 0) {
-      console.error('[tts-segments/ensure] partial result', {
+      logger.error({
+        event: 'tts.segments.ensure.partial_result',
         requestId,
         documentId: parsed.documentId,
         total: manifest.length,
@@ -803,7 +814,10 @@ export async function POST(request: NextRequest) {
     attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
     return response;
   } catch (error) {
-    console.error('Error ensuring TTS segments:', error);
+    logger.error({
+      event: 'tts.segments.ensure.route_failed',
+      error: errorToLog(error),
+    });
     const response = NextResponse.json({ error: 'Failed to ensure TTS segments' }, { status: 500 });
     attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
     return response;

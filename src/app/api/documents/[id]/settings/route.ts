@@ -7,6 +7,7 @@ import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/li
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,7 +93,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       hasStoredSettings: Boolean(row),
     });
   } catch (error) {
-    console.error('Error loading document settings:', error);
+    serverLogger.error({ err: error }, 'Error loading document settings:');
     return NextResponse.json({ error: 'Failed to load document settings' }, { status: 500 });
   }
 }
@@ -161,7 +162,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       applied: true,
     });
   } catch (error) {
-    console.error('Error updating document settings:', error);
+    serverLogger.error({ err: error }, 'Error updating document settings:');
     return NextResponse.json({ error: 'Failed to update document settings' }, { status: 500 });
   }
 }

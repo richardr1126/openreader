@@ -6,6 +6,7 @@ import { isAuthEnabled } from '@/lib/server/auth/config';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { nextUtcMidnightTimestampMs } from '@/lib/shared/timestamps';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Error getting rate limit status:', error);
+    serverLogger.error({ err: error }, 'Error getting rate limit status:');
     return NextResponse.json(
       { error: 'Failed to get rate limit status' },
       { status: 500 }

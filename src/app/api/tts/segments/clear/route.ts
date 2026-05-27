@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
+import { createRequestLogger, errorToLog } from '@/lib/server/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,10 @@ function parseBody(value: unknown): { documentId: string } | null {
 }
 
 export async function POST(request: NextRequest) {
+  const { logger } = createRequestLogger({
+    route: '/api/tts/segments/clear',
+    request,
+  });
   try {
     const parsed = parseBody(await request.json().catch(() => null));
     if (!parsed) {
@@ -34,7 +39,10 @@ export async function POST(request: NextRequest) {
       ...cleared,
     });
   } catch (error) {
-    console.error('Error clearing TTS segment cache:', error);
+    logger.error({
+      event: 'tts.segments.clear_failed',
+      error: errorToLog(error),
+    });
     return NextResponse.json({ error: 'Failed to clear TTS segment cache' }, { status: 500 });
   }
 }

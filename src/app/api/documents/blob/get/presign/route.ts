@@ -6,6 +6,7 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignGet } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
     const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(doc.id)}`;
     const directUrl = await presignGet(doc.id, testNamespace).catch(() => null);
     if (!directUrl) {
-      console.warn('[blob-fallback] presign download unavailable, redirecting to proxy fallback', { id: doc.id });
+      serverLogger.warn({ id: doc.id }, '[blob-fallback] presign download unavailable, redirecting to proxy fallback');
       return NextResponse.redirect(fallbackUrl, {
         status: 307,
         headers: { 'Cache-Control': 'no-store' },
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    console.error('Error creating document download signature:', error);
+    serverLogger.error({ err: error }, 'Error creating document download signature:');
     return NextResponse.json({ error: 'Failed to prepare document download' }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ import { contentTypeForName } from '@/lib/server/storage/library-mount';
 import { getDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
-    console.info('[blob-fallback] download proxy used', { id });
+    serverLogger.info({ id }, '[blob-fallback] download proxy used');
 
     const rows = (await db
       .select({ id: documents.id, userId: documents.userId, name: documents.name })
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
       throw error;
     }
   } catch (error) {
-    console.error('Error loading document content fallback:', error);
+    serverLogger.error({ err: error }, 'Error loading document content fallback:');
     return NextResponse.json({ error: 'Failed to load document content' }, { status: 500 });
   }
 }

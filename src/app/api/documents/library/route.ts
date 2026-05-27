@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseLibraryRoots } from '@/lib/server/storage/library-mount';
 import type { DocumentType } from '@/types/documents';
 import { auth } from '@/lib/server/auth/auth';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,7 +112,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
   } catch (error) {
-    console.error('Error checking auth:', error);
+    serverLogger.error({ err: error }, 'Error checking auth:');
     return NextResponse.json({ error: 'Error checking auth' }, { status: 500 });
   }
 

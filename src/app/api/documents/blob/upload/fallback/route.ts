@@ -3,6 +3,7 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, putDocumentBlob } from '@/lib/server/documents/blobstore';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,15 +43,15 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    console.info('[blob-fallback] upload proxy used', {
+    serverLogger.info({
       id,
       contentType,
       bytes: body.byteLength,
-    });
+    }, '[blob-fallback] upload proxy used');
 
     return NextResponse.json({ success: true, id });
   } catch (error) {
-    console.error('Error proxy-uploading document blob:', error);
+    serverLogger.error({ err: error }, 'Error proxy-uploading document blob:');
     return NextResponse.json({ error: 'Failed to upload document blob' }, { status: 500 });
   }
 }

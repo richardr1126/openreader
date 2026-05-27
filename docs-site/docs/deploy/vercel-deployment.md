@@ -41,10 +41,19 @@ ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in
 COMPUTE_WORKER_URL=https://<railway-worker-domain>
 COMPUTE_WORKER_TOKEN=...
 
+# Logging (recommended for Vercel log ingestion)
+LOG_FORMAT=json
+LOG_LEVEL=info
+
 # First-boot seed for the TTS shared provider (optional; manage in-app afterwards)
 # API_KEY=your_replicate_key
 # API_BASE only needed for OpenAI-compatible self-hosted providers
 ```
+
+If you also run an external worker service (for example Railway), set these there too:
+
+- `LOG_FORMAT=json`
+- `COMPUTE_LOG_LEVEL=info`
 
 :::note Env vars vs. admin panel (important for Vercel)
 `API_KEY` / `API_BASE` are one-shot bootstrap seeds on first deploy. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).

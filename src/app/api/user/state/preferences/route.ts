@@ -9,6 +9,7 @@ import { isTtsProviderType, type TtsProviderId } from '@/lib/shared/tts-provider
 import { listAdminProviders } from '@/lib/server/admin/providers';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { normalizeLegacyProviderRef, resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
+import { serverLogger } from '@/lib/server/logger';
 import {
   deserializeUserPreferencesPayload,
   extractUserPreferencesMeta,
@@ -241,7 +242,7 @@ export async function GET(req: NextRequest) {
       hasStoredPreferences: Boolean(row),
     });
   } catch (error) {
-    console.error('Error loading user preferences:', error);
+    serverLogger.error({ err: error }, 'Error loading user preferences:');
     return NextResponse.json({ error: 'Failed to load user preferences' }, { status: 500 });
   }
 }
@@ -315,7 +316,7 @@ export async function PUT(req: NextRequest) {
       applied: true,
     });
   } catch (error) {
-    console.error('Error updating user preferences:', error);
+    serverLogger.error({ err: error }, 'Error updating user preferences:');
     return NextResponse.json({ error: 'Failed to update user preferences' }, { status: 500 });
   }
 }

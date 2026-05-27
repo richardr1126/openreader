@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
+import { serverLogger } from '@/lib/server/logger';
 import {
   cleanupDocumentPreviewArtifacts,
   deleteDocumentPreviewRows,
@@ -172,7 +173,7 @@ export async function POST(req: NextRequest) {
         },
         testNamespace,
       ).catch((error) => {
-        console.error(`Failed to enqueue preview for document ${doc.id}:`, error);
+        serverLogger.error({ err: error }, `Failed to enqueue preview for document ${doc.id}:`);
       });
 
       if (doc.type === 'pdf') {
@@ -186,7 +187,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, stored });
   } catch (error) {
-    console.error('Error registering documents:', error);
+    serverLogger.error({ err: error }, 'Error registering documents:');
     return NextResponse.json({ error: 'Failed to register documents' }, { status: 500 });
   }
 }
@@ -262,7 +263,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ documents: results });
   } catch (error) {
-    console.error('Error loading document metadata:', error);
+    serverLogger.error({ err: error }, 'Error loading document metadata:');
     return NextResponse.json({ error: 'Failed to load documents' }, { status: 500 });
   }
 }
@@ -342,21 +343,21 @@ export async function DELETE(req: NextRequest) {
         await deleteDocumentBlob(id, testNamespace);
       } catch (error) {
         if (!isMissingBlobError(error)) {
-          console.error(`[best-effort] Failed to delete blob for document ${id}, orphaned blob may need manual cleanup:`, error);
+          serverLogger.error({ err: error }, `[best-effort] Failed to delete blob for document ${id}, orphaned blob may need manual cleanup:`);
         }
       }
 
       await cleanupDocumentPreviewArtifacts(id, testNamespace).catch((error) => {
-        console.error(`Failed to cleanup preview artifacts for document ${id}:`, error);
+        serverLogger.error({ err: error }, `Failed to cleanup preview artifacts for document ${id}:`);
       });
       await deleteDocumentPreviewRows(id, testNamespace).catch((error) => {
-        console.error(`Failed to cleanup preview rows for document ${id}:`, error);
+        serverLogger.error({ err: error }, `Failed to cleanup preview rows for document ${id}:`);
       });
     }
 
     return NextResponse.json({ success: true, deleted: deletedRows.length });
   } catch (error) {
-    console.error('Error deleting documents:', error);
+    serverLogger.error({ err: error }, 'Error deleting documents:');
     return NextResponse.json({ error: 'Failed to delete documents' }, { status: 500 });
   }
 }

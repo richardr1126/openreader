@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import { serverLogger } from '@/lib/server/logger';
 import {
   resolveProviderModels,
   type ReplicateVoiceInputKey,
@@ -192,7 +193,7 @@ async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promi
     if (error instanceof DOMException && error.name === 'AbortError') {
       return null;
     }
-    console.error('Error fetching Replicate model schema:', error);
+    serverLogger.error({ err: error }, 'Error fetching Replicate model schema:');
     return null;
   } finally {
     clearTimeout(timeoutId);
@@ -283,7 +284,7 @@ async function fetchDeepinfraVoices(apiKey: string): Promise<string[]> {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return [];
     }
-    console.error('Error fetching Deepinfra voices:', error);
+    serverLogger.error({ err: error }, 'Error fetching Deepinfra voices:');
     return [];
   } finally {
     clearTimeout(timeoutId);
@@ -315,7 +316,7 @@ async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise
       ? data.voices
       : null;
   } catch {
-    console.log('Custom endpoint does not support voices, using defaults');
+    serverLogger.info('Custom endpoint does not support voices, using defaults');
     return null;
   } finally {
     clearTimeout(timeoutId);

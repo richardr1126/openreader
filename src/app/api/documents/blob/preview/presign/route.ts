@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { presignDocumentPreviewGet } from '@/lib/server/documents/previews-blobstore';
 import { ensureDocumentPreview } from '@/lib/server/documents/previews';
 import { validatePreviewRequest } from '../utils';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
 
     const directUrl = await presignDocumentPreviewGet(doc.id, testNamespace).catch(() => null);
     if (!directUrl) {
-      console.warn('[blob-fallback] presign preview unavailable, redirecting to proxy fallback', { id: doc.id });
+      serverLogger.warn({ id: doc.id }, '[blob-fallback] presign preview unavailable, redirecting to proxy fallback');
       return NextResponse.redirect(fallbackUrl, {
         status: 307,
         headers: { 'Cache-Control': 'no-store' },
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    console.error('Error creating document preview signature:', error);
+    serverLogger.error({ err: error }, 'Error creating document preview signature:');
     return NextResponse.json({ error: 'Failed to prepare document preview' }, { status: 500 });
   }
 }

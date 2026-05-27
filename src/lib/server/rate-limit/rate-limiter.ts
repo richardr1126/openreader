@@ -3,6 +3,7 @@ import { userTtsChars } from '@/db/schema';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
+import { serverLogger } from '@/lib/server/logger';
 
 function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -10,7 +11,7 @@ function readPositiveIntEnv(name: string, fallback: number): number {
 
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.warn(`[rate-limiter] Invalid ${name}=${raw}; using default ${fallback}`);
+    serverLogger.warn(`[rate-limiter] Invalid ${name}=${raw}; using default ${fallback}`);
     return fallback;
   }
 

@@ -133,7 +133,7 @@ function parseBoolEnv(name: string, fallback: boolean): boolean {
 }
 
 function buildLoggerConfig(): boolean | Record<string, unknown> {
-  const format = (process.env.COMPUTE_LOG_FORMAT?.trim().toLowerCase() || 'pretty');
+  const format = (process.env.LOG_FORMAT?.trim().toLowerCase() || 'pretty');
   const level = process.env.COMPUTE_LOG_LEVEL?.trim() || 'info';
   if (format === 'json') {
     return {

@@ -3,6 +3,7 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignPut } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ uploads: signed });
   } catch (error) {
-    console.error('Error creating document upload signatures:', error);
+    serverLogger.error({ err: error }, 'Error creating document upload signatures:');
     return NextResponse.json({ error: 'Failed to presign uploads' }, { status: 500 });
   }
 }

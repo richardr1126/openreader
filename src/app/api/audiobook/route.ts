@@ -7,6 +7,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { audiobooks, audiobookChapters } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
+import { serverLogger } from '@/lib/server/logger';
 import {
   audiobookPrefix,
   deleteAudiobookObject,
@@ -115,7 +116,7 @@ async function runFFmpeg(args: string[], signal?: AbortSignal): Promise<void> {
     }
 
     ffmpeg.stderr.on('data', (data) => {
-      console.error(`ffmpeg stderr: ${data}`);
+      serverLogger.error(`ffmpeg stderr: ${data}`);
     });
 
     ffmpeg.on('close', (code) => {
@@ -282,7 +283,7 @@ export async function GET(request: NextRequest) {
           request.signal,
         );
       } catch (copyError) {
-        console.warn('MP3 concat copy failed; falling back to re-encode:', copyError);
+        serverLogger.warn({ err: copyError }, 'MP3 concat copy failed; falling back to re-encode:');
         await runFFmpeg(
           ['-f', 'concat', '-safe', '0', '-i', listPath, '-c:a', 'libmp3lame', '-b:a', '64k', outputPath],
           request.signal,
@@ -311,7 +312,7 @@ export async function GET(request: NextRequest) {
           request.signal,
         );
       } catch (copyError) {
-        console.warn('M4B concat copy failed; falling back to re-encode:', copyError);
+        serverLogger.warn({ err: copyError }, 'M4B concat copy failed; falling back to re-encode:');
         await runFFmpeg(
           [
             '-f',
@@ -360,7 +361,7 @@ export async function GET(request: NextRequest) {
     if ((error as Error)?.message === 'ABORTED' || request.signal.aborted) {
       return NextResponse.json({ error: 'cancelled' }, { status: 499 });
     }
-    console.error('Error creating full audiobook:', error);
+    serverLogger.error({ err: error }, 'Error creating full audiobook:');
     return NextResponse.json({ error: 'Failed to create full audiobook file' }, { status: 500 });
   } finally {
     if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => {});
@@ -408,7 +409,7 @@ export async function DELETE(request: NextRequest) {
     const deleted = await deleteAudiobookPrefix(audiobookPrefix(bookId, storageUserId, testNamespace)).catch(() => 0);
     return NextResponse.json({ success: true, existed: deleted > 0 });
   } catch (error) {
-    console.error('Error resetting audiobook:', error);
+    serverLogger.error({ err: error }, 'Error resetting audiobook:');
     return NextResponse.json({ error: 'Failed to reset audiobook' }, { status: 500 });
   }
 }

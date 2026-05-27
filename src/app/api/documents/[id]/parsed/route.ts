@@ -23,6 +23,7 @@ import {
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { createRequestLogger, errorToLog, hashForLog, type ServerLogger } from '@/lib/server/logger';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
@@ -92,6 +93,7 @@ async function finalizeFromWorkerState(input: {
   workerState: WorkerOperationState<PdfLayoutJobResult>;
   row: ParseRow;
   namespace: string | null;
+  logger: ServerLogger;
 }): Promise<NextResponse> {
   const snapshot = snapshotFromWorkerState(input.workerState);
 
@@ -159,9 +161,10 @@ async function finalizeFromWorkerState(input: {
   }
 
   if (!hasAnyParsedBlocks(parsedDoc)) {
-    console.warn('[documents/parsed] parsed doc has no blocks', {
+    input.logger.warn({
+      event: 'documents.parsed.no_blocks_in_output',
       documentId: input.row.id,
-      userId: input.row.userId,
+      userIdHash: hashForLog(input.row.userId),
       parsedJsonKey,
     });
   }
@@ -176,6 +179,10 @@ async function finalizeFromWorkerState(input: {
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { logger } = createRequestLogger({
+    route: '/api/documents/[id]/parsed',
+    request: req,
+  });
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
@@ -208,11 +215,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           workerState,
           row,
           namespace: testNamespace,
+          logger,
         });
       }
-      console.warn('[documents/parsed:get] requested opId unavailable', {
+      logger.warn({
+        event: 'documents.parsed.requested_op_unavailable',
         documentId: id,
-        userId: row.userId,
+        userIdHash: hashForLog(row.userId),
         opId: requestedOpId,
       });
     }
@@ -235,6 +244,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           workerState,
           row,
           namespace: testNamespace,
+          logger,
         });
       }
     }
@@ -273,9 +283,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       }
 
       if (!hasAnyParsedBlocks(parsedDoc)) {
-        console.warn('[documents/parsed] parsed doc has no blocks', {
+        logger.warn({
+          event: 'documents.parsed.no_blocks_from_blob',
           documentId: id,
-          userId: row.userId,
+          userIdHash: hashForLog(row.userId),
           parsedJsonKey: row.parsedJsonKey,
         });
       }
@@ -294,12 +305,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       throw error;
     }
   } catch (error) {
-    console.error('Error reading parsed PDF:', error);
+    logger.error({
+      event: 'documents.parsed.get_failed',
+      error: errorToLog(error),
+    });
     return NextResponse.json({ error: 'Failed to read parsed PDF' }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { logger } = createRequestLogger({
+    route: '/api/documents/[id]/parsed',
+    request: req,
+  });
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
@@ -367,7 +385,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       opId: created.opId,
     }, { status: 202 });
   } catch (error) {
-    console.error('Error forcing parsed PDF refresh:', error);
+    logger.error({
+      event: 'documents.parsed.force_refresh_failed',
+      error: errorToLog(error),
+    });
     return NextResponse.json({ error: 'Failed to force PDF refresh' }, { status: 500 });
   }
 }

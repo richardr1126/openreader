@@ -13,6 +13,7 @@ import { deleteDocumentPreviewArtifacts } from '@/lib/server/documents/previews-
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
 import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks/blobstore';
 import { deleteTtsSegmentPrefix } from '@/lib/server/tts/segments-blobstore';
+import { serverLogger } from '@/lib/server/logger';
 
 type DocumentRow = { id: string };
 type AudiobookRow = { id: string };
@@ -49,13 +50,13 @@ export async function deleteUserStorageData(
         await deleteDocumentBlob(doc.id, namespace);
         docsDeleted++;
       } catch (error) {
-        console.error(`[user-data-cleanup] Failed to delete document blob ${doc.id}:`, error);
+        serverLogger.error({ err: error }, `[user-data-cleanup] Failed to delete document blob ${doc.id}:`);
       }
 
       try {
         await deleteDocumentPreviewArtifacts(doc.id, namespace);
       } catch (error) {
-        console.error(`[user-data-cleanup] Failed to delete preview for ${doc.id}:`, error);
+        serverLogger.error({ err: error }, `[user-data-cleanup] Failed to delete preview for ${doc.id}:`);
       }
     }
 
@@ -63,7 +64,7 @@ export async function deleteUserStorageData(
     try {
       await deleteDocumentPreviewRows(doc.id, namespace);
     } catch (error) {
-      console.error(`[user-data-cleanup] Failed to delete preview rows for ${doc.id}:`, error);
+      serverLogger.error({ err: error }, `[user-data-cleanup] Failed to delete preview rows for ${doc.id}:`);
     }
   }
 
@@ -82,7 +83,7 @@ export async function deleteUserStorageData(
       await deleteAudiobookPrefix(prefix);
       booksDeleted++;
     } catch (error) {
-      console.error(`[user-data-cleanup] Failed to delete audiobook blobs ${book.id}:`, error);
+      serverLogger.error({ err: error }, `[user-data-cleanup] Failed to delete audiobook blobs ${book.id}:`);
     }
   }
 
@@ -97,12 +98,12 @@ export async function deleteUserStorageData(
       segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV1);
       segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV2);
     } catch (error) {
-      console.error(`[user-data-cleanup] Failed to delete TTS segment blobs for user ${userId}:`, error);
+      serverLogger.error({ err: error }, `[user-data-cleanup] Failed to delete TTS segment blobs for user ${userId}:`);
     }
   }
 
   if (docsDeleted > 0 || booksDeleted > 0 || segmentsDeleted > 0) {
-    console.log(
+    serverLogger.info(
       `[user-data-cleanup] Cleaned up S3 data for user ${userId}: ` +
       `${docsDeleted}/${userDocs.length} document(s), ` +
       `${booksDeleted}/${userBooks.length} audiobook(s), ` +

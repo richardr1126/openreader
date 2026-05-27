@@ -1,5 +1,6 @@
 import { getWorkerClientConfigFromEnv } from '@/lib/server/compute/worker';
 import type { WorkerOperationState } from '@openreader/compute-core/api-contracts';
+import { serverLogger } from '@/lib/server/logger';
 
 const WORKER_OP_REQUEST_TIMEOUT_MS = 2_500;
 
@@ -13,10 +14,10 @@ export async function fetchWorkerOperationState<Result>(
   try {
     cfg = getWorkerClientConfigFromEnv();
   } catch (error) {
-    console.warn('[worker-op-state] worker client env missing/invalid', {
+    serverLogger.warn({
       opId: normalized,
       error: error instanceof Error ? error.message : String(error),
-    });
+    }, '[worker-op-state] worker client env missing/invalid');
     return null;
   }
 
@@ -36,26 +37,26 @@ export async function fetchWorkerOperationState<Result>(
 
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
-      console.warn('[worker-op-state] worker op request failed', {
+      serverLogger.warn({
         opId: normalized,
         status: res.status,
         detail,
-      });
+      }, '[worker-op-state] worker op request failed');
       return null;
     }
     const parsed = await res.json() as WorkerOperationState<Result>;
     if (!parsed || typeof parsed !== 'object' || parsed.opId !== normalized) {
-      console.warn('[worker-op-state] worker op response invalid', {
+      serverLogger.warn({
         opId: normalized,
-      });
+      }, '[worker-op-state] worker op response invalid');
       return null;
     }
     return parsed;
   } catch (error) {
-    console.warn('[worker-op-state] worker op request threw', {
+    serverLogger.warn({
       opId: normalized,
       error: error instanceof Error ? error.message : String(error),
-    });
+    }, '[worker-op-state] worker op request threw');
     return null;
   } finally {
     clearTimeout(timeout);
