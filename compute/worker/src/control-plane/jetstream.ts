@@ -14,6 +14,7 @@ import type {
   WhisperAlignJobRequest,
   WorkerOperationKind,
 } from '@openreader/compute-core/api-contracts';
+import { createJsonCodec } from './json-codec';
 
 export interface KvEntryLike {
   operation?: string;
@@ -26,24 +27,6 @@ export interface KvStoreLike {
   put(key: string, data: Uint8Array): Promise<unknown>;
   create(key: string, data: Uint8Array): Promise<unknown>;
   update(key: string, data: Uint8Array, version: number): Promise<unknown>;
-}
-
-type JsonCodec<T> = {
-  encode(value: T): Uint8Array;
-  decode(data: Uint8Array): T;
-};
-
-function createJsonCodec<T>(): JsonCodec<T> {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  return {
-    encode(value: T): Uint8Array {
-      return encoder.encode(JSON.stringify(value));
-    },
-    decode(data: Uint8Array): T {
-      return JSON.parse(decoder.decode(data)) as T;
-    },
-  };
 }
 
 function toErrorMessage(error: unknown): string {
@@ -64,7 +47,8 @@ interface OpIndexEntry {
   opId: string;
 }
 
-const OP_EVENTS_SUBJECT_PREFIX = 'ops.events';
+export const OP_EVENTS_SUBJECT_PREFIX = 'ops.events';
+export const OP_EVENTS_SUBJECT_WILDCARD = `${OP_EVENTS_SUBJECT_PREFIX}.*`;
 
 export function hashOpKey(opKey: string): string {
   return createHash('sha256').update(opKey).digest('hex');

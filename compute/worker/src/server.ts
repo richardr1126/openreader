@@ -50,10 +50,12 @@ import type {
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   JetStreamOperationEventStream,
+  OP_EVENTS_SUBJECT_WILDCARD,
   JetStreamOperationQueue,
   JetStreamOperationStateStore,
   hashOpKey,
 } from './control-plane/jetstream';
+import { type JsonCodec, createJsonCodec } from './control-plane/json-codec';
 
 const JOBS_STREAM_NAME = 'compute_jobs';
 const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
@@ -65,7 +67,6 @@ const COMPUTE_STATE_BUCKET = 'compute_state';
 const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
-const OP_EVENTS_SUBJECT_PREFIX = 'ops.events';
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
@@ -104,11 +105,6 @@ interface NatsSession {
 }
 
 type StreamedOperationState = WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>;
-
-type JsonCodec<T> = {
-  encode(value: T): Uint8Array;
-  decode(data: Uint8Array): T;
-};
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -281,19 +277,6 @@ function isAlreadyExistsError(error: unknown): boolean {
   return message.includes('already in use') || message.includes('already exists');
 }
 
-function createJsonCodec<T>(): JsonCodec<T> {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  return {
-    encode(value: T): Uint8Array {
-      return encoder.encode(JSON.stringify(value));
-    },
-    decode(data: Uint8Array): T {
-      return JSON.parse(decoder.decode(data)) as T;
-    },
-  };
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -395,7 +378,7 @@ async function ensureJetStreamResources(
 
   const eventsStreamConfig = {
     name: EVENTS_STREAM_NAME,
-    subjects: [`${OP_EVENTS_SUBJECT_PREFIX}.*`],
+    subjects: [OP_EVENTS_SUBJECT_WILDCARD],
     retention: RetentionPolicy.Limits,
     storage: StorageType.File,
     max_bytes: eventsMaxBytes,
@@ -408,7 +391,7 @@ async function ensureJetStreamResources(
   } catch (error) {
     if (!isAlreadyExistsError(error)) throw error;
     await jsm.streams.update(EVENTS_STREAM_NAME, {
-      subjects: [`${OP_EVENTS_SUBJECT_PREFIX}.*`],
+      subjects: [OP_EVENTS_SUBJECT_WILDCARD],
       max_bytes: eventsMaxBytes,
       max_age: nanos(COMPUTE_STATE_TTL_MS),
       num_replicas: natsReplicas,
@@ -973,7 +956,7 @@ async function main(): Promise<void> {
     };
   };
 
-  async function processMessage<TPayload, TResult>(input: {
+  type ProcessMessageInput<TPayload, TResult> = {
     msg: JsMsg;
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: (
@@ -982,81 +965,212 @@ async function main(): Promise<void> {
       hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
     ) => Promise<TResult>;
     workerLabel: string;
-  }): Promise<void> {
-    let decoded: QueuedJob<TPayload> | null = null;
-    let heartbeat: NodeJS.Timeout | null = null;
-    let latestProgress: PdfLayoutProgress | undefined;
-    try {
-      decoded = input.codec.decode(input.msg.data);
-      const startedAt = Date.now();
-      const queueWaitMs = safeDurationMs(decoded.queuedAt, startedAt);
-      const queueWaitTiming = typeof queueWaitMs === 'number' ? { queueWaitMs } : undefined;
+  };
 
-      await orchestrator.markRunning({
-        opId: decoded.opId,
-        startedAt,
-        updatedAt: startedAt,
-        ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
+  type ProcessMessageContext<TPayload> = {
+    decoded: QueuedJob<TPayload>;
+    workerLabel: string;
+    startedAt: number;
+    queueWaitTiming?: { queueWaitMs: number };
+    latestProgress?: PdfLayoutProgress;
+  };
+
+  function buildQueueWaitTiming(queuedAt: number, now: number): { queueWaitMs: number } | undefined {
+    const queueWaitMs = safeDurationMs(queuedAt, now);
+    return typeof queueWaitMs === 'number' ? { queueWaitMs } : undefined;
+  }
+
+  function extractTiming(result: unknown): WorkerJobTiming | undefined {
+    if (!result || typeof result !== 'object' || !('timing' in result)) return undefined;
+    return (result as { timing?: WorkerJobTiming }).timing;
+  }
+
+  async function markRunning<TPayload>(
+    context: ProcessMessageContext<TPayload>,
+    updatedAt: number,
+    options?: { includeStartedAt?: boolean },
+  ): Promise<void> {
+    if (context.latestProgress) {
+      await orchestrator.markProgress({
+        opId: context.decoded.opId,
+        progress: context.latestProgress,
+        updatedAt,
+        ...(context.queueWaitTiming ? { timing: context.queueWaitTiming } : {}),
       });
+      return;
+    }
+
+    await orchestrator.markRunning({
+      opId: context.decoded.opId,
+      ...(options?.includeStartedAt === false ? {} : { startedAt: context.startedAt }),
+      updatedAt,
+      ...(context.queueWaitTiming ? { timing: context.queueWaitTiming } : {}),
+    });
+  }
+
+  async function markProgress<TPayload>(
+    context: ProcessMessageContext<TPayload>,
+    progress: PdfLayoutProgress,
+    updatedAt: number,
+  ): Promise<void> {
+    context.latestProgress = progress;
+    await markRunning(context, updatedAt);
+  }
+
+  async function markTerminal<TPayload, TResult>(input: {
+    context: ProcessMessageContext<TPayload>;
+    status: 'succeeded' | 'failed';
+    result?: TResult;
+    errorMessage?: string;
+    timing?: WorkerJobTiming;
+    updatedAt: number;
+  }): Promise<void> {
+    if (input.status === 'succeeded') {
+      await orchestrator.markSucceeded({
+        opId: input.context.decoded.opId,
+        result: input.result as WhisperAlignJobResult | PdfLayoutJobResult,
+        updatedAt: input.updatedAt,
+        ...(input.timing ? { timing: input.timing } : {}),
+      });
+      return;
+    }
+
+    await orchestrator.markFailed({
+      opId: input.context.decoded.opId,
+      error: { message: input.errorMessage ?? 'unknown worker failure' },
+      updatedAt: input.updatedAt,
+      ...(input.timing ? { timing: input.timing } : {}),
+    });
+  }
+
+  async function handleRetry<TPayload>(input: {
+    context: ProcessMessageContext<TPayload> | null;
+    msg: JsMsg;
+    errorMessage: string;
+  }): Promise<void> {
+    const deliveryCount = input.msg.info.deliveryCount;
+    const isWhisperAlign = input.context?.decoded.kind === 'whisper_align';
+    const maxAttempts = isWhisperAlign ? WHISPER_MAX_DELIVER : pdfAttempts;
+    const hasRetriesLeft = !isWhisperAlign && deliveryCount < maxAttempts;
+
+    if (input.context) {
+      const now = Date.now();
+      const retryTiming = buildQueueWaitTiming(input.context.decoded.queuedAt, now);
+      const persistOpUpdate = hasRetriesLeft
+        ? (input.context.latestProgress
+          ? orchestrator.markProgress({
+            opId: input.context.decoded.opId,
+            progress: input.context.latestProgress,
+            updatedAt: now,
+            ...(retryTiming ? { timing: retryTiming } : {}),
+          })
+          : orchestrator.markRunning({
+            opId: input.context.decoded.opId,
+            updatedAt: now,
+            ...(retryTiming ? { timing: retryTiming } : {}),
+          }))
+        : markTerminal({
+          context: input.context,
+          status: 'failed',
+          errorMessage: input.errorMessage,
+          updatedAt: now,
+          ...(retryTiming ? { timing: retryTiming } : {}),
+        });
+
+      await persistOpUpdate.catch((stateError) => {
+        app.log.error({
+          worker: input.context?.workerLabel,
+          opId: input.context?.decoded.opId,
+          jobId: input.context?.decoded.jobId,
+          error: toErrorMessage(stateError),
+        }, 'failed to persist operation state');
+      });
+    }
+
+    if (hasRetriesLeft) {
+      input.msg.nak();
+      app.log.error({
+        worker: input.context?.workerLabel,
+        kind: input.context?.decoded.kind,
+        opId: input.context?.decoded.opId,
+        jobId: input.context?.decoded.jobId,
+        status: 'running',
+        error: input.errorMessage,
+        deliveryCount,
+        maxAttempts,
+        retryAction: 'nack_retry',
+      }, 'job.terminal');
+      return;
+    }
+
+    input.msg.term(input.errorMessage);
+    app.log.error({
+      worker: input.context?.workerLabel,
+      kind: input.context?.decoded.kind,
+      opId: input.context?.decoded.opId,
+      jobId: input.context?.decoded.jobId,
+      status: 'failed',
+      error: input.errorMessage,
+      deliveryCount,
+      maxAttempts,
+      retrySuppressed: isWhisperAlign ? 'whisper_align' : undefined,
+      retryAction: 'term',
+    }, 'job.terminal');
+  }
+
+  async function processMessage<TPayload, TResult>(input: ProcessMessageInput<TPayload, TResult>): Promise<void> {
+    let context: ProcessMessageContext<TPayload> | null = null;
+    let heartbeat: NodeJS.Timeout | null = null;
+    try {
+      const decoded = input.codec.decode(input.msg.data);
+      const startedAt = Date.now();
+      context = {
+        decoded,
+        workerLabel: input.workerLabel,
+        startedAt,
+        queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
+      };
+
+      await markRunning(context, startedAt);
       app.log.info({
         worker: input.workerLabel,
         kind: decoded.kind,
         opId: decoded.opId,
         jobId: decoded.jobId,
-        queueWaitMs: queueWaitMs ?? null,
+        queueWaitMs: context.queueWaitTiming?.queueWaitMs ?? null,
         deliveryCount: input.msg.info.deliveryCount,
       }, 'job.started');
 
-      const persistRunningState = async (updatedAt: number): Promise<void> => {
-        if (latestProgress) {
-          await orchestrator.markProgress({
-            opId: decoded!.opId,
-            progress: latestProgress,
-            updatedAt,
-            ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-          });
-        } else {
-          await orchestrator.markRunning({
-            opId: decoded!.opId,
-            startedAt,
-            updatedAt,
-            ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-          });
-        }
-      };
-
       heartbeat = setInterval(() => {
         const now = Date.now();
-        void persistRunningState(now).catch((stateError) => {
+        void markRunning(context!, now).catch((stateError) => {
           app.log.error({
             worker: input.workerLabel,
-            opId: decoded?.opId,
-            jobId: decoded?.jobId,
+            opId: context?.decoded.opId,
+            jobId: context?.decoded.jobId,
             error: toErrorMessage(stateError),
           }, 'failed to persist operation heartbeat state');
         });
       }, RUNNING_HEARTBEAT_MS);
 
-      const result = await input.run(decoded.payload, queueWaitMs ?? 0, {
+      const result = await input.run(decoded.payload, context.queueWaitTiming?.queueWaitMs ?? 0, {
         onProgress: async (progress) => {
-          latestProgress = progress;
-          await persistRunningState(Date.now());
+          await markProgress(context!, progress, Date.now());
         },
       });
-      const resultTiming = result && typeof result === 'object' && 'timing' in result
-        ? (result as { timing?: WorkerJobTiming }).timing
-        : undefined;
+      const resultTiming = extractTiming(result);
       const now = Date.now();
 
-      await orchestrator.markSucceeded({
-        opId: decoded.opId,
-        result: result as WhisperAlignJobResult | PdfLayoutJobResult,
+      await markTerminal({
+        context,
+        status: 'succeeded',
+        result,
+        timing: resultTiming,
         updatedAt: now,
-        ...(resultTiming ? { timing: resultTiming } : {}),
       });
 
       input.msg.ack();
-      const terminalDurationMs = safeDurationMs(startedAt, now);
+      const terminalDurationMs = safeDurationMs(context.startedAt, now);
       const slowJobLogThresholdMs = SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND[decoded.kind];
       if ((terminalDurationMs ?? 0) >= slowJobLogThresholdMs) {
         app.log.info({
@@ -1079,75 +1193,11 @@ async function main(): Promise<void> {
         timing: resultTiming ?? null,
       }, 'job.terminal');
     } catch (error) {
-      const message = toErrorMessage(error);
-      const deliveryCount = input.msg.info.deliveryCount;
-      const isWhisperAlign = decoded?.kind === 'whisper_align';
-      const maxAttempts = isWhisperAlign ? WHISPER_MAX_DELIVER : pdfAttempts;
-      const hasRetriesLeft = !isWhisperAlign && deliveryCount < maxAttempts;
-
-      if (decoded) {
-        const now = Date.now();
-        const queueWaitMs = safeDurationMs(decoded.queuedAt, now);
-        const queueWaitTiming = typeof queueWaitMs === 'number' ? { queueWaitMs } : undefined;
-
-        const persistOpUpdate = hasRetriesLeft
-          ? (latestProgress
-            ? orchestrator.markProgress({
-              opId: decoded.opId,
-              progress: latestProgress,
-              updatedAt: now,
-              ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-            })
-            : orchestrator.markRunning({
-              opId: decoded.opId,
-              updatedAt: now,
-              ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-            }))
-          : orchestrator.markFailed({
-            opId: decoded.opId,
-            error: { message },
-            updatedAt: now,
-            ...(queueWaitTiming ? { timing: queueWaitTiming } : {}),
-          });
-
-        await persistOpUpdate.catch((stateError) => {
-          app.log.error({
-            worker: input.workerLabel,
-            opId: decoded?.opId,
-            jobId: decoded?.jobId,
-            error: toErrorMessage(stateError),
-          }, 'failed to persist operation state');
-        });
-      }
-
-      if (hasRetriesLeft) {
-        input.msg.nak();
-        app.log.error({
-          worker: input.workerLabel,
-          kind: decoded?.kind,
-          opId: decoded?.opId,
-          jobId: decoded?.jobId,
-          status: 'running',
-          error: message,
-          deliveryCount,
-          maxAttempts,
-          retryAction: 'nack_retry',
-        }, 'job.terminal');
-      } else {
-        input.msg.term(message);
-        app.log.error({
-          worker: input.workerLabel,
-          kind: decoded?.kind,
-          opId: decoded?.opId,
-          jobId: decoded?.jobId,
-          status: 'failed',
-          error: message,
-          deliveryCount,
-          maxAttempts,
-          retrySuppressed: isWhisperAlign ? 'whisper_align' : undefined,
-          retryAction: 'term',
-        }, 'job.terminal');
-      }
+      await handleRetry({
+        context,
+        msg: input.msg,
+        errorMessage: toErrorMessage(error),
+      });
     } finally {
       if (heartbeat) clearInterval(heartbeat);
     }

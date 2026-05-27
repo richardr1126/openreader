@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { getWorkerClientConfigFromEnv } from '@/lib/server/compute/worker';
+import { snapshotFromWorkerState } from '@/lib/server/compute/worker-parse-state';
 import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/documents/parse-state';
@@ -45,29 +46,6 @@ function s3NotConfiguredResponse(): NextResponse {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']): PdfParseStatus {
-  switch (status) {
-    case 'queued':
-      return 'pending';
-    case 'running':
-      return 'running';
-    case 'succeeded':
-      return 'ready';
-    case 'failed':
-      return 'failed';
-    default:
-      return 'pending';
-  }
-}
-
-function snapshotFromWorkerState(state: WorkerOperationState<PdfLayoutJobResult>): ParsedSnapshot {
-  const parseStatus = mapWorkerStatusToParseStatus(state.status);
-  return {
-    parseStatus,
-    parseProgress: parseStatus === 'running' ? (state.progress ?? null) : null,
-  };
 }
 
 async function toSnapshotState(row: ParseRow): Promise<SnapshotState> {
