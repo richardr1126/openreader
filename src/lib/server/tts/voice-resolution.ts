@@ -1,5 +1,6 @@
 import { LRUCache } from 'lru-cache';
-import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { serverLogger } from '@/lib/server/logger';
+import { logServerError } from '@/lib/server/errors/logging';
 import {
   resolveProviderModels,
   type ReplicateVoiceInputKey,
@@ -193,10 +194,12 @@ async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promi
     if (error instanceof DOMException && error.name === 'AbortError') {
       return null;
     }
-    serverLogger.error({
+    logServerError(serverLogger, {
       event: 'tts.voice_resolution.replicate_schema_fetch.failed',
-      error: errorToLog(error),
-    }, 'Failed fetching Replicate model schema');
+      msg: 'Failed fetching Replicate model schema',
+      error,
+      normalize: { code: 'TTS_VOICE_RESOLUTION_REPLICATE_SCHEMA_FETCH_FAILED', errorClass: 'upstream' },
+    });
     return null;
   } finally {
     clearTimeout(timeoutId);
@@ -287,10 +290,12 @@ async function fetchDeepinfraVoices(apiKey: string): Promise<string[]> {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return [];
     }
-    serverLogger.error({
+    logServerError(serverLogger, {
       event: 'tts.voice_resolution.deepinfra_voices_fetch.failed',
-      error: errorToLog(error),
-    }, 'Failed fetching Deepinfra voices');
+      msg: 'Failed fetching Deepinfra voices',
+      error,
+      normalize: { code: 'TTS_VOICE_RESOLUTION_DEEPINFRA_FETCH_FAILED', errorClass: 'upstream' },
+    });
     return [];
   } finally {
     clearTimeout(timeoutId);

@@ -46,7 +46,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ provider: toMasked(record) }, { status: 201 });
   } catch (error) {
     if (error instanceof AdminProviderError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error, {
+        apiErrorMessage: error.message,
+        normalize: {
+          code: 'ADMIN_PROVIDERS_CREATE_REQUEST_FAILED',
+          errorClass: error.status >= 500 ? 'db' : 'validation',
+          httpStatus: error.status,
+          retryable: error.status >= 500,
+        },
+      });
     }
     serverLogger.error({
       event: 'admin.providers.create.failed',

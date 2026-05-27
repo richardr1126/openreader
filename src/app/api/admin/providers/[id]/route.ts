@@ -41,7 +41,15 @@ export async function PUT(
     return NextResponse.json({ provider: toMasked(updated) });
   } catch (error) {
     if (error instanceof AdminProviderError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error, {
+        apiErrorMessage: error.message,
+        normalize: {
+          code: 'ADMIN_PROVIDERS_UPDATE_REQUEST_FAILED',
+          errorClass: error.status >= 500 ? 'db' : 'validation',
+          httpStatus: error.status,
+          retryable: error.status >= 500,
+        },
+      });
     }
     serverLogger.error({
       event: 'admin.providers.update.failed',
@@ -68,7 +76,15 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof AdminProviderError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error, {
+        apiErrorMessage: error.message,
+        normalize: {
+          code: 'ADMIN_PROVIDERS_DELETE_REQUEST_FAILED',
+          errorClass: error.status >= 500 ? 'db' : 'validation',
+          httpStatus: error.status,
+          retryable: error.status >= 500,
+        },
+      });
     }
     serverLogger.error({
       event: 'admin.providers.delete.failed',

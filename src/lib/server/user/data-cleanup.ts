@@ -13,7 +13,8 @@ import { deleteDocumentPreviewArtifacts } from '@/lib/server/documents/previews-
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
 import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks/blobstore';
 import { deleteTtsSegmentPrefix } from '@/lib/server/tts/segments-blobstore';
-import { errorToLog, hashForLog, serverLogger } from '@/lib/server/logger';
+import { hashForLog, serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 type DocumentRow = { id: string };
 type AudiobookRow = { id: string };
@@ -50,27 +51,31 @@ export async function deleteUserStorageData(
         await deleteDocumentBlob(doc.id, namespace);
         docsDeleted++;
       } catch (error) {
-        serverLogger.warn({
+        logDegraded(serverLogger, {
           event: 'user.data_cleanup.document_blob_delete.failed',
-          degraded: true,
+          msg: 'Failed to delete document blob',
           step: 'delete_document_blob',
-          documentId: doc.id,
-          userIdHash: hashForLog(userId),
-          error: errorToLog(error),
-        }, 'Failed to delete document blob');
+          context: {
+            documentId: doc.id,
+            userIdHash: hashForLog(userId),
+          },
+          error,
+        });
       }
 
       try {
         await deleteDocumentPreviewArtifacts(doc.id, namespace);
       } catch (error) {
-        serverLogger.warn({
+        logDegraded(serverLogger, {
           event: 'user.data_cleanup.document_preview_delete.failed',
-          degraded: true,
+          msg: 'Failed to delete preview artifacts',
           step: 'delete_document_preview_artifacts',
-          documentId: doc.id,
-          userIdHash: hashForLog(userId),
-          error: errorToLog(error),
-        }, 'Failed to delete preview artifacts');
+          context: {
+            documentId: doc.id,
+            userIdHash: hashForLog(userId),
+          },
+          error,
+        });
       }
     }
 
@@ -78,14 +83,16 @@ export async function deleteUserStorageData(
     try {
       await deleteDocumentPreviewRows(doc.id, namespace);
     } catch (error) {
-      serverLogger.warn({
+      logDegraded(serverLogger, {
         event: 'user.data_cleanup.document_preview_rows_delete.failed',
-        degraded: true,
+        msg: 'Failed to delete preview rows',
         step: 'delete_document_preview_rows',
-        documentId: doc.id,
-        userIdHash: hashForLog(userId),
-        error: errorToLog(error),
-      }, 'Failed to delete preview rows');
+        context: {
+          documentId: doc.id,
+          userIdHash: hashForLog(userId),
+        },
+        error,
+      });
     }
   }
 
@@ -104,14 +111,16 @@ export async function deleteUserStorageData(
       await deleteAudiobookPrefix(prefix);
       booksDeleted++;
     } catch (error) {
-      serverLogger.warn({
+      logDegraded(serverLogger, {
         event: 'user.data_cleanup.audiobook_blobs_delete.failed',
-        degraded: true,
+        msg: 'Failed to delete audiobook blobs',
         step: 'delete_audiobook_prefix',
-        bookId: book.id,
-        userIdHash: hashForLog(userId),
-        error: errorToLog(error),
-      }, 'Failed to delete audiobook blobs');
+        context: {
+          bookId: book.id,
+          userIdHash: hashForLog(userId),
+        },
+        error,
+      });
     }
   }
 
@@ -126,13 +135,13 @@ export async function deleteUserStorageData(
       segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV1);
       segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV2);
     } catch (error) {
-      serverLogger.warn({
+      logDegraded(serverLogger, {
         event: 'user.data_cleanup.tts_segments_delete.failed',
-        degraded: true,
+        msg: 'Failed to delete TTS segment blobs',
         step: 'delete_tts_segment_prefixes',
-        userIdHash: hashForLog(userId),
-        error: errorToLog(error),
-      }, 'Failed to delete TTS segment blobs');
+        context: { userIdHash: hashForLog(userId) },
+        error,
+      });
     }
   }
 

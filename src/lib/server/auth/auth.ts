@@ -11,7 +11,8 @@ import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { assertUserSignupAllowed } from '@/lib/server/auth/signup-policy';
 import * as authSchemaSqlite from "@/db/schema_auth_sqlite";
 import * as authSchemaPostgres from "@/db/schema_auth_postgres";
-import { errorToLog, hashForLog, serverLogger } from '@/lib/server/logger';
+import { hashForLog, serverLogger } from '@/lib/server/logger';
+import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 
 // Heavy modules (S3 SDK, blobstore, rate-limiter, claim-data) are loaded
 // lazily via dynamic import() inside the beforeDelete / onLinkAccount
@@ -94,13 +95,13 @@ const createAuth = () => betterAuth({
           const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
           await deleteUserStorageData(user.id, null);
         } catch (error) {
-          serverLogger.warn({
+          logDegraded(serverLogger, {
             event: 'auth.user_delete.storage_cleanup_failed',
-            degraded: true,
+            msg: 'Failed to clean up user storage before deletion',
             step: 'delete_user_storage',
-            userIdHash: hashForLog(user.id),
-            error: errorToLog(error),
-          }, 'Failed to clean up user storage before deletion');
+            context: { userIdHash: hashForLog(user.id) },
+            error,
+          });
           // Don't throw – allow the user deletion to proceed even if S3 cleanup fails.
           // Orphaned blobs are preferable to a blocked account deletion.
         }
@@ -177,14 +178,16 @@ const createAuth = () => betterAuth({
                   newUserIdHash: hashForLog(newUser.user.id),
                 }, 'Transferred rate limit data during account linking');
               } catch (error) {
-                serverLogger.warn({
+                logDegraded(serverLogger, {
                   event: 'auth.link_account.transfer.rate_limit.failed',
-                  degraded: true,
+                  msg: 'Failed transferring rate limit data during account linking',
                   step: 'transfer_rate_limit',
-                  anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                  newUserIdHash: hashForLog(newUser.user.id),
-                  error: errorToLog(error),
-                }, 'Failed transferring rate limit data during account linking');
+                  context: {
+                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+                    newUserIdHash: hashForLog(newUser.user.id),
+                  },
+                  error,
+                });
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -200,14 +203,16 @@ const createAuth = () => betterAuth({
                   }, 'Transferred audiobooks during account linking');
                 }
               } catch (error) {
-                serverLogger.warn({
+                logDegraded(serverLogger, {
                   event: 'auth.link_account.transfer.audiobooks.failed',
-                  degraded: true,
+                  msg: 'Failed transferring audiobooks during account linking',
                   step: 'transfer_audiobooks',
-                  anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                  newUserIdHash: hashForLog(newUser.user.id),
-                  error: errorToLog(error),
-                }, 'Failed transferring audiobooks during account linking');
+                  context: {
+                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+                    newUserIdHash: hashForLog(newUser.user.id),
+                  },
+                  error,
+                });
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -223,14 +228,16 @@ const createAuth = () => betterAuth({
                   }, 'Transferred documents during account linking');
                 }
               } catch (error) {
-                serverLogger.warn({
+                logDegraded(serverLogger, {
                   event: 'auth.link_account.transfer.documents.failed',
-                  degraded: true,
+                  msg: 'Failed transferring documents during account linking',
                   step: 'transfer_documents',
-                  anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                  newUserIdHash: hashForLog(newUser.user.id),
-                  error: errorToLog(error),
-                }, 'Failed transferring documents during account linking');
+                  context: {
+                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+                    newUserIdHash: hashForLog(newUser.user.id),
+                  },
+                  error,
+                });
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -246,14 +253,16 @@ const createAuth = () => betterAuth({
                   }, 'Transferred preferences during account linking');
                 }
               } catch (error) {
-                serverLogger.warn({
+                logDegraded(serverLogger, {
                   event: 'auth.link_account.transfer.preferences.failed',
-                  degraded: true,
+                  msg: 'Failed transferring preferences during account linking',
                   step: 'transfer_preferences',
-                  anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                  newUserIdHash: hashForLog(newUser.user.id),
-                  error: errorToLog(error),
-                }, 'Failed transferring preferences during account linking');
+                  context: {
+                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+                    newUserIdHash: hashForLog(newUser.user.id),
+                  },
+                  error,
+                });
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -269,21 +278,24 @@ const createAuth = () => betterAuth({
                   }, 'Transferred reading progress during account linking');
                 }
               } catch (error) {
-                serverLogger.warn({
+                logDegraded(serverLogger, {
                   event: 'auth.link_account.transfer.progress.failed',
-                  degraded: true,
+                  msg: 'Failed transferring reading progress during account linking',
                   step: 'transfer_progress',
-                  anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                  newUserIdHash: hashForLog(newUser.user.id),
-                  error: errorToLog(error),
-                }, 'Failed transferring reading progress during account linking');
+                  context: {
+                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+                    newUserIdHash: hashForLog(newUser.user.id),
+                  },
+                  error,
+                });
                 // Don't throw here to prevent blocking the account linking process
               }
             } catch (error) {
-              serverLogger.error({
+              logServerError(serverLogger, {
                 event: 'auth.link_account.failed',
-                error: errorToLog(error),
-              }, 'onLinkAccount callback failed');
+                msg: 'onLinkAccount callback failed',
+                error,
+              });
               // Don't throw here to prevent blocking the account linking process
             }
             // Note: Anonymous user will be automatically deleted after this callback completes

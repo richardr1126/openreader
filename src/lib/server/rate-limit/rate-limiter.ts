@@ -4,6 +4,7 @@ import { isAuthEnabled } from '@/lib/server/auth/config';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 import { serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -11,13 +12,16 @@ function readPositiveIntEnv(name: string, fallback: number): number {
 
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    serverLogger.warn({
+    logDegraded(serverLogger, {
       event: 'rate_limit.config.invalid_env',
-      degraded: true,
-      envVar: name,
-      envValue: raw,
-      fallbackValue: fallback,
-    }, 'Invalid rate limiter env value; using default');
+      msg: 'Invalid rate limiter env value; using default',
+      step: 'read_limit_env',
+      context: {
+        envVar: name,
+        envValue: raw,
+        fallbackValue: fallback,
+      },
+    });
     return fallback;
   }
 

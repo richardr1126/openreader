@@ -3,6 +3,7 @@ import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignRes
 import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
 import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
@@ -46,24 +47,36 @@ function truncateForLog(value: string, maxChars = MAX_LOG_DETAIL_CHARS): string 
 
 function logWorker(level: WorkerLogLevel, event: string, fields: Record<string, unknown>): void {
   if (!LOG_EVENTS.has(event)) return;
+  const eventName = `compute.worker_client.${event}`;
+  const msg = `Worker client ${event}`;
   if (level === 'error') {
-    serverLogger.error({
-      event: `compute.worker_client.${event}`,
-      operation: 'compute_worker_client',
-      ...fields,
-    }, `Worker client ${event}`);
+    logServerError(serverLogger, {
+      event: eventName,
+      msg,
+      error: fields.error ?? new Error(msg),
+      context: {
+        operation: 'compute_worker_client',
+        ...fields,
+      },
+      normalize: { code: 'COMPUTE_WORKER_CLIENT_EVENT_FAILED', errorClass: 'upstream' },
+    });
     return;
   }
   if (level === 'warn') {
-    serverLogger.warn({
-      event: `compute.worker_client.${event}`,
-      operation: 'compute_worker_client',
-      ...fields,
-    }, `Worker client ${event}`);
+    logDegraded(serverLogger, {
+      event: eventName,
+      msg,
+      step: 'worker_client',
+      context: {
+        operation: 'compute_worker_client',
+        ...fields,
+      },
+      error: fields.error,
+    });
     return;
   }
   serverLogger.info({
-    event: `compute.worker_client.${event}`,
+    event: eventName,
     operation: 'compute_worker_client',
     ...fields,
   }, `Worker client ${event}`);

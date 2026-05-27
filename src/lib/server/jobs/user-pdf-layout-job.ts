@@ -2,7 +2,8 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { documentKey, putParsedDocumentBlob } from '@/lib/server/documents/blobstore';
-import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { serverLogger } from '@/lib/server/logger';
+import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import {
   parseDocumentParseState,
   stringifyDocumentParseState,
@@ -349,24 +350,28 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
         readerType: 'pdf',
       }).then((cleared) => {
         if (cleared.warning) {
-          serverLogger.warn({
+          logDegraded(serverLogger, {
             event: 'documents.parse.cache_invalidation.warning',
-            degraded: true,
+            msg: 'Parse cache invalidation warning',
             step: 'clear_tts_segment_cache',
-            documentId: input.documentId,
-            userId,
-            warning: cleared.warning,
-          }, 'Parse cache invalidation warning');
+            context: {
+              documentId: input.documentId,
+              userId,
+              warning: cleared.warning,
+            },
+          });
         }
       }).catch((cacheError) => {
-        serverLogger.warn({
+        logDegraded(serverLogger, {
           event: 'documents.parse.cache_invalidation.failed',
-          degraded: true,
+          msg: 'Parse cache invalidation failed',
           step: 'clear_tts_segment_cache',
-          documentId: input.documentId,
-          userId,
-          error: errorToLog(cacheError),
-        }, 'Parse cache invalidation failed');
+          context: {
+            documentId: input.documentId,
+            userId,
+          },
+          error: cacheError,
+        });
       });
     }
   } catch (error) {
@@ -388,19 +393,27 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
         parseState: stringifyDocumentParseState(failedState),
       });
     } catch (statusError) {
-      serverLogger.error({
+      logServerError(serverLogger, {
         event: 'documents.parse.status_write.failed',
+        msg: 'Failed to write parse status',
+        error: statusError,
+        context: {
+          documentId: input.documentId,
+          parseStatus,
+        },
+        normalize: { code: 'DOCUMENT_PARSE_STATUS_WRITE_FAILED', errorClass: 'db' },
+      });
+    }
+    logServerError(serverLogger, {
+      event: 'documents.parse.job.failed',
+      msg: 'Parse job failed',
+      error,
+      context: {
         documentId: input.documentId,
         parseStatus,
-        error: errorToLog(statusError),
-      }, 'Failed to write parse status');
-    }
-    serverLogger.error({
-      event: 'documents.parse.job.failed',
-      documentId: input.documentId,
-      parseStatus,
-      error: errorToLog(error),
-    }, 'Parse job failed');
+      },
+      normalize: { code: 'DOCUMENT_PARSE_JOB_FAILED', errorClass: 'upstream' },
+    });
   } finally {
     running.delete(key);
   }
@@ -410,10 +423,12 @@ export function enqueueParsePdfJob(input: UserPdfLayoutJobRequest): void {
   Promise.resolve()
     .then(() => parsePdfJob(input))
     .catch((error) => {
-      serverLogger.error({
+      logServerError(serverLogger, {
         event: 'documents.parse.job.uncaught_error',
-        documentId: input.documentId,
-        error: errorToLog(error),
-      }, 'Parse job uncaught error');
+        msg: 'Parse job uncaught error',
+        error,
+        context: { documentId: input.documentId },
+        normalize: { code: 'DOCUMENT_PARSE_JOB_UNCAUGHT_ERROR', errorClass: 'unknown' },
+      });
     });
 }
