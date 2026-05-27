@@ -424,7 +424,7 @@ export async function POST(request: NextRequest) {
               segmentId: segment.segmentId,
               aborted,
               error: alignError instanceof Error ? alignError.message : String(alignError),
-            });
+            }, 'Self-heal alignment unavailable');
             alignment = null;
           }
         }
@@ -666,7 +666,7 @@ export async function POST(request: NextRequest) {
               segmentId: segment.segmentId,
               aborted,
               error: alignError instanceof Error ? alignError.message : String(alignError),
-            });
+            }, 'Alignment unavailable');
             alignment = null;
           }
         }
@@ -708,7 +708,7 @@ export async function POST(request: NextRequest) {
           status: 'completed',
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to generate segment';
+        const detail = error instanceof Error ? error.message : 'Failed to generate segment';
         const aborted = isAbortLikeError(error);
         const upstreamStatus = getUpstreamStatus(error);
         const retryAfterSeconds = upstreamStatus === 429
@@ -719,29 +719,46 @@ export async function POST(request: NextRequest) {
           : upstreamStatus && upstreamStatus >= 500
             ? 'UPSTREAM_TTS_ERROR'
             : 'TTS_SEGMENT_GENERATION_FAILED';
-        const level = aborted ? 'info' : 'error';
-        logger[level]({
-          event: 'tts.segments.ensure.segment_failed',
-          requestId,
-          documentId: parsed.documentId,
-          segmentId: segment.segmentId,
-          failedStage,
-          elapsedMs: Date.now() - segmentStartedAt,
-          stageTimings,
-          aborted,
-          upstreamStatus,
-          retryAfterSeconds,
-          errorCode,
-          message,
-        });
+        if (aborted) {
+          logger.info({
+            event: 'tts.segments.ensure.segment_aborted',
+            requestId,
+            documentId: parsed.documentId,
+            segmentId: segment.segmentId,
+            failedStage,
+            elapsedMs: Date.now() - segmentStartedAt,
+            stageTimings,
+            aborted: true,
+            errorCode,
+            detail,
+            completedSoFar: manifest.length,
+            totalRequested: normalized.length,
+          }, 'Stopping segment ensure after abort');
+        } else {
+          logger.error({
+            event: 'tts.segments.ensure.segment_failed',
+            requestId,
+            documentId: parsed.documentId,
+            segmentId: segment.segmentId,
+            failedStage,
+            elapsedMs: Date.now() - segmentStartedAt,
+            stageTimings,
+            aborted: false,
+            upstreamStatus,
+            retryAfterSeconds,
+            errorCode,
+            detail,
+            error: errorToLog(error),
+          }, 'TTS segment generation failed');
+        }
         await db
           .update(ttsSegmentVariants)
           .set({
             status: aborted ? 'pending' : 'error',
             error: aborted ? null : (
               upstreamStatus
-                ? `${errorCode}${retryAfterSeconds ? ` (retry after ${retryAfterSeconds}s)` : ''}: ${message}`
-                : message
+                ? `${errorCode}${retryAfterSeconds ? ` (retry after ${retryAfterSeconds}s)` : ''}: ${detail}`
+                : detail
             ),
             updatedAt: Date.now(),
           })
@@ -764,21 +781,13 @@ export async function POST(request: NextRequest) {
             ? null
             : {
               code: errorCode,
-              detail: message,
+              detail,
               ...(typeof upstreamStatus === 'number' ? { upstreamStatus } : {}),
               ...(typeof retryAfterSeconds === 'number' ? { retryAfterSeconds } : {}),
           },
         });
 
         if (aborted || request.signal.aborted) {
-          logger.info({
-            event: 'tts.segments.ensure.stop_after_abort',
-            requestId,
-            documentId: parsed.documentId,
-            segmentId: segment.segmentId,
-            completedSoFar: manifest.length,
-            totalRequested: normalized.length,
-          }, 'Stopping segment ensure after abort');
           break;
         }
       }
