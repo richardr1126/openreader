@@ -186,7 +186,7 @@ async function runFFmpeg(args: string[], signal?: AbortSignal): Promise<void> {
     }
 
     ffmpeg.stderr.on('data', (data) => {
-      serverLogger.error(`ffmpeg stderr: ${data}`);
+      serverLogger.warn(`ffmpeg stderr: ${data}`);
     });
 
     ffmpeg.on('close', (code) => {

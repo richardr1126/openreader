@@ -29,7 +29,7 @@ export async function DELETE() {
       try {
         await deleteUserStorageData(session.user.id, testNamespace);
       } catch (error) {
-        serverLogger.error({ err: error }, '[account-delete] Failed to clean up namespaced user storage before deletion:');
+        serverLogger.warn({ err: error }, '[account-delete] Failed to clean up namespaced user storage before deletion:');
       }
     }
 

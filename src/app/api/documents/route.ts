@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
         },
         testNamespace,
       ).catch((error) => {
-        serverLogger.error({ err: error }, `Failed to enqueue preview for document ${doc.id}:`);
+        serverLogger.warn({ err: error }, `Failed to enqueue preview for document ${doc.id}:`);
       });
 
       if (doc.type === 'pdf') {
@@ -343,15 +343,15 @@ export async function DELETE(req: NextRequest) {
         await deleteDocumentBlob(id, testNamespace);
       } catch (error) {
         if (!isMissingBlobError(error)) {
-          serverLogger.error({ err: error }, `[best-effort] Failed to delete blob for document ${id}, orphaned blob may need manual cleanup:`);
+          serverLogger.warn({ err: error }, `[best-effort] Failed to delete blob for document ${id}, orphaned blob may need manual cleanup:`);
         }
       }
 
       await cleanupDocumentPreviewArtifacts(id, testNamespace).catch((error) => {
-        serverLogger.error({ err: error }, `Failed to cleanup preview artifacts for document ${id}:`);
+        serverLogger.warn({ err: error }, `Failed to cleanup preview artifacts for document ${id}:`);
       });
       await deleteDocumentPreviewRows(id, testNamespace).catch((error) => {
-        serverLogger.error({ err: error }, `Failed to cleanup preview rows for document ${id}:`);
+        serverLogger.warn({ err: error }, `Failed to cleanup preview rows for document ${id}:`);
       });
     }
 

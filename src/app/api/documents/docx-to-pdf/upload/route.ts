@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
         },
         testNamespace,
       ).catch((error) => {
-        serverLogger.error({ err: error }, `Failed to enqueue preview for converted DOCX ${id}:`);
+        serverLogger.warn({ err: error }, `Failed to enqueue preview for converted DOCX ${id}:`);
       });
 
       enqueueParsePdfJob({

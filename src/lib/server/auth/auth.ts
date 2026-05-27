@@ -91,7 +91,7 @@ const createAuth = () => betterAuth({
           const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
           await deleteUserStorageData(user.id, null);
         } catch (error) {
-          serverLogger.error({ err: error }, '[auth] Failed to clean up user storage before deletion:');
+          serverLogger.warn({ err: error }, '[auth] Failed to clean up user storage before deletion:');
           // Don't throw – allow the user deletion to proceed even if S3 cleanup fails.
           // Orphaned blobs are preferable to a blocked account deletion.
         }
@@ -163,7 +163,7 @@ const createAuth = () => betterAuth({
                 await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
                 serverLogger.info(`Successfully transferred rate limit data from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
               } catch (error) {
-                serverLogger.error({ err: error }, "Error transferring rate limit data during account linking:");
+                serverLogger.warn({ err: error }, "Error transferring rate limit data during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -174,7 +174,7 @@ const createAuth = () => betterAuth({
                   serverLogger.info(`Successfully transferred ${transferred} audiobook(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                serverLogger.error({ err: error }, "Error transferring audiobooks during account linking:");
+                serverLogger.warn({ err: error }, "Error transferring audiobooks during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -185,7 +185,7 @@ const createAuth = () => betterAuth({
                   serverLogger.info(`Successfully transferred ${transferred} document(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                serverLogger.error({ err: error }, "Error transferring documents during account linking:");
+                serverLogger.warn({ err: error }, "Error transferring documents during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -196,7 +196,7 @@ const createAuth = () => betterAuth({
                   serverLogger.info(`Successfully transferred preferences from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                serverLogger.error({ err: error }, "Error transferring preferences during account linking:");
+                serverLogger.warn({ err: error }, "Error transferring preferences during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
 
@@ -207,7 +207,7 @@ const createAuth = () => betterAuth({
                   serverLogger.info(`Successfully transferred ${transferred} progress row(s) from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
                 }
               } catch (error) {
-                serverLogger.error({ err: error }, "Error transferring reading progress during account linking:");
+                serverLogger.warn({ err: error }, "Error transferring reading progress during account linking:");
                 // Don't throw here to prevent blocking the account linking process
               }
             } catch (error) {

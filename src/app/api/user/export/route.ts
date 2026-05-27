@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 
   archive.on('warning', (warning) => {
     if ((warning as NodeJS.ErrnoException).code !== 'ENOENT') {
-      serverLogger.error({ err: warning }, 'User export warning:');
+      serverLogger.warn({ err: warning }, 'User export warning:');
     }
   });
 
