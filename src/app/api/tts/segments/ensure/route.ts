@@ -423,7 +423,10 @@ export async function POST(request: NextRequest) {
               documentId: parsed.documentId,
               segmentId: segment.segmentId,
               aborted,
-              error: alignError instanceof Error ? alignError.message : String(alignError),
+              errorCode: 'TTS_SEGMENT_ALIGNMENT_UNAVAILABLE',
+              ...(aborted ? {} : { degraded: true }),
+              step: 'whisper_align',
+              error: errorToLog(alignError),
             }, 'Self-heal alignment unavailable');
             alignment = null;
           }
@@ -665,7 +668,10 @@ export async function POST(request: NextRequest) {
               documentId: parsed.documentId,
               segmentId: segment.segmentId,
               aborted,
-              error: alignError instanceof Error ? alignError.message : String(alignError),
+              errorCode: 'TTS_SEGMENT_ALIGNMENT_UNAVAILABLE',
+              ...(aborted ? {} : { degraded: true }),
+              step: 'whisper_align',
+              error: errorToLog(alignError),
             }, 'Alignment unavailable');
             alignment = null;
           }
@@ -708,7 +714,7 @@ export async function POST(request: NextRequest) {
           status: 'completed',
         });
       } catch (error) {
-        const detail = error instanceof Error ? error.message : 'Failed to generate segment';
+        const errorMessage = error instanceof Error ? error.message : 'Failed to generate segment';
         const aborted = isAbortLikeError(error);
         const upstreamStatus = getUpstreamStatus(error);
         const retryAfterSeconds = upstreamStatus === 429
@@ -730,7 +736,7 @@ export async function POST(request: NextRequest) {
             stageTimings,
             aborted: true,
             errorCode,
-            detail,
+            error: errorToLog(error),
             completedSoFar: manifest.length,
             totalRequested: normalized.length,
           }, 'Stopping segment ensure after abort');
@@ -747,7 +753,6 @@ export async function POST(request: NextRequest) {
             upstreamStatus,
             retryAfterSeconds,
             errorCode,
-            detail,
             error: errorToLog(error),
           }, 'TTS segment generation failed');
         }
@@ -757,8 +762,8 @@ export async function POST(request: NextRequest) {
             status: aborted ? 'pending' : 'error',
             error: aborted ? null : (
               upstreamStatus
-                ? `${errorCode}${retryAfterSeconds ? ` (retry after ${retryAfterSeconds}s)` : ''}: ${detail}`
-                : detail
+                ? `${errorCode}${retryAfterSeconds ? ` (retry after ${retryAfterSeconds}s)` : ''}: ${errorMessage}`
+                : errorMessage
             ),
             updatedAt: Date.now(),
           })
@@ -781,7 +786,7 @@ export async function POST(request: NextRequest) {
             ? null
             : {
               code: errorCode,
-              detail,
+              detail: errorMessage,
               ...(typeof upstreamStatus === 'number' ? { upstreamStatus } : {}),
               ...(typeof retryAfterSeconds === 'number' ? { retryAfterSeconds } : {}),
           },
@@ -799,6 +804,7 @@ export async function POST(request: NextRequest) {
     if (errorItems.length > 0) {
       logger.error({
         event: 'tts.segments.ensure.partial_result',
+        errorCode: 'TTS_SEGMENT_PARTIAL_FAILURE',
         requestId,
         documentId: parsed.documentId,
         total: manifest.length,
@@ -806,6 +812,10 @@ export async function POST(request: NextRequest) {
         pendingCount,
         errorCount: errorItems.length,
         elapsedMs: Date.now() - requestStartedAt,
+        error: {
+          name: 'PartialSegmentFailure',
+          message: `TTS segment ensure completed with ${errorItems.length} segment errors`,
+        },
         errors: errorItems.slice(0, 5).map((item) => ({
           segmentId: item.segmentId,
           code: item.error?.code ?? null,
@@ -825,6 +835,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.error({
       event: 'tts.segments.ensure.route_failed',
+      errorCode: 'TTS_SEGMENTS_ENSURE_ROUTE_FAILED',
       error: errorToLog(error),
     }, 'TTS segments ensure route failed');
     const response = NextResponse.json({ error: 'Failed to ensure TTS segments' }, { status: 500 });

@@ -116,6 +116,7 @@ async function resolveImplicitDefaultTtsProvider(): Promise<string | undefined> 
   } catch (error) {
     serverLogger.warn({
       event: 'admin.runtime_config.default_provider_lookup.failed',
+      errorCode: 'ADMIN_RUNTIME_CONFIG_DEFAULT_PROVIDER_LOOKUP_FAILED',
       degraded: true,
       error: errorToLog(error),
     }, 'Implicit defaultTtsProvider lookup failed');
@@ -148,6 +149,7 @@ async function readAllRows(): Promise<Map<string, { value: unknown; source: stri
   } catch (error) {
     serverLogger.warn({
       event: 'admin.runtime_config.read.failed',
+      errorCode: 'ADMIN_RUNTIME_CONFIG_READ_FAILED',
       degraded: true,
       error: errorToLog(error),
     }, 'Runtime config read failed');
@@ -308,6 +310,7 @@ export async function seedRuntimeConfigFromEnv(): Promise<{ seeded: RuntimeConfi
     } catch (error) {
       serverLogger.warn({
         event: 'admin.runtime_config.seed.failed',
+        errorCode: 'ADMIN_RUNTIME_CONFIG_SEED_FAILED',
         degraded: true,
         key,
         error: errorToLog(error),

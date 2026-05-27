@@ -371,8 +371,6 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
-    const cause = error instanceof Error ? error.cause : undefined;
     const parseStatus = 'failed';
     try {
       const scopedRows = await loadScopedRows(input);
@@ -392,6 +390,7 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
     } catch (statusError) {
       serverLogger.error({
         event: 'documents.parse.status_write.failed',
+        errorCode: 'DOCUMENTS_PARSE_STATUS_WRITE_FAILED',
         documentId: input.documentId,
         parseStatus,
         error: errorToLog(statusError),
@@ -399,11 +398,10 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
     }
     serverLogger.error({
       event: 'documents.parse.job.failed',
+      errorCode: 'DOCUMENTS_PARSE_JOB_FAILED',
       documentId: input.documentId,
       parseStatus,
-      error: message,
-      ...(stack ? { stack } : {}),
-      ...(cause ? { cause: String(cause) } : {}),
+      error: errorToLog(error),
     }, 'Parse job failed');
   } finally {
     running.delete(key);
@@ -417,6 +415,7 @@ export function enqueueParsePdfJob(input: UserPdfLayoutJobRequest): void {
       serverLogger.error({
         event: 'documents.parse.job.uncaught_error',
         documentId: input.documentId,
+        errorCode: 'DOCUMENTS_PARSE_JOB_UNCAUGHT_ERROR',
         error: errorToLog(error),
       }, 'Parse job uncaught error');
     });

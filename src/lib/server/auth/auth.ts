@@ -96,6 +96,7 @@ const createAuth = () => betterAuth({
         } catch (error) {
           serverLogger.warn({
             event: 'auth.user_delete.storage_cleanup_failed',
+            errorCode: 'AUTH_USER_DELETE_STORAGE_CLEANUP_FAILED',
             degraded: true,
             step: 'delete_user_storage',
             userIdHash: hashForLog(user.id),
@@ -179,6 +180,7 @@ const createAuth = () => betterAuth({
               } catch (error) {
                 serverLogger.warn({
                   event: 'auth.link_account.transfer.rate_limit.failed',
+                  errorCode: 'AUTH_LINK_ACCOUNT_TRANSFER_RATE_LIMIT_FAILED',
                   degraded: true,
                   step: 'transfer_rate_limit',
                   anonymousUserIdHash: hashForLog(anonymousUser.user.id),
@@ -202,6 +204,7 @@ const createAuth = () => betterAuth({
               } catch (error) {
                 serverLogger.warn({
                   event: 'auth.link_account.transfer.audiobooks.failed',
+                  errorCode: 'AUTH_LINK_ACCOUNT_TRANSFER_AUDIOBOOKS_FAILED',
                   degraded: true,
                   step: 'transfer_audiobooks',
                   anonymousUserIdHash: hashForLog(anonymousUser.user.id),
@@ -225,6 +228,7 @@ const createAuth = () => betterAuth({
               } catch (error) {
                 serverLogger.warn({
                   event: 'auth.link_account.transfer.documents.failed',
+                  errorCode: 'AUTH_LINK_ACCOUNT_TRANSFER_DOCUMENTS_FAILED',
                   degraded: true,
                   step: 'transfer_documents',
                   anonymousUserIdHash: hashForLog(anonymousUser.user.id),
@@ -248,6 +252,7 @@ const createAuth = () => betterAuth({
               } catch (error) {
                 serverLogger.warn({
                   event: 'auth.link_account.transfer.preferences.failed',
+                  errorCode: 'AUTH_LINK_ACCOUNT_TRANSFER_PREFERENCES_FAILED',
                   degraded: true,
                   step: 'transfer_preferences',
                   anonymousUserIdHash: hashForLog(anonymousUser.user.id),
@@ -271,6 +276,7 @@ const createAuth = () => betterAuth({
               } catch (error) {
                 serverLogger.warn({
                   event: 'auth.link_account.transfer.progress.failed',
+                  errorCode: 'AUTH_LINK_ACCOUNT_TRANSFER_PROGRESS_FAILED',
                   degraded: true,
                   step: 'transfer_progress',
                   anonymousUserIdHash: hashForLog(anonymousUser.user.id),
@@ -282,6 +288,7 @@ const createAuth = () => betterAuth({
             } catch (error) {
               serverLogger.error({
                 event: 'auth.link_account.failed',
+                errorCode: 'AUTH_LINK_ACCOUNT_FAILED',
                 error: errorToLog(error),
               }, 'onLinkAccount callback failed');
               // Don't throw here to prevent blocking the account linking process

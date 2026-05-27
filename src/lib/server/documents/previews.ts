@@ -377,6 +377,7 @@ export async function ensureDocumentPreview(doc: PreviewSourceDocument, namespac
     } catch (error) {
       serverLogger.error({
         event: 'documents.preview.generate.failed',
+        errorCode: 'DOCUMENTS_PREVIEW_GENERATE_FAILED',
         documentId: doc.id,
         documentType: doc.type,
         error: errorToLog(error),

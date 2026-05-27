@@ -33,6 +33,7 @@ export async function ensureAdminSeed(): Promise<void> {
     seedPromise = runSeed().catch((error) => {
       serverLogger.warn({
         event: 'admin.seed.run.failed',
+        errorCode: 'ADMIN_SEED_RUN_FAILED',
         degraded: true,
         error: errorToLog(error),
       }, 'Admin seed run failed');
@@ -65,6 +66,7 @@ async function seedDefaultAdminProvider(): Promise<void> {
   } catch (error) {
     serverLogger.warn({
       event: 'admin.seed.providers.check_failed',
+      errorCode: 'ADMIN_SEED_PROVIDERS_CHECK_FAILED',
       degraded: true,
       error: errorToLog(error),
     }, 'Could not check admin_providers');
@@ -102,6 +104,7 @@ async function seedDefaultAdminProvider(): Promise<void> {
       } catch (fallbackError) {
         serverLogger.warn({
           event: 'admin.seed.restrict_user_api_keys.fallback_write_failed',
+          errorCode: 'ADMIN_SEED_RESTRICT_USER_API_KEYS_FALLBACK_WRITE_FAILED',
           degraded: true,
           error: errorToLog(fallbackError),
         }, 'Failed to write restrictUserApiKeys fallback after encryption failure');
@@ -109,6 +112,7 @@ async function seedDefaultAdminProvider(): Promise<void> {
     }
     serverLogger.warn({
       event: 'admin.seed.provider_key_encrypt.failed',
+      errorCode: 'ADMIN_SEED_PROVIDER_KEY_ENCRYPT_FAILED',
       degraded: true,
       error: errorToLog(error),
     }, 'Failed to encrypt default provider API key');
@@ -137,6 +141,7 @@ async function seedDefaultAdminProvider(): Promise<void> {
   } catch (error) {
     serverLogger.warn({
       event: 'admin.seed.provider_insert.failed',
+      errorCode: 'ADMIN_SEED_PROVIDER_INSERT_FAILED',
       degraded: true,
       providerSlug: 'default-openai',
       error: errorToLog(error),
@@ -166,6 +171,7 @@ async function cleanupLegacyDefaultTtsProviderSeedRow(): Promise<void> {
   } catch (error) {
     serverLogger.warn({
       event: 'admin.seed.legacy_default_provider_cleanup.failed',
+      errorCode: 'ADMIN_SEED_LEGACY_DEFAULT_PROVIDER_CLEANUP_FAILED',
       degraded: true,
       error: errorToLog(error),
     }, 'Failed to cleanup legacy defaultTtsProvider seed row');
@@ -180,6 +186,7 @@ async function cleanupLegacyDefaultTtsModelRows(): Promise<void> {
   } catch (error) {
     serverLogger.warn({
       event: 'admin.seed.legacy_default_model_cleanup.failed',
+      errorCode: 'ADMIN_SEED_LEGACY_DEFAULT_MODEL_CLEANUP_FAILED',
       degraded: true,
       error: errorToLog(error),
     }, 'Failed to cleanup legacy defaultTtsModel rows');

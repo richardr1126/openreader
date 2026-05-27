@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error({
       event: 'tts.segments.audio_fallback_failed',
+      errorCode: 'TTS_SEGMENT_AUDIO_FALLBACK_FAILED',
       error: errorToLog(error),
     }, 'Failed to load segment audio from fallback route');
     return NextResponse.json({ error: 'Failed to load segment audio' }, { status: 500 });

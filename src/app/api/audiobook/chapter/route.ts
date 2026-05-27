@@ -333,8 +333,13 @@ export async function POST(request: NextRequest) {
       if (!existingResult.settings) {
         serverLogger.error({
           event: 'audiobook.chapter.meta_settings.invalid',
+          errorCode: 'AUDIOBOOK_CHAPTER_META_SETTINGS_INVALID',
           bookId,
           storageUserId,
+          error: {
+            name: 'AudiobookMetaSettingsInvalid',
+            message: 'Invalid audiobook.meta.json settings payload',
+          },
         }, 'Invalid audiobook.meta.json settings payload');
         return NextResponse.json({ error: 'Invalid audiobook metadata settings' }, { status: 500 });
       }

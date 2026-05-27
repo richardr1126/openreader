@@ -52,6 +52,7 @@ export async function deleteUserStorageData(
       } catch (error) {
         serverLogger.warn({
           event: 'user.data_cleanup.document_blob_delete.failed',
+          errorCode: 'USER_DATA_CLEANUP_DOCUMENT_BLOB_DELETE_FAILED',
           degraded: true,
           step: 'delete_document_blob',
           documentId: doc.id,
@@ -65,6 +66,7 @@ export async function deleteUserStorageData(
       } catch (error) {
         serverLogger.warn({
           event: 'user.data_cleanup.document_preview_delete.failed',
+          errorCode: 'USER_DATA_CLEANUP_DOCUMENT_PREVIEW_DELETE_FAILED',
           degraded: true,
           step: 'delete_document_preview_artifacts',
           documentId: doc.id,
@@ -80,6 +82,7 @@ export async function deleteUserStorageData(
     } catch (error) {
       serverLogger.warn({
         event: 'user.data_cleanup.document_preview_rows_delete.failed',
+        errorCode: 'USER_DATA_CLEANUP_DOCUMENT_PREVIEW_ROWS_DELETE_FAILED',
         degraded: true,
         step: 'delete_document_preview_rows',
         documentId: doc.id,
@@ -106,6 +109,7 @@ export async function deleteUserStorageData(
     } catch (error) {
       serverLogger.warn({
         event: 'user.data_cleanup.audiobook_blobs_delete.failed',
+        errorCode: 'USER_DATA_CLEANUP_AUDIOBOOK_BLOBS_DELETE_FAILED',
         degraded: true,
         step: 'delete_audiobook_prefix',
         bookId: book.id,
@@ -128,6 +132,7 @@ export async function deleteUserStorageData(
     } catch (error) {
       serverLogger.warn({
         event: 'user.data_cleanup.tts_segments_delete.failed',
+        errorCode: 'USER_DATA_CLEANUP_TTS_SEGMENTS_DELETE_FAILED',
         degraded: true,
         step: 'delete_tts_segment_prefixes',
         userIdHash: hashForLog(userId),

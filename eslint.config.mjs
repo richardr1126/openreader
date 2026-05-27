@@ -53,6 +53,11 @@ const eslintConfig = [
             "Server logger calls must pass context + message: logger.<level>({ event, ...ctx }, 'message').",
         },
         {
+          selector: `${SERVER_LOGGER_CALL_SELECTOR}[arguments.0.type!='ObjectExpression']`,
+          message:
+            "Server logger first argument must be an object with an event field.",
+        },
+        {
           selector: `${SERVER_LOGGER_CALL_SELECTOR}[arguments.0.type='Literal']`,
           message:
             "Server logger first argument must be an object with an event field, not a string literal.",
@@ -68,9 +73,34 @@ const eslintConfig = [
             "Server logger context object must include an event field.",
         },
         {
+          selector: `${SERVER_LOGGER_CALL_SELECTOR}[arguments.1.type!='Literal'][arguments.1.type!='TemplateLiteral']`,
+          message:
+            "Server logger second argument must be a message string (literal or template literal).",
+        },
+        {
+          selector: `${STATIC_LOGGER_CALL_SELECTOR}[callee.property.name='error']${LOGGER_RECEIVER_SELECTOR}[arguments.0.type='ObjectExpression']:not(:has(ObjectExpression > Property[key.name='error'])):not(:has(ObjectExpression > SpreadElement))`,
+          message:
+            "Error-level server logger calls must include nested `error` payload (prefer `error: errorToLog(...)`).",
+        },
+        {
+          selector: `${SERVER_LOGGER_CALL_SELECTOR} > ObjectExpression:first-child > Property[key.name='detail']`,
+          message:
+            "Do not use top-level `detail` in server logger context; keep throwable text under `error.message`.",
+        },
+        {
           selector: `${SERVER_LOGGER_CALL_SELECTOR} > ObjectExpression:first-child > Property[key.name='err']`,
           message:
             "Use `error` (typically from errorToLog(...)) instead of `err` in server logs.",
+        },
+        {
+          selector: `${SERVER_LOGGER_CALL_SELECTOR} > ObjectExpression:first-child > Property[key.name='error'][value.type='Literal']`,
+          message:
+            "Server logger `error` must be a structured object (prefer `errorToLog(...)`), not a literal.",
+        },
+        {
+          selector: `${SERVER_LOGGER_CALL_SELECTOR} > ObjectExpression:first-child > Property[key.name='error'][value.type='TemplateLiteral']`,
+          message:
+            "Server logger `error` must be a structured object (prefer `errorToLog(...)`), not template text.",
         },
       ],
     },

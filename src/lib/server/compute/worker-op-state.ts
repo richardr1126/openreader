@@ -16,8 +16,10 @@ export async function fetchWorkerOperationState<Result>(
   } catch (error) {
     serverLogger.warn({
       event: 'compute.worker_op_state.config.invalid',
+      errorCode: 'COMPUTE_WORKER_OP_STATE_CONFIG_INVALID',
       opId: normalized,
       degraded: true,
+      step: 'read_worker_config',
       error: errorToLog(error),
     }, 'Worker client env missing/invalid');
     return null;
@@ -38,13 +40,19 @@ export async function fetchWorkerOperationState<Result>(
     });
 
     if (!res.ok) {
-      const detail = await res.text().catch(() => '');
+      const upstreamResponseBody = await res.text().catch(() => '');
       serverLogger.warn({
         event: 'compute.worker_op_state.fetch.failed',
+        errorCode: 'COMPUTE_WORKER_OP_STATE_FETCH_FAILED',
         opId: normalized,
         status: res.status,
-        detail,
+        upstreamResponseBody,
         degraded: true,
+        step: 'fetch_worker_op',
+        error: {
+          name: 'WorkerOpStateFetchFailed',
+          message: `Worker op request failed with status ${res.status}`,
+        },
       }, 'Worker op request failed');
       return null;
     }
@@ -52,8 +60,10 @@ export async function fetchWorkerOperationState<Result>(
     if (!parsed || typeof parsed !== 'object' || parsed.opId !== normalized) {
       serverLogger.warn({
         event: 'compute.worker_op_state.response.invalid',
+        errorCode: 'COMPUTE_WORKER_OP_STATE_RESPONSE_INVALID',
         opId: normalized,
         degraded: true,
+        step: 'validate_worker_op_response',
       }, 'Worker op response invalid');
       return null;
     }
@@ -61,8 +71,10 @@ export async function fetchWorkerOperationState<Result>(
   } catch (error) {
     serverLogger.warn({
       event: 'compute.worker_op_state.fetch.error',
+      errorCode: 'COMPUTE_WORKER_OP_STATE_FETCH_ERROR',
       opId: normalized,
       degraded: true,
+      step: 'fetch_worker_op',
       error: errorToLog(error),
     }, 'Worker op request threw');
     return null;

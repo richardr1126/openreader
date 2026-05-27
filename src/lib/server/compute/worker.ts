@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
 import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
 import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core';
-import { serverLogger } from '@/lib/server/logger';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
@@ -42,22 +42,6 @@ type WorkerLogLevel = 'info' | 'warn' | 'error';
 function truncateForLog(value: string, maxChars = MAX_LOG_DETAIL_CHARS): string {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, maxChars)}...`;
-}
-
-function errorToLog(error: unknown): Record<string, unknown> {
-  if (error instanceof WorkerHttpError) {
-    return {
-      name: error.name,
-      message: error.message,
-      status: error.status,
-      retryAfterMs: error.retryAfterMs,
-      stack: error.stack,
-    };
-  }
-  if (error instanceof Error) {
-    return { name: error.name, message: error.message, stack: error.stack };
-  }
-  return { message: String(error) };
 }
 
 function logWorker(level: WorkerLogLevel, event: string, fields: Record<string, unknown>): void {
@@ -316,6 +300,7 @@ export class WorkerComputeBackend implements ComputeBackend {
         return { alignments: final.result.alignments };
       }, ({ attempt, maxAttempts, willRetry, delayMs, error }) => {
         logWorker(willRetry ? 'warn' : 'error', 'align.request.attempt_error', {
+          errorCode: 'COMPUTE_WORKER_ALIGN_REQUEST_ATTEMPT_ERROR',
           traceId,
           kind: 'whisper_align',
           opKeyHash,
@@ -336,6 +321,7 @@ export class WorkerComputeBackend implements ComputeBackend {
       return result;
     } catch (error) {
       logWorker('error', 'align.request.failed', {
+        errorCode: 'COMPUTE_WORKER_ALIGN_REQUEST_FAILED',
         traceId,
         kind: 'whisper_align',
         opKeyHash,
@@ -414,6 +400,7 @@ export class WorkerComputeBackend implements ComputeBackend {
         throw new Error('PDF layout worker operation completed without parsed output');
       }, ({ attempt, maxAttempts, willRetry, delayMs, error }) => {
         logWorker(willRetry ? 'warn' : 'error', 'pdf_layout.request.attempt_error', {
+          errorCode: 'COMPUTE_WORKER_PDF_LAYOUT_REQUEST_ATTEMPT_ERROR',
           traceId,
           kind: 'pdf_layout',
           opKeyHash,
@@ -436,6 +423,7 @@ export class WorkerComputeBackend implements ComputeBackend {
       return result;
     } catch (error) {
       logWorker('error', 'pdf_layout.request.failed', {
+        errorCode: 'COMPUTE_WORKER_PDF_LAYOUT_REQUEST_FAILED',
         traceId,
         kind: 'pdf_layout',
         opKeyHash,
@@ -473,8 +461,14 @@ export class WorkerComputeBackend implements ComputeBackend {
 
     if (!res.ok) {
       const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'));
-      const detail = await res.text().catch(() => '');
+      const upstreamResponseBody = await res.text().catch(() => '');
+      const requestError = new WorkerHttpError(
+        `Worker request failed (${method} ${path}): ${res.status}${upstreamResponseBody ? ` ${upstreamResponseBody}` : ''}`,
+        res.status,
+        retryAfterMs,
+      );
       logWorker(res.status >= 500 ? 'warn' : 'error', 'http.request.failed', {
+        errorCode: 'COMPUTE_WORKER_HTTP_REQUEST_FAILED',
         ...context,
         traceId,
         method,
@@ -482,13 +476,10 @@ export class WorkerComputeBackend implements ComputeBackend {
         status: res.status,
         retryAfterMs,
         durationMs: Date.now() - startedAt,
-        detail: truncateForLog(detail),
+        upstreamResponseBody: truncateForLog(upstreamResponseBody),
+        error: errorToLog(requestError),
       });
-      throw new WorkerHttpError(
-        `Worker request failed (${method} ${path}): ${res.status}${detail ? ` ${detail}` : ''}`,
-        res.status,
-        retryAfterMs,
-      );
+      throw requestError;
     }
 
     const parsed = await res.json() as T;
@@ -549,21 +540,24 @@ export class WorkerComputeBackend implements ComputeBackend {
 
         if (!res.ok) {
           const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'));
-          const detail = await res.text().catch(() => '');
+          const upstreamResponseBody = await res.text().catch(() => '');
+          const requestError = new WorkerHttpError(
+            `Worker request failed (GET /ops/${encodeURIComponent(opId)}/events): ${res.status}${upstreamResponseBody ? ` ${upstreamResponseBody}` : ''}`,
+            res.status,
+            retryAfterMs,
+          );
           logWorker(res.status >= 500 ? 'warn' : 'error', 'sse.wait.http_failed', {
+            errorCode: 'COMPUTE_WORKER_SSE_WAIT_HTTP_FAILED',
             ...context,
             traceId,
             opId,
             status: res.status,
             retryAfterMs,
             durationMs: Date.now() - startedAt,
-            detail: truncateForLog(detail),
+            upstreamResponseBody: truncateForLog(upstreamResponseBody),
+            error: errorToLog(requestError),
           });
-          throw new WorkerHttpError(
-            `Worker request failed (GET /ops/${encodeURIComponent(opId)}/events): ${res.status}${detail ? ` ${detail}` : ''}`,
-            res.status,
-            retryAfterMs,
-          );
+          throw requestError;
         }
 
         if (!res.body) {
@@ -675,16 +669,22 @@ export class WorkerComputeBackend implements ComputeBackend {
       }
 
       logWorker('error', 'sse.wait.ended_without_terminal', {
+        errorCode: 'COMPUTE_WORKER_SSE_WAIT_ENDED_WITHOUT_TERMINAL',
         ...context,
         traceId,
         opId,
         eventCount,
         latestStatus: latest?.status ?? null,
         durationMs: Date.now() - startedAt,
+        error: {
+          name: 'WorkerSseWaitEndedWithoutTerminal',
+          message: `Operation stream ended before terminal state for op ${opId}`,
+        },
       });
       throw new Error(`Operation stream ended before terminal state for op ${opId}`);
     } catch (error) {
       logWorker('error', 'sse.wait.failed', {
+        errorCode: 'COMPUTE_WORKER_SSE_WAIT_FAILED',
         ...context,
         traceId,
         opId,

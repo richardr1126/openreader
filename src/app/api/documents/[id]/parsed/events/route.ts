@@ -269,10 +269,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               if (closed) return;
               logger.warn({
                 event: 'documents.parsed.events.db_resync_failed',
+                errorCode: 'DOCUMENTS_PARSED_EVENTS_DB_RESYNC_FAILED',
+                degraded: true,
+                step: 'db_resync',
                 documentId: id,
                 storageUserIdHash,
                 requestId,
-                error: error instanceof Error ? error.message : String(error),
+                error: errorToLog(error),
               }, 'SSE DB resync failed');
               controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`));
             });
@@ -302,6 +305,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                   loggedMissingOpId = true;
                   logger.warn({
                     event: 'documents.parsed.events.missing_opid_non_terminal',
+                    degraded: true,
+                    step: 'poll_without_worker_op',
                     documentId: id,
                     storageUserIdHash,
                     parseStatus: current.parseStatus,
@@ -339,13 +344,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             if (closed) return;
 
             if (!response.ok) {
-              const detail = await response.text().catch(() => '');
+              const upstreamResponseBody = await response.text().catch(() => '');
               logger.warn({
                 event: 'documents.parsed.events.worker_stream_request_failed',
+                errorCode: 'DOCUMENTS_PARSED_EVENTS_WORKER_STREAM_REQUEST_FAILED',
+                degraded: true,
+                step: 'worker_stream_request',
                 documentId: id,
                 opId: currentOpId,
                 status: response.status,
-                detail,
+                upstreamResponseBody,
+                error: {
+                  name: 'WorkerStreamRequestFailed',
+                  message: `Worker stream request failed with status ${response.status}`,
+                },
               }, 'Worker stream request failed');
               await sleep(500);
               continue;
@@ -353,8 +365,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             if (!response.body) {
               logger.warn({
                 event: 'documents.parsed.events.worker_stream_missing_body',
+                errorCode: 'DOCUMENTS_PARSED_EVENTS_WORKER_STREAM_MISSING_BODY',
+                degraded: true,
+                step: 'worker_stream_body',
                 documentId: id,
                 opId: currentOpId,
+                error: {
+                  name: 'WorkerStreamMissingBody',
+                  message: 'Worker stream response missing body',
+                },
               }, 'Worker stream response missing body');
               await sleep(500);
               continue;
@@ -455,6 +474,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             logger.error({
               event: 'documents.parsed.events.worker_proxy_crashed',
               documentId: id,
+              errorCode: 'DOCUMENTS_PARSED_EVENTS_WORKER_PROXY_CRASHED',
               error: errorToLog(error),
             }, 'Worker proxy crashed while streaming parse events');
             if (!closed) {
@@ -485,6 +505,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   } catch (error) {
     logger.error({
       event: 'documents.parsed.events.route_failed',
+      errorCode: 'DOCUMENTS_PARSED_EVENTS_ROUTE_FAILED',
       error: errorToLog(error),
     }, 'Parsed events route failed');
     return NextResponse.json({ error: 'Failed to stream parsed PDF progress' }, { status: 500 });

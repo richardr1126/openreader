@@ -63,6 +63,7 @@ export async function syncAdminFlag(
   } catch (error) {
     serverLogger.warn({
       event: 'admin.email_sync.user_flag_update.failed',
+      errorCode: 'ADMIN_EMAIL_SYNC_USER_FLAG_UPDATE_FAILED',
       userIdHash: hashForLog(userId),
       degraded: true,
       error: errorToLog(error),

@@ -388,6 +388,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error({
       event: 'tts.segments.manifest.list_failed',
+      errorCode: 'TTS_SEGMENTS_MANIFEST_LIST_FAILED',
       error: errorToLog(error),
     }, 'Failed to list TTS segments');
     return NextResponse.json({ error: 'Failed to list TTS segments' }, { status: 500 });

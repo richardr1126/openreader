@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.error({
       event: 'tts.segments.clear_failed',
+      errorCode: 'TTS_SEGMENTS_CLEAR_FAILED',
       error: errorToLog(error),
     }, 'Failed to clear TTS segment cache');
     return NextResponse.json({ error: 'Failed to clear TTS segment cache' }, { status: 500 });

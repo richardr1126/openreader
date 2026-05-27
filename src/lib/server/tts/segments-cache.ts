@@ -68,6 +68,7 @@ export async function clearTtsSegmentCache(
       warning = error instanceof Error ? error.message : 'Failed deleting some audio objects';
       serverLogger.warn({
         event: 'tts.segments.cache.audio_cleanup_failed',
+        errorCode: 'TTS_SEGMENTS_CACHE_AUDIO_CLEANUP_FAILED',
         degraded: true,
         step: 'delete_tts_audio_objects',
         documentId: input.documentId,

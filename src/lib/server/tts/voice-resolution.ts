@@ -195,6 +195,7 @@ async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promi
     }
     serverLogger.error({
       event: 'tts.voice_resolution.replicate_schema_fetch.failed',
+      errorCode: 'TTS_VOICE_RESOLUTION_REPLICATE_SCHEMA_FETCH_FAILED',
       error: errorToLog(error),
     }, 'Failed fetching Replicate model schema');
     return null;
@@ -289,6 +290,7 @@ async function fetchDeepinfraVoices(apiKey: string): Promise<string[]> {
     }
     serverLogger.error({
       event: 'tts.voice_resolution.deepinfra_voices_fetch.failed',
+      errorCode: 'TTS_VOICE_RESOLUTION_DEEPINFRA_VOICES_FETCH_FAILED',
       error: errorToLog(error),
     }, 'Failed fetching Deepinfra voices');
     return [];
