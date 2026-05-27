@@ -18,7 +18,6 @@ import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { ChevronUpDownIcon, CheckIcon, SettingsIcon, KeyIcon, PaletteIcon, DocumentIcon, UserIcon, DownloadIcon, ChevronRightIcon } from '@/components/icons/Icons';
-import { getAppConfig, getFirstVisit, setFirstVisit } from '@/lib/client/dexie';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ProgressPopup } from '@/components/ProgressPopup';
@@ -33,7 +32,6 @@ import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useRouter } from 'next/navigation';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { deleteDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
-import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
 import { cacheStoredDocumentFromBytes, clearDocumentCache } from '@/lib/client/cache/documents';
 import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from '@/lib/client/cache/previews';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
@@ -71,8 +69,7 @@ import {
   type ChangelogManifestEntry,
   type ChangelogReleaseBody,
 } from '@/lib/shared/changelog';
-import { useOnboardingCoordinator } from '@/hooks/useOnboardingCoordinator';
-import { ONBOARDING_STATE_REGISTRY } from '@/lib/shared/onboarding-state';
+import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 
 // Hard-coded theme color palettes for the visual theme selector
 type ThemeColorSet = { background: string; base: string; offbase: string; accent: string; secondaryAccent: string; foreground: string; muted: string };
@@ -174,7 +171,8 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const { authEnabled, baseUrl: authBaseUrl } = useAuthConfig();
-  const { data: session, isPending: isSessionPending } = useAuthSession();
+  const { data: session } = useAuthSession();
+  const { requestOpenSettings, registerSettingsController } = useOnboardingFlow();
   const router = useRouter();
   const isBusy = isImportingLibrary;
   const {
@@ -217,34 +215,15 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     setIsChangelogOpen(Boolean(options?.changelog));
   }, []);
 
-  const readLocalOnboardingSnapshot = useCallback(async () => {
-    const appConfig = await getAppConfig();
-    const row = appConfig as Record<string, unknown> | null;
-    const privacyKey = ONBOARDING_STATE_REGISTRY.privacyAccepted.localKey;
-    const firstVisitKey = ONBOARDING_STATE_REGISTRY.firstVisitSettingsOpened.localKey;
-
-    return {
-      privacyAccepted: privacyKey ? Boolean(row?.[privacyKey]) : false,
-      firstVisitSettingsOpened: firstVisitKey ? Boolean(row?.[firstVisitKey]) : await getFirstVisit(),
+  useEffect(() => {
+    registerSettingsController({
+      open: openSettings,
+      close: closeSettings,
+    });
+    return () => {
+      registerSettingsController(null);
     };
-  }, []);
-
-  const markFirstVisitSettingsOpened = useCallback(async () => {
-    await setFirstVisit(true);
-  }, []);
-
-  const { requestOpenSettings } = useOnboardingCoordinator({
-    authEnabled,
-    isSessionPending,
-    sessionUserId: session?.user?.id,
-    appVersion: runtimeConfig.appVersion,
-    isSettingsOpen: isOpen,
-    readLocalSnapshot: readLocalOnboardingSnapshot,
-    markFirstVisitSettingsOpened,
-    postChangelogVersionCheck: async (currentVersion) => postChangelogVersionCheck(currentVersion),
-    openSettings,
-    closeSettings,
-  });
+  }, [closeSettings, openSettings, registerSettingsController]);
 
   useEffect(() => {
     setLocalApiKey(apiKey);
@@ -530,7 +509,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
       </Button>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={resetToCurrent}>
+        <Dialog
+          as="div"
+          className={`relative ${isChangelogOpen ? 'z-[90]' : 'z-50'}`}
+          onClose={resetToCurrent}
+        >
           <TransitionChild
             as={Fragment}
             enter="ease-out duration-300"

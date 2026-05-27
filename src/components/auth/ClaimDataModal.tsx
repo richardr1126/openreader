@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { Fragment, useState } from 'react';
 import {
   Dialog,
   DialogPanel,
@@ -9,11 +9,10 @@ import {
   TransitionChild,
   Button,
 } from '@headlessui/react';
-import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
-type ClaimableCounts = {
+export type ClaimableCounts = {
   documents: number;
   audiobooks: number;
   preferences: number;
@@ -30,53 +29,21 @@ function toClaimableCounts(value: unknown): ClaimableCounts {
   };
 }
 
-export default function ClaimDataModal() {
-  const { data: sessionData } = useAuthSession();
+type ClaimDataModalProps = {
+  isOpen: boolean;
+  claimableCounts: ClaimableCounts;
+  onDismiss: () => void;
+  onClaimed: () => void;
+};
+
+export default function ClaimDataModal({
+  isOpen,
+  claimableCounts,
+  onDismiss,
+  onClaimed,
+}: ClaimDataModalProps) {
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
-  const [hasChecked, setHasChecked] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
-  const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>({
-    documents: 0,
-    audiobooks: 0,
-    preferences: 0,
-    progress: 0,
-  });
-  const user = sessionData?.user;
-  const userId = user?.id;
-
-  const checkClaimableData = useCallback(async () => {
-    setHasChecked(true);
-
-    try {
-      const res = await fetch('/api/user/claim', {
-        method: 'GET',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const counts = toClaimableCounts(data);
-        setClaimableCounts(counts);
-
-        if (counts.documents + counts.audiobooks + counts.preferences + counts.progress > 0) {
-          setIsOpen(true);
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Reset per-user guard so account switches trigger a fresh check.
-    setHasChecked(false);
-  }, [userId]);
-
-  useEffect(() => {
-    // Only check once per authenticated user
-    if (userId && !user?.isAnonymous && !hasChecked) {
-      checkClaimableData();
-    }
-  }, [userId, user?.isAnonymous, hasChecked, checkClaimableData]);
 
   const handleClaim = async () => {
     setIsClaiming(true);
@@ -93,8 +60,7 @@ export default function ClaimDataModal() {
           + `${claimed.preferences} preference set(s), and `
           + `${claimed.progress} reading progress record(s)!`,
         );
-
-        setIsOpen(false);
+        onClaimed();
         router.refresh();
         return;
       }
@@ -107,15 +73,9 @@ export default function ClaimDataModal() {
     }
   };
 
-  const handleDismiss = () => {
-    // Close the modal for this session - will reappear on next page load/refresh
-    setIsOpen(false);
-    // Keep hasChecked = true so useEffect doesn't re-trigger in this session
-  };
-
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleDismiss}>
+      <Dialog as="div" className="relative z-[80]" onClose={onDismiss}>
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
@@ -169,7 +129,7 @@ export default function ClaimDataModal() {
                 <div className="flex justify-end gap-3">
                   <Button
                     type="button"
-                    onClick={handleDismiss}
+                    onClick={onDismiss}
                     disabled={isClaiming}
                     className="inline-flex justify-center rounded-lg bg-background px-3 py-1.5 text-sm 
                              font-medium text-foreground hover:bg-offbase focus:outline-none 
