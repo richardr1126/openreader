@@ -146,6 +146,7 @@ export function usePdfDocument(): PdfDocumentState {
   const [parsedDocument, setParsedDocument] = useState<ParsedPdfDocument | null>(null);
   const [parseStatus, setParseStatus] = useState<PdfParseStatus | null>(null);
   const [parseProgress, setParseProgress] = useState<PdfParseProgress | null>(null);
+  const [, setActiveParseOpId] = useState<string | null>(null);
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
   const [isAudioCombining] = useState(false);
@@ -173,6 +174,7 @@ export function usePdfDocument(): PdfDocumentState {
     documentId: string,
     initialStatus: PdfParseStatus | null,
     signal: AbortSignal,
+    initialOpId?: string | null,
   ): Promise<void> => {
     // Legacy PDFs may have null parseStatus; treat as pending so opening the
     // document backfills parse output via the parsed endpoint polling path.
@@ -182,22 +184,30 @@ export function usePdfDocument(): PdfDocumentState {
     const delayMs = 1200;
     const retryFailed = effectiveInitialStatus === 'failed';
     let attempt = 0;
+    let effectiveOpId = initialOpId?.trim() || null;
     while (!signal.aborted) {
       if (signal.aborted) return;
       const result = await getParsedPdfDocument(documentId, {
         signal,
         retryFailed: retryFailed && attempt === 0,
+        ...(effectiveOpId ? { opId: effectiveOpId } : {}),
       });
       if (result.status === 'ready') {
         setParsedDocument(result.parsed);
         setParseStatus('ready');
         setParseProgress(null);
+        setActiveParseOpId(null);
         return;
+      }
+      if ('opId' in result && typeof result.opId === 'string' && result.opId.trim()) {
+        effectiveOpId = result.opId.trim();
+        setActiveParseOpId(effectiveOpId);
       }
       setParseStatus(result.status);
       setParseProgress(result.parseProgress ?? null);
       if (result.status === 'failed') {
         setParsedDocument(null);
+        setActiveParseOpId(null);
         return;
       }
       attempt += 1;
@@ -216,24 +226,36 @@ export function usePdfDocument(): PdfDocumentState {
     }
   }, []);
 
-  const startParsedPolling = useCallback((documentId: string) => {
+  const startParsedPolling = useCallback((documentId: string, initialOpId?: string | null) => {
     parsePollAbortRef.current?.abort();
     parseSseCloseRef.current?.();
     parseSseCloseRef.current = null;
     setParseProgress(null);
+    setActiveParseOpId(initialOpId?.trim() || null);
     const controller = new AbortController();
     parsePollAbortRef.current = controller;
 
     const closeSse = subscribeParsedPdfDocumentEvents(documentId, {
+      opId: initialOpId?.trim() || null,
+    }, {
       onSnapshot: (snapshot) => {
         if (controller.signal.aborted) return;
+        if (typeof snapshot.opId === 'string' && snapshot.opId.trim()) {
+          setActiveParseOpId(snapshot.opId.trim());
+        }
         setParseStatus(snapshot.parseStatus);
         setParseProgress(snapshot.parseProgress);
         if (snapshot.parseStatus === 'ready' || snapshot.parseStatus === 'failed') {
           if (snapshot.parseStatus === 'failed') {
             setParsedDocument(null);
+            setActiveParseOpId(null);
           } else {
-            void fetchParsedDocument(documentId, 'ready', controller.signal);
+            void fetchParsedDocument(
+              documentId,
+              'ready',
+              controller.signal,
+              typeof snapshot.opId === 'string' ? snapshot.opId : (initialOpId ?? null),
+            );
           }
           closeSse();
           parseSseCloseRef.current = null;
@@ -263,7 +285,7 @@ export function usePdfDocument(): PdfDocumentState {
         parsePollAbortRef.current = null;
       }
     }, { once: true });
-  }, [fetchParsedDocument]);
+  }, [fetchParsedDocument, setActiveParseOpId]);
 
   useEffect(() => {
     pdfDocumentRef.current = pdfDocument;
@@ -449,6 +471,7 @@ export function usePdfDocument(): PdfDocumentState {
       setParsedDocument(null);
       setParseStatus(null);
       setParseProgress(null);
+      setActiveParseOpId(null);
       setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
 
       const meta = await getDocumentMetadata(id, { signal: controller.signal });
@@ -461,7 +484,8 @@ export function usePdfDocument(): PdfDocumentState {
         const initialParseStatus = (meta.parseStatus ?? null) as PdfParseStatus | null;
         setParseStatus(initialParseStatus);
         setParseProgress(null);
-        startParsedPolling(id);
+        setActiveParseOpId(null);
+        startParsedPolling(id, null);
         void fetchDocumentSettings(id, controller.signal);
       }
 
@@ -513,11 +537,12 @@ export function usePdfDocument(): PdfDocumentState {
   const forceReparseParsedPdf = useCallback(async (): Promise<void> => {
     if (!currDocId) return;
     try {
-      await forceReparsePdfDocument(currDocId);
+      const forced = await forceReparsePdfDocument(currDocId);
       setParsedDocument(null);
-      setParseStatus('pending');
+      setParseStatus(forced.status);
       setParseProgress(null);
-      startParsedPolling(currDocId);
+      setActiveParseOpId(forced.opId ?? null);
+      startParsedPolling(currDocId, forced.opId ?? null);
     } catch (error) {
       console.error('Failed to force PDF reparse:', error);
     }
@@ -548,6 +573,7 @@ export function usePdfDocument(): PdfDocumentState {
     setParsedDocument(null);
     setParseStatus(null);
     setParseProgress(null);
+    setActiveParseOpId(null);
     setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
     pageTextCacheRef.current.clear();
     stop();

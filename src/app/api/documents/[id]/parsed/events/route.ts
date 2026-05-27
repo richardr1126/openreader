@@ -31,11 +31,13 @@ type ParseRow = {
 type ParsedSnapshot = {
   parseStatus: PdfParseStatus;
   parseProgress: PdfParseProgress | null;
+  opId?: string | null;
 };
 
 type SnapshotState = {
   snapshot: ParsedSnapshot;
   opId: string | null;
+  fromWorker: boolean;
 };
 
 function s3NotConfiguredResponse(): NextResponse {
@@ -49,20 +51,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function toSnapshotState(row: ParseRow): Promise<SnapshotState> {
+async function toSnapshotState(row: ParseRow, preferredOpId?: string | null): Promise<SnapshotState> {
   const state = await healStaleDocumentParseState({
     documentId: row.id,
     userId: row.userId,
     state: parseDocumentParseState(row.parseState),
   });
   const parseStatus = normalizeParseStatus(state.status);
-  const opId = typeof state.opId === 'string' && state.opId.trim() ? state.opId.trim() : null;
-  if (opId && parseStatus !== 'ready') {
+  const dbOpId = typeof state.opId === 'string' && state.opId.trim() ? state.opId.trim() : null;
+  const requestedOpId = preferredOpId?.trim() || null;
+  const opId = requestedOpId ?? dbOpId;
+  // When a caller pins an opId, that op is the live source of truth even if
+  // the per-user document row currently says "ready" or has a different opId.
+  if (opId && (requestedOpId !== null || parseStatus !== 'ready')) {
     const workerState = await fetchWorkerOperationState<PdfLayoutJobResult>(opId);
     if (workerState && workerState.opId === opId) {
       return {
-        snapshot: snapshotFromWorkerState(workerState),
-        opId,
+        snapshot: {
+          ...snapshotFromWorkerState(workerState),
+          opId: workerState.opId,
+        },
+        opId: workerState.opId,
+        fromWorker: true,
       };
     }
   }
@@ -70,8 +80,10 @@ async function toSnapshotState(row: ParseRow): Promise<SnapshotState> {
     snapshot: {
       parseStatus,
       parseProgress: state.progress ?? null,
+      opId,
     },
     opId,
+    fromWorker: false,
   };
 }
 
@@ -97,8 +109,9 @@ async function syncFromDb(input: {
   storageUserId: string;
   allowedUserIds: string[];
   signature: string;
+  preferredOpId?: string | null;
   writeSnapshot: (snapshot: ParsedSnapshot) => void;
-}): Promise<{ snapshot: ParsedSnapshot; opId: string | null; signature: string } | null> {
+}): Promise<{ snapshot: ParsedSnapshot; opId: string | null; fromWorker: boolean; signature: string } | null> {
   const nextRow = await loadPreferredRow({
     documentId: input.documentId,
     storageUserId: input.storageUserId,
@@ -106,7 +119,7 @@ async function syncFromDb(input: {
   });
   if (!nextRow) return null;
 
-  const nextState = await toSnapshotState(nextRow);
+  const nextState = await toSnapshotState(nextRow, input.preferredOpId);
   const nextSignature = JSON.stringify(nextState.snapshot);
   if (nextSignature !== input.signature) {
     input.writeSnapshot(nextState.snapshot);
@@ -115,6 +128,7 @@ async function syncFromDb(input: {
   return {
     snapshot: nextState.snapshot,
     opId: nextState.opId,
+    fromWorker: nextState.fromWorker,
     signature: nextSignature,
   };
 }
@@ -131,6 +145,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (!isValidDocumentId(id)) {
       return NextResponse.json({ error: 'Invalid document id' }, { status: 400 });
     }
+    const requestedOpIdRaw = req.nextUrl.searchParams.get('opId');
+    const requestedOpId = typeof requestedOpIdRaw === 'string' && requestedOpIdRaw.trim()
+      ? requestedOpIdRaw.trim()
+      : null;
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
     const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
@@ -147,16 +165,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const initialState = await toSnapshotState(row);
+    const initialState = await toSnapshotState(row, requestedOpId);
     const workerCfg = getWorkerClientConfigFromEnv();
     const encoder = new TextEncoder();
-    console.info('[parsed/events] stream open', {
-      documentId: id,
-      storageUserId,
-      initialParseStatus: initialState.snapshot.parseStatus,
-      initialOpId: initialState.opId,
-    });
-
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         let closed = false;
@@ -193,12 +204,23 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         const runWorkerProxy = async () => {
           let current = initialState.snapshot;
           let signature = JSON.stringify(current);
-          let currentOpId = initialState.opId;
+          let currentOpId = requestedOpId ?? initialState.opId;
+          let currentFromWorker = initialState.fromWorker;
           let lastEventId: number | null = null;
+          let loggedMissingOpId = false;
+          const pinnedRequestedOp = requestedOpId ?? null;
+          const shouldCloseForTerminalSnapshot = (snapshot: ParsedSnapshot, fromWorker: boolean): boolean => {
+            const isTerminal = snapshot.parseStatus === 'ready' || snapshot.parseStatus === 'failed';
+            if (!isTerminal) return false;
+            // If caller pinned an opId, keep streaming until worker confirms that
+            // op state. DB fallback can report stale terminal status for other rows.
+            if (pinnedRequestedOp && snapshot.opId === pinnedRequestedOp && !fromWorker) return false;
+            return true;
+          };
 
           writeSnapshot(current);
 
-          if (current.parseStatus === 'ready' || current.parseStatus === 'failed') {
+          if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
             closeStream();
             return;
           }
@@ -215,6 +237,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               storageUserId,
               allowedUserIds,
               signature,
+              preferredOpId: requestedOpId ?? currentOpId,
               writeSnapshot,
             }).then((next) => {
               if (closed) return;
@@ -224,7 +247,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               }
               current = next.snapshot;
               signature = next.signature;
-              if (next.opId !== currentOpId) {
+              currentFromWorker = next.fromWorker;
+              if (!requestedOpId && next.opId !== currentOpId) {
                 currentOpId = next.opId;
                 lastEventId = null;
                 if (workerAbort) {
@@ -232,7 +256,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                   workerAbort = null;
                 }
               }
-              if (current.parseStatus === 'ready' || current.parseStatus === 'failed') {
+              if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
                 closeStream();
               }
             }).catch((error) => {
@@ -254,6 +278,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                 storageUserId,
                 allowedUserIds,
                 signature,
+                preferredOpId: requestedOpId ?? currentOpId,
                 writeSnapshot,
               });
               if (!next) {
@@ -262,14 +287,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               }
               current = next.snapshot;
               signature = next.signature;
-              currentOpId = next.opId;
+              currentFromWorker = next.fromWorker;
+              currentOpId = requestedOpId ?? next.opId;
               if (!currentOpId) {
-                console.warn('[parsed/events] waiting for worker opId', {
-                  documentId: id,
-                  parseStatus: current.parseStatus,
-                });
+                if (!loggedMissingOpId) {
+                  loggedMissingOpId = true;
+                  console.warn('[parsed/events] missing worker opId while parse is non-terminal', {
+                    documentId: id,
+                    storageUserId,
+                    parseStatus: current.parseStatus,
+                    requestedOpId,
+                  });
+                }
+              } else if (loggedMissingOpId) {
+                loggedMissingOpId = false;
               }
-              if (current.parseStatus === 'ready' || current.parseStatus === 'failed') {
+              if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
                 closeStream();
                 return;
               }
@@ -358,15 +391,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                 );
                 if (!workerSnapshot || workerSnapshot.opId !== currentOpId) continue;
 
-                const nextSnapshot = snapshotFromWorkerState(workerSnapshot);
+                const nextSnapshot: ParsedSnapshot = {
+                  ...snapshotFromWorkerState(workerSnapshot),
+                  opId: workerSnapshot.opId,
+                };
                 const nextSignature = JSON.stringify(nextSnapshot);
                 if (nextSignature !== signature) {
                   current = nextSnapshot;
                   signature = nextSignature;
+                  currentFromWorker = true;
                   writeSnapshot(current);
                 }
 
-                if (current.parseStatus === 'ready' || current.parseStatus === 'failed') {
+                if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
                   closeStream();
                   return;
                 }
@@ -380,6 +417,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               storageUserId,
               allowedUserIds,
               signature,
+              preferredOpId: requestedOpId ?? currentOpId,
               writeSnapshot,
             });
             if (!next) {
@@ -388,11 +426,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             }
             current = next.snapshot;
             signature = next.signature;
-            if (next.opId !== currentOpId) {
+            currentFromWorker = next.fromWorker;
+            if (!requestedOpId && next.opId !== currentOpId) {
               currentOpId = next.opId;
               lastEventId = null;
             }
-            if (current.parseStatus === 'ready' || current.parseStatus === 'failed') {
+            if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
               closeStream();
               return;
             }
