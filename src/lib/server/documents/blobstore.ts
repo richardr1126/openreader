@@ -100,35 +100,11 @@ function legacyDocumentParsedKey(id: string, namespace: string | null): string {
   return `${cfg.prefix}/documents_v1/${nsSegment}${id}/parsed.v1.json`;
 }
 
-async function cleanupLegacyParsedPathCollision(id: string, namespace: string | null): Promise<void> {
-  const cfg = getS3Config();
-  const client = getS3ProxyClient();
-  const key = documentKey(id, namespace);
-  const legacyPrefix = `${key}/`;
-  const legacyParsedKey = legacyDocumentParsedKey(id, namespace);
-
-  const legacyObjects = await client.send(
-    new ListObjectsV2Command({
-      Bucket: cfg.bucket,
-      Prefix: legacyPrefix,
-      MaxKeys: 1,
-    }),
-  );
-  const hasLegacyChildren = (legacyObjects.Contents?.length ?? 0) > 0;
-  if (!hasLegacyChildren) return;
-
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey })).catch(() => undefined);
-  await deleteDocumentPrefix(legacyPrefix).catch(() => undefined);
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key })).catch(() => undefined);
-}
-
 export async function presignPut(
   id: string,
   contentType: string,
   namespace: string | null,
 ): Promise<{ url: string; headers: Record<string, string> }> {
-  await cleanupLegacyParsedPathCollision(id, namespace);
-
   const cfg = getS3Config();
   const client = getS3Client();
   const key = documentKey(id, namespace);
@@ -278,8 +254,6 @@ export async function putDocumentBlob(
   contentType: string,
   namespace: string | null,
 ): Promise<void> {
-  await cleanupLegacyParsedPathCollision(id, namespace);
-
   const cfg = getS3Config();
   const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
