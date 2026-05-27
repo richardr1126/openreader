@@ -6,7 +6,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthRateLimitProvider } from '@/contexts/AuthRateLimitContext';
 import { RuntimeConfigProvider } from '@/contexts/RuntimeConfigContext';
-import { PrivacyModal } from '@/components/PrivacyModal';
 import { AuthLoader } from '@/components/auth/AuthLoader';
 
 interface ProvidersProps {
@@ -38,10 +37,7 @@ export function Providers({ children, authEnabled, authBaseUrl, allowAnonymousAu
         >
           <ThemeProvider>
             <AuthLoader>
-              <>
-                {children}
-                {authEnabled && <PrivacyModal />}
-              </>
+              {children}
             </AuthLoader>
           </ThemeProvider>
         </AuthRateLimitProvider>

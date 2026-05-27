@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ClaimDataModal, { type ClaimableCounts } from '@/components/auth/ClaimDataModal';
 import { DexieMigrationModal } from '@/components/documents/DexieMigrationModal';
+import { PrivacyModal } from '@/components/PrivacyModal';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
@@ -120,7 +121,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const userId = user?.id ?? null;
   const isAnonymous = Boolean(user?.isAnonymous);
 
-  const [activeBlockingModal, setActiveBlockingModal] = useState<'claim' | 'migration' | null>(null);
+  const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | 'migration' | null>(null);
   const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>(EMPTY_CLAIM_COUNTS);
   const [migrationCounts, setMigrationCounts] = useState<{ localCount: number; missingCount: number }>({
     localCount: 0,
@@ -144,12 +145,14 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     }
     runningAdvanceRef.current = true;
     try {
-      if (activeBlockingModal) {
-        return;
-      }
-
       const local = await readLocalOnboardingSnapshot();
       if (authEnabled && !local.privacyAccepted) {
+        setActiveBlockingModal('privacy');
+        return;
+      }
+      if (activeBlockingModal === 'privacy') {
+        setActiveBlockingModal(null);
+      } else if (activeBlockingModal) {
         return;
       }
 
@@ -237,6 +240,11 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     void advanceFlow();
   }, [advanceFlow]);
 
+  const handlePrivacyAccepted = useCallback(() => {
+    setActiveBlockingModal(null);
+    void advanceFlow();
+  }, [advanceFlow]);
+
   useEffect(() => {
     void advanceFlow();
   }, [advanceFlow, authEnabled, isAnonymous, userId]);
@@ -280,6 +288,13 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   return (
     <OnboardingFlowContext.Provider value={contextValue}>
       {children}
+      {authEnabled && (
+        <PrivacyModal
+          isOpen={activeBlockingModal === 'privacy'}
+          onAccept={handlePrivacyAccepted}
+          onDismiss={() => { }}
+        />
+      )}
       {authEnabled && (
         <ClaimDataModal
           isOpen={activeBlockingModal === 'claim'}
