@@ -49,7 +49,7 @@ Monorepo packages under `compute/`:
 
 - **`@openreader/compute-core`** — ONNX runtime lifecycle, model management, and inference logic shared by compute worker runtime + app/worker contracts
   - ONNX runtime: `onnxruntime-node` with `@huggingface/tokenizers`
-  - Whisper alignment: `onnx-community/whisper-base_timestamped` (int8) for word-level timestamps
+  - Whisper alignment: `onnx-community/whisper-base_timestamped` (q4) for word-level timestamps
   - PDF layout: `Bei0001/PP-DocLayoutV3-ONNX` for document block detection and layout parsing
   - PDF rendering: `pdfjs-dist`, `@napi-rs/canvas` for server-side page rasterization
   - Utilities: `jszip`, `ffmpeg-static`

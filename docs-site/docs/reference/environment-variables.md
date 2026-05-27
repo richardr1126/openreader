@@ -65,7 +65,7 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `COMPUTE_PDF_TIMEOUT_MS` | Heavy compute backend | `300000` | Shared PDF idle-timeout budget (worker + worker client wait budget) |
 | `COMPUTE_OP_STALE_MS` | Heavy compute backend | `max(30m, 4x max compute timeout)` | Shared stale window for worker op replacement and app-side stale PDF parse-state healing |
 | `PDF_LAYOUT_MODEL_BASE_URL` | PDF layout model | PP-DocLayoutV3 ONNX base URL | Optional base URL override for `ensureModel()` |
-| `WHISPER_MODEL_BASE_URL` | Whisper ONNX model | onnx-community defaults | Optional base URL override for ONNX whisper-base_timestamped int8 downloads |
+| `WHISPER_MODEL_BASE_URL` | Whisper ONNX model | onnx-community defaults | Optional base URL override for ONNX whisper-base_timestamped q4 downloads |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 
 
@@ -460,7 +460,7 @@ Optional base URL override for PP-DocLayoutV3 artifacts downloaded by `ensureMod
 Optional base URL override for the built-in ONNX Whisper alignment model downloader.
 
 - Default: `https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main`
-- Default model variant: int8 (`encoder_model_int8.onnx`, `decoder_model_merged_int8.onnx`, `decoder_with_past_model_int8.onnx`)
+- Default model variant: q4 (`encoder_model_q4.onnx`, `decoder_model_merged_q4.onnx`, `decoder_with_past_model_q4.onnx`)
 - The base URL must host all expected manifest files under the same relative paths.
 - Configure this on the worker service env (not only the app server env)
 

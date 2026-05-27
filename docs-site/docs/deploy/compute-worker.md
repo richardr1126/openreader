@@ -55,7 +55,7 @@ Advanced tuning (usually leave unset unless you need overrides):
 - `COMPUTE_JOB_CONCURRENCY=1` (shared total compute jobs across whisper + PDF)
 - `COMPUTE_WHISPER_TIMEOUT_MS=30000`
 - `COMPUTE_PDF_TIMEOUT_MS=300000`
-- `WHISPER_MODEL_BASE_URL=https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main` (optional override)
+- `WHISPER_MODEL_BASE_URL=https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main` (optional override, q4 defaults)
 - `PDF_LAYOUT_MODEL_BASE_URL=https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main` (optional override)
 - `COMPUTE_PDF_JOB_ATTEMPTS=1` (PDF layout retry attempts)
 - `COMPUTE_JOBS_STREAM_MAX_BYTES=268435456` (256MB JetStream jobs stream cap)
@@ -79,7 +79,7 @@ COMPUTE_WORKER_TOKEN=<same-token-as-worker>
 # COMPUTE_OP_STALE_MS=1800000
 ```
 
-Model artifact overrides (`WHISPER_MODEL_BASE_URL`, `PDF_LAYOUT_MODEL_BASE_URL`) are worker runtime variables and should be set on the compute worker service environment.
+Model artifact overrides (`WHISPER_MODEL_BASE_URL`, `PDF_LAYOUT_MODEL_BASE_URL`) are worker runtime variables and should be set on the compute worker service environment. Current Whisper defaults expect q4 artifacts (`encoder_model_q4.onnx`, `decoder_model_merged_q4.onnx`, `decoder_with_past_model_q4.onnx`) under that base URL.
 
 `COMPUTE_OP_STALE_MS` is shared by both services in worker mode:
 
@@ -168,6 +168,10 @@ COMPUTE_WORKER_TOKEN=<long-random-shared-token>
 # COMPUTE_WHISPER_TIMEOUT_MS=30000
 # COMPUTE_PDF_TIMEOUT_MS=300000
 # WHISPER_MODEL_BASE_URL=https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main
+# # Expects q4 files at that base:
+# # - onnx/encoder_model_q4.onnx
+# # - onnx/decoder_model_merged_q4.onnx
+# # - onnx/decoder_with_past_model_q4.onnx
 # PDF_LAYOUT_MODEL_BASE_URL=https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main
 # COMPUTE_PDF_JOB_ATTEMPTS=1
 # COMPUTE_JOBS_STREAM_MAX_BYTES=268435456

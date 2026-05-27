@@ -155,7 +155,7 @@ No extra native Whisper CLI build step is required.
 
 Word-by-word highlighting and PDF layout parsing are worker-backed in current releases.
 
-If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` in `.env`.
+If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` in `.env` (current defaults expect q4 Whisper files at that base URL).
 
 </details>
 

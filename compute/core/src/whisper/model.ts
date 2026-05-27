@@ -14,9 +14,9 @@ export const WHISPER_CONFIG_PATH = path.join(MODEL_DIR, 'config.json');
 export const WHISPER_GENERATION_CONFIG_PATH = path.join(MODEL_DIR, 'generation_config.json');
 export const WHISPER_TOKENIZER_PATH = path.join(MODEL_DIR, 'tokenizer.json');
 export const WHISPER_TOKENIZER_CONFIG_PATH = path.join(MODEL_DIR, 'tokenizer_config.json');
-export const WHISPER_ENCODER_MODEL_PATH = path.join(MODEL_DIR, 'onnx', 'encoder_model_int8.onnx');
-export const WHISPER_DECODER_MERGED_MODEL_PATH = path.join(MODEL_DIR, 'onnx', 'decoder_model_merged_int8.onnx');
-export const WHISPER_DECODER_WITH_PAST_MODEL_PATH = path.join(MODEL_DIR, 'onnx', 'decoder_with_past_model_int8.onnx');
+export const WHISPER_ENCODER_MODEL_PATH = path.join(MODEL_DIR, 'onnx', 'encoder_model_q4.onnx');
+export const WHISPER_DECODER_MERGED_MODEL_PATH = path.join(MODEL_DIR, 'onnx', 'decoder_model_merged_q4.onnx');
+export const WHISPER_DECODER_WITH_PAST_MODEL_PATH = path.join(MODEL_DIR, 'onnx', 'decoder_with_past_model_q4.onnx');
 
 const BASE_MODEL_URL = 'https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main';
 const WHISPER_MODEL_BASE_URL_ENV = 'WHISPER_MODEL_BASE_URL';
@@ -32,9 +32,9 @@ const MODEL_RELATIVE_PATHS: string[] = [
   'added_tokens.json',
   'preprocessor_config.json',
   'special_tokens_map.json',
-  'onnx/encoder_model_int8.onnx',
-  'onnx/decoder_model_merged_int8.onnx',
-  'onnx/decoder_with_past_model_int8.onnx',
+  'onnx/encoder_model_q4.onnx',
+  'onnx/decoder_model_merged_q4.onnx',
+  'onnx/decoder_with_past_model_q4.onnx',
 ];
 
 const DEFAULT_URLS: Record<string, string> = {
@@ -48,9 +48,9 @@ const DEFAULT_URLS: Record<string, string> = {
   'added_tokens.json': `${BASE_MODEL_URL}/added_tokens.json`,
   'preprocessor_config.json': `${BASE_MODEL_URL}/preprocessor_config.json`,
   'special_tokens_map.json': `${BASE_MODEL_URL}/special_tokens_map.json`,
-  'onnx/encoder_model_int8.onnx': `${BASE_MODEL_URL}/onnx/encoder_model_int8.onnx`,
-  'onnx/decoder_model_merged_int8.onnx': `${BASE_MODEL_URL}/onnx/decoder_model_merged_int8.onnx`,
-  'onnx/decoder_with_past_model_int8.onnx': `${BASE_MODEL_URL}/onnx/decoder_with_past_model_int8.onnx`,
+  'onnx/encoder_model_q4.onnx': `${BASE_MODEL_URL}/onnx/encoder_model_q4.onnx`,
+  'onnx/decoder_model_merged_q4.onnx': `${BASE_MODEL_URL}/onnx/decoder_model_merged_q4.onnx`,
+  'onnx/decoder_with_past_model_q4.onnx': `${BASE_MODEL_URL}/onnx/decoder_with_past_model_q4.onnx`,
 };
 
 type ManifestEntry = { path: string; sha256?: string; size?: number };

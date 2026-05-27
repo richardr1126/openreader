@@ -1,5 +1,5 @@
 {
-  "name": "whisper-base_timestamped-int8",
+  "name": "whisper-base_timestamped-q4",
   "version": "onnx-community/whisper-base_timestamped@608c49e61301901684bc36cac8f74b95ff6b5a8e",
   "files": [
     {
@@ -53,19 +53,19 @@
       "size": 2194
     },
     {
-      "path": "onnx/encoder_model_int8.onnx",
-      "sha256": "152da96dd8ff3f28f3fadabc2e8960405a277846453ff94ed411fe935a72917f",
-      "size": 23159150
+      "path": "onnx/encoder_model_q4.onnx",
+      "sha256": "0df94e35822653ba16e23c3f19f05b9b7fe7aae97884d1b277e02044f33c4880",
+      "size": 18771046
     },
     {
-      "path": "onnx/decoder_model_merged_int8.onnx",
-      "sha256": "cf9a8d5bcddc0917a0078135b484cedcaf44f28909cd91910abd29dced9171db",
-      "size": 53712708
+      "path": "onnx/decoder_model_merged_q4.onnx",
+      "sha256": "fc1902ce2e42c69b2346d8e2a98898c60c01da1e6a64ae90f41d22350ac7db13",
+      "size": 123738327
     },
     {
-      "path": "onnx/decoder_with_past_model_int8.onnx",
-      "sha256": "bdd92860d0ed7dff2aca623963378cbba1b617bfae127356db1c8aa8baa930ef",
-      "size": 50131672
+      "path": "onnx/decoder_with_past_model_q4.onnx",
+      "sha256": "d864ca26509968b00d92e6823c4db7ac460c106f9228a21bc5199e9893fe4126",
+      "size": 121378741
     },
     {
       "path": "LICENSE.txt",
