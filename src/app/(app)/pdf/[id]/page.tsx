@@ -72,7 +72,6 @@ export default function PDFViewerPage() {
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
-  const backNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearCurrDocRef = useRef(clearCurrDoc);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   const parseUiState: NonNullable<typeof parseStatus> = parseStatus ?? 'pending';
@@ -160,9 +159,6 @@ export default function PDFViewerPage() {
 
   useEffect(() => {
     return () => {
-      if (backNavTimeoutRef.current) {
-        clearTimeout(backNavTimeoutRef.current);
-      }
       clearCurrDocRef.current();
     };
   }, []);
@@ -222,16 +218,9 @@ export default function PDFViewerPage() {
     if (isNavigatingBack) return;
     setIsNavigatingBack(true);
     stop();
-    const hadOpenSidebar = activeSidebar !== null;
     setActiveSidebar(null);
-    const delayMs = hadOpenSidebar ? 220 : 0;
-    if (backNavTimeoutRef.current) {
-      clearTimeout(backNavTimeoutRef.current);
-    }
-    backNavTimeoutRef.current = setTimeout(() => {
-      router.push('/app');
-    }, delayMs);
-  }, [isNavigatingBack, stop, activeSidebar, router]);
+    router.push('/app');
+  }, [isNavigatingBack, stop, router]);
 
   const requestForceReparse = useCallback(() => {
     if (forceReparseDisabled) return;

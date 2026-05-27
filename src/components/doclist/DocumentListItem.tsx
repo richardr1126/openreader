@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { DragEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@headlessui/react';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { DocumentListDocument } from '@/types/documents';
@@ -35,9 +34,9 @@ export function DocumentListItem({
   viewMode,
 }: DocumentListItemProps) {
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const { authEnabled } = useAuthConfig();
   const { data: session } = useAuthSession();
+  const href = `/${doc.type}/${encodeURIComponent(doc.id)}`;
 
   // Only allow drag and drop interactions for documents not in folders
   const isDraggable = dragEnabled && !doc.folderId;
@@ -45,10 +44,8 @@ export function DocumentListItem({
   const isAnonymousAuthed = Boolean(authEnabled && session?.user?.isAnonymous);
   const showDeleteButton = !(isAnonymousAuthed && doc.scope === 'unclaimed');
 
-  const handleDocumentClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleDocumentClick = () => {
     setLoading(true);
-    router.push(`/${doc.type}/${encodeURIComponent(doc.id)}`);
   };
 
   return (
@@ -81,7 +78,7 @@ export function DocumentListItem({
       {viewMode === 'grid' ? (
         <>
           <Link
-            href={`/${doc.type}/${encodeURIComponent(doc.id)}`}
+            href={href}
             draggable={false}
             className="block"
             aria-label="Open document preview"
@@ -91,7 +88,7 @@ export function DocumentListItem({
           </Link>
           <div className="flex items-center w-full px-1.5 py-1.5">
             <Link
-              href={`/${doc.type}/${encodeURIComponent(doc.id)}`}
+              href={href}
               draggable={false}
               className="document-link flex items-center gap-2 flex-1 min-w-0 rounded-md py-0.5 px-0.5"
               onClick={handleDocumentClick}
@@ -134,7 +131,7 @@ export function DocumentListItem({
       ) : (
         <div className="flex items-center w-full">
           <Link
-            href={`/${doc.type}/${encodeURIComponent(doc.id)}`}
+            href={href}
             draggable={false}
             className="document-link flex items-center align-center gap-2 flex-1 min-w-0 rounded-md py-0.5 px-0.5"
             onClick={handleDocumentClick}

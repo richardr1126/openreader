@@ -102,6 +102,12 @@ export default function EPUBPage() {
     loadDocument();
   }, [loadDocument, isLoading]);
 
+  useEffect(() => {
+    return () => {
+      clearCurrDoc();
+    };
+  }, [clearCurrDoc]);
+
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
     const compute = () => {
@@ -170,7 +176,6 @@ export default function EPUBPage() {
         <p className="text-red-500 mb-4">{error}</p>
         <Link
           href="/app"
-          onClick={() => clearCurrDoc()}
           className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
         >
           <svg className="w-4 h-4 mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +193,6 @@ export default function EPUBPage() {
         left={
           <Link
             href="/app"
-            onClick={() => clearCurrDoc()}
             className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
             aria-label="Back to documents"
           >
