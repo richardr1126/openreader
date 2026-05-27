@@ -4,6 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
+import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
 import {
   getParsedDocumentBlob,
   getParsedDocumentBlobByKey,
@@ -20,6 +21,7 @@ import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
+import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +35,21 @@ function s3NotConfiguredResponse(): NextResponse {
 function hasAnyParsedBlocks(doc: ParsedPdfDocument | null): boolean {
   if (!doc || !Array.isArray(doc.pages)) return false;
   return doc.pages.some((page) => Array.isArray(page.blocks) && page.blocks.length > 0);
+}
+
+function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']) {
+  switch (status) {
+    case 'queued':
+      return 'pending' as const;
+    case 'running':
+      return 'running' as const;
+    case 'succeeded':
+      return 'ready' as const;
+    case 'failed':
+      return 'failed' as const;
+    default:
+      return 'pending' as const;
+  }
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -80,7 +97,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       userId: row.userId,
       state,
     });
-    const effectiveStatus = normalizeParseStatus(state.status);
+    let effectiveStatus = normalizeParseStatus(state.status);
+    let effectiveProgress = state.progress ?? null;
+    const opId = typeof state.opId === 'string' ? state.opId.trim() : '';
+    if (opId && effectiveStatus !== 'ready') {
+      const workerState = await fetchWorkerOperationState<PdfLayoutJobResult>(opId);
+      if (workerState && workerState.opId === opId) {
+        const workerStatus = mapWorkerStatusToParseStatus(workerState.status);
+        // Keep DB/blob as source of truth for "ready"; prefer worker only for active/failed states.
+        if (workerStatus === 'pending' || workerStatus === 'running' || workerStatus === 'failed') {
+          effectiveStatus = workerStatus;
+          effectiveProgress = workerStatus === 'running' ? (workerState.progress ?? null) : null;
+        }
+      }
+    }
 
     if (effectiveStatus === 'failed' && retryFailed) {
       await db
@@ -104,7 +134,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (effectiveStatus !== 'ready') {
       return NextResponse.json({
         parseStatus: effectiveStatus,
-        parseProgress: state.progress ?? null,
+        parseProgress: effectiveProgress,
       }, { status: 202 });
     }
 
@@ -190,7 +220,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       userId: row.userId,
       state,
     });
-    const effectiveStatus = normalizeParseStatus(state.status);
+    let effectiveStatus = normalizeParseStatus(state.status);
+    let effectiveProgress = state.progress ?? null;
+    const opId = typeof state.opId === 'string' ? state.opId.trim() : '';
+    if (opId && effectiveStatus !== 'ready') {
+      const workerState = await fetchWorkerOperationState<PdfLayoutJobResult>(opId);
+      if (workerState && workerState.opId === opId) {
+        const workerStatus = mapWorkerStatusToParseStatus(workerState.status);
+        if (workerStatus === 'pending' || workerStatus === 'running' || workerStatus === 'failed') {
+          effectiveStatus = workerStatus;
+          effectiveProgress = workerStatus === 'running' ? (workerState.progress ?? null) : null;
+        }
+      }
+    }
 
     if (effectiveStatus !== 'running') {
       await db
@@ -215,7 +257,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json(
       {
         parseStatus: effectiveStatus === 'running' ? 'running' : 'pending',
-        parseProgress: effectiveStatus === 'running' ? (state.progress ?? null) : null,
+        parseProgress: effectiveStatus === 'running' ? effectiveProgress : null,
       },
       { status: 202 },
     );

@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { getWorkerClientConfigFromEnv } from '@/lib/server/compute/worker';
+import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/documents/parse-state';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
@@ -76,12 +77,22 @@ async function toSnapshotState(row: ParseRow): Promise<SnapshotState> {
     state: parseDocumentParseState(row.parseState),
   });
   const parseStatus = normalizeParseStatus(state.status);
+  const opId = typeof state.opId === 'string' && state.opId.trim() ? state.opId.trim() : null;
+  if (opId && parseStatus !== 'ready') {
+    const workerState = await fetchWorkerOperationState<PdfLayoutJobResult>(opId);
+    if (workerState && workerState.opId === opId) {
+      return {
+        snapshot: snapshotFromWorkerState(workerState),
+        opId,
+      };
+    }
+  }
   return {
     snapshot: {
       parseStatus,
       parseProgress: state.progress ?? null,
     },
-    opId: typeof state.opId === 'string' && state.opId.trim() ? state.opId.trim() : null,
+    opId,
   };
 }
 
