@@ -26,13 +26,13 @@ export function UserMenu({ className = '' }: { className?: string }) {
     return (
       <div className={`flex gap-2 ${className}`}>
         <Link href="/signin">
-          <Button className="inline-flex items-center rounded-md bg-base border border-offbase px-2 py-1 text-xs font-medium text-foreground hover:bg-offbase focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 transform transition-all duration-200 ease-in-out hover:scale-[1.09] hover:text-accent">
+          <Button className="inline-flex items-center rounded-md bg-base border border-offbase px-2 py-1 text-xs font-medium text-foreground hover:bg-offbase focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 transform transition-all duration-200 ease-in-out hover:scale-[1.01] hover:text-accent">
             Connect
           </Button>
         </Link>
         {enableUserSignups && (
           <Link href="/signup">
-            <Button className="inline-flex items-center rounded-md bg-accent px-2 py-1 text-xs font-medium text-background hover:bg-secondary-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 transform transition-all duration-200 ease-in-out hover:scale-[1.09]">
+            <Button className="inline-flex items-center rounded-md bg-accent px-2 py-1 text-xs font-medium text-background hover:bg-secondary-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 transform transition-all duration-200 ease-in-out hover:scale-[1.01]">
               Create account
             </Button>
           </Link>
@@ -49,7 +49,7 @@ export function UserMenu({ className = '' }: { className?: string }) {
 
       <Button
         onClick={handleDisconnectAccount}
-        className="inline-flex items-center text-foreground text-xs hover:text-accent transform transition-all duration-200 ease-in-out hover:scale-[1.09]"
+        className="inline-flex items-center text-foreground text-xs hover:text-accent transform transition-all duration-200 ease-in-out hover:scale-[1.01]"
         title="Disconnect account"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

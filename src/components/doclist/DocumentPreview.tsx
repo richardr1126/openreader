@@ -329,8 +329,16 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
         </>
       )}
 
-      <div className="absolute left-1 top-1 z-20 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-        {isGenerating ? '…' : typeLabel}
+      <div className="absolute left-1 bottom-1 z-20 rounded bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/90">
+        {isGenerating
+          ? '…'
+          : `${typeLabel} • ${
+              doc.size >= 1024 * 1024 * 1024
+                ? `${(doc.size / 1024 / 1024 / 1024).toFixed(2)} GB`
+                : doc.size >= 1024 * 1024
+                  ? `${(doc.size / 1024 / 1024).toFixed(2)} MB`
+                  : `${(doc.size / 1024).toFixed(1)} KB`
+            }`}
       </div>
     </div>
   );

@@ -489,63 +489,65 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         </div>
       )}
 
-      {fallbackViewMode === 'icons' && (
-        <IconsView
-          folders={visibleFolders}
-          unfolderedDocs={unfolderedDocs}
-          iconSize={iconSize}
-          collapsedFolders={collapsedFolders}
-          onToggleCollapse={toggleFolderCollapse}
-          onDeleteFolder={handleDeleteFolder}
-          onDeleteDoc={(doc) =>
-            setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-          }
-          onDropOnFolder={handleDropOnFolder}
-          onMergeIntoFolder={handleMergeIntoFolder}
-        />
-      )}
-      {fallbackViewMode === 'list' && (
-        <ListView
-          folders={visibleFolders}
-          unfolderedDocs={unfolderedDocs}
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          onSortChange={(b, d) => {
-            setSortBy(b);
-            setSortDirection(d);
-          }}
-          collapsedFolders={collapsedFolders}
-          onToggleCollapse={toggleFolderCollapse}
-          onDeleteFolder={handleDeleteFolder}
-          onDeleteDoc={(doc) =>
-            setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-          }
-          onDropOnFolder={handleDropOnFolder}
-          onMergeIntoFolder={handleMergeIntoFolder}
-        />
-      )}
-      {fallbackViewMode === 'columns' && (
-        <ColumnsView
-          folders={visibleFolders}
-          unfolderedDocs={unfolderedDocs}
-          onDeleteDoc={(doc) =>
-            setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-          }
-          onDropOnFolder={handleDropOnFolder}
-          onMergeIntoFolder={handleMergeIntoFolder}
-        />
-      )}
-      {fallbackViewMode === 'gallery' && (
-        <GalleryView
-          folders={visibleFolders}
-          unfolderedDocs={unfolderedDocs}
-          onDeleteDoc={(doc) =>
-            setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-          }
-          onDropOnFolder={handleDropOnFolder}
-          onMergeIntoFolder={handleMergeIntoFolder}
-        />
-      )}
+      <DocumentUploader variant="overlay" className="flex-1 min-h-0 flex flex-col">
+        {fallbackViewMode === 'icons' && (
+          <IconsView
+            folders={visibleFolders}
+            unfolderedDocs={unfolderedDocs}
+            iconSize={iconSize}
+            collapsedFolders={collapsedFolders}
+            onToggleCollapse={toggleFolderCollapse}
+            onDeleteFolder={handleDeleteFolder}
+            onDeleteDoc={(doc) =>
+              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
+            }
+            onDropOnFolder={handleDropOnFolder}
+            onMergeIntoFolder={handleMergeIntoFolder}
+          />
+        )}
+        {fallbackViewMode === 'list' && (
+          <ListView
+            folders={visibleFolders}
+            unfolderedDocs={unfolderedDocs}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            onSortChange={(b, d) => {
+              setSortBy(b);
+              setSortDirection(d);
+            }}
+            collapsedFolders={collapsedFolders}
+            onToggleCollapse={toggleFolderCollapse}
+            onDeleteFolder={handleDeleteFolder}
+            onDeleteDoc={(doc) =>
+              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
+            }
+            onDropOnFolder={handleDropOnFolder}
+            onMergeIntoFolder={handleMergeIntoFolder}
+          />
+        )}
+        {fallbackViewMode === 'columns' && (
+          <ColumnsView
+            folders={visibleFolders}
+            unfolderedDocs={unfolderedDocs}
+            onDeleteDoc={(doc) =>
+              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
+            }
+            onDropOnFolder={handleDropOnFolder}
+            onMergeIntoFolder={handleMergeIntoFolder}
+          />
+        )}
+        {fallbackViewMode === 'gallery' && (
+          <GalleryView
+            folders={visibleFolders}
+            unfolderedDocs={unfolderedDocs}
+            onDeleteDoc={(doc) =>
+              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
+            }
+            onDropOnFolder={handleDropOnFolder}
+            onMergeIntoFolder={handleMergeIntoFolder}
+          />
+        )}
+      </DocumentUploader>
 
       <CreateFolderDialog
         isOpen={pendingMerge !== null}

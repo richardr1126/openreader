@@ -181,7 +181,11 @@ export function GalleryView({
               </h2>
               <p className="text-[11px] text-muted">
                 {activeDoc.type.toUpperCase()} •{' '}
-                {(activeDoc.size / 1024 / 1024).toFixed(2)} MB
+                {activeDoc.size >= 1024 * 1024 * 1024
+                  ? `${(activeDoc.size / 1024 / 1024 / 1024).toFixed(2)} GB`
+                  : activeDoc.size >= 1024 * 1024
+                    ? `${(activeDoc.size / 1024 / 1024).toFixed(2)} MB`
+                    : `${(activeDoc.size / 1024).toFixed(1)} KB`}
               </p>
             </div>
             <div className="flex gap-2">

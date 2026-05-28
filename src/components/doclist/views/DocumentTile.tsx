@@ -9,7 +9,6 @@ import type { DocumentListDocument, IconSize } from '@/types/documents';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
-import { buttonClass } from '@/components/formPrimitives';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -111,9 +110,51 @@ export function DocumentTile({
 
   const sizeClasses: Record<IconSize, string> = {
     sm: 'text-[10px]',
-    md: 'text-[12px]',
-    lg: 'text-[13px]',
-    xl: 'text-[14px]',
+    md: 'text-[11px]',
+    lg: 'text-[12px]',
+    xl: 'text-[13px]',
+  };
+
+  const bottomPaddingClasses: Record<IconSize, string> = {
+    sm: 'px-[7px] py-[4px]',
+    md: 'px-[8px] py-[5px]',
+    lg: 'px-[9px] py-[5px]',
+    xl: 'px-[10px] py-[6px]',
+  };
+
+  const linkPaddingClasses: Record<IconSize, string> = {
+    sm: 'px-[2px] py-[2px]',
+    md: 'px-[2px] py-[2px]',
+    lg: 'px-[2px] py-[2px]',
+    xl: 'px-[2px] py-[2px]',
+  };
+
+  const gapClasses: Record<IconSize, string> = {
+    sm: 'gap-1',
+    md: 'gap-1.5',
+    lg: 'gap-2',
+    xl: 'gap-2',
+  };
+
+  const fileIconClasses: Record<IconSize, string> = {
+    sm: 'w-3 h-3',
+    md: 'w-3.5 h-3.5',
+    lg: 'w-3.5 h-3.5',
+    xl: 'w-4 h-4',
+  };
+
+  const trashBtnClasses: Record<IconSize, string> = {
+    sm: 'ml-0.5 h-[18px] w-[18px] rounded-sm',
+    md: 'ml-0.5 h-[21px] w-[21px] rounded-sm',
+    lg: 'ml-1 h-[23px] w-[23px] rounded',
+    xl: 'ml-1.5 h-[25px] w-[25px] rounded',
+  };
+
+  const trashIconClasses: Record<IconSize, string> = {
+    sm: 'w-[10px] h-[10px]',
+    md: 'w-[11px] h-[11px]',
+    lg: 'w-[12px] h-[12px]',
+    xl: 'w-[13px] h-[13px]',
   };
 
   return (
@@ -140,49 +181,40 @@ export function DocumentTile({
       >
         <DocumentPreview doc={doc} />
       </Link>
-      <div className="flex items-center w-full px-1.5 py-1.5">
+      <div className={`flex items-center w-full ${bottomPaddingClasses[iconSize]}`}>
         <Link
           href={href}
           draggable={false}
-          className="flex items-center gap-2 flex-1 min-w-0 rounded-md py-0.5 px-0.5"
+          className={`flex items-center flex-1 min-w-0 rounded-md ${linkPaddingClasses[iconSize]} ${gapClasses[iconSize]}`}
           onClick={handleClick}
         >
-          <span className="flex-shrink-0">
+          <span className="flex-shrink-0 flex items-center">
             {doc.type === 'pdf' ? (
-              <PDFIcon className="w-4 h-4 text-red-500" />
+              <PDFIcon className={`${fileIconClasses[iconSize]} text-red-500`} />
             ) : doc.type === 'epub' ? (
-              <EPUBIcon className="w-4 h-4 text-blue-500" />
+              <EPUBIcon className={`${fileIconClasses[iconSize]} text-blue-500`} />
             ) : (
-              <FileIcon className="w-4 h-4 text-muted" />
+              <FileIcon className={`${fileIconClasses[iconSize]} text-muted`} />
             )}
           </span>
-          <span className="flex flex-col min-w-0 w-full">
-            <span
-              className={
-                'leading-tight font-medium truncate ' +
-                sizeClasses[iconSize] +
-                ' ' +
-                (isSelected ? 'text-accent' : 'text-foreground group-hover:text-accent')
-              }
-            >
-              {doc.name}
-            </span>
-            <span className="text-[9px] leading-tight text-muted truncate">
-              {(doc.size / 1024 / 1024).toFixed(2)} MB
-            </span>
+          <span
+            className={
+              'leading-none font-medium truncate flex-1 min-w-0 ' +
+              sizeClasses[iconSize] +
+              ' ' +
+              (isSelected ? 'text-accent' : 'text-foreground group-hover:text-accent')
+            }
+          >
+            {doc.name}
           </span>
         </Link>
         {showDeleteButton && (
           <Button
             onClick={() => onDelete(doc)}
-            className={buttonClass({
-              variant: 'ghost',
-              size: 'icon',
-              className: 'ml-1 h-6 w-6 text-muted hover:bg-base',
-            })}
+            className={`inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base focus:outline-none transition-colors duration-200 ${trashBtnClasses[iconSize]}`}
             aria-label={`Delete ${doc.name}`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={trashIconClasses[iconSize]} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

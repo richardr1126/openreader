@@ -501,11 +501,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
         onClick={() => {
           void requestOpenSettings();
         }}
-        className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-200 ease-out hover:scale-[1.08] ${className}`}
+        className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-200 ease-out hover:scale-[1.01] ${className}`}
         aria-label="Settings"
         tabIndex={0}
       >
-        <SettingsIcon className="w-4 h-4 transition-transform duration-200 ease-out hover:scale-[1.08] hover:rotate-45" />
+        <SettingsIcon className="w-4 h-4 transition-transform duration-200 ease-out hover:scale-[1.01] hover:rotate-45" />
       </Button>
 
       <Transition appear show={isOpen} as={Fragment}>
@@ -1447,7 +1447,7 @@ function SettingsChangelogPanel({
       <div className="flex items-center gap-3 px-4 py-3 border-b border-offbase bg-background">
         <Button
           onClick={onClose}
-          className="inline-flex items-center justify-center rounded-md text-muted hover:text-accent hover:bg-base transition-all duration-200 ease-in-out transform hover:scale-[1.08]"
+          className="inline-flex items-center justify-center rounded-md text-muted hover:text-accent hover:bg-base transition-all duration-200 ease-in-out transform hover:scale-[1.01]"
           aria-label="Back to settings"
           title="Back"
         >

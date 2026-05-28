@@ -58,10 +58,9 @@ const ICON_SIZES: Array<{ value: IconSize; label: string }> = [
 
 // Match SettingsModal / UserMenu trigger sizing exactly so all bar buttons share one rhythm.
 const TOOLBAR_BTN =
-  'inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition-all duration-200 ease-out hover:scale-[1.02]';
+  'inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition-all duration-200 ease-out hover:scale-[1.01]';
 const TOOLBAR_BTN_INACTIVE =
   'border-offbase text-foreground hover:text-accent hover:border-accent hover:bg-offbase';
-const TOOLBAR_BTN_ACTIVE = 'border-accent text-accent bg-offbase';
 
 // Pill-grouped segmented control. Outer pill carries the border; inner segments are
 // borderless and rely on bg/text color to show active/hover. Sized so the whole pill

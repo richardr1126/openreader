@@ -47,7 +47,7 @@ function SidebarRow({
       type="button"
       onClick={onClick}
       className={
-        'group w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition-all duration-200 ease-out text-left hover:scale-[1.02] ' +
+        'group w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition-all duration-200 ease-out text-left hover:scale-[1.01] ' +
         (active
           ? 'border-accent bg-offbase text-accent'
           : 'border-transparent text-foreground hover:border-accent hover:bg-offbase hover:text-accent') +

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
@@ -10,10 +10,11 @@ import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 
 interface DocumentUploaderProps {
   className?: string;
-  variant?: 'default' | 'compact';
+  variant?: 'default' | 'compact' | 'overlay';
+  children?: ReactNode;
 }
 
-export function DocumentUploader({ className = '', variant = 'default' }: DocumentUploaderProps) {
+export function DocumentUploader({ className = '', variant = 'default', children }: DocumentUploaderProps) {
   const enableDocx = useFeatureFlag('enableDocxConversion');
   const {
     addPDFDocument: addPDF,
@@ -71,11 +72,13 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
       } : {})
     },
     multiple: true,
-    disabled: isUploading || isConverting
+    disabled: isUploading || isConverting,
+    noClick: variant === 'overlay',
+    noKeyboard: variant === 'overlay'
   });
 
   const containerBase = `group w-full rounded transform transition-all duration-200 ease-in-out ${
-    variant === 'compact' ? 'hover:scale-[1.02]' : ''
+    variant === 'compact' ? 'hover:scale-[1.01]' : ''
   } ${
     isUploading || isConverting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
   } ${className}`;
@@ -94,6 +97,32 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
         }`;
 
   const paddingClass = variant === 'compact' ? 'py-1 px-2 rounded-md' : 'py-5 px-3 rounded-lg';
+
+  if (variant === 'overlay') {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { onClick, onKeyDown, ...rootProps } = getRootProps();
+    return (
+      <div {...rootProps} className={`relative w-full h-full ${className}`}>
+        <input {...getInputProps()} />
+        {children}
+        {isDragActive && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-md pointer-events-none p-6">
+            <div className="w-full h-full border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center bg-base/60 text-center p-4">
+              <UploadIcon className="w-14 h-14 text-accent mb-4 animate-bounce" />
+              <p className="text-xl font-bold text-foreground mb-1.5">
+                Drop files here to upload
+              </p>
+              <p className="text-sm text-foreground/70">
+                {enableDocx
+                  ? 'Accepts PDF, EPUB, TXT, MD, or DOCX'
+                  : 'Accepts PDF, EPUB, TXT, or MD'}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

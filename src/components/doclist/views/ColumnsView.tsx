@@ -216,7 +216,12 @@ export function ColumnsView({
               {selected.doc.name}
             </h3>
             <p className="text-[11px] text-muted">
-              {selected.doc.type.toUpperCase()} • {(selected.doc.size / 1024 / 1024).toFixed(2)} MB
+              {selected.doc.type.toUpperCase()} •{' '}
+              {selected.doc.size >= 1024 * 1024 * 1024
+                ? `${(selected.doc.size / 1024 / 1024 / 1024).toFixed(2)} GB`
+                : selected.doc.size >= 1024 * 1024
+                  ? `${(selected.doc.size / 1024 / 1024).toFixed(2)} MB`
+                  : `${(selected.doc.size / 1024).toFixed(1)} KB`}
             </p>
             <div className="mt-3 flex gap-2">
               <Link
