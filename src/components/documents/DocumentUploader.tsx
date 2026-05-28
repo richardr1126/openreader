@@ -74,28 +74,46 @@ export function DocumentUploader({ className = '', variant = 'default' }: Docume
     disabled: isUploading || isConverting
   });
 
-  const containerBase = `w-full border-2 border-dashed rounded-lg ${isDragActive ? 'border-accent bg-base' : 'border-muted'} transform transition-transform duration-200 ease-in-out ${(isUploading || isConverting) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-accent hover:bg-base hover:scale-[1.008]'} ${className}`;
-  const paddingClass = variant === 'compact' ? 'py-1.5 px-2' : 'py-5 px-3';
+  const containerBase = `group w-full rounded transform transition-all duration-200 ease-in-out ${
+    variant === 'compact' ? 'hover:scale-[1.02]' : ''
+  } ${
+    isUploading || isConverting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+  } ${className}`;
+
+  const borderBgClass =
+    variant === 'compact'
+      ? `${
+          isDragActive
+            ? 'border border-accent bg-offbase text-accent'
+            : 'border border-dashed border-offbase text-foreground hover:border-accent hover:bg-offbase hover:text-accent'
+        }`
+      : `${
+          isDragActive
+            ? 'border-2 border-dashed border-accent bg-base text-foreground'
+            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-base hover:scale-[1.008]'
+        }`;
+
+  const paddingClass = variant === 'compact' ? 'py-1 px-2 rounded-md' : 'py-5 px-3 rounded-lg';
 
   return (
     <div
       {...getRootProps()}
-      className={`${containerBase} ${paddingClass}`}
+      className={`${containerBase} ${borderBgClass} ${paddingClass}`}
     >
       <input {...getInputProps()} />
       {variant === 'compact' ? (
-        <div className="flex items-center gap-2 text-left">
-          <UploadIcon className="w-5 h-5 text-muted" />
+        <div className="flex items-center gap-2 text-left w-full min-w-0">
+          <UploadIcon className="w-3.5 h-3.5 text-muted group-hover:text-accent shrink-0 transition-colors duration-200" />
           {isUploading ? (
-            <p className="text-xs font-medium text-foreground">Uploading…</p>
+            <p className="text-[12px] font-medium truncate flex-1">Uploading…</p>
           ) : isConverting ? (
-            <p className="text-xs font-medium text-foreground">Converting DOCX…</p>
+            <p className="text-[12px] font-medium truncate flex-1">Converting DOCX…</p>
           ) : (
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-medium text-foreground">
-                {isDragActive ? 'Drop files here' : 'Drop files or click'}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <p className="text-[12px] truncate flex-1">
+                {isDragActive ? 'Drop files here' : 'Upload documents'}
               </p>
-              {error && <p className="text-xs text-red-500">{error}</p>}
+              {error && <p className="text-[10px] text-red-500 truncate shrink-0">{error}</p>}
             </div>
           )}
         </div>

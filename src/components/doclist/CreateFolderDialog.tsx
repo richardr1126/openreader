@@ -53,7 +53,7 @@ export function CreateFolderDialog({
                     onChange={(e) => onFolderNameChange(e.target.value)}
                     onKeyDown={onKeyDown}
                     placeholder="Enter folder name"
-                    className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-accent"
                     autoFocus
                   />
                   <p className="mt-2 text-xs text-muted">Press Enter to create or Escape to cancel</p>

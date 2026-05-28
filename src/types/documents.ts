@@ -60,13 +60,24 @@ export interface Folder {
 export type SortBy = 'name' | 'type' | 'date' | 'size';
 export type SortDirection = 'asc' | 'desc';
 
+export type ViewMode = 'icons' | 'list' | 'columns' | 'gallery';
+export type IconSize = 'sm' | 'md' | 'lg' | 'xl';
+
+// Filter applied from the sidebar.
+// Examples: 'all', 'recents', 'pdf', 'epub', 'html', or `folder:<folderId>`.
+export type SidebarFilter = string;
+
 export interface DocumentListState {
   sortBy: SortBy;
   sortDirection: SortDirection;
   folders: Folder[];
   collapsedFolders: string[];
   showHint: boolean;
-  viewMode?: 'list' | 'grid';
+  viewMode?: ViewMode | 'list' | 'grid';
+  iconSize?: IconSize;
+  sidebarWidth?: number;
+  sidebarFilter?: SidebarFilter;
+  sidebarCollapsed?: boolean;
 }
 
 export interface LibraryDocument extends BaseDocument {

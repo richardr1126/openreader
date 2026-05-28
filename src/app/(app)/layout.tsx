@@ -34,8 +34,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       allowAnonymousAuthSessions={allowAnonymousAuthSessions}
       githubAuthEnabled={githubAuthEnabled}
     >
-      <div className="app-shell min-h-screen flex flex-col bg-background">
-        <main className="flex-1 flex flex-col">{children}</main>
+      <div className="app-shell h-dvh flex flex-col bg-background overflow-hidden">
+        <main className="flex-1 min-h-0 flex flex-col">{children}</main>
       </div>
       <Toaster
         toastOptions={{
