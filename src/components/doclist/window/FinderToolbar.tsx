@@ -118,51 +118,59 @@ export function FinderToolbar({
           {VIEW_BUTTONS.map(({ value, label, Icon }) => {
             const disabled = value === 'columns' && isNarrow;
             const active = viewMode === value;
+            const isIconsToggle = value === 'icons';
             return (
-              <button
+              <div
                 key={value}
-                type="button"
-                disabled={disabled}
-                onClick={() => onViewModeChange(value)}
-                aria-pressed={active}
-                aria-label={`${label} view`}
-                title={disabled ? `${label} (desktop only)` : `${label} view`}
-                className={
-                  PILL_SEGMENT +
-                  ' h-6 w-7 ' +
-                  (active ? PILL_SEGMENT_ACTIVE : PILL_SEGMENT_INACTIVE) +
-                  (disabled ? ' opacity-40 cursor-not-allowed hover:bg-transparent hover:text-muted' : '')
-                }
+                className={isIconsToggle ? 'relative group/icons inline-flex items-center' : 'inline-flex items-center'}
               >
-                <Icon className="w-4 h-4" />
-              </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onViewModeChange(value)}
+                  aria-pressed={active}
+                  aria-label={`${label} view`}
+                  title={disabled ? `${label} (desktop only)` : `${label} view`}
+                  className={
+                    PILL_SEGMENT +
+                    ' h-6 w-7 ' +
+                    (active ? PILL_SEGMENT_ACTIVE : PILL_SEGMENT_INACTIVE) +
+                    (disabled ? ' opacity-40 cursor-not-allowed hover:bg-transparent hover:text-muted' : '')
+                  }
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+                {isIconsToggle && viewMode === 'icons' && (
+                  <div
+                    className="absolute top-full left-1/2 z-30 -translate-x-1/2 pt-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/icons:opacity-100 group-hover/icons:pointer-events-auto group-focus-within/icons:opacity-100 group-focus-within/icons:pointer-events-auto"
+                  >
+                    <div className={`${PILL} shadow-lg`}>
+                      {ICON_SIZES.map(({ value: sizeValue, label: sizeLabel }) => {
+                        const sizeActive = iconSize === sizeValue;
+                        return (
+                          <button
+                            key={sizeValue}
+                            type="button"
+                            onClick={() => onIconSizeChange(sizeValue)}
+                            aria-pressed={sizeActive}
+                            aria-label={`Icon size ${sizeLabel}`}
+                            className={
+                              PILL_SEGMENT +
+                              ' h-6 min-w-[26px] px-1.5 font-semibold tracking-wide ' +
+                              (sizeActive ? PILL_SEGMENT_ACTIVE : PILL_SEGMENT_INACTIVE)
+                            }
+                          >
+                            {sizeLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
-
-        {viewMode === 'icons' && (
-          <div className={`${PILL} hidden sm:inline-flex`}>
-            {ICON_SIZES.map(({ value, label }) => {
-              const active = iconSize === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onIconSizeChange(value)}
-                  aria-pressed={active}
-                  aria-label={`Icon size ${label}`}
-                  className={
-                    PILL_SEGMENT +
-                    ' h-6 min-w-[26px] px-1.5 font-semibold tracking-wide ' +
-                    (active ? PILL_SEGMENT_ACTIVE : PILL_SEGMENT_INACTIVE)
-                  }
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         <div className="flex items-center gap-1 shrink-0">
           <button
