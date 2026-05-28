@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { useRef, type CSSProperties, type ReactNode } from 'react';
 import { useDrop } from 'react-dnd';
 import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
@@ -158,8 +158,8 @@ export function FinderSidebar({
 
   return (
     <aside
-      style={{ width }}
-      className="relative h-full bg-base border-r border-offbase shrink-0 overflow-y-auto"
+      style={{ '--sidebar-width': `${width}px` } as CSSProperties}
+      className="relative h-full w-full md:[width:var(--sidebar-width)] bg-base border-r border-offbase shrink-0 overflow-y-auto"
     >
       <div className="p-2 flex flex-col gap-0.5">
         {topSlot && (
@@ -234,4 +234,3 @@ export function FinderSidebar({
     </aside>
   );
 }
-

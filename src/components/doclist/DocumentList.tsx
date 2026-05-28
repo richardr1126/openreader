@@ -124,6 +124,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_STATE.sidebarWidth);
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
 
   const [isInitialized, setIsInitialized] = useState(false);
@@ -205,6 +206,12 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     sidebarOpen,
     isInitialized,
   ]);
+
+  // Mobile drawer should never auto-open from persisted desktop state.
+  useEffect(() => {
+    if (!isNarrow) return;
+    setMobileSidebarOpen(false);
+  }, [isNarrow]);
 
   // Build the union document list.
   const allDocuments: DocumentListDocument[] = useMemo(
@@ -413,6 +420,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   const fallbackViewMode: ViewMode =
     viewMode === 'columns' && isNarrow ? 'list' : viewMode;
+  const effectiveSidebarOpen = isNarrow ? mobileSidebarOpen : sidebarOpen;
 
   return (
     <FinderWindow
@@ -434,7 +442,12 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             setNewFolderName('');
             setManualFolderPrompt(true);
           }}
-          onToggleSidebar={() => setSidebarOpen((p) => !p)}
+          onToggleSidebar={() =>
+            isNarrow
+              ? setMobileSidebarOpen((p) => !p)
+              : setSidebarOpen((p) => !p)
+          }
+          isSidebarOpen={effectiveSidebarOpen}
           isNarrow={isNarrow}
           leftSlot={brand}
           rightSlot={appActions}
@@ -460,8 +473,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           summary={summary}
         />
       }
-      sidebarOpen={sidebarOpen}
-      onSidebarOpenChange={setSidebarOpen}
+      sidebarOpen={effectiveSidebarOpen}
+      onSidebarOpenChange={(open) => {
+        if (isNarrow) setMobileSidebarOpen(open);
+        else setSidebarOpen(open);
+      }}
     >
       {!isLoading && showHint && allDocuments.length > 1 && (
         <div className="px-3 pt-3 shrink-0 bg-background">

@@ -86,7 +86,7 @@ export function FinderWindow({
               leaveTo="-translate-x-full"
             >
               <DialogPanel
-                className="w-[80vw] max-w-[280px] h-full bg-base border-r border-offbase shadow-xl"
+                className="w-[80vw] max-w-[280px] h-full bg-base shadow-xl"
                 onClick={() => onSidebarOpenChange(false)}
               >
                 {sidebar}
