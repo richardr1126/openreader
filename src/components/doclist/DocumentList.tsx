@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useDocuments } from '@/contexts/DocumentContext';
 import type {
   DocumentListDocument,
@@ -134,7 +135,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const [sidebarOpen, setSidebarOpen] = useState(!(cachedState?.sidebarCollapsed ?? false));
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [recentlyOpenedById, setRecentlyOpenedById] = useState<Record<string, number>>({});
 
   const [isInitialized, setIsInitialized] = useState(cachedState !== null);
 
@@ -247,22 +247,18 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     () => rawDocuments.map((d) => d.id).sort().join('|'),
     [rawDocuments],
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  const recentlyOpenedById = useLiveQuery<Record<string, number>, Record<string, number>>(
+    async () => {
       try {
-        const recentMap = await getDocumentRecentlyOpenedMap();
-        if (cancelled) return;
-        setRecentlyOpenedById(recentMap);
+        return await getDocumentRecentlyOpenedMap();
       } catch (err) {
         console.warn('Failed to load recently opened cache metadata:', err);
+        return {};
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [rawDocumentIdsKey]);
+    },
+    [rawDocumentIdsKey],
+    {},
+  );
 
   const allDocuments: DocumentListDocument[] = useMemo(
     () =>
@@ -289,6 +285,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           .map((d) => ({ ...d, folderId: folder.id })),
       })),
     [folders, allDocumentsById],
+  );
+
+  const folderNameById = useMemo(
+    () =>
+      foldersWithLiveDocs.reduce<Record<string, string>>((acc, folder) => {
+        acc[folder.id] = folder.name;
+        return acc;
+      }, {}),
+    [foldersWithLiveDocs],
   );
 
   const folderIdByDocId = useMemo(() => {
@@ -471,6 +476,10 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     () => allDocuments.reduce((acc, d) => acc + d.size, 0),
     [allDocuments],
   );
+  const visibleSelectedCount = useMemo(
+    () => sortedVisible.reduce((count, doc) => count + (selection.isSelected(doc) ? 1 : 0), 0),
+    [sortedVisible, selection],
+  );
 
   const isLoading = isPDFLoading || isEPUBLoading || isHTMLLoading;
 
@@ -499,6 +508,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
               : setSidebarOpen((p) => !p)
           }
           isSidebarOpen={effectiveSidebarOpen}
+          showSortControls={sidebarFilter !== 'recents'}
           leftSlot={brand}
         />
       }
@@ -519,12 +529,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           onWidthChange={setSidebarWidth}
           topSlot={<DocumentUploader variant="compact" />}
           bottomSlot={appActions}
+          onRowAction={() => {
+            if (isNarrow) setMobileSidebarOpen(false);
+          }}
         />
       }
       statusBar={
         <FinderStatusBar
           itemCount={allDocuments.length}
-          selectedCount={selection.selectionSize}
+          selectedCount={visibleSelectedCount}
           totalSize={totalBytes}
           summary={summary}
         />
@@ -589,6 +602,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           {fallbackViewMode === 'gallery' && (
             <GalleryView
               documents={sortedVisible}
+              folderNameById={folderNameById}
               onDeleteDoc={handleDeleteDoc}
               onMergeIntoFolder={handleMergeIntoFolder}
             />

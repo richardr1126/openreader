@@ -25,6 +25,7 @@ interface FinderToolbarProps {
   onQueryChange: (q: string) => void;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
+  showSortControls?: boolean;
   /** App-level content rendered at the far left (brand/logo). */
   leftSlot?: ReactNode;
   /** App-level content rendered at the far right (settings, user menu). */
@@ -80,6 +81,7 @@ export function FinderToolbar({
   onQueryChange,
   onToggleSidebar,
   isSidebarOpen,
+  showSortControls = true,
   leftSlot,
   rightSlot,
 }: FinderToolbarProps) {
@@ -161,42 +163,44 @@ export function FinderToolbar({
           })}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={onSortDirectionToggle}
-            className={`${TOOLBAR_BTN} ${TOOLBAR_BTN_INACTIVE} whitespace-nowrap`}
-            title="Toggle sort direction"
-          >
-            {directionLabel}
-          </button>
-          <Listbox value={sortBy} onChange={onSortByChange}>
-            <ListboxButton
-              className={`${TOOLBAR_BTN} ${TOOLBAR_BTN_INACTIVE} gap-1 min-w-[90px] justify-between`}
+        {showSortControls && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={onSortDirectionToggle}
+              className={`${TOOLBAR_BTN} ${TOOLBAR_BTN_INACTIVE} whitespace-nowrap`}
+              title="Toggle sort direction"
             >
-              <span>{currentSort.label}</span>
-              <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
-            </ListboxButton>
-            <ListboxOptions
-              anchor="bottom end"
-              className="z-50 mt-1 rounded-md bg-background border border-offbase shadow-lg p-1 focus:outline-none"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <ListboxOption
-                  key={opt.value}
-                  value={opt.value}
-                  className={({ active, selected }) =>
-                    `cursor-pointer select-none rounded-sm py-1.5 px-2.5 text-xs ${
-                      active ? 'bg-offbase text-accent' : 'text-foreground'
-                    } ${selected ? 'font-semibold' : ''}`
-                  }
-                >
-                  {opt.label}
-                </ListboxOption>
-              ))}
-            </ListboxOptions>
-          </Listbox>
-        </div>
+              {directionLabel}
+            </button>
+            <Listbox value={sortBy} onChange={onSortByChange}>
+              <ListboxButton
+                className={`${TOOLBAR_BTN} ${TOOLBAR_BTN_INACTIVE} gap-1 min-w-[90px] justify-between`}
+              >
+                <span>{currentSort.label}</span>
+                <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
+              </ListboxButton>
+              <ListboxOptions
+                anchor="bottom end"
+                className="z-50 mt-1 rounded-md bg-background border border-offbase shadow-lg p-1 focus:outline-none"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <ListboxOption
+                    key={opt.value}
+                    value={opt.value}
+                    className={({ active, selected }) =>
+                      `cursor-pointer select-none rounded-sm py-1.5 px-2.5 text-xs ${
+                        active ? 'bg-offbase text-accent' : 'text-foreground'
+                      } ${selected ? 'font-semibold' : ''}`
+                    }
+                  >
+                    {opt.label}
+                  </ListboxOption>
+                ))}
+              </ListboxOptions>
+            </Listbox>
+          </div>
+        )}
 
         <div className="flex-1 min-w-0" />
 

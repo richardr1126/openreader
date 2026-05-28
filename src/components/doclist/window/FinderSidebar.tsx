@@ -23,6 +23,8 @@ interface FinderSidebarProps {
   onWidthChange: (px: number) => void;
   topSlot?: ReactNode;
   bottomSlot?: ReactNode;
+  /** Fired for explicit row/button actions (used to close mobile drawer). */
+  onRowAction?: () => void;
 }
 
 const MIN_WIDTH = 168;
@@ -182,6 +184,7 @@ export function FinderSidebar({
   onWidthChange,
   topSlot,
   bottomSlot,
+  onRowAction,
 }: FinderSidebarProps) {
   const startRef = useRef<{ x: number; w: number } | null>(null);
 
@@ -215,14 +218,20 @@ export function FinderSidebar({
           <SectionHeader isFirst={!!topSlot}>Library</SectionHeader>
           <SidebarRow
             active={filter === 'all'}
-            onClick={() => onFilterChange('all')}
+            onClick={() => {
+              onFilterChange('all');
+              onRowAction?.();
+            }}
             icon={<HomeIcon className="w-3.5 h-3.5" />}
             label="All Documents"
             count={counts.all}
           />
           <SidebarRow
             active={filter === 'recents'}
-            onClick={() => onFilterChange('recents')}
+            onClick={() => {
+              onFilterChange('recents');
+              onRowAction?.();
+            }}
             icon={<ClockIcon className="w-3.5 h-3.5" />}
             label="Recently Opened"
           />
@@ -230,21 +239,30 @@ export function FinderSidebar({
           <SectionHeader>Kinds</SectionHeader>
           <SidebarRow
             active={filter === 'pdf'}
-            onClick={() => onFilterChange('pdf')}
+            onClick={() => {
+              onFilterChange('pdf');
+              onRowAction?.();
+            }}
             icon={<PDFIcon className="w-3.5 h-3.5" />}
             label="PDF"
             count={counts.pdf}
           />
           <SidebarRow
             active={filter === 'epub'}
-            onClick={() => onFilterChange('epub')}
+            onClick={() => {
+              onFilterChange('epub');
+              onRowAction?.();
+            }}
             icon={<EPUBIcon className="w-3.5 h-3.5" />}
             label="EPUB"
             count={counts.epub}
           />
           <SidebarRow
             active={filter === 'html'}
-            onClick={() => onFilterChange('html')}
+            onClick={() => {
+              onFilterChange('html');
+              onRowAction?.();
+            }}
             icon={<FileIcon className="w-3.5 h-3.5" />}
             label="Text"
             count={counts.html}
@@ -277,7 +295,10 @@ export function FinderSidebar({
                       {({ active }) => (
                         <button
                           type="button"
-                          onClick={onNewFolder}
+                          onClick={() => {
+                            onNewFolder();
+                            onRowAction?.();
+                          }}
                           className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                         >
                           <FolderPlusIcon className="h-4 w-4" />
@@ -289,7 +310,10 @@ export function FinderSidebar({
                       {({ active, disabled }) => (
                         <button
                           type="button"
-                          onClick={onClearFolders}
+                          onClick={() => {
+                            onClearFolders();
+                            onRowAction?.();
+                          }}
                           disabled={disabled}
                           className={`${disabled ? 'text-muted/60 cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                         >
@@ -315,8 +339,14 @@ export function FinderSidebar({
                 key={folder.id}
                 folder={folder}
                 active={filter === `folder:${folder.id}`}
-                onClick={() => onFilterChange(`folder:${folder.id}`)}
-                onDelete={() => onDeleteFolder(folder.id)}
+                onClick={() => {
+                  onFilterChange(`folder:${folder.id}`);
+                  onRowAction?.();
+                }}
+                onDelete={() => {
+                  onDeleteFolder(folder.id);
+                  onRowAction?.();
+                }}
                 onDropOnFolder={onDropOnFolder}
               />
             ))

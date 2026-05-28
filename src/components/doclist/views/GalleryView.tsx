@@ -12,8 +12,28 @@ import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
 
 interface GalleryViewProps {
   documents: DocumentListDocument[];
+  folderNameById?: Record<string, string>;
   onDeleteDoc: (doc: DocumentListDocument) => void;
   onMergeIntoFolder: (sources: DocumentListDocument[], target: DocumentListDocument) => void;
+}
+
+function formatDateTime(value: number | undefined): string {
+  if (!value || !Number.isFinite(value) || value <= 0) return 'Never';
+  return new Date(value).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatParseStatus(status: DocumentListDocument['parseStatus']): string {
+  if (!status) return 'N/A';
+  if (status === 'pending') return 'Pending';
+  if (status === 'running') return 'Running';
+  if (status === 'ready') return 'Ready';
+  return 'Failed';
 }
 
 function KindIcon({ doc, className }: { doc: DocumentListDocument; className?: string }) {
@@ -107,6 +127,7 @@ function GalleryThumb({
 
 export function GalleryView({
   documents,
+  folderNameById,
   onDeleteDoc,
   onMergeIntoFolder,
 }: GalleryViewProps) {
@@ -150,34 +171,60 @@ export function GalleryView({
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex-1 min-h-0 flex items-center justify-center p-6 bg-background">
         {activeDoc ? (
-          <div className="flex flex-col items-center gap-3 max-w-[420px]">
-            <div className="w-[260px] sm:w-[320px] aspect-[3/4] rounded-lg overflow-hidden border border-offbase shadow-lg">
-              <DocumentPreview doc={activeDoc} />
+          <div className="w-full max-w-[920px] flex flex-col md:flex-row items-center md:items-start justify-center gap-4 md:gap-6">
+            <div className="flex flex-col items-center gap-3 w-[260px] sm:w-[320px] shrink-0">
+              <div className="w-full aspect-[3/4] rounded-lg overflow-hidden border border-offbase shadow-lg">
+                <DocumentPreview doc={activeDoc} />
+              </div>
+              <div className="text-center">
+                <h2 className="text-[14px] font-semibold text-foreground truncate max-w-[320px]">
+                  {activeDoc.name}
+                </h2>
+                <p className="text-[11px] text-muted">
+                  {activeDoc.type.toUpperCase()} • {formatDocumentSize(activeDoc.size)}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Link
+                  href={openHref || '/app'}
+                  prefetch={false}
+                  className="h-8 px-4 inline-flex items-center justify-center rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
+                >
+                  Open
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => onDeleteDoc(activeDoc)}
+                  className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.01] transition-all duration-200 ease-out"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <div className="text-center">
-              <h2 className="text-[14px] font-semibold text-foreground truncate max-w-[320px]">
-                {activeDoc.name}
-              </h2>
-              <p className="text-[11px] text-muted">
-                {activeDoc.type.toUpperCase()} • {formatDocumentSize(activeDoc.size)}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Link
-                href={openHref || '/app'}
-                prefetch={false}
-                className="h-8 px-4 inline-flex items-center justify-center rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
-              >
-                Open
-              </Link>
-              <button
-                type="button"
-                onClick={() => onDeleteDoc(activeDoc)}
-                className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.01] transition-all duration-200 ease-out"
-              >
-                Delete
-              </button>
-            </div>
+            <dl className="w-full max-w-[360px] md:max-w-[340px] grid grid-cols-2 gap-x-2 gap-y-1 rounded-md border border-offbase bg-base px-3 py-2 text-[11px] md:self-center">
+              <dt className="text-muted">Type</dt>
+              <dd className="text-foreground text-right uppercase tracking-wide">{activeDoc.type}</dd>
+              <dt className="text-muted">Size</dt>
+              <dd className="text-foreground text-right tabular-nums">{formatDocumentSize(activeDoc.size)}</dd>
+              <dt className="text-muted">Last opened</dt>
+              <dd className="text-foreground text-right">{formatDateTime(activeDoc.recentlyOpenedAt)}</dd>
+              <dt className="text-muted">Last modified</dt>
+              <dd className="text-foreground text-right">{formatDateTime(activeDoc.lastModified)}</dd>
+              {activeDoc.folderId && (
+                <>
+                  <dt className="text-muted">Folder</dt>
+                  <dd className="text-foreground text-right truncate" title={folderNameById?.[activeDoc.folderId] ?? activeDoc.folderId}>
+                    {folderNameById?.[activeDoc.folderId] ?? activeDoc.folderId}
+                  </dd>
+                </>
+              )}
+              {activeDoc.type === 'pdf' && (
+                <>
+                  <dt className="text-muted">Parse status</dt>
+                  <dd className="text-foreground text-right">{formatParseStatus(activeDoc.parseStatus)}</dd>
+                </>
+              )}
+            </dl>
           </div>
         ) : (
           <p className="text-[12px] text-muted">No documents to show</p>
