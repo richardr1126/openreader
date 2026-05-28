@@ -1,5 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
-import { setupTest, uploadFiles, ensureDocumentsListed, waitForDocumentListHintPersist, dispatchHtml5DragAndDrop } from './helpers';
+import {
+  setupTest,
+  uploadFiles,
+  ensureDocumentsListed,
+  waitForDocumentListHintPersist,
+  dispatchHtml5DragAndDrop,
+  expectDocumentListed,
+  expectNoDocumentLink,
+} from './helpers';
 
 test.describe('Document folders and hint persistence', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -13,10 +21,16 @@ test.describe('Document folders and hint persistence', () => {
     return link.locator('xpath=ancestor::*[@draggable="true"][1]');
   };
 
+  const folderRow = (page: Page, folderName: string) =>
+    page.getByRole('button', { name: new RegExp(`^${folderName}\\b`, 'i') }).first();
+
+  const allDocumentsRow = (page: Page) =>
+    page.getByRole('button', { name: /^All Documents\b/i }).first();
+
   test('Folder creation via drag-and-drop with persistence', async ({ page }) => {
-    // Upload three docs
-    await uploadFiles(page, 'sample.pdf', 'sample.epub', 'sample.txt');
-    await ensureDocumentsListed(page, ['sample.pdf', 'sample.epub', 'sample.txt']);
+    // Upload four docs (one stays outside folder to verify filtering)
+    await uploadFiles(page, 'sample.pdf', 'sample.epub', 'sample.txt', 'sample.md');
+    await ensureDocumentsListed(page, ['sample.pdf', 'sample.epub', 'sample.txt', 'sample.md']);
 
     // Drag PDF onto EPUB to create a folder
     const pdfRow = rowFor(page, 'sample.pdf');
@@ -30,51 +44,31 @@ test.describe('Document folders and hint persistence', () => {
     await nameInput.press('Enter');
     await expect(page.getByRole('dialog', { name: 'Create New Folder' })).toHaveCount(0);
 
-    // Folder shows with both docs
-    const folderHeading = page.getByRole('heading', { name: 'My Folder' });
-    await expect(folderHeading).toBeVisible();
+    // Sidebar folder row exists and folder becomes selected (content filtered to folder docs)
+    const myFolderRow = folderRow(page, 'My Folder');
+    await expect(myFolderRow).toBeVisible();
+    await expectDocumentListed(page, 'sample.pdf');
+    await expectDocumentListed(page, 'sample.epub');
+    await expectNoDocumentLink(page, 'sample.txt');
+    await expectNoDocumentLink(page, 'sample.md');
 
-    // Scope checks inside the folder container
-    const folderContainer = folderHeading.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " rounded-md ") and contains(concat(" ", normalize-space(@class), " "), " border ")][1]');
-    await expect(folderContainer.getByRole('link', { name: /sample\.pdf/i })).toBeVisible();
-    await expect(folderContainer.getByRole('link', { name: /sample\.epub/i })).toBeVisible();
-
-    // Drag third doc (TXT) into folder
+    // Switch to all documents and drag TXT into sidebar folder row
+    await allDocumentsRow(page).click();
     const txtRow = rowFor(page, 'sample.txt');
-    await dispatchHtml5DragAndDrop(page, txtRow, folderContainer);
-    await expect(folderContainer.getByRole('link', { name: /sample\.txt/i })).toBeVisible();
+    await dispatchHtml5DragAndDrop(page, txtRow, myFolderRow);
+    await expectDocumentListed(page, 'sample.txt');
+    await expectNoDocumentLink(page, 'sample.md');
 
-    // Collapse folder and verify items are hidden
-    const collapseBtn = folderContainer.getByRole('button', { name: 'Collapse folder' });
-    await collapseBtn.scrollIntoViewIfNeeded();
-    await expect(collapseBtn).toBeVisible();
-    await collapseBtn.click();
-    await expect(folderContainer.getByRole('button', { name: 'Expand folder' })).toBeVisible();
-    await expect(folderContainer.getByRole('link', { name: /sample\.pdf/i })).toHaveCount(0);
-    await expect(folderContainer.getByRole('link', { name: /sample\.epub/i })).toHaveCount(0);
-    await expect(folderContainer.getByRole('link', { name: /sample\.txt/i })).toHaveCount(0);
-
-    // Reload and verify persisted folder with collapsed state and documents
+    // Reload and verify persisted folder + membership
     await page.reload();
     await page.waitForLoadState('networkidle');
-    const folderHeadingAfter = page.getByRole('heading', { name: 'My Folder' });
-    await expect(folderHeadingAfter).toBeVisible();
-    const folderContainerAfter = folderHeadingAfter.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " rounded-md ") and contains(concat(" ", normalize-space(@class), " "), " border ")][1]');
-
-    // Still collapsed after reload
-    await expect(folderContainerAfter.getByRole('button', { name: 'Expand folder' })).toBeVisible();
-    await expect(folderContainerAfter.getByRole('link', { name: /sample\.pdf/i })).toHaveCount(0);
-    await expect(folderContainerAfter.getByRole('link', { name: /sample\.epub/i })).toHaveCount(0);
-    await expect(folderContainerAfter.getByRole('link', { name: /sample\.txt/i })).toHaveCount(0);
-
-    // Expand and verify all three documents visible
-    const expandBtn = folderContainerAfter.getByRole('button', { name: 'Expand folder' });
-    await expandBtn.scrollIntoViewIfNeeded();
-    await expect(expandBtn).toBeVisible();
-    await expandBtn.click();
-    await expect(folderContainerAfter.getByRole('link', { name: /sample\.pdf/i })).toBeVisible();
-    await expect(folderContainerAfter.getByRole('link', { name: /sample\.epub/i })).toBeVisible();
-    await expect(folderContainerAfter.getByRole('link', { name: /sample\.txt/i })).toBeVisible();
+    const myFolderRowAfter = folderRow(page, 'My Folder');
+    await expect(myFolderRowAfter).toBeVisible();
+    await myFolderRowAfter.click();
+    await expectDocumentListed(page, 'sample.pdf');
+    await expectDocumentListed(page, 'sample.epub');
+    await expectDocumentListed(page, 'sample.txt');
+    await expectNoDocumentLink(page, 'sample.md');
   });
 
   test('Dismiss “Drag files to make folders” hint persists after reload', async ({ page }) => {
@@ -82,7 +76,7 @@ test.describe('Document folders and hint persistence', () => {
     await uploadFiles(page, 'sample.pdf', 'sample.epub');
     await ensureDocumentsListed(page, ['sample.pdf', 'sample.epub']);
 
-    const hint = page.getByText('Drag files on top of each other to make folders');
+    const hint = page.getByText('Drag files onto each other to make folders. Drop into the sidebar to move.');
     await expect(hint).toBeVisible();
     await page.getByRole('button', { name: 'Dismiss hint' }).click();
 
@@ -95,6 +89,6 @@ test.describe('Document folders and hint persistence', () => {
     // Reload and ensure it remains dismissed
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await expect(page.getByText('Drag files on top of each other to make folders')).toHaveCount(0);
+    await expect(page.getByText('Drag files onto each other to make folders. Drop into the sidebar to move.')).toHaveCount(0);
   });
 });

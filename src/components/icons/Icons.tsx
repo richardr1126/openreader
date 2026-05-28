@@ -393,6 +393,24 @@ export function DotsVerticalIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function DotsHorizontalIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 12"
+      fill="currentColor"
+      className={props.className}
+      width={props.width || "1.5em"}
+      height={props.height || "0.75em"}
+      {...props}
+    >
+      <circle cx="4" cy="6" r="1.5" />
+      <circle cx="12" cy="6" r="1.5" />
+      <circle cx="20" cy="6" r="1.5" />
+    </svg>
+  );
+}
+
 export function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg

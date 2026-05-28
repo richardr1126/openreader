@@ -140,6 +140,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   >(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [manualFolderPrompt, setManualFolderPrompt] = useState(false);
+  const [clearFoldersPrompt, setClearFoldersPrompt] = useState(false);
 
   const isNarrow = useIsNarrow();
   const selection = useDocumentSelection();
@@ -432,6 +433,13 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     if (sidebarFilter === `folder:${folderId}`) setSidebarFilter('all');
   }, [sidebarFilter]);
 
+  const handleClearFolders = useCallback(() => {
+    setFolders([]);
+    if (sidebarFilter.startsWith('folder:')) setSidebarFilter('all');
+    setClearFoldersPrompt(false);
+    selection.clear();
+  }, [selection, sidebarFilter]);
+
   // Status bar summary.
   const summary = useMemo(() => {
     const parts: string[] = [];
@@ -490,6 +498,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             setNewFolderName('');
             setManualFolderPrompt(true);
           }}
+          onClearFolders={() => setClearFoldersPrompt(true)}
           onDropOnFolder={handleDropOnFolder}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
@@ -617,6 +626,16 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         title="Delete Document"
         message={`Are you sure you want to delete ${documentToDelete?.name ?? 'this document'}?`}
         confirmText="Delete"
+        isDangerous
+      />
+
+      <ConfirmDialog
+        isOpen={clearFoldersPrompt}
+        onClose={() => setClearFoldersPrompt(false)}
+        onConfirm={handleClearFolders}
+        title="Remove All Folders"
+        message="Remove all folders? This will not delete documents."
+        confirmText="Remove Folders"
         isDangerous
       />
     </FinderWindow>

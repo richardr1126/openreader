@@ -1,9 +1,10 @@
 'use client';
 
-import { useRef, type CSSProperties, type ReactNode } from 'react';
+import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
+import { Fragment, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useDrop } from 'react-dnd';
 import type { Folder, SidebarFilter } from '@/types/documents';
-import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
+import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -14,6 +15,7 @@ interface FinderSidebarProps {
   counts: { all: number; pdf: number; epub: number; html: number };
   onDeleteFolder: (folderId: string) => void;
   onNewFolder: () => void;
+  onClearFolders: () => void;
   /** When dragging onto a folder row, move dropped docs into that folder. */
   onDropOnFolder: (folderId: string, item: DocumentDragItem) => void;
   /** Width controls (desktop only). */
@@ -144,16 +146,25 @@ function FolderRow({
   );
 }
 
-function SectionLabel({ children, isFirst }: { children: ReactNode; isFirst?: boolean }) {
+function SectionHeader({
+  children,
+  isFirst,
+  rightSlot,
+}: {
+  children: ReactNode;
+  isFirst?: boolean;
+  rightSlot?: ReactNode;
+}) {
   return (
-    <p
+    <div
       className={
-        'px-2 pb-1 text-[10px] uppercase tracking-[0.08em] text-muted font-semibold ' +
+        'px-2 pb-1 text-[10px] uppercase tracking-[0.08em] text-muted font-semibold leading-none flex items-center justify-between ' +
         (isFirst ? 'pt-1.5' : 'pt-3')
       }
     >
-      {children}
-    </p>
+      <span>{children}</span>
+      {rightSlot && <span className="inline-flex items-center leading-none shrink-0">{rightSlot}</span>}
+    </div>
   );
 }
 
@@ -164,6 +175,7 @@ export function FinderSidebar({
   counts,
   onDeleteFolder,
   onNewFolder,
+  onClearFolders,
   onDropOnFolder,
   width,
   onWidthChange,
@@ -197,7 +209,7 @@ export function FinderSidebar({
             {topSlot}
           </div>
         )}
-        <SectionLabel isFirst={!!topSlot}>Library</SectionLabel>
+        <SectionHeader isFirst={!!topSlot}>Library</SectionHeader>
         <SidebarRow
           active={filter === 'all'}
           onClick={() => onFilterChange('all')}
@@ -212,7 +224,7 @@ export function FinderSidebar({
           label="Recently Opened"
         />
 
-        <SectionLabel>Kinds</SectionLabel>
+        <SectionHeader>Kinds</SectionHeader>
         <SidebarRow
           active={filter === 'pdf'}
           onClick={() => onFilterChange('pdf')}
@@ -235,20 +247,63 @@ export function FinderSidebar({
           count={counts.html}
         />
 
-        <div className="px-2 pt-3 pb-1 flex items-center justify-between">
-          <p className="text-[10px] uppercase tracking-[0.08em] text-muted font-semibold">
-            Folders
-          </p>
-          <button
-            type="button"
-            onClick={onNewFolder}
-            className="inline-flex items-center justify-center h-6 w-6 rounded-md border border-offbase bg-base text-foreground hover:text-accent hover:border-accent hover:bg-offbase transition-all duration-200 ease-out hover:scale-[1.01]"
-            title="New folder"
-            aria-label="New folder"
-          >
-            <FolderPlusIcon className="w-4 h-4" />
-          </button>
-        </div>
+        <SectionHeader
+          rightSlot={(
+            <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
+              <MenuButton
+                className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-muted hover:text-accent transition-colors duration-200 ease-out focus:outline-none"
+                title="Folder actions"
+                aria-label="Folder actions"
+              >
+                <DotsHorizontalIcon className="w-4 h-2.5" />
+              </MenuButton>
+              <Transition
+                as={Fragment}
+                enter="transition ease-out duration-100"
+                enterFrom="transform opacity-0 scale-95"
+                enterTo="transform opacity-100 scale-100"
+                leave="transition ease-in duration-75"
+                leaveFrom="transform opacity-100 scale-100"
+                leaveTo="transform opacity-0 scale-95"
+              >
+                <MenuItems
+                  anchor="bottom start"
+                  className="z-50 mt-2 min-w-[180px] rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none p-1 normal-case tracking-normal font-normal"
+                >
+                  <MenuItem>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        onClick={onNewFolder}
+                        className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                      >
+                        <FolderPlusIcon className="h-4 w-4" />
+                        New Folder
+                      </button>
+                    )}
+                  </MenuItem>
+                  <MenuItem disabled={folders.length === 0}>
+                    {({ active, disabled }) => (
+                      <button
+                        type="button"
+                        onClick={onClearFolders}
+                        disabled={disabled}
+                        className={`${disabled ? 'text-muted/60 cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Remove All Folders
+                      </button>
+                    )}
+                  </MenuItem>
+                </MenuItems>
+              </Transition>
+            </Menu>
+          )}
+        >
+          Folders
+        </SectionHeader>
         {folders.length === 0 ? (
           <p className="px-2 py-1 text-[11px] text-muted">No folders yet</p>
         ) : (
