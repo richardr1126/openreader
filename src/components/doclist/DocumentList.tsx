@@ -502,7 +502,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           isSidebarOpen={effectiveSidebarOpen}
           isNarrow={isNarrow}
           leftSlot={brand}
-          rightSlot={appActions}
         />
       }
       sidebar={
@@ -521,6 +520,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
           topSlot={<DocumentUploader variant="compact" />}
+          bottomSlot={appActions}
         />
       }
       statusBar={

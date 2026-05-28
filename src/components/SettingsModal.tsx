@@ -130,7 +130,13 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
 
 type AdminSubTab = 'providers' | 'features';
 
-export function SettingsModal({ className = '' }: { className?: string }) {
+export function SettingsModal({
+  className = '',
+  triggerLabel,
+}: {
+  className?: string;
+  triggerLabel?: string;
+}) {
   const runtimeConfig = useRuntimeConfig();
   const enableDestructiveDelete = runtimeConfig.enableDestructiveDeleteActions;
   const showAllProviderModels = runtimeConfig.showAllProviderModels;
@@ -506,6 +512,7 @@ export function SettingsModal({ className = '' }: { className?: string }) {
         tabIndex={0}
       >
         <SettingsIcon className="w-4 h-4 transition-transform duration-200 ease-out hover:scale-[1.01] hover:rotate-45" />
+        {triggerLabel && <span className="ml-2">{triggerLabel}</span>}
       </Button>
 
       <Transition appear show={isOpen} as={Fragment}>

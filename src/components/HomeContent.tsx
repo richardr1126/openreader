@@ -15,10 +15,13 @@ const Brand = () => (
 );
 
 const AppActions = () => (
-  <>
-    <SettingsModal />
-    <UserMenu />
-  </>
+  <div className="flex flex-col gap-0.5 w-full">
+    <SettingsModal
+      triggerLabel="Settings"
+      className="w-full justify-start gap-2 px-2 py-1 text-[12px] border-transparent hover:border-accent"
+    />
+    <UserMenu variant="sidebar" />
+  </div>
 );
 
 export function HomeContent() {

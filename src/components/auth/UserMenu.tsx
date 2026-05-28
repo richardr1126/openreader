@@ -7,8 +7,17 @@ import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useRouter } from 'next/navigation';
+import { UserIcon } from '@/components/icons/Icons';
 
-export function UserMenu({ className = '' }: { className?: string }) {
+type UserMenuVariant = 'toolbar' | 'sidebar';
+
+export function UserMenu({
+  className = '',
+  variant = 'toolbar',
+}: {
+  className?: string;
+  variant?: UserMenuVariant;
+}) {
   const { authEnabled, baseUrl } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
   const { data: session, isPending } = useAuthSession();
@@ -22,7 +31,27 @@ export function UserMenu({ className = '' }: { className?: string }) {
     router.push('/signin');
   };
 
+  const rowClass =
+    'w-full inline-flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border border-transparent transition-all duration-200 ease-out text-left hover:scale-[1.01] hover:border-accent hover:bg-offbase hover:text-accent';
+
   if (!session || session.user.isAnonymous) {
+    if (variant === 'sidebar') {
+      return (
+        <div className={`flex w-full flex-col gap-0.5 ${className}`}>
+          <Link href="/signin" className={rowClass}>
+            <UserIcon className="h-3.5 w-3.5 text-muted" />
+            <span className="truncate">Connect</span>
+          </Link>
+          {enableUserSignups && (
+            <Link href="/signup" className={rowClass}>
+              <UserIcon className="h-3.5 w-3.5 text-muted" />
+              <span className="truncate">Create account</span>
+            </Link>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className={`flex gap-2 ${className}`}>
         <Link href="/signin">
@@ -38,6 +67,24 @@ export function UserMenu({ className = '' }: { className?: string }) {
           </Link>
         )}
       </div>
+    );
+  }
+
+  if (variant === 'sidebar') {
+    return (
+      <button
+        onClick={handleDisconnectAccount}
+        className={`${rowClass} ${className}`}
+        title="Disconnect account"
+      >
+        <UserIcon className="h-3.5 w-3.5 text-muted" />
+        <span className="truncate flex-1">{session.user.email || 'Account'}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+      </button>
     );
   }
 

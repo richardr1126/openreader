@@ -22,6 +22,7 @@ interface FinderSidebarProps {
   width: number;
   onWidthChange: (px: number) => void;
   topSlot?: ReactNode;
+  bottomSlot?: ReactNode;
 }
 
 const MIN_WIDTH = 168;
@@ -180,6 +181,7 @@ export function FinderSidebar({
   width,
   onWidthChange,
   topSlot,
+  bottomSlot,
 }: FinderSidebarProps) {
   const startRef = useRef<{ x: number; w: number } | null>(null);
 
@@ -201,124 +203,131 @@ export function FinderSidebar({
   return (
     <aside
       style={{ '--sidebar-width': `${width}px` } as CSSProperties}
-      className="relative h-full w-full md:[width:var(--sidebar-width)] bg-base border-r border-offbase shrink-0 overflow-y-auto"
+      className="relative h-full w-full md:[width:var(--sidebar-width)] bg-base border-r border-offbase shrink-0 flex flex-col"
     >
-      <div className="p-2 flex flex-col gap-0.5">
-        {topSlot && (
-          <div className="mb-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-            {topSlot}
-          </div>
-        )}
-        <SectionHeader isFirst={!!topSlot}>Library</SectionHeader>
-        <SidebarRow
-          active={filter === 'all'}
-          onClick={() => onFilterChange('all')}
-          icon={<HomeIcon className="w-3.5 h-3.5" />}
-          label="All Documents"
-          count={counts.all}
-        />
-        <SidebarRow
-          active={filter === 'recents'}
-          onClick={() => onFilterChange('recents')}
-          icon={<ClockIcon className="w-3.5 h-3.5" />}
-          label="Recently Opened"
-        />
-
-        <SectionHeader>Kinds</SectionHeader>
-        <SidebarRow
-          active={filter === 'pdf'}
-          onClick={() => onFilterChange('pdf')}
-          icon={<PDFIcon className="w-3.5 h-3.5" />}
-          label="PDF"
-          count={counts.pdf}
-        />
-        <SidebarRow
-          active={filter === 'epub'}
-          onClick={() => onFilterChange('epub')}
-          icon={<EPUBIcon className="w-3.5 h-3.5" />}
-          label="EPUB"
-          count={counts.epub}
-        />
-        <SidebarRow
-          active={filter === 'html'}
-          onClick={() => onFilterChange('html')}
-          icon={<FileIcon className="w-3.5 h-3.5" />}
-          label="HTML / Text"
-          count={counts.html}
-        />
-
-        <SectionHeader
-          rightSlot={(
-            <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
-              <MenuButton
-                className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-muted hover:text-accent transition-colors duration-200 ease-out focus:outline-none"
-                title="Folder actions"
-                aria-label="Folder actions"
-              >
-                <DotsHorizontalIcon className="w-4 h-2.5" />
-              </MenuButton>
-              <Transition
-                as={Fragment}
-                enter="transition ease-out duration-100"
-                enterFrom="transform opacity-0 scale-95"
-                enterTo="transform opacity-100 scale-100"
-                leave="transition ease-in duration-75"
-                leaveFrom="transform opacity-100 scale-100"
-                leaveTo="transform opacity-0 scale-95"
-              >
-                <MenuItems
-                  anchor="bottom start"
-                  className="z-50 mt-2 min-w-[180px] rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none p-1 normal-case tracking-normal font-normal"
-                >
-                  <MenuItem>
-                    {({ active }) => (
-                      <button
-                        type="button"
-                        onClick={onNewFolder}
-                        className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
-                      >
-                        <FolderPlusIcon className="h-4 w-4" />
-                        New Folder
-                      </button>
-                    )}
-                  </MenuItem>
-                  <MenuItem disabled={folders.length === 0}>
-                    {({ active, disabled }) => (
-                      <button
-                        type="button"
-                        onClick={onClearFolders}
-                        disabled={disabled}
-                        className={`${disabled ? 'text-muted/60 cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        Remove All Folders
-                      </button>
-                    )}
-                  </MenuItem>
-                </MenuItems>
-              </Transition>
-            </Menu>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="p-2 flex flex-col gap-0.5">
+          {topSlot && (
+            <div className="mb-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {topSlot}
+            </div>
           )}
-        >
-          Folders
-        </SectionHeader>
-        {folders.length === 0 ? (
-          <p className="px-2 py-1 text-[11px] text-muted">No folders yet</p>
-        ) : (
-          folders.map((folder) => (
-            <FolderRow
-              key={folder.id}
-              folder={folder}
-              active={filter === `folder:${folder.id}`}
-              onClick={() => onFilterChange(`folder:${folder.id}`)}
-              onDelete={() => onDeleteFolder(folder.id)}
-              onDropOnFolder={onDropOnFolder}
-            />
-          ))
-        )}
+          <SectionHeader isFirst={!!topSlot}>Library</SectionHeader>
+          <SidebarRow
+            active={filter === 'all'}
+            onClick={() => onFilterChange('all')}
+            icon={<HomeIcon className="w-3.5 h-3.5" />}
+            label="All Documents"
+            count={counts.all}
+          />
+          <SidebarRow
+            active={filter === 'recents'}
+            onClick={() => onFilterChange('recents')}
+            icon={<ClockIcon className="w-3.5 h-3.5" />}
+            label="Recently Opened"
+          />
+
+          <SectionHeader>Kinds</SectionHeader>
+          <SidebarRow
+            active={filter === 'pdf'}
+            onClick={() => onFilterChange('pdf')}
+            icon={<PDFIcon className="w-3.5 h-3.5" />}
+            label="PDF"
+            count={counts.pdf}
+          />
+          <SidebarRow
+            active={filter === 'epub'}
+            onClick={() => onFilterChange('epub')}
+            icon={<EPUBIcon className="w-3.5 h-3.5" />}
+            label="EPUB"
+            count={counts.epub}
+          />
+          <SidebarRow
+            active={filter === 'html'}
+            onClick={() => onFilterChange('html')}
+            icon={<FileIcon className="w-3.5 h-3.5" />}
+            label="HTML / Text"
+            count={counts.html}
+          />
+
+          <SectionHeader
+            rightSlot={(
+              <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
+                <MenuButton
+                  className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-muted hover:text-accent transition-colors duration-200 ease-out focus:outline-none"
+                  title="Folder actions"
+                  aria-label="Folder actions"
+                >
+                  <DotsHorizontalIcon className="w-4 h-2.5" />
+                </MenuButton>
+                <Transition
+                  as={Fragment}
+                  enter="transition ease-out duration-100"
+                  enterFrom="transform opacity-0 scale-95"
+                  enterTo="transform opacity-100 scale-100"
+                  leave="transition ease-in duration-75"
+                  leaveFrom="transform opacity-100 scale-100"
+                  leaveTo="transform opacity-0 scale-95"
+                >
+                  <MenuItems
+                    anchor="bottom start"
+                    className="z-50 mt-2 min-w-[180px] rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none p-1 normal-case tracking-normal font-normal"
+                  >
+                    <MenuItem>
+                      {({ active }) => (
+                        <button
+                          type="button"
+                          onClick={onNewFolder}
+                          className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                        >
+                          <FolderPlusIcon className="h-4 w-4" />
+                          New Folder
+                        </button>
+                      )}
+                    </MenuItem>
+                    <MenuItem disabled={folders.length === 0}>
+                      {({ active, disabled }) => (
+                        <button
+                          type="button"
+                          onClick={onClearFolders}
+                          disabled={disabled}
+                          className={`${disabled ? 'text-muted/60 cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Remove All Folders
+                        </button>
+                      )}
+                    </MenuItem>
+                  </MenuItems>
+                </Transition>
+              </Menu>
+            )}
+          >
+            Folders
+          </SectionHeader>
+          {folders.length === 0 ? (
+            <p className="px-2 py-1 text-[11px] text-muted">No folders yet</p>
+          ) : (
+            folders.map((folder) => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                active={filter === `folder:${folder.id}`}
+                onClick={() => onFilterChange(`folder:${folder.id}`)}
+                onDelete={() => onDeleteFolder(folder.id)}
+                onDropOnFolder={onDropOnFolder}
+              />
+            ))
+          )}
+        </div>
       </div>
+      {bottomSlot && (
+        <div className="shrink-0 border-t border-offbase p-2" onClick={(e) => e.stopPropagation()}>
+          {bottomSlot}
+        </div>
+      )}
 
       <div
         role="separator"
