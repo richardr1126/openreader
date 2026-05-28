@@ -8,6 +8,7 @@ import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/cli
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
 const inFlightPreviewPrime = new Map<string, Promise<string | null>>();
+const inFlightPersistedPreviewUrl = new Map<string, Promise<string | null>>();
 const PREVIEW_CACHE_SCHEMA_VERSION = 4;
 
 function revokeIfBlobUrl(url: string | null | undefined): void {
@@ -37,6 +38,7 @@ export function clearInMemoryDocumentPreviewCache(): void {
     revokeIfBlobUrl(value);
   }
   inMemoryPreviewUrlCache.clear();
+  inFlightPersistedPreviewUrl.clear();
 }
 
 export async function getPersistedDocumentPreviewUrl(
@@ -44,29 +46,52 @@ export async function getPersistedDocumentPreviewUrl(
   lastModified: number,
   cacheKey: string,
 ): Promise<string | null> {
-  const row = await getDocumentPreviewCache(docId);
-  if (!row) return null;
+  const cachedUrl = getInMemoryDocumentPreviewUrl(cacheKey);
+  if (cachedUrl) return cachedUrl;
 
-  if (Number((row as { previewVersion?: number }).previewVersion ?? 1) !== PREVIEW_CACHE_SCHEMA_VERSION) {
-    await removeDocumentPreviewCache(docId).catch(() => {});
-    return null;
+  const persistedKey = `${cacheKey}:${Number(lastModified)}`;
+  const existing = inFlightPersistedPreviewUrl.get(persistedKey);
+  if (existing) {
+    return existing;
   }
 
-  if (Number(row.lastModified) !== Number(lastModified)) {
-    await removeDocumentPreviewCache(docId).catch(() => {});
-    return null;
-  }
+  const promise = (async (): Promise<string | null> => {
+    const row = await getDocumentPreviewCache(docId);
+    if (!row) return null;
 
-  const contentType = row.contentType || 'image/jpeg';
-  const bytes = row.data;
-  if (!(bytes instanceof ArrayBuffer) || bytes.byteLength === 0) {
-    await removeDocumentPreviewCache(docId).catch(() => {});
-    return null;
-  }
+    if (Number((row as { previewVersion?: number }).previewVersion ?? 1) !== PREVIEW_CACHE_SCHEMA_VERSION) {
+      await removeDocumentPreviewCache(docId).catch(() => {});
+      return null;
+    }
 
-  const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
-  setInMemoryDocumentPreviewUrl(cacheKey, url);
-  return url;
+    if (Number(row.lastModified) !== Number(lastModified)) {
+      await removeDocumentPreviewCache(docId).catch(() => {});
+      return null;
+    }
+
+    const latestCachedUrl = getInMemoryDocumentPreviewUrl(cacheKey);
+    if (latestCachedUrl) return latestCachedUrl;
+
+    const contentType = row.contentType || 'image/jpeg';
+    const bytes = row.data;
+    if (!(bytes instanceof ArrayBuffer) || bytes.byteLength === 0) {
+      await removeDocumentPreviewCache(docId).catch(() => {});
+      return null;
+    }
+
+    const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
+    setInMemoryDocumentPreviewUrl(cacheKey, url);
+    return url;
+  })();
+
+  inFlightPersistedPreviewUrl.set(persistedKey, promise);
+  try {
+    return await promise;
+  } finally {
+    if (inFlightPersistedPreviewUrl.get(persistedKey) === promise) {
+      inFlightPersistedPreviewUrl.delete(persistedKey);
+    }
+  }
 }
 
 export async function primeDocumentPreviewCache(
