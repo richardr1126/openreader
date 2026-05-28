@@ -11,6 +11,7 @@ import type {
   SortDirection,
 } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
+import { formatDocumentSize } from '@/components/doclist/formatSize';
 import { FolderIcon } from '../window/finderIcons';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
@@ -32,14 +33,6 @@ interface ListViewProps {
 function formatDate(ms: number): string {
   const d = new Date(ms);
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function formatSize(bytes: number): string {
-  const mb = bytes / 1024 / 1024;
-  if (mb >= 1024) {
-    return `${(mb / 1024).toFixed(2)} GB`;
-  }
-  return mb >= 1 ? `${mb.toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 function KindIcon({ doc }: { doc: DocumentListDocument }) {
@@ -180,7 +173,7 @@ function DocRow({
       </Link>
       <span className="px-2 text-[11px] text-muted uppercase tracking-wide">{doc.type}</span>
       <span className="px-2 text-[11px] text-muted text-right tabular-nums">
-        {formatSize(doc.size)}
+        {formatDocumentSize(doc.size)}
       </span>
       <span className="px-2 text-[11px] text-muted tabular-nums">
         {formatDate(doc.lastModified)}
@@ -259,7 +252,7 @@ function FolderRowGroup({
         </button>
         <span className="px-2 text-[11px] text-muted">Folder</span>
         <span className="px-2 text-[11px] text-muted text-right tabular-nums">
-          {formatSize(totalSize)}
+          {formatDocumentSize(totalSize)}
         </span>
         <span className="px-2 text-[11px] text-muted tabular-nums">
           {folder.documents.length} items

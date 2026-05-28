@@ -310,6 +310,10 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     }
   }, [documentToDelete, removePDFDocument, removeEPUBDocument, removeHTMLDocument]);
 
+  const handleDeleteDoc = useCallback((doc: DocumentListDocument) => {
+    setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type });
+  }, []);
+
   const handleDropOnFolder = useCallback(
     (folderId: string, item: DocumentDragItem) => {
       setFolders((prev) =>
@@ -478,7 +482,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             <button
               type="button"
               onClick={() => setShowHint(false)}
-              className="h-6 w-6 inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base hover:scale-[1.02] rounded transition-all duration-200 ease-out"
+              className="h-6 w-6 inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base hover:scale-[1.01] rounded transition-all duration-200 ease-out"
               aria-label="Dismiss hint"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -498,9 +502,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             collapsedFolders={collapsedFolders}
             onToggleCollapse={toggleFolderCollapse}
             onDeleteFolder={handleDeleteFolder}
-            onDeleteDoc={(doc) =>
-              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-            }
+            onDeleteDoc={handleDeleteDoc}
             onDropOnFolder={handleDropOnFolder}
             onMergeIntoFolder={handleMergeIntoFolder}
           />
@@ -518,9 +520,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             collapsedFolders={collapsedFolders}
             onToggleCollapse={toggleFolderCollapse}
             onDeleteFolder={handleDeleteFolder}
-            onDeleteDoc={(doc) =>
-              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-            }
+            onDeleteDoc={handleDeleteDoc}
             onDropOnFolder={handleDropOnFolder}
             onMergeIntoFolder={handleMergeIntoFolder}
           />
@@ -529,9 +529,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           <ColumnsView
             folders={visibleFolders}
             unfolderedDocs={unfolderedDocs}
-            onDeleteDoc={(doc) =>
-              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-            }
+            onDeleteDoc={handleDeleteDoc}
             onDropOnFolder={handleDropOnFolder}
             onMergeIntoFolder={handleMergeIntoFolder}
           />
@@ -540,9 +538,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           <GalleryView
             folders={visibleFolders}
             unfolderedDocs={unfolderedDocs}
-            onDeleteDoc={(doc) =>
-              setDocumentToDelete({ id: doc.id, name: doc.name, type: doc.type })
-            }
+            onDeleteDoc={handleDeleteDoc}
             onDropOnFolder={handleDropOnFolder}
             onMergeIntoFolder={handleMergeIntoFolder}
           />

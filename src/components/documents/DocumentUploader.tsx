@@ -7,7 +7,6 @@ import { useDocuments } from '@/contexts/DocumentContext';
 import { uploadDocxAsPdf } from '@/lib/client/api/documents';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 
-
 interface DocumentUploaderProps {
   className?: string;
   variant?: 'default' | 'compact' | 'overlay';
@@ -93,14 +92,13 @@ export function DocumentUploader({ className = '', variant = 'default', children
       : `${
           isDragActive
             ? 'border-2 border-dashed border-accent bg-base text-foreground'
-            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-base hover:scale-[1.008]'
+            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-base hover:scale-[1.01]'
         }`;
 
   const paddingClass = variant === 'compact' ? 'py-1 px-2 rounded-md' : 'py-5 px-3 rounded-lg';
 
   if (variant === 'overlay') {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { onClick, onKeyDown, ...rootProps } = getRootProps();
+    const rootProps = getRootProps();
     return (
       <div {...rootProps} className={`relative w-full h-full ${className}`}>
         <input {...getInputProps()} />

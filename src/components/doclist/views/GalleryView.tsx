@@ -7,6 +7,7 @@ import type { DocumentListDocument, Folder } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { FolderIcon } from '../window/finderIcons';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
+import { formatDocumentSize } from '@/components/doclist/formatSize';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -180,25 +181,20 @@ export function GalleryView({
                 {activeDoc.name}
               </h2>
               <p className="text-[11px] text-muted">
-                {activeDoc.type.toUpperCase()} •{' '}
-                {activeDoc.size >= 1024 * 1024 * 1024
-                  ? `${(activeDoc.size / 1024 / 1024 / 1024).toFixed(2)} GB`
-                  : activeDoc.size >= 1024 * 1024
-                    ? `${(activeDoc.size / 1024 / 1024).toFixed(2)} MB`
-                    : `${(activeDoc.size / 1024).toFixed(1)} KB`}
+                {activeDoc.type.toUpperCase()} • {formatDocumentSize(activeDoc.size)}
               </p>
             </div>
             <div className="flex gap-2">
               <Link
                 href={`/${activeDoc.type}/${encodeURIComponent(activeDoc.id)}`}
-                className="h-8 px-4 inline-flex items-center justify-center rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.02] transition-all duration-200 ease-out"
+                className="h-8 px-4 inline-flex items-center justify-center rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
               >
                 Open
               </Link>
               <button
                 type="button"
                 onClick={() => onDeleteDoc(activeDoc)}
-                className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.02] transition-all duration-200 ease-out"
+                className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.01] transition-all duration-200 ease-out"
               >
                 Delete
               </button>

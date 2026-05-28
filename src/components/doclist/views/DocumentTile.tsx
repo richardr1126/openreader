@@ -20,8 +20,49 @@ interface DocumentTileProps {
   onMergeIntoFolder: (source: DocumentListDocument[], target: DocumentListDocument) => void;
 }
 
-const SIZE_LABEL: Record<IconSize, string> = { sm: 'S', md: 'M', lg: 'L', xl: 'XL' };
-void SIZE_LABEL;
+const NAME_SIZE_CLASSES: Record<IconSize, string> = {
+  sm: 'text-[10px]',
+  md: 'text-[11px]',
+  lg: 'text-[12px]',
+  xl: 'text-[13px]',
+};
+
+const BOTTOM_PADDING_CLASSES: Record<IconSize, string> = {
+  sm: 'px-[7px] py-[4px]',
+  md: 'px-[8px] py-[5px]',
+  lg: 'px-[9px] py-[5px]',
+  xl: 'px-[10px] py-[6px]',
+};
+
+const LINK_PADDING_CLASS = 'px-[2px] py-[2px]';
+
+const GAP_CLASSES: Record<IconSize, string> = {
+  sm: 'gap-1',
+  md: 'gap-1.5',
+  lg: 'gap-2',
+  xl: 'gap-2',
+};
+
+const FILE_ICON_CLASSES: Record<IconSize, string> = {
+  sm: 'w-3 h-3',
+  md: 'w-3.5 h-3.5',
+  lg: 'w-3.5 h-3.5',
+  xl: 'w-4 h-4',
+};
+
+const TRASH_BTN_CLASSES: Record<IconSize, string> = {
+  sm: 'ml-0.5 h-[18px] w-[18px] rounded-sm',
+  md: 'ml-0.5 h-[21px] w-[21px] rounded-sm',
+  lg: 'ml-1 h-[23px] w-[23px] rounded',
+  xl: 'ml-1.5 h-[25px] w-[25px] rounded',
+};
+
+const TRASH_ICON_CLASSES: Record<IconSize, string> = {
+  sm: 'w-[10px] h-[10px]',
+  md: 'w-[11px] h-[11px]',
+  lg: 'w-[12px] h-[12px]',
+  xl: 'w-[13px] h-[13px]',
+};
 
 export function DocumentTile({
   doc,
@@ -108,55 +149,6 @@ export function DocumentTile({
     return () => clearTimeout(t);
   }, [loading]);
 
-  const sizeClasses: Record<IconSize, string> = {
-    sm: 'text-[10px]',
-    md: 'text-[11px]',
-    lg: 'text-[12px]',
-    xl: 'text-[13px]',
-  };
-
-  const bottomPaddingClasses: Record<IconSize, string> = {
-    sm: 'px-[7px] py-[4px]',
-    md: 'px-[8px] py-[5px]',
-    lg: 'px-[9px] py-[5px]',
-    xl: 'px-[10px] py-[6px]',
-  };
-
-  const linkPaddingClasses: Record<IconSize, string> = {
-    sm: 'px-[2px] py-[2px]',
-    md: 'px-[2px] py-[2px]',
-    lg: 'px-[2px] py-[2px]',
-    xl: 'px-[2px] py-[2px]',
-  };
-
-  const gapClasses: Record<IconSize, string> = {
-    sm: 'gap-1',
-    md: 'gap-1.5',
-    lg: 'gap-2',
-    xl: 'gap-2',
-  };
-
-  const fileIconClasses: Record<IconSize, string> = {
-    sm: 'w-3 h-3',
-    md: 'w-3.5 h-3.5',
-    lg: 'w-3.5 h-3.5',
-    xl: 'w-4 h-4',
-  };
-
-  const trashBtnClasses: Record<IconSize, string> = {
-    sm: 'ml-0.5 h-[18px] w-[18px] rounded-sm',
-    md: 'ml-0.5 h-[21px] w-[21px] rounded-sm',
-    lg: 'ml-1 h-[23px] w-[23px] rounded',
-    xl: 'ml-1.5 h-[25px] w-[25px] rounded',
-  };
-
-  const trashIconClasses: Record<IconSize, string> = {
-    sm: 'w-[10px] h-[10px]',
-    md: 'w-[11px] h-[11px]',
-    lg: 'w-[12px] h-[12px]',
-    xl: 'w-[13px] h-[13px]',
-  };
-
   return (
     <div
       ref={setRefs}
@@ -181,26 +173,26 @@ export function DocumentTile({
       >
         <DocumentPreview doc={doc} />
       </Link>
-      <div className={`flex items-center w-full ${bottomPaddingClasses[iconSize]}`}>
+      <div className={`flex items-center w-full ${BOTTOM_PADDING_CLASSES[iconSize]}`}>
         <Link
           href={href}
           draggable={false}
-          className={`flex items-center flex-1 min-w-0 rounded-md ${linkPaddingClasses[iconSize]} ${gapClasses[iconSize]}`}
+          className={`flex items-center flex-1 min-w-0 rounded-md ${LINK_PADDING_CLASS} ${GAP_CLASSES[iconSize]}`}
           onClick={handleClick}
         >
           <span className="flex-shrink-0 flex items-center">
             {doc.type === 'pdf' ? (
-              <PDFIcon className={`${fileIconClasses[iconSize]} text-red-500`} />
+              <PDFIcon className={`${FILE_ICON_CLASSES[iconSize]} text-red-500`} />
             ) : doc.type === 'epub' ? (
-              <EPUBIcon className={`${fileIconClasses[iconSize]} text-blue-500`} />
+              <EPUBIcon className={`${FILE_ICON_CLASSES[iconSize]} text-blue-500`} />
             ) : (
-              <FileIcon className={`${fileIconClasses[iconSize]} text-muted`} />
+              <FileIcon className={`${FILE_ICON_CLASSES[iconSize]} text-muted`} />
             )}
           </span>
           <span
             className={
               'leading-none font-medium truncate flex-1 min-w-0 ' +
-              sizeClasses[iconSize] +
+              NAME_SIZE_CLASSES[iconSize] +
               ' ' +
               (isSelected ? 'text-accent' : 'text-foreground group-hover:text-accent')
             }
@@ -211,10 +203,10 @@ export function DocumentTile({
         {showDeleteButton && (
           <Button
             onClick={() => onDelete(doc)}
-            className={`inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base focus:outline-none transition-colors duration-200 ${trashBtnClasses[iconSize]}`}
+            className={`inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base focus:outline-none transition-colors duration-200 ${TRASH_BTN_CLASSES[iconSize]}`}
             aria-label={`Delete ${doc.name}`}
           >
-            <svg className={trashIconClasses[iconSize]} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={TRASH_ICON_CLASSES[iconSize]} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

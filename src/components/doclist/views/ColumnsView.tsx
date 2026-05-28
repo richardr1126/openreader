@@ -7,6 +7,7 @@ import type { DocumentListDocument, Folder } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { FolderIcon, ChevronRightSmall } from '../window/finderIcons';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
+import { formatDocumentSize } from '@/components/doclist/formatSize';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -216,24 +217,19 @@ export function ColumnsView({
               {selected.doc.name}
             </h3>
             <p className="text-[11px] text-muted">
-              {selected.doc.type.toUpperCase()} •{' '}
-              {selected.doc.size >= 1024 * 1024 * 1024
-                ? `${(selected.doc.size / 1024 / 1024 / 1024).toFixed(2)} GB`
-                : selected.doc.size >= 1024 * 1024
-                  ? `${(selected.doc.size / 1024 / 1024).toFixed(2)} MB`
-                  : `${(selected.doc.size / 1024).toFixed(1)} KB`}
+              {selected.doc.type.toUpperCase()} • {formatDocumentSize(selected.doc.size)}
             </p>
             <div className="mt-3 flex gap-2">
               <Link
                 href={`/${selected.doc.type}/${encodeURIComponent(selected.doc.id)}`}
-                className="flex-1 inline-flex items-center justify-center h-8 rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.02] transition-all duration-200 ease-out"
+                className="flex-1 inline-flex items-center justify-center h-8 rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
               >
                 Open
               </Link>
               <button
                 type="button"
                 onClick={() => onDeleteDoc(selected.doc)}
-                className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.03] transition-all duration-200 ease-out"
+                className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.01] transition-all duration-200 ease-out"
               >
                 Delete
               </button>
