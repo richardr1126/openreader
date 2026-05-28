@@ -1,24 +1,20 @@
 'use client';
 
 import type { IconSize, ViewMode } from '@/types/documents';
+import { iconsGridStyle } from '@/components/doclist/views/iconsGrid';
 
 interface DocumentListSkeletonProps {
   viewMode?: ViewMode;
   iconSize?: IconSize;
 }
 
-const ICON_COLS: Record<IconSize, string> = {
-  sm: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-8',
-  md: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
-  lg: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
-  xl: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
-};
+const ICON_SKELETON_ITEM_COUNT = 12;
 
 function IconsSkeleton({ iconSize }: { iconSize: IconSize }) {
   return (
     <div className="h-full min-h-0 overflow-y-auto p-3">
-      <div className={`grid gap-2 sm:gap-3 ${ICON_COLS[iconSize]}`}>
-        {Array.from({ length: 12 }).map((_, index) => (
+      <div className="grid" style={iconsGridStyle(iconSize, ICON_SKELETON_ITEM_COUNT)}>
+        {Array.from({ length: ICON_SKELETON_ITEM_COUNT }).map((_, index) => (
           <div key={index} className="overflow-hidden rounded-md border border-offbase bg-base">
             <div className="aspect-[3/4] w-full bg-offbase" />
             <div className="flex items-center gap-2 px-2 py-2">
