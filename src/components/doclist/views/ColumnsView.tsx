@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import type { DocumentListDocument, Folder } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
@@ -74,15 +74,17 @@ function ColumnDocRow({
       data-doc-tile
       onClick={onClick}
       className={
-        'flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] transition-colors duration-200 ease-out cursor-pointer ' +
+        'group flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition-all duration-200 ease-out cursor-pointer text-left hover:scale-[1.01] ' +
         (active || isSelected
-          ? 'bg-accent text-background'
-          : 'text-foreground hover:bg-offbase') +
+          ? 'border-accent bg-offbase text-accent'
+          : 'border-transparent text-foreground hover:border-accent hover:bg-offbase hover:text-accent') +
         (isOver && canDrop ? ' ring-1 ring-accent' : '') +
         (isDragging ? ' opacity-50' : '')
       }
     >
-      <KindIcon doc={doc} />
+      <span className={'w-4 h-4 shrink-0 flex items-center justify-center transition-colors duration-200 ' + ((active || isSelected) ? 'text-accent' : 'text-muted group-hover:text-accent')}>
+        <KindIcon doc={doc} />
+      </span>
       <span className="truncate flex-1">{doc.name}</span>
     </div>
   );
@@ -111,19 +113,19 @@ function ColumnFolderRow({
       ref={dropRef as unknown as React.RefObject<HTMLDivElement>}
       onClick={onClick}
       className={
-        'flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] transition-colors duration-200 ease-out cursor-pointer ' +
+        'group flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition-all duration-200 ease-out cursor-pointer text-left hover:scale-[1.01] ' +
         (active
-          ? 'bg-accent text-background'
-          : 'text-foreground hover:bg-offbase') +
+          ? 'border-accent bg-offbase text-accent'
+          : 'border-transparent text-foreground hover:border-accent hover:bg-offbase hover:text-accent') +
         (isOver && canDrop ? ' ring-1 ring-accent' : '')
       }
     >
-      <FolderIcon className={'w-4 h-4 ' + (active ? 'text-background' : 'text-accent')} />
+      <FolderIcon className={'w-4 h-4 ' + (active ? 'text-accent' : 'text-muted group-hover:text-accent')} />
       <span className="truncate flex-1">{folder.name}</span>
-      <span className={'text-[10px] ' + (active ? 'text-background' : 'text-muted')}>
+      <span className={'text-[10px] ' + (active ? 'text-accent' : 'text-muted')}>
         {folder.documents.length}
       </span>
-      <ChevronRightSmall className={'w-3 h-3 ' + (active ? 'text-background' : 'text-muted')} />
+      <ChevronRightSmall className={'w-3 h-3 ' + (active ? 'text-accent' : 'text-muted group-hover:text-accent')} />
     </div>
   );
 }
@@ -150,19 +152,41 @@ export function ColumnsView({
 }: ColumnsViewProps) {
   const { setVisibleOrder } = useDocumentSelection();
   const [selected, setSelected] = useState<Selected>(null);
+  const allDocs = useMemo(
+    () => [...folders.flatMap((f) => f.documents), ...unfolderedDocs],
+    [folders, unfolderedDocs],
+  );
 
   useEffect(() => {
-    const all = [...folders.flatMap((f) => f.documents), ...unfolderedDocs];
-    setVisibleOrder(all);
-  }, [folders, unfolderedDocs, setVisibleOrder]);
+    setVisibleOrder(allDocs);
+  }, [allDocs, setVisibleOrder]);
 
-  // Drop selection if it no longer exists.
+  // Keep selection valid and default to the first document when entering this view.
   useEffect(() => {
-    if (!selected) return;
-    if (selected.kind === 'folder' && !folders.find((f) => f.id === selected.id)) {
-      setSelected(null);
+    if (allDocs.length === 0) {
+      if (selected !== null) setSelected(null);
+      return;
     }
-  }, [folders, selected]);
+
+    if (!selected) {
+      setSelected({ kind: 'doc', doc: allDocs[0] });
+      return;
+    }
+
+    if (selected.kind === 'folder') {
+      if (!folders.find((f) => f.id === selected.id)) {
+        setSelected({ kind: 'doc', doc: allDocs[0] });
+      }
+      return;
+    }
+
+    const selectedStillExists = allDocs.some(
+      (d) => d.id === selected.doc.id && d.type === selected.doc.type,
+    );
+    if (!selectedStillExists) {
+      setSelected({ kind: 'doc', doc: allDocs[0] });
+    }
+  }, [allDocs, folders, selected]);
 
   const selectedFolder =
     selected?.kind === 'folder' ? folders.find((f) => f.id === selected.id) : undefined;

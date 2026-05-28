@@ -409,17 +409,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     [allDocuments],
   );
 
-  if (isPDFLoading || isEPUBLoading || isHTMLLoading) {
-    return <DocumentListSkeleton viewMode={viewMode === 'list' ? 'list' : 'grid'} />;
-  }
-
-  if (allDocuments.length === 0) {
-    return (
-      <div className="w-full max-w-2xl mx-auto py-12">
-        <DocumentUploader />
-      </div>
-    );
-  }
+  const isLoading = isPDFLoading || isEPUBLoading || isHTMLLoading;
 
   const fallbackViewMode: ViewMode =
     viewMode === 'columns' && isNarrow ? 'list' : viewMode;
@@ -473,7 +463,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       sidebarOpen={sidebarOpen}
       onSidebarOpenChange={setSidebarOpen}
     >
-      {showHint && allDocuments.length > 1 && (
+      {!isLoading && showHint && allDocuments.length > 1 && (
         <div className="px-3 pt-3 shrink-0 bg-background">
           <div className="flex items-center justify-between bg-base border border-offbase rounded-md px-3 py-1 text-[12px]">
             <p className="text-foreground">
@@ -493,57 +483,67 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         </div>
       )}
 
-      <DocumentUploader variant="overlay" className="flex-1 min-h-0 flex flex-col">
-        {fallbackViewMode === 'icons' && (
-          <IconsView
-            folders={visibleFolders}
-            unfolderedDocs={unfolderedDocs}
-            iconSize={iconSize}
-            collapsedFolders={collapsedFolders}
-            onToggleCollapse={toggleFolderCollapse}
-            onDeleteFolder={handleDeleteFolder}
-            onDeleteDoc={handleDeleteDoc}
-            onDropOnFolder={handleDropOnFolder}
-            onMergeIntoFolder={handleMergeIntoFolder}
-          />
-        )}
-        {fallbackViewMode === 'list' && (
-          <ListView
-            folders={visibleFolders}
-            unfolderedDocs={unfolderedDocs}
-            sortBy={sortBy}
-            sortDirection={sortDirection}
-            onSortChange={(b, d) => {
-              setSortBy(b);
-              setSortDirection(d);
-            }}
-            collapsedFolders={collapsedFolders}
-            onToggleCollapse={toggleFolderCollapse}
-            onDeleteFolder={handleDeleteFolder}
-            onDeleteDoc={handleDeleteDoc}
-            onDropOnFolder={handleDropOnFolder}
-            onMergeIntoFolder={handleMergeIntoFolder}
-          />
-        )}
-        {fallbackViewMode === 'columns' && (
-          <ColumnsView
-            folders={visibleFolders}
-            unfolderedDocs={unfolderedDocs}
-            onDeleteDoc={handleDeleteDoc}
-            onDropOnFolder={handleDropOnFolder}
-            onMergeIntoFolder={handleMergeIntoFolder}
-          />
-        )}
-        {fallbackViewMode === 'gallery' && (
-          <GalleryView
-            folders={visibleFolders}
-            unfolderedDocs={unfolderedDocs}
-            onDeleteDoc={handleDeleteDoc}
-            onDropOnFolder={handleDropOnFolder}
-            onMergeIntoFolder={handleMergeIntoFolder}
-          />
-        )}
-      </DocumentUploader>
+      {isLoading ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
+        </div>
+      ) : allDocuments.length === 0 ? (
+        <div className="flex-1 min-h-0 flex items-center justify-center p-6">
+          <DocumentUploader className="py-12 w-full max-w-2xl" />
+        </div>
+      ) : (
+        <DocumentUploader variant="overlay" className="flex-1 min-h-0 flex flex-col">
+          {fallbackViewMode === 'icons' && (
+            <IconsView
+              folders={visibleFolders}
+              unfolderedDocs={unfolderedDocs}
+              iconSize={iconSize}
+              collapsedFolders={collapsedFolders}
+              onToggleCollapse={toggleFolderCollapse}
+              onDeleteFolder={handleDeleteFolder}
+              onDeleteDoc={handleDeleteDoc}
+              onDropOnFolder={handleDropOnFolder}
+              onMergeIntoFolder={handleMergeIntoFolder}
+            />
+          )}
+          {fallbackViewMode === 'list' && (
+            <ListView
+              folders={visibleFolders}
+              unfolderedDocs={unfolderedDocs}
+              sortBy={sortBy}
+              sortDirection={sortDirection}
+              onSortChange={(b, d) => {
+                setSortBy(b);
+                setSortDirection(d);
+              }}
+              collapsedFolders={collapsedFolders}
+              onToggleCollapse={toggleFolderCollapse}
+              onDeleteFolder={handleDeleteFolder}
+              onDeleteDoc={handleDeleteDoc}
+              onDropOnFolder={handleDropOnFolder}
+              onMergeIntoFolder={handleMergeIntoFolder}
+            />
+          )}
+          {fallbackViewMode === 'columns' && (
+            <ColumnsView
+              folders={visibleFolders}
+              unfolderedDocs={unfolderedDocs}
+              onDeleteDoc={handleDeleteDoc}
+              onDropOnFolder={handleDropOnFolder}
+              onMergeIntoFolder={handleMergeIntoFolder}
+            />
+          )}
+          {fallbackViewMode === 'gallery' && (
+            <GalleryView
+              folders={visibleFolders}
+              unfolderedDocs={unfolderedDocs}
+              onDeleteDoc={handleDeleteDoc}
+              onDropOnFolder={handleDropOnFolder}
+              onMergeIntoFolder={handleMergeIntoFolder}
+            />
+          )}
+        </DocumentUploader>
+      )}
 
       <CreateFolderDialog
         isOpen={pendingMerge !== null}
