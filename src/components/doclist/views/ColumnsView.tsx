@@ -102,6 +102,9 @@ export function ColumnsView({
 }: ColumnsViewProps) {
   const { setVisibleOrder } = useDocumentSelection();
   const [selectedDoc, setSelectedDoc] = useState<DocumentListDocument | null>(null);
+  const openHref = selectedDoc
+    ? `/${selectedDoc.type}/${encodeURIComponent(selectedDoc.id)}`
+    : null;
 
   useEffect(() => {
     setVisibleOrder(documents);
@@ -154,7 +157,8 @@ export function ColumnsView({
             </p>
             <div className="mt-3 flex gap-2">
               <Link
-                href={`/${selectedDoc.type}/${encodeURIComponent(selectedDoc.id)}`}
+                href={openHref || '/app'}
+                prefetch={false}
                 className="flex-1 inline-flex items-center justify-center h-8 rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
               >
                 Open

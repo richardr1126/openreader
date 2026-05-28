@@ -36,6 +36,8 @@ import { ListView } from './views/ListView';
 import { ColumnsView } from './views/ColumnsView';
 import { GalleryView } from './views/GalleryView';
 
+let cachedDocumentListState: DocumentListState | null = null;
+
 type DocumentToDelete = {
   id: string;
   name: string;
@@ -116,22 +118,25 @@ interface DocumentListInnerProps {
 }
 
 function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
-  const [sortBy, setSortBy] = useState<SortBy>(DEFAULT_STATE.sortBy);
+  const cachedState = cachedDocumentListState;
+  const [sortBy, setSortBy] = useState<SortBy>(cachedState?.sortBy ?? DEFAULT_STATE.sortBy);
   const [sortDirection, setSortDirection] = useState<SortDirection>(
-    DEFAULT_STATE.sortDirection,
+    cachedState?.sortDirection ?? DEFAULT_STATE.sortDirection,
   );
-  const [viewMode, setViewMode] = useState<ViewMode>(DEFAULT_STATE.viewMode);
-  const [iconSize, setIconSize] = useState<IconSize>(DEFAULT_STATE.iconSize);
-  const [folders, setFolders] = useState<Folder[]>(DEFAULT_STATE.folders);
-  const [showHint, setShowHint] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_STATE.sidebarWidth);
-  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    normalizeViewMode(cachedState?.viewMode ?? DEFAULT_STATE.viewMode),
+  );
+  const [iconSize, setIconSize] = useState<IconSize>(cachedState?.iconSize ?? DEFAULT_STATE.iconSize);
+  const [folders, setFolders] = useState<Folder[]>(cachedState?.folders ?? DEFAULT_STATE.folders);
+  const [showHint, setShowHint] = useState(cachedState?.showHint ?? true);
+  const [sidebarWidth, setSidebarWidth] = useState(cachedState?.sidebarWidth ?? DEFAULT_STATE.sidebarWidth);
+  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>(cachedState?.sidebarFilter ?? 'all');
+  const [sidebarOpen, setSidebarOpen] = useState(!(cachedState?.sidebarCollapsed ?? false));
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [recentlyOpenedById, setRecentlyOpenedById] = useState<Record<string, number>>({});
 
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(cachedState !== null);
 
   const [documentToDelete, setDocumentToDelete] = useState<DocumentToDelete | null>(null);
   const [pendingMerge, setPendingMerge] = useState<
@@ -164,6 +169,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       const saved = await getDocumentListState();
       if (cancelled) return;
       if (saved) {
+        cachedDocumentListState = saved;
         setSortBy(saved.sortBy);
         setSortDirection(saved.sortDirection);
         setFolders(saved.folders ?? []);
@@ -173,6 +179,17 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         setSidebarWidth(saved.sidebarWidth ?? DEFAULT_STATE.sidebarWidth);
         setSidebarFilter(saved.sidebarFilter ?? 'all');
         setSidebarOpen(!(saved.sidebarCollapsed ?? false));
+      } else {
+        cachedDocumentListState = null;
+        setSortBy(DEFAULT_STATE.sortBy);
+        setSortDirection(DEFAULT_STATE.sortDirection);
+        setFolders(DEFAULT_STATE.folders);
+        setShowHint(DEFAULT_STATE.showHint);
+        setViewMode(DEFAULT_STATE.viewMode);
+        setIconSize(DEFAULT_STATE.iconSize);
+        setSidebarWidth(DEFAULT_STATE.sidebarWidth);
+        setSidebarFilter(DEFAULT_STATE.sidebarFilter);
+        setSidebarOpen(!DEFAULT_STATE.sidebarCollapsed);
       }
       setIsInitialized(true);
     })();
@@ -196,6 +213,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       sidebarFilter,
       sidebarCollapsed: !sidebarOpen,
     };
+    cachedDocumentListState = state;
     void saveDocumentListState(state);
   }, [
     sortBy,

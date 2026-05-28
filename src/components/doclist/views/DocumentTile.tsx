@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { useDrag, useDrop, type DragSourceMonitor } from 'react-dnd';
 import { Button } from '@headlessui/react';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
@@ -70,7 +69,6 @@ export function DocumentTile({
   onDelete,
   onMergeIntoFolder,
 }: DocumentTileProps) {
-  const [loading, setLoading] = useState(false);
   const { authEnabled } = useAuthConfig();
   const { data: session } = useAuthSession();
   const href = `/${doc.type}/${encodeURIComponent(doc.id)}`;
@@ -136,18 +134,8 @@ export function DocumentTile({
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       e.preventDefault();
       selection.select(doc, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
-      return;
     }
-    selection.replace([doc]);
-    setLoading(true);
   };
-
-  // Cap any stuck loading flag if the user navigates back.
-  useEffect(() => {
-    if (!loading) return;
-    const t = setTimeout(() => setLoading(false), 2500);
-    return () => clearTimeout(t);
-  }, [loading]);
 
   return (
     <div
@@ -160,12 +148,12 @@ export function DocumentTile({
           ? 'border-accent bg-offbase'
           : 'border-offbase bg-base hover:bg-offbase hover:border-accent') +
         (isDropTarget ? ' ring-1 ring-accent' : '') +
-        (isDragging ? ' opacity-50' : '') +
-        (loading ? ' prism-outline' : '')
+        (isDragging ? ' opacity-50' : '')
       }
     >
       <Link
         href={href}
+        prefetch={false}
         draggable={false}
         className="block"
         aria-label={`Open ${doc.name}`}
@@ -176,6 +164,7 @@ export function DocumentTile({
       <div className={`flex items-center w-full ${BOTTOM_PADDING_CLASSES[iconSize]}`}>
         <Link
           href={href}
+          prefetch={false}
           draggable={false}
           className={`flex items-center flex-1 min-w-0 rounded-md ${LINK_PADDING_CLASS} ${GAP_CLASSES[iconSize]}`}
           onClick={handleClick}

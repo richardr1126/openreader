@@ -114,6 +114,7 @@ export function GalleryView({
   const railRef = useRef<HTMLDivElement | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const activeDoc = useMemo(() => documents[activeIdx], [documents, activeIdx]);
+  const openHref = activeDoc ? `/${activeDoc.type}/${encodeURIComponent(activeDoc.id)}` : null;
 
   useEffect(() => {
     setVisibleOrder(documents);
@@ -163,7 +164,8 @@ export function GalleryView({
             </div>
             <div className="flex gap-2">
               <Link
-                href={`/${activeDoc.type}/${encodeURIComponent(activeDoc.id)}`}
+                href={openHref || '/app'}
+                prefetch={false}
                 className="h-8 px-4 inline-flex items-center justify-center rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
               >
                 Open

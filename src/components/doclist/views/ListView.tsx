@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import { Button } from '@headlessui/react';
 import type {
@@ -87,7 +87,6 @@ function DocRow({
   const selection = useDocumentSelection();
   const isSelected = selection.isSelected(doc);
   const isInFolder = Boolean(doc.folderId);
-  const [loading, setLoading] = useState(false);
   const href = `/${doc.type}/${encodeURIComponent(doc.id)}`;
 
   const [{ isDragging }, dragRef] = useDrag<DocumentDragItem, void, { isDragging: boolean }>(() => ({
@@ -117,22 +116,13 @@ function DocRow({
     dropRef(node);
   };
 
-  useEffect(() => {
-    if (!loading) return;
-    const t = setTimeout(() => setLoading(false), 2500);
-    return () => clearTimeout(t);
-  }, [loading]);
-
   const isTarget = isOver && canDrop;
 
   const handleClick: React.MouseEventHandler = (e) => {
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       e.preventDefault();
       selection.select(doc, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
-      return;
     }
-    selection.replace([doc]);
-    setLoading(true);
   };
 
   return (
@@ -146,12 +136,12 @@ function DocRow({
           ? 'bg-offbase text-accent'
           : 'text-foreground hover:bg-offbase') +
         (isTarget ? ' ring-1 ring-accent ring-inset' : '') +
-        (isDragging ? ' opacity-50' : '') +
-        (loading ? ' prism-outline' : '')
+        (isDragging ? ' opacity-50' : '')
       }
     >
       <Link
         href={href}
+        prefetch={false}
         draggable={false}
         onClick={handleClick}
         className="flex items-center gap-2 min-w-0 px-2 py-1.5"
