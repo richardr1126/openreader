@@ -304,14 +304,6 @@ export function AdminFeaturesPanel() {
           variant="flat"
         />
         <ToggleRow
-          label="Word-level highlighting"
-          description="Highlight words during TTS playback."
-          checked={Boolean(draft.enableWordHighlight)}
-          onChange={(checked) => updateDraft('enableWordHighlight', checked)}
-          right={renderSource('enableWordHighlight')}
-          variant="flat"
-        />
-        <ToggleRow
           label="Audiobook export"
           description='Show "Export audiobook" on PDF/EPUB pages.'
           checked={Boolean(draft.enableAudiobookExport)}

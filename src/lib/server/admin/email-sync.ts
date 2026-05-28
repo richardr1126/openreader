@@ -1,5 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
+import { hashForLog, serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 // We only need the `user` table here. Better Auth manages its own schema files;
 // we import them lazily to avoid coupling this module to a single dialect.
@@ -60,7 +62,13 @@ export async function syncAdminFlag(
     await db.update(user).set({ isAdmin: shouldBeAdmin }).where(eq(user.id, userId));
     return shouldBeAdmin;
   } catch (error) {
-    console.warn('[admin] Failed to sync isAdmin flag for user', userId, error);
+    logDegraded(serverLogger, {
+      event: 'admin.email_sync.user_flag_update.failed',
+      msg: 'Failed to sync isAdmin flag for user',
+      step: 'sync_admin_flag',
+      context: { userIdHash: hashForLog(userId) },
+      error,
+    });
     return currentIsAdmin;
   }
 }

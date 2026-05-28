@@ -1,0 +1,3 @@
+PP-DocLayoutV3 ONNX model assets are distributed by the model publisher under Apache-2.0.
+See upstream for the authoritative license and terms:
+https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX

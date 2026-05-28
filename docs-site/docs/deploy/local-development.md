@@ -90,6 +90,41 @@ OpenReader currently pins `4.18` in CI and Docker builds while `4.19` compatibil
 </details>
 
 <details>
+<summary><strong>NATS Server <code>nats-server</code> (required for embedded compute mode)</strong></summary>
+
+If `COMPUTE_WORKER_URL` is unset, startup launches embedded compute worker + NATS, so `nats-server` must be available on host PATH.
+
+If you always use an external worker (`COMPUTE_WORKER_URL` set), this is not required.
+
+<Tabs groupId="local-dev-nats-os">
+<TabItem value="macos" label="macOS" default>
+
+```bash
+brew install nats-server
+nats-server -v
+```
+
+</TabItem>
+<TabItem value="linux" label="Linux">
+
+```bash
+# Linux amd64 example
+mkdir -p "$HOME/.local/bin"
+curl -fsSL -o /tmp/nats-server.zip \
+  https://github.com/nats-io/nats-server/releases/latest/download/nats-server-v2.12.1-linux-amd64.zip
+unzip -j /tmp/nats-server.zip '*/nats-server' -d /tmp
+install -m 0755 /tmp/nats-server "$HOME/.local/bin/nats-server"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+export PATH="$HOME/.local/bin:$PATH"
+nats-server -v
+```
+
+</TabItem>
+</Tabs>
+
+</details>
+
+<details>
 <summary><strong>LibreOffice (optional, for DOCX conversion)</strong></summary>
 
 <Tabs groupId="local-dev-libreoffice-os">
@@ -114,50 +149,51 @@ sudo apt install -y libreoffice
 </details>
 
 <details>
-<summary><strong>whisper.cpp (optional, for word-by-word highlighting)</strong></summary>
+<summary><strong>Word-by-word highlighting (optional)</strong></summary>
 
-Install build dependencies:
+No extra native Whisper CLI build step is required.
 
-<Tabs groupId="local-dev-whisper-deps-os">
-<TabItem value="macos" label="macOS" default>
+Word-by-word highlighting and PDF layout parsing are worker-backed in current releases.
 
-```bash
-brew install cmake
-```
+If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` in `.env` (current defaults expect q4 Whisper files at that base URL).
 
-</TabItem>
-<TabItem value="linux" label="Linux">
+</details>
 
-```bash
-# Debian/Ubuntu example
-sudo apt update
-sudo apt install -y git build-essential cmake
-```
+<details>
+<summary><strong>External compute worker dev stack (optional)</strong></summary>
 
-</TabItem>
-</Tabs>
+Use this only when you intentionally run compute-worker as a separate service.
+Default local flow does not need `compute/worker/.env`; embedded worker startup reads root `.env`.
+Full worker deployment details are in [Compute Worker (NATS JetStream)](./compute-worker).
 
-Build whisper.cpp:
+Start only NATS + compute-worker via compose watch:
 
 ```bash
-# clone and build whisper.cpp (no model download needed – OpenReader handles that)
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
-cmake -B build
-cmake --build build -j --config Release
-
-# point OpenReader to the compiled whisper-cli binary
-echo WHISPER_CPP_BIN="$(pwd)/build/bin/whisper-cli"
+docker compose --env-file compute/worker/.env -f compute/worker/docker-compose.yml up --watch
+# or: pnpm compute:dev:watch
 ```
 
-If you are not on Debian/Ubuntu, install equivalent packages with your distro package manager:
+`compute/worker/.env.example` contains a starter config for standalone worker service deployments.
 
-- Fedora/RHEL: use `dnf` (`gcc gcc-c++ make cmake curl git tar xz`)
-- Arch: use `pacman` (`base-devel cmake curl git tar xz`)
+Run the main app separately on the host:
 
-:::tip
-Set `WHISPER_CPP_BIN` in your `.env` to enable word-by-word highlighting.
-:::
+```bash
+pnpm dev
+```
+
+For app -> external worker routing, set in root `.env`:
+
+```env
+COMPUTE_WORKER_URL=http://localhost:8081
+COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+```
+
+Ownership in external worker mode:
+- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale overrides
+- `compute/worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
+
+Worker mode requires worker-reachable shared object storage (S3-compatible endpoint).
+For external worker mode, object storage must be shared/reachable by both app and worker services.
 
 </details>
 
@@ -185,6 +221,24 @@ cp .env.example .env
 ```
 
 Then edit `.env`.
+
+Default embedded worker flow (no external worker URL):
+
+```env
+# Leave COMPUTE_WORKER_URL unset.
+# Entry point auto-starts embedded worker+NATS when available.
+```
+
+External worker flow:
+
+```env
+COMPUTE_WORKER_URL=http://localhost:8081
+COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+```
+
+Use the same ownership split:
+- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale overrides
+- `compute/worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
 
 Use one of these `.env` mode templates:
 
@@ -242,14 +296,32 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 ```
 
   </TabItem>
+  <TabItem value="worker-mode" label="External Worker Service">
+
+```env
+API_BASE=http://host.docker.internal:8880/v1
+API_KEY=none
+COMPUTE_WORKER_URL=http://localhost:8081
+COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+USE_EMBEDDED_WEED_MINI=false
+S3_BUCKET=your-bucket
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your-access-key
+S3_SECRET_ACCESS_KEY=your-secret-key
+# Optional for non-AWS providers:
+# S3_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_FORCE_PATH_STYLE=true
+```
+
+  </TabItem>
 </Tabs>
 
 :::note Env vars vs. admin panel
-On first boot, `API_KEY` / `API_BASE` and any `NEXT_PUBLIC_*` flags you've set get auto-seeded into the admin-managed runtime config (DB-backed, keys encrypted at rest). After that, the admin UI is authoritative and editing those env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
+On first boot, `API_KEY` / `API_BASE` and any `RUNTIME_SEED_*` flags you've set get auto-seeded into the admin-managed runtime config (DB-backed, keys encrypted at rest). After that, the admin UI is authoritative and editing those env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
 :::
 
 :::note User BYOK restriction default
-If you want each user to enter personal provider credentials, set `restrictUserApiKeys=false` (from **Settings → Admin** when auth/admin is enabled, or via legacy first-boot seed `NEXT_PUBLIC_RESTRICT_USER_API_KEYS=false` for no-admin bootstrap flows).
+If you want each user to enter personal provider credentials, set `restrictUserApiKeys=false` (from **Settings → Admin** when auth/admin is enabled, or via legacy first-boot seed `RUNTIME_SEED_RESTRICT_USER_API_KEYS=false` for no-admin bootstrap flows).
 :::
 
 :::info
@@ -270,6 +342,9 @@ Learn about migration behavior and commands in [Migrations](../configure/migrati
 ```bash
 pnpm dev
 ```
+
+If you use embedded worker startup (no `COMPUTE_WORKER_URL`) and the host is missing `nats-server`,
+install `nats-server` locally or switch to external worker mode.
 
   </TabItem>
   <TabItem value="prod" label="Build + Start">

@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseLibraryRoots } from '@/lib/server/storage/library-mount';
 import type { DocumentType } from '@/types/documents';
 import { auth } from '@/lib/server/auth/auth';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,8 +113,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
   } catch (error) {
-    console.error('Error checking auth:', error);
-    return NextResponse.json({ error: 'Error checking auth' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.library.auth_check.failed',
+      error: errorToLog(error),
+    }, 'Failed to check auth for library route');
+    return errorResponse(error, {
+      apiErrorMessage: 'Error checking auth',
+      normalize: { code: 'DOCUMENTS_LIBRARY_AUTH_CHECK_FAILED', errorClass: 'auth' },
+    });
   }
 
   const url = new URL(req.url);

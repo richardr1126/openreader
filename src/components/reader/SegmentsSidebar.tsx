@@ -185,6 +185,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     isPlaying,
     playFromSegment,
     activeReaderType,
+    clearSegmentCaches,
   } = useTTS();
   const {
     providerRef,
@@ -241,6 +242,9 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const didAutoScrollOnOpenRef = useRef(false);
+  const userScrollUntilMsRef = useRef(0);
+  const programmaticScrollUntilMsRef = useRef(0);
+  const lastSegmentRefreshKeyRef = useRef('');
   const segmentsQueryKey = useMemo(
     () => [SEGMENTS_MANIFEST_QUERY_KEY, documentId] as const,
     [documentId],
@@ -319,6 +323,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
       return payload;
     },
     onSuccess: async (payload) => {
+      clearSegmentCaches();
       if (payload?.warning) {
         toast.error(`Segments cleared, but audio cleanup was partial: ${payload.warning}`);
       } else if (payload) {
@@ -353,19 +358,54 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
   }, [documentId, isClearingSegments, clearSegments]);
 
   useEffect(() => {
+    if (!isOpen || !isPlaying) return;
+    const locationKey = activeReaderType === 'epub'
+      ? String(currDocPage)
+      : String(currDocPageNumber);
+    const refreshKey = `${activeReaderType}|${locationKey}|${currentSentenceIndex}`;
+    if (lastSegmentRefreshKeyRef.current === refreshKey) return;
+    lastSegmentRefreshKeyRef.current = refreshKey;
+    void refetchManifest();
+  }, [
+    isOpen,
+    isPlaying,
+    activeReaderType,
+    currDocPage,
+    currDocPageNumber,
+    currentSentenceIndex,
+    refetchManifest,
+  ]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const node = listRef.current;
     if (!node) return;
 
+    const markUserScrollActive = () => {
+      userScrollUntilMsRef.current = Date.now() + 1200;
+    };
+
     const onScroll = () => {
+      if (Date.now() > programmaticScrollUntilMsRef.current) {
+        markUserScrollActive();
+      }
       if (!hasMoreManifestPages || isLoadingMoreManifest) return;
       const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
       if (distance > 280) return;
       void fetchNextPage();
     };
 
+    const onWheel = () => markUserScrollActive();
+    const onTouchMove = () => markUserScrollActive();
+
     node.addEventListener('scroll', onScroll);
-    return () => node.removeEventListener('scroll', onScroll);
+    node.addEventListener('wheel', onWheel, { passive: true });
+    node.addEventListener('touchmove', onTouchMove, { passive: true });
+    return () => {
+      node.removeEventListener('scroll', onScroll);
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('touchmove', onTouchMove);
+    };
   }, [isOpen, hasMoreManifestPages, isLoadingMoreManifest, fetchNextPage]);
 
   const handleSelectVariant = useCallback(async (settings: TTSSegmentSettings | null) => {
@@ -551,10 +591,12 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
 
     const container = listRef.current;
     if (!container) return;
+    if (Date.now() < userScrollUntilMsRef.current) return;
     const activeRow = container.querySelector<HTMLElement>('[data-active-segment="true"]');
     if (!activeRow) return;
 
     requestAnimationFrame(() => {
+      programmaticScrollUntilMsRef.current = Date.now() + 300;
       activeRow.scrollIntoView({ block: 'center', behavior: 'auto' });
       didAutoScrollOnOpenRef.current = true;
     });
@@ -566,6 +608,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
 
     const root = listRef.current;
     if (!root) return;
+    if (Date.now() < userScrollUntilMsRef.current) return;
     const activeRow = root.querySelector<HTMLElement>('[data-active-segment="true"]');
     if (!activeRow) return;
 
@@ -574,6 +617,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     if (isElementFullyVisibleWithinContainer(activeRow, scrollContainer)) return;
 
     requestAnimationFrame(() => {
+      programmaticScrollUntilMsRef.current = Date.now() + 300;
       activeRow.scrollIntoView({ block: 'center', behavior: 'auto' });
     });
   }, [

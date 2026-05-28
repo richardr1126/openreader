@@ -5,7 +5,6 @@ import type { HtmlBlock } from '@/lib/client/html/blocks';
 interface HtmlAudiobookAdapterOptions {
   blocks: HtmlBlock[];
   isTxt: boolean;
-  smartSentenceSplitting: boolean;
   maxBlockLength?: number;
   /**
    * For markdown: any heading with `headingLevel <= chapterHeadingLevel`
@@ -83,7 +82,6 @@ function buildChapterDrafts({
 
 function chapterText(
   draft: ChapterDraft,
-  smartSentenceSplitting: boolean,
   maxBlockLength?: number,
 ): string {
   const joined = draft.blocks
@@ -91,14 +89,14 @@ function chapterText(
     .filter((t) => t && t.trim())
     .join('\n\n');
   if (!joined) return '';
-  return smartSentenceSplitting ? normalizeTextForTts(joined, { maxBlockLength }) : joined;
+  return normalizeTextForTts(joined, { maxBlockLength });
 }
 
 function preparedChapters(options: HtmlAudiobookAdapterOptions): PreparedAudiobookChapter[] {
   const drafts = buildChapterDrafts(options);
   const out: PreparedAudiobookChapter[] = [];
   for (const draft of drafts) {
-    const text = chapterText(draft, options.smartSentenceSplitting, options.maxBlockLength);
+    const text = chapterText(draft, options.maxBlockLength);
     if (!text.trim()) continue;
     out.push({
       index: out.length,

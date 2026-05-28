@@ -1,24 +1,37 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild, Button } from '@headlessui/react';
-import { getAppConfig, getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, updateAppConfig } from '@/lib/client/dexie';
+import { getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, updateAppConfig } from '@/lib/client/dexie';
 import { listDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
 import { useDocuments } from '@/contexts/DocumentContext';
 import type { BaseDocument } from '@/types/documents';
 import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
 
-export function DexieMigrationModal() {
+type DexieMigrationModalProps = {
+  isOpen: boolean;
+  localCount: number;
+  missingCount: number;
+  onComplete: () => void;
+};
+
+export function DexieMigrationModal({
+  isOpen,
+  localCount,
+  missingCount,
+  onComplete,
+}: DexieMigrationModalProps) {
   const { refreshDocuments } = useDocuments();
-  const [isOpen, setIsOpen] = useState(false);
-  const [localCount, setLocalCount] = useState(0);
-  const [missingCount, setMissingCount] = useState(0);
+  const [displayMissingCount, setDisplayMissingCount] = useState(missingCount);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>('');
-  const checkedRef = useRef(false);
 
   const closeDisabled = isUploading;
+
+  useEffect(() => {
+    setDisplayMissingCount(missingCount);
+  }, [missingCount, isOpen]);
 
   const loadLocalDexieDocs = useCallback(async (): Promise<{
     docs: BaseDocument[];
@@ -38,60 +51,12 @@ export function DexieMigrationModal() {
     return { docs, pdfById, epubById, htmlById };
   }, []);
 
-  const checkAndMaybePrompt = useCallback(async () => {
-    if (checkedRef.current) return;
-    checkedRef.current = true;
-
-    const cfg = await getAppConfig();
-    if (!cfg?.privacyAccepted) {
-      // Wait for privacy acceptance before prompting.
-      checkedRef.current = false;
-      return;
-    }
-
-    if (cfg.documentsMigrationPrompted) return;
-
-    const { docs } = await loadLocalDexieDocs();
-    const count = docs.length;
-    setLocalCount(count);
-
-    if (count === 0) return;
-
-    const serverDocs = await listDocuments().catch(() => null);
-    if (serverDocs) {
-      const serverIds = new Set(serverDocs.map((d) => d.id));
-      const missing = docs.filter((d) => !serverIds.has(d.id));
-      setMissingCount(missing.length);
-      if (missing.length === 0) return;
-    } else {
-      // If the server list fails, still prompt so the user can attempt upload.
-      setMissingCount(count);
-    }
-
-    setIsOpen(true);
-  }, [loadLocalDexieDocs]);
-
-  useEffect(() => {
-    checkAndMaybePrompt().catch((err) => {
-      console.error('Dexie migration check failed:', err);
-    });
-  }, [checkAndMaybePrompt]);
-
-  useEffect(() => {
-    const handler = () => {
-      checkedRef.current = false;
-      checkAndMaybePrompt().catch((err) => console.error('Dexie migration check failed:', err));
-    };
-    window.addEventListener('openreader:privacyAccepted', handler as EventListener);
-    return () => window.removeEventListener('openreader:privacyAccepted', handler as EventListener);
-  }, [checkAndMaybePrompt]);
-
   const title = 'Upload your local documents?';
 
   const handleSkip = useCallback(async () => {
     await updateAppConfig({ documentsMigrationPrompted: true });
-    setIsOpen(false);
-  }, []);
+    onComplete();
+  }, [onComplete]);
 
   const handleUpload = useCallback(async () => {
     setIsUploading(true);
@@ -104,7 +69,7 @@ export function DexieMigrationModal() {
       const serverDocs = await listDocuments().catch(() => null);
       const serverIds = serverDocs ? new Set(serverDocs.map((d) => d.id)) : null;
       const toUpload = serverIds ? docs.filter((d) => !serverIds.has(d.id)) : docs;
-      setMissingCount(toUpload.length);
+      setDisplayMissingCount(toUpload.length);
 
       const encoder = new TextEncoder();
       for (let i = 0; i < toUpload.length; i++) {
@@ -159,21 +124,20 @@ export function DexieMigrationModal() {
       setStatus('Refreshing...');
       await refreshDocuments();
       await updateAppConfig({ documentsMigrationPrompted: true });
-      setIsOpen(false);
+      onComplete();
     } catch (err) {
       console.error('Dexie migration upload failed:', err);
       setStatus('Upload failed. You can retry or skip.');
-      checkedRef.current = false;
     } finally {
       setIsUploading(false);
     }
-  }, [loadLocalDexieDocs, refreshDocuments]);
+  }, [loadLocalDexieDocs, onComplete, refreshDocuments]);
 
   if (!isOpen) return null;
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[70]" onClose={() => (closeDisabled ? null : setIsOpen(false))}>
+      <Dialog as="div" className="relative z-[80]" onClose={() => (closeDisabled ? null : onComplete())}>
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
@@ -204,8 +168,8 @@ export function DexieMigrationModal() {
                 <div className="space-y-2">
                   <p className="text-sm text-muted mb-2">
                     Found {localCount} document{localCount === 1 ? '' : 's'} stored locally from an older version.
-                    {missingCount > 0 ? (
-                      <> {missingCount} {missingCount === 1 ? 'is' : 'are'} not here yet.</>
+                    {displayMissingCount > 0 ? (
+                      <> {displayMissingCount} {displayMissingCount === 1 ? 'is' : 'are'} not here yet.</>
                     ) : null}
                     {' '}This app now stores documents on the server and keeps a local cache for speed.
                   </p>

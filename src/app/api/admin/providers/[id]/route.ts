@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminContext } from '@/lib/server/auth/admin';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 import {
   AdminProviderError,
   deleteAdminProvider,
@@ -39,10 +41,25 @@ export async function PUT(
     return NextResponse.json({ provider: toMasked(updated) });
   } catch (error) {
     if (error instanceof AdminProviderError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error, {
+        apiErrorMessage: error.message,
+        normalize: {
+          code: 'ADMIN_PROVIDERS_UPDATE_REQUEST_FAILED',
+          errorClass: error.status >= 500 ? 'db' : 'validation',
+          httpStatus: error.status,
+          retryable: error.status >= 500,
+        },
+      });
     }
-    console.error('[admin/providers/:id] update failed:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    serverLogger.error({
+      event: 'admin.providers.update.failed',
+      providerId: id,
+      error: errorToLog(error),
+    }, 'Admin provider update failed');
+    return errorResponse(error, {
+      apiErrorMessage: 'Internal error',
+      normalize: { code: 'ADMIN_PROVIDERS_UPDATE_FAILED', errorClass: 'db' },
+    });
   }
 }
 
@@ -59,9 +76,24 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof AdminProviderError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error, {
+        apiErrorMessage: error.message,
+        normalize: {
+          code: 'ADMIN_PROVIDERS_DELETE_REQUEST_FAILED',
+          errorClass: error.status >= 500 ? 'db' : 'validation',
+          httpStatus: error.status,
+          retryable: error.status >= 500,
+        },
+      });
     }
-    console.error('[admin/providers/:id] delete failed:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    serverLogger.error({
+      event: 'admin.providers.delete.failed',
+      providerId: id,
+      error: errorToLog(error),
+    }, 'Admin provider delete failed');
+    return errorResponse(error, {
+      apiErrorMessage: 'Internal error',
+      normalize: { code: 'ADMIN_PROVIDERS_DELETE_FAILED', errorClass: 'db' },
+    });
   }
 }

@@ -2,9 +2,11 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { adminProviders, adminSettings } from '@/db/schema';
 import { isAuthEnabled } from '@/lib/server/auth/config';
+import { serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 /**
- * Runtime config: site-wide settings that used to live in `NEXT_PUBLIC_*`
+ * Runtime config: site-wide settings that used to live in build-time env vars.
  * env vars. Each key has:
  *   - a TypeScript value type
  *   - an env var name used for the first-run seed
@@ -75,17 +77,16 @@ function stringValue(defaultValue: string, envVar: string): RuntimeConfigKeyDef<
 }
 
 export const RUNTIME_CONFIG_SCHEMA = {
-  defaultTtsProvider: stringValue('custom-openai', 'NEXT_PUBLIC_DEFAULT_TTS_PROVIDER'),
-  changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json', 'NEXT_PUBLIC_CHANGELOG_FEED_URL'),
-  enableUserSignups: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_USER_SIGNUPS'),
-  restrictUserApiKeys: booleanFlag(true, 'NEXT_PUBLIC_RESTRICT_USER_API_KEYS'),
+  defaultTtsProvider: stringValue('custom-openai', 'RUNTIME_SEED_DEFAULT_TTS_PROVIDER'),
+  changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json', 'RUNTIME_SEED_CHANGELOG_FEED_URL'),
+  enableUserSignups: booleanFlag(true, 'RUNTIME_SEED_ENABLE_USER_SIGNUPS'),
+  restrictUserApiKeys: booleanFlag(true, 'RUNTIME_SEED_RESTRICT_USER_API_KEYS'),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
-  enableTtsProvidersTab: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_TTS_PROVIDERS_TAB'),
-  enableWordHighlight: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_WORD_HIGHLIGHT'),
-  enableAudiobookExport: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_AUDIOBOOK_EXPORT'),
-  enableDocxConversion: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_DOCX_CONVERSION'),
-  enableDestructiveDeleteActions: booleanFlag(true, 'NEXT_PUBLIC_ENABLE_DESTRUCTIVE_DELETE_ACTIONS'),
+  enableTtsProvidersTab: booleanFlag(true, 'RUNTIME_SEED_ENABLE_TTS_PROVIDERS_TAB'),
+  enableAudiobookExport: booleanFlag(true, 'RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT'),
+  enableDocxConversion: booleanFlag(true, 'RUNTIME_SEED_ENABLE_DOCX_CONVERSION'),
+  enableDestructiveDeleteActions: booleanFlag(true, 'RUNTIME_SEED_ENABLE_DESTRUCTIVE_DELETE_ACTIONS'),
   showAllProviderModels: runtimeBoolean(true),
 } as const satisfies Record<string, RuntimeConfigKeyDef<unknown>>;
 
@@ -114,7 +115,12 @@ async function resolveImplicitDefaultTtsProvider(): Promise<string | undefined> 
       .limit(1);
     return rows[0]?.slug;
   } catch (error) {
-    console.warn('[runtime-config] implicit defaultTtsProvider lookup failed:', error);
+    logDegraded(serverLogger, {
+      event: 'admin.runtime_config.default_provider_lookup.failed',
+      msg: 'Implicit defaultTtsProvider lookup failed',
+      step: 'resolve_implicit_default_provider',
+      error,
+    });
     return undefined;
   }
 }
@@ -142,7 +148,12 @@ async function readAllRows(): Promise<Map<string, { value: unknown; source: stri
     }
     return out;
   } catch (error) {
-    console.warn('[runtime-config] read failed (table may not exist yet):', error);
+    logDegraded(serverLogger, {
+      event: 'admin.runtime_config.read.failed',
+      msg: 'Runtime config read failed',
+      step: 'read_runtime_config_rows',
+      error,
+    });
     return new Map();
   }
 }
@@ -298,7 +309,13 @@ export async function seedRuntimeConfigFromEnv(): Promise<{ seeded: RuntimeConfi
         .onConflictDoNothing({ target: adminSettings.key });
       seeded.push(key);
     } catch (error) {
-      console.warn('[runtime-config] seed failed for', key, error);
+      logDegraded(serverLogger, {
+        event: 'admin.runtime_config.seed.failed',
+        msg: 'Runtime config seed failed',
+        step: 'seed_runtime_config_key',
+        context: { key },
+        error,
+      });
     }
   }
   return { seeded };

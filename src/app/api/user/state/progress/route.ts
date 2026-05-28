@@ -6,6 +6,8 @@ import type { ReaderType } from '@/types/user-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,8 +64,14 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error loading user progress:', error);
-    return NextResponse.json({ error: 'Failed to load user progress' }, { status: 500 });
+    serverLogger.error({
+      event: 'user.progress.load.failed',
+      error: errorToLog(error),
+    }, 'Failed to load user progress');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to load user progress',
+      normalize: { code: 'USER_PROGRESS_LOAD_FAILED', errorClass: 'db' },
+    });
   }
 }
 
@@ -172,7 +180,13 @@ export async function PUT(req: NextRequest) {
       applied: true,
     });
   } catch (error) {
-    console.error('Error updating user progress:', error);
-    return NextResponse.json({ error: 'Failed to update user progress' }, { status: 500 });
+    serverLogger.error({
+      event: 'user.progress.update.failed',
+      error: errorToLog(error),
+    }, 'Failed to update user progress');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to update user progress',
+      normalize: { code: 'USER_PROGRESS_UPDATE_FAILED', errorClass: 'db' },
+    });
   }
 }

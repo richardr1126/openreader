@@ -18,26 +18,41 @@ import {
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
-import { getDocumentMetadata } from '@/lib/client/api/documents';
+import {
+  forceReparsePdfDocument,
+  getDocumentMetadata,
+  getDocumentSettings,
+  getParsedPdfDocument,
+  putDocumentSettings,
+  subscribeParsedPdfDocumentEvents,
+} from '@/lib/client/api/documents';
 import { createPdfAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/pdf';
 import { regenerateAudiobookChapter, runAudiobookGeneration } from '@/lib/client/audiobooks/pipeline';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import {
-  extractTextFromPDF,
   highlightPattern,
   clearHighlights,
   clearWordHighlights,
   highlightWordIndex,
 } from '@/lib/client/pdf';
+import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
+import { buildPdfPageSourceUnits, buildPdfPrefetchPayload } from '@/lib/client/pdf-tts-planning';
+import type { CanonicalTtsSourceUnit } from '@/lib/shared/tts-segment-plan';
+import {
+  DEFAULT_DOCUMENT_SETTINGS,
+  type DocumentSettings,
+} from '@/types/document-settings';
+import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import type { ParsedPdfDocument, ParsedPdfPage, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 
 import type {
   TTSSentenceAlignment,
   TTSAudiobookFormat,
   TTSAudiobookChapter,
 } from '@/types/tts';
-import type { AudiobookGenerationSettings } from '@/types/client';
+import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
 import { clampSegmentPreloadDepth } from '@/types/config';
 
 /**
@@ -52,12 +67,29 @@ export interface PdfDocumentState {
   currDocPage: number;
   currDocText: string | undefined;
   pdfDocument: PDFDocumentProxy | undefined;
-  setCurrentDocument: (id: string) => Promise<void>;
+  parsedDocument: ParsedPdfDocument | null;
+  parseStatus: PdfParseStatus | null;
+  parseProgress: PdfParseProgress | null;
+  documentSettings: DocumentSettings;
+  updateDocumentSettings: (settings: DocumentSettings) => Promise<void>;
+  parsedOverlayEnabled: boolean;
+  setParsedOverlayEnabled: (enabled: boolean) => void;
+  forceReparseParsedPdf: () => Promise<void>;
+  setCurrentDocument: (id: string) => Promise<boolean>;
   clearCurrDoc: () => void;
 
   // PDF functionality
   onDocumentLoadSuccess: (pdf: PDFDocumentProxy) => void;
-  highlightPattern: (text: string, pattern: string, containerRef: RefObject<HTMLDivElement>) => void;
+  highlightPattern: (
+    text: string,
+    pattern: string,
+    containerRef: RefObject<HTMLDivElement>,
+    options?: {
+      parsedDocument?: ParsedPdfDocument | null;
+      locator?: TTSSegmentLocator | null;
+      useBlockGeometryOnly?: boolean;
+    },
+  ) => void;
   clearHighlights: () => void;
   clearWordHighlights: () => void;
   highlightWordIndex: (
@@ -84,9 +116,6 @@ export interface PdfDocumentState {
   isAudioCombining: boolean;
 }
 
-const EMPTY_TEXT_RETRY_DELAY_MS = 120;
-const EMPTY_TEXT_MAX_RETRIES = 6;
-
 /**
  * Main PDF route hook.
  */
@@ -101,14 +130,9 @@ export function usePdfDocument(): PdfDocumentState {
     registerVisualPageChangeHandler,
   } = useTTS();
   const {
-    headerMargin,
-    footerMargin,
-    leftMargin,
-    rightMargin,
     apiKey,
     baseUrl,
     providerRef,
-    smartSentenceSplitting,
     segmentPreloadDepthPages,
     ttsSegmentMaxBlockLength,
   } = useConfig();
@@ -119,18 +143,18 @@ export function usePdfDocument(): PdfDocumentState {
   const [currDocName, setCurrDocName] = useState<string>();
   const [currDocText, setCurrDocText] = useState<string>();
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy>();
+  const [parsedDocument, setParsedDocument] = useState<ParsedPdfDocument | null>(null);
+  const [parseStatus, setParseStatus] = useState<PdfParseStatus | null>(null);
+  const [parseProgress, setParseProgress] = useState<PdfParseProgress | null>(null);
+  const [, setActiveParseOpId] = useState<string | null>(null);
+  const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
+  const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
   const [isAudioCombining] = useState(false);
   const audiobookAdapter = useMemo(() => createPdfAudiobookSourceAdapter({
-    pdfDocument,
-    margins: {
-      header: headerMargin,
-      footer: footerMargin,
-      left: leftMargin,
-      right: rightMargin,
-    },
-    smartSentenceSplitting,
+    parsed: parsedDocument ?? undefined,
+    settings: documentSettings,
     maxBlockLength: ttsSegmentMaxBlockLength,
-  }), [pdfDocument, headerMargin, footerMargin, leftMargin, rightMargin, smartSentenceSplitting, ttsSegmentMaxBlockLength]);
+  }), [parsedDocument, documentSettings, ttsSegmentMaxBlockLength]);
   const pageTextCacheRef = useRef<Map<number, string>>(new Map());
   const [currDocPage, setCurrDocPage] = useState<number>(currDocPageNumber);
 
@@ -139,11 +163,129 @@ export function usePdfDocument(): PdfDocumentState {
   const pdfDocGenerationRef = useRef(0);
   const pdfDocumentRef = useRef<PDFDocumentProxy | undefined>(undefined);
   const loadSeqRef = useRef(0);
-  const emptyRetryRef = useRef<{ page: number; attempt: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
 
   // Guards for setCurrentDocument to prevent stale loads from overwriting newer selections.
   const docLoadSeqRef = useRef(0);
   const docLoadAbortRef = useRef<AbortController | null>(null);
+  const parsePollAbortRef = useRef<AbortController | null>(null);
+  const parseSseCloseRef = useRef<(() => void) | null>(null);
+
+  const fetchParsedDocument = useCallback(async (
+    documentId: string,
+    initialStatus: PdfParseStatus | null,
+    signal: AbortSignal,
+    initialOpId?: string | null,
+  ): Promise<void> => {
+    // Legacy PDFs may have null parseStatus; treat as pending so opening the
+    // document backfills parse output via the parsed endpoint polling path.
+    const effectiveInitialStatus: PdfParseStatus = initialStatus ?? 'pending';
+    setParseStatus(effectiveInitialStatus);
+    setParseProgress(null);
+    const delayMs = 1200;
+    const retryFailed = effectiveInitialStatus === 'failed';
+    let attempt = 0;
+    let effectiveOpId = initialOpId?.trim() || null;
+    while (!signal.aborted) {
+      if (signal.aborted) return;
+      const result = await getParsedPdfDocument(documentId, {
+        signal,
+        retryFailed: retryFailed && attempt === 0,
+        ...(effectiveOpId ? { opId: effectiveOpId } : {}),
+      });
+      if (result.status === 'ready') {
+        setParsedDocument(result.parsed);
+        setParseStatus('ready');
+        setParseProgress(null);
+        setActiveParseOpId(null);
+        return;
+      }
+      if ('opId' in result && typeof result.opId === 'string' && result.opId.trim()) {
+        effectiveOpId = result.opId.trim();
+        setActiveParseOpId(effectiveOpId);
+      }
+      setParseStatus(result.status);
+      setParseProgress(result.parseProgress ?? null);
+      if (result.status === 'failed') {
+        setParsedDocument(null);
+        setActiveParseOpId(null);
+        return;
+      }
+      attempt += 1;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }, []);
+
+  const fetchDocumentSettings = useCallback(async (documentId: string, signal: AbortSignal): Promise<void> => {
+    try {
+      const response = await getDocumentSettings(documentId, { signal });
+      setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, response.settings));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      console.warn('Failed to load document settings, using defaults:', error);
+      setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
+    }
+  }, []);
+
+  const startParsedPolling = useCallback((documentId: string, initialOpId?: string | null) => {
+    parsePollAbortRef.current?.abort();
+    parseSseCloseRef.current?.();
+    parseSseCloseRef.current = null;
+    setParseProgress(null);
+    setActiveParseOpId(initialOpId?.trim() || null);
+    const controller = new AbortController();
+    parsePollAbortRef.current = controller;
+
+    const closeSse = subscribeParsedPdfDocumentEvents(documentId, {
+      opId: initialOpId?.trim() || null,
+    }, {
+      onSnapshot: (snapshot) => {
+        if (controller.signal.aborted) return;
+        if (typeof snapshot.opId === 'string' && snapshot.opId.trim()) {
+          setActiveParseOpId(snapshot.opId.trim());
+        }
+        setParseStatus(snapshot.parseStatus);
+        setParseProgress(snapshot.parseProgress);
+        if (snapshot.parseStatus === 'ready' || snapshot.parseStatus === 'failed') {
+          if (snapshot.parseStatus === 'failed') {
+            setParsedDocument(null);
+            setActiveParseOpId(null);
+          } else {
+            void fetchParsedDocument(
+              documentId,
+              'ready',
+              controller.signal,
+              typeof snapshot.opId === 'string' ? snapshot.opId : (initialOpId ?? null),
+            );
+          }
+          closeSse();
+          parseSseCloseRef.current = null;
+          if (parsePollAbortRef.current === controller) {
+            parsePollAbortRef.current = null;
+          }
+          return;
+        }
+      },
+      onError: () => {
+        // EventSource reconnects automatically. Keep stream open, but log so
+        // production debugging can correlate UI stalls with SSE churn.
+        if (controller.signal.aborted) return;
+        console.warn('[pdf] parsed/events stream error; waiting for auto-reconnect', {
+          documentId,
+        });
+      },
+    });
+    parseSseCloseRef.current = closeSse;
+
+    controller.signal.addEventListener('abort', () => {
+      closeSse();
+      if (parseSseCloseRef.current === closeSse) {
+        parseSseCloseRef.current = null;
+      }
+      if (parsePollAbortRef.current === controller) {
+        parsePollAbortRef.current = null;
+      }
+    }, { once: true });
+  }, [fetchParsedDocument, setActiveParseOpId]);
 
   useEffect(() => {
     pdfDocumentRef.current = pdfDocument;
@@ -167,7 +309,7 @@ export function usePdfDocument(): PdfDocumentState {
 
   /**
    * Loads and processes text from the current document page
-   * Extracts text from the PDF and updates both document text and TTS text states
+   * Uses parsed PDF blocks only and updates both document text and TTS text states.
    * 
    * @returns {Promise<void>}
    */
@@ -179,20 +321,18 @@ export function usePdfDocument(): PdfDocumentState {
       const seq = ++loadSeqRef.current;
       const pageNumber = currDocPageNumber;
 
-      const existingRetry = emptyRetryRef.current;
-      if (existingRetry?.timer) {
-        clearTimeout(existingRetry.timer);
-      }
-      emptyRetryRef.current =
-        existingRetry && existingRetry.page === pageNumber
-          ? { ...existingRetry, timer: null }
-          : null;
+      const pageFromParsed = (pageNum: number): ParsedPdfPage | undefined =>
+        parsedDocument?.pages.find((page) => page.pageNumber === pageNum);
 
-      const margins = {
-        header: headerMargin,
-        footer: footerMargin,
-        left: leftMargin,
-        right: rightMargin
+      if (parseStatus !== 'ready' || !parsedDocument) {
+        setCurrDocText(undefined);
+        setTTSText('', { location: currDocPageNumber });
+        return;
+      }
+
+      const sourceUnitsFromParsedPage = (pageNum: number): CanonicalTtsSourceUnit[] => {
+        const page = pageFromParsed(pageNum);
+        return buildPdfPageSourceUnits(page, pageNum, documentSettings.pdf?.skipBlockKinds ?? []);
       };
 
       const getPageText = async (pageNumber: number, shouldCache = false): Promise<string> => {
@@ -209,7 +349,10 @@ export function usePdfDocument(): PdfDocumentState {
           return cached;
         }
 
-        const extracted = await extractTextFromPDF(currentPdf, pageNumber, margins);
+        const parsedPage = pageFromParsed(pageNumber);
+        const extracted = parsedPage
+          ? buildPageTextFromBlocks(parsedPage, documentSettings.pdf?.skipBlockKinds ?? [])
+          : '';
 
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
           throw new DOMException('Stale PDF extraction', 'AbortError');
@@ -237,14 +380,15 @@ export function usePdfDocument(): PdfDocumentState {
         prevPageNumber ? getPageText(prevPageNumber) : Promise.resolve<string | undefined>(undefined),
         ...upcomingPageNumbers.map((pageNum) => getPageText(pageNum, true)),
       ]);
-      const nextText = upcomingTexts[0];
-      const additionalUpcoming = upcomingPageNumbers
-        .slice(1)
-        .map((pageNum, idx) => ({
-          location: pageNum,
-          text: upcomingTexts[idx + 1] || '',
-        }))
-        .filter((item) => item.text.trim().length > 0);
+      const {
+        nextText,
+        nextSourceUnits,
+        additionalUpcoming,
+      } = buildPdfPrefetchPayload(
+        upcomingPageNumbers,
+        upcomingTexts,
+        sourceUnitsFromParsedPage,
+      );
 
       if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
         return;
@@ -253,40 +397,17 @@ export function usePdfDocument(): PdfDocumentState {
         return;
       }
 
-      const trimmed = text.trim();
-      if (!trimmed) {
-        const prevAttempt = emptyRetryRef.current?.page === pageNumber ? emptyRetryRef.current.attempt : 0;
-        const attempt = prevAttempt + 1;
-
-        // Avoid pushing empty text into TTS immediately; transient empty extractions can happen
-        // during page turns or react-pdf worker churn. Retry a few times before treating it as
-        // a truly blank page.
-        if (attempt <= EMPTY_TEXT_MAX_RETRIES) {
-          const timer = setTimeout(() => {
-            if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
-              return;
-            }
-            if (pageNumber !== currDocPageNumber) {
-              return;
-            }
-            void loadCurrDocText();
-          }, EMPTY_TEXT_RETRY_DELAY_MS);
-
-          emptyRetryRef.current = { page: pageNumber, attempt, timer };
-          return;
-        }
-      } else {
-        emptyRetryRef.current = null;
-      }
-
       if (text !== currDocText || text === '') {
         setCurrDocText(text);
+        const sourceUnits = sourceUnitsFromParsedPage(currDocPageNumber);
         setTTSText(text, {
           location: currDocPageNumber,
           previousText: prevText,
           nextLocation: nextPageNumber,
           nextText: nextText,
+          nextSourceUnits,
           upcomingLocations: additionalUpcoming,
+          ...(sourceUnits.length > 0 ? { sourceUnits } : {}),
         });
       }
     } catch (error) {
@@ -300,11 +421,10 @@ export function usePdfDocument(): PdfDocumentState {
     currDocPages,
     setTTSText,
     currDocText,
-    headerMargin,
-    footerMargin,
-    leftMargin,
-    rightMargin,
     segmentPreloadDepthPages,
+    parsedDocument,
+    parseStatus,
+    documentSettings,
   ]);
 
   /**
@@ -324,7 +444,7 @@ export function usePdfDocument(): PdfDocumentState {
    * @param {string} id - The unique identifier of the document to set
    * @returns {Promise<void>}
    */
-  const setCurrentDocument = useCallback(async (id: string): Promise<void> => {
+  const setCurrentDocument = useCallback(async (id: string): Promise<boolean> => {
     // --- race-condition guard ---
     const seq = ++docLoadSeqRef.current;
     docLoadAbortRef.current?.abort();
@@ -337,10 +457,10 @@ export function usePdfDocument(): PdfDocumentState {
       // or fast refresh.
       pdfDocGenerationRef.current += 1;
       loadSeqRef.current += 1;
-      if (emptyRetryRef.current?.timer) {
-        clearTimeout(emptyRetryRef.current.timer);
-      }
-      emptyRetryRef.current = null;
+      parsePollAbortRef.current?.abort();
+      parsePollAbortRef.current = null;
+      parseSseCloseRef.current?.();
+      parseSseCloseRef.current = null;
       pageTextCacheRef.current.clear();
       setPdfDocument(undefined);
       setCurrDocPages(undefined);
@@ -348,35 +468,85 @@ export function usePdfDocument(): PdfDocumentState {
       setCurrDocId(id);
       setCurrDocName(undefined);
       setCurrDocData(undefined);
+      setParsedDocument(null);
+      setParseStatus(null);
+      setParseProgress(null);
+      setActiveParseOpId(null);
+      setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
 
       const meta = await getDocumentMetadata(id, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return; // stale
+      if (seq !== docLoadSeqRef.current) return false; // stale
       if (!meta) {
         console.error('Document not found on server');
-        return;
+        return false;
+      }
+      if (meta.type === 'pdf') {
+        const initialParseStatus = (meta.parseStatus ?? null) as PdfParseStatus | null;
+        setParseStatus(initialParseStatus);
+        setParseProgress(null);
+        setActiveParseOpId(null);
+        startParsedPolling(id, null);
+        void fetchDocumentSettings(id, controller.signal);
       }
 
       const doc = await ensureCachedDocument(meta, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return; // stale
+      if (seq !== docLoadSeqRef.current) return false; // stale
       if (doc.type !== 'pdf') {
         console.error('Document is not a PDF');
-        return;
+        return false;
       }
 
       setCurrDocName(doc.name);
       // IMPORTANT: keep an immutable copy. pdf.js may transfer/detach the
       // buffer passed into the worker; we always pass clones to react-pdf.
       setCurrDocData(doc.data.slice(0));
+      return true;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (error instanceof DOMException && error.name === 'AbortError') return false;
       console.error('Failed to get document:', error);
+      return false;
     } finally {
       // Clean up the controller only if it's still ours (a newer call hasn't replaced it).
       if (docLoadAbortRef.current === controller) {
         docLoadAbortRef.current = null;
       }
     }
-  }, [setCurrDocId, setCurrDocName, setCurrDocData, setCurrDocPages, setCurrDocText, setPdfDocument]);
+    return false;
+  }, [
+    setCurrDocId,
+    setCurrDocName,
+    setCurrDocData,
+    setCurrDocPages,
+    setCurrDocText,
+    setPdfDocument,
+    fetchDocumentSettings,
+    startParsedPolling,
+  ]);
+
+  const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {
+    if (!currDocId) return;
+    setDocumentSettings(settings);
+    try {
+      const updated = await putDocumentSettings(currDocId, settings);
+      setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, updated.settings));
+    } catch (error) {
+      console.warn('Failed to persist document settings:', error);
+    }
+  }, [currDocId]);
+
+  const forceReparseParsedPdf = useCallback(async (): Promise<void> => {
+    if (!currDocId) return;
+    try {
+      const forced = await forceReparsePdfDocument(currDocId);
+      setParsedDocument(null);
+      setParseStatus(forced.status);
+      setParseProgress(null);
+      setActiveParseOpId(forced.opId ?? null);
+      startParsedPolling(currDocId, forced.opId ?? null);
+    } catch (error) {
+      console.error('Failed to force PDF reparse:', error);
+    }
+  }, [currDocId, startParsedPolling]);
 
   /**
    * Clears the current document state
@@ -390,16 +560,21 @@ export function usePdfDocument(): PdfDocumentState {
     docLoadSeqRef.current += 1;
     docLoadAbortRef.current?.abort();
     docLoadAbortRef.current = null;
-    if (emptyRetryRef.current?.timer) {
-      clearTimeout(emptyRetryRef.current.timer);
-    }
-    emptyRetryRef.current = null;
+    parsePollAbortRef.current?.abort();
+    parsePollAbortRef.current = null;
+    parseSseCloseRef.current?.();
+    parseSseCloseRef.current = null;
     setCurrDocId(undefined);
     setCurrDocName(undefined);
     setCurrDocData(undefined);
     setCurrDocText(undefined);
     setCurrDocPages(undefined);
     setPdfDocument(undefined);
+    setParsedDocument(null);
+    setParseStatus(null);
+    setParseProgress(null);
+    setActiveParseOpId(null);
+    setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
     pageTextCacheRef.current.clear();
     stop();
   }, [setCurrDocId, setCurrDocName, setCurrDocData, setCurrDocPages, setCurrDocText, setPdfDocument, stop]);
@@ -499,6 +674,14 @@ export function usePdfDocument(): PdfDocumentState {
       currDocPages,
       currDocPage,
       currDocText,
+      parsedDocument,
+      parseStatus,
+      parseProgress,
+      documentSettings,
+      updateDocumentSettings,
+      parsedOverlayEnabled,
+      setParsedOverlayEnabled,
+      forceReparseParsedPdf,
       clearCurrDoc,
       highlightPattern,
       clearHighlights,
@@ -518,6 +701,14 @@ export function usePdfDocument(): PdfDocumentState {
       currDocPages,
       currDocPage,
       currDocText,
+      parsedDocument,
+      parseStatus,
+      parseProgress,
+      documentSettings,
+      updateDocumentSettings,
+      parsedOverlayEnabled,
+      setParsedOverlayEnabled,
+      forceReparseParsedPdf,
       clearCurrDoc,
       pdfDocument,
       createFullAudioBook,

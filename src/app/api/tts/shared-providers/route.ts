@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/server/auth/auth';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { listAdminProviders, toPublic } from '@/lib/server/admin/providers';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,12 @@ export async function GET(req: NextRequest) {
     const visible = all.filter((p) => p.enabled).map(toPublic);
     return NextResponse.json({ providers: visible });
   } catch (error) {
-    console.warn('[tts/shared-providers] list failed:', error);
+    serverLogger.warn({
+      event: 'tts.shared_providers.list.failed',
+      degraded: true,
+      fallbackPath: 'empty_provider_list',
+      error: errorToLog(error),
+    }, 'Failed to list shared providers');
     return NextResponse.json({ providers: [] });
   }
 }

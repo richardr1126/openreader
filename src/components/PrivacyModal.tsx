@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import {
   Dialog,
   DialogPanel,
@@ -9,10 +9,12 @@ import {
   TransitionChild,
   Button,
 } from '@headlessui/react';
-import { updateAppConfig, getAppConfig } from '@/lib/client/dexie';
+import { updateAppConfig } from '@/lib/client/dexie';
 
 interface PrivacyModalProps {
+  isOpen: boolean;
   onAccept?: () => void;
+  onDismiss?: () => void;
 }
 
 function PrivacyModalBody({ origin }: { origin: string }) {
@@ -38,32 +40,23 @@ function PrivacyModalBody({ origin }: { origin: string }) {
   );
 }
 
-export function PrivacyModal({ onAccept }: PrivacyModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps) {
   const [origin, setOrigin] = useState('');
   const [agreed, setAgreed] = useState(false);
-
-  const checkPrivacyAccepted = useCallback(async () => {
-    const config = await getAppConfig();
-    if (!config?.privacyAccepted) {
-      setIsOpen(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    checkPrivacyAccepted().catch((err) => {
-      console.error('Privacy acceptance check failed:', err);
-    });
-  }, [checkPrivacyAccepted]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setOrigin(window.location.origin);
   }, []);
 
+  useEffect(() => {
+    if (isOpen) {
+      setAgreed(false);
+    }
+  }, [isOpen]);
+
   const handleAccept = async () => {
     await updateAppConfig({ privacyAccepted: true });
-    setIsOpen(false);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('openreader:privacyAccepted'));
     }
@@ -72,7 +65,7 @@ export function PrivacyModal({ onAccept }: PrivacyModalProps) {
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[60]" onClose={() => { }}>
+      <Dialog as="div" className="relative z-[80]" onClose={onDismiss ?? (() => { })}>
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"

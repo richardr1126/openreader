@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogPanel,
@@ -18,7 +18,6 @@ import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { ChevronUpDownIcon, CheckIcon, SettingsIcon, KeyIcon, PaletteIcon, DocumentIcon, UserIcon, DownloadIcon, ChevronRightIcon } from '@/components/icons/Icons';
-import { getAppConfig, getFirstVisit, setFirstVisit } from '@/lib/client/dexie';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ProgressPopup } from '@/components/ProgressPopup';
@@ -33,8 +32,6 @@ import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useRouter } from 'next/navigation';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { deleteDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
-import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
-import { scheduleChangelogCheck } from '@/lib/client/changelog-check';
 import { cacheStoredDocumentFromBytes, clearDocumentCache } from '@/lib/client/cache/documents';
 import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from '@/lib/client/cache/previews';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
@@ -72,6 +69,7 @@ import {
   type ChangelogManifestEntry,
   type ChangelogReleaseBody,
 } from '@/lib/shared/changelog';
+import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 
 // Hard-coded theme color palettes for the visual theme selector
 type ThemeColorSet = { background: string; base: string; offbase: string; accent: string; secondaryAccent: string; foreground: string; muted: string };
@@ -173,9 +171,8 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const { authEnabled, baseUrl: authBaseUrl } = useAuthConfig();
-  const { data: session, isPending: isSessionPending } = useAuthSession();
-  const changelogVersionCheckKeyRef = useRef<string | null>(null);
-  const changelogVersionCheckInFlightRef = useRef<string | null>(null);
+  const { data: session } = useAuthSession();
+  const { requestOpenSettings, registerSettingsController } = useOnboardingFlow();
   const router = useRouter();
   const isBusy = isImportingLibrary;
   const {
@@ -208,23 +205,25 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   const isSharedSelected = Boolean(selectedSharedProvider);
   const selectedProviderOption = ttsProviders.find((p) => p.id === localProviderRef) ?? ttsProviders[0];
 
-  const checkFirstVist = useCallback(async () => {
-    const appConfig = await getAppConfig();
-    if (authEnabled && !appConfig?.privacyAccepted) {
-      return;
-    }
-    const firstVisit = await getFirstVisit();
-    if (!firstVisit) {
-      await setFirstVisit(true);
-      setIsOpen(true);
-    }
-  }, [authEnabled, setIsOpen]);
+  const closeSettings = useCallback(() => {
+    setIsOpen(false);
+    setIsChangelogOpen(false);
+  }, []);
+
+  const openSettings = useCallback((options?: { changelog?: boolean }) => {
+    setIsOpen(true);
+    setIsChangelogOpen(Boolean(options?.changelog));
+  }, []);
 
   useEffect(() => {
-    checkFirstVist().catch((err) => {
-      console.error('First visit check failed:', err);
+    registerSettingsController({
+      open: openSettings,
+      close: closeSettings,
     });
-  }, [checkFirstVist]);
+    return () => {
+      registerSettingsController(null);
+    };
+  }, [closeSettings, openSettings, registerSettingsController]);
 
   useEffect(() => {
     setLocalApiKey(apiKey);
@@ -234,39 +233,6 @@ export function SettingsModal({ className = '' }: { className?: string }) {
     setModelValue(ttsModel);
     setLocalTTSInstructions(ttsInstructions);
   }, [apiKey, baseUrl, providerRef, providerType, ttsModel, ttsInstructions]);
-
-  useEffect(() => {
-    if (!authEnabled) {
-      return;
-    }
-    const onPrivacyAccepted = () => {
-      checkFirstVist().catch((err) => {
-        console.error('First visit check after privacy acceptance failed:', err);
-      });
-    };
-    window.addEventListener('openreader:privacyAccepted', onPrivacyAccepted);
-    return () => {
-      window.removeEventListener('openreader:privacyAccepted', onPrivacyAccepted);
-    };
-  }, [authEnabled, checkFirstVist]);
-
-  useEffect(() => {
-    return scheduleChangelogCheck({
-      authEnabled,
-      isSessionPending,
-      sessionUserId: session?.user?.id,
-      appVersion: runtimeConfig.appVersion,
-      completedRef: changelogVersionCheckKeyRef,
-      inFlightRef: changelogVersionCheckInFlightRef,
-      postCheck: async (currentVersion) => postChangelogVersionCheck(currentVersion),
-      onShouldOpen: () => {
-        setIsOpen(true);
-        setIsChangelogOpen(true);
-      },
-      delayMs: 120,
-      retryDelayMs: 400,
-    });
-  }, [authEnabled, isSessionPending, session?.user?.id, runtimeConfig.appVersion]);
 
   useEffect(() => {
     if (!ttsModels.some(m => m.id === modelValue) && modelValue !== '') {
@@ -532,7 +498,9 @@ export function SettingsModal({ className = '' }: { className?: string }) {
   return (
     <>
       <Button
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          void requestOpenSettings();
+        }}
         className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-200 ease-out hover:scale-[1.08] ${className}`}
         aria-label="Settings"
         tabIndex={0}
@@ -541,7 +509,11 @@ export function SettingsModal({ className = '' }: { className?: string }) {
       </Button>
 
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={resetToCurrent}>
+        <Dialog
+          as="div"
+          className={`relative ${isChangelogOpen ? 'z-[90]' : 'z-50'}`}
+          onClose={resetToCurrent}
+        >
           <TransitionChild
             as={Fragment}
             enter="ease-out duration-300"

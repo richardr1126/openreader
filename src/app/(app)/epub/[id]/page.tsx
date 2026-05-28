@@ -19,6 +19,7 @@ import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useEpubDocument } from './useEpubDocument';
 
 export default function EPUBPage() {
@@ -102,6 +103,8 @@ export default function EPUBPage() {
     loadDocument();
   }, [loadDocument, isLoading]);
 
+  useUnmountCleanupRef(clearCurrDoc);
+
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
     const compute = () => {
@@ -111,7 +114,9 @@ export default function EPUBPage() {
       const ttsH = ttsbar ? ttsbar.getBoundingClientRect().height : 0;
       const vh = window.innerHeight;
       const h = Math.max(0, vh - headerH - ttsH);
-      setContainerHeight(`${h}px`);
+      if (h > 0) {
+        setContainerHeight(`${h}px`);
+      }
 
       // compute max horizontal padding while preserving a minimum readable width,
       // but still allow some padding on small screens
@@ -122,9 +127,15 @@ export default function EPUBPage() {
       setMaxPadPx(maxPad);
     };
     compute();
+    const settleT1 = window.setTimeout(compute, 0);
+    const settleT2 = window.setTimeout(compute, 120);
     window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.clearTimeout(settleT1);
+      window.clearTimeout(settleT2);
+    };
+  }, [isLoading, activeSidebar]);
 
   // Nudge EPUB renderer to reflow on horizontal padding changes
   useEffect(() => {
@@ -162,7 +173,6 @@ export default function EPUBPage() {
         <p className="text-red-500 mb-4">{error}</p>
         <Link
           href="/app"
-          onClick={() => clearCurrDoc()}
           className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
         >
           <svg className="w-4 h-4 mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,7 +190,6 @@ export default function EPUBPage() {
         left={
           <Link
             href="/app"
-            onClick={() => clearCurrDoc()}
             className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
             aria-label="Back to documents"
           >

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { presignDocumentPreviewGet } from '@/lib/server/documents/previews-blobstore';
 import { ensureDocumentPreview } from '@/lib/server/documents/previews';
 import { validatePreviewRequest } from '../utils';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +52,13 @@ export async function GET(req: NextRequest) {
       },
     );
   } catch (error) {
-    console.error('Error ensuring document preview:', error);
-    return NextResponse.json({ error: 'Failed to ensure document preview' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.preview.ensure.failed',
+      error: errorToLog(error),
+    }, 'Failed to ensure document preview');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to ensure document preview',
+      normalize: { code: 'DOCUMENTS_PREVIEW_ENSURE_FAILED', errorClass: 'storage' },
+    });
   }
 }

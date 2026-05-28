@@ -30,7 +30,7 @@ test.describe('EPUB walker preload helpers', () => {
     expect(selectUpcomingWalkerItems(items, 'epubcfi(/6/2!/4/2)', 0)).toEqual([]);
   });
 
-  test('buildWalkerPlanningSourceUnits includes live context when smart splitting is enabled', () => {
+  test('buildWalkerPlanningSourceUnits includes live context', () => {
     const contextUnits: CanonicalTtsSourceUnit[] = [
       { sourceKey: 'previous:page-a', text: 'prev sentence', locator: null },
       { sourceKey: 'page-a', text: 'current sentence', locator: { readerType: 'epub', location: 'page-a' } },
@@ -40,25 +40,12 @@ test.describe('EPUB walker preload helpers', () => {
       { sourceKey: 'page-c', text: 'upcoming two', locator: { readerType: 'epub', location: 'page-c' } },
     ];
 
-    const planned = buildWalkerPlanningSourceUnits(true, contextUnits, upcomingUnits);
+    const planned = buildWalkerPlanningSourceUnits(contextUnits, upcomingUnits);
     expect(planned.map((item) => item.sourceKey)).toEqual([
       'previous:page-a',
       'page-a',
       'page-b',
       'page-c',
     ]);
-  });
-
-  test('buildWalkerPlanningSourceUnits uses only upcoming units when smart splitting is disabled', () => {
-    const contextUnits: CanonicalTtsSourceUnit[] = [
-      { sourceKey: 'previous:page-a', text: 'prev sentence', locator: null },
-      { sourceKey: 'page-a', text: 'current sentence', locator: { readerType: 'epub', location: 'page-a' } },
-    ];
-    const upcomingUnits: CanonicalTtsSourceUnit[] = [
-      { sourceKey: 'page-b', text: 'upcoming one', locator: { readerType: 'epub', location: 'page-b' } },
-    ];
-
-    const planned = buildWalkerPlanningSourceUnits(false, contextUnits, upcomingUnits);
-    expect(planned.map((item) => item.sourceKey)).toEqual(['page-b']);
   });
 });

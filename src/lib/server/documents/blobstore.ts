@@ -80,6 +80,26 @@ export function documentKey(id: string, namespace: string | null): string {
   return `${cfg.prefix}/documents_v1/${nsSegment}${id}`;
 }
 
+export function documentParsedKey(id: string, namespace: string | null): string {
+  if (!isValidDocumentId(id)) {
+    throw new Error(`Invalid document id: ${id}`);
+  }
+  const cfg = getS3Config();
+  const ns = sanitizeNamespace(namespace);
+  const nsSegment = ns ? `ns/${ns}/` : '';
+  return `${cfg.prefix}/documents_v1/parsed_v1/${nsSegment}${id}.json`;
+}
+
+function legacyDocumentParsedKey(id: string, namespace: string | null): string {
+  if (!isValidDocumentId(id)) {
+    throw new Error(`Invalid document id: ${id}`);
+  }
+  const cfg = getS3Config();
+  const ns = sanitizeNamespace(namespace);
+  const nsSegment = ns ? `ns/${ns}/` : '';
+  return `${cfg.prefix}/documents_v1/${nsSegment}${id}/parsed.v1.json`;
+}
+
 export async function presignPut(
   id: string,
   contentType: string,
@@ -94,7 +114,6 @@ export async function presignPut(
     Bucket: cfg.bucket,
     Key: key,
     ContentType: normalizedType,
-    IfNoneMatch: '*',
     ServerSideEncryption: 'AES256',
   });
   const url = await getSignedUrl(client, command, { expiresIn: 60 * 5 });
@@ -103,7 +122,6 @@ export async function presignPut(
     url,
     headers: {
       'Content-Type': normalizedType,
-      'If-None-Match': '*',
       'x-amz-server-side-encryption': 'AES256',
     },
   };
@@ -169,6 +187,49 @@ export async function getDocumentBlobStream(id: string, namespace: string | null
   return res.Body as DocumentBlobBody;
 }
 
+export async function getParsedDocumentBlob(id: string, namespace: string | null): Promise<Buffer> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const key = documentParsedKey(id, namespace);
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+    }),
+  );
+  return bodyToBuffer(res.Body);
+}
+
+export async function getParsedDocumentBlobByKey(key: string): Promise<Buffer> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const trimmed = key.trim();
+  if (!trimmed) throw new Error('Parsed document key is empty');
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: cfg.bucket,
+      Key: trimmed,
+    }),
+  );
+  return bodyToBuffer(res.Body);
+}
+
+export async function putParsedDocumentBlob(id: string, body: Buffer, namespace: string | null): Promise<string> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const key = documentParsedKey(id, namespace);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+      Body: body,
+      ContentType: 'application/json',
+      ServerSideEncryption: 'AES256',
+    }),
+  );
+  return key;
+}
+
 export async function presignGet(
   id: string,
   namespace: string | null,
@@ -202,7 +263,6 @@ export async function putDocumentBlob(
       Key: key,
       Body: body,
       ContentType: contentType,
-      IfNoneMatch: '*',
       ServerSideEncryption: 'AES256',
     }),
   );
@@ -212,7 +272,13 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   const cfg = getS3Config();
   const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
+  const parsedKey = documentParsedKey(id, namespace);
+  const legacyParsedKey = legacyDocumentParsedKey(id, namespace);
+
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey })).catch(() => undefined);
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey })).catch(() => undefined);
+  await deleteDocumentPrefix(`${key}/`).catch(() => undefined);
 }
 
 export function isMissingBlobError(error: unknown): boolean {

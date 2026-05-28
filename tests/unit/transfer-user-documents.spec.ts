@@ -20,6 +20,8 @@ test.describe('transferUserDocuments', () => {
         size INTEGER NOT NULL,
         last_modified INTEGER NOT NULL,
         file_path TEXT NOT NULL,
+        parse_state TEXT,
+        parsed_json_key TEXT,
         created_at INTEGER,
         PRIMARY KEY (id, user_id)
       );

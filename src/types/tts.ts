@@ -1,10 +1,12 @@
 import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
+export type {
+  TTSAudioBuffer,
+  TTSAudioBytes,
+  TTSSentenceAlignment,
+  TTSSentenceWord,
+} from '@openreader/compute-core/types';
 
 export type TTSLocation = string | number;
-
-// Core audio representations used across TTS and audiobook flows
-export type TTSAudioBuffer = ArrayBuffer;
-export type TTSAudioBytes = number[]; // JSON-safe representation (Array.from(new Uint8Array(buffer)))
 
 // Core playback state exposed by the TTS context
 export interface TTSPlaybackState {
@@ -24,21 +26,6 @@ export interface TTSPageTurnEstimate {
   fraction: number;
 }
 
-// Word-level alignment within a single spoken sentence/block
-export interface TTSSentenceWord {
-  text: string;
-  startSec: number;
-  endSec: number;
-  charStart: number;
-  charEnd: number;
-}
-
-// Alignment metadata for a single TTS sentence/block
-export interface TTSSentenceAlignment {
-  sentence: string;
-  sentenceIndex: number;
-  words: TTSSentenceWord[];
-}
 
 interface EpubRenderedLocationWalkItem {
   /** Page-start CFI from the rendition — best-effort jump hint only. */

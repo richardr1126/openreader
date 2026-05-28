@@ -68,7 +68,6 @@ export function useHtmlDocument(): HtmlDocumentState {
     apiKey,
     baseUrl,
     providerRef,
-    smartSentenceSplitting,
     ttsSegmentMaxBlockLength,
   } = useConfig();
 
@@ -133,10 +132,9 @@ export function useHtmlDocument(): HtmlDocumentState {
       createHtmlAudiobookSourceAdapter({
         blocks,
         isTxt,
-        smartSentenceSplitting,
         maxBlockLength: ttsSegmentMaxBlockLength,
       }),
-    [blocks, isTxt, smartSentenceSplitting, ttsSegmentMaxBlockLength],
+    [blocks, isTxt, ttsSegmentMaxBlockLength],
   );
 
   const createFullAudioBook = useCallback(

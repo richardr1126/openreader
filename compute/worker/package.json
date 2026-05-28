@@ -1,0 +1,22 @@
+{
+  "name": "@openreader/compute-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1050.0",
+    "@nats-io/jetstream": "^3.4.0",
+    "@nats-io/kv": "^3.4.0",
+    "@nats-io/transport-node": "^3.4.0",
+    "@openreader/compute-core": "workspace:*",
+    "fastify": "^5.6.2",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.2",
+    "tsx": "^4.22.3",
+    "zod": "^4.1.12"
+  }
+}

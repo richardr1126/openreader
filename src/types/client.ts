@@ -1,8 +1,7 @@
 import type {
   TTSAudiobookChapter,
-  TTSSentenceAlignment,
-  TTSAudioBytes,
   TTSAudiobookFormat,
+  TTSSentenceAlignment,
 } from '@/types/tts';
 import type { TtsProviderType } from '@/lib/shared/tts-provider-catalog';
 
@@ -64,17 +63,6 @@ export interface VoicesResponse {
   voices: string[];
 }
 
-// --- Whisper API Types ---
-
-export interface AlignmentPayload {
-  text: string;
-  audio: TTSAudioBytes; // Array.from(new Uint8Array(arrayBuffer))
-}
-
-export interface AlignmentResponse {
-  alignments: TTSSentenceAlignment[];
-}
-
 export interface TTSSegmentSettings {
   providerRef: string;
   providerType: TtsProviderType;
@@ -107,6 +95,8 @@ export interface TTSSegmentLocator {
   readerType?: TTSReaderType;
   // PDF / legacy
   page?: number;
+  // PDF block-level locator (structured parser path)
+  blockId?: string;
   // HTML / legacy EPUB CFI (kept for in-flight drafts; not persisted for EPUB)
   location?: string;
   // Stable EPUB coordinates

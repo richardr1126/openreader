@@ -3,6 +3,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 import {
   getDocumentRange,
   isMissingBlobError as isMissingDocumentBlobError,
@@ -65,10 +67,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
-    console.info('[blob-fallback] preview proxy used', {
-      id,
+    serverLogger.info({
+      event: 'documents.preview.fallback.proxy_used',
+      degraded: true,
+      fallbackPath: 'preview_proxy',
+      documentId: id,
       snippetRequested,
-    });
+    }, 'Document preview fallback proxy used');
 
     const rows = (await db
       .select({
@@ -175,7 +180,13 @@ export async function GET(req: NextRequest) {
       throw error;
     }
   } catch (error) {
-    console.error('Error loading document preview fallback:', error);
-    return NextResponse.json({ error: 'Failed to load document preview' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.preview.fallback.failed',
+      error: errorToLog(error),
+    }, 'Failed to load document preview fallback');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to load document preview',
+      normalize: { code: 'DOCUMENTS_PREVIEW_FALLBACK_FAILED', errorClass: 'storage' },
+    });
   }
 }

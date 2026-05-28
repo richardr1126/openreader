@@ -56,7 +56,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     ...runtimeConfig,
     appVersion: pkg.version,
   };
-  const runtimeConfigInit = `window.__OPENREADER_RUNTIME_CONFIG__=${jsonEmbedSafe(runtimeConfigWithAppVersion)};`;
+  const runtimeConfigInit = `window.__RUNTIME_CONFIG__=${jsonEmbedSafe(runtimeConfigWithAppVersion)};`;
 
   return (
     <html lang="en" className={figtree.variable} suppressHydrationWarning>

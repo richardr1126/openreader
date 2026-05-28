@@ -4,8 +4,8 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
 /**
  * Site-wide runtime config resolved at SSR time and injected via
- * `window.__OPENREADER_RUNTIME_CONFIG__`. Replaces module-scope reads of
- * `process.env.NEXT_PUBLIC_*` so admin edits take effect on the next page
+ * `window.__RUNTIME_CONFIG__`. Replaces module-scope reads of
+ * build-time public env flags so admin edits take effect on the next page
  * load without a redeploy. Read-only from the client; admin writes go
  * through `/api/admin/settings` and trigger a reload.
  *
@@ -18,11 +18,11 @@ export interface RuntimeConfig {
   enableUserSignups: boolean;
   restrictUserApiKeys: boolean;
   enableTtsProvidersTab: boolean;
-  enableWordHighlight: boolean;
   enableAudiobookExport: boolean;
   enableDocxConversion: boolean;
   enableDestructiveDeleteActions: boolean;
   showAllProviderModels: boolean;
+  computeAvailable: boolean;
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
@@ -32,23 +32,23 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   enableUserSignups: true,
   restrictUserApiKeys: true,
   enableTtsProvidersTab: true,
-  enableWordHighlight: true,
   enableAudiobookExport: true,
   enableDocxConversion: true,
   enableDestructiveDeleteActions: true,
   showAllProviderModels: true,
+  computeAvailable: true,
 };
 
 declare global {
   // Injected via SSR in `src/app/layout.tsx`. Always defined in the browser.
   interface Window {
-    __OPENREADER_RUNTIME_CONFIG__?: Partial<RuntimeConfig>;
+    __RUNTIME_CONFIG__?: Partial<RuntimeConfig>;
   }
 }
 
 function readInjectedConfig(): RuntimeConfig {
   if (typeof window === 'undefined') return { ...RUNTIME_DEFAULTS };
-  const injected = window.__OPENREADER_RUNTIME_CONFIG__;
+  const injected = window.__RUNTIME_CONFIG__;
   if (!injected || typeof injected !== 'object') return { ...RUNTIME_DEFAULTS };
   return { ...RUNTIME_DEFAULTS, ...injected };
 }

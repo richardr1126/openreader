@@ -1,7 +1,8 @@
 import path from 'path';
-import { DOMMatrix, Path2D, createCanvas, loadImage } from '@napi-rs/canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
+import { renderPage } from '@openreader/compute-core';
 
 export type RenderedDocumentPreview = {
   bytes: Buffer;
@@ -9,26 +10,7 @@ export type RenderedDocumentPreview = {
   height: number;
 };
 
-type CanvasAndContext = {
-  canvas: unknown;
-  context: unknown;
-};
-
-type NodeCanvasFactory = {
-  create: (width: number, height: number) => CanvasAndContext;
-  reset: (target: CanvasAndContext, width: number, height: number) => void;
-  destroy: (target: CanvasAndContext) => void;
-};
-
-function ensureNodeCanvasGlobals(): void {
-  const g = globalThis as Record<string, unknown>;
-  if (typeof g.DOMMatrix === 'undefined') {
-    g.DOMMatrix = DOMMatrix as unknown;
-  }
-  if (typeof g.Path2D === 'undefined') {
-    g.Path2D = Path2D as unknown;
-  }
-}
+const PREVIEW_JPEG_QUALITY = 82;
 
 function normalizeTargetWidth(targetWidth: number): number {
   if (!Number.isFinite(targetWidth) || targetWidth <= 0) return 240;
@@ -99,9 +81,11 @@ async function renderImageBytesToJpeg(imageBytes: Buffer, targetWidth: number): 
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, outWidth, outHeight);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(bitmap, 0, 0, outWidth, outHeight);
   return {
-    bytes: canvas.toBuffer('image/jpeg', 82),
+    bytes: canvas.toBuffer('image/jpeg', PREVIEW_JPEG_QUALITY),
     width: outWidth,
     height: outHeight,
   };
@@ -150,109 +134,18 @@ export async function renderEpubCoverToJpeg(sourceBytes: Buffer, targetWidth: nu
 }
 
 export async function renderPdfFirstPageToJpeg(sourceBytes: Buffer, targetWidth: number): Promise<RenderedDocumentPreview> {
-  ensureNodeCanvasGlobals();
-
-  type PdfViewport = {
-    width: number;
-    height: number;
-  };
-  type PdfPage = {
-    getViewport: (params: { scale: number }) => PdfViewport;
-    render: (params: {
-      canvasContext: unknown;
-      viewport: PdfViewport;
-      intent: 'display';
-      canvasFactory?: NodeCanvasFactory;
-    }) => { promise: Promise<void> };
-  };
-
-  // pdfjs-dist legacy build works in Node and avoids relying on DOM workers.
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore - pdfjs-dist legacy build path has no dedicated TypeScript declaration.
-  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as {
-    getDocument: (options: Record<string, unknown>) => {
-      promise: Promise<{ getPage: (n: number) => Promise<PdfPage>; destroy: () => Promise<void> }>;
-      destroy: () => Promise<void>;
-    };
-    GlobalWorkerOptions?: { workerSrc?: string; workerPort?: unknown };
-  };
-
-  if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
-    pdfjs.GlobalWorkerOptions.workerPort = null;
-  }
-
-  const standardFontDir = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts');
-  const standardFontDataUrl = `${standardFontDir.replace(/\/?$/, '/')}`;
-
-  const nodeCanvasFactory: NodeCanvasFactory = {
-    create: (width, height) => {
-      const canvas = createCanvas(width, height);
-      const context = canvas.getContext('2d');
-      return { canvas, context };
-    },
-    reset: (target, width, height) => {
-      const canvas = target.canvas as { width: number; height: number };
-      canvas.width = width;
-      canvas.height = height;
-    },
-    destroy: (target) => {
-      const canvas = target.canvas as { width: number; height: number };
-      canvas.width = 0;
-      canvas.height = 0;
-    },
-  };
-
-  class PdfNodeCanvasFactory {
-    create(width: number, height: number): CanvasAndContext {
-      return nodeCanvasFactory.create(width, height);
-    }
-    reset(target: CanvasAndContext, width: number, height: number): void {
-      nodeCanvasFactory.reset(target, width, height);
-    }
-    destroy(target: CanvasAndContext): void {
-      nodeCanvasFactory.destroy(target);
-    }
-  }
-
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(sourceBytes),
-    useWorkerFetch: false,
-    standardFontDataUrl,
-    CanvasFactory: PdfNodeCanvasFactory,
-    isEvalSupported: false,
+  const width = normalizeTargetWidth(targetWidth);
+  const isolatedBytes = Uint8Array.from(sourceBytes);
+  const rendered = await renderPage({
+    pdfBytes: isolatedBytes.buffer as ArrayBuffer,
+    pageNumber: 1,
+    targetWidth: width,
+    format: 'jpeg',
+    jpegQuality: PREVIEW_JPEG_QUALITY,
   });
-  const pdf = await loadingTask.promise;
-
-  try {
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1 });
-    const target = normalizeTargetWidth(targetWidth);
-    const scale = target / viewport.width;
-    const scaledViewport = page.getViewport({ scale });
-
-    const outWidth = Math.max(1, Math.floor(scaledViewport.width));
-    const outHeight = Math.max(1, Math.floor(scaledViewport.height));
-    const canvas = createCanvas(outWidth, outHeight);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, outWidth, outHeight);
-
-    const renderTask = page.render({
-      canvasContext: ctx,
-      viewport: scaledViewport,
-      intent: 'display',
-      canvasFactory: nodeCanvasFactory,
-    });
-    await renderTask.promise;
-
-    return {
-      bytes: canvas.toBuffer('image/jpeg', 82),
-      width: outWidth,
-      height: outHeight,
-    };
-  } finally {
-    await pdf.destroy().catch(() => undefined);
-    await loadingTask.destroy().catch(() => undefined);
-  }
+  return {
+    bytes: rendered.image,
+    width: rendered.width,
+    height: rendered.height,
+  };
 }

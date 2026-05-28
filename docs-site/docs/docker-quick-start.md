@@ -22,6 +22,12 @@ OpenReader currently pins embedded SeaweedFS to `4.18` in CI and Docker builds.
 `4.19` introduced intermittent `InternalError` responses on S3 `PutObject` in our upload flow.
 :::
 
+## Published images
+
+- App server: `ghcr.io/richardr1126/openreader:latest`
+- Compute worker (Optional): `ghcr.io/richardr1126/openreader-compute-worker:latest`
+- Legacy app alias: `ghcr.io/richardr1126/openreader-webui:latest`
+
 ## 1. Start the Docker container
 
 <Tabs groupId="docker-start-mode">
@@ -113,7 +119,7 @@ What this command enables:
 - Set `API_BASE` on first boot to a TTS endpoint the container can reach (`host.docker.internal` works for host-local services). After first boot, manage providers in **Settings → Admin → Shared providers**.
 - Auth is enabled only when both `BASE_URL` and `AUTH_SECRET` are set. The admin panel requires auth.
 - Set `ADMIN_EMAILS` to your email if you want the **Admin** tab in Settings.
-- `restrictUserApiKeys` controls shared-provider-only mode. For per-user BYOK in auth-enabled setups, toggle it off in **Settings → Admin → Site features**. Legacy first-boot seed via `NEXT_PUBLIC_RESTRICT_USER_API_KEYS=false` is still supported.
+- `restrictUserApiKeys` controls shared-provider-only mode. For per-user BYOK in auth-enabled setups, toggle it off in **Settings → Admin → Site features**. Legacy first-boot seed via `RUNTIME_SEED_RESTRICT_USER_API_KEYS=false` is still supported.
 - Use a `/app/docstore` mount if you want data to survive container/image replacement.
 - Startup automatically runs DB/storage migrations via the shared entrypoint.
 :::
@@ -135,6 +141,7 @@ Visit [http://localhost:3003](http://localhost:3003) after startup.
 ## 3. Update Docker image
 
 Legacy image compatibility: `ghcr.io/richardr1126/openreader-webui:latest` remains available as an alias.
+For external compute mode image details, see [Compute Worker (NATS JetStream)](./deploy/compute-worker).
 
 ```bash
 docker stop openreader || true && \

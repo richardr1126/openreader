@@ -3,16 +3,18 @@ import { adminProviders, adminSettings } from '@/db/schema';
 import { encryptSecret, apiKeyLast4 } from '@/lib/server/crypto/secrets';
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
+import { serverLogger } from '@/lib/server/logger';
 import {
   RUNTIME_CONFIG_SCHEMA,
   seedRuntimeConfigFromEnv,
 } from '@/lib/server/admin/settings';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 /**
  * Idempotent boot-time seeding for the admin layer. Safe to call multiple
  * times. Runs:
  *
- *   1. `seedRuntimeConfigFromEnv()` — for each `NEXT_PUBLIC_*` env var that
+ *   1. `seedRuntimeConfigFromEnv()` — for each `RUNTIME_SEED_*` env var that
  *      maps to a runtime config key, write the value as `source='env-seed'`.
  *
  *   2. Default admin provider seed — if `admin_providers` is empty AND
@@ -30,7 +32,12 @@ let seedPromise: Promise<void> | null = null;
 export async function ensureAdminSeed(): Promise<void> {
   if (!seedPromise) {
     seedPromise = runSeed().catch((error) => {
-      console.warn('[admin-seed] failed:', error);
+      logDegraded(serverLogger, {
+        event: 'admin.seed.run.failed',
+        msg: 'Admin seed run failed',
+        step: 'run_admin_seed',
+        error,
+      });
       // Reset so a subsequent call can retry (e.g. once migrations run).
       seedPromise = null;
       throw error;
@@ -58,7 +65,12 @@ async function seedDefaultAdminProvider(): Promise<void> {
   try {
     existing = await db.select({ id: adminProviders.id }).from(adminProviders).limit(1);
   } catch (error) {
-    console.warn('[admin-seed] could not check admin_providers (table missing?)', error);
+    logDegraded(serverLogger, {
+      event: 'admin.seed.providers.check_failed',
+      msg: 'Could not check admin_providers',
+      step: 'check_existing_admin_providers',
+      error,
+    });
     return;
   }
   if (existing.length > 0) return;
@@ -85,17 +97,26 @@ async function seedDefaultAdminProvider(): Promise<void> {
             updatedAt: now,
           })
           .onConflictDoNothing({ target: adminSettings.key });
-        console.warn(
-          '[admin-seed] API_KEY present but AUTH_SECRET missing; defaulting restrictUserApiKeys=false so BYOK remains available',
-        );
+        logDegraded(serverLogger, {
+          event: 'admin.seed.restrict_user_api_keys.defaulted',
+          msg: 'API_KEY present but AUTH_SECRET missing; defaulting restrictUserApiKeys=false',
+          step: 'set_restrict_user_api_keys_fallback',
+        });
       } catch (fallbackError) {
-        console.warn(
-          '[admin-seed] failed to write restrictUserApiKeys fallback after encryption failure',
-          fallbackError,
-        );
+        logDegraded(serverLogger, {
+          event: 'admin.seed.restrict_user_api_keys.fallback_write_failed',
+          msg: 'Failed to write restrictUserApiKeys fallback after encryption failure',
+          step: 'set_restrict_user_api_keys_fallback',
+          error: fallbackError,
+        });
       }
     }
-    console.warn('[admin-seed] failed to encrypt default provider API key', error);
+    logDegraded(serverLogger, {
+      event: 'admin.seed.provider_key_encrypt.failed',
+      msg: 'Failed to encrypt default provider API key',
+      step: 'encrypt_default_provider_key',
+      error,
+    });
     return;
   }
 
@@ -114,9 +135,18 @@ async function seedDefaultAdminProvider(): Promise<void> {
       createdAt: now,
       updatedAt: now,
     });
-    console.log('[admin-seed] created default-openai admin provider from env');
+    serverLogger.info({
+      event: 'admin.seed.provider_insert.succeeded',
+      providerSlug: 'default-openai',
+    }, 'Created default-openai admin provider from env');
   } catch (error) {
-    console.warn('[admin-seed] failed to insert default-openai provider', error);
+    logDegraded(serverLogger, {
+      event: 'admin.seed.provider_insert.failed',
+      msg: 'Failed to insert default-openai provider',
+      step: 'insert_default_provider',
+      context: { providerSlug: 'default-openai' },
+      error,
+    });
   }
 }
 
@@ -140,7 +170,12 @@ async function cleanupLegacyDefaultTtsProviderSeedRow(): Promise<void> {
         ),
       );
   } catch (error) {
-    console.warn('[admin-seed] failed to cleanup legacy defaultTtsProvider seed row', error);
+    logDegraded(serverLogger, {
+      event: 'admin.seed.legacy_default_provider_cleanup.failed',
+      msg: 'Failed to cleanup legacy defaultTtsProvider seed row',
+      step: 'cleanup_legacy_default_provider_seed',
+      error,
+    });
   }
 }
 
@@ -150,6 +185,11 @@ async function cleanupLegacyDefaultTtsModelRows(): Promise<void> {
       .delete(adminSettings)
       .where(eq(adminSettings.key, 'defaultTtsModel'));
   } catch (error) {
-    console.warn('[admin-seed] failed to cleanup legacy defaultTtsModel rows', error);
+    logDegraded(serverLogger, {
+      event: 'admin.seed.legacy_default_model_cleanup.failed',
+      msg: 'Failed to cleanup legacy defaultTtsModel rows',
+      step: 'cleanup_legacy_default_model_rows',
+      error,
+    });
   }
 }

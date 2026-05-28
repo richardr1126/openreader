@@ -8,6 +8,8 @@ This guide covers deploying OpenReader to Vercel with external Postgres and S3-c
 
 - Documents (PDF/EPUB/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
 - Audiobook routes work on Node.js serverless functions using `ffmpeg-static`.
+- Heavy compute features (Whisper alignment + PDF layout parsing) run through an external compute worker service.
+- For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
 
 :::warning DOCX Conversion Limitation
 `docx` conversion requires `soffice` (LibreOffice), which is not available in a standard Vercel runtime.
@@ -35,14 +37,39 @@ BASE_URL=https://your-app.vercel.app
 AUTH_SECRET=...
 ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in-app
 
+# Heavy compute (required on Vercel in current releases)
+COMPUTE_WORKER_URL=https://<railway-worker-domain>
+COMPUTE_WORKER_TOKEN=...
+
+# Logging (recommended for Vercel log ingestion)
+LOG_FORMAT=json
+LOG_LEVEL=info
+
 # First-boot seed for the TTS shared provider (optional; manage in-app afterwards)
-API_KEY=your_replicate_key
+# API_KEY=your_replicate_key
 # API_BASE only needed for OpenAI-compatible self-hosted providers
 ```
+
+If you also run an external worker service (for example Railway), set these there too:
+
+- `LOG_FORMAT=json`
+- `COMPUTE_LOG_LEVEL=info`
 
 :::note Env vars vs. admin panel (important for Vercel)
 `API_KEY` / `API_BASE` are one-shot bootstrap seeds on first deploy. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
 :::
+
+## 1a. Railway + Synadia quick start (worker mode)
+
+If your Vercel app uses an external compute worker on Railway with Synadia Cloud (NGS):
+
+1. Deploy a Railway service from:
+   - `ghcr.io/richardr1126/openreader-compute-worker:refactor-ppdoclayoutv3-onnx-layout-parsing`
+2. Enable public networking on that Railway service and set:
+   - `COMPUTE_WORKER_URL=https://<railway-worker-domain>` (in Vercel)
+3. Use the same `COMPUTE_WORKER_TOKEN` value in both Vercel and Railway worker env vars.
+
+For complete Railway worker env vars (`NATS_*`, `S3_*`, health checks, and Synadia `.creds` guidance), see [Compute Worker (NATS JetStream)](./compute-worker).
 
 ## 2. First-run admin configuration (recommended)
 
@@ -58,11 +85,10 @@ After the first successful deploy and admin login, open **Settings → Admin** a
   - `defaultTtsProvider=replicate` (or your preferred shared slug).
   - `showAllProviderModels=false` if you want users locked to each provider's default model.
   - `enableAudiobookExport=true`.
-  - `enableWordHighlight=false` unless your timestamp stack is configured.
 
 ## 3. Legacy first-boot seed (optional)
 
-If you must pre-seed site features via environment variables, the legacy `NEXT_PUBLIC_*` seeds are still supported on first boot only. Prefer the admin panel for ongoing management.
+If you must pre-seed site features via environment variables, the legacy `RUNTIME_SEED_*` seeds are still supported on first boot only. Prefer the admin panel for ongoing management.
 
 See [Environment Variables](../reference/environment-variables#legacy-first-boot-runtime-seeds-optional) for the complete legacy seed list.
 
@@ -91,8 +117,7 @@ Vercel deployments do not run `scripts/openreader-entrypoint.mjs`, so automatic 
 
 - `/api/audiobook`
 - `/api/audiobook/chapter`
-- `/api/audiobook/status`
-- `/api/whisper`
+- `/api/tts/segments/ensure`
 
 :::info
 `serverExternalPackages` should include `ffmpeg-static` so package paths resolve at runtime instead of being bundled into route output.
@@ -109,7 +134,7 @@ FFmpeg workloads benefit from more memory/CPU. This repo includes:
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app/api/audiobook/route.ts": { "memory": 3009 },
-    "app/api/whisper/route.ts": { "memory": 3009 }
+    "app/api/tts/segments/ensure/route.ts": { "memory": 3009 }
   }
 }
 ```
@@ -126,4 +151,4 @@ Adjust memory per route if your files are larger or your plan differs.
 1. Upload and read a PDF/EPUB document.
 2. Confirm sync/blob fetch works across refreshes/devices.
 3. Generate at least one audiobook chapter and play/download it.
-4. If using word highlighting, verify timestamps are produced and rendered.
+4. Verify worker-backed word highlighting and PDF parsing.

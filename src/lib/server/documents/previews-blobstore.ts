@@ -10,10 +10,10 @@ import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const DEFAULT_NAMESPACE_SEGMENT = '_default';
 
-export const DOCUMENT_PREVIEW_VARIANT = 'card-240-jpeg';
-export const DOCUMENT_PREVIEW_FILE_NAME = 'card-240.jpg';
+export const DOCUMENT_PREVIEW_VARIANT = 'card-400-jpeg';
+export const DOCUMENT_PREVIEW_FILE_NAME = 'card-400.jpg';
 export const DOCUMENT_PREVIEW_CONTENT_TYPE = 'image/jpeg';
-export const DOCUMENT_PREVIEW_WIDTH = 240;
+export const DOCUMENT_PREVIEW_WIDTH = 400;
 
 function sanitizeNamespace(namespace: string | null): string | null {
   if (!namespace) return null;

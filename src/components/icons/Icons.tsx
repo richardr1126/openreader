@@ -620,3 +620,19 @@ export function FileSettingsIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function SparkleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      className={props.className}
+      width={props.width || '1em'}
+      height={props.height || '1em'}
+      {...props}
+    >
+      <path d="M8 1c.2 0 .38.13.44.32L9.6 5.4l4.07 1.16a.46.46 0 0 1 0 .88L9.6 8.6 8.44 12.68a.46.46 0 0 1-.88 0L6.4 8.6 2.33 7.44a.46.46 0 0 1 0-.88L6.4 5.4 7.56 1.32A.46.46 0 0 1 8 1ZM3 1a.35.35 0 0 1 .34.24l.6 1.82 1.82.6a.35.35 0 0 1 0 .68l-1.82.6-.6 1.82a.35.35 0 0 1-.68 0l-.6-1.82L.24 4.34a.35.35 0 0 1 0-.68l1.82-.6.6-1.82A.35.35 0 0 1 3 1ZM12 9a.35.35 0 0 1 .34.24l.6 1.82 1.82.6a.35.35 0 0 1 0 .68l-1.82.6-.6 1.82a.35.35 0 0 1-.68 0l-.6-1.82-1.82-.6a.35.35 0 0 1 0-.68l1.82-.6.6-1.82A.35.35 0 0 1 12 9Z" />
+    </svg>
+  );
+}

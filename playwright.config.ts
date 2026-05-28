@@ -6,6 +6,7 @@ import 'dotenv/config';
  */
 export default defineConfig({
   testDir: './tests',
+  tsconfig: './tsconfig.json',
   timeout: 30 * 1000,
   outputDir: './tests/results',
   globalTeardown: './tests/global-teardown.ts',
@@ -29,7 +30,7 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     // Disable auth rate limiting for tests to support parallel workers creating sessions
-    command: `npm run build && DISABLE_AUTH_RATE_LIMIT=true npm run start`,
+    command: `pnpm build && DISABLE_AUTH_RATE_LIMIT=true pnpm start`,
     url: 'http://localhost:3003',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

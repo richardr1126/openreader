@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
-import { deleteTtsSegmentAudioObjects } from '@/lib/server/tts/segments-blobstore';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
+import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
+import { createRequestLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,6 +15,10 @@ function parseBody(value: unknown): { documentId: string } | null {
 }
 
 export async function POST(request: NextRequest) {
+  const { logger } = createRequestLogger({
+    route: '/api/tts/segments/clear',
+    request,
+  });
   try {
     const parsed = parseBody(await request.json().catch(() => null));
     if (!parsed) {
@@ -25,62 +28,24 @@ export async function POST(request: NextRequest) {
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
 
-    const rows = (await db
-      .select({
-        segmentId: ttsSegmentVariants.segmentId,
-        audioKey: ttsSegmentVariants.audioKey,
-      })
-      .from(ttsSegmentVariants)
-      .innerJoin(ttsSegmentEntries, and(
-        eq(ttsSegmentEntries.segmentEntryId, ttsSegmentVariants.segmentEntryId),
-        eq(ttsSegmentEntries.userId, ttsSegmentVariants.userId),
-      ))
-      .where(and(
-        eq(ttsSegmentEntries.userId, scope.storageUserId),
-        eq(ttsSegmentEntries.documentId, parsed.documentId),
-        eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
-      ))) as Array<{ segmentId: string; audioKey: string | null }>;
-
-    await db
-      .delete(ttsSegmentEntries)
-      .where(and(
-        eq(ttsSegmentEntries.userId, scope.storageUserId),
-        eq(ttsSegmentEntries.documentId, parsed.documentId),
-        eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
-      ));
-
-    const audioKeys = rows
-      .map((row) => row.audioKey)
-      .filter((key): key is string => Boolean(key));
-    const uniqueAudioKeys = Array.from(new Set(audioKeys));
-
-    let deletedAudioObjects = 0;
-    let warning: string | undefined;
-    if (uniqueAudioKeys.length > 0) {
-      try {
-        deletedAudioObjects = await deleteTtsSegmentAudioObjects(uniqueAudioKeys);
-        if (deletedAudioObjects < uniqueAudioKeys.length) {
-          warning = `Deleted ${deletedAudioObjects} of ${uniqueAudioKeys.length} audio objects.`;
-        }
-      } catch (error) {
-        warning = error instanceof Error ? error.message : 'Failed deleting some audio objects';
-        console.warn('Failed clearing some TTS segment audio objects:', {
-          documentId: parsed.documentId,
-          userId: scope.storageUserId,
-          error: warning,
-        });
-      }
-    }
+    const cleared = await clearTtsSegmentCache({
+      userId: scope.storageUserId,
+      documentId: parsed.documentId,
+      documentVersion: scope.documentVersion,
+      readerType: scope.readerType,
+    });
 
     return NextResponse.json({
       documentId: parsed.documentId,
-      deletedSegments: rows.length,
-      requestedAudioObjects: uniqueAudioKeys.length,
-      deletedAudioObjects,
-      ...(warning ? { warning } : {}),
+      ...cleared,
     });
   } catch (error) {
-    console.error('Error clearing TTS segment cache:', error);
-    return NextResponse.json({ error: 'Failed to clear TTS segment cache' }, { status: 500 });
+    return errorResponse(error, {
+      logger,
+      event: 'tts.segments.clear_failed',
+      msg: 'Failed to clear TTS segment cache',
+      apiErrorMessage: 'Failed to clear TTS segment cache',
+      normalize: { code: 'TTS_SEGMENTS_CLEAR_FAILED', errorClass: 'storage' },
+    });
   }
 }

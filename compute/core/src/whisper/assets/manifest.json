@@ -1,0 +1,76 @@
+{
+  "name": "whisper-base_timestamped-q4",
+  "version": "onnx-community/whisper-base_timestamped@608c49e61301901684bc36cac8f74b95ff6b5a8e",
+  "files": [
+    {
+      "path": "config.json",
+      "sha256": "f4d0608f7d918166da7edb3e188de5ef1bfe70d9802e785d271fd88111e9cf4b",
+      "size": 2243
+    },
+    {
+      "path": "generation_config.json",
+      "sha256": "61070cf8de25b1e9256e8e102ded49d8d24a8369ed36ef84fdf21549e68125a0",
+      "size": 3832
+    },
+    {
+      "path": "tokenizer.json",
+      "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566",
+      "size": 2480466
+    },
+    {
+      "path": "tokenizer_config.json",
+      "sha256": "2e036e4dbacfdeb7242c7d4ec4149f4a16e86026048f94d1637e3a8ee9c6a573",
+      "size": 282682
+    },
+    {
+      "path": "merges.txt",
+      "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+      "size": 493869
+    },
+    {
+      "path": "vocab.json",
+      "sha256": "50d6a919f0a0601d56a04eb583c780d18553aa388254ba3158eb6a00f13e2c1a",
+      "size": 1036584
+    },
+    {
+      "path": "normalizer.json",
+      "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+      "size": 52666
+    },
+    {
+      "path": "added_tokens.json",
+      "sha256": "9715fd2243b6f06a5858b5e32950d2853f73dd5bc201aafcf76f5082a2d8acd1",
+      "size": 34604
+    },
+    {
+      "path": "preprocessor_config.json",
+      "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d",
+      "size": 339
+    },
+    {
+      "path": "special_tokens_map.json",
+      "sha256": "e67ae3a0aaa99abcd9f187138e12db1f65c16a14761c50ef10eef2c174a7a691",
+      "size": 2194
+    },
+    {
+      "path": "onnx/encoder_model_q4.onnx",
+      "sha256": "0df94e35822653ba16e23c3f19f05b9b7fe7aae97884d1b277e02044f33c4880",
+      "size": 18771046
+    },
+    {
+      "path": "onnx/decoder_model_merged_q4.onnx",
+      "sha256": "fc1902ce2e42c69b2346d8e2a98898c60c01da1e6a64ae90f41d22350ac7db13",
+      "size": 123738327
+    },
+    {
+      "path": "onnx/decoder_with_past_model_q4.onnx",
+      "sha256": "d864ca26509968b00d92e6823c4db7ac460c106f9228a21bc5199e9893fe4126",
+      "size": 121378741
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "size": 1063
+    }
+  ]
+}

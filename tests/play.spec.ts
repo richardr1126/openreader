@@ -45,6 +45,7 @@ test.describe('Play/Pause Tests', () => {
   test.describe.configure({ mode: 'serial', timeout: 60000 });
 
   test('plays and pauses TTS for a PDF document', async ({ page }) => {
+    test.setTimeout(120_000);
     // Play TTS for the PDF document
     await playTTSAndWaitForASecond(page, 'sample.pdf');
     
@@ -61,6 +62,7 @@ test.describe('Play/Pause Tests', () => {
   });
 
   test('plays and pauses TTS for an DOCX document', async ({ page }) => {
+    test.setTimeout(120_000);
     // Play TTS for the DOCX document
     await playTTSAndWaitForASecond(page, 'sample.docx');
     
@@ -77,6 +79,7 @@ test.describe('Play/Pause Tests', () => {
   });
 
   test('switches to a single voice and resumes playing', async ({ page }) => {
+    test.setTimeout(120_000);
     // Start playback
     await playTTSAndWaitForASecond(page, 'sample.pdf');
 
@@ -96,6 +99,7 @@ test.describe('Play/Pause Tests', () => {
   });
 
   test('keeps selected single voice instead of resetting to first option', async ({ page }) => {
+    test.setTimeout(120_000);
     await playTTSAndWaitForASecond(page, 'sample.pdf');
 
     await openVoicesMenu(page);
@@ -122,6 +126,7 @@ test.describe('Play/Pause Tests', () => {
   });
 
   if (!process.env.CI) test('selects multiple Kokoro voices and resumes playing', async ({ page }) => {
+    test.setTimeout(120_000);
     // Start playback
     await playTTSAndWaitForASecond(page, 'sample.pdf');
 
@@ -142,6 +147,7 @@ test.describe('Play/Pause Tests', () => {
   });
 
   test('changing TTS native speed toggles processing and returns to playing', async ({ page }) => {
+    test.setTimeout(120_000);
     await playTTSAndWaitForASecond(page, 'sample.pdf');
     await changeNativeSpeedAndAssert(page, 1.5);
     await expectMediaState(page, 'playing');

@@ -1,9 +1,10 @@
 import { pdfjs } from 'react-pdf';
-import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { type PDFDocumentProxy, TextLayer } from 'pdfjs-dist';
+import { TextLayer } from 'pdfjs-dist';
 import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
+import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 import { CmpStr } from 'cmpstr';
+import type { TTSSegmentLocator } from '@/types/client';
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 
@@ -80,18 +81,16 @@ function runHighlightTokenMatch(
 function shouldUseLegacyBuild() {
   try {
     if (typeof window === 'undefined') return false;
-    
+
     const ua = window.navigator.userAgent;
     const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-    
-    console.log(isSafari ? 'Running on Safari' : 'Not running on Safari');
+
     if (!isSafari) return false;
-    
+
     // Extract Safari version - matches "Version/18" format
     const match = ua.match(/Version\/(\d+)/i);
-    console.log('Safari version:', match);
     if (!match || !match[1]) return true; // If we can't determine version, use legacy to be safe
-    
+
     const version = parseInt(match[1]);
     return version < 18; // Use legacy build for Safari versions equal or below 18
   } catch (e) {
@@ -106,10 +105,9 @@ function initPDFWorker() {
     if (typeof window !== 'undefined') {
       const useLegacy = shouldUseLegacyBuild();
       // Use local worker file instead of unpkg
-      const workerSrc = useLegacy 
+      const workerSrc = useLegacy
         ? new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
         : new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
-      console.log('Setting PDF worker to:', workerSrc);
       pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
       pdfjs.GlobalWorkerOptions.workerPort = null;
     }
@@ -188,146 +186,200 @@ const normalizeWordForMatch = (text: string): string =>
     .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
     .toLowerCase();
 
-// Text Processing functions
-export async function extractTextFromPDF(
-  pdf: PDFDocumentProxy, 
-  pageNumber: number, 
-  margins = { header: 0.07, footer: 0.07, left: 0.07, right: 0.07 }
-): Promise<string> {
-  try {
-    // Log pdf worker version
-    //console.log('PDF worker version:', pdfjs.GlobalWorkerOptions.workerSrc);
-
-    const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    
-    const viewport = page.getViewport({ scale: 1.0 });
-    const pageHeight = viewport.height;
-    const pageWidth = viewport.width;
-
-    const textItems = textContent.items.filter((item): item is TextItem => {
-      if (!('str' in item && 'transform' in item)) return false;
-      
-      const [scaleX, skewX, skewY, scaleY, x, y] = item.transform;
-      
-      // Basic text filtering
-      if (Math.abs(scaleX) < 1 || Math.abs(scaleX) > 20) return false;
-      if (Math.abs(scaleY) < 1 || Math.abs(scaleY) > 20) return false;
-      if (Math.abs(skewX) > 0.5 || Math.abs(skewY) > 0.5) return false;
-      
-      // Calculate margins in PDF coordinate space (y=0 is at bottom)
-      const headerY = pageHeight * (1 - margins.header); // Convert from top margin to bottom-based Y
-      const footerY = pageHeight * margins.footer; // Footer Y stays as is since it's already bottom-based
-      const leftX = pageWidth * margins.left;
-      const rightX = pageWidth * (1 - margins.right);
-      
-      // Check margins - remember y=0 is at bottom of page in PDF coordinates
-      if (y > headerY || y < footerY) { // Y greater than headerY means it's in header area, less than footerY means footer area
-        return false;
-      }
-
-      // Check horizontal margins
-      if (x < leftX || x > rightX) {
-        return false;
-      }
-      
-      // Sanity check for coordinates
-      if (x < 0 || x > pageWidth) return false;
-      
-      return item.str.trim().length > 0;
-    });
-
-    //console.log('Filtered text items:', textItems);
-
-    const tolerance = 2;
-    const lines: TextItem[][] = [];
-    let currentLine: TextItem[] = [];
-    let currentY: number | null = null;
-
-    textItems.forEach((item) => {
-      const y = item.transform[5];
-      if (currentY === null) {
-        currentY = y;
-        currentLine.push(item);
-      } else if (Math.abs(y - currentY) < tolerance) {
-        currentLine.push(item);
-      } else {
-        lines.push(currentLine);
-        currentLine = [item];
-        currentY = y;
-      }
-    });
-    lines.push(currentLine);
-
-    let pageText = '';
-    for (const line of lines) {
-      line.sort((a, b) => a.transform[4] - b.transform[4]);
-      let lineText = '';
-      let prevItem: TextItem | null = null;
-
-      for (const item of line) {
-        if (!prevItem) {
-          lineText = item.str;
-        } else {
-          const prevEndX = prevItem.transform[4] + (prevItem.width ?? 0);
-          const currentStartX = item.transform[4];
-          const space = currentStartX - prevEndX;
-          
-          // Get average character width as fallback
-          const avgCharWidth = (item.width ?? 0) / Math.max(1, item.str.length);
-          
-          // Multiple conditions for space detection
-          const needsSpace = 
-              // Primary check: significant gap between items
-              space > Math.max(avgCharWidth * 0.3, 2) ||
-              // Secondary check: natural word boundary
-              (!/^\W/.test(item.str) && !/\W$/.test(prevItem.str)) ||
-              // Tertiary check: items are far enough apart relative to their size
-              (space > ((prevItem.width ?? 0) * 0.25));
-
-          if (needsSpace) {
-              lineText += ' ' + item.str;
-          } else {
-              lineText += item.str;
-          }
-        }
-        prevItem = item;
-      }
-      pageText += lineText + ' ';
-    }
-
-    return pageText.replace(/\s+/g, ' ').trim();
-  } catch (error) {
-    // During Next.js fast refresh / route transitions, react-pdf can tear down the
-    // underlying worker and pdf.js may throw a TypeError like:
-    // "null is not an object (evaluating 'this.messageHandler.sendWithPromise')".
-    // Treat this as a cancellation so the app can ignore it.
-    if (
-      error instanceof TypeError &&
-      typeof error.message === 'string' &&
-      error.message.includes('messageHandler') &&
-      error.message.includes('sendWithPromise')
-    ) {
-      throw new DOMException('PDF worker torn down', 'AbortError');
-    }
-
-    console.error('Error extracting text from PDF:', error);
-    // Preserve the original error so callers can decide whether to retry/ignore.
-    throw error;
-  }
-}
-
 // Highlighting functions
 let highlightPatternSeq = 0;
 
-export function clearHighlights() {
-  const textNodes = document.querySelectorAll('.react-pdf__Page__textContent span');
-  textNodes.forEach((node) => {
-    const element = node as HTMLElement;
-    element.style.backgroundColor = '';
-    element.style.opacity = '1';
-  });
+type HighlightPatternOptions = {
+  parsedDocument?: ParsedPdfDocument | null;
+  locator?: TTSSegmentLocator | null;
+  useBlockGeometryOnly?: boolean;
+};
 
+function getHighlightLayerForPage(pageElement: HTMLElement): {
+  layer: HTMLElement;
+  pageRect: DOMRect;
+} {
+  let layer = pageElement.querySelector('.pdf-highlight-layer') as HTMLElement | null;
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.className = 'pdf-highlight-layer';
+    pageElement.appendChild(layer);
+  }
+
+  layer.style.position = 'absolute';
+  layer.style.inset = '0';
+  layer.style.pointerEvents = 'none';
+  layer.style.zIndex = '4';
+  layer.style.overflow = 'hidden';
+  layer.style.transform = 'translateZ(0)';
+
+  return { layer, pageRect: pageElement.getBoundingClientRect() };
+}
+
+function findRenderedPageElement(container: HTMLElement, pageNumber: number): HTMLElement | null {
+  const direct = container.querySelector(`.react-pdf__Page[data-page-number="${pageNumber}"]`) as HTMLElement | null;
+  if (direct) return direct;
+
+  const pageNodes = Array.from(container.querySelectorAll('.react-pdf__Page')) as HTMLElement[];
+  for (const pageNode of pageNodes) {
+    const attr = pageNode.getAttribute('data-page-number');
+    if (Number(attr) === pageNumber) return pageNode;
+  }
+  return null;
+}
+
+function highlightParsedBlockGeometry(
+  containerRef: React.RefObject<HTMLDivElement>,
+  parsedDocument: ParsedPdfDocument,
+  locator: TTSSegmentLocator,
+): boolean {
+  if (locator.readerType !== 'pdf') return false;
+  if (!locator.blockId) return false;
+  const container = containerRef.current;
+  if (!container) return false;
+
+  let targetBlock:
+    | ParsedPdfPage['blocks'][number]
+    | null = null;
+  for (const page of parsedDocument.pages) {
+    const found = page.blocks.find((block) => block.id === locator.blockId);
+    if (found) {
+      targetBlock = found;
+      break;
+    }
+  }
+  if (!targetBlock) return false;
+
+  let firstRect: { top: number; left: number } | null = null;
+  let drewAny = false;
+
+  for (const fragment of targetBlock.fragments) {
+    const parsedPage = parsedDocument.pages.find((page) => page.pageNumber === fragment.page);
+    if (!parsedPage || parsedPage.width <= 0 || parsedPage.height <= 0) continue;
+
+    const pageElement = findRenderedPageElement(container, fragment.page);
+    if (!pageElement) continue;
+
+    const { layer, pageRect } = getHighlightLayerForPage(pageElement);
+    const [x0, y0, x1, y1] = fragment.bbox;
+    const left = (x0 / parsedPage.width) * pageRect.width;
+    const top = (y0 / parsedPage.height) * pageRect.height;
+    const width = ((x1 - x0) / parsedPage.width) * pageRect.width;
+    const height = ((y1 - y0) / parsedPage.height) * pageRect.height;
+
+    if (!(width > 0 && height > 0)) continue;
+
+    const highlight = document.createElement('div');
+    highlight.className = 'pdf-text-highlight-overlay';
+    highlight.style.position = 'absolute';
+    highlight.style.backgroundColor = 'grey';
+    highlight.style.opacity = '0.4';
+    highlight.style.pointerEvents = 'none';
+    highlight.style.zIndex = '1';
+    highlight.style.left = `${left}px`;
+    highlight.style.top = `${top}px`;
+    highlight.style.width = `${width}px`;
+    highlight.style.height = `${height}px`;
+    layer.appendChild(highlight);
+
+    if (!firstRect) {
+      firstRect = { top: pageRect.top + top, left: pageRect.left + left };
+    }
+    drewAny = true;
+  }
+
+  if (!drewAny || !firstRect) return drewAny;
+
+  const containerRect = container.getBoundingClientRect();
+  const visibleTop = container.scrollTop;
+  const visibleBottom = visibleTop + containerRect.height;
+  const elementTop = firstRect.top - containerRect.top + container.scrollTop;
+
+  if (elementTop < visibleTop || elementTop > visibleBottom) {
+    container.scrollTo({
+      top: elementTop - containerRect.height / 3,
+      behavior: 'smooth',
+    });
+  }
+  return true;
+}
+
+function resolveParsedBlock(
+  parsedDocument: ParsedPdfDocument | null | undefined,
+  locator: TTSSegmentLocator | null | undefined,
+): ParsedPdfPage['blocks'][number] | null {
+  if (!parsedDocument || !locator || locator.readerType !== 'pdf' || !locator.blockId) {
+    return null;
+  }
+
+  for (const page of parsedDocument.pages) {
+    const found = page.blocks.find((block) => block.id === locator.blockId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function isRectOverlap(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function collectSpanNodesForParsedBlock(
+  container: HTMLElement,
+  parsedDocument: ParsedPdfDocument,
+  locator: TTSSegmentLocator,
+): HTMLElement[] | null {
+  const block = resolveParsedBlock(parsedDocument, locator);
+  if (!block) return null;
+
+  const collected: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+
+  for (const fragment of block.fragments) {
+    const parsedPage = parsedDocument.pages.find((page) => page.pageNumber === fragment.page);
+    if (!parsedPage || parsedPage.width <= 0 || parsedPage.height <= 0) continue;
+
+    const pageElement = findRenderedPageElement(container, fragment.page);
+    if (!pageElement) continue;
+
+    const textLayer = pageElement.querySelector('.react-pdf__Page__textContent') as HTMLElement | null;
+    if (!textLayer) continue;
+
+    const pageRect = pageElement.getBoundingClientRect();
+    const [x0, y0, x1, y1] = fragment.bbox;
+    const blockRect = {
+      left: (x0 / parsedPage.width) * pageRect.width,
+      top: (y0 / parsedPage.height) * pageRect.height,
+      right: (x1 / parsedPage.width) * pageRect.width,
+      bottom: (y1 / parsedPage.height) * pageRect.height,
+    };
+
+    const spans = Array.from(textLayer.querySelectorAll('span')) as HTMLElement[];
+    for (const span of spans) {
+      const node = span.firstChild;
+      if (!node || node.nodeType !== Node.TEXT_NODE) continue;
+
+      const rect = span.getBoundingClientRect();
+      const spanRect = {
+        left: rect.left - pageRect.left,
+        top: rect.top - pageRect.top,
+        right: rect.right - pageRect.left,
+        bottom: rect.bottom - pageRect.top,
+      };
+
+      if (!isRectOverlap(spanRect, blockRect)) continue;
+      if (seen.has(span)) continue;
+      seen.add(span);
+      collected.push(span);
+    }
+  }
+
+  return collected.length > 0 ? collected : null;
+}
+
+export function clearHighlights() {
   const overlays = document.querySelectorAll('.pdf-text-highlight-overlay');
   overlays.forEach((node) => {
     const element = node as HTMLElement;
@@ -357,7 +409,8 @@ export function clearWordHighlights() {
 export function highlightPattern(
   text: string,
   pattern: string,
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement>,
+  options?: HighlightPatternOptions,
 ) {
   const seq = ++highlightPatternSeq;
   clearHighlights();
@@ -371,12 +424,23 @@ export function highlightPattern(
   lastSentencePattern = cleanPattern;
   lastSentenceWordToTokenMap = null;
   lastSentenceTokenWindow = null;
+  const parsedDocument = options?.parsedDocument ?? null;
+  const locator = options?.locator ?? null;
 
-  const spanNodes = Array.from(
-    container.querySelectorAll('.react-pdf__Page__textContent span')
-  ) as HTMLElement[];
+  // Canonical path: parsed block locator is required for PDF sentence
+  // highlighting. Avoid broad full-page text matching fallbacks.
+  if (!parsedDocument || !locator || locator.readerType !== 'pdf' || !locator.blockId) {
+    return;
+  }
 
-  if (!spanNodes.length) return;
+  const spanNodes = collectSpanNodesForParsedBlock(container, parsedDocument, locator) ?? [];
+
+  if (!spanNodes.length) {
+    if (options?.useBlockGeometryOnly) {
+      highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    }
+    return;
+  }
   lastSpanNodes = spanNodes;
 
   const tokens: PDFToken[] = [];
@@ -404,6 +468,15 @@ export function highlightPattern(
 
   if (!tokens.length) return;
   lastTokens = tokens;
+
+  if (options?.useBlockGeometryOnly) {
+    lastSentenceTokenWindow = {
+      start: 0,
+      end: tokens.length - 1,
+    };
+    highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    return;
+  }
 
   const patternLen = cleanPattern.length;
 

@@ -146,6 +146,7 @@ interface TTSContextType extends TTSPlaybackState {
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   setVoiceAndRestart: (voice: string) => void;
+  clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   registerEpubLocationWalker: (walker: EpubRenderedLocationWalker | null) => void;
@@ -159,11 +160,13 @@ interface TTSContextType extends TTSPlaybackState {
 interface SetTextOptions {
   shouldPause?: boolean;
   location?: TTSLocation;
+  sourceUnits?: CanonicalTtsSourceUnit[];
   previousLocation?: TTSLocation;
   nextLocation?: TTSLocation;
   nextText?: string;
+  nextSourceUnits?: CanonicalTtsSourceUnit[];
   previousText?: string;
-  upcomingLocations?: Array<{ location: TTSLocation; text: string }>;
+  upcomingLocations?: Array<{ location: TTSLocation; text: string; sourceUnits?: CanonicalTtsSourceUnit[] }>;
 }
 
 type TTSSegmentPlaybackSource = {
@@ -216,10 +219,10 @@ const WARM_AUDIO_CACHE_MAX_ITEMS = 6;
 const wordHighlightFeatureEnabled = (() => {
   if (typeof window === 'undefined') return true;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const injected = (window as any).__OPENREADER_RUNTIME_CONFIG__;
+  const injected = (window as any).__RUNTIME_CONFIG__;
   if (!injected || typeof injected !== 'object') return true;
-  return typeof injected.enableWordHighlight === 'boolean'
-    ? injected.enableWordHighlight
+  return typeof injected.computeAvailable === 'boolean'
+    ? injected.computeAvailable
     : true;
 })();
 
@@ -244,12 +247,16 @@ const buildCacheKey = (
   speed: number,
   provider: string,
   model: string,
+  providerType: string,
+  instructions: string,
 ) => {
   return [
     `provider=${provider || ''}`,
+    `providerType=${providerType || ''}`,
     `model=${model || ''}`,
     `voice=${voice || ''}`,
     `speed=${Number.isFinite(speed) ? speed : ''}`,
+    `instructions=${instructions || ''}`,
     `text=${sentence}`,
   ].join('|');
 };
@@ -262,10 +269,12 @@ const buildScopedSegmentCacheKey = (
   speed: number,
   provider: string,
   model: string,
+  providerType: string,
+  instructions: string,
   segmentKey?: string | null,
 ) => {
   return [
-    buildCacheKey(sentence, voice, speed, provider, model),
+    buildCacheKey(sentence, voice, speed, provider, model, providerType, instructions),
     `segmentKey=${segmentKey || ''}`,
     `locator=${segmentKey ? '' : buildLocatorRequestKey(locator)}`,
     `segmentIndex=${segmentKey ? '' : segmentIndex}`,
@@ -292,6 +301,11 @@ const buildLocatorRequestKey = (locator: TTSSegmentLocator): string => {
   if (typeof locator.location === 'string' && locator.location) {
     return normalizeLocationKey(locator.location);
   }
+  if (locator.readerType === 'pdf') {
+    const page = Number(locator.page || 1);
+    const block = typeof locator.blockId === 'string' && locator.blockId ? locator.blockId : '';
+    return normalizeLocationKey(`pdf:${page}:${block}`);
+  }
   return normalizeLocationKey(Number(locator.page || 1));
 };
 
@@ -300,9 +314,11 @@ const buildSegmentRequestKey = (
   segmentIndex: number,
   sentence: string,
   segmentKey?: string | null,
-): string => segmentKey
-  ? `${segmentKey}::${sentence}`
-  : `${buildLocatorRequestKey(locator)}::${segmentIndex}::${sentence}`;
+): string => {
+  return segmentKey
+    ? `${segmentKey}::${sentence}`
+    : `${buildLocatorRequestKey(locator)}::${segmentIndex}::${sentence}`;
+};
 
 const resolveJumpIndex = (input: JumpResolutionInput): JumpResolution => {
   if (input.newSentenceCount <= 0) {
@@ -371,7 +387,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsInstructions: configTTSInstructions,
     updateConfigKey,
     skipBlank,
-    smartSentenceSplitting,
     segmentPreloadDepthPages,
     segmentPreloadSentenceLookahead,
     ttsSegmentMaxBlockLength,
@@ -1124,6 +1139,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ? normalizedOptions.location
       : currDocPage;
     const resolvedLocationKey = normalizeLocationKey(resolvedLocation);
+    const currentUnits = normalizedOptions.sourceUnits && normalizedOptions.sourceUnits.length > 0
+      ? normalizedOptions.sourceUnits
+      : null;
 
     // Keep currDocPage aligned with whatever the caller declared as the viewport's
     // location. This is the canonical entry point for "the rendered page now shows
@@ -1142,9 +1160,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       text,
       locator: locatorForLocation(resolvedLocation, activeReaderType),
     };
+    const effectiveCurrentUnits = currentUnits && currentUnits.length > 0 ? currentUnits : [currentSource];
+    const currentSourceKeySet = new Set(effectiveCurrentUnits.map((unit) => unit.sourceKey));
 
     const contextSourceUnits: CanonicalTtsSourceUnit[] = [];
-    if (smartSentenceSplitting && normalizedOptions.previousText?.trim()) {
+    if (normalizedOptions.previousText?.trim()) {
       const previousLocation = normalizedOptions.previousLocation;
       contextSourceUnits.push({
         sourceKey: previousLocation !== undefined
@@ -1156,65 +1176,72 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           : null,
       });
     }
-    contextSourceUnits.push(currentSource);
+    contextSourceUnits.push(...effectiveCurrentUnits);
     const sourceUnits: CanonicalTtsSourceUnit[] = [...contextSourceUnits];
 
     plannedSegmentsByLocationRef.current.clear();
     pendingNextLocationRef.current = normalizedOptions.nextLocation;
-    const pendingPrefetches: Array<CanonicalTtsSourceUnit & { location: TTSLocation }> = [];
+    const pendingPrefetches: Array<{
+      location: TTSLocation;
+      sourceUnits: CanonicalTtsSourceUnit[];
+    }> = [];
     if (normalizedOptions.nextLocation !== undefined && normalizedOptions.nextText?.trim()) {
-      pendingPrefetches.push({
-        sourceKey: sourceKeyForLocation(normalizedOptions.nextLocation, currDocPage),
-        location: normalizedOptions.nextLocation,
-        text: normalizedOptions.nextText,
-        locator: locatorForLocation(normalizedOptions.nextLocation, activeReaderType),
-      });
+      const provided = normalizedOptions.nextSourceUnits?.filter((unit) => unit.text.trim().length > 0) ?? [];
+      pendingPrefetches.push(provided.length > 0
+        ? {
+            location: normalizedOptions.nextLocation,
+            sourceUnits: provided,
+          }
+        : {
+            location: normalizedOptions.nextLocation,
+            sourceUnits: [{
+              sourceKey: sourceKeyForLocation(normalizedOptions.nextLocation, currDocPage),
+              text: normalizedOptions.nextText,
+              locator: locatorForLocation(normalizedOptions.nextLocation, activeReaderType),
+            }],
+          });
     }
     if (Array.isArray(normalizedOptions.upcomingLocations)) {
       for (const item of normalizedOptions.upcomingLocations) {
         if (item.location === undefined || !item.text?.trim()) continue;
-        pendingPrefetches.push({
-          sourceKey: sourceKeyForLocation(item.location, currDocPage),
-          location: item.location,
-          text: item.text,
-          locator: locatorForLocation(item.location, activeReaderType),
-        });
+        const provided = item.sourceUnits?.filter((unit) => unit.text.trim().length > 0) ?? [];
+        pendingPrefetches.push(provided.length > 0
+          ? {
+              location: item.location,
+              sourceUnits: provided,
+            }
+          : {
+              location: item.location,
+              sourceUnits: [{
+                sourceKey: sourceKeyForLocation(item.location, currDocPage),
+                text: item.text,
+                locator: locatorForLocation(item.location, activeReaderType),
+              }],
+            });
       }
     }
     for (const item of pendingPrefetches) {
-      if (smartSentenceSplitting) {
-        sourceUnits.push(item);
-      }
+      sourceUnits.push(...item.sourceUnits);
     }
 
     const plan = planCanonicalTtsSegments(sourceUnits, {
       readerType: activeReaderType,
       maxBlockLength: ttsSegmentMaxBlockLength,
       keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
+      enforceSourceBoundaries: activeReaderType === 'pdf' && currentUnits !== null && currentUnits.length > 0,
     });
-    const currentSegments = smartSentenceSplitting
-      ? plan.segments.filter((segment) => segment.ownerSourceKey === currentSourceKey)
-      : planCanonicalTtsSegments([currentSource], {
-        readerType: activeReaderType,
-        maxBlockLength: ttsSegmentMaxBlockLength,
-        keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
-      }).segments;
+    const currentSegments = plan.segments.filter((segment) => currentSourceKeySet.has(segment.ownerSourceKey));
     const newSentences = currentSegments.map((segment) => segment.text);
 
     for (const item of pendingPrefetches) {
-      const planned = smartSentenceSplitting
-        ? plan.segments.filter((segment) => segment.ownerSourceKey === item.sourceKey)
-        : planCanonicalTtsSegments([item], {
-          readerType: activeReaderType,
-          maxBlockLength: ttsSegmentMaxBlockLength,
-          keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
-        }).segments;
+      const sourceKeys = new Set(item.sourceUnits.map((unit) => unit.sourceKey));
+      const planned = plan.segments.filter((segment) => sourceKeys.has(segment.ownerSourceKey));
       if (planned.length > 0) {
         plannedSegmentsByLocationRef.current.set(normalizeLocationKey(item.location), planned);
       }
     }
 
-    currentSourceUnitRef.current = currentSource;
+    currentSourceUnitRef.current = effectiveCurrentUnits[0] ?? null;
     currentSourceContextUnitsRef.current = contextSourceUnits;
 
     if (handleBlankSection(newSentences.join(' '))) return;
@@ -1288,7 +1315,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setCurrentSentenceAlignment(undefined);
       setCurrentWordIndex(null);
 
-      if (smartSentenceSplitting && !isEPUB && normalizedOptions.nextLocation !== undefined) {
+      if (
+        !isEPUB
+        && normalizedOptions.nextLocation !== undefined
+        && effectiveCurrentUnits.length === 1
+      ) {
         const spanningIndex = currentSegments.findIndex((segment) =>
           segment.spansSourceBoundary
           && segment.startAnchor.sourceKey === currentSourceKey
@@ -1335,7 +1366,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     abortAudio,
     isEPUB,
     activeReaderType,
-    smartSentenceSplitting,
     invalidatePlaybackRun,
     currDocPage,
     documentId,
@@ -1534,6 +1564,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       effectiveNativeSpeed,
       configProviderRef,
       ttsModel,
+      configProviderType,
+      providerModelPolicy.supportsInstructions ? ttsInstructions : '',
       segmentKey,
     );
 
@@ -2196,6 +2228,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       effectiveNativeSpeed,
       configProviderRef,
       ttsModel,
+      configProviderType,
+      providerModelPolicy.supportsInstructions ? ttsInstructions : '',
       playbackSegment?.key,
     );
     const cachedAlignment = sentenceAlignmentCacheRef.current.get(alignmentKey);
@@ -2230,6 +2264,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     effectiveNativeSpeed,
     configProviderRef,
     ttsModel,
+    configProviderType,
+    providerModelPolicy.supportsInstructions,
+    ttsInstructions,
     isEPUB,
     currDocPage,
     currDocPageNumber,
@@ -2326,6 +2363,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           effectiveNativeSpeed,
           configProviderRef,
           ttsModel,
+          configProviderType,
+          providerModelPolicy.supportsInstructions ? ttsInstructions : '',
           nextSegment?.key,
         );
         if (segmentManifestCacheRef.current.has(cacheKey)) {
@@ -2428,7 +2467,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             ? currentSourceContextUnitsRef.current
             : (currentSourceUnitRef.current ? [currentSourceUnitRef.current] : []);
           const sourceUnits: CanonicalTtsSourceUnit[] = buildWalkerPlanningSourceUnits(
-            smartSentenceSplitting,
             liveContextUnits,
             upcomingUnits,
           );
@@ -2457,6 +2495,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
                 effectiveNativeSpeed,
                 configProviderRef,
                 ttsModel,
+                configProviderType,
+                providerModelPolicy.supportsInstructions ? ttsInstructions : '',
                 segment.key,
               );
               if (seenCandidates.has(requestKey)) continue;
@@ -2595,6 +2635,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         effectiveNativeSpeed,
         configProviderRef,
         ttsModel,
+        configProviderType,
+        providerModelPolicy.supportsInstructions ? ttsInstructions : '',
         plannedSegment?.key,
       );
       const requestKey = buildSegmentRequestKey(locator, sentenceIndex, sentence, plannedSegment?.key);
@@ -2624,6 +2666,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           effectiveNativeSpeed,
           configProviderRef,
           ttsModel,
+          configProviderType,
+          providerModelPolicy.supportsInstructions ? ttsInstructions : '',
           segment.key,
         );
         const requestKey = buildSegmentRequestKey(segmentLocator, index, sentence, segment.key);
@@ -2774,7 +2818,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     openApiBaseUrl,
     providerModelPolicy.supportsInstructions,
     ttsInstructions,
-    smartSentenceSplitting,
     onTTSStart,
     onTTSComplete,
     processSentence,
@@ -2856,6 +2899,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
   }, [abortAudio, clearWarmAudioCache, invalidatePlaybackRun, clearPendingEpubJump, bumpEpubPreloadGeneration]);
+
+  const clearSegmentCaches = useCallback(() => {
+    // Keep the current viewport/sentence list intact, but force all audio/manifest
+    // state to be re-resolved after a server-side clear.
+    abortAudio(true);
+    segmentManifestCacheRef.current.clear();
+    sentenceAlignmentCacheRef.current.clear();
+    setCurrentSentenceAlignment(undefined);
+    setCurrentWordIndex(null);
+  }, [abortAudio]);
 
   /**
    * Stops the current audio playback and starts playing from a specified index
@@ -3068,6 +3121,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    clearSegmentCaches,
     skipToLocation,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
@@ -3098,6 +3152,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    clearSegmentCaches,
     skipToLocation,
     registerLocationChangeHandler,
     registerEpubLocationWalker,

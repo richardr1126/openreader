@@ -22,30 +22,17 @@ jobs:
   prepare:
     runs-on: ubuntu-24.04
     outputs:
-      image_name: ${{ steps.image-name.outputs.image_name }}
-      legacy_image_name: ${{ steps.image-name.outputs.legacy_image_name }}
-      tags: ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
+      web_image_name: ${{ steps.image-name.outputs.web_image_name }}
+      web_legacy_image_name: ${{ steps.image-name.outputs.web_legacy_image_name }}
+      compute_worker_image_name: ${{ steps.image-name.outputs.compute_worker_image_name }}
     steps:
       - name: Compute Docker image names
         id: image-name
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "image_name=${owner}/openreader" >> "$GITHUB_OUTPUT"
-          echo "legacy_image_name=${owner}/openreader-webui" >> "$GITHUB_OUTPUT"
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            ${{ env.REGISTRY }}/${{ steps.image-name.outputs.image_name }}
-            ${{ env.REGISTRY }}/${{ steps.image-name.outputs.legacy_image_name }}
-          tags: |
-            type=raw,value=latest,enable=${{ (github.event_name == 'push' && !contains(github.ref, '-pre')) || (github.event_name == 'workflow_dispatch' && inputs.use_latest_tag == true) }},priority=1000
-            type=semver,pattern={{version}}
-            type=ref,event=tag
-            type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag != true }}
+          echo "web_image_name=${owner}/openreader" >> "$GITHUB_OUTPUT"
+          echo "web_legacy_image_name=${owner}/openreader-webui" >> "$GITHUB_OUTPUT"
+          echo "compute_worker_image_name=${owner}/openreader-compute-worker" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -58,12 +45,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: amd64
+          - image_target: web
+            arch: amd64
             platform: linux/amd64
             runner: ubuntu-24.04
-          - arch: arm64
+            context: .
+            dockerfile: ./Dockerfile
+          - image_target: web
+            arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
+            context: .
+            dockerfile: ./Dockerfile
+          - image_target: compute-worker
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+            context: .
+            dockerfile: ./compute/worker/Dockerfile
+          - image_target: compute-worker
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            context: .
+            dockerfile: ./compute/worker/Dockerfile
 
     steps:
       - name: Checkout repository
@@ -82,46 +87,63 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image (${{ matrix.arch }})
+      - name: Select image name
+        id: image
+        run: |
+          if [ "${{ matrix.image_target }}" = "web" ]; then
+            echo "image_name=${{ needs.prepare.outputs.web_image_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_name=${{ needs.prepare.outputs.compute_worker_image_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Docker image (${{ matrix.image_target }} / ${{ matrix.arch }})
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
-          labels: ${{ needs.prepare.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.image_target }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_target }}-${{ matrix.arch }}
           provenance: false
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.image.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
-          mkdir -p /tmp/digests
+          mkdir -p /tmp/digests/${{ matrix.image_target }}
           digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
+          touch "/tmp/digests/${{ matrix.image_target }}/${digest#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ matrix.arch }}
-          path: /tmp/digests
+          name: digests-${{ matrix.image_target }}-${{ matrix.arch }}
+          path: /tmp/digests/${{ matrix.image_target }}
           if-no-files-found: error
           retention-days: 1
 
   merge:
     needs: [prepare, build]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     permissions:
       actions: read
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image_target: web
+            runner: ubuntu-24.04
+          - image_target: compute-worker
+            runner: ubuntu-24.04
 
     steps:
       - name: Download digests
         uses: actions/download-artifact@v8
         with:
-          path: /tmp/digests
-          pattern: digests-*
+          path: /tmp/digests/${{ matrix.image_target }}
+          pattern: digests-${{ matrix.image_target }}-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -134,20 +156,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Select image names
+        id: image
+        run: |
+          if [ "${{ matrix.image_target }}" = "web" ]; then
+            echo "image_name=${{ needs.prepare.outputs.web_image_name }}" >> "$GITHUB_OUTPUT"
+            echo "metadata_images<<EOF" >> "$GITHUB_OUTPUT"
+            echo "${{ env.REGISTRY }}/${{ needs.prepare.outputs.web_image_name }}" >> "$GITHUB_OUTPUT"
+            echo "${{ env.REGISTRY }}/${{ needs.prepare.outputs.web_legacy_image_name }}" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_name=${{ needs.prepare.outputs.compute_worker_image_name }}" >> "$GITHUB_OUTPUT"
+            echo "metadata_images=${{ env.REGISTRY }}/${{ needs.prepare.outputs.compute_worker_image_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.metadata_images }}
+          tags: |
+            type=raw,value=latest,enable=${{ (github.event_name == 'push' && !contains(github.ref, '-pre')) || (github.event_name == 'workflow_dispatch' && inputs.use_latest_tag == true) }},priority=1000
+            type=semver,pattern={{version}}
+            type=ref,event=tag
+            type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag != true }}
+
       - name: Create manifest list and push
-        working-directory: /tmp/digests
+        working-directory: /tmp/digests/${{ matrix.image_target }}
         run: |
           docker buildx imagetools create \
             $(echo "$TAGS" | xargs -I {} echo -t {}) \
-            $(printf '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }}@sha256:%s ' *)
+            $(printf '${{ env.REGISTRY }}/${{ steps.image.outputs.image_name }}@sha256:%s ' *)
         env:
-          TAGS: ${{ needs.prepare.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
 
       - name: Output build information
         run: |
-          echo "✅ Docker images built and pushed successfully!"
+          echo "✅ Docker image built and pushed successfully!"
+          echo "🐋 Target: ${{ matrix.image_target }}"
           echo "🐋 Images:"
-          echo '${{ needs.prepare.outputs.tags }}' | sed 's/^/  - /'
+          echo '${{ steps.meta.outputs.tags }}' | sed 's/^/  - /'
           echo "📝 Event: ${{ github.event_name }}"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "📝 Triggered by manual workflow dispatch on branch: ${{ github.ref_name }}"

@@ -61,6 +61,7 @@ export interface DocumentPreviewCacheRow {
   data: ArrayBuffer;
   cachedAt: number;
   byteSize?: number;
+  previewVersion?: number;
 }
 
 export interface ConfigRow {
@@ -193,8 +194,6 @@ function buildAppConfigFromRaw(raw: RawConfigMap): AppConfigRow {
     voice: '',
     skipBlank: raw.skipBlank === 'false' ? false : APP_CONFIG_DEFAULTS.skipBlank,
     epubTheme: raw.epubTheme === 'true',
-    smartSentenceSplitting:
-      raw.smartSentenceSplitting === 'false' ? false : APP_CONFIG_DEFAULTS.smartSentenceSplitting,
     headerMargin: raw.headerMargin ? parseFloat(raw.headerMargin) : APP_CONFIG_DEFAULTS.headerMargin,
     footerMargin: raw.footerMargin ? parseFloat(raw.footerMargin) : APP_CONFIG_DEFAULTS.footerMargin,
     leftMargin: raw.leftMargin ? parseFloat(raw.leftMargin) : APP_CONFIG_DEFAULTS.leftMargin,

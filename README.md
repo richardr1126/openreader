@@ -18,13 +18,13 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 
 ## ✨ Highlights
 
-- 🎯 **Multi-provider TTS** with OpenAI-compatible endpoints and cloud providers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI or OpenAI, Replicate, DeepInfra).
-- 📖 **Read-along playback** for PDF/EPUB with sentence-aware narration.
-- ⏱️ **Word-by-word highlighting** via optional `whisper.cpp` timestamps.
-- 🛜 **Sync + library import** to bring docs across devices and from server-mounted folders.
-- 🗂️ **Flexible storage** with embedded SeaweedFS or external S3-compatible backends.
+- 🧱 **Layout-aware PDF parsing** with PP-DocLayoutV3 (ONNX) — structured block detection, cross-page stitching, and geometry-based highlighting for precise read-along sync.
+- ⏱️ **Word-by-word highlighting** via ONNX Whisper alignment through the compute worker control plane (NATS JetStream-backed).
+- ⚡ **Segment-based read-along** for EPUB, PDF, TXT, MD, and DOCX — sentence-aware TTS with cached audio segments, background preloading, and resumable playback.
+- 🎯 **Multi-provider TTS** — self-hosted OpenAI-compatible servers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI) or cloud APIs (OpenAI, Replicate, DeepInfra).
 - 🎧 **Audiobook export** in `m4b`/`mp3` with resumable chapter processing.
-- 🐳 **Self-host friendly** with Docker, optional auth, and automatic startup migrations.
+- 🗂️ **Flexible backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync.
+- 🐳 **Self-host friendly** — Docker (amd64/arm64), optional auth, and automatic startup migrations.
 
 ## 🚀 Start Here
 
@@ -32,6 +32,7 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 | --- | --- |
 | Run with Docker | [Docker Quick Start](https://docs.openreader.richardr.dev/docker-quick-start) |
 | Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
+| Deploy external compute worker | [Compute Worker (NATS JetStream)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
 | Develop locally | [Local Development](https://docs.openreader.richardr.dev/deploy/local-development) |
 | Configure auth | [Auth](https://docs.openreader.richardr.dev/configure/auth) |
 | Configure SQL database | [Database and Migrations](https://docs.openreader.richardr.dev/configure/database) |

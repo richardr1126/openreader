@@ -29,7 +29,6 @@ interface ConfigContextType {
   voice: string;
   skipBlank: boolean;
   epubTheme: boolean;
-  smartSentenceSplitting: boolean;
   segmentPreloadDepthPages: number;
   segmentPreloadSentenceLookahead: number;
   ttsSegmentMaxBlockLength: number;
@@ -352,7 +351,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     ttsModel,
     ttsInstructions,
     savedVoices,
-    smartSentenceSplitting,
     segmentPreloadDepthPages,
     segmentPreloadSentenceLookahead,
     ttsSegmentMaxBlockLength,
@@ -475,7 +473,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       voice,
       skipBlank,
       epubTheme,
-      smartSentenceSplitting,
       segmentPreloadDepthPages,
       segmentPreloadSentenceLookahead,
       ttsSegmentMaxBlockLength,

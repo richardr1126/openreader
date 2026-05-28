@@ -364,7 +364,7 @@ Absolute path or executable name for the ffmpeg binary used by audiobook/process
 
 These variables exist only as **first-boot seeds** for the admin-managed runtime config. Prefer changing site features from **Settings → Admin → Site features**. Keep these only when you need bootstrap defaults before the first admin login. See [Admin Panel](../configure/admin-panel) for migration behavior.
 
-The values are SSR-injected via `window.__OPENREADER_RUNTIME_CONFIG__`, so admin edits take effect for all users on the next page load — no rebuild required (unlike the old `NEXT_PUBLIC_*` build-time pattern).
+The values are SSR-injected via `window.__RUNTIME_CONFIG__`, so admin edits take effect for all users on the next page load — no rebuild required (unlike the old `NEXT_PUBLIC_*` build-time pattern).
 
 ### NEXT_PUBLIC_ENABLE_DOCX_CONVERSION
 

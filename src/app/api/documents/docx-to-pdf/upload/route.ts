@@ -10,9 +10,13 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { safeDocumentName } from '@/lib/server/documents/utils';
 import { enqueueDocumentPreview } from '@/lib/server/documents/previews';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
+import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { putDocumentBlob } from '@/lib/server/documents/blobstore';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 const DOCSTORE_DIR = path.join(process.cwd(), 'docstore');
 const TEMP_DIR = path.join(DOCSTORE_DIR, 'tmp');
@@ -136,6 +140,8 @@ export async function POST(req: NextRequest) {
           size: pdfContent.length,
           lastModified,
           filePath: id,
+          parseState: stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() }),
+          parsedJsonKey: null,
         })
         .onConflictDoUpdate({
           target: [documents.id, documents.userId],
@@ -145,6 +151,8 @@ export async function POST(req: NextRequest) {
             size: pdfContent.length,
             lastModified,
             filePath: id,
+            parseState: stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() }),
+            parsedJsonKey: null,
           },
         });
 
@@ -156,7 +164,19 @@ export async function POST(req: NextRequest) {
         },
         testNamespace,
       ).catch((error) => {
-        console.error(`Failed to enqueue preview for converted DOCX ${id}:`, error);
+        serverLogger.warn({
+          event: 'documents.docx.preview_enqueue.failed',
+          degraded: true,
+          fallbackPath: 'skip_preview_enqueue',
+          documentId: id,
+          error: errorToLog(error),
+        }, 'Failed to enqueue preview for converted DOCX');
+      });
+
+      enqueueParsePdfJob({
+        documentId: id,
+        userId: storageUserId,
+        namespace: testNamespace,
       });
 
       return NextResponse.json({
@@ -172,7 +192,13 @@ export async function POST(req: NextRequest) {
       await rm(jobDir, { recursive: true, force: true }).catch(() => {});
     }
   } catch (error) {
-    console.error('Error converting/uploading DOCX:', error);
-    return NextResponse.json({ error: 'Failed to convert document' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.docx.convert_upload.failed',
+      error: errorToLog(error),
+    }, 'Failed converting/uploading DOCX');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to convert document',
+      normalize: { code: 'DOCUMENTS_DOCX_CONVERT_UPLOAD_FAILED', errorClass: 'upstream' },
+    });
   }
 }

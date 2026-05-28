@@ -12,6 +12,8 @@ export const documents = pgTable('documents', {
   size: bigint('size', { mode: 'number' }).notNull(),
   lastModified: bigint('last_modified', { mode: 'number' }).notNull(),
   filePath: text('file_path').notNull(),
+  parseState: text('parse_state'),
+  parsedJsonKey: text('parsed_json_key'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
@@ -72,6 +74,18 @@ export const userPreferences = pgTable('user_preferences', {
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });
 
+export const documentSettings = pgTable('document_settings', {
+  documentId: text('document_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  dataJson: jsonb('data_json').notNull().default({}),
+  clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.documentId, table.userId] }),
+  index('idx_document_settings_user_id').on(table.userId),
+]);
+
 export const userDocumentProgress = pgTable('user_document_progress', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   documentId: text('document_id').notNull(),
@@ -89,12 +103,12 @@ export const userDocumentProgress = pgTable('user_document_progress', {
 export const documentPreviews = pgTable('document_previews', {
   documentId: text('document_id').notNull(),
   namespace: text('namespace').notNull().default(''),
-  variant: text('variant').notNull().default('card-240-jpeg'),
+  variant: text('variant').notNull(),
   status: text('status').notNull().default('queued'),
   sourceLastModifiedMs: bigint('source_last_modified_ms', { mode: 'number' }).notNull(),
   objectKey: text('object_key').notNull(),
   contentType: text('content_type').notNull().default('image/jpeg'),
-  width: integer('width').notNull().default(240),
+  width: integer('width').notNull(),
   height: integer('height'),
   byteSize: bigint('byte_size', { mode: 'number' }),
   eTag: text('etag'),

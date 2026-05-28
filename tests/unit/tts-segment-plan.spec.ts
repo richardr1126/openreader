@@ -164,6 +164,63 @@ test.describe('planCanonicalTtsSegments', () => {
     expect(plan.segments).toHaveLength(1);
     expect(plan.segments[0].ownerSourceKey).toBe('page:1');
   });
+
+  test('keeps paragraph-title boundaries when source boundaries are enforced', () => {
+    const plan = planCanonicalTtsSegments([
+      {
+        sourceKey: 'abstract',
+        locator: { page: 1, readerType: 'pdf', blockId: 'a1' },
+        text: 'Released under the permissive MIT license, OpenHands is a community project spanning academia and industry with more than 2.1K contributions.',
+      },
+      {
+        sourceKey: 'intro-title',
+        locator: { page: 1, readerType: 'pdf', blockId: 't1' },
+        text: '1 INTRODUCTION',
+      },
+      {
+        sourceKey: 'intro-body',
+        locator: { page: 1, readerType: 'pdf', blockId: 'p1' },
+        text: 'Powered by large language models (LLMs; OpenAI 2024b; Team et al. 2023), user-facing AI systems have become increasingly capable of performing complex tasks such as accurately responding to user queries, solving math problems, and generating code.',
+      },
+    ], {
+      readerType: 'pdf',
+      maxBlockLength: 450,
+      keyPrefix: 'doc:v1',
+      enforceSourceBoundaries: true,
+    });
+
+    expect(plan.segments.some((segment) => segment.ownerSourceKey === 'intro-title' && segment.text === '1 INTRODUCTION')).toBeTruthy();
+    expect(plan.segments.some((segment) => segment.ownerSourceKey === 'intro-body' && segment.text.startsWith('Powered by large language models'))).toBeTruthy();
+    expect(plan.segments.some((segment) => segment.text.startsWith('1 INTRODUCTION Powered by'))).toBeFalsy();
+  });
+
+  test('does not drop first sentence when canonical rematch fails in enforced boundary mode', () => {
+    const plan = planCanonicalTtsSegments([
+      {
+        sourceKey: 'title',
+        locator: { page: 1, readerType: 'pdf', blockId: 't1' },
+        text: '1 INTRODUCTION',
+      },
+      {
+        sourceKey: 'intro',
+        locator: { page: 1, readerType: 'pdf', blockId: 'p1' },
+        // Missing whitespace after sentence terminal is a common PDF extraction artifact.
+        text: 'Powered by large language models have become increasingly capable of generating code.In particular, AI agents have recently received ever-increasing research focus.',
+      },
+    ], {
+      readerType: 'pdf',
+      maxBlockLength: 450,
+      keyPrefix: 'doc:v1',
+      enforceSourceBoundaries: true,
+    });
+
+    const introSegments = plan.segments
+      .filter((segment) => segment.ownerSourceKey === 'intro')
+      .map((segment) => segment.text);
+    const combinedIntro = introSegments.join(' ');
+    expect(combinedIntro.includes('Powered by large language models')).toBeTruthy();
+    expect(combinedIntro.includes('In particular, AI agents')).toBeTruthy();
+  });
 });
 
 test.describe('buildSegmentKeyPrefix / buildSegmentKey contract', () => {

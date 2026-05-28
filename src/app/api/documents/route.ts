@@ -4,12 +4,20 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 import {
   cleanupDocumentPreviewArtifacts,
   deleteDocumentPreviewRows,
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
+import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
+import {
+  normalizeParseStatus,
+  parseDocumentParseState,
+  stringifyDocumentParseState,
+} from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
@@ -129,6 +137,10 @@ export async function POST(req: NextRequest) {
           size: headSize,
           lastModified: doc.lastModified,
           filePath: doc.id,
+          parseState: doc.type === 'pdf'
+            ? stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() })
+            : null,
+          parsedJsonKey: null,
         })
         .onConflictDoUpdate({
           target: [documents.id, documents.userId],
@@ -138,6 +150,10 @@ export async function POST(req: NextRequest) {
             size: headSize,
             lastModified: doc.lastModified,
             filePath: doc.id,
+            parseState: doc.type === 'pdf'
+              ? stringifyDocumentParseState({ status: 'pending', progress: null, updatedAt: Date.now() })
+              : null,
+            parsedJsonKey: null,
           },
         });
 
@@ -158,14 +174,34 @@ export async function POST(req: NextRequest) {
         },
         testNamespace,
       ).catch((error) => {
-        console.error(`Failed to enqueue preview for document ${doc.id}:`, error);
+        serverLogger.warn({
+          event: 'documents.preview.enqueue.failed',
+          degraded: true,
+          fallbackPath: 'skip_preview_enqueue',
+          documentId: doc.id,
+          error: errorToLog(error),
+        }, 'Failed to enqueue document preview');
       });
+
+      if (doc.type === 'pdf') {
+        enqueueParsePdfJob({
+          documentId: doc.id,
+          userId: storageUserId,
+          namespace: testNamespace,
+        });
+      }
     }
 
     return NextResponse.json({ success: true, stored });
   } catch (error) {
-    console.error('Error registering documents:', error);
-    return NextResponse.json({ error: 'Failed to register documents' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.register.failed',
+      error: errorToLog(error),
+    }, 'Failed to register documents');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to register documents',
+      normalize: { code: 'DOCUMENTS_REGISTER_FAILED', errorClass: 'db' },
+    });
   }
 }
 
@@ -206,9 +242,25 @@ export async function GET(req: NextRequest) {
       size: number;
       lastModified: number;
       filePath: string;
+      parseState: string | null;
+      parsedJsonKey: string | null;
     }>;
 
-    const results: BaseDocument[] = rows.map((doc) => {
+    const preferredById = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      const existing = preferredById.get(row.id);
+      if (!existing) {
+        preferredById.set(row.id, row);
+        continue;
+      }
+      const isRowPrimary = row.userId === storageUserId;
+      const isExistingPrimary = existing.userId === storageUserId;
+      if (isRowPrimary && !isExistingPrimary) {
+        preferredById.set(row.id, row);
+      }
+    }
+
+    const results: BaseDocument[] = Array.from(preferredById.values()).map((doc) => {
       const type = normalizeDocumentType(doc.type, doc.name);
       return {
         id: doc.id,
@@ -216,14 +268,22 @@ export async function GET(req: NextRequest) {
         size: Number(doc.size),
         lastModified: Number(doc.lastModified),
         type,
+        parseStatus: type === 'pdf' ? normalizeParseStatus(parseDocumentParseState(doc.parseState).status) : null,
+        parsedJsonKey: doc.parsedJsonKey,
         scope: doc.userId === unclaimedUserId ? 'unclaimed' : 'user',
       };
     });
 
     return NextResponse.json({ documents: results });
   } catch (error) {
-    console.error('Error loading document metadata:', error);
-    return NextResponse.json({ error: 'Failed to load documents' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.list.failed',
+      error: errorToLog(error),
+    }, 'Failed to load document metadata');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to load documents',
+      normalize: { code: 'DOCUMENTS_LIST_FAILED', errorClass: 'db' },
+    });
   }
 }
 
@@ -302,21 +362,45 @@ export async function DELETE(req: NextRequest) {
         await deleteDocumentBlob(id, testNamespace);
       } catch (error) {
         if (!isMissingBlobError(error)) {
-          console.error(`[best-effort] Failed to delete blob for document ${id}, orphaned blob may need manual cleanup:`, error);
+          serverLogger.warn({
+            event: 'documents.delete.blob_cleanup_failed',
+            degraded: true,
+            step: 'delete_document_blob',
+            documentId: id,
+            error: errorToLog(error),
+          }, 'Failed to delete document blob during cleanup');
         }
       }
 
       await cleanupDocumentPreviewArtifacts(id, testNamespace).catch((error) => {
-        console.error(`Failed to cleanup preview artifacts for document ${id}:`, error);
+        serverLogger.warn({
+          event: 'documents.delete.preview_artifacts_cleanup_failed',
+          degraded: true,
+          step: 'delete_preview_artifacts',
+          documentId: id,
+          error: errorToLog(error),
+        }, 'Failed to cleanup preview artifacts');
       });
       await deleteDocumentPreviewRows(id, testNamespace).catch((error) => {
-        console.error(`Failed to cleanup preview rows for document ${id}:`, error);
+        serverLogger.warn({
+          event: 'documents.delete.preview_rows_cleanup_failed',
+          degraded: true,
+          step: 'delete_preview_rows',
+          documentId: id,
+          error: errorToLog(error),
+        }, 'Failed to cleanup preview rows');
       });
     }
 
     return NextResponse.json({ success: true, deleted: deletedRows.length });
   } catch (error) {
-    console.error('Error deleting documents:', error);
-    return NextResponse.json({ error: 'Failed to delete documents' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.delete.failed',
+      error: errorToLog(error),
+    }, 'Failed to delete documents');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to delete documents',
+      normalize: { code: 'DOCUMENTS_DELETE_FAILED', errorClass: 'db' },
+    });
   }
 }

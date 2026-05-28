@@ -1,0 +1,31 @@
+{
+  "name": "pp-doclayoutv3",
+  "version": "Bei0001/PP-DocLayoutV3-ONNX@main",
+  "files": [
+    {
+      "path": "model.onnx",
+      "sha256": "c0721928ff08741bb208ebed539c77170db5234a68cb7e546e6cc9bc172a695b",
+      "size": 5088167
+    },
+    {
+      "path": "model.onnx.data",
+      "sha256": "34df3e4b79d7bbbf82abce1b4f3cde3d540fa57ad42ec8905c352b97c408d437",
+      "size": 136774480
+    },
+    {
+      "path": "config.json",
+      "sha256": "3cf834b91d23a756b1519bce4db42c09e852f3e35c35092dd5a3e253a50c071a",
+      "size": 2460
+    },
+    {
+      "path": "preprocessor_config.json",
+      "sha256": "519fe0187a43a1ca429e3ad8317bab8700f0d5e8fb3a6e3a0a413ffac078ba42",
+      "size": 575
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "578a6ba6f86b0692a8f719843f575a3eebf4705768ac5c37d149f441208f601f",
+      "size": 195
+    }
+  ]
+}

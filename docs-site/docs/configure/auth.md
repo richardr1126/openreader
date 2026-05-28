@@ -31,7 +31,7 @@ ADMIN_EMAILS=alice@example.com,bob@example.com
 Admins see a new **Admin** tab in **Settings** with two sub-tabs:
 
 - **Shared TTS providers** — server-managed TTS provider instances with encrypted keys, visible to all users.
-- **Site features** — runtime overrides for what were previously `NEXT_PUBLIC_*` build-time flags (including account signup availability, default TTS provider/model, word highlighting, audiobook export, etc.).
+- **Site features** — runtime overrides for what were previously build-time public env flags (including account signup availability, default TTS provider, audiobook export, etc.).
 
 Admin assignment is reconciled on every session resolution, so removing an email from `ADMIN_EMAILS` demotes the user on next login without a restart. See [Admin Panel](./admin-panel) for the full reference.
 

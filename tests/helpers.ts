@@ -22,6 +22,27 @@ function sha256HexOfFile(filePath: string) {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+async function waitForPdfViewerReady(page: Page, timeout = 60000) {
+  await expect(page).toHaveURL(/\/pdf\/[A-Za-z0-9._%-]+$/, { timeout: Math.min(timeout, 20000) });
+  const loader = page.getByTestId('pdf-status-loader').first();
+  const parseFailedBanner = page.getByText('PDF parsing failed. Retry to continue.').first();
+  await expect
+    .poll(async () => {
+      const parseFailed = await parseFailedBanner.isVisible().catch(() => false);
+      if (parseFailed) return 'failed';
+
+      const documentVisible = await page.locator('.react-pdf__Document').first().isVisible().catch(() => false);
+      const pageVisible = await page.locator('.react-pdf__Page').first().isVisible().catch(() => false);
+      const canvasVisible = await page.locator('.react-pdf__Page canvas').first().isVisible().catch(() => false);
+
+      const hasRenderedPdf = documentVisible || pageVisible || canvasVisible;
+      const loaderVisible = await loader.isVisible().catch(() => false);
+      if (hasRenderedPdf && !loaderVisible) return 'ready';
+      return 'loading';
+    }, { timeout })
+    .toBe('ready');
+}
+
 /**
  * Upload a sample epub or pdf
  */
@@ -63,7 +84,7 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
     await expect(targetLink).toBeVisible({ timeout: 15000 });
     await dismissOnboardingModals(page);
     await targetLink.click();
-    await page.waitForSelector('.react-pdf__Document', { timeout: 15000 });
+    await waitForPdfViewerReady(page, 60000);
     return;
   }
 
@@ -80,7 +101,7 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
   }
 
   if (lower.endsWith('.pdf')) {
-    await page.waitForSelector('.react-pdf__Document', { timeout: 10000 });
+    await waitForPdfViewerReady(page, 60000);
   } else if (lower.endsWith('.epub')) {
     await page.waitForSelector('.epub-container', { timeout: 10000 });
   } else if (lower.endsWith('.txt') || lower.endsWith('.md')) {
@@ -98,29 +119,6 @@ async function dismissOnboardingModals(page: Page): Promise<void> {
   let settledWithoutDialog = 0;
 
   for (let step = 0; step < maxSteps; step += 1) {
-    if (await settingsDialog.isVisible().catch(() => false)) {
-      const backToSettingsBtn = settingsDialog.getByRole('button', { name: /back to settings/i });
-      if (await backToSettingsBtn.isVisible().catch(() => false)) {
-        await expect(backToSettingsBtn).toBeEnabled({ timeout: 10000 });
-        await backToSettingsBtn.click();
-        await page.waitForTimeout(100);
-        settledWithoutDialog = 0;
-        continue;
-      }
-
-      const saveBtn = page.getByTestId('settings-save-button');
-      if (await saveBtn.isVisible().catch(() => false)) {
-        await expect(saveBtn).toBeEnabled({ timeout: 15000 });
-        await saveBtn.click();
-      } else {
-        await page.keyboard.press('Escape');
-      }
-      await settingsDialog.waitFor({ state: 'hidden', timeout: 15000 });
-      await page.waitForTimeout(100);
-      settledWithoutDialog = 0;
-      continue;
-    }
-
     if (await privacyDialog.isVisible().catch(() => false)) {
       const privacyAgree = page.getByTestId('privacy-agree-checkbox');
       if (await privacyAgree.isVisible().catch(() => false)) {
@@ -132,6 +130,30 @@ async function dismissOnboardingModals(page: Page): Promise<void> {
       await expect(continueBtn).toBeEnabled({ timeout: 10000 });
       await continueBtn.click();
       await privacyDialog.waitFor({ state: 'hidden', timeout: 15000 });
+      await page.waitForTimeout(100);
+      settledWithoutDialog = 0;
+      continue;
+    }
+
+    if (await settingsDialog.isVisible().catch(() => false)) {
+      const backToSettingsBtn = settingsDialog.getByRole('button', { name: /back to settings/i });
+      if (await backToSettingsBtn.isVisible().catch(() => false)) {
+        await expect(backToSettingsBtn).toBeEnabled({ timeout: 10000 });
+        await backToSettingsBtn.click();
+        await page.waitForTimeout(100);
+      }
+
+      // For test setup teardown, we only need to dismiss overlays.
+      // Avoid saving because Save can race with state changes and detach.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await page.keyboard.press('Escape');
+        const hidden = await settingsDialog.isHidden().catch(() => false);
+        if (hidden) {
+          break;
+        }
+        await page.waitForTimeout(100);
+      }
+      await settingsDialog.waitFor({ state: 'hidden', timeout: 15000 });
       await page.waitForTimeout(100);
       settledWithoutDialog = 0;
       continue;
@@ -350,10 +372,28 @@ export async function ensureDocumentsListed(page: Page, fileNames: string[]) {
 
 // Click the document link row by filename
 export async function clickDocumentLink(page: Page, fileName: string) {
-  await page
+  const link = page
     .getByRole('link', { name: new RegExp(escapeRegExp(fileName), 'i') })
-    .first()
-    .click();
+    .first();
+  await expect(link).toBeVisible({ timeout: 15_000 });
+
+  const href = await link.getAttribute('href');
+  if (!href) {
+    await link.click();
+    return;
+  }
+
+  const navigatedByClick = await Promise.all([
+    page
+      .waitForURL((url) => url.pathname === href, { timeout: 8_000 })
+      .then(() => true)
+      .catch(() => false),
+    link.click(),
+  ]).then(([ok]) => ok);
+
+  if (!navigatedByClick) {
+    await page.goto(href);
+  }
 }
 
 // Expect correct URL and viewer to be visible for a given file by extension
@@ -362,7 +402,7 @@ export async function expectViewerForFile(page: Page, fileName: string) {
   if (lower.endsWith('.pdf') || lower.endsWith('.docx')) {
     // DOCX converts to PDF, so viewer expectations are PDF
     await expect(page).toHaveURL(/\/pdf\/[A-Za-z0-9._%-]+$/);
-    await expect(page.locator('.react-pdf__Document')).toBeVisible({ timeout: 15000 });
+    await waitForPdfViewerReady(page, 60000);
     return;
   }
   if (lower.endsWith('.epub')) {

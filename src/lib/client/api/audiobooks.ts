@@ -5,8 +5,6 @@ import type {
   AudiobookStatusResponse,
   CreateChapterPayload,
   VoicesResponse,
-  AlignmentPayload,
-  AlignmentResponse,
   TTSSegmentsEnsureRequest,
   TTSSegmentsEnsureResponse,
 } from '@/types/client';
@@ -205,23 +203,6 @@ export const getVoices = async (headers: HeadersInit): Promise<VoicesResponse> =
   });
 
   if (!response.ok) throw new Error('Failed to fetch voices');
-  return await response.json();
-};
-
-// --- Whisper API ---
-
-
-
-export const alignAudio = async (payload: AlignmentPayload): Promise<AlignmentResponse | null> => {
-  const response = await fetch('/api/whisper', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) return null;
   return await response.json();
 };
 

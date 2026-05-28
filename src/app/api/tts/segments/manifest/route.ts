@@ -20,6 +20,8 @@ import type {
 import { isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveEffectiveProviderType } from '@/lib/shared/tts-provider-policy';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
+import { createRequestLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -178,6 +180,10 @@ function cursorFromGroupRow(row: ManifestGroupRow): TTSSegmentManifestCursor {
 }
 
 export async function GET(request: NextRequest) {
+  const { logger } = createRequestLogger({
+    route: '/api/tts/segments/manifest',
+    request,
+  });
   try {
     const documentIdRaw = request.nextUrl.searchParams.get('documentId');
     const documentId = documentIdRaw?.trim().toLowerCase();
@@ -381,7 +387,12 @@ export async function GET(request: NextRequest) {
     };
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error listing TTS segments manifest:', error);
-    return NextResponse.json({ error: 'Failed to list TTS segments' }, { status: 500 });
+    return errorResponse(error, {
+      logger,
+      event: 'tts.segments.manifest.list_failed',
+      msg: 'Failed to list TTS segments',
+      apiErrorMessage: 'Failed to list TTS segments',
+      normalize: { code: 'TTS_SEGMENTS_MANIFEST_LIST_FAILED', errorClass: 'db' },
+    });
   }
 }

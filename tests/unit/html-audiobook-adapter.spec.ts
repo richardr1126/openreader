@@ -30,7 +30,6 @@ test.describe('createHtmlAudiobookSourceAdapter (markdown chapter splitting)', (
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: false,
-      smartSentenceSplitting: false,
     });
     const chapters = await adapter.prepareChapters();
     expect(chapters.map((c) => c.title)).toEqual(['Alpha', 'Beta', 'Delta']);
@@ -46,7 +45,6 @@ test.describe('createHtmlAudiobookSourceAdapter (markdown chapter splitting)', (
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: false,
-      smartSentenceSplitting: false,
     });
     const chapters = await adapter.prepareChapters();
     expect(chapters.map((c) => c.title)).toEqual(['Introduction', 'First Heading']);
@@ -64,7 +62,6 @@ test.describe('createHtmlAudiobookSourceAdapter (markdown chapter splitting)', (
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: false,
-      smartSentenceSplitting: false,
       fallbackBlocksPerChapter: 3,
     });
     const chapters = await adapter.prepareChapters();
@@ -88,7 +85,6 @@ test.describe('createHtmlAudiobookSourceAdapter (markdown chapter splitting)', (
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: false,
-      smartSentenceSplitting: false,
       chapterHeadingLevel: 1,
     });
     const chapters = await adapter.prepareChapters();
@@ -109,7 +105,6 @@ test.describe('createHtmlAudiobookSourceAdapter (txt chapter splitting)', () => 
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: true,
-      smartSentenceSplitting: false,
     });
     const chapters = await adapter.prepareChapters();
     expect(chapters.map((c) => c.title)).toEqual(['Part 1', 'Part 2', 'Part 3']);
@@ -128,7 +123,6 @@ test.describe('createHtmlAudiobookSourceAdapter (txt chapter splitting)', () => 
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: true,
-      smartSentenceSplitting: false,
     });
     const chapters = await adapter.prepareChapters();
     expect(chapters.length).toBe(1);
@@ -142,7 +136,6 @@ test.describe('createHtmlAudiobookSourceAdapter — prepareChapter', () => {
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: false,
-      smartSentenceSplitting: false,
     });
     const list = await adapter.prepareChapters();
     const second = await adapter.prepareChapter(1);
@@ -155,7 +148,6 @@ test.describe('createHtmlAudiobookSourceAdapter — prepareChapter', () => {
     const adapter = createHtmlAudiobookSourceAdapter({
       blocks,
       isTxt: false,
-      smartSentenceSplitting: false,
     });
     await expect(adapter.prepareChapter(42)).rejects.toThrow(/invalid chapter index/i);
   });

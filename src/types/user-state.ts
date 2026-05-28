@@ -7,7 +7,6 @@ export const SYNCED_PREFERENCE_KEYS = [
   'voice',
   'skipBlank',
   'epubTheme',
-  'smartSentenceSplitting',
   'segmentPreloadDepthPages',
   'segmentPreloadSentenceLookahead',
   'ttsSegmentMaxBlockLength',

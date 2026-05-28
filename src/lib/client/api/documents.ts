@@ -1,5 +1,7 @@
 import { sha256HexFromArrayBuffer } from '@/lib/client/sha256';
 import type { BaseDocument, DocumentType } from '@/types/documents';
+import type { ParsedPdfDocument, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
+import type { DocumentSettings } from '@/types/document-settings';
 
 export type UploadSource = {
   id: string;
@@ -74,6 +76,161 @@ export async function listDocuments(options?: { ids?: string[]; signal?: AbortSi
 export async function getDocumentMetadata(id: string, options?: { signal?: AbortSignal }): Promise<BaseDocument | null> {
   const docs = await listDocuments({ ids: [id], signal: options?.signal });
   return docs[0] ?? null;
+}
+
+export async function getParsedPdfDocument(
+  id: string,
+  options?: { signal?: AbortSignal; retryFailed?: boolean; opId?: string },
+): Promise<
+  | { status: 'ready'; parsed: ParsedPdfDocument }
+  | { status: 'pending' | 'running' | 'failed'; parseProgress?: PdfParseProgress | null; opId?: string | null }
+> {
+  const params = new URLSearchParams();
+  if (options?.retryFailed) params.set('retry', '1');
+  if (options?.opId) params.set('opId', options.opId);
+  const query = params.size > 0 ? `?${params.toString()}` : '';
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed${query}`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+
+  if (res.status === 202) {
+    const data = (await res.json().catch(() => null)) as {
+      parseStatus?: string;
+      parseProgress?: PdfParseProgress | null;
+      opId?: string | null;
+    } | null;
+    const parseStatus = data?.parseStatus;
+    if (parseStatus === 'pending' || parseStatus === 'running' || parseStatus === 'failed') {
+      return { status: parseStatus, parseProgress: data?.parseProgress ?? null, opId: data?.opId ?? null };
+    }
+    return { status: 'pending', parseProgress: data?.parseProgress ?? null, opId: data?.opId ?? null };
+  }
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to load parsed PDF');
+  }
+
+  const parsed = (await res.json()) as ParsedPdfDocument;
+  return { status: 'ready', parsed };
+}
+
+export function subscribeParsedPdfDocumentEvents(
+  id: string,
+  options: {
+    opId?: string | null;
+  },
+  handlers: {
+    onSnapshot: (snapshot: {
+      parseStatus: PdfParseStatus;
+      parseProgress: PdfParseProgress | null;
+      opId?: string | null;
+    }) => void;
+    onError?: (error: Event) => void;
+  },
+): () => void {
+  const params = new URLSearchParams();
+  if (options.opId) params.set('opId', options.opId);
+  const query = params.size > 0 ? `?${params.toString()}` : '';
+  const source = new EventSource(`/api/documents/${encodeURIComponent(id)}/parsed/events${query}`);
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const payload = JSON.parse(event.data) as {
+        parseStatus: PdfParseStatus;
+        parseProgress: PdfParseProgress | null;
+        opId?: string | null;
+      };
+      handlers.onSnapshot(payload);
+    } catch {
+      // Ignore malformed payloads to avoid breaking active streams.
+    }
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(event);
+  });
+  return () => {
+    source.close();
+  };
+}
+
+export async function forceReparsePdfDocument(
+  id: string,
+  options?: { signal?: AbortSignal },
+): Promise<{ status: 'pending' | 'running'; opId?: string | null }> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
+    method: 'POST',
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+
+  if (res.status === 409) {
+    const data = (await res.json().catch(() => null)) as {
+      parseStatus?: string;
+      opId?: string | null;
+      error?: string;
+    } | null;
+    if (typeof data?.opId === 'string' && data.opId.trim()) {
+      return {
+        status: data?.parseStatus === 'running' ? 'running' : 'pending',
+        opId: data.opId,
+      };
+    }
+  }
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to force PDF reparse');
+  }
+
+  const data = (await res.json().catch(() => null)) as { parseStatus?: string; opId?: string | null } | null;
+  return {
+    status: data?.parseStatus === 'running' ? 'running' : 'pending',
+    opId: data?.opId ?? null,
+  };
+}
+
+type DocumentSettingsResponse = {
+  settings: DocumentSettings;
+  clientUpdatedAtMs: number;
+  hasStoredSettings?: boolean;
+};
+
+export async function getDocumentSettings(
+  id: string,
+  options?: { signal?: AbortSignal },
+): Promise<DocumentSettingsResponse> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/settings`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to load document settings');
+  }
+  return (await res.json()) as DocumentSettingsResponse;
+}
+
+export async function putDocumentSettings(
+  id: string,
+  settings: DocumentSettings,
+  options?: { signal?: AbortSignal; clientUpdatedAtMs?: number },
+): Promise<DocumentSettingsResponse & { applied: boolean }> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      settings,
+      clientUpdatedAtMs: options?.clientUpdatedAtMs ?? Date.now(),
+    }),
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to update document settings');
+  }
+  return (await res.json()) as DocumentSettingsResponse & { applied: boolean };
 }
 
 export async function uploadDocumentSources(sources: UploadSource[], options?: UploadOptions): Promise<BaseDocument[]> {

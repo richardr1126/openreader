@@ -15,6 +15,14 @@ const securityHeaders = [
   },
 ];
 
+const bundleWorkerCompute = true;
+const serverExternalPackages = [
+  '@napi-rs/canvas',
+  'better-sqlite3',
+  'ffmpeg-static',
+  ...(!bundleWorkerCompute ? ['onnxruntime-node', '@huggingface/tokenizers'] : []),
+];
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -30,7 +38,8 @@ const nextConfig: NextConfig = {
       canvas: '@napi-rs/canvas',
     },
   },
-  serverExternalPackages: ["@napi-rs/canvas", "ffmpeg-static", "better-sqlite3"],
+  transpilePackages: [],
+  serverExternalPackages,
   outputFileTracingIncludes: {
     '/api/audiobook': [
       './node_modules/ffmpeg-static/ffmpeg',
@@ -38,7 +47,7 @@ const nextConfig: NextConfig = {
     '/api/audiobook/chapter': [
       './node_modules/ffmpeg-static/ffmpeg',
     ],
-    '/api/whisper': [
+    '/api/tts/segments/ensure': [
       './node_modules/ffmpeg-static/ffmpeg',
     ],
     '/api/documents/blob/preview/ensure': [
@@ -50,6 +59,24 @@ const nextConfig: NextConfig = {
     '/api/documents/blob/preview/fallback': [
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
     ],
+  },
+  outputFileTracingExcludes: {
+    '/*': [
+      './docstore/**/*',
+      './node_modules/onnxruntime-node/**/*',
+      './node_modules/@huggingface/tokenizers/**/*',
+    ],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer && bundleWorkerCompute) {
+      config.resolve.alias = {
+        ...(config.resolve.alias || {}),
+        '@openreader/compute-core/local-runtime$': false,
+        'onnxruntime-node$': false,
+        '@huggingface/tokenizers$': false,
+      };
+    }
+    return config;
   },
 };
 

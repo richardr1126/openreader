@@ -8,6 +8,7 @@ import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/cli
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
 const inFlightPreviewPrime = new Map<string, Promise<string | null>>();
+const PREVIEW_CACHE_SCHEMA_VERSION = 4;
 
 function revokeIfBlobUrl(url: string | null | undefined): void {
   if (!url) return;
@@ -45,6 +46,11 @@ export async function getPersistedDocumentPreviewUrl(
 ): Promise<string | null> {
   const row = await getDocumentPreviewCache(docId);
   if (!row) return null;
+
+  if (Number((row as { previewVersion?: number }).previewVersion ?? 1) !== PREVIEW_CACHE_SCHEMA_VERSION) {
+    await removeDocumentPreviewCache(docId).catch(() => {});
+    return null;
+  }
 
   if (Number(row.lastModified) !== Number(lastModified)) {
     await removeDocumentPreviewCache(docId).catch(() => {});
@@ -102,6 +108,7 @@ export async function primeDocumentPreviewCache(
     contentType,
     data: bytes,
     cachedAt: Date.now(),
+    previewVersion: PREVIEW_CACHE_SCHEMA_VERSION,
   });
 
   const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));

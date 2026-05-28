@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { setupTest, uploadFiles, ensureDocumentsListed, waitForDocumentListHintPersist, dispatchHtml5DragAndDrop } from './helpers';
 
 test.describe('Document folders and hint persistence', () => {
@@ -7,7 +7,7 @@ test.describe('Document folders and hint persistence', () => {
   });
 
   // Utility to get the draggable row for a given filename (by link)
-  const rowFor = (page: any, fileName: string) => {
+  const rowFor = (page: Page, fileName: string) => {
     const link = page.getByRole('link', { name: new RegExp(fileName, 'i') }).first();
     // The draggable attribute lives on the row container ancestor
     return link.locator('xpath=ancestor::*[@draggable="true"][1]');

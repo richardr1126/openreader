@@ -29,10 +29,8 @@ export function selectUpcomingWalkerItems<T extends EpubWalkerLocationItem>(
  * (previous/current) so walker boundary behavior aligns with setText.
  */
 export function buildWalkerPlanningSourceUnits(
-  smartSentenceSplitting: boolean,
   contextUnits: readonly CanonicalTtsSourceUnit[],
   upcomingUnits: readonly CanonicalTtsSourceUnit[],
 ): CanonicalTtsSourceUnit[] {
-  if (!smartSentenceSplitting) return [...upcomingUnits];
   return [...contextUnits, ...upcomingUnits];
 }

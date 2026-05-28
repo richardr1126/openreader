@@ -36,6 +36,27 @@
       "when": 1778644075081,
       "tag": "0004_admin_panel",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1779041717890,
+      "tag": "0005_pdf_layout_and_compute",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779102950385,
+      "tag": "0006_preview-defaults-cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1779378125905,
+      "tag": "0007_pdf_parse_progress",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,8 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, putDocumentBlob } from '@/lib/server/documents/blobstore';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,15 +44,24 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    console.info('[blob-fallback] upload proxy used', {
-      id,
+    serverLogger.info({
+      event: 'documents.blob.upload.fallback.proxy_used',
+      degraded: true,
+      fallbackPath: 'upload_proxy',
+      documentId: id,
       contentType,
       bytes: body.byteLength,
-    });
+    }, 'Document upload fallback proxy used');
 
     return NextResponse.json({ success: true, id });
   } catch (error) {
-    console.error('Error proxy-uploading document blob:', error);
-    return NextResponse.json({ error: 'Failed to upload document blob' }, { status: 500 });
+    serverLogger.error({
+      event: 'documents.blob.upload.fallback.failed',
+      error: errorToLog(error),
+    }, 'Failed to proxy-upload document blob');
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to upload document blob',
+      normalize: { code: 'DOCUMENTS_BLOB_UPLOAD_FALLBACK_FAILED', errorClass: 'storage' },
+    });
   }
 }

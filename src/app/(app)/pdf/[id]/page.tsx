@@ -3,14 +3,14 @@
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import TTSPlayer from '@/components/player/TTSPlayer';
@@ -19,6 +19,14 @@ import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { LoadingSpinner } from '@/components/Spinner';
+import {
+  FORCE_REPARSE_CONFIRM_MESSAGE,
+  FORCE_REPARSE_CONFIRM_TEXT,
+  FORCE_REPARSE_CONFIRM_TITLE,
+  isForceReparseDisabled,
+} from '@/lib/client/pdf/force-reparse';
+import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -26,9 +34,11 @@ const PDFViewer = dynamic(
   () => import('@/components/views/PDFViewer').then((module) => module.PDFViewer),
   {
     ssr: false,
-    loading: () => <DocumentSkeleton />
+    loading: () => null
   }
 );
+
+const PARSE_LOADER_EXPAND_DELAY_MS = 320;
 
 export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
@@ -41,6 +51,13 @@ export default function PDFViewerPage() {
     clearCurrDoc,
     currDocPage,
     currDocPages,
+    parseStatus,
+    parseProgress,
+    documentSettings,
+    updateDocumentSettings,
+    parsedOverlayEnabled,
+    setParsedOverlayEnabled,
+    forceReparseParsedPdf,
     createFullAudioBook: createPDFAudioBook,
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
@@ -48,14 +65,29 @@ export default function PDFViewerPage() {
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPdfViewerReady, setIsPdfViewerReady] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'segments'>(null);
+  const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
+  const [showDetailedParseLoader, setShowDetailedParseLoader] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
+  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
+  const parseUiState: NonNullable<typeof parseStatus> = parseStatus ?? 'pending';
+  const hasResolvedParseStatus = parseStatus !== null;
+  const isParseReady = parseUiState === 'ready';
+  const forceReparseDisabled = isForceReparseDisabled(parseStatus);
+  const hasRealParseProgress = !!parseProgress
+    && parseProgress.totalPages > 0
+    && parseProgress.pagesParsed >= 0;
+  const shouldShowExpandedParseLoader = !isLoading
+    && hasResolvedParseStatus
+    && (parseUiState === 'pending' || parseUiState === 'running' || parseUiState === 'failed' || hasRealParseProgress);
 
   useEffect(() => {
     setIsLoading(true);
+    setIsPdfViewerReady(false);
     setError(null);
     setActiveSidebar(null);
     inFlightDocIdRef.current = null;
@@ -67,6 +99,7 @@ export default function PDFViewerPage() {
     console.log('Loading new document (from page.tsx)');
     let didRedirect = false;
     let startedLoad = false;
+    let loadSucceeded = false;
     try {
       if (!id) {
         setError('Document not found');
@@ -89,8 +122,20 @@ export default function PDFViewerPage() {
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
       stop(); // Reset TTS when loading new document
-      await setCurrentDocument(resolved);
-      loadedDocIdRef.current = resolved;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const loaded = await setCurrentDocument(resolved);
+        if (loaded) {
+          loadSucceeded = true;
+          loadedDocIdRef.current = resolved;
+          break;
+        }
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+      if (!loadSucceeded) {
+        throw new Error(`Failed to load PDF document ${resolved}`);
+      }
     } catch (err) {
       console.error('Error loading document:', err);
       setError('Failed to load document');
@@ -98,7 +143,7 @@ export default function PDFViewerPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad) {
+      if (!didRedirect && startedLoad && loadSucceeded) {
         setIsLoading(false);
       }
     }
@@ -107,6 +152,30 @@ export default function PDFViewerPage() {
   useEffect(() => {
     loadDocument();
   }, [loadDocument]);
+
+  useUnmountCleanupRef(clearCurrDoc);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isParseReady) return;
+    stop();
+  }, [isLoading, isParseReady, stop]);
+
+  useEffect(() => {
+    if (!shouldShowExpandedParseLoader) {
+      // Keep the current loader variant stable during the final
+      // parse-ready -> first-frame handoff to avoid a visual flash.
+      if (!isLoading && isParseReady && !isPdfViewerReady) {
+        return;
+      }
+      setShowDetailedParseLoader(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setShowDetailedParseLoader(true);
+    }, PARSE_LOADER_EXPAND_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [shouldShowExpandedParseLoader, id, isLoading, isParseReady, isPdfViewerReady]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -117,15 +186,43 @@ export default function PDFViewerPage() {
       const ttsH = ttsbar ? ttsbar.getBoundingClientRect().height : 0;
       const vh = window.innerHeight;
       const h = Math.max(0, vh - headerH - ttsH);
-      setContainerHeight(`${h}px`);
+      // Avoid locking the reader at 0px during transient startup layout states.
+      if (h > 0) {
+        setContainerHeight(`${h}px`);
+      }
     };
     compute();
+    const settleT1 = window.setTimeout(compute, 0);
+    const settleT2 = window.setTimeout(compute, 120);
     window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.clearTimeout(settleT1);
+      window.clearTimeout(settleT2);
+    };
+  }, [isLoading, isParseReady, isAtLimit, activeSidebar]);
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 10, 300));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 10, 50));
+
+  const handleBackToDocuments = useCallback((event?: MouseEvent) => {
+    event?.preventDefault();
+    if (isNavigatingBack) return;
+    setIsNavigatingBack(true);
+    stop();
+    setActiveSidebar(null);
+    router.push('/app');
+  }, [isNavigatingBack, stop, router]);
+
+  const requestForceReparse = useCallback(() => {
+    if (forceReparseDisabled) return;
+    setShowForceReparseConfirm(true);
+  }, [forceReparseDisabled]);
+
+  const confirmForceReparse = useCallback(() => {
+    setShowForceReparseConfirm(false);
+    void forceReparseParsedPdf();
+  }, [forceReparseParsedPdf]);
 
   const handleGenerateAudiobook = useCallback(async (
     onProgress: (progress: number) => void,
@@ -133,8 +230,11 @@ export default function PDFViewerPage() {
     onChapterComplete: (chapter: TTSAudiobookChapter) => void,
     settings: AudiobookGenerationSettings
   ) => {
+    if (!isParseReady) {
+      throw new Error('PDF parsing is not ready yet.');
+    }
     return createPDFAudioBook(onProgress, signal, onChapterComplete, id as string, settings.format, settings);
-  }, [createPDFAudioBook, id]);
+  }, [createPDFAudioBook, id, isParseReady]);
 
   const handleRegenerateChapter = useCallback(async (
     chapterIndex: number,
@@ -142,8 +242,11 @@ export default function PDFViewerPage() {
     settings: AudiobookGenerationSettings,
     signal: AbortSignal
   ) => {
+    if (!isParseReady) {
+      throw new Error('PDF parsing is not ready yet.');
+    }
     return regeneratePDFChapter(chapterIndex, bookId, settings.format, signal, settings);
-  }, [regeneratePDFChapter]);
+  }, [regeneratePDFChapter, isParseReady]);
 
   if (error) {
     return (
@@ -151,7 +254,7 @@ export default function PDFViewerPage() {
         <p className="text-red-500 mb-4">{error}</p>
         <Link
           href="/app"
-          onClick={() => { clearCurrDoc(); }}
+          onClick={handleBackToDocuments}
           className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
         >
           <svg className="w-4 h-4 mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,13 +266,124 @@ export default function PDFViewerPage() {
     );
   }
 
+  const renderPdfStatusLoader = () => {
+    const compactLabel = isLoading
+      ? 'Opening PDF...'
+      : (parseUiState === 'ready' ? 'Rendering pages...' : 'Preparing PDF layout...');
+    const compactSubLabel = isLoading
+      ? 'Loading document data'
+      : (parseUiState === 'ready' ? 'Preparing first frame' : 'Queueing parser and preparing page extraction');
+
+    const totalPages = parseProgress?.totalPages ?? 0;
+    const pagesParsed = parseProgress?.pagesParsed ?? 0;
+    const progressPercent = totalPages > 0
+      ? Math.max(0, Math.min(100, (pagesParsed / totalPages) * 100))
+      : 0;
+    const hasMeasuredProgress = totalPages > 0;
+    const isMerging = parseProgress?.phase === 'merge';
+
+    let statusText = 'Loading PDF...';
+    let statusSubText = 'Initializing document renderer';
+    if (!isLoading) {
+      if (parseUiState === 'pending') {
+        statusText = 'Preparing PDF layout...';
+        statusSubText = parseProgress?.phase === 'merge'
+          ? 'Finalizing stitched block structure'
+          : 'Queueing parser and preparing page extraction';
+      } else if (parseUiState === 'running') {
+        statusText = 'Parsing PDF layout blocks...';
+        statusSubText = parseProgress?.phase === 'merge'
+          ? 'Merging cross-page sections'
+          : 'Inferring reading order and text regions';
+      } else if (parseUiState === 'failed') {
+        statusText = 'PDF parsing failed. Retry to continue.';
+        statusSubText = 'The parser could not build a usable layout map';
+      }
+    }
+
+    const stageLabel = parseUiState === 'failed'
+      ? 'Stage: blocked'
+      : (parseUiState === 'pending'
+        ? 'Stage: prepare'
+        : (isMerging ? 'Stage: merge' : 'Stage: infer'));
+
+    return (
+      <div className="h-full w-full bg-base">
+        <div className={`mx-auto flex h-full items-center px-4 py-6 transition-all duration-300 ease-out ${showDetailedParseLoader ? 'max-w-lg' : 'max-w-md'}`}>
+          {showDetailedParseLoader ? (
+            <div className="w-full rounded-xl border border-offbase bg-offbase/95 shadow-sm overflow-hidden">
+              <div className="h-1 bg-[linear-gradient(90deg,var(--accent),transparent_80%)]" />
+              <div className="p-3.5 sm:p-4">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-offbase bg-base/70 px-2.5 py-1">
+                    <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">PDF Layout Parse</span>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">{statusText}</p>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-offbase bg-base/75 p-2.5">
+                  <div className="mb-1.5 flex items-end justify-between gap-2">
+                    <p className="text-[11px] font-semibold text-foreground">
+                      {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
+                    </p>
+                    <p className="text-[10px] text-muted">{stageLabel}</p>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-offbase overflow-hidden">
+                    <div
+                      className="h-full bg-accent transition-all duration-300 ease-out"
+                      style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-muted">
+                    {hasMeasuredProgress ? `${Math.round(progressPercent)}% complete` : statusSubText}
+                  </p>
+                </div>
+
+                {!isLoading && parseUiState === 'failed' ? (
+                  <div className="mt-3 flex justify-start">
+                    <button
+                      type="button"
+                      onClick={requestForceReparse}
+                      className="inline-flex items-center rounded-md border border-offbase bg-base px-3 py-1.5 text-xs font-medium text-foreground hover:text-accent transition-colors"
+                    >
+                      Retry Parse
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="w-full rounded-xl border border-offbase bg-offbase/95 p-4 shadow-sm transition-all duration-300 ease-out overflow-hidden">
+              <div className="h-0.5 -mx-4 -mt-4 mb-3 bg-[linear-gradient(90deg,var(--accent),transparent_75%)]" />
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{compactLabel}</p>
+                  <p className="mt-1 text-xs text-muted">{compactSubLabel}</p>
+                </div>
+                <span className="inline-flex items-center justify-center rounded-md border border-offbase bg-base p-1.5">
+                  <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-1.5">
+                <span className="h-1.5 rounded-full bg-accent/30 animate-pulse" />
+                <span className="h-1.5 rounded-full bg-accent/20 animate-pulse [animation-delay:120ms]" />
+                <span className="h-1.5 rounded-full bg-accent/15 animate-pulse [animation-delay:220ms]" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <Header
         left={
           <Link
             href="/app"
-            onClick={() => clearCurrDoc()}
+            onClick={handleBackToDocuments}
             className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
             aria-label="Back to documents"
           >
@@ -199,15 +413,21 @@ export default function PDFViewerPage() {
           </div>
         }
       />
-      <div className="overflow-hidden" style={{ height: containerHeight }}>
-
-        {isLoading ? (
-          <div className="p-4">
-            <DocumentSkeleton />
+      <div className="relative overflow-hidden" style={{ height: containerHeight }}>
+        {isParseReady ? (
+          <div className={isPdfViewerReady ? 'h-full' : 'h-full opacity-0 pointer-events-none'}>
+            <PDFViewer
+              zoomLevel={zoomLevel}
+              onDocumentReady={() => setIsPdfViewerReady(true)}
+              pdfState={pdfState}
+            />
           </div>
-        ) : (
-          <PDFViewer zoomLevel={zoomLevel} pdfState={pdfState} />
-        )}
+        ) : null}
+        {isLoading || !isParseReady || !isPdfViewerReady ? (
+          <div className="absolute inset-0 z-10" data-testid="pdf-status-loader">
+            {renderPdfStatusLoader()}
+          </div>
+        ) : null}
       </div>
       {canExportAudiobook && (
         <AudiobookExportModal
@@ -226,12 +446,41 @@ export default function PDFViewerPage() {
             <RateLimitBanner />
           </div>
         </div>
-      ) : (
+      ) : isParseReady ? (
         <TTSPlayer currentPage={currDocPage} numPages={currDocPages} />
-      )}
+      ) : null}
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        pdf={{
+          parseStatus,
+          parsedOverlayEnabled,
+          skipBlockKinds: documentSettings.pdf?.skipBlockKinds ?? [],
+          onToggleOverlay: (enabled) => setParsedOverlayEnabled(enabled),
+          onToggleSkipKind: (kind, enabled) => {
+            const current = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
+            if (enabled) current.add(kind);
+            else current.delete(kind);
+            void updateDocumentSettings({
+              ...documentSettings,
+              schemaVersion: 1,
+              pdf: {
+                ...(documentSettings.pdf ?? {}),
+                skipBlockKinds: Array.from(current),
+              },
+            });
+          },
+          onForceReparse: requestForceReparse,
+        }}
+      />
+      <ConfirmDialog
+        isOpen={showForceReparseConfirm}
+        onClose={() => setShowForceReparseConfirm(false)}
+        onConfirm={confirmForceReparse}
+        title={FORCE_REPARSE_CONFIRM_TITLE}
+        message={FORCE_REPARSE_CONFIRM_MESSAGE}
+        confirmText={FORCE_REPARSE_CONFIRM_TEXT}
+        cancelText="Cancel"
       />
       <SegmentsSidebar
         isOpen={activeSidebar === 'segments'}

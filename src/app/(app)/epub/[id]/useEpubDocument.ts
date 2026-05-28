@@ -101,7 +101,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     baseUrl,
     providerRef,
     ttsSegmentMaxBlockLength,
-    smartSentenceSplitting,
     epubTheme,
     epubHighlightEnabled,
   } = useConfig();
@@ -239,22 +238,13 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
       const leadingPreview = collectLeadingContextFromRange(range);
       const continuationPreview = collectContinuationFromRange(range);
 
-      if (smartSentenceSplitting) {
-        setTTSText(textContent, {
-          shouldPause,
-          location: start.cfi,
-          previousText: leadingPreview,
-          nextLocation: end.cfi,
-          nextText: continuationPreview
-        });
-      } else {
-        // When smart splitting is disabled, behave like the original implementation:
-        // send only the current page/location text without any continuation preview.
-        setTTSText(textContent, {
-          shouldPause,
-          location: start.cfi,
-        });
-      }
+      setTTSText(textContent, {
+        shouldPause,
+        location: start.cfi,
+        previousText: leadingPreview,
+        nextLocation: end.cfi,
+        nextText: continuationPreview
+      });
       setCurrDocText(textContent);
 
       return textContent;
@@ -262,7 +252,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
       console.error('Error extracting EPUB text:', error);
       return '';
     }
-  }, [setRenderedTextMaps, setTTSText, smartSentenceSplitting]);
+  }, [setRenderedTextMaps, setTTSText]);
 
   /**
    * Resolves a draft EPUB locator (typically `{ readerType: 'epub', location:

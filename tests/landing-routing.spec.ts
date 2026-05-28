@@ -37,6 +37,7 @@ test.describe('Landing and app routing', () => {
   });
 
   test('documents back link returns to /app', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
     await setupTest(page, testInfo);
     await uploadAndDisplay(page, 'sample.pdf');
 

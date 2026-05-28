@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
 
 import { Providers } from '@/app/providers';
-import ClaimDataPopup from '@/components/auth/ClaimDataModal';
 import { getAuthBaseUrl, isAnonymousAuthSessionsEnabled, isAuthEnabled, isGithubAuthEnabled } from '@/lib/server/auth/config';
 
 export const dynamic = 'force-dynamic';
@@ -36,7 +35,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       githubAuthEnabled={githubAuthEnabled}
     >
       <div className="app-shell min-h-screen flex flex-col bg-background">
-        {authEnabled && <ClaimDataPopup />}
         <main className="flex-1 flex flex-col">{children}</main>
       </div>
       <Toaster

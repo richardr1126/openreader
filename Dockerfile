@@ -1,23 +1,13 @@
-# Stage 1: build whisper.cpp (no model download – the app handles that)
-FROM alpine:3.23 AS whisper-builder
-
-RUN apk add --no-cache git cmake build-base
-
-WORKDIR /opt
-
-ARG TARGETARCH
-
-RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git && \
-    cd whisper.cpp && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF $( [ "$TARGETARCH" = "arm64" ] && echo "-DGGML_CPU_ARM_ARCH=armv8-a" || true ) && \
-    cmake --build build -j
-
-# Stage 1b: extract seaweedfs weed binary (for optional embedded weed mini)
+# Stage 1: extract seaweedfs weed binary (for optional embedded weed mini)
 # Pin to 4.18 because CI observed upload regressions on 4.19.
 FROM chrislusf/seaweedfs:4.18 AS seaweedfs-builder
 RUN cp "$(command -v weed)" /tmp/weed && \
     (wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/LICENSE" || \
      wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/main/LICENSE")
+
+# Stage 1b: extract nats-server binary for embedded single-container worker mode.
+FROM nats:2.11-alpine AS nats-builder
+RUN cp "$(command -v nats-server)" /tmp/nats-server
 
 
 # Stage 2: build the Next.js app
@@ -29,8 +19,10 @@ RUN npm install -g pnpm@11.1.2
 # Create app directory
 WORKDIR /app
 
-# Copy package files
+# Copy workspace manifests needed for dependency installation
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY compute/core/package.json ./compute/core/package.json
+COPY compute/worker/package.json ./compute/worker/package.json
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -59,29 +51,30 @@ FROM node:lts-alpine AS runner
 # ffmpeg is provided by ffmpeg-static from node_modules.
 RUN apk add --no-cache ca-certificates libreoffice-writer
 
-# Install pnpm globally for running the app
-RUN npm install -g pnpm@11.1.2
+# Install pnpm for runtime process commands.
+RUN npm install -g pnpm@10.33.4
 
 # App runtime directory
 WORKDIR /app
 
-# Copy built app and dependencies from the builder stage
+# Copy built app and runtime files from the builder stage (non-standalone runtime).
 COPY --from=app-builder /app ./
 # Include third-party license report and copied license texts at a stable path in the image.
 COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
+# Include static model notices for runtime-downloaded assets.
+COPY --from=app-builder /app/compute/core/src/pdf/assets/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
 
-# Copy the compiled whisper.cpp build output into the runtime image
-# (includes whisper-cli and its shared libraries, e.g. libwhisper.so, libggml.so)
-COPY --from=whisper-builder /opt/whisper.cpp/build /opt/whisper.cpp/build
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed
+# Copy nats-server binary for embedded local JetStream.
+COPY --from=nats-builder /tmp/nats-server /usr/local/bin/nats-server
+RUN chmod +x /usr/local/bin/nats-server
 
-# Point the app at the compiled whisper-cli binary and ensure its libs are discoverable
-ENV WHISPER_CPP_BIN=/opt/whisper.cpp/build/bin/whisper-cli
-ENV LD_LIBRARY_PATH=/opt/whisper.cpp/build
+# Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
+COPY --from=app-builder /app/compute/core/src/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
 
 # Expose the port the app runs on
 EXPOSE 3003

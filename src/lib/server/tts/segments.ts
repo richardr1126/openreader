@@ -81,6 +81,9 @@ export function normalizeLocator(locator: TTSSegmentLocator | undefined): TTSSeg
     return {
       readerType: 'pdf',
       page: Math.max(1, Math.floor(locator.page)),
+      ...(typeof locator.blockId === 'string' && locator.blockId.trim()
+        ? { blockId: locator.blockId.trim() }
+        : {}),
     };
   }
   if (locator.readerType === 'html') {

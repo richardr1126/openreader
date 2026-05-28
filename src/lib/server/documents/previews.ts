@@ -1,10 +1,9 @@
 import { randomUUID } from 'crypto';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { and, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { documentPreviews } from '@/db/schema';
+import { serverLogger } from '@/lib/server/logger';
+import { logServerError } from '@/lib/server/errors/logging';
 import {
   DOCUMENT_PREVIEW_CONTENT_TYPE,
   DOCUMENT_PREVIEW_VARIANT,
@@ -290,28 +289,17 @@ async function markPreviewFailed(docId: string, namespaceKey: string, error: unk
 }
 
 async function generateAndStorePreview(doc: PreviewSourceDocument, namespace: string | null): Promise<void> {
-  let workDir: string | null = null;
-  try {
-    const sourceBytes = await getDocumentBlob(doc.id, namespace);
-    workDir = await mkdtemp(join(tmpdir(), 'openreader-preview-'));
-    const sourcePath = join(workDir, 'source');
-    await writeFile(sourcePath, sourceBytes);
-
-    let rendered;
-    if (doc.type === 'pdf') {
-      rendered = await renderPdfFirstPageToJpeg(sourceBytes, DOCUMENT_PREVIEW_WIDTH);
-    } else if (doc.type === 'epub') {
-      rendered = await renderEpubCoverToJpeg(sourceBytes, DOCUMENT_PREVIEW_WIDTH);
-    } else {
-      throw new Error(`Unsupported preview type: ${doc.type}`);
-    }
-
-    await putDocumentPreviewBuffer(doc.id, rendered.bytes, namespace);
-  } finally {
-    if (workDir) {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
-    }
+  const sourceBytes = await getDocumentBlob(doc.id, namespace);
+  let rendered;
+  if (doc.type === 'pdf') {
+    rendered = await renderPdfFirstPageToJpeg(sourceBytes, DOCUMENT_PREVIEW_WIDTH);
+  } else if (doc.type === 'epub') {
+    rendered = await renderEpubCoverToJpeg(sourceBytes, DOCUMENT_PREVIEW_WIDTH);
+  } else {
+    throw new Error(`Unsupported preview type: ${doc.type}`);
   }
+  // Hot path: overwrite current variant key directly to avoid prefix list/delete latency.
+  await putDocumentPreviewBuffer(doc.id, rendered.bytes, namespace);
 }
 
 function pendingResult(status: PreviewStatus, lastError: string | null): EnsureDocumentPreviewResult {
@@ -388,7 +376,16 @@ export async function ensureDocumentPreview(doc: PreviewSourceDocument, namespac
         eTag: head.eTag,
       });
     } catch (error) {
-      console.error(`[document-previews] Preview generation failed for ${doc.id} (type=${doc.type}):`, error);
+      logServerError(serverLogger, {
+        event: 'documents.preview.generate.failed',
+        msg: 'Preview generation failed',
+        error,
+        context: {
+          documentId: doc.id,
+          documentType: doc.type,
+        },
+        normalize: { code: 'DOCUMENT_PREVIEW_GENERATE_FAILED', errorClass: 'storage' },
+      });
       await markPreviewFailed(doc.id, namespaceKey, error);
     }
   }
