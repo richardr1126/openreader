@@ -431,7 +431,9 @@ export async function deleteDocumentByName(page: Page, fileName: string) {
 // Open Settings modal and navigate to Documents section
 export async function openSettingsDocumentsTab(page: Page) {
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: 'Documents' }).click();
+  const settingsDialog = page.locator('[data-testid="settings-modal"]');
+  await expect(settingsDialog).toBeVisible({ timeout: 10000 });
+  await settingsDialog.getByRole('button', { name: /^Documents$/ }).click();
 }
 
 // Delete all local documents through Settings and close dialogs
