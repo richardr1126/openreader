@@ -178,13 +178,6 @@ async function dismissOnboardingModals(page: Page): Promise<void> {
 }
 
 /**
- * Dismiss startup/settings overlays that can intermittently appear after reloads.
- */
-export async function dismissBlockingModals(page: Page): Promise<void> {
-  await dismissOnboardingModals(page);
-}
-
-/**
  * Wait for the play button to be clickable and click it
  */
 export async function waitAndClickPlay(page: Page) {

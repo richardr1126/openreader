@@ -7,7 +7,6 @@ import {
   dispatchHtml5DragAndDrop,
   expectDocumentListed,
   expectNoDocumentLink,
-  dismissBlockingModals,
 } from './helpers';
 
 test.describe('Document folders and hint persistence', () => {
@@ -63,7 +62,6 @@ test.describe('Document folders and hint persistence', () => {
     // Reload and verify persisted folder + membership
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await dismissBlockingModals(page);
     const myFolderRowAfter = folderRow(page, 'My Folder');
     await expect(myFolderRowAfter).toBeVisible();
     await myFolderRowAfter.click();

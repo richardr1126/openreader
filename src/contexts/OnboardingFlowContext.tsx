@@ -179,7 +179,11 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
       if (!local.firstVisitSettingsOpened) {
         await setFirstVisit(true);
-        openSettingsNow();
+        // In no-auth mode (used by local/CI e2e), avoid background modal opens
+        // that can race with interactions and steal pointer events.
+        if (authEnabled) {
+          openSettingsNow();
+        }
         return;
       }
 
@@ -263,6 +267,10 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   }, [advanceFlow, authEnabled]);
 
   useEffect(() => {
+    if (!authEnabled) {
+      return () => { };
+    }
+
     return scheduleChangelogCheck({
       authEnabled,
       isSessionPending,
