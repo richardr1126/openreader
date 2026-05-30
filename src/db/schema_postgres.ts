@@ -66,6 +66,22 @@ export const userTtsChars = pgTable("user_tts_chars", {
   index('idx_user_tts_chars_date').on(table.date),
 ]);
 
+// Generic per-user job-creation ledger for rate/concurrency limiting of
+// expensive compute operations (e.g. PDF layout parsing). One row per created
+// worker op. A trailing-window COUNT over (user_id, action) enforces both a
+// short-window burst cap and a wider sustained/concurrency cap; because the
+// worker bounds each op by a hard cap, "ops created in the last hard-cap
+// window" is an upper bound on in-flight ops. Old rows are pruned opportunistically.
+export const userJobEvents = pgTable('user_job_events', {
+  userId: text('user_id').notNull(),
+  action: text('action').notNull(),
+  opId: text('op_id').notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.action, table.opId] }),
+  index('idx_user_job_events_user_action_created').on(table.userId, table.action, table.createdAt),
+]);
+
 export const userPreferences = pgTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   dataJson: jsonb('data_json').notNull().default({}),

@@ -11,6 +11,8 @@ import { documents } from '@/db/schema';
 import { safeDocumentName } from '@/lib/server/documents/utils';
 import { enqueueDocumentPreview } from '@/lib/server/documents/previews';
 import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
+import { recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
@@ -173,6 +175,9 @@ export async function POST(req: NextRequest) {
         }, 'Failed to enqueue preview for converted DOCX');
       });
 
+      // Record upload-driven parse load (see register route for rationale).
+      const pdfRateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
+      await recordJobEvent(ctxOrRes.userId, 'pdf_layout', `docx:${randomUUID()}`, pdfRateConfig);
       enqueueParsePdfJob({
         documentId: id,
         userId: storageUserId,

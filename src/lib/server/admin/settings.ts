@@ -111,6 +111,17 @@ export const RUNTIME_CONFIG_SCHEMA = {
   ttsDailyLimitAuthenticated: positiveIntValue(500_000),
   ttsIpDailyLimitAnonymous: positiveIntValue(100_000),
   ttsIpDailyLimitAuthenticated: positiveIntValue(1_000_000),
+  // Per-user throttle for expensive PDF-layout parsing. Enabled by default.
+  // When enabled, the sub-limits below apply (admin-tunable, no env seed):
+  // a short "burst" window plus a wider "sustained" window that also bounds
+  // concurrency (the worker caps each job's duration).
+  disableComputeRateLimit: booleanFlag(false, 'RUNTIME_SEED_DISABLE_COMPUTE_LIMIT'),
+  computeParseBurstMax: positiveIntValue(8),
+  computeParseBurstWindowSec: positiveIntValue(60),
+  computeParseSustainedMax: positiveIntValue(24),
+  computeParseSustainedWindowSec: positiveIntValue(600),
+  // Maximum size (MB) accepted for a single document upload.
+  maxUploadMb: positiveIntValue(200),
 } as const satisfies Record<string, RuntimeConfigKeyDef<unknown>>;
 
 export type RuntimeConfigKey = keyof typeof RUNTIME_CONFIG_SCHEMA;

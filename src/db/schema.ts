@@ -10,6 +10,7 @@ export const documents = usePostgres ? postgresSchema.documents : sqliteSchema.d
 export const audiobooks = usePostgres ? postgresSchema.audiobooks : sqliteSchema.audiobooks;
 export const audiobookChapters = usePostgres ? postgresSchema.audiobookChapters : sqliteSchema.audiobookChapters;
 export const userTtsChars = usePostgres ? postgresSchema.userTtsChars : sqliteSchema.userTtsChars;
+export const userJobEvents = usePostgres ? postgresSchema.userJobEvents : sqliteSchema.userJobEvents;
 export const userPreferences = usePostgres ? postgresSchema.userPreferences : sqliteSchema.userPreferences;
 export const documentSettings = usePostgres ? postgresSchema.documentSettings : sqliteSchema.documentSettings;
 export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentProgress : sqliteSchema.userDocumentProgress;

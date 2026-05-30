@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignPut } from '@/lib/server/documents/blobstore';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
@@ -53,10 +54,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No valid uploads provided' }, { status: 400 });
     }
 
+    const { maxUploadMb } = await getResolvedRuntimeConfig();
+    const maxUploadBytes = maxUploadMb * 1024 * 1024;
+    const oversized = uploads.find((upload) => upload.size > maxUploadBytes);
+    if (oversized) {
+      return NextResponse.json(
+        {
+          error: `Upload exceeds the maximum allowed size of ${maxUploadBytes} bytes`,
+          maxBytes: maxUploadBytes,
+        },
+        { status: 413 },
+      );
+    }
+
     const namespace = getOpenReaderTestNamespace(req.headers);
     const signed = await Promise.all(
       uploads.map(async (upload) => {
-        const res = await presignPut(upload.id, upload.contentType, namespace);
+        const res = await presignPut(upload.id, upload.contentType, namespace, {
+          contentLength: upload.size,
+        });
         return {
           id: upload.id,
           url: res.url,

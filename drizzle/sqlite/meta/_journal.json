@@ -57,6 +57,13 @@
       "when": 1779378125905,
       "tag": "0007_pdf_parse_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1780162695101,
+      "tag": "0008_user_job_events",
+      "breakpoints": true
     }
   ]
 }

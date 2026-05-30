@@ -22,6 +22,9 @@ import {
 } from '@/lib/server/documents/parse-state';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { checkJobRate, recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
+import { buildComputeRateLimitedResponse } from '@/lib/server/rate-limit/problem-response';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger, hashForLog, type ServerLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -263,11 +266,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
 
     if (effectiveStatus === 'failed' && retryFailed) {
+      const rateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
+      const rateDecision = await checkJobRate(authCtxOrRes.userId, 'pdf_layout', rateConfig);
+      if (!rateDecision.allowed) {
+        return buildComputeRateLimitedResponse({ decision: rateDecision, pathname: req.nextUrl.pathname });
+      }
       const created = await createOrReusePdfWorkerOperation({
         documentId: id,
         namespace: testNamespace,
         documentObjectKey: documentKey(id, testNamespace),
       });
+      await recordJobEvent(authCtxOrRes.userId, 'pdf_layout', created.opId, rateConfig);
       const snapshot = snapshotFromWorkerState(created);
       return NextResponse.json({
         parseStatus: snapshot.parseStatus,
@@ -385,12 +394,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
     }
 
+    const rateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
+    const rateDecision = await checkJobRate(authCtxOrRes.userId, 'pdf_layout', rateConfig);
+    if (!rateDecision.allowed) {
+      return buildComputeRateLimitedResponse({ decision: rateDecision, pathname: req.nextUrl.pathname });
+    }
+
     const created = await createOrReusePdfWorkerOperation({
       documentId: id,
       namespace: testNamespace,
       documentObjectKey: documentKey(id, testNamespace),
       forceToken: randomUUID(),
     });
+    await recordJobEvent(authCtxOrRes.userId, 'pdf_layout', created.opId, rateConfig);
 
     const snapshot = snapshotFromWorkerState(created);
 

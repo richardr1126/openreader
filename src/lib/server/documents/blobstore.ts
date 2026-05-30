@@ -104,17 +104,28 @@ export async function presignPut(
   id: string,
   contentType: string,
   namespace: string | null,
+  options?: { contentLength?: number },
 ): Promise<{ url: string; headers: Record<string, string> }> {
   const cfg = getS3Config();
   const client = getS3Client();
   const key = documentKey(id, namespace);
   const normalizedType = (contentType || 'application/octet-stream').trim() || 'application/octet-stream';
 
+  // When the client declares an exact size, sign Content-Length so S3 rejects a
+  // PUT whose body does not match (the browser always sends an accurate
+  // Content-Length for a known body). Skipped when size is unknown/zero so the
+  // upload still works against stores that enforce the signed header.
+  const contentLength =
+    typeof options?.contentLength === 'number' && Number.isFinite(options.contentLength) && options.contentLength > 0
+      ? Math.floor(options.contentLength)
+      : undefined;
+
   const command = new PutObjectCommand({
     Bucket: cfg.bucket,
     Key: key,
     ContentType: normalizedType,
     ServerSideEncryption: 'AES256',
+    ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
   });
   const url = await getSignedUrl(client, command, { expiresIn: 60 * 5 });
 

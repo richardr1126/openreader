@@ -160,6 +160,7 @@ export function AdminFeaturesPanel() {
     : fallbackShared;
   const selectedProviderOption = effectiveSelectedProvider;
   const shouldRenderRateLimitInputs = draft.disableTtsRateLimit === false;
+  const shouldRenderComputeRateLimitInputs = draft.disableComputeRateLimit === false;
 
   const handleProviderChange = (opt: ProviderOption) => {
     updateDraft('defaultTtsProvider', opt.id);
@@ -347,6 +348,92 @@ export function AdminFeaturesPanel() {
             </div>
           </div>
         ) : null}
+
+        <ToggleRow
+          label="Disable PDF parsing rate limiting"
+          description="When on, per-user limits on starting PDF layout parses are not enforced."
+          checked={Boolean(draft.disableComputeRateLimit)}
+          onChange={(checked) => updateDraft('disableComputeRateLimit', checked)}
+          right={renderSource('disableComputeRateLimit')}
+          variant="flat"
+        />
+        {shouldRenderComputeRateLimitInputs ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-0.5 py-1.5">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-foreground">Burst limit (parses)</label>
+                {renderSource('computeParseBurstMax')}
+              </div>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={inputClass}
+                value={String(draft.computeParseBurstMax ?? '')}
+                onChange={(event) => updatePositiveIntDraft('computeParseBurstMax', event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-foreground">Burst window (seconds)</label>
+                {renderSource('computeParseBurstWindowSec')}
+              </div>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={inputClass}
+                value={String(draft.computeParseBurstWindowSec ?? '')}
+                onChange={(event) => updatePositiveIntDraft('computeParseBurstWindowSec', event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-foreground">Sustained limit (parses)</label>
+                {renderSource('computeParseSustainedMax')}
+              </div>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={inputClass}
+                value={String(draft.computeParseSustainedMax ?? '')}
+                onChange={(event) => updatePositiveIntDraft('computeParseSustainedMax', event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-foreground">Sustained window (seconds)</label>
+                {renderSource('computeParseSustainedWindowSec')}
+              </div>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={inputClass}
+                value={String(draft.computeParseSustainedWindowSec ?? '')}
+                onChange={(event) => updatePositiveIntDraft('computeParseSustainedWindowSec', event.target.value)}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-0.5 py-1.5">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-foreground">Max upload size (MB)</label>
+              {renderSource('maxUploadMb')}
+            </div>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className={inputClass}
+              value={String(draft.maxUploadMb ?? '')}
+              onChange={(event) => updatePositiveIntDraft('maxUploadMb', event.target.value)}
+            />
+          </div>
+        </div>
       </Section>
 
       <Section

@@ -31,6 +31,7 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `DISABLE_AUTH_RATE_LIMIT` | Rate limiting | `false` | Set `true` to disable auth-layer rate limiting |
+| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor the `x-openreader-test-namespace` header on a production build; leave unset on real deployments |
 | `ADMIN_EMAILS` | Auth/Admin | empty | Comma-separated emails auto-promoted to admin (requires auth enabled) |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
@@ -43,8 +44,6 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `S3_ENDPOINT` | Storage | derived in embedded mode | Set for S3-compatible providers (MinIO/SeaweedFS/R2/etc.) |
 | `S3_FORCE_PATH_STYLE` | Storage | `true` in embedded mode | Set per provider requirement |
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
-| `RUN_DRIZZLE_MIGRATIONS` | Database migrations | `true` | Set `false` to skip startup Drizzle schema migrations |
-| `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
 | `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Set only for standalone external compute worker; leave unset for embedded worker startup |
@@ -72,6 +71,9 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUNTIME_SEED_DEFAULT_TTS_PROVIDER` | Legacy bootstrap seed | `custom-openai` | Optional first-boot seed for default TTS provider slug |
 | `RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable audiobook export UI |
 | `RUNTIME_SEED_DISABLE_TTS_LIMIT` | Legacy bootstrap seed | `true` | Optional first-boot seed that keeps TTS daily rate limiting disabled |
+| `RUNTIME_SEED_DISABLE_COMPUTE_LIMIT` | Legacy bootstrap seed | `false` | Optional first-boot seed that disables PDF parsing rate limiting (other compute-limit values + max upload size are admin-only) |
+| `RUN_DRIZZLE_MIGRATIONS` | Database migrations | `true` | Set `false` to skip startup Drizzle schema migrations |
+| `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 
 
 
@@ -228,6 +230,15 @@ Controls Better Auth rate limiting.
 - This does not affect TTS character rate limiting
 - Related docs: [Auth](../configure/auth)
 
+### ENABLE_TEST_NAMESPACE
+
+Honors the `x-openreader-test-namespace` request header, which scopes documents/storage into an isolated namespace for end-to-end tests.
+
+- Default: unset (header ignored on production builds)
+- Non-production builds (`NODE_ENV !== 'production'`) honor the header without this flag.
+- Production builds (`pnpm build && pnpm start`) honor it only when `ENABLE_TEST_NAMESPACE=true`. The Playwright web server sets this automatically.
+- **Leave unset on real deployments.** It is test/CI scaffolding only.
+
 ### ADMIN_EMAILS
 
 Comma-separated list of email addresses that are auto-promoted to admin.
@@ -330,24 +341,13 @@ Prefix prepended to stored object keys.
 - Default: `openreader`
 - Related docs: [Object / Blob Storage](../configure/object-blob-storage)
 
-## Migration Controls
+### Maximum Upload Size (Runtime Settings)
 
-### RUN_DRIZZLE_MIGRATIONS
+The maximum size accepted for a single document upload is an admin runtime setting (no env var).
 
-Controls startup migration execution in shared entrypoint.
-
-- Default: `true`
-- Set `false` to skip automatic startup Drizzle schema migrations
-- Related docs: [Migrations](../configure/migrations), [Database](../configure/database)
-
-### RUN_FS_MIGRATIONS
-
-Controls startup filesystem-to-object-store migration execution in shared entrypoint.
-
-- Default: `true`
-- Runs `scripts/migrate-fs-v2.mjs` at startup after DB migrations
-- Set `false` to skip automatic storage migration pass
-- Related docs: [Migrations](../configure/migrations), [Database](../configure/database), [Object / Blob Storage](../configure/object-blob-storage)
+- Runtime key: `maxUploadMb` (default: `200`)
+- Configure in **Settings → Admin → Site features → Max upload size (MB)**.
+- Enforced up front (`413`) and signed into the presigned S3 PUT so a client cannot stream more than it declared.
 
 ## Library Import
 
@@ -492,6 +492,19 @@ Absolute path or executable name for the ffmpeg binary used by audiobook/process
 - Resolution order: `FFMPEG_BIN` -> `ffmpeg-static`
 - Example: `/var/task/node_modules/ffmpeg-static/ffmpeg`
 
+### Compute (PDF Parsing) Rate Limiting (Runtime Settings)
+
+Per-user throttling of expensive PDF layout parsing is managed from **Settings → Admin → Site features**, not env vars. Enforcement applies only when auth is enabled.
+
+- `disableComputeRateLimit` default: `false` (rate limiting enabled)
+- When enabled, the following admin-tunable sub-limits apply:
+  - `computeParseBurstMax` (default `8`) over `computeParseBurstWindowSec` (default `60`)
+  - `computeParseSustainedMax` (default `24`) over `computeParseSustainedWindowSec` (default `600`)
+- The sustained window also acts as a concurrency cap: because the worker bounds each job's duration, the count of parses started in that window is an upper bound on those still running.
+- Exceeding a limit returns `429` (`application/problem+json`) with `Retry-After`.
+
+Optional first-boot seed: `RUNTIME_SEED_DISABLE_COMPUTE_LIMIT`. All other values are DB-backed admin runtime settings.
+
 ## Legacy First-Boot Runtime Seeds (optional)
 
 These variables exist only as **first-boot seeds** for the admin-managed runtime config. Prefer changing site features from **Settings → Admin → Site features**. Keep these only when you need bootstrap defaults before the first admin login. See [Admin Panel](../configure/admin-panel) for migration behavior.
@@ -564,3 +577,38 @@ Controls whether audiobook export UI/actions are shown in the client.
 - Default: `true` (enabled)
 - Affects export entry points in PDF/EPUB pages and document settings UI
 - Runtime key: `enableAudiobookExport`
+
+### RUNTIME_SEED_DISABLE_TTS_LIMIT
+
+Seeds the TTS daily character rate-limit on/off state on first boot.
+
+- Default: `true` (TTS rate limiting disabled)
+- Runtime key: `disableTtsRateLimit`
+- Per-user/IP daily limit values are admin-only runtime settings (see [TTS Daily Rate Limiting](#tts-daily-rate-limiting-runtime-settings)).
+
+### RUNTIME_SEED_DISABLE_COMPUTE_LIMIT
+
+Seeds the PDF parsing rate-limit on/off state on first boot.
+
+- Default: `false` (PDF parsing rate limiting enabled)
+- Runtime key: `disableComputeRateLimit`
+- The burst/sustained limits, their windows, and the max upload size are admin-only runtime settings (see [Compute (PDF Parsing) Rate Limiting](#compute-pdf-parsing-rate-limiting-runtime-settings)).
+
+## Migration Controls
+
+### RUN_DRIZZLE_MIGRATIONS
+
+Controls startup migration execution in shared entrypoint.
+
+- Default: `true`
+- Set `false` to skip automatic startup Drizzle schema migrations
+- Related docs: [Migrations](../configure/migrations), [Database](../configure/database)
+
+### RUN_FS_MIGRATIONS
+
+Controls startup filesystem-to-object-store migration execution in shared entrypoint.
+
+- Default: `true`
+- Runs `scripts/migrate-fs-v2.mjs` at startup after DB migrations
+- Set `false` to skip automatic storage migration pass
+- Related docs: [Migrations](../configure/migrations), [Database](../configure/database), [Object / Blob Storage](../configure/object-blob-storage)

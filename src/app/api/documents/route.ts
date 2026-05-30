@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { and, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
@@ -12,6 +13,8 @@ import {
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
 import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
+import { recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { deleteDocumentBlob, headDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
 import {
   normalizeParseStatus,
@@ -89,6 +92,11 @@ export async function POST(req: NextRequest) {
     }
 
     const stored: BaseDocument[] = [];
+
+    // Resolve the parse rate-limit config once (only when a PDF is present).
+    const pdfRateConfig = documentsData.some((doc) => doc.type === 'pdf')
+      ? getPdfLayoutRateConfig(await getResolvedRuntimeConfig())
+      : null;
 
     for (const doc of documentsData) {
       let headSize = doc.size;
@@ -184,6 +192,11 @@ export async function POST(req: NextRequest) {
       });
 
       if (doc.type === 'pdf') {
+        // Account for upload-driven parse load in the same ledger the explicit
+        // re-parse limiter reads. We record (not reject) here so a legitimate
+        // bulk upload always parses; the recorded load still throttles
+        // subsequent loopable re-parse spam via /parsed.
+        await recordJobEvent(ctxOrRes.userId, 'pdf_layout', `register:${randomUUID()}`, pdfRateConfig ?? { enabled: false });
         enqueueParsePdfJob({
           documentId: doc.id,
           userId: storageUserId,
