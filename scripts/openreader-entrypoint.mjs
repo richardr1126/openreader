@@ -11,6 +11,15 @@ import * as dotenv from 'dotenv';
 
 function loadEnvFiles() {
   const cwd = process.cwd();
+  const isCi = isTrue(process.env.CI, false);
+  if (isCi) {
+    const envCiPath = path.join(cwd, '.env.ci');
+    if (fs.existsSync(envCiPath)) {
+      dotenv.config({ path: envCiPath });
+    }
+    return;
+  }
+
   const envPath = path.join(cwd, '.env');
   const envLocalPath = path.join(cwd, '.env.local');
 

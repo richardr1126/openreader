@@ -178,7 +178,7 @@ export function SettingsModal({
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const { authEnabled, baseUrl: authBaseUrl } = useAuthConfig();
   const { data: session } = useAuthSession();
-  const { requestOpenSettings, registerSettingsController } = useOnboardingFlow();
+  const { changelogOpenSignal } = useOnboardingFlow();
   const router = useRouter();
   const isBusy = isImportingLibrary;
   const {
@@ -211,25 +211,11 @@ export function SettingsModal({
   const isSharedSelected = Boolean(selectedSharedProvider);
   const selectedProviderOption = ttsProviders.find((p) => p.id === localProviderRef) ?? ttsProviders[0];
 
-  const closeSettings = useCallback(() => {
-    setIsOpen(false);
-    setIsChangelogOpen(false);
-  }, []);
-
-  const openSettings = useCallback((options?: { changelog?: boolean }) => {
-    setIsOpen(true);
-    setIsChangelogOpen(Boolean(options?.changelog));
-  }, []);
-
   useEffect(() => {
-    registerSettingsController({
-      open: openSettings,
-      close: closeSettings,
-    });
-    return () => {
-      registerSettingsController(null);
-    };
-  }, [closeSettings, openSettings, registerSettingsController]);
+    if (changelogOpenSignal <= 0) return;
+    setIsOpen(true);
+    setIsChangelogOpen(true);
+  }, [changelogOpenSignal]);
 
   useEffect(() => {
     setLocalApiKey(apiKey);
@@ -505,7 +491,8 @@ export function SettingsModal({
     <>
       <Button
         onClick={() => {
-          void requestOpenSettings();
+          setIsOpen(true);
+          setIsChangelogOpen(false);
         }}
         className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-200 ease-out hover:scale-[1.01] ${className}`}
         aria-label="Settings"

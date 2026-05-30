@@ -99,7 +99,7 @@ export default function ClaimDataModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition-all">
+              <DialogPanel data-testid="claim-modal" className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition-all">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground mb-4"
@@ -128,6 +128,7 @@ export default function ClaimDataModal({
 
                 <div className="flex justify-end gap-3">
                   <Button
+                    data-testid="claim-dismiss-button"
                     type="button"
                     onClick={onDismiss}
                     disabled={isClaiming}
@@ -140,6 +141,7 @@ export default function ClaimDataModal({
                     Dismiss
                   </Button>
                   <Button
+                    data-testid="claim-submit-button"
                     type="button"
                     onClick={handleClaim}
                     disabled={isClaiming}

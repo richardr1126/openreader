@@ -12,6 +12,7 @@
     "start:raw": "next start -p 3003",
     "lint": "next lint",
     "test": "playwright test",
+    "test:ci-env": "CI=true playwright test",
     "migrate": "node drizzle/scripts/migrate.mjs",
     "migrate-fs": "node scripts/migrate-fs-v2.mjs",
     "migrate-fs:dry-run": "node scripts/migrate-fs-v2.mjs --dry-run true",

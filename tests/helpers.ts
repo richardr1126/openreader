@@ -111,6 +111,7 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
 
 async function dismissOnboardingModals(page: Page): Promise<void> {
   const privacyDialog = page.getByTestId('privacy-modal');
+  const claimDialog = page.getByTestId('claim-modal');
   const migrationDialog = page.getByTestId('migration-modal');
   const settingsDialog = page.getByTestId('settings-modal');
 
@@ -130,6 +131,16 @@ async function dismissOnboardingModals(page: Page): Promise<void> {
       await expect(continueBtn).toBeEnabled({ timeout: 10000 });
       await continueBtn.click();
       await privacyDialog.waitFor({ state: 'hidden', timeout: 15000 });
+      await page.waitForTimeout(100);
+      settledWithoutDialog = 0;
+      continue;
+    }
+
+    if (await claimDialog.isVisible().catch(() => false)) {
+      const dismissBtn = page.getByTestId('claim-dismiss-button');
+      await expect(dismissBtn).toBeEnabled({ timeout: 10000 });
+      await dismissBtn.click();
+      await claimDialog.waitFor({ state: 'hidden', timeout: 15000 });
       await page.waitForTimeout(100);
       settledWithoutDialog = 0;
       continue;

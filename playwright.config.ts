@@ -1,5 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
+import dotenv from 'dotenv';
+
+if (process.env.CI === 'true') {
+  const envCiPath = path.join(process.cwd(), '.env.ci');
+  if (fs.existsSync(envCiPath)) {
+    dotenv.config({ path: envCiPath, override: true });
+  }
+}
 
 /**
  * See https://playwright.dev/docs/test-configuration.

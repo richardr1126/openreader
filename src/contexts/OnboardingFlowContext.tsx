@@ -11,20 +11,11 @@ import { getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, getAppCon
 import { listDocuments } from '@/lib/client/api/documents';
 import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
 import { scheduleChangelogCheck } from '@/lib/client/changelog-check';
+import { createCoalescedAsyncRunner, resolveNextOnboardingStep } from '@/lib/client/onboarding-flow';
 import { ONBOARDING_STATE_REGISTRY } from '@/lib/shared/onboarding-state';
 
-type SettingsOpenOptions = {
-  changelog?: boolean;
-};
-
-type SettingsController = {
-  open: (options?: SettingsOpenOptions) => void;
-  close: () => void;
-};
-
 type OnboardingFlowContextValue = {
-  requestOpenSettings: (options?: SettingsOpenOptions) => Promise<boolean>;
-  registerSettingsController: (controller: SettingsController | null) => void;
+  changelogOpenSignal: number;
 };
 
 const OnboardingFlowContext = createContext<OnboardingFlowContextValue | null>(null);
@@ -61,9 +52,9 @@ async function fetchClaimableCounts(): Promise<ClaimableCounts> {
   return toClaimableCounts(data);
 }
 
-async function getMigrationPromptState(): Promise<MigrationPromptState> {
+async function getMigrationPromptState(privacyGateSatisfied: boolean): Promise<MigrationPromptState> {
   const cfg = await getAppConfig();
-  if (!cfg?.privacyAccepted || cfg.documentsMigrationPrompted) {
+  if (!privacyGateSatisfied || cfg?.documentsMigrationPrompted) {
     return { shouldPrompt: false, localCount: 0, missingCount: 0 };
   }
 
@@ -127,144 +118,125 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     localCount: 0,
     missingCount: 0,
   });
+  const [changelogOpenSignal, setChangelogOpenSignal] = useState(0);
 
-  const settingsControllerRef = useRef<SettingsController | null>(null);
   const pendingChangelogOpenRef = useRef(false);
-  const runningAdvanceRef = useRef(false);
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
   const changelogVersionCheckKeyRef = useRef<string | null>(null);
   const changelogVersionCheckInFlightRef = useRef<string | null>(null);
 
-  const openSettingsNow = useCallback((options?: SettingsOpenOptions) => {
-    settingsControllerRef.current?.open(options);
-  }, []);
+  const runOnceFlowRef = useRef<() => Promise<void>>(async () => {});
 
-  const advanceFlow = useCallback(async () => {
-    if (runningAdvanceRef.current) {
-      return;
-    }
-    runningAdvanceRef.current = true;
-    try {
-      const local = await readLocalOnboardingSnapshot();
-      if (authEnabled && !local.privacyAccepted) {
-        setActiveBlockingModal('privacy');
-        return;
-      }
-      if (activeBlockingModal === 'privacy') {
-        setActiveBlockingModal(null);
-      } else if (activeBlockingModal) {
-        return;
-      }
+  const runFlow = useMemo(
+    () => createCoalescedAsyncRunner(async () => {
+      await runOnceFlowRef.current();
+    }),
+    [],
+  );
 
-      if (authEnabled && userId && !isAnonymous && !claimDismissedUsersRef.current.has(userId)) {
-        const counts = await fetchClaimableCounts();
-        const total = counts.documents + counts.audiobooks + counts.preferences + counts.progress;
-        if (total > 0) {
-          setClaimableCounts(counts);
-          setActiveBlockingModal('claim');
-          return;
-        }
+  const runOnceFlow = useCallback(async () => {
+    const local = await readLocalOnboardingSnapshot();
+    const privacyRequired = authEnabled;
+    const privacyAccepted = !privacyRequired || local.privacyAccepted;
+
+    const isClaimEligible = Boolean(
+      authEnabled
+      && userId
+      && !isAnonymous
+      && !claimDismissedUsersRef.current.has(userId),
+    );
+
+    let claimCounts = EMPTY_CLAIM_COUNTS;
+    let claimHasData = false;
+
+    if (isClaimEligible) {
+      claimCounts = await fetchClaimableCounts();
+      const total = claimCounts.documents + claimCounts.audiobooks + claimCounts.preferences + claimCounts.progress;
+      claimHasData = total > 0;
+      if (!claimHasData && userId) {
         claimDismissedUsersRef.current.add(userId);
       }
-
-      const migrationState = await getMigrationPromptState();
-      if (migrationState.shouldPrompt) {
-        setMigrationCounts({
-          localCount: migrationState.localCount,
-          missingCount: migrationState.missingCount,
-        });
-        setActiveBlockingModal('migration');
-        return;
-      }
-
-      if (!local.firstVisitSettingsOpened) {
-        await setFirstVisit(true);
-        // In no-auth mode (used by local/CI e2e), avoid background modal opens
-        // that can race with interactions and steal pointer events.
-        if (authEnabled) {
-          openSettingsNow();
-        }
-        return;
-      }
-
-      if (pendingChangelogOpenRef.current) {
-        pendingChangelogOpenRef.current = false;
-        openSettingsNow({ changelog: true });
-      }
-    } finally {
-      runningAdvanceRef.current = false;
-    }
-  }, [activeBlockingModal, authEnabled, isAnonymous, openSettingsNow, userId]);
-
-  const requestOpenSettings = useCallback(async (options?: SettingsOpenOptions): Promise<boolean> => {
-    const local = await readLocalOnboardingSnapshot();
-    if (authEnabled && !local.privacyAccepted) {
-      if (options?.changelog) {
-        pendingChangelogOpenRef.current = true;
-      }
-      settingsControllerRef.current?.close();
-      return false;
     }
 
-    if (activeBlockingModal) {
-      if (options?.changelog) {
-        pendingChangelogOpenRef.current = true;
-      }
-      return false;
+    const migrationState = await getMigrationPromptState(privacyAccepted);
+
+    const nextStep = resolveNextOnboardingStep({
+      privacyRequired,
+      privacyAccepted,
+      claimEligible: isClaimEligible,
+      claimHasData,
+      migrationRequired: migrationState.shouldPrompt,
+      changelogPending: pendingChangelogOpenRef.current,
+    });
+
+    if (nextStep === 'privacy') {
+      setActiveBlockingModal('privacy');
+      return;
     }
 
-    if (!settingsControllerRef.current) {
-      if (options?.changelog) {
-        pendingChangelogOpenRef.current = true;
-      }
-      return false;
+    if (nextStep === 'claim') {
+      setClaimableCounts(claimCounts);
+      setActiveBlockingModal('claim');
+      return;
     }
 
-    settingsControllerRef.current.open(options);
-    return true;
-  }, [activeBlockingModal, authEnabled]);
-
-  const registerSettingsController = useCallback((controller: SettingsController | null) => {
-    settingsControllerRef.current = controller;
-    if (controller) {
-      void advanceFlow();
+    if (nextStep === 'migration') {
+      setMigrationCounts({
+        localCount: migrationState.localCount,
+        missingCount: migrationState.missingCount,
+      });
+      setActiveBlockingModal('migration');
+      return;
     }
-  }, [advanceFlow]);
+
+    setActiveBlockingModal(null);
+
+    if (!local.firstVisitSettingsOpened) {
+      await setFirstVisit(true);
+    }
+
+    if (nextStep === 'changelog') {
+      pendingChangelogOpenRef.current = false;
+      setChangelogOpenSignal((value) => value + 1);
+    }
+  }, [authEnabled, isAnonymous, userId]);
+
+  runOnceFlowRef.current = runOnceFlow;
 
   const handleClaimComplete = useCallback(() => {
     if (userId) {
       claimDismissedUsersRef.current.add(userId);
     }
     setActiveBlockingModal(null);
-    void advanceFlow();
-  }, [advanceFlow, userId]);
+    void runFlow();
+  }, [runFlow, userId]);
 
   const handleMigrationComplete = useCallback(() => {
     setActiveBlockingModal(null);
-    void advanceFlow();
-  }, [advanceFlow]);
+    void runFlow();
+  }, [runFlow]);
 
   const handlePrivacyAccepted = useCallback(() => {
     setActiveBlockingModal(null);
-    void advanceFlow();
-  }, [advanceFlow]);
+    void runFlow();
+  }, [runFlow]);
 
   useEffect(() => {
-    void advanceFlow();
-  }, [advanceFlow, authEnabled, isAnonymous, userId]);
+    void runFlow();
+  }, [authEnabled, isAnonymous, runFlow, userId]);
 
   useEffect(() => {
     if (!authEnabled) {
       return;
     }
     const onPrivacyAccepted = () => {
-      void advanceFlow();
+      void runFlow();
     };
     window.addEventListener('openreader:privacyAccepted', onPrivacyAccepted);
     return () => {
       window.removeEventListener('openreader:privacyAccepted', onPrivacyAccepted);
     };
-  }, [advanceFlow, authEnabled]);
+  }, [authEnabled, runFlow]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -281,17 +253,16 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       postCheck: async (currentVersion) => postChangelogVersionCheck(currentVersion),
       onShouldOpen: () => {
         pendingChangelogOpenRef.current = true;
-        void advanceFlow();
+        void runFlow();
       },
       delayMs: 120,
       retryDelayMs: 400,
     });
-  }, [advanceFlow, authEnabled, isSessionPending, runtimeConfig.appVersion, userId]);
+  }, [authEnabled, isSessionPending, runFlow, runtimeConfig.appVersion, userId]);
 
   const contextValue = useMemo<OnboardingFlowContextValue>(() => ({
-    requestOpenSettings,
-    registerSettingsController,
-  }), [registerSettingsController, requestOpenSettings]);
+    changelogOpenSignal,
+  }), [changelogOpenSignal]);
 
   return (
     <OnboardingFlowContext.Provider value={contextValue}>
