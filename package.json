@@ -26,7 +26,6 @@
     "compute:worker:dev": "pnpm --filter @openreader/compute-worker dev",
     "compute:worker:start": "pnpm --filter @openreader/compute-worker start",
     "compute:dev:compose": "docker compose --env-file compute/worker/.env -f compute/worker/docker-compose.yml up --build",
-    "compute:dev:watch": "docker compose --env-file compute/worker/.env -f compute/worker/docker-compose.yml up --watch",
     "lint:route-errors": "node scripts/check-route-error-responses.mjs"
   },
   "dependencies": {
