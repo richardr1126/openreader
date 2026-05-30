@@ -17,7 +17,9 @@ interface FinderWindowProps {
 const NARROW_QUERY = '(max-width: 767px)';
 
 export function useIsNarrow(): boolean {
-  const [isNarrow, setIsNarrow] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(NARROW_QUERY).matches : false,
+  );
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia(NARROW_QUERY);
