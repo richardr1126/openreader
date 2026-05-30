@@ -8,7 +8,7 @@ export function DocumentSkeleton() {
         icon: '⚠️',
         duration: 5000,
       });
-    }, 3000);
+    }, 10000);
 
     return () => clearTimeout(timer);
   }, []);

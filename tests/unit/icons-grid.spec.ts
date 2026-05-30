@@ -8,7 +8,7 @@ test.describe('icons grid layout', () => {
     expect(maxColumnsForIconGrid('md', 1000)).toBe(6);
   });
 
-  test('keeps fill behavior when single-row suppression is off', () => {
+  test('uses auto-fit by default when single-row suppression is off', () => {
     const style = iconsGridStyle('md', 4);
     expect(style.gridTemplateColumns).toContain('repeat(auto-fit');
     expect(style.gridTemplateColumns).toContain('1fr');
