@@ -354,7 +354,10 @@ export function FinderSidebar({
         </div>
       </div>
       {bottomSlot && (
-        <div className="shrink-0 border-t border-offbase p-2" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="shrink-0 border-t border-offbase px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           {bottomSlot}
         </div>
       )}

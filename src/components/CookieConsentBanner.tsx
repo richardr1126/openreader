@@ -41,7 +41,7 @@ export function CookieConsentBanner() {
       leave="transition ease-in duration-200 transform"
       leaveFrom="translate-y-0 opacity-100"
       leaveTo="translate-y-full opacity-0"
-      className="fixed bottom-0 left-0 right-0 z-[60] p-4 md:p-6"
+      className="fixed bottom-0 left-0 right-0 z-[60] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:pt-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto max-w-5xl rounded-xl border border-offbase bg-base p-5 shadow-2xl md:flex md:items-center md:justify-between md:gap-8">
         <div className="mb-4 md:mb-0">

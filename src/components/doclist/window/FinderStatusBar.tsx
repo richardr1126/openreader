@@ -19,7 +19,7 @@ export function FinderStatusBar({
     <div
       role="status"
       aria-live="polite"
-      className="h-6 px-3 flex items-center justify-between gap-3 text-[11px] text-muted bg-base border-t border-offbase select-none"
+      className="min-h-6 px-3 pb-[env(safe-area-inset-bottom)] flex items-center justify-between gap-3 text-[11px] text-muted bg-base border-t border-offbase select-none"
     >
       <span className="truncate">{summary}</span>
       <span className="shrink-0">

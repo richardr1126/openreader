@@ -1,6 +1,6 @@
 import "./globals.css";
 import { ReactNode } from "react";
-import { Metadata } from "next";
+import { Metadata, Viewport } from "next";
 import { Figtree } from "next/font/google";
 import { ConsentAwareAnalytics } from "@/components/ConsentAwareAnalytics";
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
@@ -29,6 +29,10 @@ const themeInitScript = `
   root.style.colorScheme = lightThemes.has(effective) ? 'light' : 'dark';
 })();
 `;
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: {

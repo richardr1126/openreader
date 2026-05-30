@@ -243,7 +243,7 @@ export default function EPUBPage() {
       )}
       {isAtLimit ? (
         <div className="sticky bottom-0 z-30 w-full border-t border-offbase bg-base" data-app-ttsbar>
-          <div className="px-2 md:px-3 pt-1 pb-1.5 flex items-center justify-center gap-1 min-h-10">
+          <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
             <RateLimitPauseButton />
             <RateLimitBanner />
           </div>
