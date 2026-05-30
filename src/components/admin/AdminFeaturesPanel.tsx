@@ -64,7 +64,6 @@ export function AdminFeaturesPanel() {
     if (!data) return;
     setDraft({ ...data.values });
     setDirty(new Set());
-    setEditingChangelogUrl(false);
   }, [data]);
 
   useEffect(() => {
@@ -145,10 +144,14 @@ export function AdminFeaturesPanel() {
       providerType: entry.providerType,
     }));
   }, [sharedProviders]);
+  const valueFor = (key: string) =>
+    Object.prototype.hasOwnProperty.call(draft, key)
+      ? draft[key]
+      : data?.values?.[key];
 
   const currentProviderId =
-    typeof draft.defaultTtsProvider === 'string'
-      ? draft.defaultTtsProvider
+    typeof valueFor('defaultTtsProvider') === 'string'
+      ? (valueFor('defaultTtsProvider') as string)
       : '';
   const currentSharedEntry: SharedProviderEntry | undefined = sharedProviders.find(
     (p) => p.slug === currentProviderId,
@@ -162,7 +165,7 @@ export function AdminFeaturesPanel() {
     } as ProviderOption
     : fallbackShared;
   const selectedProviderOption = effectiveSelectedProvider;
-  const showTtsDailyLimitInputs = !Boolean(draft.disableTtsRateLimit);
+  const showTtsDailyLimitInputs = !Boolean(valueFor('disableTtsRateLimit'));
 
   const handleProviderChange = (opt: ProviderOption) => {
     updateDraft('defaultTtsProvider', opt.id);
@@ -253,7 +256,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Restrict user API keys (recommended)"
           description="Only allow admin shared providers."
-          checked={Boolean(draft.restrictUserApiKeys)}
+          checked={Boolean(valueFor('restrictUserApiKeys'))}
           onChange={(checked) => {
             if (!checked) {
               const ok = confirm(
@@ -269,7 +272,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Show TTS provider settings tab"
           description="Allow per-user provider overrides."
-          checked={Boolean(draft.enableTtsProvidersTab)}
+          checked={Boolean(valueFor('enableTtsProvidersTab'))}
           onChange={(checked) => updateDraft('enableTtsProvidersTab', checked)}
           right={renderSource('enableTtsProvidersTab')}
           variant="flat"
@@ -277,7 +280,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Show all provider models"
           description="Allow model selection beyond defaults."
-          checked={Boolean(draft.showAllProviderModels)}
+          checked={Boolean(valueFor('showAllProviderModels'))}
           onChange={(checked) => updateDraft('showAllProviderModels', checked)}
           right={renderSource('showAllProviderModels')}
           variant="flat"
@@ -285,7 +288,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Disable TTS daily rate limiting"
           description="When on, per-user/IP daily character quotas are not enforced."
-          checked={Boolean(draft.disableTtsRateLimit)}
+          checked={Boolean(valueFor('disableTtsRateLimit'))}
           onChange={(checked) => updateDraft('disableTtsRateLimit', checked)}
           right={renderSource('disableTtsRateLimit')}
           variant="flat"
@@ -312,7 +315,7 @@ export function AdminFeaturesPanel() {
                   min={1}
                   step={1}
                   className={inputClass}
-                  value={String(draft.ttsDailyLimitAnonymous ?? '')}
+                  value={String(valueFor('ttsDailyLimitAnonymous') ?? '')}
                   onChange={(event) => updatePositiveIntDraft('ttsDailyLimitAnonymous', event.target.value)}
                 />
               </div>
@@ -326,7 +329,7 @@ export function AdminFeaturesPanel() {
                   min={1}
                   step={1}
                   className={inputClass}
-                  value={String(draft.ttsDailyLimitAuthenticated ?? '')}
+                  value={String(valueFor('ttsDailyLimitAuthenticated') ?? '')}
                   onChange={(event) => updatePositiveIntDraft('ttsDailyLimitAuthenticated', event.target.value)}
                 />
               </div>
@@ -340,7 +343,7 @@ export function AdminFeaturesPanel() {
                   min={1}
                   step={1}
                   className={inputClass}
-                  value={String(draft.ttsIpDailyLimitAnonymous ?? '')}
+                  value={String(valueFor('ttsIpDailyLimitAnonymous') ?? '')}
                   onChange={(event) => updatePositiveIntDraft('ttsIpDailyLimitAnonymous', event.target.value)}
                 />
               </div>
@@ -354,7 +357,7 @@ export function AdminFeaturesPanel() {
                   min={1}
                   step={1}
                   className={inputClass}
-                  value={String(draft.ttsIpDailyLimitAuthenticated ?? '')}
+                  value={String(valueFor('ttsIpDailyLimitAuthenticated') ?? '')}
                   onChange={(event) => updatePositiveIntDraft('ttsIpDailyLimitAuthenticated', event.target.value)}
                 />
               </div>
@@ -371,7 +374,7 @@ export function AdminFeaturesPanel() {
         <EditableRow
           label="Changelog feed URL"
           description="Public URL to the changelog manifest JSON used by Settings."
-          value={String(draft.changelogFeedUrl ?? '') || '—'}
+          value={String(valueFor('changelogFeedUrl') ?? '') || '—'}
           expanded={editingChangelogUrl}
           onExpandedChange={setEditingChangelogUrl}
           right={renderSource('changelogFeedUrl')}
@@ -380,7 +383,7 @@ export function AdminFeaturesPanel() {
           <input
             type="text"
             className={inputClass}
-            value={String(draft.changelogFeedUrl ?? '')}
+            value={String(valueFor('changelogFeedUrl') ?? '')}
             onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
           />
@@ -388,7 +391,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Allow new account sign-ups"
           description="When off, new accounts cannot be created. Existing accounts can still sign in."
-          checked={Boolean(draft.enableUserSignups)}
+          checked={Boolean(valueFor('enableUserSignups'))}
           onChange={(checked) => updateDraft('enableUserSignups', checked)}
           right={renderSource('enableUserSignups')}
           variant="flat"
@@ -396,7 +399,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Audiobook export"
           description='Show "Export audiobook" on PDF/EPUB pages.'
-          checked={Boolean(draft.enableAudiobookExport)}
+          checked={Boolean(valueFor('enableAudiobookExport'))}
           onChange={(checked) => updateDraft('enableAudiobookExport', checked)}
           right={renderSource('enableAudiobookExport')}
           variant="flat"
@@ -404,7 +407,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="DOCX upload conversion"
           description="Allow DOCX uploads (converted to PDF)."
-          checked={Boolean(draft.enableDocxConversion)}
+          checked={Boolean(valueFor('enableDocxConversion'))}
           onChange={(checked) => updateDraft('enableDocxConversion', checked)}
           right={renderSource('enableDocxConversion')}
           variant="flat"
@@ -412,7 +415,7 @@ export function AdminFeaturesPanel() {
         <ToggleRow
           label="Destructive delete buttons"
           description='Show "Delete all data" actions (auth-off mode).'
-          checked={Boolean(draft.enableDestructiveDeleteActions)}
+          checked={Boolean(valueFor('enableDestructiveDeleteActions'))}
           onChange={(checked) => updateDraft('enableDestructiveDeleteActions', checked)}
           right={renderSource('enableDestructiveDeleteActions')}
           variant="flat"
