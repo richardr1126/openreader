@@ -5,6 +5,8 @@ import { adminProviders } from '@/db/schema';
 import { apiKeyLast4, decryptSecret, encryptSecret } from '@/lib/server/crypto/secrets';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { resolvePreferredSharedProviderSlug } from '@/lib/shared/shared-provider-selection';
+import { getRuntimeConfig, setRuntimeConfigKey } from '@/lib/server/admin/settings';
 
 export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'custom-openai',
@@ -195,6 +197,19 @@ export async function listAdminProviders(): Promise<AdminProviderRecord[]> {
   return (rows as Array<Record<string, unknown>>).map(rowToRecord);
 }
 
+export async function listEnabledAdminProviders(): Promise<AdminProviderRecord[]> {
+  const rows = await db
+    .select()
+    .from(adminProviders)
+    .where(eq(adminProviders.enabled, 1))
+    .orderBy(
+      desc(adminProviders.updatedAt),
+      desc(adminProviders.createdAt),
+      asc(adminProviders.slug),
+    );
+  return (rows as Array<Record<string, unknown>>).map(rowToRecord);
+}
+
 export async function getAdminProviderBySlug(slug: string): Promise<AdminProviderRecord | null> {
   const rows = await db.select().from(adminProviders).where(eq(adminProviders.slug, slug)).limit(1);
   const arr = rows as Array<Record<string, unknown>>;
@@ -258,6 +273,8 @@ export async function updateAdminProvider(
 ): Promise<AdminProviderRecord> {
   const current = await getAdminProviderById(id);
   if (!current) throw new AdminProviderError('provider not found', 404);
+  const runtimeConfigBefore = await getRuntimeConfig();
+  const wasDefaultProvider = runtimeConfigBefore.defaultTtsProvider === current.slug;
 
   const update: Record<string, unknown> = { updatedAt: Date.now() };
   const nextModel =
@@ -309,13 +326,27 @@ export async function updateAdminProvider(
   await db.update(adminProviders).set(update).where(eq(adminProviders.id, id));
   const updated = await getAdminProviderById(id);
   if (!updated) throw new AdminProviderError('failed to load updated provider', 500);
+  if (wasDefaultProvider) {
+    if (updated.enabled && updated.slug !== current.slug) {
+      await setRuntimeConfigKey('defaultTtsProvider', updated.slug);
+    } else if (!updated.enabled) {
+      await swapDefaultSharedProvider(updated.slug);
+    }
+  }
+  await ensureDefaultSharedProviderValidity();
   return updated;
 }
 
 export async function deleteAdminProvider(id: string): Promise<void> {
   const existing = await getAdminProviderById(id);
   if (!existing) throw new AdminProviderError('provider not found', 404);
+  const runtimeConfigBefore = await getRuntimeConfig();
+  const wasDefaultProvider = runtimeConfigBefore.defaultTtsProvider === existing.slug;
   await db.delete(adminProviders).where(eq(adminProviders.id, id));
+  if (wasDefaultProvider) {
+    await swapDefaultSharedProvider(existing.slug);
+  }
+  await ensureDefaultSharedProviderValidity();
 }
 
 /** Lookup helper used by TTS routes: returns null if not found or disabled. */
@@ -333,11 +364,49 @@ export async function getEnabledAdminProviderBySlug(
 }
 
 export async function getFirstEnabledAdminProvider(): Promise<AdminProviderRecord | null> {
-  const rows = await db
-    .select()
-    .from(adminProviders)
-    .where(eq(adminProviders.enabled, 1))
-    .limit(1);
-  const arr = rows as Array<Record<string, unknown>>;
-  return arr[0] ? rowToRecord(arr[0]) : null;
+  const rows = await listEnabledAdminProviders();
+  return rows[0] ?? null;
+}
+
+export async function resolvePreferredEnabledAdminProvider(input: {
+  requestedSlug?: string | null;
+  runtimeDefaultSlug?: string | null;
+}): Promise<AdminProviderRecord | null> {
+  const providers = await listEnabledAdminProviders();
+  const selectedSlug = resolvePreferredSharedProviderSlug({
+    providers,
+    requestedSlug: input.requestedSlug,
+    runtimeDefaultSlug: input.runtimeDefaultSlug,
+  });
+  if (!selectedSlug) return null;
+  return providers.find((provider) => provider.slug === selectedSlug) ?? null;
+}
+
+async function ensureDefaultSharedProviderValidity(): Promise<void> {
+  const runtimeConfig = await getRuntimeConfig();
+  const currentDefaultSlug = runtimeConfig.defaultTtsProvider;
+  if (!currentDefaultSlug || BUILT_IN_PROVIDER_IDS.includes(currentDefaultSlug as TtsProviderId)) {
+    return;
+  }
+
+  const currentDefaultEnabled = await getEnabledAdminProviderBySlug(currentDefaultSlug);
+  if (currentDefaultEnabled) return;
+
+  const nextProvider = await resolvePreferredEnabledAdminProvider({
+    runtimeDefaultSlug: currentDefaultSlug,
+  });
+  if (!nextProvider) return;
+
+  await setRuntimeConfigKey('defaultTtsProvider', nextProvider.slug);
+}
+
+async function swapDefaultSharedProvider(excludedSlug: string): Promise<void> {
+  const providers = await listEnabledAdminProviders();
+  const filtered = providers.filter((provider) => provider.slug !== excludedSlug);
+  const selectedSlug = resolvePreferredSharedProviderSlug({
+    providers: filtered,
+    runtimeDefaultSlug: null,
+  });
+  if (!selectedSlug) return;
+  await setRuntimeConfigKey('defaultTtsProvider', selectedSlug);
 }

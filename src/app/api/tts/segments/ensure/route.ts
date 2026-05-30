@@ -23,7 +23,7 @@ import {
 } from '@/lib/server/tts/segments';
 import { isBuiltInTtsProviderId, isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { rateLimiter, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { rateLimiter, resolveRateLimitThresholds } from '@/lib/server/rate-limit/rate-limiter';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
@@ -169,6 +169,13 @@ export async function POST(request: NextRequest) {
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
     const runtimeConfig = await getResolvedRuntimeConfig();
+    const ttsRateLimitEnabled = !runtimeConfig.disableTtsRateLimit;
+    const limits = resolveRateLimitThresholds({
+      anonymous: runtimeConfig.ttsDailyLimitAnonymous,
+      authenticated: runtimeConfig.ttsDailyLimitAuthenticated,
+      ipAnonymous: runtimeConfig.ttsIpDailyLimitAnonymous,
+      ipAuthenticated: runtimeConfig.ttsIpDailyLimitAuthenticated,
+    });
     const requestCreds = await resolveTtsCredentials({
       providerHeader: parsed.settings.providerRef,
       apiKeyHeader: request.headers.get('x-openai-key'),
@@ -461,7 +468,7 @@ export async function POST(request: NextRequest) {
         segmentId: segment.segmentId,
       });
 
-      if (scope.authEnabled && scope.userId && isTtsRateLimitEnabled()) {
+      if (scope.authEnabled && scope.userId && ttsRateLimitEnabled) {
         const charCount = segment.text.length;
         const ip = getClientIp(request);
         const device = scope.isAnonymousUser ? getOrCreateDeviceId(request) : null;
@@ -477,6 +484,10 @@ export async function POST(request: NextRequest) {
             deviceId: device?.deviceId ?? null,
             ip,
           },
+          {
+            enabled: ttsRateLimitEnabled,
+            limits,
+          },
         );
 
         if (!rateLimitResult.allowed) {
@@ -484,6 +495,8 @@ export async function POST(request: NextRequest) {
             rateLimitResult,
             isAnonymousUser: scope.isAnonymousUser,
             pathname: request.nextUrl.pathname,
+            anonymousLimit: limits.anonymous,
+            authenticatedLimit: limits.authenticated,
           });
           attachDeviceIdCookie(response, deviceIdToSet, didCreateDeviceIdCookie);
           return response;

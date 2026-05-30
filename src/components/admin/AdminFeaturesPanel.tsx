@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { ChevronUpDownIcon, CheckIcon } from '@/components/icons/Icons';
 import {
   Badge,
+  EditableRow,
   Section,
   ToggleRow,
   buttonClass,
@@ -56,12 +57,14 @@ export function AdminFeaturesPanel() {
   });
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
+  const [editingChangelogUrl, setEditingChangelogUrl] = useState(false);
   const { providers: sharedProviders } = useSharedProviders();
 
   useEffect(() => {
     if (!data) return;
     setDraft({ ...data.values });
     setDirty(new Set());
+    setEditingChangelogUrl(false);
   }, [data]);
 
   useEffect(() => {
@@ -104,9 +107,17 @@ export function AdminFeaturesPanel() {
     setDraft((d) => ({ ...d, [key]: value }));
     setDirty((s) => {
       const next = new Set(s);
-      next.add(key);
+      const baselineValue = data?.values?.[key];
+      if (Object.is(value, baselineValue)) next.delete(key);
+      else next.add(key);
       return next;
     });
+  };
+
+  const updatePositiveIntDraft = (key: string, raw: string) => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    updateDraft(key, Math.max(1, Math.floor(parsed)));
   };
 
   const resetField = (key: string) => {
@@ -151,6 +162,7 @@ export function AdminFeaturesPanel() {
     } as ProviderOption
     : fallbackShared;
   const selectedProviderOption = effectiveSelectedProvider;
+  const showTtsDailyLimitInputs = !Boolean(draft.disableTtsRateLimit);
 
   const handleProviderChange = (opt: ProviderOption) => {
     updateDraft('defaultTtsProvider', opt.id);
@@ -270,6 +282,85 @@ export function AdminFeaturesPanel() {
           right={renderSource('showAllProviderModels')}
           variant="flat"
         />
+        <ToggleRow
+          label="Disable TTS daily rate limiting"
+          description="When on, per-user/IP daily character quotas are not enforced."
+          checked={Boolean(draft.disableTtsRateLimit)}
+          onChange={(checked) => updateDraft('disableTtsRateLimit', checked)}
+          right={renderSource('disableTtsRateLimit')}
+          variant="flat"
+        />
+        <Transition
+          as={Fragment}
+          show={showTtsDailyLimitInputs}
+          enter="transition-all duration-200 ease-out"
+          enterFrom="opacity-0 -translate-y-1 max-h-0"
+          enterTo="opacity-100 translate-y-0 max-h-[420px]"
+          leave="transition-all duration-150 ease-in"
+          leaveFrom="opacity-100 translate-y-0 max-h-[420px]"
+          leaveTo="opacity-0 -translate-y-1 max-h-0"
+        >
+          <div className="overflow-hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-0.5 py-1.5">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-medium text-foreground">Anonymous per-user daily limit</label>
+                  {renderSource('ttsDailyLimitAnonymous')}
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className={inputClass}
+                  value={String(draft.ttsDailyLimitAnonymous ?? '')}
+                  onChange={(event) => updatePositiveIntDraft('ttsDailyLimitAnonymous', event.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-medium text-foreground">Authenticated per-user daily limit</label>
+                  {renderSource('ttsDailyLimitAuthenticated')}
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className={inputClass}
+                  value={String(draft.ttsDailyLimitAuthenticated ?? '')}
+                  onChange={(event) => updatePositiveIntDraft('ttsDailyLimitAuthenticated', event.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-medium text-foreground">Anonymous IP daily backstop</label>
+                  {renderSource('ttsIpDailyLimitAnonymous')}
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className={inputClass}
+                  value={String(draft.ttsIpDailyLimitAnonymous ?? '')}
+                  onChange={(event) => updatePositiveIntDraft('ttsIpDailyLimitAnonymous', event.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-medium text-foreground">Authenticated IP daily backstop</label>
+                  {renderSource('ttsIpDailyLimitAuthenticated')}
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className={inputClass}
+                  value={String(draft.ttsIpDailyLimitAuthenticated ?? '')}
+                  onChange={(event) => updatePositiveIntDraft('ttsIpDailyLimitAuthenticated', event.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        </Transition>
       </Section>
 
       <Section
@@ -277,16 +368,15 @@ export function AdminFeaturesPanel() {
         subtitle="Feature flags for all users."
         action={<Badge tone="foreground">Feature Flags</Badge>}
       >
-        <div className="space-y-1.5 pb-2 border-b border-offbase">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Changelog feed URL</p>
-              <p className="text-xs text-muted mt-0.5">
-                Public URL to the changelog manifest JSON used by Settings.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('changelogFeedUrl')}</div>
-          </div>
+        <EditableRow
+          label="Changelog feed URL"
+          description="Public URL to the changelog manifest JSON used by Settings."
+          value={String(draft.changelogFeedUrl ?? '') || '—'}
+          expanded={editingChangelogUrl}
+          onExpandedChange={setEditingChangelogUrl}
+          right={renderSource('changelogFeedUrl')}
+          editLabel={editingChangelogUrl ? 'Close editor' : 'Edit URL'}
+        >
           <input
             type="text"
             className={inputClass}
@@ -294,7 +384,7 @@ export function AdminFeaturesPanel() {
             onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
           />
-        </div>
+        </EditableRow>
         <ToggleRow
           label="Allow new account sign-ups"
           description="When off, new accounts cannot be created. Existing accounts can still sign in."

@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { auth } from '@/lib/server/auth/auth';
-import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { rateLimiter, resolveRateLimitThresholds } from '@/lib/server/rate-limit/rate-limiter';
 import { headers } from 'next/headers';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { nextUtcMidnightTimestampMs } from '@/lib/shared/timestamps';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -17,7 +18,14 @@ function getUtcResetTimeMs(): number {
 
 export async function GET(req: NextRequest) {
   try {
-    const ttsRateLimitEnabled = isTtsRateLimitEnabled();
+    const runtimeConfig = await getResolvedRuntimeConfig();
+    const limits = resolveRateLimitThresholds({
+      anonymous: runtimeConfig.ttsDailyLimitAnonymous,
+      authenticated: runtimeConfig.ttsDailyLimitAuthenticated,
+      ipAnonymous: runtimeConfig.ttsIpDailyLimitAnonymous,
+      ipAuthenticated: runtimeConfig.ttsIpDailyLimitAuthenticated,
+    });
+    const ttsRateLimitEnabled = !runtimeConfig.disableTtsRateLimit;
 
     // If auth is not enabled, return unlimited status
     if (!isAuthEnabled() || !auth) {
@@ -46,8 +54,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         allowed: true,
         currentCount: 0,
-        limit: ttsRateLimitEnabled ? RATE_LIMITS.ANONYMOUS : Number.MAX_SAFE_INTEGER,
-        remainingChars: ttsRateLimitEnabled ? RATE_LIMITS.ANONYMOUS : Number.MAX_SAFE_INTEGER,
+        limit: ttsRateLimitEnabled ? limits.anonymous : Number.MAX_SAFE_INTEGER,
+        remainingChars: ttsRateLimitEnabled ? limits.anonymous : Number.MAX_SAFE_INTEGER,
         resetTimeMs,
         userType: 'unauthenticated',
         authEnabled: true
@@ -57,7 +65,7 @@ export async function GET(req: NextRequest) {
     const isAnonymous = Boolean((session.user as { isAnonymous?: boolean }).isAnonymous);
 
     const ip = getClientIp(req);
-    const device = isTtsRateLimitEnabled() ? (isAnonymous ? getOrCreateDeviceId(req) : null) : null;
+    const device = ttsRateLimitEnabled ? (isAnonymous ? getOrCreateDeviceId(req) : null) : null;
 
     const result = await rateLimiter.getCurrentUsage(
       {
@@ -67,7 +75,11 @@ export async function GET(req: NextRequest) {
       {
         deviceId: device?.deviceId ?? null,
         ip,
-      }
+      },
+      {
+        enabled: ttsRateLimitEnabled,
+        limits,
+      },
     );
 
     const response = NextResponse.json({

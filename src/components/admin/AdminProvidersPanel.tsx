@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Input, Listbox, ListboxButton, ListboxOption, ListboxOptions, Transition } from '@headlessui/react';
+import { Button, Input, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ChevronUpDownIcon, CheckIcon, PlusIcon } from '@/components/icons/Icons';
+import { ChevronUpDownIcon, CheckIcon, DotsHorizontalIcon, PlusIcon } from '@/components/icons/Icons';
 import { providerSupportsCustomModel, resolveProviderModels, type TtsModelDefinition, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { defaultBaseUrlForProviderType, defaultModelForProviderType, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import {
@@ -56,6 +56,35 @@ interface FormState {
 
 const providerDefaultModel = defaultModelForProviderType;
 const ADMIN_PROVIDERS_QUERY_KEY = ['admin-providers'] as const;
+const ADMIN_SETTINGS_QUERY_KEY = ['admin-settings'] as const;
+
+async function fetchDefaultProviderSlug(): Promise<string> {
+  const res = await fetch('/api/admin/settings');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { values?: { defaultTtsProvider?: unknown } };
+  return typeof data.values?.defaultTtsProvider === 'string' ? data.values.defaultTtsProvider : '';
+}
+
+async function patchDefaultProviderSlug(slug: string): Promise<void> {
+  const res = await fetch('/api/admin/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates: { defaultTtsProvider: slug } }),
+  });
+  if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
+}
+
+async function patchProviderEnabled(input: { id: string; enabled: boolean }): Promise<void> {
+  const res = await fetch(`/api/admin/providers/${input.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: input.enabled }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+}
 
 function createEmptyForm(): FormState {
   return {
@@ -68,6 +97,11 @@ function createEmptyForm(): FormState {
     defaultInstructions: '',
     enabled: true,
   };
+}
+
+function truncateModelLabel(value: string, maxLength = 56): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 3)}...`;
 }
 
 async function fetchAdminProviders(): Promise<AdminProviderMasked[]> {
@@ -122,19 +156,34 @@ export function AdminProvidersPanel() {
     queryKey: ADMIN_PROVIDERS_QUERY_KEY,
     queryFn: fetchAdminProviders,
   });
+  const {
+    data: defaultProviderSlug = '',
+    error: defaultProviderError,
+  } = useQuery({
+    queryKey: ADMIN_SETTINGS_QUERY_KEY,
+    queryFn: fetchDefaultProviderSlug,
+  });
 
   useEffect(() => {
     if (!error) return;
     console.error('[AdminProvidersPanel] load failed:', error);
     toast.error('Failed to load admin providers');
   }, [error]);
+  useEffect(() => {
+    if (!defaultProviderError) return;
+    console.error('[AdminProvidersPanel] default provider load failed:', defaultProviderError);
+    toast.error('Failed to load default provider');
+  }, [defaultProviderError]);
 
   const saveMutation = useMutation({
     mutationFn: upsertAdminProvider,
     onSuccess: async (_data, variables) => {
       toast.success(variables.editingId === '__new' ? 'Provider created' : 'Provider updated');
       cancelEdit();
-      await queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
+      ]);
     },
     onError: (mutationError) => {
       console.error('[AdminProvidersPanel] save failed:', mutationError);
@@ -146,11 +195,39 @@ export function AdminProvidersPanel() {
     mutationFn: deleteAdminProvider,
     onSuccess: async () => {
       toast.success('Provider deleted');
-      await queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
+      ]);
     },
     onError: (mutationError) => {
       console.error('[AdminProvidersPanel] delete failed:', mutationError);
       toast.error((mutationError as Error).message || 'Delete failed');
+    },
+  });
+  const toggleEnabledMutation = useMutation({
+    mutationFn: patchProviderEnabled,
+    onSuccess: async (_data, vars) => {
+      toast.success(vars.enabled ? 'Provider enabled' : 'Provider disabled');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
+      ]);
+    },
+    onError: (mutationError) => {
+      console.error('[AdminProvidersPanel] toggle enabled failed:', mutationError);
+      toast.error((mutationError as Error).message || 'Update failed');
+    },
+  });
+  const setDefaultMutation = useMutation({
+    mutationFn: patchDefaultProviderSlug,
+    onSuccess: async () => {
+      toast.success('Default provider updated');
+      await queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
+    },
+    onError: (mutationError) => {
+      console.error('[AdminProvidersPanel] set default failed:', mutationError);
+      toast.error((mutationError as Error).message || 'Failed to set default');
     },
   });
 
@@ -190,6 +267,14 @@ export function AdminProvidersPanel() {
     if (!confirm('Delete this shared provider? Users selecting it will lose access until they switch.')) return;
     if (deleteMutation.isPending) return;
     deleteMutation.mutate(id);
+  };
+  const toggleEnabled = (provider: AdminProviderMasked) => {
+    if (toggleEnabledMutation.isPending) return;
+    toggleEnabledMutation.mutate({ id: provider.id, enabled: !provider.enabled });
+  };
+  const setDefault = (slug: string) => {
+    if (setDefaultMutation.isPending) return;
+    setDefaultMutation.mutate(slug);
   };
 
   const isEditingExisting = editingId !== null && editingId !== '__new';
@@ -504,38 +589,101 @@ export function AdminProvidersPanel() {
           <p className="text-xs text-muted py-2">No shared providers configured yet.</p>
         ) : (
           providers.map((p) => (
-            <div key={p.id} className="py-1.5 border-b border-offbase last:border-b-0">
-              <div className="flex items-start gap-3">
+            <div key={p.id} className="py-1.5 border-b border-offbase last:border-b-0 px-0.5 rounded-md">
+              <div className="flex items-start gap-2.5">
                 <div className="flex-1 min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-sm font-medium text-foreground truncate">{p.displayName}</span>
                     <Badge tone="muted">{p.slug}</Badge>
+                    {defaultProviderSlug === p.slug && <Badge tone="foreground">Default</Badge>}
                     {!p.enabled && <Badge tone="muted">Disabled</Badge>}
                   </div>
-                  <div className="text-xs text-muted truncate">
+                  <div className="text-xs text-muted">
                     {p.providerType}
-                    {p.defaultModel ? ` · ${p.defaultModel}` : ''}
+                    {p.defaultModel ? (
+                      <>
+                        {' · '}
+                        <span title={p.defaultModel}>{truncateModelLabel(p.defaultModel)}</span>
+                      </>
+                    ) : (
+                      ' · no default model'
+                    )}
                     {p.defaultInstructions ? ' · instructions' : ''}
-                    {p.baseUrl ? ` · ${p.baseUrl}` : ''}
-                    {' · '}key {p.apiKeyMask}
+                  </div>
+                  <div className="text-[11px] text-muted truncate">
+                    {p.baseUrl ? p.baseUrl : 'provider base URL default'} · key {p.apiKeyMask}
                   </div>
                 </div>
-                <div className="shrink-0 flex gap-1.5">
-                  <Button
-                    onClick={() => startEdit(p)}
-                    className={buttonClass({ variant: 'outline', size: 'xs', className: 'h-7' })}
-                    disabled={!!editingId || deleteMutation.isPending}
+                <Menu as="div" className="relative shrink-0">
+                  <MenuButton
+                    className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-offbase bg-base text-muted hover:text-accent hover:bg-offbase transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+                    title="Provider actions"
+                    aria-label="Provider actions"
+                    disabled={!!editingId || deleteMutation.isPending || toggleEnabledMutation.isPending || setDefaultMutation.isPending}
                   >
-                    Edit
-                  </Button>
-                  <Button
-                    onClick={() => remove(p.id)}
-                    className={buttonClass({ variant: 'danger', size: 'xs', className: 'h-7' })}
-                    disabled={!!editingId || deleteMutation.isPending}
+                    <DotsHorizontalIcon className="h-3 w-4" />
+                  </MenuButton>
+                  <Transition
+                    as={Fragment}
+                    enter="transition ease-out duration-100"
+                    enterFrom="transform opacity-0 scale-95"
+                    enterTo="transform opacity-100 scale-100"
+                    leave="transition ease-in duration-75"
+                    leaveFrom="transform opacity-100 scale-100"
+                    leaveTo="transform opacity-0 scale-95"
                   >
-                    Delete
-                  </Button>
-                </div>
+                    <MenuItems
+                      anchor="bottom end"
+                      className="z-50 mt-2 min-w-[170px] rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none p-1"
+                    >
+                      <MenuItem>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => startEdit(p)}
+                            className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </MenuItem>
+                      <MenuItem disabled={!p.enabled || defaultProviderSlug === p.slug}>
+                        {({ active, disabled }) => (
+                          <button
+                            type="button"
+                            onClick={() => setDefault(p.slug)}
+                            disabled={disabled}
+                            className={`${disabled ? 'text-muted/60 cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          >
+                            Set as default
+                          </button>
+                        )}
+                      </MenuItem>
+                      <MenuItem>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => toggleEnabled(p)}
+                            className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          >
+                            {p.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                        )}
+                      </MenuItem>
+                      <MenuItem>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => remove(p.id)}
+                            className={`${active ? 'bg-offbase' : ''} text-red-500 flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </MenuItem>
+                    </MenuItems>
+                  </Transition>
+                </Menu>
               </div>
             </div>
           ))

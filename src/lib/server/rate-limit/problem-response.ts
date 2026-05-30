@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { RATE_LIMITS, type RateLimitResult } from '@/lib/server/rate-limit/rate-limiter';
+import { type RateLimitResult } from '@/lib/server/rate-limit/rate-limiter';
 
 function formatLimitForHint(limit: number): string {
   if (!Number.isFinite(limit) || limit <= 0) return String(limit);
@@ -15,8 +15,10 @@ export function buildDailyQuotaExceededResponse(input: {
   rateLimitResult: RateLimitResult;
   isAnonymousUser: boolean;
   pathname: string;
+  anonymousLimit: number;
+  authenticatedLimit: number;
 }): NextResponse {
-  const { rateLimitResult, isAnonymousUser, pathname } = input;
+  const { rateLimitResult, isAnonymousUser, pathname, anonymousLimit, authenticatedLimit } = input;
   const resetTimeMs = rateLimitResult.resetTimeMs;
   const retryAfterSeconds = Math.max(0, Math.ceil((resetTimeMs - Date.now()) / 1000));
 
@@ -32,7 +34,7 @@ export function buildDailyQuotaExceededResponse(input: {
     resetTimeMs,
     userType: isAnonymousUser ? 'anonymous' : 'authenticated',
     upgradeHint: isAnonymousUser
-      ? `Sign up to increase your limit from ${formatLimitForHint(RATE_LIMITS.ANONYMOUS)} to ${formatLimitForHint(RATE_LIMITS.AUTHENTICATED)} characters per day`
+      ? `Sign up to increase your limit from ${formatLimitForHint(anonymousLimit)} to ${formatLimitForHint(authenticatedLimit)} characters per day`
       : undefined,
     instance: pathname,
   }), {

@@ -8,6 +8,7 @@ import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
 import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
+import { resolvePreferredSharedProviderSlug } from '@/lib/shared/shared-provider-selection';
 
 function isAudiobookFormat(value: unknown): value is TTSAudiobookFormat {
   return value === 'mp3' || value === 'm4b';
@@ -101,13 +102,12 @@ function resolveRestrictedProviderRef(
   fallbackProviderRef: string,
   sharedProviders: SharedProviderPolicyEntry[],
 ): string {
-  const requestedIsBuiltIn = isBuiltInTtsProviderId(providerRef);
-  const fallbackIsBuiltIn = isBuiltInTtsProviderId(fallbackProviderRef);
-  const requestedSharedSlug = requestedIsBuiltIn ? '' : providerRef;
-  const fallbackSharedSlug = fallbackIsBuiltIn ? '' : fallbackProviderRef;
-  const preferredSharedSlug = requestedSharedSlug || fallbackSharedSlug;
-  if (preferredSharedSlug) return preferredSharedSlug;
-  return sharedProviders[0]?.slug || providerRef;
+  const preferred = resolvePreferredSharedProviderSlug({
+    providers: sharedProviders,
+    requestedSlug: isBuiltInTtsProviderId(providerRef) ? null : providerRef,
+    runtimeDefaultSlug: isBuiltInTtsProviderId(fallbackProviderRef) ? null : fallbackProviderRef,
+  });
+  return preferred || providerRef;
 }
 
 export function canonicalizeAudiobookSettingsForRuntime(input: {

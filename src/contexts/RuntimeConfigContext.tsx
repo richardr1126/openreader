@@ -22,6 +22,11 @@ export interface RuntimeConfig {
   enableDocxConversion: boolean;
   enableDestructiveDeleteActions: boolean;
   showAllProviderModels: boolean;
+  disableTtsRateLimit: boolean;
+  ttsDailyLimitAnonymous: number;
+  ttsDailyLimitAuthenticated: number;
+  ttsIpDailyLimitAnonymous: number;
+  ttsIpDailyLimitAuthenticated: number;
   computeAvailable: boolean;
 }
 
@@ -36,6 +41,11 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   enableDocxConversion: true,
   enableDestructiveDeleteActions: true,
   showAllProviderModels: true,
+  disableTtsRateLimit: true,
+  ttsDailyLimitAnonymous: 50_000,
+  ttsDailyLimitAuthenticated: 500_000,
+  ttsIpDailyLimitAnonymous: 100_000,
+  ttsIpDailyLimitAuthenticated: 1_000_000,
   computeAvailable: true,
 };
 

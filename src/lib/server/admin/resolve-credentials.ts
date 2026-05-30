@@ -1,7 +1,7 @@
 import {
   getEnabledAdminProviderBySlug,
-  getFirstEnabledAdminProvider,
   decryptedKeyFor,
+  resolvePreferredEnabledAdminProvider,
   type AdminProviderRecord,
 } from '@/lib/server/admin/providers';
 
@@ -46,37 +46,20 @@ export async function resolveTtsCredentials(opts: {
   if (opts.restrictUserApiKeys) {
     const requestedIsBuiltIn = isBuiltInProviderId(requestedProvider);
     const fallback = opts.fallbackProvider || '';
-    const fallbackIsBuiltIn = isBuiltInProviderId(fallback);
-    const requestedSharedSlug = requestedIsBuiltIn ? '' : requestedProvider;
-    const fallbackSharedSlug = fallbackIsBuiltIn ? '' : fallback;
-    const preferredSharedSlug = requestedSharedSlug || fallbackSharedSlug;
-
-    if (preferredSharedSlug) {
-      const admin = await getEnabledAdminProviderBySlug(preferredSharedSlug);
-      if (!admin) {
-        return { error: 'provider_unknown', slug: preferredSharedSlug };
-      }
-      const apiKey = await decryptedKeyFor(admin);
-      return {
-        provider: admin.providerType,
-        apiKey,
-        baseUrl: admin.baseUrl || undefined,
-        fromAdmin: true,
-        adminRecord: admin,
-      };
-    }
-
-    const firstShared = await getFirstEnabledAdminProvider();
-    if (!firstShared) {
+    const selected = await resolvePreferredEnabledAdminProvider({
+      requestedSlug: requestedIsBuiltIn ? null : requestedProvider,
+      runtimeDefaultSlug: fallback,
+    });
+    if (!selected) {
       return { error: 'no_shared_provider_configured', slug: requestedProvider };
     }
-    const apiKey = await decryptedKeyFor(firstShared);
+    const apiKey = await decryptedKeyFor(selected);
     return {
-      provider: firstShared.providerType,
+      provider: selected.providerType,
       apiKey,
-      baseUrl: firstShared.baseUrl || undefined,
+      baseUrl: selected.baseUrl || undefined,
       fromAdmin: true,
-      adminRecord: firstShared,
+      adminRecord: selected,
     };
   }
 

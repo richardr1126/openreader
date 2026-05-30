@@ -3,53 +3,40 @@ import { userTtsChars } from '@/db/schema';
 import { isAuthEnabled } from '@/lib/server/auth/config';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
-import { serverLogger } from '@/lib/server/logger';
-import { logDegraded } from '@/lib/server/errors/logging';
 
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw || raw.trim() === '') return fallback;
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    logDegraded(serverLogger, {
-      event: 'rate_limit.config.invalid_env',
-      msg: 'Invalid rate limiter env value; using default',
-      step: 'read_limit_env',
-      context: {
-        envVar: name,
-        envValue: raw,
-        fallbackValue: fallback,
-      },
-    });
-    return fallback;
-  }
-
-  return Math.floor(parsed);
+export interface RateLimitThresholds {
+  anonymous: number;
+  authenticated: number;
+  ipAnonymous: number;
+  ipAuthenticated: number;
 }
 
-function readBooleanEnv(name: string, fallback: boolean): boolean {
-  const raw = process.env[name];
-  if (!raw || raw.trim() === '') return fallback;
-  const normalized = raw.trim().toLowerCase();
-  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
-  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
-  return fallback;
+export interface RateLimitRuntimeOptions {
+  enabled: boolean;
+  limits: RateLimitThresholds;
 }
 
-export function isTtsRateLimitEnabled(): boolean {
-  return readBooleanEnv('TTS_ENABLE_RATE_LIMIT', false);
-}
+export const DEFAULT_RATE_LIMITS: RateLimitThresholds = {
+  anonymous: 50_000,
+  authenticated: 500_000,
+  ipAnonymous: 100_000,
+  ipAuthenticated: 1_000_000,
+};
 
-// Rate limits configuration - character counts per day
-export const RATE_LIMITS = {
-  ANONYMOUS: readPositiveIntEnv('TTS_DAILY_LIMIT_ANONYMOUS', 50_000),
-  AUTHENTICATED: readPositiveIntEnv('TTS_DAILY_LIMIT_AUTHENTICATED', 500_000),
-  // IP-based backstop limits to make it harder to reset limits by creating new accounts
-  // or clearing storage/cookies
-  IP_ANONYMOUS: readPositiveIntEnv('TTS_IP_DAILY_LIMIT_ANONYMOUS', 100_000),
-  IP_AUTHENTICATED: readPositiveIntEnv('TTS_IP_DAILY_LIMIT_AUTHENTICATED', 1_000_000),
-} as const;
+export function resolveRateLimitThresholds(input?: Partial<RateLimitThresholds>): RateLimitThresholds {
+  const source = input ?? {};
+  const normalize = (value: unknown, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+    return Math.floor(value);
+  };
+
+  return {
+    anonymous: normalize(source.anonymous, DEFAULT_RATE_LIMITS.anonymous),
+    authenticated: normalize(source.authenticated, DEFAULT_RATE_LIMITS.authenticated),
+    ipAnonymous: normalize(source.ipAnonymous, DEFAULT_RATE_LIMITS.ipAnonymous),
+    ipAuthenticated: normalize(source.ipAuthenticated, DEFAULT_RATE_LIMITS.ipAuthenticated),
+  };
+}
 
 // Helper to ensure DB is strictly typed when we know it exists
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,8 +150,15 @@ export class RateLimiter {
   /**
    * Check if a user can use TTS and increment their char count if allowed
    */
-  async checkAndIncrementLimit(user: UserInfo, charCount: number, backstops?: RateLimitBackstops): Promise<RateLimitResult> {
-    if (!isAuthEnabled() || !isTtsRateLimitEnabled()) {
+  async checkAndIncrementLimit(
+    user: UserInfo,
+    charCount: number,
+    backstops?: RateLimitBackstops,
+    options?: RateLimitRuntimeOptions,
+  ): Promise<RateLimitResult> {
+    const limits = resolveRateLimitThresholds(options?.limits);
+    const enabled = options?.enabled ?? true;
+    if (!isAuthEnabled() || !enabled) {
       return {
         allowed: true,
         currentCount: 0,
@@ -176,7 +170,7 @@ export class RateLimiter {
 
     const today = new Date().toISOString().split('T')[0];
     const dateValue = today as unknown as UserTtsCharsDateValue;
-    const userLimit = user.isAnonymous ? RATE_LIMITS.ANONYMOUS : RATE_LIMITS.AUTHENTICATED;
+    const userLimit = user.isAnonymous ? limits.anonymous : limits.authenticated;
 
     const buckets: Bucket[] = [{ key: user.id, limit: userLimit }];
 
@@ -184,13 +178,13 @@ export class RateLimiter {
     const ip = backstops?.ip?.toString() || null;
 
     if (user.isAnonymous && deviceId) {
-      buckets.push({ key: normalizeBackstopKey('device', deviceId), limit: RATE_LIMITS.ANONYMOUS });
+      buckets.push({ key: normalizeBackstopKey('device', deviceId), limit: limits.anonymous });
     }
 
     if (ip) {
       buckets.push({
         key: normalizeBackstopKey('ip', ip),
-        limit: user.isAnonymous ? RATE_LIMITS.IP_ANONYMOUS : RATE_LIMITS.IP_AUTHENTICATED,
+        limit: user.isAnonymous ? limits.ipAnonymous : limits.ipAuthenticated,
       });
     }
 
@@ -254,7 +248,7 @@ export class RateLimiter {
       });
     } catch (error) {
       if (error instanceof RateLimitExceeded) {
-        const current = await this.getCurrentUsage(user, backstops);
+        const current = await this.getCurrentUsage(user, backstops, options);
         return { ...current, allowed: false };
       }
       throw error;
@@ -264,8 +258,14 @@ export class RateLimiter {
   /**
    * Get current usage for a user without incrementing
    */
-  async getCurrentUsage(user: UserInfo, backstops?: RateLimitBackstops): Promise<RateLimitResult> {
-    if (!isAuthEnabled() || !isTtsRateLimitEnabled()) {
+  async getCurrentUsage(
+    user: UserInfo,
+    backstops?: RateLimitBackstops,
+    options?: RateLimitRuntimeOptions,
+  ): Promise<RateLimitResult> {
+    const limits = resolveRateLimitThresholds(options?.limits);
+    const enabled = options?.enabled ?? true;
+    if (!isAuthEnabled() || !enabled) {
       return {
         allowed: true,
         currentCount: 0,
@@ -276,7 +276,7 @@ export class RateLimiter {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const userLimit = user.isAnonymous ? RATE_LIMITS.ANONYMOUS : RATE_LIMITS.AUTHENTICATED;
+    const userLimit = user.isAnonymous ? limits.anonymous : limits.authenticated;
 
     const buckets: Bucket[] = [{ key: user.id, limit: userLimit }];
 
@@ -284,13 +284,13 @@ export class RateLimiter {
     const ip = backstops?.ip?.toString() || null;
 
     if (user.isAnonymous && deviceId) {
-      buckets.push({ key: normalizeBackstopKey('device', deviceId), limit: RATE_LIMITS.ANONYMOUS });
+      buckets.push({ key: normalizeBackstopKey('device', deviceId), limit: limits.anonymous });
     }
 
     if (ip) {
       buckets.push({
         key: normalizeBackstopKey('ip', ip),
-        limit: user.isAnonymous ? RATE_LIMITS.IP_ANONYMOUS : RATE_LIMITS.IP_AUTHENTICATED,
+        limit: user.isAnonymous ? limits.ipAnonymous : limits.ipAuthenticated,
       });
     }
 
@@ -321,7 +321,7 @@ export class RateLimiter {
    * Transfer char counts when anonymous user creates an account
    */
   async transferAnonymousUsage(anonymousUserId: string, authenticatedUserId: string): Promise<void> {
-    if (!isAuthEnabled() || !isTtsRateLimitEnabled()) return;
+    if (!isAuthEnabled()) return;
 
     const today = new Date().toISOString().split('T')[0];
     const dateValue = today as unknown as UserTtsCharsDateValue;

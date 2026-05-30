@@ -8,7 +8,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { audiobooks, audiobookChapters } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { rateLimiter, RATE_LIMITS, isTtsRateLimitEnabled } from '@/lib/server/rate-limit/rate-limiter';
+import { rateLimiter, resolveRateLimitThresholds } from '@/lib/server/rate-limit/rate-limiter';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
@@ -532,7 +532,15 @@ export async function POST(request: NextRequest) {
       sharedDefaultInstructions: credResolved.adminRecord?.defaultInstructions,
     });
 
-    if (authEnabled && userId && isTtsRateLimitEnabled()) {
+    const ttsRateLimitEnabled = !runtimeConfig.disableTtsRateLimit;
+    const limits = resolveRateLimitThresholds({
+      anonymous: runtimeConfig.ttsDailyLimitAnonymous,
+      authenticated: runtimeConfig.ttsDailyLimitAuthenticated,
+      ipAnonymous: runtimeConfig.ttsIpDailyLimitAnonymous,
+      ipAuthenticated: runtimeConfig.ttsIpDailyLimitAuthenticated,
+    });
+
+    if (authEnabled && userId && ttsRateLimitEnabled) {
       const isAnonymous = Boolean(user?.isAnonymous);
       const charCount = data.text.length;
       const ip = getClientIp(request);
@@ -548,6 +556,10 @@ export async function POST(request: NextRequest) {
         {
           deviceId: device?.deviceId ?? null,
           ip,
+        },
+        {
+          enabled: ttsRateLimitEnabled,
+          limits,
         },
       );
 
@@ -570,7 +582,7 @@ export async function POST(request: NextRequest) {
           resetTimeMs,
           userType: isAnonymous ? 'anonymous' : 'authenticated',
           upgradeHint: isAnonymous
-            ? `Sign up to increase your limit from ${formatLimitForHint(RATE_LIMITS.ANONYMOUS)} to ${formatLimitForHint(RATE_LIMITS.AUTHENTICATED)} characters per day`
+            ? `Sign up to increase your limit from ${formatLimitForHint(limits.anonymous)} to ${formatLimitForHint(limits.authenticated)} characters per day`
             : undefined,
           instance: request.nextUrl.pathname,
         };

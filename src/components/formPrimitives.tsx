@@ -1,6 +1,8 @@
 'use client';
 
-import { useId, type ReactNode } from 'react';
+import { Fragment, useId, type ReactNode } from 'react';
+import { Transition } from '@headlessui/react';
+import { EditIcon } from '@/components/icons/Icons';
 
 /**
  * Shared compact form primitives used by settings-like surfaces across
@@ -235,6 +237,65 @@ export function ToggleRow({
           ariaDescribedBy={descId}
         />
       </div>
+    </div>
+  );
+}
+
+export function EditableRow({
+  label,
+  description,
+  value,
+  expanded,
+  onExpandedChange,
+  right,
+  children,
+  editLabel = 'Edit',
+}: {
+  label: string;
+  description: string;
+  value: ReactNode;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  right?: ReactNode;
+  children: ReactNode;
+  editLabel?: string;
+}) {
+  const rowClass =
+    'px-0.5 pt-1 pb-2 border-b border-offbase last:border-b-0 transition-transform duration-200 ease-out hover:scale-[1.003]';
+  return (
+    <div className={rowClass}>
+      <div className="flex items-start gap-2.5">
+        <div className="flex-1 min-w-0 space-y-0.5">
+          <span className="block text-sm font-medium leading-5 text-foreground">{label}</span>
+          <span className="block text-xs leading-4 text-muted">{description}</span>
+          <span className="block text-xs leading-5 text-foreground truncate">{value}</span>
+        </div>
+        {right ? <div className="shrink-0 self-start pl-1.5">{right}</div> : null}
+        <button
+          type="button"
+          onClick={() => onExpandedChange(!expanded)}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-offbase bg-base text-muted transition-colors hover:bg-offbase hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          title={editLabel}
+          aria-label={editLabel}
+          aria-expanded={expanded}
+        >
+          <EditIcon className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <Transition
+        as={Fragment}
+        show={expanded}
+        enter="transition-all duration-200 ease-out"
+        enterFrom="opacity-0 -translate-y-1 max-h-0"
+        enterTo="opacity-100 translate-y-0 max-h-48"
+        leave="transition-all duration-150 ease-in"
+        leaveFrom="opacity-100 translate-y-0 max-h-48"
+        leaveTo="opacity-0 -translate-y-1 max-h-0"
+      >
+        <div className="overflow-hidden pt-2">
+          {children}
+        </div>
+      </Transition>
     </div>
   );
 }

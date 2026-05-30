@@ -24,11 +24,6 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `TTS_RETRY_MAX_MS` | TTS retry | `2000` | Tune max retry delay |
 | `TTS_RETRY_BACKOFF` | TTS retry | `2` | Tune exponential backoff factor |
 | `TTS_UPSTREAM_TIMEOUT_MS` | TTS request timeout | `285000` | Set max upstream TTS request duration before fail-fast |
-| `TTS_ENABLE_RATE_LIMIT` | Rate limiting | `false` | Set `true` to enable TTS per-user/IP daily character limits |
-| `TTS_DAILY_LIMIT_ANONYMOUS` | Rate limiting | `50000` | Override anonymous per-user daily character limit |
-| `TTS_DAILY_LIMIT_AUTHENTICATED` | Rate limiting | `500000` | Override authenticated per-user daily character limit |
-| `TTS_IP_DAILY_LIMIT_ANONYMOUS` | Rate limiting | `100000` | Override anonymous IP backstop daily limit |
-| `TTS_IP_DAILY_LIMIT_AUTHENTICATED` | Rate limiting | `1000000` | Override authenticated IP backstop daily limit |
 | `BASE_URL` | Auth | unset | Required (with `AUTH_SECRET`) to enable auth |
 | `AUTH_SECRET` | Auth | unset | Required (with `BASE_URL`) to enable auth |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
@@ -76,6 +71,7 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUNTIME_SEED_RESTRICT_USER_API_KEYS` | Legacy bootstrap seed | runtime-dependent | Optional first-boot seed to restrict per-user BYOK |
 | `RUNTIME_SEED_DEFAULT_TTS_PROVIDER` | Legacy bootstrap seed | `custom-openai` | Optional first-boot seed for default TTS provider slug |
 | `RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable audiobook export UI |
+| `RUNTIME_SEED_DISABLE_TTS_LIMIT` | Legacy bootstrap seed | `true` | Optional first-boot seed that keeps TTS daily rate limiting disabled |
 
 
 
@@ -158,37 +154,22 @@ Maximum upstream TTS request timeout in milliseconds.
 - Applies to outbound provider calls from server routes using shared TTS generation
 - Increase for slower providers/models; decrease to fail fast and surface retryable errors sooner
 
-### TTS_ENABLE_RATE_LIMIT
+### TTS Daily Rate Limiting (Runtime Settings)
 
-Controls TTS character rate limiting in the TTS API.
+TTS character rate limiting is now managed from **Settings → Admin → Site features**.
 
-- Default: `false` (TTS char limits disabled)
-- Set to `true` to enforce `TTS_DAILY_LIMIT_*` and `TTS_IP_DAILY_LIMIT_*`
-- For behavior details and examples, see [TTS Rate Limiting](../configure/tts-rate-limiting)
+- `disableTtsRateLimit` default: `true` (rate limiting disabled)
+- Daily limit defaults:
+  - Anonymous per-user: `50000`
+  - Authenticated per-user: `500000`
+  - Anonymous IP backstop: `100000`
+  - Authenticated IP backstop: `1000000`
 
-### TTS_DAILY_LIMIT_ANONYMOUS
+Optional first-boot seeds:
 
-Anonymous per-user daily character limit.
+- `RUNTIME_SEED_DISABLE_TTS_LIMIT`
 
-- Default: `50000`
-
-### TTS_DAILY_LIMIT_AUTHENTICATED
-
-Authenticated per-user daily character limit.
-
-- Default: `500000`
-
-### TTS_IP_DAILY_LIMIT_ANONYMOUS
-
-Anonymous IP backstop daily character limit.
-
-- Default: `100000`
-
-### TTS_IP_DAILY_LIMIT_AUTHENTICATED
-
-Authenticated IP backstop daily character limit.
-
-- Default: `1000000`
+After first boot, these values are DB-backed admin runtime settings.
 
 ## Auth and Identity
 

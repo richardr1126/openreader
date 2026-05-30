@@ -76,6 +76,24 @@ function stringValue(defaultValue: string, envVar: string): RuntimeConfigKeyDef<
   };
 }
 
+function positiveIntValue(defaultValue: number, envVar?: string): RuntimeConfigKeyDef<number> {
+  return {
+    default: defaultValue,
+    envVar,
+    parseEnv(raw) {
+      const trimmed = raw.trim();
+      if (!trimmed) return undefined;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+      return Math.floor(parsed);
+    },
+    validate(value) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+      return Math.floor(value);
+    },
+  };
+}
+
 export const RUNTIME_CONFIG_SCHEMA = {
   defaultTtsProvider: stringValue('custom-openai', 'RUNTIME_SEED_DEFAULT_TTS_PROVIDER'),
   changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json', 'RUNTIME_SEED_CHANGELOG_FEED_URL'),
@@ -88,6 +106,11 @@ export const RUNTIME_CONFIG_SCHEMA = {
   enableDocxConversion: booleanFlag(true, 'RUNTIME_SEED_ENABLE_DOCX_CONVERSION'),
   enableDestructiveDeleteActions: booleanFlag(true, 'RUNTIME_SEED_ENABLE_DESTRUCTIVE_DELETE_ACTIONS'),
   showAllProviderModels: runtimeBoolean(true),
+  disableTtsRateLimit: booleanFlag(true, 'RUNTIME_SEED_DISABLE_TTS_LIMIT'),
+  ttsDailyLimitAnonymous: positiveIntValue(50_000),
+  ttsDailyLimitAuthenticated: positiveIntValue(500_000),
+  ttsIpDailyLimitAnonymous: positiveIntValue(100_000),
+  ttsIpDailyLimitAuthenticated: positiveIntValue(1_000_000),
 } as const satisfies Record<string, RuntimeConfigKeyDef<unknown>>;
 
 export type RuntimeConfigKey = keyof typeof RUNTIME_CONFIG_SCHEMA;

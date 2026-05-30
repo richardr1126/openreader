@@ -7,7 +7,8 @@ This page explains OpenReader's TTS character rate limiting controls.
 ## Overview
 
 - TTS rate limiting is disabled by default.
-- To enable it, set `TTS_ENABLE_RATE_LIMIT=true`.
+- Primary control is **Settings → Admin → Site features → Disable TTS daily rate limiting**.
+- Optional first-boot seed: `RUNTIME_SEED_DISABLE_TTS_LIMIT=true`.
 - Limits are enforced per day in UTC.
 - Enforcement applies only when auth is enabled.
 
@@ -28,21 +29,10 @@ If a request exceeds the active limit, the TTS API returns `429` with reset meta
 - `DISABLE_AUTH_RATE_LIMIT` only affects Better Auth's own request throttling.
 - `DISABLE_AUTH_RATE_LIMIT` does not disable TTS character limits.
 
-## Environment variables
+## Runtime config + seed var
 
-Enable/disable:
-
-- `TTS_ENABLE_RATE_LIMIT` (default: `false`)
-
-Per-user daily limits:
-
-- `TTS_DAILY_LIMIT_ANONYMOUS` (default: `50000`)
-- `TTS_DAILY_LIMIT_AUTHENTICATED` (default: `500000`)
-
-IP backstop daily limits:
-
-- `TTS_IP_DAILY_LIMIT_ANONYMOUS` (default: `100000`)
-- `TTS_IP_DAILY_LIMIT_AUTHENTICATED` (default: `1000000`)
+- First-boot seed toggle: `RUNTIME_SEED_DISABLE_TTS_LIMIT` (default: `true`)
+- Per-user and IP backstop limit values are configured in **Settings → Admin → Site features** and stored in DB runtime settings.
 
 ## Related docs
 
