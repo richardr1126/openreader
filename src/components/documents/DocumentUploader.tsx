@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, useId, type ReactNode } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
@@ -11,9 +11,25 @@ interface DocumentUploaderProps {
   className?: string;
   variant?: 'default' | 'compact' | 'overlay';
   children?: ReactNode;
+  onUploadBatchChange?: (state: UploadBatchState) => void;
 }
 
-export function DocumentUploader({ className = '', variant = 'default', children }: DocumentUploaderProps) {
+export interface UploadBatchState {
+  uploaderId: string;
+  isActive: boolean;
+  totalFiles: number;
+  completedFiles: number;
+  phase: 'uploading' | 'converting';
+  currentFileName: string | null;
+}
+
+export function DocumentUploader({
+  className = '',
+  variant = 'default',
+  children,
+  onUploadBatchChange,
+}: DocumentUploaderProps) {
+  const uploaderId = useId();
   const enableDocx = useFeatureFlag('enableDocxConversion');
   const {
     addPDFDocument: addPDF,
@@ -25,30 +41,86 @@ export function DocumentUploader({ className = '', variant = 'default', children
   const [isConverting, setIsConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const emitBatchState = useCallback((state: Omit<UploadBatchState, 'uploaderId'>) => {
+    onUploadBatchChange?.({ uploaderId, ...state });
+  }, [onUploadBatchChange, uploaderId]);
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles || acceptedFiles.length === 0) return;
 
+    const totalFiles = acceptedFiles.length;
+    let completedFiles = 0;
+
     setIsUploading(true);
     setError(null);
+    emitBatchState({
+      isActive: true,
+      totalFiles,
+      completedFiles,
+      phase: 'uploading',
+      currentFileName: acceptedFiles[0]?.name ?? null,
+    });
 
     try {
       for (const file of acceptedFiles) {
         if (file.type === 'application/pdf') {
+          emitBatchState({
+            isActive: true,
+            totalFiles,
+            completedFiles,
+            phase: 'uploading',
+            currentFileName: file.name,
+          });
           await addPDF(file);
+          completedFiles += 1;
         } else if (file.type === 'application/epub+zip') {
+          emitBatchState({
+            isActive: true,
+            totalFiles,
+            completedFiles,
+            phase: 'uploading',
+            currentFileName: file.name,
+          });
           await addEPUB(file);
+          completedFiles += 1;
         } else if (file.type === 'text/plain' || file.type === 'text/markdown' || file.name.endsWith('.md')) {
+          emitBatchState({
+            isActive: true,
+            totalFiles,
+            completedFiles,
+            phase: 'uploading',
+            currentFileName: file.name,
+          });
           await addHTML(file);
+          completedFiles += 1;
         } else if (enableDocx && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
           // Preserve prior UX: show "Converting DOCX..." state rather than generic uploading.
           setIsUploading(false);
           setIsConverting(true);
+          emitBatchState({
+            isActive: true,
+            totalFiles,
+            completedFiles,
+            phase: 'converting',
+            currentFileName: file.name,
+          });
           // Convert+upload directly on the server. Use sha(docx) as stable ID to avoid duplicates.
           await uploadDocxAsPdf(file);
           await refreshDocuments();
           setIsConverting(false);
           setIsUploading(true);
+          completedFiles += 1;
+        } else {
+          continue;
         }
+
+        emitBatchState({
+          isActive: true,
+          totalFiles,
+          completedFiles,
+          phase: 'uploading',
+          currentFileName: null,
+        });
       }
     } catch (err) {
       setError('Failed to upload file. Please try again.');
@@ -56,8 +128,15 @@ export function DocumentUploader({ className = '', variant = 'default', children
     } finally {
       setIsUploading(false);
       setIsConverting(false);
+      emitBatchState({
+        isActive: false,
+        totalFiles,
+        completedFiles,
+        phase: 'uploading',
+        currentFileName: null,
+      });
     }
-  }, [addHTML, addPDF, addEPUB, refreshDocuments, enableDocx]);
+  }, [addHTML, addPDF, addEPUB, refreshDocuments, enableDocx, emitBatchState]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

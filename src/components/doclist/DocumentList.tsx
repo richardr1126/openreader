@@ -21,7 +21,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
-import { DocumentUploader } from '@/components/documents/DocumentUploader';
+import { DocumentUploader, type UploadBatchState } from '@/components/documents/DocumentUploader';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import {
   DocumentSelectionProvider,
@@ -118,6 +118,70 @@ interface DocumentListInnerProps {
   appActions?: ReactNode;
 }
 
+function SidebarUploadLoader({
+  totalFiles,
+  completedFiles,
+  phase,
+  currentFileName,
+}: {
+  totalFiles: number;
+  completedFiles: number;
+  phase: 'uploading' | 'converting';
+  currentFileName: string | null;
+}) {
+  const progress = totalFiles > 0 ? Math.min(100, Math.round((completedFiles / totalFiles) * 100)) : 0;
+  const label = phase === 'converting' ? 'Converting' : 'Uploading';
+  const radius = 7;
+  const stroke = 2;
+  const size = 18;
+  const normalizedRadius = radius - stroke / 2;
+  const circumference = 2 * Math.PI * normalizedRadius;
+  const dashOffset = circumference - (progress / 100) * circumference;
+
+  return (
+    <div className="rounded-md border border-offbase bg-offbase/60 px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex items-center gap-1.5 text-[11px] leading-tight">
+          <span className="font-medium text-foreground">{label}</span>
+          <span className="shrink-0 tabular-nums text-muted">{completedFiles}/{totalFiles}</span>
+        </div>
+        <div className="shrink-0 flex items-center gap-1 text-accent" aria-label={`Upload progress ${progress}%`}>
+          <span className="text-[10px] tabular-nums text-muted">{progress}%</span>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={phase === 'converting' ? 'animate-spin' : ''}>
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={normalizedRadius}
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.2"
+              strokeWidth={stroke}
+            />
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={normalizedRadius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${circumference} ${circumference}`}
+              strokeDashoffset={dashOffset}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              style={{ transition: 'stroke-dashoffset 200ms ease-out' }}
+            />
+          </svg>
+        </div>
+      </div>
+      {currentFileName && (
+        <p className="mt-0.5 truncate text-[10px] text-muted" title={currentFileName}>
+          {currentFileName}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const cachedState = cachedDocumentListState;
   const [sortBy, setSortBy] = useState<SortBy>(cachedState?.sortBy ?? DEFAULT_STATE.sortBy);
@@ -135,6 +199,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const [sidebarOpen, setSidebarOpen] = useState(!(cachedState?.sidebarCollapsed ?? false));
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [activeUploadBatches, setActiveUploadBatches] = useState<Record<string, UploadBatchState>>({});
 
   const [isInitialized, setIsInitialized] = useState(cachedState !== null);
 
@@ -484,6 +549,29 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   const isLoading = isPDFLoading || isEPUBLoading || isHTMLLoading;
 
+  const handleUploadBatchChange = useCallback((state: UploadBatchState) => {
+    setActiveUploadBatches((prev) => {
+      if (!state.isActive) {
+        if (!prev[state.uploaderId]) return prev;
+        const next = { ...prev };
+        delete next[state.uploaderId];
+        return next;
+      }
+      return { ...prev, [state.uploaderId]: state };
+    });
+  }, []);
+
+  const sidebarUploadState = useMemo(() => {
+    const batches = Object.values(activeUploadBatches);
+    if (batches.length === 0) return null;
+    const totalFiles = batches.reduce((sum, batch) => sum + batch.totalFiles, 0);
+    const completedFiles = batches.reduce((sum, batch) => sum + batch.completedFiles, 0);
+    const convertingBatch = batches.find((batch) => batch.phase === 'converting');
+    const phase: 'uploading' | 'converting' = convertingBatch ? 'converting' : 'uploading';
+    const currentFileName = convertingBatch?.currentFileName ?? batches.find((batch) => batch.currentFileName)?.currentFileName ?? null;
+    return { totalFiles, completedFiles, phase, currentFileName };
+  }, [activeUploadBatches]);
+
   const fallbackViewMode: ViewMode = viewMode;
   const effectiveSidebarOpen = isNarrow ? mobileSidebarOpen : sidebarOpen;
 
@@ -528,8 +616,20 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           onDropOnFolder={handleDropOnFolder}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
-          topSlot={<DocumentUploader variant="compact" />}
-          bottomSlot={appActions}
+          topSlot={<DocumentUploader variant="compact" onUploadBatchChange={handleUploadBatchChange} />}
+          bottomSlot={(
+            <div className="flex flex-col gap-2">
+              {sidebarUploadState && (
+                <SidebarUploadLoader
+                  totalFiles={sidebarUploadState.totalFiles}
+                  completedFiles={sidebarUploadState.completedFiles}
+                  phase={sidebarUploadState.phase}
+                  currentFileName={sidebarUploadState.currentFileName}
+                />
+              )}
+              {appActions}
+            </div>
+          )}
           onRowAction={() => {
             if (isNarrow) setMobileSidebarOpen(false);
           }}
@@ -574,10 +674,17 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         </div>
       ) : allDocuments.length === 0 ? (
         <div className="flex-1 min-h-0 flex items-center justify-center p-6">
-          <DocumentUploader className="py-12 w-full max-w-2xl" />
+          <DocumentUploader
+            className="py-12 w-full max-w-2xl"
+            onUploadBatchChange={handleUploadBatchChange}
+          />
         </div>
       ) : (
-        <DocumentUploader variant="overlay" className="flex-1 min-h-0 flex flex-col">
+        <DocumentUploader
+          variant="overlay"
+          className="flex-1 min-h-0 flex flex-col"
+          onUploadBatchChange={handleUploadBatchChange}
+        >
           {fallbackViewMode === 'icons' && (
             <IconsView
               documents={sortedVisible}
