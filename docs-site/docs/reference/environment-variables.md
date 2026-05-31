@@ -17,21 +17,12 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `LOG_LEVEL` | Runtime logging | `info` | Set app server log level |
 | `API_BASE` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
 | `API_KEY` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
-| `TTS_CACHE_MAX_SIZE_BYTES` | TTS caching | `268435456` (256 MB) | Tune in-memory TTS cache size |
-| `TTS_CACHE_TTL_MS` | TTS caching | `1800000` (30 min) | Tune in-memory TTS cache TTL |
-| `TTS_MAX_RETRIES` | TTS retry | `2` | Tune retry attempts for upstream 429/5xx |
-| `TTS_RETRY_INITIAL_MS` | TTS retry | `250` | Tune initial retry delay |
-| `TTS_RETRY_MAX_MS` | TTS retry | `2000` | Tune max retry delay |
-| `TTS_RETRY_BACKOFF` | TTS retry | `2` | Tune exponential backoff factor |
-| `TTS_UPSTREAM_TIMEOUT_MS` | TTS request timeout | `285000` | Set max upstream TTS request duration before fail-fast |
 | `BASE_URL` | Auth | unset | Required (with `AUTH_SECRET`) to enable auth |
 | `AUTH_SECRET` | Auth | unset | Required (with `BASE_URL`) to enable auth |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
 | `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to enable anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
-| `DISABLE_AUTH_RATE_LIMIT` | Rate limiting | `false` | Set `true` to disable auth-layer rate limiting |
-| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor the `x-openreader-test-namespace` header on a production build; leave unset on real deployments |
 | `ADMIN_EMAILS` | Auth/Admin | empty | Comma-separated emails auto-promoted to admin (requires auth enabled) |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
@@ -46,8 +37,6 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
-| `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Set only for standalone external compute worker; leave unset for embedded worker startup |
-| `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset (auto-generated in embedded startup) | Required for standalone external compute worker auth; must match worker |
 | `EMBEDDED_COMPUTE_WORKER_PORT` | Heavy compute backend | `8081` | Override embedded worker bind port |
 | `EMBEDDED_NATS_PORT` | Heavy compute backend | `4222` | Override embedded NATS client port |
 | `EMBEDDED_NATS_MONITOR_PORT` | Heavy compute backend | `8222` | Override embedded NATS monitor port |
@@ -58,8 +47,10 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Heavy compute backend | `30000` | Shared whisper alignment timeout budget (worker + worker client wait budget) |
 | `COMPUTE_PDF_TIMEOUT_MS` | Heavy compute backend | `300000` | Shared PDF idle-timeout budget (worker + worker client wait budget) |
 | `COMPUTE_OP_STALE_MS` | Heavy compute backend | `max(30m, 4x max compute timeout)` | Shared stale window for worker op replacement and app-side stale PDF parse-state healing |
-| `PDF_LAYOUT_MODEL_BASE_URL` | PDF layout model | PP-DocLayoutV3 ONNX base URL | Optional base URL override for `ensureModel()` |
 | `WHISPER_MODEL_BASE_URL` | Whisper ONNX model | onnx-community defaults | Optional base URL override for ONNX whisper-base_timestamped q4 downloads |
+| `PDF_LAYOUT_MODEL_BASE_URL` | PDF layout model | PP-DocLayoutV3 ONNX base URL | Optional base URL override for `ensureModel()` |
+| `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Set only for standalone external compute worker; leave unset for embedded worker startup |
+| `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset (auto-generated in embedded startup) | Required for standalone external compute worker auth; must match worker |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 | `RUNTIME_SEED_*` runtime seeds | Legacy bootstrap seed | varies | Optional first-boot seeds for site features; then manage in Settings → Admin → Site features |
 | `RUNTIME_SEED_ENABLE_DOCX_CONVERSION` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable/disable DOCX conversion UI |
@@ -72,6 +63,8 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable audiobook export UI |
 | `RUNTIME_SEED_DISABLE_TTS_LIMIT` | Legacy bootstrap seed | `true` | Optional first-boot seed that keeps TTS daily rate limiting disabled |
 | `RUNTIME_SEED_DISABLE_COMPUTE_LIMIT` | Legacy bootstrap seed | `true` | Optional first-boot seed that keeps PDF parsing rate limiting disabled (other compute-limit values + max upload size are admin-only) |
+| `DISABLE_AUTH_RATE_LIMIT` | Rate limiting | `false` | Set `true` to disable auth-layer rate limiting |
+| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor the `x-openreader-test-namespace` header on a production build; leave unset on real deployments |
 | `RUN_DRIZZLE_MIGRATIONS` | Database migrations | `true` | Set `false` to skip startup Drizzle schema migrations |
 | `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
 
@@ -112,49 +105,16 @@ Bootstrap API key for the legacy OpenAI-compatible TTS endpoint.
 - **Seeded on first boot** into the auto-created `default-openai` shared provider (encrypted at rest), then no longer read by the running app. Manage in **Settings → Admin → Shared providers** afterwards.
 - Related docs: [Admin Panel](../configure/admin-panel), [TTS Providers](../configure/tts-providers)
 
-### TTS_CACHE_MAX_SIZE_BYTES
+### TTS Upstream Settings (Runtime Settings)
 
-Maximum in-memory TTS audio cache size in bytes.
+TTS upstream request behavior and cache settings are now managed from **Settings → Admin → Site features → TTS upstream**.
 
-- Default: `268435456` (256 MB)
+- `ttsUpstreamMaxRetries` default: `2`
+- `ttsUpstreamTimeoutMs` default: `285000`
+- `ttsCacheMaxSizeBytes` default: `268435456` (256 MB)
+- `ttsCacheTtlMs` default: `1800000` (30 minutes)
 
-### TTS_CACHE_TTL_MS
-
-In-memory TTS audio cache TTL in milliseconds.
-
-- Default: `1800000` (30 minutes)
-
-### TTS_MAX_RETRIES
-
-Maximum retries for upstream TTS failures (429/5xx).
-
-- Default: `2`
-
-### TTS_RETRY_INITIAL_MS
-
-Initial retry delay in milliseconds for TTS upstream requests.
-
-- Default: `250`
-
-### TTS_RETRY_MAX_MS
-
-Maximum retry delay in milliseconds.
-
-- Default: `2000`
-
-### TTS_RETRY_BACKOFF
-
-Exponential backoff multiplier between retries.
-
-- Default: `2`
-
-### TTS_UPSTREAM_TIMEOUT_MS
-
-Maximum upstream TTS request timeout in milliseconds.
-
-- Default: `285000` (285 seconds)
-- Applies to outbound provider calls from server routes using shared TTS generation
-- Increase for slower providers/models; decrease to fail fast and surface retryable errors sooner
+There are no environment variables for these settings in v4.
 
 ### TTS Daily Rate Limiting (Runtime Settings)
 
@@ -220,24 +180,6 @@ GitHub OAuth client ID.
 GitHub OAuth client secret.
 
 - Enable only with `GITHUB_CLIENT_ID`
-
-### DISABLE_AUTH_RATE_LIMIT
-
-Controls Better Auth rate limiting.
-
-- Default behavior: auth-layer rate limiting enabled
-- Set to `true` to disable auth-layer rate limiting
-- This does not affect TTS character rate limiting
-- Related docs: [Auth](../configure/auth)
-
-### ENABLE_TEST_NAMESPACE
-
-Honors the `x-openreader-test-namespace` request header, which scopes documents/storage into an isolated namespace for end-to-end tests.
-
-- Default: unset (header ignored on production builds)
-- Non-production builds (`NODE_ENV !== 'production'`) honor the header without this flag.
-- Production builds (`pnpm build && pnpm start`) honor it only when `ENABLE_TEST_NAMESPACE=true`. The Playwright web server sets this automatically.
-- **Leave unset on real deployments.** It is test/CI scaffolding only.
 
 ### ADMIN_EMAILS
 
@@ -369,25 +311,6 @@ Multiple library roots for server library import.
 
 ## Audio Tooling and Alignment
 
-### COMPUTE_WORKER_URL
-
-Base URL for standalone external compute worker mode.
-
-- Leave unset for embedded/local startup (`pnpm dev` / `pnpm start`) so entrypoint can start embedded worker+NATS.
-- Embedded startup requires `nats-server` available on host PATH.
-- Required only when using a standalone external worker service.
-- App-side only: set on app server/root `.env` (routing target), not worker-only env files.
-- Example: `http://localhost:8081`
-
-### COMPUTE_WORKER_TOKEN
-
-Bearer token for compute-worker auth.
-
-- Required for standalone external worker service mode.
-- Must match worker service `COMPUTE_WORKER_TOKEN`.
-- In embedded startup, entrypoint auto-generates one if unset.
-- In external worker mode, set this on both app server/root `.env` and worker service env (`compute/worker/.env*` or platform env).
-
 ### EMBEDDED_COMPUTE_WORKER_PORT
 
 Embedded compute-worker HTTP port.
@@ -464,6 +387,15 @@ Shared stale window in milliseconds.
 - If a parse row is stuck in `pending`/`running` past this window, app routes mark it failed so retries/reparse can proceed.
 - Keep this value aligned on both app-server and worker service envs.
 
+### WHISPER_MODEL_BASE_URL
+
+Optional base URL override for the built-in ONNX Whisper alignment model downloader.
+
+- Default: `https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main`
+- Default model variant: q4 (`encoder_model_q4.onnx`, `decoder_model_merged_q4.onnx`, `decoder_with_past_model_q4.onnx`)
+- The base URL must host all expected manifest files under the same relative paths.
+- Configure this on the worker service env (not only the app server env)
+
 ### PDF_LAYOUT_MODEL_BASE_URL
 
 Optional base URL override for PP-DocLayoutV3 artifacts downloaded by `ensureModel()`.
@@ -476,14 +408,24 @@ Optional base URL override for PP-DocLayoutV3 artifacts downloaded by `ensureMod
   - `preprocessor_config.json`
 - Configure this on the worker service env (not only the app server env)
 
-### WHISPER_MODEL_BASE_URL
+### COMPUTE_WORKER_URL
 
-Optional base URL override for the built-in ONNX Whisper alignment model downloader.
+Base URL for standalone external compute worker mode.
 
-- Default: `https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main`
-- Default model variant: q4 (`encoder_model_q4.onnx`, `decoder_model_merged_q4.onnx`, `decoder_with_past_model_q4.onnx`)
-- The base URL must host all expected manifest files under the same relative paths.
-- Configure this on the worker service env (not only the app server env)
+- Leave unset for embedded/local startup (`pnpm dev` / `pnpm start`) so entrypoint can start embedded worker+NATS.
+- Embedded startup requires `nats-server` available on host PATH.
+- Required only when using a standalone external compute worker service.
+- App-side only: set on app server/root `.env` (routing target), not worker-only env files.
+- Example: `http://localhost:8081`
+
+### COMPUTE_WORKER_TOKEN
+
+Bearer token for compute-worker auth.
+
+- Required for standalone external worker service mode.
+- Must match worker service `COMPUTE_WORKER_TOKEN`.
+- In embedded startup, entrypoint auto-generates one if unset.
+- In external worker mode, set this on both app server/root `.env` and worker service env (`compute/worker/.env*` or platform env).
 
 ### FFMPEG_BIN
 
@@ -593,6 +535,26 @@ Seeds the PDF parsing rate-limit on/off state on first boot.
 - Default: `true` (PDF parsing rate limiting disabled, matching `RUNTIME_SEED_DISABLE_TTS_LIMIT`)
 - Runtime key: `disableComputeRateLimit`
 - The burst/sustained limits, their windows, and the max upload size are admin-only runtime settings (see [Compute (PDF Parsing) Rate Limiting](#compute-pdf-parsing-rate-limiting-runtime-settings)).
+
+## Test and Dev Overrides
+
+### DISABLE_AUTH_RATE_LIMIT
+
+Controls Better Auth rate limiting.
+
+- Default behavior: auth-layer rate limiting enabled
+- Set to `true` to disable auth-layer rate limiting
+- This does not affect TTS character rate limiting
+- Related docs: [Auth](../configure/auth)
+
+### ENABLE_TEST_NAMESPACE
+
+Honors the `x-openreader-test-namespace` request header, which scopes documents/storage into an isolated namespace for end-to-end tests.
+
+- Default: unset (header ignored on production builds)
+- Non-production builds (`NODE_ENV !== 'production'`) honor the header without this flag.
+- Production builds (`pnpm build && pnpm start`) honor it only when `ENABLE_TEST_NAMESPACE=true`. The Playwright web server sets this automatically.
+- **Leave unset on real deployments.** It is test/CI scaffolding only.
 
 ## Migration Controls
 

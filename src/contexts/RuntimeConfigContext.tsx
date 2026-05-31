@@ -27,6 +27,10 @@ export interface RuntimeConfig {
   ttsDailyLimitAuthenticated: number;
   ttsIpDailyLimitAnonymous: number;
   ttsIpDailyLimitAuthenticated: number;
+  ttsCacheMaxSizeBytes: number;
+  ttsCacheTtlMs: number;
+  ttsUpstreamMaxRetries: number;
+  ttsUpstreamTimeoutMs: number;
   computeAvailable: boolean;
 }
 
@@ -46,6 +50,10 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   ttsDailyLimitAuthenticated: 500_000,
   ttsIpDailyLimitAnonymous: 100_000,
   ttsIpDailyLimitAuthenticated: 1_000_000,
+  ttsCacheMaxSizeBytes: 256 * 1024 * 1024,
+  ttsCacheTtlMs: 1000 * 60 * 30,
+  ttsUpstreamMaxRetries: 2,
+  ttsUpstreamTimeoutMs: 285_000,
   computeAvailable: true,
 };
 

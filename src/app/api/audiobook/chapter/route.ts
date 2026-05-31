@@ -614,6 +614,12 @@ export async function POST(request: NextRequest) {
         testNamespace,
       },
       request.signal,
+      {
+        ttsCacheMaxSizeBytes: runtimeConfig.ttsCacheMaxSizeBytes,
+        ttsCacheTtlMs: runtimeConfig.ttsCacheTtlMs,
+        ttsUpstreamMaxRetries: runtimeConfig.ttsUpstreamMaxRetries,
+        ttsUpstreamTimeoutMs: runtimeConfig.ttsUpstreamTimeoutMs,
+      },
     );
 
     workDir = await mkdtemp(join(tmpdir(), 'openreader-audiobook-'));

@@ -105,6 +105,19 @@ The **Disable TTS daily rate limiting** and **Disable PDF parsing rate limiting*
 - TTS: anonymous/authenticated per-user daily limits and anonymous/authenticated IP daily backstops.
 - PDF parsing: burst limit + window (seconds) and sustained limit + window (seconds). The sustained window doubles as a concurrency cap.
 
+## TTS upstream
+
+At the end of the **Site features** tab, a dedicated **TTS upstream** group controls server-side request and cache tuning (DB-backed runtime settings, not env vars):
+
+| Key | What it controls |
+| --- | --- |
+| `ttsUpstreamMaxRetries` | Maximum retry attempts for upstream TTS 429/5xx responses. |
+| `ttsUpstreamTimeoutMs` | Upstream request timeout for OpenAI-compatible TTS calls. |
+| `ttsCacheMaxSizeBytes` | Maximum size of the in-memory TTS audio cache. |
+| `ttsCacheTtlMs` | Time-to-live for cached TTS audio buffers. |
+
+In v4 these settings are admin-only and are no longer configurable through environment variables.
+
 ## Migrating off env vars
 
 The future-direction goal is to remove `RUNTIME_SEED_*` / `API_KEY` / `API_BASE` from your `.env` entirely. To do that safely:

@@ -506,6 +506,71 @@ export function AdminFeaturesPanel() {
         />
       </Section>
 
+      <Section
+        title="TTS upstream"
+        subtitle="Server-side retry, timeout, and cache controls for TTS generation."
+        action={<Badge tone="foreground">Upstream</Badge>}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-0.5 py-1.5">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-foreground">Retry attempts</label>
+              {renderSource('ttsUpstreamMaxRetries')}
+            </div>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className={inputClass}
+              value={String(draft.ttsUpstreamMaxRetries ?? '')}
+              onChange={(event) => updatePositiveIntDraft('ttsUpstreamMaxRetries', event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-foreground">Upstream timeout (ms)</label>
+              {renderSource('ttsUpstreamTimeoutMs')}
+            </div>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className={inputClass}
+              value={String(draft.ttsUpstreamTimeoutMs ?? '')}
+              onChange={(event) => updatePositiveIntDraft('ttsUpstreamTimeoutMs', event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-foreground">Audio cache size (bytes)</label>
+              {renderSource('ttsCacheMaxSizeBytes')}
+            </div>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className={inputClass}
+              value={String(draft.ttsCacheMaxSizeBytes ?? '')}
+              onChange={(event) => updatePositiveIntDraft('ttsCacheMaxSizeBytes', event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-foreground">Audio cache TTL (ms)</label>
+              {renderSource('ttsCacheTtlMs')}
+            </div>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className={inputClass}
+              value={String(draft.ttsCacheTtlMs ?? '')}
+              onChange={(event) => updatePositiveIntDraft('ttsCacheTtlMs', event.target.value)}
+            />
+          </div>
+        </div>
+      </Section>
+
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted">
           {dirty.size > 0

@@ -111,6 +111,10 @@ export const RUNTIME_CONFIG_SCHEMA = {
   ttsDailyLimitAuthenticated: positiveIntValue(500_000),
   ttsIpDailyLimitAnonymous: positiveIntValue(100_000),
   ttsIpDailyLimitAuthenticated: positiveIntValue(1_000_000),
+  ttsCacheMaxSizeBytes: positiveIntValue(256 * 1024 * 1024),
+  ttsCacheTtlMs: positiveIntValue(1000 * 60 * 30),
+  ttsUpstreamMaxRetries: positiveIntValue(2),
+  ttsUpstreamTimeoutMs: positiveIntValue(285_000),
   // Per-user throttle for expensive PDF-layout parsing. Disabled by default
   // (admins enable it in Settings → Admin), mirroring disableTtsRateLimit.
   // When enabled, the sub-limits below apply (admin-tunable, no env seed):

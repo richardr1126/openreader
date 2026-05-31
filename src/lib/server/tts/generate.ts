@@ -56,14 +56,83 @@ const replicateBlockedUntilByScope = new LRUCache<string, number>({
   max: REPLICATE_COOLDOWN_SCOPE_CACHE_MAX_ENTRIES,
 });
 
-const TTS_CACHE_MAX_SIZE_BYTES = Number(process.env.TTS_CACHE_MAX_SIZE_BYTES || 256 * 1024 * 1024); // 256MB
-const TTS_CACHE_TTL_MS = Number(process.env.TTS_CACHE_TTL_MS || 1000 * 60 * 30); // 30 minutes
+const DEFAULT_TTS_CACHE_MAX_SIZE_BYTES = 256 * 1024 * 1024;
+const DEFAULT_TTS_CACHE_TTL_MS = 1000 * 60 * 30;
+const DEFAULT_TTS_UPSTREAM_MAX_RETRIES = 2;
+const DEFAULT_TTS_UPSTREAM_TIMEOUT_MS = 285_000;
+const OPENAI_RETRY_INITIAL_DELAY_MS = 250;
+const OPENAI_RETRY_MAX_DELAY_MS = 2000;
+const OPENAI_RETRY_BACKOFF = 2;
 
-const ttsAudioCache = new LRUCache<string, Buffer>({
-  maxSize: TTS_CACHE_MAX_SIZE_BYTES,
-  sizeCalculation: (value) => value.byteLength,
-  ttl: TTS_CACHE_TTL_MS,
-});
+export interface TtsUpstreamRuntimeSettings {
+  ttsCacheMaxSizeBytes?: number;
+  ttsCacheTtlMs?: number;
+  ttsUpstreamMaxRetries?: number;
+  ttsUpstreamTimeoutMs?: number;
+}
+
+interface ResolvedTtsUpstreamRuntimeSettings {
+  ttsCacheMaxSizeBytes: number;
+  ttsCacheTtlMs: number;
+  ttsUpstreamMaxRetries: number;
+  ttsUpstreamTimeoutMs: number;
+}
+
+function clampPositiveInteger(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.floor(parsed);
+}
+
+function resolveTtsUpstreamSettings(
+  settings?: TtsUpstreamRuntimeSettings,
+): ResolvedTtsUpstreamRuntimeSettings {
+  return {
+    ttsCacheMaxSizeBytes: clampPositiveInteger(
+      settings?.ttsCacheMaxSizeBytes,
+      DEFAULT_TTS_CACHE_MAX_SIZE_BYTES,
+    ),
+    ttsCacheTtlMs: clampPositiveInteger(settings?.ttsCacheTtlMs, DEFAULT_TTS_CACHE_TTL_MS),
+    ttsUpstreamMaxRetries: clampPositiveInteger(
+      settings?.ttsUpstreamMaxRetries,
+      DEFAULT_TTS_UPSTREAM_MAX_RETRIES,
+    ),
+    ttsUpstreamTimeoutMs: clampPositiveInteger(
+      settings?.ttsUpstreamTimeoutMs,
+      DEFAULT_TTS_UPSTREAM_TIMEOUT_MS,
+    ),
+  };
+}
+
+function createTtsAudioCache(maxSize: number, ttlMs: number): LRUCache<string, Buffer> {
+  return new LRUCache<string, Buffer>({
+    maxSize,
+    sizeCalculation: (value) => value.byteLength,
+    ttl: ttlMs,
+  });
+}
+
+let activeCacheConfig = {
+  maxSize: DEFAULT_TTS_CACHE_MAX_SIZE_BYTES,
+  ttlMs: DEFAULT_TTS_CACHE_TTL_MS,
+};
+
+let ttsAudioCache = createTtsAudioCache(activeCacheConfig.maxSize, activeCacheConfig.ttlMs);
+
+function ensureTtsAudioCache(settings: ResolvedTtsUpstreamRuntimeSettings): void {
+  if (
+    activeCacheConfig.maxSize === settings.ttsCacheMaxSizeBytes
+    && activeCacheConfig.ttlMs === settings.ttsCacheTtlMs
+  ) {
+    return;
+  }
+
+  activeCacheConfig = {
+    maxSize: settings.ttsCacheMaxSizeBytes,
+    ttlMs: settings.ttsCacheTtlMs,
+  };
+  ttsAudioCache = createTtsAudioCache(activeCacheConfig.maxSize, activeCacheConfig.ttlMs);
+}
 
 const inflightRequests = new Map<string, InflightEntry>();
 
@@ -324,13 +393,11 @@ async function getTestMockTtsBuffer(testNamespace?: string | null): Promise<Buff
 async function fetchTTSBufferWithRetry(
   openai: OpenAI,
   createParams: ExtendedSpeechParams,
-  signal: AbortSignal
+  signal: AbortSignal,
+  maxRetries: number,
 ): Promise<Buffer> {
   let attempt = 0;
-  const maxRetries = Number(process.env.TTS_MAX_RETRIES ?? 2);
-  let delay = Number(process.env.TTS_RETRY_INITIAL_MS ?? 250);
-  const maxDelay = Number(process.env.TTS_RETRY_MAX_MS ?? 2000);
-  const backoff = Number(process.env.TTS_RETRY_BACKOFF ?? 2);
+  let delay = OPENAI_RETRY_INITIAL_DELAY_MS;
 
   for (; ;) {
     try {
@@ -348,8 +415,8 @@ async function fetchTTSBufferWithRetry(
         throw error;
       }
 
-      await sleep(Math.min(delay, maxDelay));
-      delay = Math.min(maxDelay, delay * backoff);
+      await sleep(Math.min(delay, OPENAI_RETRY_MAX_DELAY_MS));
+      delay = Math.min(OPENAI_RETRY_MAX_DELAY_MS, delay * OPENAI_RETRY_BACKOFF);
       attempt += 1;
     }
   }
@@ -434,14 +501,17 @@ async function buildReplicateInput(request: ResolvedServerTTSRequest): Promise<R
   return input;
 }
 
-async function runReplicateRequest(request: ResolvedServerTTSRequest, signal: AbortSignal): Promise<Buffer> {
+async function runReplicateRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  maxRetries: number,
+): Promise<Buffer> {
   const replicate = new Replicate({ auth: request.apiKey });
   const input = await buildReplicateInput(request);
   const modelId = request.model as `${string}/${string}`;
   const cooldownScopeKey = getReplicateCooldownScopeKey(request);
 
   return runWithReplicateGate(cooldownScopeKey, signal, async () => {
-    const maxRetries = Number(process.env.TTS_MAX_RETRIES ?? 2);
     let attempt = 0;
 
     for (; ;) {
@@ -493,19 +563,23 @@ async function runReplicateRequest(request: ResolvedServerTTSRequest, signal: Ab
   });
 }
 
-async function runProviderRequest(request: ResolvedServerTTSRequest, signal: AbortSignal): Promise<Buffer> {
+async function runProviderRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
+): Promise<Buffer> {
   const mockBuffer = await getTestMockTtsBuffer(request.testNamespace);
   if (mockBuffer) return mockBuffer;
 
   if (request.provider === 'replicate') {
-    return runReplicateRequest(request, signal);
+    return runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries);
   }
 
   const openai = new OpenAI({
     apiKey: request.apiKey,
     baseURL: request.baseUrl,
     maxRetries: 0,
-    timeout: Number(process.env.TTS_UPSTREAM_TIMEOUT_MS ?? 285_000),
+    timeout: upstreamSettings.ttsUpstreamTimeoutMs,
   });
 
   const createParams: ExtendedSpeechParams = {
@@ -520,13 +594,17 @@ async function runProviderRequest(request: ResolvedServerTTSRequest, signal: Abo
     createParams.instructions = request.instructions;
   }
 
-  return fetchTTSBufferWithRetry(openai, createParams, signal);
+  return fetchTTSBufferWithRetry(openai, createParams, signal, upstreamSettings.ttsUpstreamMaxRetries);
 }
 
 export async function generateTTSBuffer(
   request: ServerTTSRequest,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  runtimeSettings?: TtsUpstreamRuntimeSettings,
 ): Promise<Buffer> {
+  const upstreamSettings = resolveTtsUpstreamSettings(runtimeSettings);
+  ensureTtsAudioCache(upstreamSettings);
+
   const resolved = resolveTTSRequest(request);
   const cacheKey = makeCacheKey({
     provider: resolved.provider,
@@ -569,7 +647,7 @@ export async function generateTTSBuffer(
     consumers: 1,
     promise: (async () => {
       try {
-        const buffer = await runProviderRequest(resolved, controller.signal);
+        const buffer = await runProviderRequest(resolved, controller.signal, upstreamSettings);
         ttsAudioCache.set(cacheKey, buffer);
         return buffer;
       } finally {
