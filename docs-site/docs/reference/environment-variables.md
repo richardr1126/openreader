@@ -329,7 +329,7 @@ External compute worker URL.
 
 ### COMPUTE_WORKER_TOKEN
 
-Shared token for app <-> external worker requests.
+Shared token for app-to-external-worker requests.
 
 ## Compute PDF Parsing Rate Limiting (Runtime Settings)
 
