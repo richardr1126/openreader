@@ -5,7 +5,7 @@ import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { contentTypeForName } from '@/lib/server/storage/library-mount';
 import { getDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -34,11 +34,11 @@ export async function GET(req: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
-    const allowedUserIds = [storageUserId, unclaimedUserId];
+    const storageUserId = ctxOrRes.userId;
+    const allowedUserIds = [storageUserId];
 
     const url = new URL(req.url);
     const id = (url.searchParams.get('id') || '').trim().toLowerCase();

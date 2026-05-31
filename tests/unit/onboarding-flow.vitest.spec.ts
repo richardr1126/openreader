@@ -64,7 +64,7 @@ describe('onboarding flow resolver', () => {
       migrationRequired: false,
       changelogPending: false,
     });
-    const noAuthStep = resolveNextOnboardingStep({
+    const minimalStep = resolveNextOnboardingStep({
       privacyRequired: false,
       privacyAccepted: false,
       claimEligible: false,
@@ -74,7 +74,7 @@ describe('onboarding flow resolver', () => {
     });
 
     expect(authStep).toBe('done');
-    expect(noAuthStep).toBe('done');
+    expect(minimalStep).toBe('done');
   });
 });
 

@@ -14,7 +14,7 @@ import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { putDocumentBlob } from '@/lib/server/documents/blobstore';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
@@ -82,11 +82,11 @@ export async function POST(req: NextRequest) {
     }
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
-    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const storageUserId = ctxOrRes.userId;
 
     await ensureTempDir();
 

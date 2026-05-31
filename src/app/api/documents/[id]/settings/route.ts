@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { documentSettings, documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
@@ -35,21 +34,19 @@ function parseStored(value: unknown): DocumentSettings {
 }
 
 async function resolveDocumentAccess(req: NextRequest, documentId: string): Promise<
-  | { ownerUserId: string; allowedUserIds: string[] }
+  | { ownerUserId: string }
   | Response
 > {
   const authCtxOrRes = await requireAuthContext(req);
   if (authCtxOrRes instanceof Response) return authCtxOrRes;
+  if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const testNamespace = getOpenReaderTestNamespace(req.headers);
-  const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-  const storageUserId = authCtxOrRes.userId ?? unclaimedUserId;
-  const allowedUserIds = [storageUserId, unclaimedUserId];
+  const storageUserId = authCtxOrRes.userId;
 
   const rows = await db
     .select({ userId: documents.userId })
     .from(documents)
-    .where(and(eq(documents.id, documentId), inArray(documents.userId, allowedUserIds)))
+    .where(and(eq(documents.id, documentId), eq(documents.userId, storageUserId)))
     .limit(1);
 
   if (!rows[0]) {
@@ -58,7 +55,6 @@ async function resolveDocumentAccess(req: NextRequest, documentId: string): Prom
 
   return {
     ownerUserId: rows[0].userId,
-    allowedUserIds,
   };
 }
 

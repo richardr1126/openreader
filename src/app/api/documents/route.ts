@@ -21,7 +21,7 @@ import {
   parseDocumentParseState,
   stringifyDocumentParseState,
 } from '@/lib/server/documents/parse-state';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
@@ -80,10 +80,10 @@ export async function POST(req: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
+    const storageUserId = ctxOrRes.userId;
 
     const body = await req.json().catch(() => null);
     const documentsData = parseDocumentPayload(body);
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
         type: doc.type,
         size: headSize,
         lastModified: doc.lastModified,
-        scope: storageUserId === unclaimedUserId ? 'unclaimed' : 'user',
+        scope: 'user',
       });
 
       await enqueueDocumentPreview(
@@ -224,11 +224,10 @@ export async function GET(req: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
-    const allowedUserIds = [storageUserId, unclaimedUserId];
+    const storageUserId = ctxOrRes.userId;
+    const allowedUserIds = [storageUserId];
 
     const url = new URL(req.url);
     const idsParam = url.searchParams.get('ids');
@@ -259,21 +258,7 @@ export async function GET(req: NextRequest) {
       parsedJsonKey: string | null;
     }>;
 
-    const preferredById = new Map<string, (typeof rows)[number]>();
-    for (const row of rows) {
-      const existing = preferredById.get(row.id);
-      if (!existing) {
-        preferredById.set(row.id, row);
-        continue;
-      }
-      const isRowPrimary = row.userId === storageUserId;
-      const isExistingPrimary = existing.userId === storageUserId;
-      if (isRowPrimary && !isExistingPrimary) {
-        preferredById.set(row.id, row);
-      }
-    }
-
-    const results: BaseDocument[] = Array.from(preferredById.values()).map((doc) => {
+    const results: BaseDocument[] = rows.map((doc) => {
       const type = normalizeDocumentType(doc.type, doc.name);
       return {
         id: doc.id,
@@ -283,7 +268,7 @@ export async function GET(req: NextRequest) {
         type,
         parseStatus: type === 'pdf' ? normalizeParseStatus(parseDocumentParseState(doc.parseState).status) : null,
         parsedJsonKey: doc.parsedJsonKey,
-        scope: doc.userId === unclaimedUserId ? 'unclaimed' : 'user',
+        scope: 'user',
       };
     });
 
@@ -306,37 +291,19 @@ export async function DELETE(req: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
+    const storageUserId = ctxOrRes.userId;
 
     const url = new URL(req.url);
     const idsParam = url.searchParams.get('ids');
     const scopeParam = (url.searchParams.get('scope') || '').toLowerCase().trim();
-
-    const wantsUnclaimed = scopeParam === 'unclaimed';
-    const wantsUser = scopeParam === '' || scopeParam === 'user';
-
-    if (!wantsUser && !wantsUnclaimed) {
-      return NextResponse.json(
-        { error: "Invalid scope. Expected 'user' (default) or 'unclaimed'." },
-        { status: 400 },
-      );
+    if (scopeParam && scopeParam !== 'user') {
+      return NextResponse.json({ error: "Invalid scope. Expected 'user' (default)." }, { status: 400 });
     }
 
-    if (wantsUnclaimed && ctxOrRes.user?.isAnonymous) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const targetUserIds = Array.from(
-      new Set(
-        [
-          ...(wantsUser ? [storageUserId] : []),
-          ...(wantsUnclaimed ? [unclaimedUserId] : []),
-        ].filter(Boolean),
-      ),
-    );
+    const targetUserIds = [storageUserId];
 
     if (targetUserIds.length === 0) {
       return NextResponse.json({ success: true, deleted: 0 });

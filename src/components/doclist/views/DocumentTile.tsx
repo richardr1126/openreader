@@ -6,8 +6,6 @@ import { Button } from '@headlessui/react';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import type { DocumentListDocument, IconSize } from '@/types/documents';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
-import { useAuthSession } from '@/hooks/useAuthSession';
-import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -69,13 +67,10 @@ export function DocumentTile({
   onDelete,
   onMergeIntoFolder,
 }: DocumentTileProps) {
-  const { authEnabled } = useAuthConfig();
-  const { data: session } = useAuthSession();
   const href = `/${doc.type}/${encodeURIComponent(doc.id)}`;
   const selection = useDocumentSelection();
 
-  const isAnonymousAuthed = Boolean(authEnabled && session?.user?.isAnonymous);
-  const showDeleteButton = !(isAnonymousAuthed && doc.scope === 'unclaimed');
+  const showDeleteButton = true;
   const isSelected = selection.isSelected(doc);
   const isInFolder = Boolean(doc.folderId);
 

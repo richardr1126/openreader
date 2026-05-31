@@ -14,7 +14,6 @@ describe('changelog check scheduling', () => {
     let openCalls = 0;
 
     const args = {
-      authEnabled: true,
       isSessionPending: false,
       sessionUserId: 'u1',
       appVersion: '3.3.0',
@@ -48,13 +47,12 @@ describe('changelog check scheduling', () => {
     expect(inFlightRef.current).toBeNull();
   });
 
-  test('does not run when auth is enabled and session is pending', async () => {
+  test('does not run while session is pending', async () => {
     const completedRef = { current: null as string | null };
     const inFlightRef = { current: null as string | null };
     let apiCalls = 0;
 
     const cleanup = scheduleChangelogCheck({
-      authEnabled: true,
       isSessionPending: true,
       sessionUserId: null,
       appVersion: '3.3.0',

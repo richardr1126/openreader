@@ -234,7 +234,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return scheduleChangelogCheck({
-      authEnabled: true,
       isSessionPending,
       sessionUserId: userId,
       appVersion: runtimeConfig.appVersion,

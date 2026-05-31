@@ -10,7 +10,7 @@ import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state'
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/documents/parse-state';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger, hashForLog } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -147,6 +147,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const authCtxOrRes = await requireAuthContext(req);
     if (authCtxOrRes instanceof Response) return authCtxOrRes;
+    if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const params = await ctx.params;
     const id = (params.id || '').trim().toLowerCase();
@@ -159,10 +160,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       : null;
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = authCtxOrRes.userId ?? unclaimedUserId;
+    const storageUserId = authCtxOrRes.userId;
     const storageUserIdHash = hashForLog(storageUserId);
-    const allowedUserIds = [storageUserId, unclaimedUserId];
+    const allowedUserIds = [storageUserId];
 
     const row = await loadPreferredRow({
       documentId: id,

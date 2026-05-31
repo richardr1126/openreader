@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audiobooks, audiobookChapters } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
@@ -7,8 +7,7 @@ import { getAudiobookObjectBuffer, isMissingBlobError, listAudiobookObjects } fr
 import { decodeChapterFileName } from '@/lib/server/audiobooks/chapters';
 import { pruneAudiobookChaptersNotOnDisk } from '@/lib/server/audiobooks/prune';
 import { isS3Configured } from '@/lib/server/storage/s3';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
-import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
@@ -73,22 +72,16 @@ export async function GET(request: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(request);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { userId } = ctxOrRes;
+    const storageUserId = ctxOrRes.userId;
     const testNamespace = getOpenReaderTestNamespace(request.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const { preferredUserId, allowedUserIds } = buildAllowedAudiobookUserIds(userId, unclaimedUserId);
     const existingBookRows = await db
       .select({ userId: audiobooks.userId })
       .from(audiobooks)
-      .where(and(eq(audiobooks.id, bookId), inArray(audiobooks.userId, allowedUserIds)));
-    const existingBookUserId = pickAudiobookOwner(
-      existingBookRows.map((book: { userId: string }) => book.userId),
-      preferredUserId,
-      unclaimedUserId,
-    );
+      .where(and(eq(audiobooks.id, bookId), eq(audiobooks.userId, storageUserId)));
 
-    if (!existingBookUserId) {
+    if (existingBookRows.length === 0) {
       return NextResponse.json({
         chapters: [],
         exists: false,
@@ -98,20 +91,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const objects = await listAudiobookObjects(bookId, existingBookUserId, testNamespace);
+    const objects = await listAudiobookObjects(bookId, storageUserId, testNamespace);
     const objectNames = objects.map((object) => object.fileName);
     const chapterObjects = listChapterObjects(objectNames);
 
     await pruneAudiobookChaptersNotOnDisk(
       bookId,
-      existingBookUserId,
+      storageUserId,
       chapterObjects.map((chapter) => chapter.index),
     );
 
     const chapterRows = await db
       .select({ chapterIndex: audiobookChapters.chapterIndex, duration: audiobookChapters.duration })
       .from(audiobookChapters)
-      .where(and(eq(audiobookChapters.bookId, bookId), eq(audiobookChapters.userId, existingBookUserId)));
+      .where(and(eq(audiobookChapters.bookId, bookId), eq(audiobookChapters.userId, storageUserId)));
     const durationByIndex = new Map<number, number>();
     for (const row of chapterRows) {
       durationByIndex.set(row.chapterIndex, Number(row.duration ?? 0));
@@ -128,7 +121,7 @@ export async function GET(request: NextRequest) {
 
     let settings: AudiobookGenerationSettings | null = null;
     try {
-      settings = JSON.parse((await getAudiobookObjectBuffer(bookId, existingBookUserId, 'audiobook.meta.json', testNamespace)).toString('utf8')) as AudiobookGenerationSettings;
+      settings = JSON.parse((await getAudiobookObjectBuffer(bookId, storageUserId, 'audiobook.meta.json', testNamespace)).toString('utf8')) as AudiobookGenerationSettings;
     } catch (error) {
       if (!isMissingBlobError(error)) throw error;
       settings = null;
@@ -139,7 +132,7 @@ export async function GET(request: NextRequest) {
 
     if (!exists) {
       // Deleting the audiobook row cascades to audiobookChapters via bookFk
-      await db.delete(audiobooks).where(and(eq(audiobooks.id, bookId), eq(audiobooks.userId, existingBookUserId)));
+      await db.delete(audiobooks).where(and(eq(audiobooks.id, bookId), eq(audiobooks.userId, storageUserId)));
       return NextResponse.json({
         chapters: [],
         exists: false,

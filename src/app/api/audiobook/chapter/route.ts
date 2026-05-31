@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { audiobooks, audiobookChapters } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
@@ -26,8 +26,7 @@ import {
   ffprobeAudio,
 } from '@/lib/server/audiobooks/chapters';
 import { isS3Configured } from '@/lib/server/storage/s3';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
-import { buildAllowedAudiobookUserIds, pickAudiobookOwner } from '@/lib/server/audiobooks/user-scope';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
 import { generateTTSBuffer } from '@/lib/server/tts/generate';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
@@ -285,28 +284,17 @@ export async function POST(request: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(request);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { userId, user } = ctxOrRes;
+    const { user } = ctxOrRes;
+    const storageUserId = ctxOrRes.userId;
     const runtimeConfig = await getResolvedRuntimeConfig();
     const testNamespace = getOpenReaderTestNamespace(request.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const { preferredUserId, allowedUserIds } = buildAllowedAudiobookUserIds(userId, unclaimedUserId);
     const bookId = data.bookId || randomUUID();
 
     if (!isSafeId(bookId)) {
       return NextResponse.json({ error: 'Invalid bookId parameter' }, { status: 400 });
     }
-
-    const existingBookRows = await db
-      .select({ userId: audiobooks.userId })
-      .from(audiobooks)
-      .where(and(eq(audiobooks.id, bookId), inArray(audiobooks.userId, allowedUserIds)));
-    const storageUserId =
-      pickAudiobookOwner(
-        existingBookRows.map((book: { userId: string }) => book.userId),
-        preferredUserId,
-        unclaimedUserId,
-      ) ?? preferredUserId;
 
     await db
       .insert(audiobooks)
@@ -540,7 +528,7 @@ export async function POST(request: NextRequest) {
       ipAuthenticated: runtimeConfig.ttsIpDailyLimitAuthenticated,
     });
 
-    if (userId && ttsRateLimitEnabled) {
+    if (ttsRateLimitEnabled) {
       const isAnonymous = Boolean(user?.isAnonymous);
       const charCount = data.text.length;
       const ip = getClientIp(request);
@@ -551,7 +539,7 @@ export async function POST(request: NextRequest) {
       }
 
       const rateLimitResult = await rateLimiter.checkAndIncrementLimit(
-        { id: userId, isAnonymous },
+        { id: storageUserId, isAnonymous },
         charCount,
         {
           deviceId: device?.deviceId ?? null,
@@ -808,26 +796,20 @@ export async function GET(request: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(request);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { userId } = ctxOrRes;
+    const storageUserId = ctxOrRes.userId;
     const testNamespace = getOpenReaderTestNamespace(request.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const { preferredUserId, allowedUserIds } = buildAllowedAudiobookUserIds(userId, unclaimedUserId);
     const existingBookRows = await db
       .select({ userId: audiobooks.userId })
       .from(audiobooks)
-      .where(and(eq(audiobooks.id, bookId), inArray(audiobooks.userId, allowedUserIds)));
-    const existingBookUserId = pickAudiobookOwner(
-      existingBookRows.map((book: { userId: string }) => book.userId),
-      preferredUserId,
-      unclaimedUserId,
-    );
+      .where(and(eq(audiobooks.id, bookId), eq(audiobooks.userId, storageUserId)));
 
-    if (!existingBookUserId) {
+    if (existingBookRows.length === 0) {
       return NextResponse.json({ error: 'Book not found' }, { status: 404 });
     }
 
-    const objects = await listAudiobookObjects(bookId, existingBookUserId, testNamespace);
+    const objects = await listAudiobookObjects(bookId, storageUserId, testNamespace);
     const chapter = findChapterFileNameByIndex(
       objects.map((object) => object.fileName),
       chapterIndex,
@@ -839,7 +821,7 @@ export async function GET(request: NextRequest) {
         .where(
           and(
             eq(audiobookChapters.bookId, bookId),
-            eq(audiobookChapters.userId, existingBookUserId),
+            eq(audiobookChapters.userId, storageUserId),
             eq(audiobookChapters.chapterIndex, chapterIndex),
           ),
         );
@@ -848,7 +830,7 @@ export async function GET(request: NextRequest) {
 
     let buffer: Buffer;
     try {
-      buffer = await getAudiobookObjectBuffer(bookId, existingBookUserId, chapter.fileName, testNamespace);
+      buffer = await getAudiobookObjectBuffer(bookId, storageUserId, chapter.fileName, testNamespace);
     } catch (error) {
       if (isMissingBlobError(error)) {
         await db
@@ -856,7 +838,7 @@ export async function GET(request: NextRequest) {
           .where(
             and(
               eq(audiobookChapters.bookId, bookId),
-              eq(audiobookChapters.userId, existingBookUserId),
+              eq(audiobookChapters.userId, storageUserId),
               eq(audiobookChapters.chapterIndex, chapterIndex),
             ),
           );
@@ -905,22 +887,16 @@ export async function DELETE(request: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(request);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { userId } = ctxOrRes;
+    const storageUserId = ctxOrRes.userId;
     const testNamespace = getOpenReaderTestNamespace(request.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const { preferredUserId, allowedUserIds } = buildAllowedAudiobookUserIds(userId, unclaimedUserId);
     const existingBookRows = await db
       .select({ userId: audiobooks.userId })
       .from(audiobooks)
-      .where(and(eq(audiobooks.id, bookId), inArray(audiobooks.userId, allowedUserIds)));
-    const storageUserId = pickAudiobookOwner(
-      existingBookRows.map((book: { userId: string }) => book.userId),
-      preferredUserId,
-      unclaimedUserId,
-    );
+      .where(and(eq(audiobooks.id, bookId), eq(audiobooks.userId, storageUserId)));
 
-    if (!storageUserId) {
+    if (existingBookRows.length === 0) {
       return NextResponse.json({ error: 'Book not found' }, { status: 404 });
     }
 

@@ -468,7 +468,7 @@ export async function POST(request: NextRequest) {
         segmentId: segment.segmentId,
       });
 
-      if (scope.authEnabled && scope.userId && ttsRateLimitEnabled) {
+      if (ttsRateLimitEnabled) {
         const charCount = segment.text.length;
         const ip = getClientIp(request);
         const device = scope.isAnonymousUser ? getOrCreateDeviceId(request) : null;

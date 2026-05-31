@@ -61,3 +61,4 @@ Admin assignment is reconciled on every session resolution, so removing an email
 ## Claim modal note
 
 - You may still see old anonymous settings/progress available to claim from older deployments.
+- Legacy `unclaimed` data is only surfaced through the claim flow; normal authenticated routes are scoped to your current user id.

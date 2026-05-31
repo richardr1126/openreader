@@ -9,7 +9,7 @@ export interface BaseDocument {
   type: DocumentType;
   parseStatus?: 'pending' | 'running' | 'ready' | 'failed' | null;
   parsedJsonKey?: string | null;
-  scope?: 'user' | 'unclaimed';
+  scope?: 'user';
   folderId?: string;
   isConverting?: boolean;
 }

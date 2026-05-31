@@ -5,7 +5,7 @@ import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { isPreviewableDocumentType } from '@/lib/server/documents/previews';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 
 export function s3NotConfiguredResponse(): NextResponse {
@@ -37,15 +37,11 @@ export async function validatePreviewRequest(req: NextRequest): Promise<Validate
 
   const ctxOrRes = await requireAuthContext(req);
   if (ctxOrRes instanceof Response) return { errorResponse: ctxOrRes };
+  if (!ctxOrRes.userId) return { errorResponse: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
 
   const testNamespace = getOpenReaderTestNamespace(req.headers);
-  const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-  const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
-
-  // Deduplicate allowedUserIds
-  const allowedUserIds = Array.from(new Set(
-    [storageUserId, unclaimedUserId]
-  ));
+  const storageUserId = ctxOrRes.userId;
+  const allowedUserIds = [storageUserId];
 
   const url = new URL(req.url);
   const id = (url.searchParams.get('id') || '').trim().toLowerCase();

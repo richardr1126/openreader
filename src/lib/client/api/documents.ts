@@ -341,13 +341,10 @@ export async function uploadDocuments(files: File[], options?: UploadOptions): P
   return uploadDocumentSources(sources, options);
 }
 
-export async function deleteDocuments(options?: { ids?: string[]; scope?: 'user' | 'unclaimed'; signal?: AbortSignal }): Promise<void> {
+export async function deleteDocuments(options?: { ids?: string[]; signal?: AbortSignal }): Promise<void> {
   const params = new URLSearchParams();
   if (options?.ids?.length) {
     params.set('ids', options.ids.join(','));
-  }
-  if (options?.scope) {
-    params.set('scope', options.scope);
   }
 
   const url = params.toString() ? `/api/documents?${params.toString()}` : '/api/documents';

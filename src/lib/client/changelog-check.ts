@@ -9,7 +9,6 @@ export type ChangelogVersionCheckResponse = {
 type RefLike = { current: string | null };
 
 export type RunChangelogCheckArgs = {
-  authEnabled: boolean;
   isSessionPending: boolean;
   sessionUserId: string | null | undefined;
   appVersion: string | null | undefined;
@@ -23,13 +22,12 @@ export type RunChangelogCheckArgs = {
 
 export async function runChangelogCheck(args: RunChangelogCheckArgs): Promise<void> {
   const sessionUserId = args.sessionUserId ?? null;
-  if (args.authEnabled && (args.isSessionPending || !sessionUserId)) return;
+  if (args.isSessionPending || !sessionUserId) return;
 
   const currentVersion = normalizeVersion(args.appVersion || '');
   if (!currentVersion) return;
 
-  const userKey = sessionUserId ?? 'server-unclaimed';
-  const checkKey = `${userKey}:${currentVersion}`;
+  const checkKey = `${sessionUserId}:${currentVersion}`;
   if (args.completedRef.current === checkKey) return;
   if (args.inFlightRef.current === checkKey) return;
   args.inFlightRef.current = checkKey;

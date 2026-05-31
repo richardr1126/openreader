@@ -3,14 +3,13 @@ import type { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import type { ReaderType } from '@/types/user-state';
 
 export type ResolvedSegmentDocumentScope = {
   testNamespace: string | null;
   storageUserId: string;
-  authEnabled: true;
-  userId: string | null;
+  userId: string;
   isAnonymousUser: boolean;
   documentVersion: number;
   readerType: ReaderType;
@@ -28,11 +27,11 @@ export async function resolveSegmentDocumentScope(
 ): Promise<ResolvedSegmentDocumentScope | Response> {
   const ctxOrRes = await requireAuthContext(request);
   if (ctxOrRes instanceof Response) return ctxOrRes;
+  if (!ctxOrRes.userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const testNamespace = getOpenReaderTestNamespace(request.headers);
-  const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-  const storageUserId = ctxOrRes.userId ?? unclaimedUserId;
-  const allowedUserIds = [storageUserId, unclaimedUserId];
+  const storageUserId = ctxOrRes.userId;
+  const allowedUserIds = [storageUserId];
 
   const rows = (await db
     .select({
@@ -55,7 +54,6 @@ export async function resolveSegmentDocumentScope(
   return {
     testNamespace,
     storageUserId: doc.userId,
-    authEnabled: true,
     userId: ctxOrRes.userId,
     isAnonymousUser: Boolean(ctxOrRes.user?.isAnonymous),
     documentVersion: Number(doc.lastModified),

@@ -21,7 +21,7 @@ import {
   stringifyDocumentParseState,
 } from '@/lib/server/documents/parse-state';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { checkJobRate, recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
 import { buildComputeRateLimitedResponse } from '@/lib/server/rate-limit/problem-response';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
@@ -196,6 +196,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const authCtxOrRes = await requireAuthContext(req);
     if (authCtxOrRes instanceof Response) return authCtxOrRes;
+    if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const params = await ctx.params;
     const id = (params.id || '').trim().toLowerCase();
@@ -206,9 +207,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = authCtxOrRes.userId ?? unclaimedUserId;
-    const allowedUserIds = [storageUserId, unclaimedUserId];
+    const storageUserId = authCtxOrRes.userId;
+    const allowedUserIds = [storageUserId];
 
     const rows = await loadRows({ documentId: id, allowedUserIds });
     const row = pickPreferredRow(rows, storageUserId);
@@ -347,6 +347,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const authCtxOrRes = await requireAuthContext(req);
     if (authCtxOrRes instanceof Response) return authCtxOrRes;
+    if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const params = await ctx.params;
     const id = (params.id || '').trim().toLowerCase();
@@ -363,9 +364,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
 
     const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const storageUserId = authCtxOrRes.userId ?? unclaimedUserId;
-    const allowedUserIds = [storageUserId, unclaimedUserId];
+    const storageUserId = authCtxOrRes.userId;
+    const allowedUserIds = [storageUserId];
 
     const rows = await loadRows({ documentId: id, allowedUserIds });
     const row = pickPreferredRow(rows, storageUserId);
