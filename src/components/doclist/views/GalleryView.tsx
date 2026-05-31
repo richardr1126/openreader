@@ -7,6 +7,7 @@ import type { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
+import { buttonClass } from '@/components/formPrimitives';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -166,11 +167,17 @@ export function GalleryView({
         setActiveIdx((i) => Math.min(documents.length - 1, i + 1));
       } else if (e.key === 'ArrowLeft') {
         setActiveIdx((i) => Math.max(0, i - 1));
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        const doc = documents[activeIdx];
+        if (doc) {
+          e.preventDefault();
+          onDeleteDoc(doc);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [documents.length]);
+  }, [documents, activeIdx, onDeleteDoc]);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -194,14 +201,14 @@ export function GalleryView({
                 <Link
                   href={openHref || '/app'}
                   prefetch={false}
-                  className="h-8 px-4 inline-flex items-center justify-center rounded-md bg-accent text-background text-[12px] font-medium hover:bg-secondary-accent hover:scale-[1.01] transition-all duration-200 ease-out"
+                  className={buttonClass({ variant: 'primary', size: 'sm' })}
                 >
                   Open
                 </Link>
                 <button
                   type="button"
                   onClick={() => onDeleteDoc(activeDoc)}
-                  className="h-8 px-3 rounded-md border border-offbase bg-base text-[12px] text-muted hover:text-accent hover:border-accent hover:bg-offbase hover:scale-[1.01] transition-all duration-200 ease-out"
+                  className={buttonClass({ variant: 'secondary', size: 'sm' })}
                 >
                   Delete
                 </button>
