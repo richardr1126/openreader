@@ -20,7 +20,7 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { authEnabled, baseUrl } = useAuthConfig();
+  const { baseUrl } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
@@ -251,7 +251,7 @@ export default function SignUpPage() {
           <p className="text-xs text-muted">
             By creating an account, you agree to our{' '}
             <button
-              onClick={() => showPrivacyModal({ authEnabled })}
+              onClick={() => showPrivacyModal()}
               className="underline hover:text-foreground"
             >
               Privacy Policy

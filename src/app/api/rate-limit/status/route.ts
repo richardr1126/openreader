@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
         remainingChars: ttsRateLimitEnabled ? limits.anonymous : Number.MAX_SAFE_INTEGER,
         resetTimeMs,
         userType: 'unauthenticated',
-        authEnabled: true
       });
     }
 
@@ -72,7 +71,6 @@ export async function GET(req: NextRequest) {
       remainingChars: result.remainingChars,
       resetTimeMs: result.resetTimeMs,
       userType: isAnonymous ? 'anonymous' : 'authenticated',
-      authEnabled: true
     });
 
     if (device?.didCreate) {

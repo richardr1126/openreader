@@ -33,7 +33,6 @@ export function shouldPersistEpubLocation(
 
 type UseEpubLocationControllerParams = {
   documentId?: string;
-  authEnabled: boolean;
   isEpubSetOnceRef: MutableRefObject<boolean>;
   shouldPauseRef: MutableRefObject<boolean>;
   setIsEpub: (isEpub: boolean) => void;
@@ -46,7 +45,6 @@ type UseEpubLocationControllerParams = {
 
 export function useEPUBLocationController({
   documentId,
-  authEnabled,
   isEpubSetOnceRef,
   shouldPauseRef,
   setIsEpub,
@@ -138,13 +136,11 @@ export function useEPUBLocationController({
     // Save the location to IndexedDB if not initial
     if (shouldPersistEpubLocation(documentId, locationRef.current)) {
       setLastDocumentLocation(documentId, location.toString());
-      if (authEnabled) {
-        scheduleDocumentProgressSync({
-          documentId,
-          readerType: 'epub',
-          location: location.toString(),
-        });
-      }
+      scheduleDocumentProgressSync({
+        documentId,
+        readerType: 'epub',
+        location: location.toString(),
+      });
     }
 
     skipToLocation(location);
@@ -155,7 +151,6 @@ export function useEPUBLocationController({
       shouldPauseRef.current = true;
     }
   }, [
-    authEnabled,
     bookRef,
     documentId,
     extractPageText,

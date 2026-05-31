@@ -406,7 +406,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     configTTSModel,
   );
   const {
-    authEnabled,
     onTTSStart,
     onTTSComplete,
     refresh: refreshRateLimit,
@@ -3229,19 +3228,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     };
 
     const load = async () => {
-      if (authEnabled) {
-        try {
-          const remote = await getDocumentProgress(docId);
-          if (!cancelled && remote?.location) {
-            await setLastDocumentLocation(docId, remote.location).catch((error) => {
-              console.warn('Error caching remote location locally:', error);
-            });
-            applyLocation(remote.location);
-            return;
-          }
-        } catch (error) {
-          console.warn('Error loading remote progress:', error);
+      try {
+        const remote = await getDocumentProgress(docId);
+        if (!cancelled && remote?.location) {
+          await setLastDocumentLocation(docId, remote.location).catch((error) => {
+            console.warn('Error caching remote location locally:', error);
+          });
+          applyLocation(remote.location);
+          return;
         }
+      } catch (error) {
+        console.warn('Error loading remote progress:', error);
       }
 
       try {
@@ -3259,7 +3256,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     return () => {
       cancelled = true;
     };
-  }, [id, isEPUB, currentReaderType, authEnabled]);
+  }, [id, isEPUB, currentReaderType]);
 
   // Save current position periodically for non-EPUB readers.
   useEffect(() => {
@@ -3271,18 +3268,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         setLastDocumentLocation(id as string, location).catch(error => {
           console.warn('Error saving non-EPUB location:', error);
         });
-        if (authEnabled) {
-          scheduleDocumentProgressSync({
-            documentId: id as string,
-            readerType: currentReaderType,
-            location,
-          });
-        }
+        scheduleDocumentProgressSync({
+          documentId: id as string,
+          readerType: currentReaderType,
+          location,
+        });
       }, 1000); // Debounce saves by 1 second
 
       return () => clearTimeout(timeoutId);
     }
-  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType, authEnabled]);
+  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType]);
 
   /**
    * Renders the TTS context provider with its children

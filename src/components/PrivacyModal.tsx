@@ -150,15 +150,13 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
  * Function to programmatically show the privacy popup
  * This can be called from signin/signup components
  */
-export function showPrivacyModal(options?: { authEnabled?: boolean }): void {
+export function showPrivacyModal(): void {
   // Create a temporary container for the popup
   const container = document.createElement('div');
   container.id = 'privacy-modal-container';
   document.body.appendChild(container);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  void options;
-
   // Import React and render the popup
   import('react-dom/client').then(({ createRoot }) => {
     import('react').then((React) => {

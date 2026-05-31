@@ -12,7 +12,7 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
   const { status, isAtLimit, timeUntilReset } = useAuthRateLimit();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
 
-  if (!status?.authEnabled || !isAtLimit) {
+  if (!status || !isAtLimit) {
     return null;
   }
 
@@ -52,7 +52,7 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
 export function RateLimitIndicator({ className = '' }: RateLimitBannerProps) {
   const { status, isAtLimit } = useAuthRateLimit();
 
-  if (!status?.authEnabled) {
+  if (!status) {
     return null;
   }
 

@@ -18,7 +18,6 @@ import { EpubRenderedLocationCloneManager } from '@/lib/client/epub/rendered-loc
 import { canonicalizeEpubSegmentAgainstSpineText } from '@/lib/client/epub/canonicalize-epub-segment';
 import { buildEpubLocator, getSpineItemPlainText } from '@/lib/client/epub/spine-coordinates';
 import { useTTS, type EpubLocatorResolver } from '@/contexts/TTSContext';
-import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { createRangeCfi } from '@/lib/client/epub';
 import { normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -94,7 +93,6 @@ export interface EpubDocumentState {
  */
 export function useEpubDocument(documentId?: string): EpubDocumentState {
   const { setText: setTTSText, currDocPage, currDocPages, setCurrDocPages, stop, skipToLocation, setIsEPUB } = useTTS();
-  const { authEnabled } = useAuthConfig();
   // Configuration context to get TTS settings
   const {
     apiKey,
@@ -372,7 +370,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
 
   const handleLocationChanged = useEPUBLocationController({
     documentId,
-    authEnabled,
     isEpubSetOnceRef: isEPUBSetOnce,
     shouldPauseRef,
     setIsEpub: setIsEPUB,

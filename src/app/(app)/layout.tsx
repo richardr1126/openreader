@@ -28,7 +28,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <Providers
-      authEnabled
       authBaseUrl={authBaseUrl}
       allowAnonymousAuthSessions={allowAnonymousAuthSessions}
       githubAuthEnabled={githubAuthEnabled}

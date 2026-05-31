@@ -31,7 +31,7 @@ function SignInContent() {
   const [rememberMe, setRememberMe] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { authEnabled, baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
+  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
@@ -242,7 +242,7 @@ function SignInContent() {
           <p className="text-xs text-muted">
             By signing in, you agree to our{' '}
             <button
-              onClick={() => showPrivacyModal({ authEnabled })}
+              onClick={() => showPrivacyModal()}
               className="underline hover:text-foreground"
             >
               Privacy Policy

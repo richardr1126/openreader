@@ -11,12 +11,10 @@ export interface RateLimitStatus {
   remainingChars: number;
   resetTimeMs: number;
   userType: 'anonymous' | 'authenticated' | 'unauthenticated';
-  authEnabled: boolean;
 }
 
 interface AuthRateLimitContextType {
   // Auth Config
-  authEnabled: boolean;
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
@@ -45,8 +43,8 @@ export function useAuthRateLimit(): AuthRateLimitContextType {
 }
 
 export function useAuthConfig() {
-  const { authEnabled, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthRateLimit();
-  return { authEnabled, baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled };
+  const { authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthRateLimit();
+  return { baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled };
 }
 
 export function useRateLimit() {
@@ -87,7 +85,6 @@ function parseRateLimitStatus(raw: unknown): RateLimitStatus | null {
     remainingChars: Number(data.remainingChars ?? 0),
     resetTimeMs: coerceTimestampMs(data.resetTimeMs ?? data.resetTime, nextUtcMidnightTimestampMs()),
     userType,
-    authEnabled: Boolean(data.authEnabled),
   };
 }
 
@@ -105,7 +102,6 @@ export function formatCharCount(count: number): string {
 
 interface AuthRateLimitProviderProps {
   children: ReactNode;
-  authEnabled: boolean;
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
@@ -115,7 +111,6 @@ const RATE_LIMIT_QUERY_KEY = ['rate-limit-status'] as const;
 
 export function AuthRateLimitProvider({
   children,
-  authEnabled,
   authBaseUrl,
   allowAnonymousAuthSessions,
   githubAuthEnabled,
@@ -210,7 +205,6 @@ export function AuthRateLimitProvider({
   }, []);
 
   const contextValue: AuthRateLimitContextType = {
-    authEnabled,
     authBaseUrl,
     allowAnonymousAuthSessions,
     githubAuthEnabled,

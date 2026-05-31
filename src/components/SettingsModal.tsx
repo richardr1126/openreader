@@ -556,7 +556,7 @@ export function SettingsModal({
                     </div>
                     <div className="flex items-center">
                       <Button
-                        onClick={() => showPrivacyModal({ authEnabled: true })}
+                        onClick={() => showPrivacyModal()}
                         className="text-sm font-medium text-muted hover:text-accent transition-colors"
                       >
                         Privacy

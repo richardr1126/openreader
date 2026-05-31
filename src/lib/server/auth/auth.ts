@@ -320,7 +320,6 @@ export type User = AuthSessionUser & {
 };
 
 export type AuthContext = {
-  authEnabled: true;
   session: Session | null;
   user: User | null;
   userId: string | null;
@@ -342,7 +341,7 @@ export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Pro
     }
   }
 
-  return { authEnabled: true, session, user, userId };
+  return { session, user, userId };
 }
 
 export async function requireAuthContext(
