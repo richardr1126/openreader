@@ -3229,25 +3229,24 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     const load = async () => {
       try {
-        const remote = await getDocumentProgress(docId);
-        if (!cancelled && remote?.location) {
-          await setLastDocumentLocation(docId, remote.location).catch((error) => {
-            console.warn('Error caching remote location locally:', error);
-          });
-          applyLocation(remote.location);
-          return;
-        }
-      } catch (error) {
-        console.warn('Error loading remote progress:', error);
-      }
-
-      try {
         const local = await getLastDocumentLocation(docId);
         if (!cancelled && local) {
           applyLocation(local);
         }
       } catch (error) {
         console.warn('Error loading local last location:', error);
+      }
+
+      try {
+        const remote = await getDocumentProgress(docId);
+        if (!cancelled && remote?.location) {
+          await setLastDocumentLocation(docId, remote.location).catch((error) => {
+            console.warn('Error caching remote location locally:', error);
+          });
+          applyLocation(remote.location);
+        }
+      } catch (error) {
+        console.warn('Error loading remote progress:', error);
       }
     };
 
