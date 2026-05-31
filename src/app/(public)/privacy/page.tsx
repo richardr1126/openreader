@@ -48,6 +48,11 @@ export default async function PrivacyPage() {
           ) : null}
         </section>
 
+        {/* Claim audit
+            Code-verified: consent/GPC analytics handling, analytics toggle, export/delete controls, US geo-gate, AES256 storage headers.
+            Deployment-dependent: processing/storage region and exact provider infrastructure locations.
+            Operator-statement: OpenReader does not sell personal information.
+        */}
         <div className="policy-grid public-reveal-2">
           <aside className="policy-nav" aria-label="Privacy sections">
             <p className="policy-nav-title">On this page</p>
@@ -87,18 +92,22 @@ export default async function PrivacyPage() {
             </section>
 
             <section id="sharing" className="policy-section">
-              <h2>3. Sharing and service providers</h2>
+              <h2>3. Service providers and analytics</h2>
               <p>
-                OpenReader does not sell personal information. Limited processing may be delegated to infrastructure
-                or model providers as required to run the service.
+                OpenReader does not sell personal information. We use service providers only to run product
+                infrastructure and user-initiated features.
               </p>
+              <div className="policy-highlight">
+                Optional analytics is controlled by your consent choice, and Global Privacy Control (GPC) opt-out
+                signals are honored.
+              </div>
               <ul className="policy-fact-list">
                 {isRichardrDevProductionInstance ? (
                   <>
                     <li><strong>Hosting:</strong> Vercel for application hosting, edge runtime, and performance analytics.</li>
                     <li><strong>Database:</strong> Neon PostgreSQL for account and document metadata storage.</li>
                     <li><strong>File storage:</strong> Railway S3-compatible object storage for encrypted uploaded documents and audio artifacts.</li>
-                    <li><strong>TTS processing:</strong> DeepInfra or configured OpenAI-compatible providers, only when initiated by user actions.</li>
+                    <li><strong>TTS processing:</strong> User-initiated TTS is handled by shared providers: Kitten TTS FastAPI (self-hosted on a local Pi cluster) and Replicate.</li>
                   </>
                 ) : (
                   <>
@@ -132,8 +141,20 @@ export default async function PrivacyPage() {
             <section id="retention" className="policy-section">
               <h2>5. Retention and security</h2>
               <p>
-                Account data and uploaded files are retained while your account remains active. Documents are stored
-                encrypted at rest. When account deletion completes, active database and storage records are removed.
+                Account data and uploaded files are retained while your account remains active. Data is encrypted at
+                rest in storage. OpenReader does not currently provide end-to-end encryption.
+              </p>
+              <p>
+                The owner of this instance may be able to access stored metadata and uploaded files needed to operate
+                the service.
+              </p>
+              <p>
+                Passwords are not stored as readable plaintext; the authentication system stores credential values as
+                non-plaintext verification data.
+              </p>
+              <p>
+                Account deletion triggers removal of active account records and associated storage artifacts as part
+                of the deletion flow.
               </p>
             </section>
 
@@ -141,8 +162,8 @@ export default async function PrivacyPage() {
               <h2>6. Processing location</h2>
               {isRichardrDevProductionInstance ? (
                 <p>
-                  For the official instance, processing and storage occur in the United States. By using this service,
-                  you acknowledge that data is handled in the US and that availability may be limited to US users.
+                  For the official instance, access is restricted to users in the United States. Processing location
+                  depends on the configured infrastructure and providers used by this deployment.
                 </p>
               ) : (
                 <p>

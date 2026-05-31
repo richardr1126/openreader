@@ -49,8 +49,8 @@ export function CookieConsentBanner() {
             🍪 We use cookies
           </h3>
           <p className="text-sm leading-relaxed text-foreground/90">
-            We use strictly necessary cookies for authentication and optional cookies for anonymous analytics
-            to improve the app. See our <Link href="/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link> for details.
+            We use strictly necessary cookies for authentication. Optional analytics is enabled only when you consent.
+            See our <Link href="/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link> for details.
           </p>
         </div>
 

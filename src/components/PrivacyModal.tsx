@@ -29,7 +29,20 @@ function PrivacyModalBody({ origin }: { origin: string }) {
 
       <p className="leading-relaxed">
         We value your privacy. This application uses strictly necessary cookies for authentication
-        and anonymous analytics to improve performance. Your documents are stored securely and encrypted at rest.
+        and optional analytics only when consent allows it. Your documents are stored encrypted at rest.
+      </p>
+
+      <p className="leading-relaxed">
+        OpenReader does not currently provide end-to-end encryption.
+      </p>
+
+      <p className="leading-relaxed">
+        The owner of this instance may be able to access stored metadata and uploaded files needed to operate the
+        service.
+      </p>
+
+      <p className="leading-relaxed">
+        Passwords are not stored as readable plaintext.
       </p>
 
       <p className="leading-relaxed">
