@@ -317,11 +317,11 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 </Tabs>
 
 :::note Env vars vs. admin panel
-On first boot, `API_KEY` / `API_BASE` and any `RUNTIME_SEED_*` flags you've set get auto-seeded into the admin-managed runtime config (DB-backed, keys encrypted at rest). After that, the admin UI is authoritative and editing those env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
+On first boot, `API_KEY` / `API_BASE` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config + providers. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
 :::
 
 :::note User BYOK restriction default
-If you want each user to enter personal provider credentials, set `restrictUserApiKeys=false` (from **Settings → Admin** when auth/admin is enabled, or via legacy first-boot seed `RUNTIME_SEED_RESTRICT_USER_API_KEYS=false` for no-admin bootstrap flows).
+If you want each user to enter personal provider credentials, set `restrictUserApiKeys=false` (from **Settings → Admin** when auth/admin is enabled, or by seeding `runtimeConfig.restrictUserApiKeys=false` in runtime seed JSON).
 :::
 
 :::info

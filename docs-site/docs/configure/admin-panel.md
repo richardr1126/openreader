@@ -82,9 +82,9 @@ Word-by-word highlighting and PDF layout parsing capability are controlled by co
 
 Each row shows a source badge:
 
-- **from env** — the value was migrated from the corresponding `RUNTIME_SEED_*` env var on first boot. Editing it in the UI flips the source to **admin**.
-- **admin** — explicit admin override. Use **Reset** on the row to clear it back to the env-default state.
-- **default** — neither env nor admin set; uses the built-in default.
+- **from seed** — the value was seeded on first boot (from `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`).
+- **admin** — explicit admin override. Use **Reset** on the row to clear it back to built-in default behavior.
+- **default** — no seed/admin row exists; built-in default is active.
 
 :::warning Security note for `restrictUserApiKeys`
 Turning `restrictUserApiKeys` off allows user-supplied API keys to flow through this server. Use this only for trusted/self-hosted deployments where that tradeoff is acceptable.
@@ -120,16 +120,16 @@ In v4 these settings are admin-only and are no longer configurable through envir
 
 ## Migrating off env vars
 
-The future-direction goal is to remove `RUNTIME_SEED_*` / `API_KEY` / `API_BASE` from your `.env` entirely. To do that safely:
+In v4, runtime site features are managed by admin settings and optional JSON seed. To minimize env surface area:
 
 1. Deploy this version with your existing env values in place.
 2. Boot the app once. Open Settings → Admin and verify:
-   - Each `RUNTIME_SEED_*` setting appears as **from env**.
+   - Seeded settings appear as **from seed** (if you supplied a runtime JSON seed).
    - A `default-openai` row exists in **Shared providers** (if you had `API_KEY` set).
-3. Remove the env vars from your `.env`.
+3. Remove any bootstrap env vars you no longer need from `.env`.
 4. Redeploy. Behavior is unchanged — the DB is now the source of truth.
 
-You can keep the env vars indefinitely if you prefer; they're only read on the first boot when the corresponding DB row is absent, so there's no harm in leaving them around.
+You can keep `API_BASE` / `API_KEY` if you intentionally want bootstrap fallback behavior on empty provider tables.
 
 ## How keys are protected
 
@@ -146,4 +146,4 @@ Because the encryption key for `admin_providers` is derived from `AUTH_SECRET`, 
 
 - [Auth](./auth) — required to use the admin panel.
 - [TTS Providers](./tts-providers) — built-in provider catalog and per-user behavior.
-- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS` and the legacy flags that the admin UI replaces.
+- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed.

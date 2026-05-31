@@ -6,41 +6,25 @@ import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 
 /**
- * Runtime config: site-wide settings that used to live in build-time env vars.
- * env vars. Each key has:
+ * Runtime config: site-wide settings that are persisted in admin_settings.
+ * Each key has:
  *   - a TypeScript value type
- *   - an env var name used for the first-run seed
- *   - a parser that turns a string env value into the typed value
- *   - a default applied when neither the DB nor the env has a value
- *
- * On first boot, `seedRuntimeConfigFromEnv()` writes a row for every key
- * whose env var is set. After that, `getRuntimeConfig()` reads from DB only.
+ *   - a default used when no DB value exists
+ *   - a validator for admin/seed writes
  */
 
-export type RuntimeConfigSource = 'env-seed' | 'admin';
+export type RuntimeConfigSource = 'json-seed' | 'env-seed' | 'admin';
 
 export interface RuntimeConfigKeyDef<T> {
   /** TS-level default. Used when neither DB nor env have a value. */
   default: T;
-  /** Env var name to seed from on first run. Omit for DB/admin-only keys. */
-  envVar?: string;
-  /** Parse a string env value to T. Returns undefined to skip seeding. */
-  parseEnv(raw: string): T | undefined;
   /** Validate an incoming admin-supplied value. */
   validate(value: unknown): T | undefined;
 }
 
-function booleanFlag(defaultValue: boolean, envVar: string): RuntimeConfigKeyDef<boolean> {
+function booleanFlag(defaultValue: boolean): RuntimeConfigKeyDef<boolean> {
   return {
     default: defaultValue,
-    envVar,
-    parseEnv(raw) {
-      const lower = raw.trim().toLowerCase();
-      if (lower === '' ) return undefined;
-      if (['1', 'true', 'yes', 'on'].includes(lower)) return true;
-      if (['0', 'false', 'no', 'off'].includes(lower)) return false;
-      return undefined;
-    },
     validate(value) {
       if (typeof value === 'boolean') return value;
       return undefined;
@@ -51,9 +35,6 @@ function booleanFlag(defaultValue: boolean, envVar: string): RuntimeConfigKeyDef
 function runtimeBoolean(defaultValue: boolean): RuntimeConfigKeyDef<boolean> {
   return {
     default: defaultValue,
-    parseEnv() {
-      return undefined;
-    },
     validate(value) {
       if (typeof value === 'boolean') return value;
       return undefined;
@@ -61,14 +42,9 @@ function runtimeBoolean(defaultValue: boolean): RuntimeConfigKeyDef<boolean> {
   };
 }
 
-function stringValue(defaultValue: string, envVar: string): RuntimeConfigKeyDef<string> {
+function stringValue(defaultValue: string): RuntimeConfigKeyDef<string> {
   return {
     default: defaultValue,
-    envVar,
-    parseEnv(raw) {
-      const trimmed = raw.trim();
-      return trimmed ? trimmed : undefined;
-    },
     validate(value) {
       if (typeof value === 'string') return value;
       return undefined;
@@ -76,17 +52,9 @@ function stringValue(defaultValue: string, envVar: string): RuntimeConfigKeyDef<
   };
 }
 
-function positiveIntValue(defaultValue: number, envVar?: string): RuntimeConfigKeyDef<number> {
+function positiveIntValue(defaultValue: number): RuntimeConfigKeyDef<number> {
   return {
     default: defaultValue,
-    envVar,
-    parseEnv(raw) {
-      const trimmed = raw.trim();
-      if (!trimmed) return undefined;
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed) || parsed < 1) return undefined;
-      return Math.floor(parsed);
-    },
     validate(value) {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) return undefined;
       return Math.floor(value);
@@ -95,18 +63,18 @@ function positiveIntValue(defaultValue: number, envVar?: string): RuntimeConfigK
 }
 
 export const RUNTIME_CONFIG_SCHEMA = {
-  defaultTtsProvider: stringValue('custom-openai', 'RUNTIME_SEED_DEFAULT_TTS_PROVIDER'),
-  changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json', 'RUNTIME_SEED_CHANGELOG_FEED_URL'),
-  enableUserSignups: booleanFlag(true, 'RUNTIME_SEED_ENABLE_USER_SIGNUPS'),
-  restrictUserApiKeys: booleanFlag(true, 'RUNTIME_SEED_RESTRICT_USER_API_KEYS'),
+  defaultTtsProvider: stringValue('custom-openai'),
+  changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json'),
+  enableUserSignups: booleanFlag(true),
+  restrictUserApiKeys: booleanFlag(true),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
-  enableTtsProvidersTab: booleanFlag(true, 'RUNTIME_SEED_ENABLE_TTS_PROVIDERS_TAB'),
-  enableAudiobookExport: booleanFlag(true, 'RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT'),
-  enableDocxConversion: booleanFlag(true, 'RUNTIME_SEED_ENABLE_DOCX_CONVERSION'),
-  enableDestructiveDeleteActions: booleanFlag(true, 'RUNTIME_SEED_ENABLE_DESTRUCTIVE_DELETE_ACTIONS'),
+  enableTtsProvidersTab: booleanFlag(true),
+  enableAudiobookExport: booleanFlag(true),
+  enableDocxConversion: booleanFlag(true),
+  enableDestructiveDeleteActions: booleanFlag(true),
   showAllProviderModels: runtimeBoolean(true),
-  disableTtsRateLimit: booleanFlag(true, 'RUNTIME_SEED_DISABLE_TTS_LIMIT'),
+  disableTtsRateLimit: booleanFlag(true),
   ttsDailyLimitAnonymous: positiveIntValue(50_000),
   ttsDailyLimitAuthenticated: positiveIntValue(500_000),
   ttsIpDailyLimitAnonymous: positiveIntValue(100_000),
@@ -120,7 +88,7 @@ export const RUNTIME_CONFIG_SCHEMA = {
   // When enabled, the sub-limits below apply (admin-tunable, no env seed):
   // a short "burst" window plus a wider "sustained" window that also bounds
   // concurrency (the worker caps each job's duration).
-  disableComputeRateLimit: booleanFlag(true, 'RUNTIME_SEED_DISABLE_COMPUTE_LIMIT'),
+  disableComputeRateLimit: booleanFlag(true),
   computeParseBurstMax: positiveIntValue(8),
   computeParseBurstWindowSec: positiveIntValue(60),
   computeParseSustainedMax: positiveIntValue(24),
@@ -268,7 +236,12 @@ export async function getRuntimeConfigWithSources(): Promise<{
     const validated = RUNTIME_CONFIG_SCHEMA[key].validate(row.value);
     if (validated !== undefined) {
       (values as Record<string, unknown>)[key] = validated;
-      sources[key] = (row.source === 'env-seed' ? 'env-seed' : 'admin');
+      sources[key] = (
+        row.source === 'env-seed'
+        || row.source === 'json-seed'
+        ? row.source
+        : 'admin'
+      );
     } else {
       sources[key] = 'default';
     }
@@ -309,55 +282,70 @@ export async function setRuntimeConfigKey<K extends RuntimeConfigKey>(
   }
 }
 
-/** Delete a runtime config row (resets to env/default behavior). */
+/** Delete a runtime config row (resets to default/implicit behavior). */
 export async function clearRuntimeConfigKey(key: RuntimeConfigKey): Promise<void> {
   await db.delete(adminSettings).where(eq(adminSettings.key, key));
 }
 
 /**
- * First-run seed: for every key whose row is absent AND env var is set,
- * write a row with `source = 'env-seed'`. Idempotent — never overwrites
- * an existing row.
+ * First-run seed from a parsed object. Only inserts keys that are absent,
+ * never overwriting an existing row.
  */
-export async function seedRuntimeConfigFromEnv(): Promise<{ seeded: RuntimeConfigKey[] }> {
+export async function seedRuntimeConfigFromValues(
+  input: Record<string, unknown>,
+  source: RuntimeConfigSource = 'json-seed',
+): Promise<{ seeded: RuntimeConfigKey[]; invalid: string[]; unknown: string[] }> {
   const seeded: RuntimeConfigKey[] = [];
-  let existing: Map<string, { value: unknown; source: string }>;
-  try {
-    existing = await readAllRows();
-  } catch {
-    return { seeded };
-  }
+  const invalid: string[] = [];
+  const unknown: string[] = [];
+  const validEntries: Array<{ key: RuntimeConfigKey; value: RuntimeConfig[RuntimeConfigKey] }> = [];
+  const existing = await readAllRows();
   const now = Date.now();
-  for (const key of RUNTIME_KEYS) {
-    if (existing.has(key)) continue;
-    const def = RUNTIME_CONFIG_SCHEMA[key];
-    if (!def.envVar) continue;
-    const raw = process.env[def.envVar];
-    if (raw === undefined || raw === null || raw === '') continue;
-    const parsed = def.parseEnv(raw);
-    if (parsed === undefined) continue;
+
+  for (const [rawKey, rawValue] of Object.entries(input)) {
+    if (!RUNTIME_KEYS.includes(rawKey as RuntimeConfigKey)) {
+      unknown.push(rawKey);
+      continue;
+    }
+    const key = rawKey as RuntimeConfigKey;
+    const def = RUNTIME_CONFIG_SCHEMA[key] as RuntimeConfigKeyDef<RuntimeConfig[RuntimeConfigKey]>;
+    const validated = def.validate(rawValue);
+    if (validated === undefined) {
+      invalid.push(rawKey);
+      continue;
+    }
+    validEntries.push({ key, value: validated });
+  }
+
+  if (unknown.length > 0 || invalid.length > 0) {
+    return { seeded, invalid, unknown };
+  }
+
+  for (const entry of validEntries) {
+    if (existing.has(entry.key)) continue;
     try {
       await db
         .insert(adminSettings)
         .values({
-          key,
-          valueJson: serializeForStorage(parsed) as never,
-          source: 'env-seed',
+          key: entry.key,
+          valueJson: serializeForStorage(entry.value) as never,
+          source,
           updatedAt: now,
         })
         .onConflictDoNothing({ target: adminSettings.key });
-      seeded.push(key);
+      seeded.push(entry.key);
     } catch (error) {
       logDegraded(serverLogger, {
         event: 'admin.runtime_config.seed.failed',
         msg: 'Runtime config seed failed',
         step: 'seed_runtime_config_key',
-        context: { key },
+        context: { key: entry.key, source },
         error,
       });
     }
   }
-  return { seeded };
+
+  return { seeded, invalid, unknown };
 }
 
 export { RUNTIME_KEYS };

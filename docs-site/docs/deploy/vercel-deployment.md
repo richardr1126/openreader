@@ -86,11 +86,11 @@ After the first successful deploy and admin login, open **Settings → Admin** a
   - `showAllProviderModels=false` if you want users locked to each provider's default model.
   - `enableAudiobookExport=true`.
 
-## 3. Legacy first-boot seed (optional)
+## 3. Runtime JSON seed (optional)
 
-If you must pre-seed site features via environment variables, the legacy `RUNTIME_SEED_*` seeds are still supported on first boot only. Prefer the admin panel for ongoing management.
+If you must pre-seed site features/providers at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Prefer the admin panel for ongoing management.
 
-See [Environment Variables](../reference/environment-variables#legacy-first-boot-runtime-seeds-optional) for the complete legacy seed list.
+See [Environment Variables](../reference/environment-variables#runtime-json-seed-v4) for schema and examples.
 
 :::warning Auth recommendation
 For internet-exposed Vercel deployments, set both `BASE_URL` and `AUTH_SECRET` — they are also required for the admin panel and for encrypting admin-stored TTS credentials. Running without auth is possible, but not recommended for public environments.

@@ -3,29 +3,52 @@ import { adminProviders, adminSettings } from '@/db/schema';
 import { encryptSecret, apiKeyLast4 } from '@/lib/server/crypto/secrets';
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
+import { readFile } from 'node:fs/promises';
 import { serverLogger } from '@/lib/server/logger';
 import {
-  RUNTIME_CONFIG_SCHEMA,
-  seedRuntimeConfigFromEnv,
+  seedRuntimeConfigFromValues,
 } from '@/lib/server/admin/settings';
 import { logDegraded } from '@/lib/server/errors/logging';
+import { validateProviderType, validateSlug } from '@/lib/server/admin/providers';
+import type { TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 
 /**
- * Idempotent boot-time seeding for the admin layer. Safe to call multiple
- * times. Runs:
+ * Idempotent boot-time seeding for the admin layer. Safe to call multiple times.
  *
- *   1. `seedRuntimeConfigFromEnv()` — for each `RUNTIME_SEED_*` env var that
- *      maps to a runtime config key, write the value as `source='env-seed'`.
- *
- *   2. Default admin provider seed — if `admin_providers` is empty AND
- *      `API_KEY` is set, create a single `default-openai` row from the
- *      legacy `API_KEY` / `API_BASE` env vars. After this runs, the TTS
- *      routes no longer fall back to those env vars.
- *
- *   3. Legacy row cleanup — remove historical env-seeded
- *      `defaultTtsProvider="default-openai"` rows so the shared default is
- *      treated as an implicit baseline, not an override.
+ * v4 behavior:
+ *  1) Optional JSON seed from RUNTIME_SEED_JSON_PATH or RUNTIME_SEED_JSON
+ *     - runtimeConfig: strict validation against RUNTIME_CONFIG_SCHEMA
+ *     - providers: optional shared providers seed list
+ *  2) Legacy provider fallback: if providers were not supplied in JSON and
+ *     no provider rows exist, seed default-openai from API_KEY/API_BASE.
+ *  3) Legacy row cleanup for historical defaultTtsProvider/defaultTtsModel rows.
  */
+
+const RUNTIME_SEED_JSON = 'RUNTIME_SEED_JSON';
+const RUNTIME_SEED_JSON_PATH = 'RUNTIME_SEED_JSON_PATH';
+const SEED_VERSION = 1;
+
+type SeedProviderInput = {
+  slug: string;
+  displayName: string;
+  providerType: TtsProviderId;
+  apiKey: string;
+  baseUrl?: string | null;
+  defaultModel?: string | null;
+  defaultInstructions?: string | null;
+  enabled?: boolean;
+};
+
+type ServerSeedDocument = {
+  version: number;
+  runtimeConfig?: Record<string, unknown>;
+  providers?: SeedProviderInput[];
+};
+
+type ParsedSeedResult = {
+  seed: ServerSeedDocument;
+  hasProvidersSection: boolean;
+};
 
 let seedPromise: Promise<void> | null = null;
 
@@ -38,7 +61,6 @@ export async function ensureAdminSeed(): Promise<void> {
         step: 'run_admin_seed',
         error,
       });
-      // Reset so a subsequent call can retry (e.g. once migrations run).
       seedPromise = null;
       throw error;
     });
@@ -51,13 +73,209 @@ export async function ensureAdminSeed(): Promise<void> {
 }
 
 async function runSeed(): Promise<void> {
-  await seedRuntimeConfigFromEnv();
-  await seedDefaultAdminProvider();
+  const parsedSeed = await loadRuntimeSeedFromEnv();
+
+  if (parsedSeed?.seed.runtimeConfig) {
+    await seedRuntimeConfigStrict(parsedSeed.seed.runtimeConfig);
+  }
+
+  if (parsedSeed?.seed.providers) {
+    await seedAdminProvidersFromJson(parsedSeed.seed.providers);
+  }
+
+  if (shouldUseEnvProviderFallback(parsedSeed?.hasProvidersSection ?? false)) {
+    await seedDefaultAdminProviderFromEnvFallback();
+  }
+
   await cleanupLegacyDefaultTtsProviderSeedRow();
   await cleanupLegacyDefaultTtsModelRows();
 }
 
-async function seedDefaultAdminProvider(): Promise<void> {
+function shouldUseEnvProviderFallback(hasProvidersSection: boolean): boolean {
+  return !hasProvidersSection;
+}
+
+async function loadRuntimeSeedFromEnv(): Promise<ParsedSeedResult | null> {
+  const pathValue = process.env[RUNTIME_SEED_JSON_PATH]?.trim();
+  const inlineValue = process.env[RUNTIME_SEED_JSON]?.trim();
+
+  if (!pathValue && !inlineValue) return null;
+
+  const raw = pathValue
+    ? await readFile(pathValue, 'utf8')
+    : inlineValue as string;
+
+  return parseRuntimeSeedDocument(raw);
+}
+
+function parseRuntimeSeedDocument(raw: string): ParsedSeedResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Invalid ${RUNTIME_SEED_JSON}/${RUNTIME_SEED_JSON_PATH} JSON: ${String(error)}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Seed JSON root must be an object');
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const allowedTopLevel = new Set(['version', 'runtimeConfig', 'providers']);
+  const unknownTopLevel = Object.keys(record).filter((key) => !allowedTopLevel.has(key));
+  if (unknownTopLevel.length > 0) {
+    throw new Error(`Seed JSON contains unknown top-level keys: ${unknownTopLevel.join(', ')}`);
+  }
+
+  if (record.version !== SEED_VERSION) {
+    throw new Error(`Seed JSON version must be ${SEED_VERSION}`);
+  }
+
+  let runtimeConfig: Record<string, unknown> | undefined;
+  if (record.runtimeConfig !== undefined) {
+    if (!record.runtimeConfig || typeof record.runtimeConfig !== 'object' || Array.isArray(record.runtimeConfig)) {
+      throw new Error('Seed JSON runtimeConfig must be an object when provided');
+    }
+    runtimeConfig = record.runtimeConfig as Record<string, unknown>;
+  }
+
+  let providers: SeedProviderInput[] | undefined;
+  if (record.providers !== undefined) {
+    if (!Array.isArray(record.providers)) {
+      throw new Error('Seed JSON providers must be an array when provided');
+    }
+    providers = record.providers.map((entry, index) => validateSeedProviderEntry(entry, index));
+  }
+
+  return {
+    seed: {
+      version: SEED_VERSION,
+      ...(runtimeConfig ? { runtimeConfig } : {}),
+      ...(providers ? { providers } : {}),
+    },
+    hasProvidersSection: Object.prototype.hasOwnProperty.call(record, 'providers'),
+  };
+}
+
+function validateSeedProviderEntry(value: unknown, index: number): SeedProviderInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Seed JSON providers[${index}] must be an object`);
+  }
+
+  const rec = value as Record<string, unknown>;
+  const allowed = new Set([
+    'slug',
+    'displayName',
+    'providerType',
+    'apiKey',
+    'baseUrl',
+    'defaultModel',
+    'defaultInstructions',
+    'enabled',
+  ]);
+  const unknown = Object.keys(rec).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new Error(`Seed JSON providers[${index}] contains unknown keys: ${unknown.join(', ')}`);
+  }
+
+  if (typeof rec.slug !== 'string' || !rec.slug.trim()) {
+    throw new Error(`Seed JSON providers[${index}].slug must be a non-empty string`);
+  }
+  if (typeof rec.displayName !== 'string' || !rec.displayName.trim()) {
+    throw new Error(`Seed JSON providers[${index}].displayName must be a non-empty string`);
+  }
+  if (typeof rec.providerType !== 'string') {
+    throw new Error(`Seed JSON providers[${index}].providerType must be a string`);
+  }
+  if (typeof rec.apiKey !== 'string' || !rec.apiKey.trim()) {
+    throw new Error(`Seed JSON providers[${index}].apiKey must be a non-empty string`);
+  }
+
+  if (rec.baseUrl !== undefined && rec.baseUrl !== null && typeof rec.baseUrl !== 'string') {
+    throw new Error(`Seed JSON providers[${index}].baseUrl must be a string or null`);
+  }
+  if (rec.defaultModel !== undefined && rec.defaultModel !== null && typeof rec.defaultModel !== 'string') {
+    throw new Error(`Seed JSON providers[${index}].defaultModel must be a string or null`);
+  }
+  if (rec.defaultInstructions !== undefined && rec.defaultInstructions !== null && typeof rec.defaultInstructions !== 'string') {
+    throw new Error(`Seed JSON providers[${index}].defaultInstructions must be a string or null`);
+  }
+  if (rec.enabled !== undefined && typeof rec.enabled !== 'boolean') {
+    throw new Error(`Seed JSON providers[${index}].enabled must be a boolean when provided`);
+  }
+
+  return {
+    slug: validateSlug(rec.slug),
+    displayName: rec.displayName.trim(),
+    providerType: validateProviderType(rec.providerType),
+    apiKey: rec.apiKey.trim(),
+    ...(rec.baseUrl !== undefined ? { baseUrl: normalizeOptionalString(rec.baseUrl) } : {}),
+    ...(rec.defaultModel !== undefined ? { defaultModel: normalizeOptionalString(rec.defaultModel) } : {}),
+    ...(rec.defaultInstructions !== undefined ? { defaultInstructions: normalizeOptionalString(rec.defaultInstructions) } : {}),
+    ...(rec.enabled !== undefined ? { enabled: rec.enabled } : {}),
+  };
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function seedRuntimeConfigStrict(input: Record<string, unknown>): Promise<void> {
+  const result = await seedRuntimeConfigFromValues(input, 'json-seed');
+  if (result.unknown.length > 0 || result.invalid.length > 0) {
+    const issues = [
+      ...(result.unknown.length > 0 ? [`unknown keys: ${result.unknown.join(', ')}`] : []),
+      ...(result.invalid.length > 0 ? [`invalid values for: ${result.invalid.join(', ')}`] : []),
+    ].join('; ');
+    throw new Error(`Seed JSON runtimeConfig validation failed (${issues})`);
+  }
+}
+
+async function seedAdminProvidersFromJson(providers: SeedProviderInput[]): Promise<void> {
+  if (providers.length === 0) return;
+
+  const now = Date.now();
+  for (const provider of providers) {
+    const existing = await db
+      .select({ id: adminProviders.id })
+      .from(adminProviders)
+      .where(eq(adminProviders.slug, provider.slug))
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const encrypted = encryptSecret(provider.apiKey);
+
+    try {
+      await db.insert(adminProviders).values({
+        id: randomUUID(),
+        slug: provider.slug,
+        displayName: provider.displayName,
+        providerType: provider.providerType,
+        baseUrl: provider.baseUrl ?? null,
+        apiKeyCiphertext: encrypted.ciphertext,
+        apiKeyIv: encrypted.iv,
+        apiKeyLast4: apiKeyLast4(provider.apiKey),
+        defaultModel: provider.defaultModel ?? null,
+        defaultInstructions: provider.defaultInstructions ?? null,
+        enabled: provider.enabled === false ? 0 : 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (error) {
+      logDegraded(serverLogger, {
+        event: 'admin.seed.provider_insert.failed',
+        msg: 'Failed to insert provider from JSON seed',
+        step: 'insert_seed_provider',
+        context: { providerSlug: provider.slug },
+        error,
+      });
+    }
+  }
+}
+
+async function seedDefaultAdminProviderFromEnvFallback(): Promise<void> {
   const apiKey = process.env.API_KEY;
   if (!apiKey || !apiKey.trim()) return;
 
@@ -81,35 +299,28 @@ async function seedDefaultAdminProvider(): Promise<void> {
   try {
     enc = encryptSecret(apiKey);
   } catch (error) {
-    const hasExplicitRestriction =
-      Boolean(
-        RUNTIME_CONFIG_SCHEMA.restrictUserApiKeys.envVar
-        && process.env[RUNTIME_CONFIG_SCHEMA.restrictUserApiKeys.envVar]?.trim(),
-      );
-    if (!hasExplicitRestriction) {
-      try {
-        await db
-          .insert(adminSettings)
-          .values({
-            key: 'restrictUserApiKeys',
-            valueJson: JSON.stringify(false) as never,
-            source: 'env-seed',
-            updatedAt: now,
-          })
-          .onConflictDoNothing({ target: adminSettings.key });
-        logDegraded(serverLogger, {
-          event: 'admin.seed.restrict_user_api_keys.defaulted',
-          msg: 'API_KEY present but AUTH_SECRET missing; defaulting restrictUserApiKeys=false',
-          step: 'set_restrict_user_api_keys_fallback',
-        });
-      } catch (fallbackError) {
-        logDegraded(serverLogger, {
-          event: 'admin.seed.restrict_user_api_keys.fallback_write_failed',
-          msg: 'Failed to write restrictUserApiKeys fallback after encryption failure',
-          step: 'set_restrict_user_api_keys_fallback',
-          error: fallbackError,
-        });
-      }
+    try {
+      await db
+        .insert(adminSettings)
+        .values({
+          key: 'restrictUserApiKeys',
+          valueJson: JSON.stringify(false) as never,
+          source: 'env-seed',
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: adminSettings.key });
+      logDegraded(serverLogger, {
+        event: 'admin.seed.restrict_user_api_keys.defaulted',
+        msg: 'API_KEY present but AUTH_SECRET missing; defaulting restrictUserApiKeys=false',
+        step: 'set_restrict_user_api_keys_fallback',
+      });
+    } catch (fallbackError) {
+      logDegraded(serverLogger, {
+        event: 'admin.seed.restrict_user_api_keys.fallback_write_failed',
+        msg: 'Failed to write restrictUserApiKeys fallback after encryption failure',
+        step: 'set_restrict_user_api_keys_fallback',
+        error: fallbackError,
+      });
     }
     logDegraded(serverLogger, {
       event: 'admin.seed.provider_key_encrypt.failed',
@@ -138,7 +349,7 @@ async function seedDefaultAdminProvider(): Promise<void> {
     serverLogger.info({
       event: 'admin.seed.provider_insert.succeeded',
       providerSlug: 'default-openai',
-    }, 'Created default-openai admin provider from env');
+    }, 'Created default-openai admin provider from env fallback');
   } catch (error) {
     logDegraded(serverLogger, {
       event: 'admin.seed.provider_insert.failed',
@@ -151,12 +362,6 @@ async function seedDefaultAdminProvider(): Promise<void> {
 }
 
 async function cleanupLegacyDefaultTtsProviderSeedRow(): Promise<void> {
-  // If an explicit env default exists, keep env-seeded behavior.
-  const explicit = RUNTIME_CONFIG_SCHEMA.defaultTtsProvider.envVar
-    ? process.env[RUNTIME_CONFIG_SCHEMA.defaultTtsProvider.envVar]
-    : undefined;
-  if (explicit && explicit.trim()) return;
-
   const key = 'defaultTtsProvider';
   const seededValue = JSON.stringify('default-openai');
   try {
@@ -193,3 +398,10 @@ async function cleanupLegacyDefaultTtsModelRows(): Promise<void> {
     });
   }
 }
+
+export const __seedInternals = {
+  runSeed,
+  parseRuntimeSeedDocument,
+  validateSeedProviderEntry,
+  shouldUseEnvProviderFallback,
+};

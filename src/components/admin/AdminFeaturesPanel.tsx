@@ -18,7 +18,7 @@ import {
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 
-type RuntimeConfigSource = 'env-seed' | 'admin' | 'default';
+type RuntimeConfigSource = 'json-seed' | 'env-seed' | 'admin' | 'default';
 
 interface SettingsResponse {
   values: Record<string, unknown>;
@@ -665,6 +665,8 @@ function SourceBadge({
       )}
       {dirty ? (
         <Badge tone="accent">Modified</Badge>
+      ) : source === 'json-seed' ? (
+        <Badge tone="muted">from seed</Badge>
       ) : source === 'env-seed' ? (
         <Badge tone="muted">from env</Badge>
       ) : source === 'admin' ? (

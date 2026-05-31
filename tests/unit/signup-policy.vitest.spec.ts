@@ -7,16 +7,6 @@ describe('enableUserSignups runtime config', () => {
   test('defaults to enabled', () => {
     expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.default).toBe(true);
   });
-
-  test('parses first-boot env seed values', () => {
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('true')).toBe(true);
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('false')).toBe(false);
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('1')).toBe(true);
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('0')).toBe(false);
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('yes')).toBe(true);
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('off')).toBe(false);
-    expect(RUNTIME_CONFIG_SCHEMA.enableUserSignups.parseEnv('maybe')).toBeUndefined();
-  });
 });
 
 describe('signup policy enforcement', () => {

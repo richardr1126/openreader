@@ -11,7 +11,7 @@ OpenReader routes all TTS requests through the Next.js server to an OpenAI-compa
 **Environment variables**: `API_KEY` and `API_BASE` exist as a one-shot first-boot seed that auto-creates a `default-openai` admin shared provider. After the first boot they are no longer read by the running app.
 
 :::tip
-If you're running a private/self-hosted instance and want per-user BYOK behavior, turn off **Settings → Admin → Site features → Restrict user API keys**. Legacy first-boot seed via `RUNTIME_SEED_RESTRICT_USER_API_KEYS=false` is still supported for no-admin bootstrap flows.
+If you're running a private/self-hosted instance and want per-user BYOK behavior, turn off **Settings → Admin → Site features → Restrict user API keys**. For first-boot automation, set `runtimeConfig.restrictUserApiKeys=false` in `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`.
 :::
 
 ## Providers

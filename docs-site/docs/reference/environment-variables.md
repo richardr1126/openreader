@@ -3,27 +3,29 @@ title: Environment Variables
 toc_max_heading_level: 3
 ---
 
-This is the single reference page for OpenReader environment variables.
+This page is the source-of-truth reference for OpenReader environment variables.
 
 :::note Recommended configuration path
-For auth-enabled deployments, use **Settings → Admin** as the primary source of truth for shared TTS providers and site features. Legacy env vars (`API_KEY`, `API_BASE`, and `RUNTIME_SEED_*`) are optional first-boot seeds only.
+For auth-enabled deployments, use **Settings → Admin** as the primary source of truth for shared providers and runtime site features.
+`API_BASE` / `API_KEY` are optional one-time provider bootstrap seeds.
+Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`.
 :::
 
 ## Quick Reference Table
 
 | Variable | Area | Default | When to set |
 | --- | --- | --- | --- |
-| `LOG_FORMAT` | Runtime logging | `pretty` | Set `json` for structured logs; shared by app server + compute worker |
+| `LOG_FORMAT` | Runtime logging | `pretty` | Set `json` for structured logs |
 | `LOG_LEVEL` | Runtime logging | `info` | Set app server log level |
-| `API_BASE` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
-| `API_KEY` | Legacy bootstrap seed | none | Optional first-boot seed into `default-openai`; then manage in Settings → Admin → Shared providers |
+| `API_BASE` | TTS provider bootstrap seed | unset | Optional first-boot base URL for `default-openai` |
+| `API_KEY` | TTS provider bootstrap seed | unset | Optional first-boot API key for `default-openai` |
 | `BASE_URL` | Auth | unset | Required (with `AUTH_SECRET`) to enable auth |
 | `AUTH_SECRET` | Auth | unset | Required (with `BASE_URL`) to enable auth |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
-| `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to enable anonymous auth sessions |
+| `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
-| `ADMIN_EMAILS` | Auth/Admin | empty | Comma-separated emails auto-promoted to admin (requires auth enabled) |
+| `ADMIN_EMAILS` | Admin | empty | Comma-separated emails auto-promoted to admin |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
 | `WEED_MINI_DIR` | Storage | `docstore/seaweedfs` | Override embedded SeaweedFS data directory |
@@ -37,38 +39,27 @@ For auth-enabled deployments, use **Settings → Admin** as the primary source o
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
 | `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
-| `EMBEDDED_COMPUTE_WORKER_PORT` | Heavy compute backend | `8081` | Override embedded worker bind port |
-| `EMBEDDED_NATS_PORT` | Heavy compute backend | `4222` | Override embedded NATS client port |
-| `EMBEDDED_NATS_MONITOR_PORT` | Heavy compute backend | `8222` | Override embedded NATS monitor port |
-| `EMBEDDED_NATS_STORE_DIR` | Heavy compute backend | `docstore/nats/jetstream` | Override embedded JetStream storage directory |
-| `NATS_URL` | Heavy compute backend | `nats://127.0.0.1:4222` in embedded startup | Optional override for embedded startup or required on standalone worker service |
-| `COMPUTE_LOG_LEVEL` | Heavy compute backend | `info` | Compute worker log level |
-| `COMPUTE_JOB_CONCURRENCY` | Heavy compute backend | `1` | Worker-side shared compute concurrency cap |
-| `COMPUTE_WHISPER_TIMEOUT_MS` | Heavy compute backend | `30000` | Shared whisper alignment timeout budget (worker + worker client wait budget) |
-| `COMPUTE_PDF_TIMEOUT_MS` | Heavy compute backend | `300000` | Shared PDF idle-timeout budget (worker + worker client wait budget) |
-| `COMPUTE_OP_STALE_MS` | Heavy compute backend | `max(30m, 4x max compute timeout)` | Shared stale window for worker op replacement and app-side stale PDF parse-state healing |
-| `WHISPER_MODEL_BASE_URL` | Whisper ONNX model | onnx-community defaults | Optional base URL override for ONNX whisper-base_timestamped q4 downloads |
-| `PDF_LAYOUT_MODEL_BASE_URL` | PDF layout model | PP-DocLayoutV3 ONNX base URL | Optional base URL override for `ensureModel()` |
-| `COMPUTE_WORKER_URL` | Heavy compute backend | unset | Set only for standalone external compute worker; leave unset for embedded worker startup |
-| `COMPUTE_WORKER_TOKEN` | Heavy compute backend | unset (auto-generated in embedded startup) | Required for standalone external compute worker auth; must match worker |
+| `EMBEDDED_COMPUTE_WORKER_PORT` | Compute | `8081` | Override embedded worker bind port |
+| `EMBEDDED_NATS_PORT` | Compute | `4222` | Override embedded NATS client port |
+| `EMBEDDED_NATS_MONITOR_PORT` | Compute | `8222` | Override embedded NATS monitor port |
+| `EMBEDDED_NATS_STORE_DIR` | Compute | `docstore/nats/jetstream` | Override embedded JetStream storage directory |
+| `NATS_URL` | Compute | `nats://127.0.0.1:4222` in embedded startup | Override embedded startup or set standalone worker URL |
+| `COMPUTE_LOG_LEVEL` | Compute | `info` | Compute worker log level |
+| `COMPUTE_JOB_CONCURRENCY` | Compute | `1` | Shared compute concurrency cap |
+| `COMPUTE_WHISPER_TIMEOUT_MS` | Compute | `30000` | Whisper alignment timeout budget |
+| `COMPUTE_PDF_TIMEOUT_MS` | Compute | `300000` | PDF parse timeout budget |
+| `COMPUTE_OP_STALE_MS` | Compute | `max(30m, 4x max compute timeout)` | Shared stale window for compute op replacement |
+| `WHISPER_MODEL_BASE_URL` | Compute model source | onnx-community default | Override Whisper ONNX model base URL |
+| `PDF_LAYOUT_MODEL_BASE_URL` | Compute model source | PP-DocLayoutV3 default | Override PDF layout ONNX model base URL |
+| `COMPUTE_WORKER_URL` | External compute mode | unset | Set only for standalone external worker mode |
+| `COMPUTE_WORKER_TOKEN` | External compute mode | unset | Required for standalone external worker auth |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
-| `RUNTIME_SEED_*` runtime seeds | Legacy bootstrap seed | varies | Optional first-boot seeds for site features; then manage in Settings → Admin → Site features |
-| `RUNTIME_SEED_ENABLE_DOCX_CONVERSION` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable/disable DOCX conversion UI |
-| `RUNTIME_SEED_ENABLE_DESTRUCTIVE_DELETE_ACTIONS` | Legacy bootstrap seed | `true` | Optional first-boot seed to show/hide destructive delete actions |
-| `RUNTIME_SEED_ENABLE_TTS_PROVIDERS_TAB` | Legacy bootstrap seed | `true` | Optional first-boot seed to show/hide user TTS providers tab |
-| `RUNTIME_SEED_CHANGELOG_FEED_URL` | Legacy bootstrap seed | `https://docs.openreader.richardr.dev/changelog/manifest.json` | Optional first-boot seed for changelog feed URL; then manage in Settings → Admin → Site features |
-| `RUNTIME_SEED_ENABLE_USER_SIGNUPS` | Legacy bootstrap seed | `true` | Optional first-boot seed for whether new accounts can be created; then manage in Settings → Admin → Site features |
-| `RUNTIME_SEED_RESTRICT_USER_API_KEYS` | Legacy bootstrap seed | runtime-dependent | Optional first-boot seed to restrict per-user BYOK |
-| `RUNTIME_SEED_DEFAULT_TTS_PROVIDER` | Legacy bootstrap seed | `custom-openai` | Optional first-boot seed for default TTS provider slug |
-| `RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT` | Legacy bootstrap seed | `true` | Optional first-boot seed to enable audiobook export UI |
-| `RUNTIME_SEED_DISABLE_TTS_LIMIT` | Legacy bootstrap seed | `true` | Optional first-boot seed that keeps TTS daily rate limiting disabled |
-| `RUNTIME_SEED_DISABLE_COMPUTE_LIMIT` | Legacy bootstrap seed | `true` | Optional first-boot seed that keeps PDF parsing rate limiting disabled (other compute-limit values + max upload size are admin-only) |
-| `DISABLE_AUTH_RATE_LIMIT` | Rate limiting | `false` | Set `true` to disable auth-layer rate limiting |
-| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor the `x-openreader-test-namespace` header on a production build; leave unset on real deployments |
-| `RUN_DRIZZLE_MIGRATIONS` | Database migrations | `true` | Set `false` to skip startup Drizzle schema migrations |
+| `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
+| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor `x-openreader-test-namespace` header in production builds |
+| `RUN_DRIZZLE_MIGRATIONS` | DB migrations | `true` | Set `false` to skip startup Drizzle migrations |
 | `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
-
-
+| `RUNTIME_SEED_JSON_PATH` | Runtime JSON seed | unset | Absolute path to first-boot JSON seed document |
+| `RUNTIME_SEED_JSON` | Runtime JSON seed | unset | Inline first-boot JSON seed document |
 
 ## Runtime Logging
 
@@ -79,7 +70,6 @@ Controls log output format for server-side Pino loggers.
 - Default: `pretty`
 - Allowed values: `pretty`, `json`
 - Applies to app server and compute worker
-- Recommended in production (Vercel + external worker): `json`
 
 ### LOG_LEVEL
 
@@ -91,47 +81,40 @@ App server log level.
 
 ### API_BASE
 
-Bootstrap base URL for the legacy OpenAI-compatible TTS endpoint.
+Optional first-boot bootstrap base URL for the auto-created `default-openai` shared provider.
 
 - Example: `http://host.docker.internal:8880/v1`
-- **Seeded on first boot** into the auto-created `default-openai` shared provider, then no longer read by the running app. Manage in **Settings → Admin → Shared providers** afterwards.
-- Related docs: [Admin Panel](../configure/admin-panel), [TTS Providers](../configure/tts-providers)
+- Read only for provider bootstrap when shared providers are empty and `API_KEY` is set.
+- After bootstrap, provider configuration is DB-backed and managed in **Settings → Admin → Shared providers**.
 
 ### API_KEY
 
-Bootstrap API key for the legacy OpenAI-compatible TTS endpoint.
+Optional first-boot bootstrap API key for the auto-created `default-openai` shared provider.
 
-- Example: your provider token, or omit if the provider doesn't require auth
-- **Seeded on first boot** into the auto-created `default-openai` shared provider (encrypted at rest), then no longer read by the running app. Manage in **Settings → Admin → Shared providers** afterwards.
-- Related docs: [Admin Panel](../configure/admin-panel), [TTS Providers](../configure/tts-providers)
+- Read only for provider bootstrap when shared providers are empty.
+- Stored encrypted at rest after bootstrap.
+- After bootstrap, provider configuration is DB-backed and managed in **Settings → Admin → Shared providers**.
+
+### TTS Daily Rate Limiting (Runtime Settings)
+
+Managed as runtime config in **Settings → Admin → Site features**.
+
+- `disableTtsRateLimit` default: `true` (daily TTS limits disabled)
+- `ttsDailyLimitAnonymous` default: `50000`
+- `ttsDailyLimitAuthenticated` default: `500000`
+- `ttsIpDailyLimitAnonymous` default: `100000`
+- `ttsIpDailyLimitAuthenticated` default: `1000000`
 
 ### TTS Upstream Settings (Runtime Settings)
 
-TTS upstream request behavior and cache settings are now managed from **Settings → Admin → Site features → TTS upstream**.
+Managed as runtime config in **Settings → Admin → Site features → TTS upstream**.
 
 - `ttsUpstreamMaxRetries` default: `2`
 - `ttsUpstreamTimeoutMs` default: `285000`
 - `ttsCacheMaxSizeBytes` default: `268435456` (256 MB)
 - `ttsCacheTtlMs` default: `1800000` (30 minutes)
 
-There are no environment variables for these settings in v4.
-
-### TTS Daily Rate Limiting (Runtime Settings)
-
-TTS character rate limiting is now managed from **Settings → Admin → Site features**.
-
-- `disableTtsRateLimit` default: `true` (rate limiting disabled)
-- Daily limit defaults:
-  - Anonymous per-user: `50000`
-  - Authenticated per-user: `500000`
-  - Anonymous IP backstop: `100000`
-  - Authenticated IP backstop: `1000000`
-
-Optional first-boot seeds:
-
-- `RUNTIME_SEED_DISABLE_TTS_LIMIT`
-
-After first boot, these values are DB-backed admin runtime settings.
+There are no dedicated env vars for these runtime settings.
 
 ## Auth and Identity
 
@@ -141,7 +124,6 @@ External base URL for this OpenReader instance.
 
 - Required with `AUTH_SECRET` to enable auth
 - Example: `http://localhost:3003` or `https://reader.example.com`
-- Related docs: [Auth](../configure/auth)
 
 ### AUTH_SECRET
 
@@ -149,48 +131,38 @@ Secret key used by auth/session handling.
 
 - Required with `BASE_URL` to enable auth
 - Generate with `openssl rand -hex 32`
-- Also used to HMAC-hash server-side TTS segment text fingerprints
-- Related docs: [Auth](../configure/auth)
 
 ### AUTH_TRUSTED_ORIGINS
 
 Additional allowed origins for auth requests.
 
 - Comma-separated list
-- `BASE_URL` origin is always trusted automatically
-- Related docs: [Auth](../configure/auth)
+- `BASE_URL` origin is trusted automatically
 
 ### USE_ANONYMOUS_AUTH_SESSIONS
 
 Controls whether auth-enabled deployments can create/use anonymous sessions.
 
-- Default: `false` (anonymous sessions disabled)
-- Set `true` to allow anonymous sessions and guest-style flows
-- When `false`, users must sign in or sign up with an account
-- Related docs: [Auth](../configure/auth)
+- Default: `false`
 
 ### GITHUB_CLIENT_ID
 
 GitHub OAuth client ID.
 
-- Enable only with `GITHUB_CLIENT_SECRET`
+- Set with `GITHUB_CLIENT_SECRET`
 
 ### GITHUB_CLIENT_SECRET
 
 GitHub OAuth client secret.
 
-- Enable only with `GITHUB_CLIENT_ID`
+- Set with `GITHUB_CLIENT_ID`
 
 ### ADMIN_EMAILS
 
-Comma-separated list of email addresses that are auto-promoted to admin.
+Comma-separated list of email addresses auto-promoted to admin.
 
-- Default: empty (no admins)
-- Requires auth to be enabled (`AUTH_SECRET` + `BASE_URL`).
-- Matched emails get `user.is_admin = true` on every session resolution; removed emails are demoted on the next session resolve.
-- Admins see a new **Admin** tab in Settings exposing shared TTS providers and site-wide feature toggles. Keys for shared providers are stored encrypted in the DB and never returned to the client.
-- Example: `ADMIN_EMAILS=alice@example.com,bob@example.com`
-- Related docs: [Admin Panel](../configure/admin-panel), [Auth](../configure/auth)
+- Requires auth to be enabled
+- Admins can manage shared providers and runtime site features in-app
 
 ## Database and Object Blob Storage
 
@@ -200,9 +172,6 @@ Switches metadata/auth storage from SQLite to Postgres.
 
 - Unset: SQLite at `docstore/sqlite3.db`
 - Set: Postgres mode
-- Related docs: [Database](../configure/database)
-
-### Embedded SeaweedFS weed mini config
 
 ### USE_EMBEDDED_WEED_MINI
 
@@ -210,110 +179,83 @@ Controls embedded SeaweedFS startup.
 
 - Default behavior: treated as enabled when unset
 - Set `false` to rely on external S3-compatible storage
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
 
 ### WEED_MINI_DIR
 
 Data directory for embedded SeaweedFS (`weed mini`).
 
 - Default: `docstore/seaweedfs`
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
 
 ### WEED_MINI_WAIT_SEC
 
-Maximum seconds to wait for embedded SeaweedFS startup.
+Max wait time for embedded SeaweedFS startup.
 
 - Default: `20`
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
-
-### S3 storage config
 
 ### S3_ACCESS_KEY_ID
 
-Access key for S3-compatible storage.
+S3 access key.
 
-- Auto-generated in embedded mode if unset
-- Set explicitly for stable credentials or external providers
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+- Optional in embedded mode (auto-generated when unset)
+- Required for external S3 mode
 
 ### S3_SECRET_ACCESS_KEY
 
-Secret key for S3-compatible storage.
+S3 secret key.
 
-- Auto-generated in embedded mode if unset
-- Set explicitly for stable credentials or external providers
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+- Optional in embedded mode (auto-generated when unset)
+- Required for external S3 mode
 
 ### S3_BUCKET
 
-Bucket name used for document blobs.
+S3 bucket name.
 
-- Default in embedded mode: `openreader-documents`
-- Required for external S3-compatible storage
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+- Embedded default: `openreader-documents`
+- Required for external S3 mode
 
 ### S3_REGION
 
-Region used by the S3 client.
+S3 region.
 
-- Default in embedded mode: `us-east-1`
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+- Embedded default: `us-east-1`
+- Required for external S3 mode
 
 ### S3_ENDPOINT
 
-Endpoint URL for S3-compatible storage.
+Custom endpoint for S3-compatible providers.
 
-- In embedded mode, defaults to `http://<BASE_URL host>:8333` (or detected host)
-- For AWS S3, usually leave unset
-- For MinIO/SeaweedFS/R2/B2-style APIs, typically set explicitly
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+- Optional for AWS
+- Typical for MinIO/SeaweedFS/R2
 
 ### S3_FORCE_PATH_STYLE
 
-Path-style S3 addressing toggle.
+Force path-style S3 URLs.
 
-- Default in embedded mode: `true`
-- Set according to provider requirements
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
+- Embedded default: `true`
 
 ### S3_PREFIX
 
-Prefix prepended to stored object keys.
+Object key prefix.
 
 - Default: `openreader`
-- Related docs: [Object / Blob Storage](../configure/object-blob-storage)
-
-### Maximum Upload Size (Runtime Settings)
-
-The maximum size accepted for a single document upload is an admin runtime setting (no env var).
-
-- Runtime key: `maxUploadMb` (default: `200`)
-- Configure in **Settings → Admin → Site features → Max upload size (MB)**.
-- Enforced up front (`413`) and signed into the presigned S3 PUT so a client cannot stream more than it declared.
 
 ## Library Import
 
 ### IMPORT_LIBRARY_DIR
 
-Single directory root for server library import.
-
-- Used when `IMPORT_LIBRARY_DIRS` is unset
-- Default fallback root: `docstore/library`
-- Related docs: [Server Library Import](../configure/server-library-import)
+Single library source directory.
 
 ### IMPORT_LIBRARY_DIRS
 
-Multiple library roots for server library import.
+Multiple library roots.
 
-- Separator: comma, colon, or semicolon
-- Takes precedence over `IMPORT_LIBRARY_DIR`
-- Related docs: [Server Library Import](../configure/server-library-import)
+- Supports comma, colon, or semicolon-separated values
 
-## Audio Tooling and Alignment
+## Compute Worker and Model Configuration
 
 ### EMBEDDED_COMPUTE_WORKER_PORT
 
-Embedded compute-worker HTTP port.
+Embedded compute worker port.
 
 - Default: `8081`
 
@@ -325,252 +267,198 @@ Embedded NATS client port.
 
 ### EMBEDDED_NATS_MONITOR_PORT
 
-Embedded NATS monitor (`/healthz`) port.
+Embedded NATS monitor port.
 
 - Default: `8222`
 
 ### EMBEDDED_NATS_STORE_DIR
 
-Embedded JetStream storage directory.
+Embedded NATS JetStream data directory.
 
 - Default: `docstore/nats/jetstream`
 
 ### NATS_URL
 
-NATS connection URL used by compute worker runtime.
+NATS URL used by compute services.
 
 - Embedded startup default: `nats://127.0.0.1:4222`
-- Standalone worker service: set in worker service env (`compute/worker/.env*` or platform env)
-- For embedded startup, this is optional; startup supplies the default value.
-- Worker-side only in external mode: set on worker service env, not app/root `.env`.
 
 ### COMPUTE_LOG_LEVEL
 
 Compute worker log level.
 
 - Default: `info`
-- In standalone mode, set this on the worker service env.
 
 ### COMPUTE_JOB_CONCURRENCY
 
-Worker-side shared compute concurrency cap.
+Max concurrent compute jobs per worker.
 
 - Default: `1`
-- Set on the compute-worker service environment
 
 ### COMPUTE_WHISPER_TIMEOUT_MS
 
-Shared whisper alignment timeout budget in milliseconds.
+Whisper alignment timeout budget.
 
 - Default: `30000`
-- Used by:
-  - Worker compute whisper runtime
-  - App server worker-client wait budget (SSE wait timeout)
 
 ### COMPUTE_PDF_TIMEOUT_MS
 
-Shared PDF idle-timeout budget in milliseconds.
+PDF parse timeout budget.
 
-- Default: `300000` (5 minutes)
-- Used by:
-  - Worker compute PDF runtime (idle timeout)
-  - App server worker-client wait budget (SSE wait timeout)
+- Default: `300000`
 
 ### COMPUTE_OP_STALE_MS
 
-Shared stale window in milliseconds.
+Stale operation window before worker/app cleanup logic can replace an op.
 
-- Default: `max(30m, 4x max(COMPUTE_WHISPER_TIMEOUT_MS, COMPUTE_PDF_TIMEOUT_MS))`
-- Used by:
-  - Worker op reuse/replacement guard (`/ops` opKey stale detection)
-  - App-server PDF parse-state stale healing in `/api/documents/[id]/parsed*`
-- If a parse row is stuck in `pending`/`running` past this window, app routes mark it failed so retries/reparse can proceed.
-- Keep this value aligned on both app-server and worker service envs.
+- Default: `max(30m, 4x max compute timeout)`
 
 ### WHISPER_MODEL_BASE_URL
 
-Optional base URL override for the built-in ONNX Whisper alignment model downloader.
-
-- Default: `https://huggingface.co/onnx-community/whisper-base_timestamped/resolve/main`
-- Default model variant: q4 (`encoder_model_q4.onnx`, `decoder_model_merged_q4.onnx`, `decoder_with_past_model_q4.onnx`)
-- The base URL must host all expected manifest files under the same relative paths.
-- Configure this on the worker service env (not only the app server env)
+Base URL for Whisper ONNX model downloads.
 
 ### PDF_LAYOUT_MODEL_BASE_URL
 
-Optional base URL override for PP-DocLayoutV3 artifacts downloaded by `ensureModel()`.
-
-- Default: `https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main`
-- Required files at that base:
-  - `PP-DocLayoutV3.onnx`
-  - `PP-DocLayoutV3.onnx.data`
-  - `config.json`
-  - `preprocessor_config.json`
-- Configure this on the worker service env (not only the app server env)
+Base URL for PDF layout model downloads.
 
 ### COMPUTE_WORKER_URL
 
-Base URL for standalone external compute worker mode.
+External compute worker URL.
 
-- Leave unset for embedded/local startup (`pnpm dev` / `pnpm start`) so entrypoint can start embedded worker+NATS.
-- Embedded startup requires `nats-server` available on host PATH.
-- Required only when using a standalone external compute worker service.
-- App-side only: set on app server/root `.env` (routing target), not worker-only env files.
-- Example: `http://localhost:8081`
+- Leave unset for embedded worker mode
 
 ### COMPUTE_WORKER_TOKEN
 
-Bearer token for compute-worker auth.
+Shared token for app <-> external worker requests.
 
-- Required for standalone external worker service mode.
-- Must match worker service `COMPUTE_WORKER_TOKEN`.
-- In embedded startup, entrypoint auto-generates one if unset.
-- In external worker mode, set this on both app server/root `.env` and worker service env (`compute/worker/.env*` or platform env).
+## Compute PDF Parsing Rate Limiting (Runtime Settings)
+
+Managed as runtime config in **Settings → Admin → Site features**.
+
+- `disableComputeRateLimit` default: `true`
+- `computeParseBurstMax` default: `8`
+- `computeParseBurstWindowSec` default: `60`
+- `computeParseSustainedMax` default: `24`
+- `computeParseSustainedWindowSec` default: `600`
+- `maxUploadMb` default: `200`
+
+There are no dedicated env vars for these runtime settings.
+
+## Audio Runtime
 
 ### FFMPEG_BIN
 
-Absolute path or executable name for the ffmpeg binary used by audiobook/processing routes.
+Override ffmpeg binary path used for audiobook processing.
 
-- Resolution order: `FFMPEG_BIN` -> `ffmpeg-static`
-- Example: `/var/task/node_modules/ffmpeg-static/ffmpeg`
-
-### Compute (PDF Parsing) Rate Limiting (Runtime Settings)
-
-Per-user throttling of expensive PDF layout parsing is managed from **Settings → Admin → Site features**, not env vars. Enforcement applies only when auth is enabled.
-
-- `disableComputeRateLimit` default: `true` (rate limiting disabled, like the TTS limit; enable it in the admin panel)
-- When enabled, the following admin-tunable sub-limits apply:
-  - `computeParseBurstMax` (default `8`) over `computeParseBurstWindowSec` (default `60`)
-  - `computeParseSustainedMax` (default `24`) over `computeParseSustainedWindowSec` (default `600`)
-- The sustained window also acts as a concurrency cap: because the worker bounds each job's duration, the count of parses started in that window is an upper bound on those still running.
-- Exceeding a limit returns `429` (`application/problem+json`) with `Retry-After`.
-
-Optional first-boot seed: `RUNTIME_SEED_DISABLE_COMPUTE_LIMIT`. All other values are DB-backed admin runtime settings.
-
-## Legacy First-Boot Runtime Seeds (optional)
-
-These variables exist only as **first-boot seeds** for the admin-managed runtime config. Prefer changing site features from **Settings → Admin → Site features**. Keep these only when you need bootstrap defaults before the first admin login. See [Admin Panel](../configure/admin-panel) for migration behavior.
-
-The values are SSR-injected via `window.__RUNTIME_CONFIG__`, so admin edits take effect for all users on the next page load — no rebuild required (unlike the old build-time public env pattern).
-
-### RUNTIME_SEED_ENABLE_DOCX_CONVERSION
-
-Controls whether the experimental DOCX-to-PDF conversion and upload feature is enabled.
-
-- Default: `true` (enabled)
-- Runtime key: `enableDocxConversion`
-
-### RUNTIME_SEED_ENABLE_DESTRUCTIVE_DELETE_ACTIONS
-
-Controls whether the "Delete all user docs" and other bulk-delete buttons are shown in Settings.
-
-- Default: `true` (enabled)
-- Runtime key: `enableDestructiveDeleteActions`
-
-### RUNTIME_SEED_ENABLE_TTS_PROVIDERS_TAB
-
-Controls whether the **TTS Provider** section appears in the user-facing Settings modal.
-
-- Default: `true` (enabled)
-- Set `false` to hide provider/model/API controls in the per-user Settings modal (the admin panel is unaffected).
-- Runtime key: `enableTtsProvidersTab`
-
-### RUNTIME_SEED_ENABLE_USER_SIGNUPS
-
-Controls whether new user accounts can be created.
-
-- Default: `true` (enabled)
-- When `false`, new account creation is blocked for email sign-up, first-time OAuth signup, and anonymous-to-account upgrades.
-- Existing users can still sign in.
-- Runtime key: `enableUserSignups`
-
-### RUNTIME_SEED_RESTRICT_USER_API_KEYS
-
-Controls whether users can supply personal API keys/base URLs for built-in providers.
-
-- Default: runtime-dependent
-- When `true`, server routes only use admin-managed shared providers.
-- When `false`, users can use per-user BYOK credentials for built-in providers.
-- Runtime key: `restrictUserApiKeys`
-
-### RUNTIME_SEED_DEFAULT_TTS_PROVIDER
-
-Sets the default TTS provider for new users.
-
-- Default: `custom-openai`
-- Example values: `replicate`, `deepinfra`, `openai`, `custom-openai`, or an admin-defined shared provider slug (e.g. `kokoro-prod`)
-- Runtime key: `defaultTtsProvider`
-
-`showAllProviderModels` is a runtime-only admin setting (no env seed). Configure it in **Settings → Admin → Site features**.
-
-### RUNTIME_SEED_CHANGELOG_FEED_URL
-
-Sets the changelog manifest URL used by the Settings modal changelog viewer.
-
-- Default: `https://docs.openreader.richardr.dev/changelog/manifest.json`
-- Use this in self-hosted deployments when you publish changelog feeds to a custom docs domain/path.
-- Runtime key: `changelogFeedUrl`
-
-
-### RUNTIME_SEED_ENABLE_AUDIOBOOK_EXPORT
-
-Controls whether audiobook export UI/actions are shown in the client.
-
-- Default: `true` (enabled)
-- Affects export entry points in PDF/EPUB pages and document settings UI
-- Runtime key: `enableAudiobookExport`
-
-### RUNTIME_SEED_DISABLE_TTS_LIMIT
-
-Seeds the TTS daily character rate-limit on/off state on first boot.
-
-- Default: `true` (TTS rate limiting disabled)
-- Runtime key: `disableTtsRateLimit`
-- Per-user/IP daily limit values are admin-only runtime settings (see [TTS Daily Rate Limiting](#tts-daily-rate-limiting-runtime-settings)).
-
-### RUNTIME_SEED_DISABLE_COMPUTE_LIMIT
-
-Seeds the PDF parsing rate-limit on/off state on first boot.
-
-- Default: `true` (PDF parsing rate limiting disabled, matching `RUNTIME_SEED_DISABLE_TTS_LIMIT`)
-- Runtime key: `disableComputeRateLimit`
-- The burst/sustained limits, their windows, and the max upload size are admin-only runtime settings (see [Compute (PDF Parsing) Rate Limiting](#compute-pdf-parsing-rate-limiting-runtime-settings)).
-
-## Test and Dev Overrides
+## Testing and CI
 
 ### DISABLE_AUTH_RATE_LIMIT
 
-Controls Better Auth rate limiting.
+Disables Better Auth request rate limiting.
 
-- Default behavior: auth-layer rate limiting enabled
-- Set to `true` to disable auth-layer rate limiting
-- This does not affect TTS character rate limiting
-- Related docs: [Auth](../configure/auth)
+- Default: `false`
 
 ### ENABLE_TEST_NAMESPACE
 
-Honors the `x-openreader-test-namespace` request header, which scopes documents/storage into an isolated namespace for end-to-end tests.
-
-- Default: unset (header ignored on production builds)
-- Non-production builds (`NODE_ENV !== 'production'`) honor the header without this flag.
-- Production builds (`pnpm build && pnpm start`) honor it only when `ENABLE_TEST_NAMESPACE=true`. The Playwright web server sets this automatically.
-- **Leave unset on real deployments.** It is test/CI scaffolding only.
+Enables the `x-openreader-test-namespace` header path in production builds.
 
 ## Migration Controls
 
 ### RUN_DRIZZLE_MIGRATIONS
 
-Controls startup migration execution in shared entrypoint.
+Controls startup Drizzle schema migrations.
 
 - Default: `true`
-- Set `false` to skip automatic startup Drizzle schema migrations
-- Related docs: [Migrations](../configure/migrations), [Database](../configure/database)
+- Set `false` to skip startup migration run
 
 ### RUN_FS_MIGRATIONS
 
-Controls startup filesystem-to-object-store migration execution in shared entrypoint.
+Controls startup filesystem-to-S3/DB migration pass.
 
 - Default: `true`
-- Runs `scripts/migrate-fs-v2.mjs` at startup after DB migrations
-- Set `false` to skip automatic storage migration pass
-- Related docs: [Migrations](../configure/migrations), [Database](../configure/database), [Object / Blob Storage](../configure/object-blob-storage)
+- Set `false` to skip startup storage migration run
+
+## Runtime JSON Seed (v4)
+
+### RUNTIME_SEED_JSON_PATH
+
+Path-based first-boot seed document.
+
+- If both `RUNTIME_SEED_JSON_PATH` and `RUNTIME_SEED_JSON` are set, path wins.
+- Value must point to a JSON file readable by the app process.
+
+### RUNTIME_SEED_JSON
+
+Inline first-boot seed document.
+
+- Used only when `RUNTIME_SEED_JSON_PATH` is unset.
+- Must be a JSON object with `version: 1`.
+
+Supported top-level keys:
+
+- `version` (required, must be `1`)
+- `runtimeConfig` (optional object, strict-validated against runtime schema)
+- `providers` (optional array of shared provider seed entries)
+
+Example:
+
+```json
+{
+  "version": 1,
+  "runtimeConfig": {
+    "enableUserSignups": true,
+    "restrictUserApiKeys": true,
+    "defaultTtsProvider": "custom-openai",
+    "enableTtsProvidersTab": true,
+    "enableAudiobookExport": true,
+    "enableDocxConversion": true,
+    "enableDestructiveDeleteActions": true,
+    "showAllProviderModels": true,
+    "disableTtsRateLimit": true,
+    "ttsDailyLimitAnonymous": 50000,
+    "ttsDailyLimitAuthenticated": 500000,
+    "ttsIpDailyLimitAnonymous": 100000,
+    "ttsIpDailyLimitAuthenticated": 1000000,
+    "ttsCacheMaxSizeBytes": 268435456,
+    "ttsCacheTtlMs": 1800000,
+    "ttsUpstreamMaxRetries": 2,
+    "ttsUpstreamTimeoutMs": 285000,
+    "disableComputeRateLimit": true,
+    "computeParseBurstMax": 8,
+    "computeParseBurstWindowSec": 60,
+    "computeParseSustainedMax": 24,
+    "computeParseSustainedWindowSec": 600,
+    "maxUploadMb": 200,
+    "changelogFeedUrl": "https://docs.openreader.richardr.dev/changelog/manifest.json"
+  },
+  "providers": [
+    {
+      "slug": "default-openai",
+      "displayName": "Default (seeded)",
+      "providerType": "custom-openai",
+      "baseUrl": "http://localhost:8880/v1",
+      "apiKey": "api_key_optional",
+      "defaultModel": "kokoro",
+      "enabled": true
+    }
+  ]
+}
+```
+
+Provider fallback behavior:
+
+- If the JSON seed includes `providers` (including an empty array), `API_BASE` / `API_KEY` fallback is skipped.
+- If the JSON seed does not include a `providers` key, the legacy `API_BASE` / `API_KEY` bootstrap fallback can still create `default-openai` when provider rows are empty.
+
+Precedence summary:
+
+- Runtime reads: admin DB runtime rows override built-in defaults.
+- Seed input (`RUNTIME_SEED_JSON*`) only populates missing runtime rows on first boot; it does not overwrite existing/admin-edited rows.
+- Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY` fallback > no provider bootstrap.
+
+## Related
+
+- [Admin Panel](../configure/admin-panel)
+- [TTS Providers](../configure/tts-providers)
+- [Local Development](../deploy/local-development)
+- [Vercel Deployment](../deploy/vercel-deployment)
