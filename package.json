@@ -15,7 +15,6 @@
     "test:e2e": "playwright test",
     "test:unit": "vitest run",
     "test:compute": "vitest run --project compute-core --project compute-worker",
-    "test:ci": "CI=true playwright test",
     "migrate": "node drizzle/scripts/migrate.mjs",
     "migrate-fs": "node scripts/migrate-fs-v2.mjs",
     "migrate-fs:dry-run": "node scripts/migrate-fs-v2.mjs --dry-run true",
