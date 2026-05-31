@@ -197,7 +197,7 @@ export default async function PrivacyPage() {
                   Self-Hosting Guide
                 </a>
                 <Link href="/?redirect=false" className={buttonClass({ variant: 'ghost', size: 'md' })}>
-                  Back to home
+                  Back to landing
                 </Link>
               </div>
             </section>
