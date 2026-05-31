@@ -173,8 +173,7 @@
 
 .public-hero-shell {
   --panel-glow:
-    radial-gradient(260px 220px at 98% 96%, color-mix(in srgb, var(--pub-accent) 24%, transparent), transparent 72%),
-    radial-gradient(220px 180px at 4% 6%, color-mix(in srgb, var(--pub-accent-soft) 14%, transparent), transparent 75%);
+    radial-gradient(260px 220px at 98% 96%, color-mix(in srgb, var(--pub-accent) 24%, transparent), transparent 72%);
 }
 
 .public-eyebrow {

@@ -92,11 +92,11 @@ export default async function LandingPage() {
               </div>
               <div className="public-meta-item">
                 <dt className="public-meta-label">Providers</dt>
-                <dd className="public-meta-value">OpenAI-compatible + local</dd>
+                <dd className="public-meta-value">Replicate TTS and OpenAI-compatible</dd>
               </div>
               <div className="public-meta-item">
                 <dt className="public-meta-label">Export</dt>
-                <dd className="public-meta-value">Resumable MP3 + M4B workflows</dd>
+                <dd className="public-meta-value">Audiobook workflows</dd>
               </div>
             </dl>
           </article>
