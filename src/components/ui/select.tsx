@@ -3,7 +3,6 @@
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 import type { ComponentProps } from 'react';
 import { cn } from './cn';
-export { segmentedButtonClass, segmentedGroupClass } from './segmented-control';
 
 const listboxButtonClass =
   'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
