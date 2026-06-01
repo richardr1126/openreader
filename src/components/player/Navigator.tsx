@@ -56,7 +56,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       <Button
         onClick={() => skipToLocation(currentPage - 1, true)}
         disabled={currentPage <= 1}
-        className="relative p-2 rounded-full text-foreground hover:bg-offbase data-[hover]:bg-offbase data-[active]:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
+        className="relative p-2 rounded-full text-foreground hover:bg-accent-wash data-[hover]:bg-accent-wash data-[active]:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
         aria-label="Previous page"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -67,14 +67,14 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       {/* Page number popup */}
       <Popover className="relative mb-1">
         <PopoverButton
-          className="bg-offbase px-2 py-0.5 rounded-full focus:outline-none cursor-pointer hover:bg-offbase transform transition-transform duration-base ease-standard hover:text-accent"
+          className="bg-surface-sunken px-2 py-0.5 rounded-full focus:outline-none cursor-pointer hover:bg-accent-wash transform transition-transform duration-base ease-standard hover:text-accent"
           onClick={handlePopoverOpen}
         >
           <p className="text-xs whitespace-nowrap">
             {currentPage} / {numPages || 1}
           </p>
         </PopoverButton>
-        <PopoverPanel anchor="top" className="absolute z-50 bg-base p-3 rounded-md shadow-lg border border-offbase">
+        <PopoverPanel anchor="top" className="absolute z-50 bg-surface p-3 rounded-md shadow-elev-2 border border-line">
           <div className="flex flex-col space-y-2">
             <div className="text-xs font-medium text-foreground">Go to page</div>
             <input
@@ -82,7 +82,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              className="w-20 px-2 py-1 text-xs text-accent bg-offbase rounded border-none outline-none appearance-none text-center"
+              className="w-20 px-2 py-1 text-xs text-accent bg-surface-sunken rounded border-none outline-none appearance-none text-center"
               value={inputValue}
               onChange={handleInputChange}
               onBlur={handleInputConfirm}
@@ -90,7 +90,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
               placeholder={currentPage.toString()}
               aria-label="Page number"
             />
-            <div className="text-xs text-muted text-center">of {numPages || 1}</div>
+            <div className="text-xs text-soft text-center">of {numPages || 1}</div>
           </div>
         </PopoverPanel>
       </Popover>
@@ -99,7 +99,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       <Button
         onClick={() => skipToLocation(currentPage + 1, true)}
         disabled={currentPage >= (numPages || 1)}
-        className="relative p-2 rounded-full text-foreground hover:bg-offbase data-[hover]:bg-offbase data-[active]:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
+        className="relative p-2 rounded-full text-foreground hover:bg-accent-wash data-[hover]:bg-accent-wash data-[active]:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
         aria-label="Next page"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">

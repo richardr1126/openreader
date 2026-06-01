@@ -10,7 +10,7 @@ export function Header({
   right?: ReactNode;
 }) {
   return (
-    <div className="sticky top-0 z-40 w-full border-b border-offbase bg-base" data-app-header>
+    <div className="sticky top-0 z-40 w-full border-b border-line-soft bg-surface" data-app-header>
       <div className="px-2 sm:px-3 py-1 flex items-center justify-between gap-2 min-h-10">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {left}

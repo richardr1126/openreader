@@ -34,15 +34,15 @@ export function VoicesControlBase({
     : 'bottom-full right-0 mb-1';
 
   const buttonClass = variant === 'field'
-    ? 'relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-base ease-standard hover:text-accent w-full'
-    : 'flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-base ease-standard hover:text-accent';
+    ? 'relative cursor-pointer rounded-lg bg-surface py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line transform transition-transform duration-base ease-standard hover:text-accent w-full'
+    : 'flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-accent-wash rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-base ease-standard hover:text-accent';
 
   const iconClass = variant === 'field'
     ? 'h-3.5 w-3.5 shrink-0'
     : 'h-3 w-3 sm:h-3.5 sm:w-3.5';
 
   const chevronClass = variant === 'field'
-    ? 'h-4 w-4 text-muted'
+    ? 'h-4 w-4 text-soft'
     : 'h-2.5 w-2.5 sm:h-3 sm:w-3';
 
   const providerModelPolicy = resolveTtsProviderModelPolicy({
@@ -85,7 +85,7 @@ export function VoicesControlBase({
   if (availableVoices.length === 0) {
     return (
       <div className="relative">
-        <div className="flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-muted text-xs sm:text-sm rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1">
+        <div className="flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-soft text-xs sm:text-sm rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1">
           <AudioWaveIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
           <span>No voices</span>
         </div>
@@ -140,13 +140,13 @@ export function VoicesControlBase({
               </>
             )}
           </ListboxButton>
-          <ListboxOptions className={`absolute ${dropdownPosition} z-50 ${dropdownWidth} !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}>
+          <ListboxOptions className={`absolute ${dropdownPosition} z-50 ${dropdownWidth} !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-surface shadow-elev-2 ring-1 ring-line-soft focus:outline-none`}>
             {availableVoices.map((voiceId) => (
               <ListboxOption
                 key={voiceId}
                 value={voiceId}
                 className={({ active, selected }) =>
-                  `relative cursor-pointer select-none py-1 px-2 sm:py-2 sm:px-3 flex items-center gap-2 ${active ? 'bg-offbase' : ''} ${selected ? 'font-medium bg-accent text-background' : ''} ${selected && active ? 'text-foreground' : ''}`
+                  `relative cursor-pointer select-none py-1 px-2 sm:py-2 sm:px-3 flex items-center gap-2 ${active ? 'bg-surface-sunken' : ''} ${selected ? 'font-medium bg-accent text-background' : ''} ${selected && active ? 'text-foreground' : ''}`
                 }
               >
                 {({ selected }) => (
@@ -184,13 +184,13 @@ export function VoicesControlBase({
               </>
             )}
           </ListboxButton>
-          <ListboxOptions className={`absolute ${dropdownPosition} z-50 ${dropdownWidth} !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none`}>
+          <ListboxOptions className={`absolute ${dropdownPosition} z-50 ${dropdownWidth} !h-auto !min-h-0 !max-h-[50vh] overflow-y-auto overscroll-contain rounded-lg bg-surface shadow-elev-2 ring-1 ring-line-soft focus:outline-none`}>
             {availableVoices.map((voiceId) => (
               <ListboxOption
                 key={voiceId}
                 value={voiceId}
                 className={({ active, selected }) =>
-                  `relative cursor-pointer select-none py-1 px-2 sm:py-2 sm:px-3 ${active ? 'bg-offbase' : ''} ${selected ? 'font-medium bg-accent text-background' : ''} ${selected && active ? 'text-foreground' : ''}`
+                  `relative cursor-pointer select-none py-1 px-2 sm:py-2 sm:px-3 ${active ? 'bg-surface-sunken' : ''} ${selected ? 'font-medium bg-accent text-background' : ''} ${selected && active ? 'text-foreground' : ''}`
                 }
               >
                 <span className="text-xs sm:text-sm">{voiceId}</span>

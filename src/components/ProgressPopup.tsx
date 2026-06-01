@@ -42,7 +42,7 @@ export function ProgressPopup({
       <div className="fixed inset-x-0 top-2 z-[60] pointer-events-none px-4">
         <div className="w-full max-w-md mx-auto">
           <div 
-            className={`pointer-events-auto shadow-xl ${
+            className={`pointer-events-auto shadow-elev-3 ${
               onClick ? 'cursor-pointer' : ''
             }`}
             onClick={onClick}

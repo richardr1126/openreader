@@ -46,7 +46,7 @@ export function FinderWindow({
   const isNarrow = useIsNarrow();
 
   return (
-    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-surface-sunken overflow-hidden">
       {toolbar}
 
       <div className="flex flex-1 min-h-0">
@@ -89,7 +89,7 @@ export function FinderWindow({
               leaveTo="-translate-x-full"
             >
               <DialogPanel
-                className="w-[80vw] max-w-[280px] h-full bg-base shadow-xl"
+                className="w-[80vw] max-w-[280px] h-full bg-surface shadow-elev-3"
               >
                 {sidebar}
               </DialogPanel>

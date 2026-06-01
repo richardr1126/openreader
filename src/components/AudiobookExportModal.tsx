@@ -476,12 +476,12 @@ export function AudiobookExportModal({
                   <>
 			                      <div className="space-y-4">
 			                        {!isGenerating && (
-			                          <div className="w-full rounded-xl border border-offbase bg-background">
+			                          <div className="w-full rounded-lg border border-line bg-background">
 			                            {/* Header */}
-			                            <div className="flex items-center justify-between px-4 py-3 border-b border-offbase bg-base rounded-t-xl">
+			                            <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft bg-surface rounded-t-xl">
 			                              <h4 className="text-sm font-medium text-foreground tracking-tight">Generation settings</h4>
 			                              {settingsLocked && (
-			                                <span className="inline-flex items-center gap-1 rounded-md bg-offbase px-2 py-0.5 text-[11px] font-medium text-muted uppercase tracking-wider">
+			                                <span className="inline-flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-[11px] font-medium text-soft uppercase tracking-wider">
 			                                  <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z" clipRule="evenodd" /></svg>
 			                                  Locked
 			                                </span>
@@ -492,7 +492,7 @@ export function AudiobookExportModal({
 			                              {isLegacyAudiobookMissingSettings && (
 			                                <div className="mb-4 rounded-lg border border-accent-line bg-accent-wash p-3 text-xs text-foreground">
 			                                  <div className="font-medium">Saved generation settings not found</div>
-			                                  <div className="mt-1 text-muted">
+			                                  <div className="mt-1 text-soft">
 			                                    This audiobook was likely created before v1 metadata was introduced, so OpenReader can&apos;t know
 			                                    which voice/speeds/format were used. Consider resetting this audiobook to regenerate it with
 			                                    v1 metadata (so settings are saved for resumes across devices).
@@ -503,18 +503,18 @@ export function AudiobookExportModal({
 			                              {settingsLocked && savedSettings ? (
 			                                <div className="space-y-3">
 			                                  <div className="grid grid-cols-2 gap-3">
-			                                    <div className="rounded-lg bg-base p-3">
-			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Voice</div>
+			                                    <div className="rounded-lg bg-surface p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Voice</div>
 			                                      <div className="text-sm font-medium text-foreground truncate">{savedSettings.voice}</div>
 			                                    </div>
-			                                    <div className="rounded-lg bg-base p-3">
-			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Format</div>
+			                                    <div className="rounded-lg bg-surface p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Format</div>
 			                                      <div className="text-sm font-medium text-foreground">{savedSettings.format.toUpperCase()}</div>
 			                                    </div>
 			                                  </div>
                                   <div className="grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg bg-base p-3">
-                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Native speed</div>
+                                    <div className="rounded-lg bg-surface p-3">
+                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Native speed</div>
                                       <div className="text-sm font-medium text-foreground">
                                         {resolveTtsProviderModelPolicy({
                                           providerRef: savedSettings.providerRef,
@@ -525,12 +525,12 @@ export function AudiobookExportModal({
                                           : 'Not supported'}
                                       </div>
                                     </div>
-			                                    <div className="rounded-lg bg-base p-3">
-			                                      <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Post speed</div>
+			                                    <div className="rounded-lg bg-surface p-3">
+			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Post speed</div>
 			                                      <div className="text-sm font-medium text-foreground">{formatSpeed(savedSettings.postSpeed)}x</div>
 			                                    </div>
 			                                  </div>
-			                                  <p className="text-xs text-muted">
+			                                  <p className="text-xs text-soft">
 			                                    Reset the audiobook to change generation settings.
 			                                  </p>
 			                                </div>
@@ -539,7 +539,7 @@ export function AudiobookExportModal({
 			                                  {/* Voice & Format row */}
 			                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 			                                    <div className="space-y-1.5">
-			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Voice</label>
+			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Voice</label>
 			                                      <VoicesControlBase
 			                                        availableVoices={availableVoices}
 			                                        voice={audiobookVoice}
@@ -552,7 +552,7 @@ export function AudiobookExportModal({
 			                                    </div>
 
 			                                    <div className="space-y-1.5">
-			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Format</label>
+			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Format</label>
 			                                      {chapters.length === 0 ? (
 			                                        <Listbox
 			                                          value={format}
@@ -560,10 +560,10 @@ export function AudiobookExportModal({
 			                                          disabled={chapters.length > 0 || settingsLocked}
 			                                        >
 			                                          <div className="relative">
-			                                            <ListboxButton className="relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-base ease-standard hover:text-accent w-full">
+			                                            <ListboxButton className="relative cursor-pointer rounded-lg bg-surface py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line transform transition-transform duration-base ease-standard hover:text-accent w-full">
 			                                              <span className="block truncate text-sm font-medium">{format.toUpperCase()}</span>
 			                                              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-			                                                <ChevronUpDownIcon className="h-4 w-4 text-muted" />
+			                                                <ChevronUpDownIcon className="h-4 w-4 text-soft" />
 			                                              </span>
 			                                            </ListboxButton>
 			                                            <Transition
@@ -572,11 +572,11 @@ export function AudiobookExportModal({
 			                                              leaveFrom="opacity-100"
 			                                              leaveTo="opacity-0"
 			                                            >
-			                                              <ListboxOptions className="absolute left-0 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-base py-1 shadow-lg ring-1 ring-black/5 focus:outline-none z-10">
+			                                              <ListboxOptions className="absolute left-0 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-surface py-1 shadow-elev-2 ring-1 ring-line-soft focus:outline-none z-10">
 			                                                <ListboxOption
 			                                                  value="m4b"
 			                                                  className={({ active }) =>
-			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
+			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-surface-sunken text-accent' : 'text-foreground'}`
 			                                                  }
 			                                                >
 			                                                  {({ selected }) => (
@@ -588,7 +588,7 @@ export function AudiobookExportModal({
 			                                                <ListboxOption
 			                                                  value="mp3"
 			                                                  className={({ active }) =>
-			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-offbase text-accent' : 'text-foreground'}`
+			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-surface-sunken text-accent' : 'text-foreground'}`
 			                                                  }
 			                                                >
 			                                                  {({ selected }) => (
@@ -608,9 +608,9 @@ export function AudiobookExportModal({
 			                                  </div>
 
                                   {/* Speed controls */}
-                                  <div className="rounded-lg bg-base p-3 space-y-3">
+                                  <div className="rounded-lg bg-surface p-3 space-y-3">
                                     {!nativeSpeedSupported && (
-                                      <div className="rounded-md border border-offbase bg-background px-2 py-1.5 text-[11px] text-muted">
+                                      <div className="rounded-md border border-line bg-background px-2 py-1.5 text-[11px] text-soft">
                                         Native model speed is not available for this model.
                                       </div>
                                     )}
@@ -619,7 +619,7 @@ export function AudiobookExportModal({
                                       <>
                                         <div className="space-y-2">
                                           <div className="flex items-center justify-between">
-                                            <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Native model speed</label>
+                                            <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Native model speed</label>
                                             <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(nativeSpeed)}x</span>
                                           </div>
                                           <input
@@ -629,21 +629,21 @@ export function AudiobookExportModal({
                                             step="0.1"
                                             value={nativeSpeed}
                                             onChange={(e) => setNativeSpeed(parseFloat(e.target.value))}
-                                            className="w-full h-1.5 bg-offbase rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
+                                            className="w-full h-1.5 bg-surface-sunken rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-surface-sunken [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-elev-1 [&::-moz-range-track]:bg-surface-sunken [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
                                           />
-                                          <div className="flex justify-between text-[10px] text-muted">
+                                          <div className="flex justify-between text-[10px] text-soft">
                                             <span>0.5x</span>
                                             <span>3x</span>
                                           </div>
                                         </div>
 
-                                        <div className="border-t border-offbase" />
+                                        <div className="border-t border-line-soft" />
                                       </>
                                     )}
 
 			                                    <div className="space-y-2">
 			                                      <div className="flex items-center justify-between">
-			                                        <label className="text-[11px] uppercase tracking-wider font-medium text-muted">Post-generation speed</label>
+			                                        <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Post-generation speed</label>
 			                                        <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(postSpeed)}x</span>
 			                                      </div>
 			                                      <input
@@ -653,9 +653,9 @@ export function AudiobookExportModal({
 			                                        step="0.1"
 			                                        value={postSpeed}
 			                                        onChange={(e) => setPostSpeed(parseFloat(e.target.value))}
-			                                        className="w-full h-1.5 bg-offbase rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
+			                                        className="w-full h-1.5 bg-surface-sunken rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-surface-sunken [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-elev-1 [&::-moz-range-track]:bg-surface-sunken [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
 			                                      />
-			                                      <div className="flex justify-between text-[10px] text-muted">
+			                                      <div className="flex justify-between text-[10px] text-soft">
 			                                        <span>0.5x</span>
 			                                        <span>3x</span>
 			                                      </div>
@@ -708,7 +708,7 @@ export function AudiobookExportModal({
 			                          </div>
 			                        )}
                         {showRegenerateHint && (
-                          <div className="flex items-start justify-between bg-offbase border border-offbase rounded-md px-3 py-2 text-xs sm:text-sm">
+                          <div className="flex items-start justify-between bg-surface-sunken border border-line rounded-md px-3 py-2 text-xs sm:text-sm">
                             <p className="text-xs sm:text-sm text-foreground">
                               TTS audio for this chapter may be cached
                               <br />
@@ -716,7 +716,7 @@ export function AudiobookExportModal({
                             </p>
                             <Button
                               onClick={() => setShowRegenerateHint(false)}
-                              className="ml-3 p-1 rounded-md hover:bg-base hover:text-accent transition-colors"
+                              className="ml-3 p-1 rounded-md hover:bg-surface hover:text-accent transition-colors"
                               aria-label="Dismiss regenerate hint"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -746,12 +746,12 @@ export function AudiobookExportModal({
                             >
                               <div className="flex items-center gap-2">
                                 <h4 className="text-sm font-medium text-foreground">Chapters</h4>
-                                {isRefreshingChapters && <ClockIcon className="h-4 w-4 text-muted animate-spin" />}
+                                {isRefreshingChapters && <ClockIcon className="h-4 w-4 text-soft animate-spin" />}
                               </div>
                               {displayChapters.map((chapter) => (
                                 <div
                                   key={chapter.index}
-                                  className={`flex items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-offbase ${(regeneratingChapter === chapter.index || chapter.status === 'generating') ? 'prism-outline' : ''}`}
+                                  className={`flex items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-surface-sunken ${(regeneratingChapter === chapter.index || chapter.status === 'generating') ? 'prism-outline' : ''}`}
                                 >
                                   <div className="flex items-center space-x-3 flex-1">
                                     {chapter.status === 'completed' ? (
@@ -760,20 +760,20 @@ export function AudiobookExportModal({
                                       <Button
                                         onClick={() => handleRegenerateChapter(chapter)}
                                         disabled={regeneratingChapter !== null || chapter.status === 'generating' || isGenerating}
-                                        className="inline-flex items-center justify-center rounded-full bg-offbase text-accent hover:bg-accent-wash p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="inline-flex items-center justify-center rounded-full bg-surface-sunken text-accent hover:bg-accent-wash p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
                                         title={chapter.status === 'generating' ? 'Generating...' : 'Regenerate this chapter'}
                                       >
                                         <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index || chapter.status === 'generating' ? 'animate-spin' : ''}`} />
                                       </Button>
                                     ) : (
-                                      <ClockIcon className="h-5 w-5 text-muted" />
+                                      <ClockIcon className="h-5 w-5 text-soft" />
                                     )}
                                     <div className="flex flex-row flex-wrap items-center gap-1">
                                       <p className="text-sm font-medium text-foreground">
                                         {chapter.title}
                                       </p>
                                       <p>•</p>
-                                      <p className="text-xs text-muted mt-0.5">
+                                      <p className="text-xs text-soft mt-0.5">
                                         {chapter.status !== 'completed' && <span className="text-warning">Missing • </span>}{formatDuration(chapter.duration)}
                                       </p>
                                     </div>
@@ -782,7 +782,7 @@ export function AudiobookExportModal({
                                     {((onRegenerateChapter && !isGenerating) || chapter.status === 'completed') && (
                                       <Menu as="div" className="relative inline-block text-left">
                                         <MenuButton
-                                          className="inline-flex items-center justify-center rounded-md p-1.5 hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-accent text-muted hover:text-foreground transform transition-transform duration-base ease-standard"
+                                          className="inline-flex items-center justify-center rounded-md p-1.5 hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-accent text-soft hover:text-foreground transform transition-transform duration-base ease-standard"
                                           title="Chapter actions"
                                         >
                                           <DotsVerticalIcon className="h-5 w-5" />
@@ -799,7 +799,7 @@ export function AudiobookExportModal({
                                           <MenuItems
                                             anchor={{ to: 'bottom end', gap: '8px', padding: '12px' }}
                                             portal
-                                            className="w-44 rounded-md bg-background shadow-lg ring-1 ring-black/5 focus:outline-none z-[70] p-1 origin-top-right"
+                                            className="w-44 rounded-md bg-background shadow-elev-2 ring-1 ring-line-soft focus:outline-none z-[70] p-1 origin-top-right"
                                           >
                                             {chapter.status === 'completed' && (
                                               <>
@@ -807,7 +807,7 @@ export function AudiobookExportModal({
                                                   {({ active }) => (
                                                     <button
                                                       onClick={() => setPendingDeleteChapter(chapter)}
-                                                      className={`${active ? 'bg-offbase' : ''} text-danger group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                      className={`${active ? 'bg-surface-sunken' : ''} text-danger group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
                                                       title="Delete this chapter"
                                                     >
                                                       <XCircleIcon className="h-4 w-4" />
@@ -819,7 +819,7 @@ export function AudiobookExportModal({
                                                   {({ active }) => (
                                                     <button
                                                       onClick={() => handleDownloadChapter(chapter)}
-                                                      className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                      className={`${active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
                                                     >
                                                       <DownloadIcon className="h-4 w-4" />
                                                       <span>Download</span>
@@ -833,7 +833,7 @@ export function AudiobookExportModal({
                                                 {({ active }) => (
                                                   <button
                                                     onClick={handleCancel}
-                                                    className={`${active ? 'bg-offbase text-danger' : 'text-danger'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                    className={`${active ? 'bg-surface-sunken text-danger' : 'text-danger'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
                                                     title="Cancel this chapter regeneration"
                                                   >
                                                     <XCircleIcon className="h-4 w-4" />
@@ -848,7 +848,7 @@ export function AudiobookExportModal({
                                                   <button
                                                     onClick={() => handleRegenerateChapter(chapter)}
                                                     disabled={disabled}
-                                                    className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                    className={`${active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
                                                     title="Regenerate this chapter"
                                                   >
                                                     <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index ? 'animate-spin' : ''}`} />
@@ -868,7 +868,7 @@ export function AudiobookExportModal({
                             </div>
 
                             {bookId && !isGenerating && (
-                              <div className="pt-4 border-t border-offbase">
+                              <div className="pt-4 border-t border-line-soft">
                                 <Button
                                   onClick={handleDownloadComplete}
                                   disabled={isCombining}
@@ -888,7 +888,7 @@ export function AudiobookExportModal({
 
                         {chapters.length === 0 && !isGenerating && !isLoadingExisting && (
                           <div className="text-center">
-                            <p className="text-sm text-muted">
+                            <p className="text-sm text-soft">
                               Audiobook settings are fixed after generation. Chapters will appear here as they are ready.
                             </p>
                           </div>
@@ -938,43 +938,43 @@ export function AudiobookExportModal({
 function AudiobookSettingsSkeleton() {
   return (
     <div className="space-y-4 animate-pulse" aria-label="Loading audiobook settings" aria-busy="true">
-      <div className="w-full rounded-xl border border-offbase bg-background overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-offbase bg-base">
-          <div className="h-4 w-40 rounded bg-offbase" />
-          <div className="h-5 w-14 rounded bg-offbase" />
+      <div className="w-full rounded-lg border border-line bg-background overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft bg-surface">
+          <div className="h-4 w-40 rounded bg-surface-sunken" />
+          <div className="h-5 w-14 rounded bg-surface-sunken" />
         </div>
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <div className="h-3 w-16 rounded bg-offbase" />
-              <div className="h-9 w-full rounded-md bg-offbase" />
+              <div className="h-3 w-16 rounded bg-surface-sunken" />
+              <div className="h-9 w-full rounded-md bg-surface-sunken" />
             </div>
             <div className="space-y-1.5">
-              <div className="h-3 w-16 rounded bg-offbase" />
-              <div className="h-9 w-full rounded-md bg-offbase" />
+              <div className="h-3 w-16 rounded bg-surface-sunken" />
+              <div className="h-9 w-full rounded-md bg-surface-sunken" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <div className="h-3 w-24 rounded bg-offbase" />
-              <div className="h-2 w-full rounded bg-offbase" />
+              <div className="h-3 w-24 rounded bg-surface-sunken" />
+              <div className="h-2 w-full rounded bg-surface-sunken" />
             </div>
             <div className="space-y-1.5">
-              <div className="h-3 w-20 rounded bg-offbase" />
-              <div className="h-2 w-full rounded bg-offbase" />
+              <div className="h-3 w-20 rounded bg-surface-sunken" />
+              <div className="h-2 w-full rounded bg-surface-sunken" />
             </div>
           </div>
-          <div className="h-9 w-full rounded-md bg-offbase" />
+          <div className="h-9 w-full rounded-md bg-surface-sunken" />
         </div>
       </div>
 
-      <div className="w-full rounded-xl border border-offbase bg-background overflow-hidden">
-        <div className="px-4 py-3 border-b border-offbase bg-base">
-          <div className="h-4 w-28 rounded bg-offbase" />
+      <div className="w-full rounded-lg border border-line bg-background overflow-hidden">
+        <div className="px-4 py-3 border-b border-line-soft bg-surface">
+          <div className="h-4 w-28 rounded bg-surface-sunken" />
         </div>
         <div className="p-4 space-y-2">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-16 rounded-lg border border-offbase bg-base" />
+            <div key={index} className="h-16 rounded-lg border border-line bg-surface" />
           ))}
         </div>
       </div>

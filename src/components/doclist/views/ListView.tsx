@@ -31,7 +31,7 @@ function formatDate(ms: number): string {
 function KindIcon({ doc }: { doc: DocumentListDocument }) {
   if (doc.type === 'pdf') return <PDFIcon className="w-4 h-4 shrink-0 text-danger" />;
   if (doc.type === 'epub') return <EPUBIcon className="w-4 h-4 shrink-0 text-accent" />;
-  return <FileIcon className="w-4 h-4 shrink-0 text-muted" />;
+  return <FileIcon className="w-4 h-4 shrink-0 text-soft" />;
 }
 
 function HeaderCell({
@@ -63,7 +63,7 @@ function HeaderCell({
       }}
       className={
         'flex items-center gap-1 px-2 py-1.5 text-[10px] uppercase tracking-wide font-semibold transition-colors duration-base ease-standard hover:text-accent ' +
-        (active ? 'text-accent' : 'text-muted') +
+        (active ? 'text-accent' : 'text-soft') +
         (align === 'right' ? ' justify-end' : '') +
         ' ' +
         (className ?? '')
@@ -131,11 +131,11 @@ function DocRow({
       data-doc-tile
       aria-selected={isSelected}
       className={
-        'grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px] items-center text-[12px] border-b border-offbase transition-colors duration-base ease-standard ' +
+        'grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px] items-center text-[12px] border-b border-line-soft transition-colors duration-base ease-standard ' +
         (isSelected
-          ? 'bg-offbase text-accent'
-          : 'text-foreground hover:bg-offbase') +
-        (isTarget ? ' ring-1 ring-accent ring-inset' : '') +
+          ? 'bg-surface-sunken text-accent'
+          : 'text-foreground hover:bg-accent-wash') +
+        (isTarget ? ' ring-1 ring-accent-line ring-inset' : '') +
         (isDragging ? ' opacity-50' : '')
       }
     >
@@ -149,11 +149,11 @@ function DocRow({
         <KindIcon doc={doc} />
         <span className="truncate">{doc.name}</span>
       </Link>
-      <span className="px-2 text-[11px] text-muted uppercase tracking-wide">{doc.type}</span>
-      <span className="px-2 text-[11px] text-muted text-right tabular-nums">
+      <span className="px-2 text-[11px] text-soft uppercase tracking-wide">{doc.type}</span>
+      <span className="px-2 text-[11px] text-soft text-right tabular-nums">
         {formatDocumentSize(doc.size)}
       </span>
-      <span className="px-2 text-[11px] text-muted tabular-nums">
+      <span className="px-2 text-[11px] text-soft tabular-nums">
         {formatDate(doc.lastModified)}
       </span>
       <Button
@@ -161,7 +161,7 @@ function DocRow({
           e.stopPropagation();
           onDeleteDoc(doc);
         }}
-        className="h-7 w-7 flex items-center justify-center text-muted hover:text-accent hover:bg-offbase rounded transition duration-base ease-standard"
+        className="h-7 w-7 flex items-center justify-center text-soft hover:text-accent hover:bg-accent-wash rounded transition duration-base ease-standard"
         aria-label={`Delete ${doc.name}`}
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -198,7 +198,7 @@ export function ListView({
 
   return (
     <div onClick={handleBackgroundClick} className="flex-1 min-h-0 overflow-y-auto">
-      <div className="sticky top-0 z-10 bg-base border-b border-offbase grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px]">
+      <div className="sticky top-0 z-10 bg-surface border-b border-line-soft grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px]">
         <HeaderCell label="Name" field="name" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
         <HeaderCell label="Kind" field="type" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
         <HeaderCell label="Size" field="size" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} align="right" />

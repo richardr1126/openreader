@@ -641,7 +641,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         className={buttonClass({
           variant: 'secondary',
           size: 'xs',
-          className: 'h-8 px-2 text-muted',
+          className: 'h-8 px-2 text-soft',
         })}
       >
         {isClearingSegments ? 'Clearing…' : 'Clear'}
@@ -654,7 +654,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         className={buttonClass({
           variant: 'secondary',
           size: 'icon',
-          className: 'h-8 w-8 text-muted',
+          className: 'h-8 w-8 text-soft',
         })}
       >
         <RefreshIcon className="w-3.5 h-3.5" />
@@ -672,8 +672,8 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
       headerActions={headerActions}
       bodyClassName="flex-1 overflow-y-auto px-0 py-0"
     >
-      <div className="px-4 py-2 border-b border-offbase">
-        <div className="text-xs text-muted">
+      <div className="px-4 py-2 border-b border-line-soft">
+        <div className="text-xs text-soft">
           {hasLoadedManifest ? (
             <>
               {rowsToRender.length} indexed
@@ -687,7 +687,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
               ) : null}
             </>
           ) : isManifestLoading ? (
-            <div className="animate-pulse h-3 w-36 rounded bg-offbase" aria-label="Loading segment summary" aria-busy="true" />
+            <div className="animate-pulse h-3 w-36 rounded bg-surface-sunken" aria-label="Loading segment summary" aria-busy="true" />
           ) : hasManifestError ? (
             <span className="text-danger">error</span>
           ) : (
@@ -705,16 +705,16 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
               )}
               {hasLoadedManifest && rowsToRender.length === 0 && (
                 <div className="px-4 py-10 flex flex-col items-center text-center gap-2">
-                  <div className="text-sm font-medium text-muted">
+                  <div className="text-sm font-medium text-soft">
                     No segments
                   </div>
-                  <p className="text-sm text-muted leading-relaxed max-w-[24ch]">
+                  <p className="text-sm text-soft leading-relaxed max-w-[24ch]">
                     Press play in the reader to generate audio segments.
                   </p>
                 </div>
               )}
               {hasLoadedManifest && rowsToRender.length > 0 && (
-                <ul className="divide-y divide-offbase">
+                <ul className="divide-y divide-line-soft">
                   {rowsToRender.map(({ segmentIndex, sentenceText, row, isCurrentLocation, groupKey, groupLabel, isSynthesized }, rowIndex) => {
                     const previousGroupKey = rowIndex > 0 ? rowsToRender[rowIndex - 1]?.groupKey : null;
                     const showGroupHeader = previousGroupKey !== groupKey;
@@ -744,8 +744,8 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                         className={`relative px-4 py-3 ${isCurrent ? 'bg-surface-sunken' : ''}`}
                       >
                         {showGroupHeader && (
-                          <div className="mb-2 -mx-4 px-4 py-1.5 bg-surface-sunken border-y border-offbase">
-                            <span className="text-[10px] uppercase tracking-[0.14em] text-muted">
+                          <div className="mb-2 -mx-4 px-4 py-1.5 bg-surface-sunken border-y border-line">
+                            <span className="text-[10px] uppercase tracking-[0.14em] text-soft">
                               {groupLabel}
                             </span>
                           </div>
@@ -758,7 +758,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                             type="button"
                             onClick={() => { if (canJump) handleJump(segmentIndex, row.locator); }}
                             disabled={!canJump}
-                            className={`text-xs font-medium shrink-0 pt-0.5 ${canJump ? 'text-muted hover:text-accent' : 'text-faint cursor-not-allowed'}`}
+                            className={`text-xs font-medium shrink-0 pt-0.5 ${canJump ? 'text-soft hover:text-accent' : 'text-faint cursor-not-allowed'}`}
                             title={canJump ? (playable ? 'Play this segment' : 'Jump to this segment') : 'Text not loaded yet'}
                             aria-label={`Segment ${segmentIndex + 1}`}
                           >
@@ -774,7 +774,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                             >
                               <p className={`text-sm leading-snug ${isCurrent ? 'text-foreground' : 'text-soft'} line-clamp-2`}>
                                 {sentenceText || (
-                                  <span className="text-muted italic text-xs">
+                                  <span className="text-soft italic text-xs">
                                     [text not loaded — press play to fetch]
                                   </span>
                                 )}
@@ -787,7 +787,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                                 aria-label={`Status ${status}`}
                                 title={status}
                               />
-                              <span className="text-xs text-muted">
+                              <span className="text-xs text-soft">
                                 {formatDuration(activeVariant?.durationMs)}
                               </span>
                               {isCurrent && isPlaying && (
@@ -796,7 +796,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                                 </span>
                               )}
                               {!canJump && (
-                                <span className="text-[10px] text-faint border border-offbase rounded px-1 py-0.5">
+                                <span className="text-[10px] text-faint border border-line rounded px-1 py-0.5">
                                   not loaded
                                 </span>
                               )}
@@ -822,8 +822,8 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                                           isActive
                                             ? 'border-accent text-accent bg-surface-sunken'
                                             : known
-                                              ? 'border-offbase text-muted hover:border-accent hover:text-accent'
-                                              : 'border-offbase text-muted opacity-60 cursor-not-allowed',
+                                              ? 'border-line text-soft hover:border-accent hover:text-accent'
+                                              : 'border-line text-soft opacity-60 cursor-not-allowed',
                                         ].join(' ')}
                                       >
                                         {formatVoiceLabel(variant.settings)}
@@ -854,21 +854,21 @@ function SegmentsListSkeleton() {
   return (
     <div className="px-4 py-3">
       <div className="animate-pulse space-y-3" aria-label="Loading segments" aria-busy="true">
-        <div className="h-3 w-40 rounded bg-offbase" />
+        <div className="h-3 w-40 rounded bg-surface-sunken" />
         {Array.from({ length: 8 }).map((_, index) => (
-          <div key={index} className="rounded-md border border-offbase bg-base px-3 py-2.5">
+          <div key={index} className="rounded-md border border-line bg-surface px-3 py-2.5">
             <div className="flex items-start gap-3">
-              <div className="h-3.5 w-8 rounded bg-offbase mt-0.5 shrink-0" />
+              <div className="h-3.5 w-8 rounded bg-surface-sunken mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1 space-y-2">
-                <div className="h-3.5 w-11/12 rounded bg-offbase" />
-                <div className="h-3.5 w-3/4 rounded bg-offbase" />
+                <div className="h-3.5 w-11/12 rounded bg-surface-sunken" />
+                <div className="h-3.5 w-3/4 rounded bg-surface-sunken" />
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-offbase" />
-                  <div className="h-3 w-12 rounded bg-offbase" />
-                  <div className="h-4 w-20 rounded bg-offbase" />
+                  <div className="h-2 w-2 rounded-full bg-surface-sunken" />
+                  <div className="h-3 w-12 rounded bg-surface-sunken" />
+                  <div className="h-4 w-20 rounded bg-surface-sunken" />
                 </div>
               </div>
-              <div className="h-6 w-6 rounded bg-offbase shrink-0" />
+              <div className="h-6 w-6 rounded bg-surface-sunken shrink-0" />
             </div>
           </div>
         ))}
@@ -882,7 +882,7 @@ function SegmentsListSkeletonRows() {
     <div className="px-4 py-3 animate-pulse" aria-label="Loading more segments" aria-busy="true">
       <div className="space-y-2">
         {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="h-12 rounded-md border border-offbase bg-base" />
+          <div key={index} className="h-12 rounded-md border border-line bg-surface" />
         ))}
       </div>
     </div>
@@ -895,7 +895,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
       <PopoverButton
         aria-label="Segment metadata"
         title="Metadata"
-        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-transparent text-muted hover:bg-offbase hover:border-offbase hover:text-accent transition-colors"
+        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-transparent text-soft hover:bg-accent-wash hover:border-line hover:text-accent transition-colors"
       >
         <InfoIcon className="w-3.5 h-3.5" />
       </PopoverButton>
@@ -910,7 +910,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
       >
         <PopoverPanel
           anchor="bottom end"
-          className="z-[60] w-[300px] mt-1 rounded-lg border border-offbase bg-base shadow-xl p-3"
+          className="z-[60] w-[300px] mt-1 rounded-lg border border-line bg-surface shadow-elev-3 p-3"
         >
           <dl className="space-y-2">
             <Row label="locator">
@@ -925,7 +925,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
                         : `${row.locator.readerType || '?'} (legacy)`}
                 </span>
               ) : (
-                <span className="text-muted text-[11px]">none</span>
+                <span className="text-soft text-[11px]">none</span>
               )}
             </Row>
             <Row label="variants">
@@ -934,9 +934,9 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
               </span>
             </Row>
             {row.variants.map((v) => (
-              <div key={v.segmentId} className="border-t border-offbase pt-2">
+              <div key={v.segmentId} className="border-t border-line-soft pt-2">
                 <Row label="segment_id">
-                  <span className="font-mono text-[10px] text-muted break-all">
+                  <span className="font-mono text-[10px] text-soft break-all">
                     {v.segmentId.slice(0, 16)}…
                   </span>
                 </Row>
@@ -972,7 +972,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[80px_1fr] gap-2 items-baseline">
-      <dt className="font-mono uppercase tracking-[0.16em] text-[9px] text-muted">{label}</dt>
+      <dt className="font-mono uppercase tracking-[0.16em] text-[9px] text-soft">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
   );

@@ -32,19 +32,19 @@ export function UserMenu({
   };
 
   const rowClass =
-    'w-full inline-flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border border-transparent transition duration-base ease-standard text-left hover:border-accent hover:bg-offbase hover:text-accent';
+    'w-full inline-flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border border-transparent transition duration-base ease-standard text-left hover:border-accent hover:bg-accent-wash hover:text-accent';
 
   if (!session || session.user.isAnonymous) {
     if (variant === 'sidebar') {
       return (
         <div className={`flex w-full flex-col gap-0.5 ${className}`}>
           <Link href="/signin" className={rowClass}>
-            <UserIcon className="h-3.5 w-3.5 text-muted" />
+            <UserIcon className="h-3.5 w-3.5 text-soft" />
             <span className="truncate">Connect</span>
           </Link>
           {enableUserSignups && (
             <Link href="/signup" className={rowClass}>
-              <UserIcon className="h-3.5 w-3.5 text-muted" />
+              <UserIcon className="h-3.5 w-3.5 text-soft" />
               <span className="truncate">Create account</span>
             </Link>
           )}
@@ -55,13 +55,13 @@ export function UserMenu({
     return (
       <div className={`flex gap-2 ${className}`}>
         <Link href="/signin">
-          <Button className="inline-flex items-center rounded-md bg-base border border-offbase px-2 py-1 text-xs font-medium text-foreground hover:bg-offbase focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 transform transition duration-base ease-standard hover:text-accent">
+          <Button className="inline-flex items-center rounded-md bg-surface border border-line px-2 py-1 text-xs font-medium text-foreground hover:bg-accent-wash focus:outline-none focus:ring-2 focus:ring-accent-line focus:ring-offset-2 transform transition duration-base ease-standard hover:text-accent">
             Connect
           </Button>
         </Link>
         {enableUserSignups && (
           <Link href="/signup">
-            <Button className="inline-flex items-center rounded-md bg-accent px-2 py-1 text-xs font-medium text-background hover:bg-secondary-accent focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 transform transition duration-base ease-standard">
+            <Button className="inline-flex items-center rounded-md bg-accent px-2 py-1 text-xs font-medium text-background hover:bg-secondary-accent focus:outline-none focus:ring-2 focus:ring-accent-line focus:ring-offset-2 transform transition duration-base ease-standard">
               Create account
             </Button>
           </Link>
@@ -78,7 +78,7 @@ export function UserMenu({
         title="Disconnect account"
         aria-label="Disconnect account"
       >
-        <UserIcon className="h-3.5 w-3.5 text-muted" />
+        <UserIcon className="h-3.5 w-3.5 text-soft" />
         <span className="truncate flex-1">{session.user.email || 'Account'}</span>
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -90,7 +90,7 @@ export function UserMenu({
   }
 
   return (
-    <div className={`flex items-center gap-2 px-2 py-1 rounded-md border border-offbase bg-base ${className}`}>
+    <div className={`flex items-center gap-2 px-2 py-1 rounded-md border border-line bg-surface ${className}`}>
       <span className="hidden sm:block text-xs font-medium text-foreground truncate max-w-[160px]">
         {session.user.email || 'Account'}
       </span>

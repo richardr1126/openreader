@@ -28,7 +28,7 @@ export function ZoomControl({
       >
         −
       </button>
-      <span className="text-xs tabular-nums w-12 text-center text-muted">{value}%</span>
+      <span className="text-xs tabular-nums w-12 text-center text-soft">{value}%</span>
       <button
         type="button"
         onClick={onIncrease}

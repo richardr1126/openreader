@@ -140,9 +140,9 @@ export function DocumentTile({
       className={
         'group relative flex flex-col rounded-md overflow-hidden border transition duration-base ease-standard ' +
         (isSelected
-          ? 'border-accent bg-offbase'
-          : 'border-offbase bg-base hover:bg-offbase hover:border-accent') +
-        (isDropTarget ? ' ring-1 ring-accent' : '') +
+          ? 'border-accent-line bg-surface-sunken'
+          : 'border-line bg-surface hover:bg-accent-wash hover:border-accent-line') +
+        (isDropTarget ? ' ring-1 ring-accent-line' : '') +
         (isDragging ? ' opacity-50' : '')
       }
     >
@@ -170,7 +170,7 @@ export function DocumentTile({
             ) : doc.type === 'epub' ? (
               <EPUBIcon className={`${FILE_ICON_CLASSES[iconSize]} text-accent`} />
             ) : (
-              <FileIcon className={`${FILE_ICON_CLASSES[iconSize]} text-muted`} />
+              <FileIcon className={`${FILE_ICON_CLASSES[iconSize]} text-soft`} />
             )}
           </span>
           <span
@@ -187,7 +187,7 @@ export function DocumentTile({
         {showDeleteButton && (
           <Button
             onClick={() => onDelete(doc)}
-            className={`inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base focus:outline-none transition-colors duration-base ${TRASH_BTN_CLASSES[iconSize]}`}
+            className={`inline-flex items-center justify-center text-soft hover:text-accent hover:bg-surface focus:outline-none transition-colors duration-base ${TRASH_BTN_CLASSES[iconSize]}`}
             aria-label={`Delete ${doc.name}`}
           >
             <svg className={TRASH_ICON_CLASSES[iconSize]} fill="none" stroke="currentColor" viewBox="0 0 24 24">

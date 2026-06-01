@@ -91,7 +91,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
       <PopoverPanel
         anchor="bottom start"
         transition
-        className="z-[60] mt-2 w-56 rounded-xl shadow-xl border border-offbase bg-background p-3 space-y-3
+        className="z-[60] mt-2 w-56 rounded-lg shadow-elev-3 border border-line bg-background p-3 space-y-3
           transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95"
       >
         {/* Label */}
@@ -107,7 +107,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
               className="p-1"
               aria-label="Open system color picker"
             >
-              <PaletteIcon className="w-4 h-4 text-muted transform transition-transform duration-base ease-standard hover:text-accent" />
+              <PaletteIcon className="w-4 h-4 text-soft transform transition-transform duration-base ease-standard hover:text-accent" />
             </button>
             <input
               ref={nativeRef}
@@ -166,7 +166,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
             }}
             spellCheck={false}
             maxLength={7}
-            className="flex-1 rounded-lg px-2 py-1 text-xs font-mono border border-offbase bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+            className="flex-1 rounded-lg px-2 py-1 text-xs font-mono border border-line bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-accent-line"
           />
         </div>
       </PopoverPanel>

@@ -40,7 +40,7 @@ function formatParseStatus(status: DocumentListDocument['parseStatus']): string 
 function KindIcon({ doc, className }: { doc: DocumentListDocument; className?: string }) {
   if (doc.type === 'pdf') return <PDFIcon className={className ?? 'w-4 h-4 text-danger'} />;
   if (doc.type === 'epub') return <EPUBIcon className={className ?? 'w-4 h-4 text-accent'} />;
-  return <FileIcon className={className ?? 'w-4 h-4 text-muted'} />;
+  return <FileIcon className={className ?? 'w-4 h-4 text-soft'} />;
 }
 
 function GalleryThumb({
@@ -92,29 +92,29 @@ function GalleryThumb({
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
       className={
-        'group relative w-[98px] sm:w-[110px] shrink-0 cursor-pointer rounded-lg overflow-hidden border bg-base snap-start transition duration-base ease-standard ' +
+        'group relative w-[98px] sm:w-[110px] shrink-0 cursor-pointer rounded-lg overflow-hidden border bg-surface snap-start transition duration-base ease-standard ' +
         (active
-          ? 'border-accent shadow-[0_10px_24px_-18px_rgba(0,0,0,0.85)] -translate-y-0.5'
-          : 'border-offbase hover:border-accent hover:-translate-y-0.5') +
-        (isOver && canDrop ? ' border-accent' : '') +
+          ? 'border-accent-line shadow-elev-2 -translate-y-px'
+          : 'border-line hover:border-accent-line hover:-translate-y-px hover:shadow-elev-2') +
+        (isOver && canDrop ? ' border-accent-line' : '') +
         (isDragging ? ' opacity-50' : '')
       }
       title={doc.name}
     >
-      <div className="aspect-[3/4] bg-base">
+      <div className="aspect-[3/4] bg-surface">
         <DocumentPreview doc={doc} />
       </div>
       <div
         className={
           'px-2 py-1.5 flex items-center gap-1.5 border-t transition-colors duration-base ' +
-          (active ? 'bg-offbase border-accent' : 'bg-base border-offbase')
+          (active ? 'bg-surface-sunken border-accent-line' : 'bg-surface border-line')
         }
       >
         <KindIcon
           doc={doc}
           className={
             'w-3 h-3 shrink-0 transition-colors duration-base ' +
-            (active ? 'text-accent' : 'text-muted')
+            (active ? 'text-accent' : 'text-soft')
           }
         />
         <span
@@ -181,19 +181,19 @@ export function GalleryView({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto bg-background">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-surface-sunken">
         <div className="min-h-full flex items-center justify-center p-3 sm:p-6">
         {activeDoc ? (
           <div className="w-full max-w-[920px] flex flex-col md:flex-row items-center md:items-start justify-center gap-4 md:gap-6">
             <div className="flex flex-col items-center gap-3 w-[180px] sm:w-[260px] md:w-[320px] shrink-0">
-              <div className="w-full aspect-[3/4] rounded-lg overflow-hidden border border-offbase shadow-lg">
+              <div className="w-full aspect-[3/4] rounded-lg overflow-hidden border border-line shadow-elev-2">
                 <DocumentPreview doc={activeDoc} />
               </div>
               <div className="text-center">
                 <h2 className="text-[14px] font-semibold text-foreground truncate max-w-[320px]">
                   {activeDoc.name}
                 </h2>
-                <p className="text-[11px] text-muted">
+                <p className="text-[11px] text-soft">
                   {activeDoc.type.toUpperCase()} • {formatDocumentSize(activeDoc.size)}
                 </p>
               </div>
@@ -214,18 +214,18 @@ export function GalleryView({
                 </button>
               </div>
             </div>
-            <dl className="w-full max-w-[280px] sm:max-w-[360px] md:max-w-[340px] grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md border border-offbase bg-base px-3 py-2 text-[11px] md:self-center">
-              <dt className="text-muted">Type</dt>
+            <dl className="w-full max-w-[280px] sm:max-w-[360px] md:max-w-[340px] grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md border border-line bg-surface px-3 py-2 text-[11px] md:self-center">
+              <dt className="text-soft">Type</dt>
               <dd className="text-foreground text-right uppercase tracking-wide">{activeDoc.type}</dd>
-              <dt className="text-muted">Size</dt>
+              <dt className="text-soft">Size</dt>
               <dd className="text-foreground text-right tabular-nums">{formatDocumentSize(activeDoc.size)}</dd>
-              <dt className="text-muted">Last opened</dt>
+              <dt className="text-soft">Last opened</dt>
               <dd className="text-foreground text-right">{formatDateTime(activeDoc.recentlyOpenedAt)}</dd>
-              <dt className="text-muted">Last modified</dt>
+              <dt className="text-soft">Last modified</dt>
               <dd className="text-foreground text-right">{formatDateTime(activeDoc.lastModified)}</dd>
               {activeDoc.folderId && (
                 <>
-                  <dt className="text-muted">Folder</dt>
+                  <dt className="text-soft">Folder</dt>
                   <dd className="text-foreground text-right truncate" title={folderNameById?.[activeDoc.folderId] ?? activeDoc.folderId}>
                     {folderNameById?.[activeDoc.folderId] ?? activeDoc.folderId}
                   </dd>
@@ -233,19 +233,19 @@ export function GalleryView({
               )}
               {activeDoc.type === 'pdf' && (
                 <>
-                  <dt className="text-muted">Parse status</dt>
+                  <dt className="text-soft">Parse status</dt>
                   <dd className="text-foreground text-right">{formatParseStatus(activeDoc.parseStatus)}</dd>
                 </>
               )}
             </dl>
           </div>
         ) : (
-          <p className="text-[12px] text-muted">No documents to show</p>
+          <p className="text-[12px] text-soft">No documents to show</p>
         )}
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-offbase bg-gradient-to-b from-base to-offbase/30">
+      <div className="shrink-0 border-t border-line-soft bg-gradient-to-b from-surface to-surface-sunken">
         <div
           ref={railRef}
           className="flex gap-2.5 overflow-x-auto pl-4 pr-3 pt-2.5 pb-1.5 snap-x snap-proximity scroll-pl-4 sm:scroll-pl-5 scroll-pr-3 sm:scroll-pr-4"

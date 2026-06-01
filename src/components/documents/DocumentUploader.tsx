@@ -163,13 +163,13 @@ export function DocumentUploader({
     variant === 'compact'
       ? `${
           isDragActive
-            ? 'border border-accent bg-offbase text-accent'
-            : 'border border-dashed border-offbase text-foreground hover:border-accent hover:bg-offbase hover:text-accent'
+            ? 'border border-accent bg-surface-sunken text-accent'
+            : 'border border-dashed border-line text-foreground hover:border-accent hover:bg-accent-wash hover:text-accent'
         }`
       : `${
           isDragActive
-            ? 'border-2 border-dashed border-accent bg-base text-foreground'
-            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-base'
+            ? 'border-2 border-dashed border-accent bg-surface text-foreground'
+            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-surface'
         }`;
 
   const paddingClass = variant === 'compact' ? 'py-1 px-2 rounded-md' : 'py-5 px-3 rounded-lg';
@@ -182,7 +182,7 @@ export function DocumentUploader({
         {children}
         {isDragActive && (
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-surface backdrop-blur-md pointer-events-none p-6">
-            <div className="w-full h-full border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center bg-surface-solid text-center p-4">
+            <div className="w-full h-full border-2 border-dashed border-accent rounded-lg flex flex-col items-center justify-center bg-surface-solid text-center p-4">
               <UploadIcon className="w-14 h-14 text-accent mb-4 animate-bounce" />
               <p className="text-xl font-bold text-foreground mb-1.5">
                 Drop files here to upload
@@ -217,7 +217,7 @@ export function DocumentUploader({
       <input {...getInputProps()} />
       {variant === 'compact' ? (
         <div className="flex items-center gap-2 text-left w-full min-w-0">
-          <UploadIcon className="w-3.5 h-3.5 text-muted group-hover:text-accent shrink-0 transition-colors duration-base" />
+          <UploadIcon className="w-3.5 h-3.5 text-soft group-hover:text-accent shrink-0 transition-colors duration-base" />
           {isUploading ? (
             <p className="text-[12px] font-medium truncate flex-1">Uploading…</p>
           ) : isConverting ? (
@@ -233,7 +233,7 @@ export function DocumentUploader({
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center text-center">
-          <UploadIcon className="w-7 h-7 sm:w-10 sm:h-10 mb-2 text-muted" />
+          <UploadIcon className="w-7 h-7 sm:w-10 sm:h-10 mb-2 text-soft" />
           {isUploading ? (
             <p className="text-sm sm:text-lg font-semibold text-foreground">Uploading file...</p>
           ) : isConverting ? (
@@ -243,7 +243,7 @@ export function DocumentUploader({
               <p className="mb-2 text-sm sm:text-lg font-semibold text-foreground">
                 {isDragActive ? 'Drop your file(s) here' : 'Drop your file(s) here, or click to select'}
               </p>
-              <p className="text-xs sm:text-sm text-muted">
+              <p className="text-xs sm:text-sm text-soft">
                 {enableDocx ? 'PDF, EPUB, TXT, MD, or DOCX files are accepted' : 'PDF, EPUB, TXT, or MD files are accepted'}
               </p>
               {error && <p className="mt-2 text-sm text-danger">{error}</p>}

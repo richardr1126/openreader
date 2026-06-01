@@ -16,7 +16,7 @@ export function CodeBlock({ children }: { children: string }) {
   return (
     <div className="relative group my-2">
       <pre className="bg-background p-3 rounded-md overflow-x-auto text-xs text-left
-                      font-mono text-foreground border border-offbase">
+                      font-mono text-foreground border border-line">
         <code>{children}</code>
       </pre>
       <button

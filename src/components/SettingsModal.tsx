@@ -142,7 +142,7 @@ export function SettingsTrigger({
   return (
     <Button
       onClick={onOpen}
-      className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-base ease-standard ${className}`}
+      className={`inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash hover:text-accent transition-transform transition-colors duration-base ease-standard ${className}`}
       aria-label="Settings"
       tabIndex={0}
     >
@@ -483,8 +483,8 @@ export function SettingsModal({
     setActiveSection(visibleSections[0]?.id ?? 'theme');
   }, [activeSection, visibleSections]);
 
-  const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-muted';
-  const sectionShellClass = 'space-y-2 pb-3 border-b border-offbase px-0.5';
+  const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-soft';
+  const sectionShellClass = 'space-y-2 pb-3 border-b border-line-soft px-0.5';
   const sectionHeadingClass = 'text-sm font-semibold text-foreground';
   const effectiveProviderType = resolveEffectiveProviderType({
     providerRef: selectedProviderRef,
@@ -540,16 +540,16 @@ export function SettingsModal({
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel data-testid="settings-modal" className="relative w-full max-w-4xl transform rounded-xl bg-base text-left align-middle shadow-xl transition overflow-hidden border border-offbase">
+                <DialogPanel data-testid="settings-modal" className="relative w-full max-w-4xl transform rounded-lg bg-surface text-left align-middle shadow-elev-3 transition overflow-hidden border border-line">
                   {/* Header */}
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-offbase">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-line-soft">
                     <div className="flex items-baseline gap-4">
                       <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground">
                         Settings
                       </DialogTitle>
                       <Button
                         onClick={() => setIsChangelogOpen(true)}
-                        className="text-sm font-medium leading-6 text-muted hover:text-accent transition-colors"
+                        className="text-sm font-medium leading-6 text-soft hover:text-accent transition-colors"
                       >
                         {displayVersion ? `v${displayVersion} · Changelog` : 'Changelog'}
                       </Button>
@@ -557,7 +557,7 @@ export function SettingsModal({
                     <div className="flex items-center">
                       <Button
                         onClick={() => showPrivacyModal()}
-                        className="text-sm font-medium text-muted hover:text-accent transition-colors"
+                        className="text-sm font-medium text-soft hover:text-accent transition-colors"
                       >
                         Privacy
                       </Button>
@@ -573,7 +573,7 @@ export function SettingsModal({
                   ) : (
                     <>
                       {/* Mobile: 2x2 grid nav */}
-                      <div className="grid grid-cols-2 gap-1 sm:hidden border-b border-offbase bg-background p-2">
+                      <div className="grid grid-cols-2 gap-1 sm:hidden border-b border-line-soft bg-background p-2">
                         {visibleSections.map((section) => {
                           const Icon = section.icon;
                           return (
@@ -583,7 +583,7 @@ export function SettingsModal({
                               className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                                 activeSection === section.id
                                   ? 'bg-accent text-background'
-                                  : 'text-foreground hover:bg-offbase hover:text-accent'
+                                  : 'text-foreground hover:bg-accent-wash hover:text-accent'
                               }`}
                             >
                               <Icon className="w-3.5 h-3.5" />
@@ -595,7 +595,7 @@ export function SettingsModal({
 
                       <div className="flex flex-row h-[490px]">
                     {/* Desktop: vertical sidebar */}
-                    <nav className="hidden sm:block w-44 shrink-0 border-r border-offbase bg-background p-2">
+                    <nav className="hidden sm:block w-44 shrink-0 border-r border-line-soft bg-background p-2">
                       <div className="flex flex-col gap-1">
                         {visibleSections.map((section) => {
                           const Icon = section.icon;
@@ -607,7 +607,7 @@ export function SettingsModal({
                               className={`w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                                 active
                                   ? 'bg-accent text-background'
-                                  : 'text-foreground hover:bg-base hover:text-accent'
+                                  : 'text-foreground hover:bg-surface hover:text-accent'
                               }`}
                             >
                               <Icon className="w-4 h-4 shrink-0" />
@@ -661,7 +661,7 @@ export function SettingsModal({
                                     {selectedProviderOption?.name || 'Select Provider'}
                                   </span>
                                   <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                                    <ChevronUpDownIcon className="h-5 w-5 text-muted" />
+                                    <ChevronUpDownIcon className="h-5 w-5 text-soft" />
                                   </span>
                                 </ListboxButton>
                                 <Transition
@@ -700,7 +700,7 @@ export function SettingsModal({
                             )}
                           </div>
                           {restrictUserApiKeys && (
-                            <p className="text-xs text-muted">
+                            <p className="text-xs text-soft">
                               This instance restricts user API keys. TTS runs through admin-configured shared providers only.
                             </p>
                           )}
@@ -737,7 +737,7 @@ export function SettingsModal({
                             </div>
                           )}
                           {isSharedSelected && (
-                            <p className="text-xs text-muted">
+                            <p className="text-xs text-soft">
                               This is a shared provider configured by an admin. API key and base URL are managed server-side.
                             </p>
                           )}
@@ -745,7 +745,7 @@ export function SettingsModal({
                           <div className="space-y-1.5">
                             <label className={fieldLabelClass}>TTS Model</label>
                             {!showAllProviderModels && (
-                              <p className="text-xs text-muted">
+                              <p className="text-xs text-soft">
                                 This instance restricts model selection to each provider&apos;s default model.
                               </p>
                             )}
@@ -768,7 +768,7 @@ export function SettingsModal({
                                         {selectedModel.name}
                                       </span>
                                       {selectedModelVersion && (
-                                        <span className="block truncate text-xs text-muted">
+                                        <span className="block truncate text-xs text-soft">
                                           {selectedModelVersion}
                                         </span>
                                       )}
@@ -777,7 +777,7 @@ export function SettingsModal({
                                     <span className="block truncate">Select Model</span>
                                   )}
                                   <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                                    <ChevronUpDownIcon className="h-5 w-5 text-muted" />
+                                    <ChevronUpDownIcon className="h-5 w-5 text-soft" />
                                   </span>
                                 </ListboxButton>
                                 <Transition
@@ -801,7 +801,7 @@ export function SettingsModal({
                                           <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
                                             <span className="block truncate">{model.name}</span>
                                             {model.id.includes(':') && (
-                                              <span className="block truncate text-xs text-muted">
+                                              <span className="block truncate text-xs text-soft">
                                                 {model.id.slice(model.id.indexOf(':'))}
                                               </span>
                                             )}
@@ -911,7 +911,7 @@ export function SettingsModal({
                                   className={`flex items-center gap-2 rounded-lg px-2 py-1.5 w-full text-left transition duration-base ease-standard transform border
                                     ${isActive
                                       ? 'border-accent'
-                                      : 'border-offbase hover:border-muted'
+                                      : 'border-line hover:border-accent-line'
                                     }`}
                                   style={{ backgroundColor: colors.base }}
                                 >
@@ -927,8 +927,8 @@ export function SettingsModal({
                                     {systemTheme.name}
                                   </span>
                                   <div className="flex gap-1 ml-auto">
-                                    <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.background }} />
-                                    <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.offbase }} />
+                                    <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
+                                    <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
                                     <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
                                     <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
                                     <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
@@ -940,7 +940,7 @@ export function SettingsModal({
 
                           {/* Custom theme */}
                           <div className="space-y-1.5">
-                            <label className="block text-xs font-medium text-muted uppercase tracking-wide">Custom</label>
+                            <label className="block text-xs font-medium text-soft uppercase tracking-wide">Custom</label>
                             {(() => {
                               const colors = getThemeColors('custom');
                               const isActive = theme === 'custom';
@@ -955,7 +955,7 @@ export function SettingsModal({
                                       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 flex-1 text-left transition duration-base ease-standard transform border
                                         ${isActive
                                           ? 'border-accent'
-                                          : 'border-offbase hover:border-muted'
+                                          : 'border-line hover:border-accent-line'
                                         }`}
                                       style={{ backgroundColor: colors.base }}
                                     >
@@ -971,8 +971,8 @@ export function SettingsModal({
                                         Custom
                                       </span>
                                       <div className="flex gap-1 ml-auto">
-                                        <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.background }} />
-                                        <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.offbase }} />
+                                        <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
+                                        <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
                                         <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
                                         <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
                                         <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
@@ -980,7 +980,7 @@ export function SettingsModal({
                                     </button>
                                     <button
                                       onClick={() => setIsCustomExpanded(!isCustomExpanded)}
-                                      className="shrink-0 p-1.5 rounded-lg border border-offbase hover:border-muted transition-colors"
+                                      className="shrink-0 p-1.5 rounded-lg border border-line hover:border-accent-line transition-colors"
                                       style={{ color: colors.muted, backgroundColor: colors.base }}
                                       aria-label={isCustomExpanded ? 'Collapse color picker' : 'Expand color picker'}
                                     >
@@ -1043,7 +1043,7 @@ export function SettingsModal({
 
                           {/* Light themes */}
                           <div className="space-y-1.5">
-                            <label className="block text-xs font-medium text-muted uppercase tracking-wide">Light</label>
+                            <label className="block text-xs font-medium text-soft uppercase tracking-wide">Light</label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                               {lightThemes.map((t) => {
                                 const colors = getThemeColors(t.id);
@@ -1055,7 +1055,7 @@ export function SettingsModal({
                                     className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition duration-base ease-standard transform border
                                       ${isActive
                                         ? 'border-accent'
-                                        : 'border-offbase hover:border-muted'
+                                        : 'border-line hover:border-accent-line'
                                       }`}
                                     style={{ backgroundColor: colors.base }}
                                   >
@@ -1071,8 +1071,8 @@ export function SettingsModal({
                                       {t.name}
                                     </span>
                                     <div className="flex gap-1 ml-auto">
-                                      <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.background }} />
-                                      <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.offbase }} />
+                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
+                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
                                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
                                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
                                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
@@ -1085,7 +1085,7 @@ export function SettingsModal({
 
                           {/* Dark themes */}
                           <div className="space-y-1.5">
-                            <label className="block text-xs font-medium text-muted uppercase tracking-wide">Dark</label>
+                            <label className="block text-xs font-medium text-soft uppercase tracking-wide">Dark</label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                               {darkThemes.map((t) => {
                                 const colors = getThemeColors(t.id);
@@ -1097,7 +1097,7 @@ export function SettingsModal({
                                     className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition duration-base ease-standard transform border
                                       ${isActive
                                         ? 'border-accent'
-                                        : 'border-offbase hover:border-muted'
+                                        : 'border-line hover:border-accent-line'
                                       }`}
                                     style={{ backgroundColor: colors.base }}
                                   >
@@ -1113,8 +1113,8 @@ export function SettingsModal({
                                       {t.name}
                                     </span>
                                     <div className="flex gap-1 ml-auto">
-                                      <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.background }} />
-                                      <div className="w-4 h-4 rounded-full border border-offbase" style={{ backgroundColor: colors.offbase }} />
+                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
+                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
                                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
                                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
                                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
@@ -1199,10 +1199,10 @@ export function SettingsModal({
                       {activeSection === 'account' && (
                         <div className="space-y-2">
                           {/* Session info */}
-                          <div className="rounded-lg bg-background border border-offbase p-4 space-y-2">
+                          <div className="rounded-lg bg-background border border-line p-4 space-y-2">
                             <h4 className="text-sm font-medium text-foreground">Current Session</h4>
                             <div className="text-sm space-y-1">
-                              <p className="text-muted">Logged in as:</p>
+                              <p className="text-soft">Logged in as:</p>
                               {session?.user ? (
                                 <>
                                   <p className="font-medium text-foreground">
@@ -1211,7 +1211,7 @@ export function SettingsModal({
                                       : (session.user.name || session.user.email || 'Account')}
                                   </p>
                                   {!session.user.isAnonymous && (
-                                    <p className="text-xs text-muted font-mono">{session.user.email}</p>
+                                    <p className="text-xs text-soft font-mono">{session.user.email}</p>
                                   )}
                                   {session.user.isAnonymous && (
                                     <p className="text-xs text-accent mt-1">Anonymous session</p>
@@ -1229,14 +1229,14 @@ export function SettingsModal({
                               onClick={() => {
                                 window.open('/api/user/export', '_blank');
                               }}
-                              className="w-full rounded-lg border border-offbase bg-background p-4 flex items-center gap-4 hover:bg-offbase transition-colors text-left group"
+                              className="w-full rounded-lg border border-line bg-background p-4 flex items-center gap-4 hover:bg-accent-wash transition-colors text-left group"
                             >
-                              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-offbase flex items-center justify-center group-hover:bg-background transition-colors">
+                              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center group-hover:bg-background transition-colors">
                                 <DownloadIcon className="w-5 h-5 text-accent" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-foreground">Export My Data</p>
-                                <p className="text-xs text-muted">Download all your data as a ZIP file</p>
+                                <p className="text-xs text-soft">Download all your data as a ZIP file</p>
                               </div>
                             </button>
                           )}
@@ -1252,7 +1252,7 @@ export function SettingsModal({
                                   Disconnect account
                                 </Button>
 
-                                <div className="pt-4 mt-4 border-t border-offbase">
+                                <div className="pt-4 mt-4 border-t border-line-soft">
                                   <label className="block text-sm font-medium text-danger mb-2">Danger Zone</label>
                                   <Button
                                     onClick={() => setShowDeleteAccountConfirm(true)}
@@ -1260,14 +1260,14 @@ export function SettingsModal({
                                   >
                                     Delete Account
                                   </Button>
-                                  <p className="text-xs text-muted mt-2">
+                                  <p className="text-xs text-soft mt-2">
                                     Permanently deletes your account and all data.
                                   </p>
                                 </div>
                               </>
                             ) : (
-                              <div className="pt-2 border-t border-offbase">
-                                <p className="text-sm text-muted mb-3">
+                              <div className="pt-2 border-t border-line-soft">
+                                <p className="text-sm text-soft mb-3">
                                   {session?.user?.isAnonymous
                                     ? (runtimeConfig.enableUserSignups
                                       ? 'You are using an anonymous session. Sign up to save your progress permanently, your current data is automatically transferred.'
@@ -1435,11 +1435,11 @@ function SettingsChangelogPanel({
   }, [expanded, manifest, manifestUrl, bodies]);
 
   return (
-    <div className="h-[490px] flex flex-col bg-base">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-offbase bg-background">
+    <div className="h-[490px] flex flex-col bg-surface">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-line-soft bg-background">
         <Button
           onClick={onClose}
-          className="inline-flex items-center justify-center rounded-md text-muted hover:text-accent hover:bg-base transition duration-base ease-standard transform"
+          className="inline-flex items-center justify-center rounded-md text-soft hover:text-accent hover:bg-surface transition duration-base ease-standard transform"
           aria-label="Back to settings"
           title="Back"
         >
@@ -1449,7 +1449,7 @@ function SettingsChangelogPanel({
         </Button>
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-foreground">Changelog</h4>
-          <p className="text-xs text-muted truncate">
+          <p className="text-xs text-soft truncate">
             {normalizedAppVersion
               ? `Current version: v${normalizedAppVersion}`
               : 'Release history from GitHub'}
@@ -1459,15 +1459,15 @@ function SettingsChangelogPanel({
 
       <div className="flex-1 overflow-y-auto px-3 pb-3">
         {loading && (
-          <div className="py-3 text-sm text-muted">
+          <div className="py-3 text-sm text-soft">
             Loading changelog…
           </div>
         )}
 
         {!loading && error && (
-          <div className="py-3 space-y-2 border-b border-offbase">
+          <div className="py-3 space-y-2 border-b border-line-soft">
             <p className="text-sm text-foreground">Could not load changelog right now.</p>
-            <p className="text-xs text-muted break-words">{error}</p>
+            <p className="text-xs text-soft break-words">{error}</p>
             <a
               href="https://github.com/richardr1126/openreader/releases"
               target="_blank"
@@ -1480,7 +1480,7 @@ function SettingsChangelogPanel({
         )}
 
         {!loading && !error && manifest.length === 0 && (
-          <div className="py-3 text-sm text-muted">
+          <div className="py-3 text-sm text-soft">
             No releases found.
           </div>
         )}
@@ -1493,35 +1493,35 @@ function SettingsChangelogPanel({
           const normalizedName = normalizeVersion(entry.name || '');
           const showName = Boolean(entry.name) && normalizedName !== normalizedTag;
           return (
-            <div key={entry.tag_name} className="border-b border-offbase">
+            <div key={entry.tag_name} className="border-b border-line-soft">
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => ({ ...prev, [entry.tag_name]: !isExpanded }))}
-                className="w-full text-left py-2 flex items-center gap-2 hover:bg-base transition duration-base ease-standard transform"
+                className="w-full text-left py-2 flex items-center gap-2 hover:bg-surface transition duration-base ease-standard transform"
               >
                 <ChevronRightIcon
-                  className={`w-3.5 h-3.5 shrink-0 text-muted transition-transform ${
+                  className={`w-3.5 h-3.5 shrink-0 text-soft transition-transform ${
                     isExpanded ? 'rotate-90 text-foreground' : ''
                   }`}
                 />
                 <div className="min-w-0 flex items-center gap-2 text-sm w-full">
                   <span className="font-semibold text-foreground shrink-0">{entry.tag_name}</span>
                   {entry.prerelease && (
-                    <span className="text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 bg-offbase text-muted shrink-0">
+                    <span className="text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 bg-surface-sunken text-soft shrink-0">
                       prerelease
                     </span>
                   )}
                   {isCurrent && (
-                    <span className="text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 bg-offbase text-accent shrink-0">
+                    <span className="text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 bg-surface-sunken text-accent shrink-0">
                       current
                     </span>
                   )}
                   {showName && (
-                    <span className="text-xs text-muted truncate">
+                    <span className="text-xs text-soft truncate">
                       {entry.name}
                     </span>
                   )}
-                  <span className="text-[11px] text-muted shrink-0">
+                  <span className="text-[11px] text-soft shrink-0">
                     {new Date(entry.published_at).toLocaleDateString()}
                   </span>
                 </div>
@@ -1530,13 +1530,13 @@ function SettingsChangelogPanel({
               {isExpanded && (
                 <div className="pl-6 pr-1 pb-3 pt-1 space-y-2">
                   {body ? (
-                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-offbase [&_code]:rounded [&_code]:px-1 [&_pre]:bg-offbase [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto">
+                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {body.body || '_No release notes provided._'}
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted">Loading release notes…</p>
+                    <p className="text-xs text-soft">Loading release notes…</p>
                   )}
                   <a
                     href={entry.html_url}

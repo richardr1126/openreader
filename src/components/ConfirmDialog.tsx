@@ -62,7 +62,7 @@ export function ConfirmDialog({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel role='dialog' className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
+              <DialogPanel role='dialog' className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground"

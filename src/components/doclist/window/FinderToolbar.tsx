@@ -54,19 +54,19 @@ const ICON_SIZES: Array<{ value: IconSize; label: string }> = [
 
 // Match SettingsModal / UserMenu trigger sizing exactly so all bar buttons share one rhythm.
 const TOOLBAR_BTN =
-  'inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard';
+  'inline-flex items-center py-1 px-2 rounded-md border bg-surface text-xs transition duration-base ease-standard';
 const TOOLBAR_BTN_INACTIVE =
-  'border-offbase text-foreground hover:text-accent hover:border-accent hover:bg-offbase';
-const TOOLBAR_BTN_ACTIVE = 'border-accent bg-offbase text-accent';
+  'border-line text-foreground hover:text-accent hover:border-accent-line hover:bg-accent-wash';
+const TOOLBAR_BTN_ACTIVE = 'border-accent-line bg-surface-sunken text-accent';
 
 // Pill-grouped segmented control. Outer pill carries the border; inner segments are
 // borderless and rely on bg/text color to show active/hover. Sized so the whole pill
 // matches the height of a standalone TOOLBAR_BTN.
-const PILL = 'inline-flex items-center rounded-md border border-offbase bg-base p-0.5 gap-0.5 shrink-0';
+const PILL = 'inline-flex items-center rounded-md border border-line bg-surface p-0.5 gap-0.5 shrink-0';
 const PILL_SEGMENT =
-  'inline-flex items-center justify-center rounded-[5px] text-xs transition-colors duration-base ease-standard';
-const PILL_SEGMENT_INACTIVE = 'text-muted hover:bg-offbase hover:text-accent';
-const PILL_SEGMENT_ACTIVE = 'bg-offbase text-accent';
+  'inline-flex items-center justify-center rounded-sm text-xs transition-colors duration-base ease-standard';
+const PILL_SEGMENT_INACTIVE = 'text-soft hover:bg-accent-wash hover:text-accent';
+const PILL_SEGMENT_ACTIVE = 'bg-surface-sunken text-accent';
 
 export function FinderToolbar({
   viewMode,
@@ -89,10 +89,10 @@ export function FinderToolbar({
   const directionLabel = sortDirection === 'asc' ? currentSort.asc : currentSort.desc;
 
   return (
-    <div className="sticky top-0 z-40 w-full border-b border-offbase bg-base">
+    <div className="sticky top-0 z-40 w-full border-b border-line-soft bg-surface">
       <div className="px-2 sm:px-3 py-1 min-h-10 flex items-center gap-1.5 sm:gap-2">
         {leftSlot && (
-          <div className="shrink-0 flex items-center gap-2 pr-1 sm:pr-2 sm:border-r sm:border-offbase">
+          <div className="shrink-0 flex items-center gap-2 pr-1 sm:pr-2 sm:border-r sm:border-line">
             {leftSlot}
           </div>
         )}
@@ -135,7 +135,7 @@ export function FinderToolbar({
                   <div
                     className="absolute top-full left-1/2 z-30 -translate-x-1/2 pt-1 opacity-0 pointer-events-none transition-opacity duration-fast group-hover/icons:opacity-100 group-hover/icons:pointer-events-auto group-focus-within/icons:opacity-100 group-focus-within/icons:pointer-events-auto"
                   >
-                    <div className={`${PILL} shadow-lg`}>
+                    <div className={`${PILL} shadow-elev-2`}>
                       {ICON_SIZES.map(({ value: sizeValue, label: sizeLabel }) => {
                         const sizeActive = iconSize === sizeValue;
                         return (
@@ -182,7 +182,7 @@ export function FinderToolbar({
               </ListboxButton>
               <ListboxOptions
                 anchor="bottom end"
-                className="z-50 mt-1 rounded-md bg-background border border-offbase shadow-lg p-1 focus:outline-none"
+                className="z-50 mt-1 rounded-md bg-surface-sunken border border-line shadow-elev-2 p-1 focus:outline-none"
               >
                 {SORT_OPTIONS.map((opt) => (
                   <ListboxOption
@@ -190,7 +190,7 @@ export function FinderToolbar({
                     value={opt.value}
                     className={({ active, selected }) =>
                       `cursor-pointer select-none rounded-sm py-1.5 px-2.5 text-xs ${
-                        active ? 'bg-offbase text-accent' : 'text-foreground'
+                        active ? 'bg-surface-sunken text-accent' : 'text-foreground'
                       } ${selected ? 'font-semibold' : ''}`
                     }
                   >
@@ -204,19 +204,19 @@ export function FinderToolbar({
 
         <div className="flex-1 min-w-0" />
 
-        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-background border border-offbase hover:border-accent focus-within:ring-1 focus-within:ring-accent focus-within:border-accent transition-colors duration-base ease-standard w-[160px] md:w-[200px]">
-          <SearchIcon className="w-3.5 h-3.5 text-muted shrink-0" />
+        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken border border-line hover:border-accent-line focus-within:ring-1 focus-within:ring-accent-line focus-within:border-accent-line transition-colors duration-base ease-standard w-[160px] md:w-[200px]">
+          <SearchIcon className="w-3.5 h-3.5 text-soft shrink-0" />
           <input
             type="search"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search"
-            className="flex-1 min-w-0 bg-transparent outline-none text-xs text-foreground placeholder:text-muted"
+            className="flex-1 min-w-0 bg-transparent outline-none text-xs text-foreground placeholder:text-soft"
           />
         </div>
 
         {rightSlot && (
-          <div className="shrink-0 flex items-center gap-2 pl-1 sm:pl-2 sm:border-l sm:border-offbase ml-0.5">
+          <div className="shrink-0 flex items-center gap-2 pl-1 sm:pl-2 sm:border-l sm:border-line ml-0.5">
             {rightSlot}
           </div>
         )}

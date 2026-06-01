@@ -31,7 +31,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
   } = useTTS();
 
   return (
-    <div className="sticky bottom-0 z-30 w-full border-t border-offbase bg-base" data-app-ttsbar>
+    <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
       <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
         {/* Speed control */}
         <SpeedControl 
@@ -51,7 +51,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
         {/* Playback Controls */}
         <Button
           onClick={skipBackward}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
+          className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label="Skip backward"
           disabled={isProcessing}
         >
@@ -60,7 +60,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
 
         <Button
           onClick={togglePlay}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
+          className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label={isPlaying ? 'Pause' : 'Play'}
           disabled={isProcessing && !isPlaying}
         >
@@ -69,7 +69,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
 
         <Button
           onClick={skipForward}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
+          className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label="Skip forward"
           disabled={isProcessing}
         >

@@ -480,7 +480,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
           return (
             <div
               key={`${block.id}:${fragment.page}:${fragment.readingOrder}`}
-              className="absolute border border-accent-line rounded-[2px]"
+              className="absolute border border-accent-line rounded-sm"
               style={{
                 left: `${leftPct}%`,
                 top: `${topPct}%`,
@@ -536,7 +536,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                     pageNumber={i + 1}
                     renderAnnotationLayer={true}
                     renderTextLayer={i + 1 === currDocPage}
-                    className="shadow-lg"
+                    className="shadow-elev-2"
                     scale={currentScale()}
                     onRenderSuccess={() => {
                       lastRenderedLayoutKeyRef.current = layoutKey;
@@ -562,7 +562,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                     pageNumber={leftPage}
                     renderAnnotationLayer={true}
                     renderTextLayer={leftPage === currDocPage}
-                    className="shadow-lg"
+                    className="shadow-elev-2"
                     scale={currentScale()}
                     onRenderSuccess={() => {
                       lastRenderedLayoutKeyRef.current = layoutKey;
@@ -584,7 +584,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                     pageNumber={rightPage}
                     renderAnnotationLayer={true}
                     renderTextLayer={rightPage === currDocPage}
-                    className="shadow-lg"
+                    className="shadow-elev-2"
                     scale={currentScale()}
                     onRenderSuccess={() => {
                       lastRenderedLayoutKeyRef.current = layoutKey;

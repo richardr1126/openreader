@@ -120,11 +120,11 @@ function SignInContent() {
         <SessionExpiredLoader setSessionExpired={setSessionExpired} />
       </Suspense>
 
-        <div className="w-full max-w-md bg-base rounded-2xl shadow-xl p-6">
+        <div className="w-full max-w-md bg-surface rounded-lg shadow-elev-3 p-6">
           <h1 className="text-xl font-semibold text-foreground">
             {sessionExpired ? 'Session Expired' : 'Connect Account'}
           </h1>
-          <p className="text-sm text-muted mt-1">
+          <p className="text-sm text-soft mt-1">
             {sessionExpired
               ? 'Please sign in again to continue'
               : 'Connect an email account to sync your data across devices'}
@@ -154,8 +154,8 @@ function SignInContent() {
               value={email}
               onChange={(e) => { setEmail(e.target.value); setError(null); }}
               placeholder="me@example.com"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
+                       focus:outline-none focus:ring-2 focus:ring-accent-line"
             />
           </div>
 
@@ -167,8 +167,8 @@ function SignInContent() {
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(null); }}
               placeholder="Password"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
+                       focus:outline-none focus:ring-2 focus:ring-accent-line"
             />
           </div>
 
@@ -178,7 +178,7 @@ function SignInContent() {
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-muted text-accent focus:ring-accent"
+              className="rounded border-muted text-accent focus:ring-accent-line"
             />
             <span className="text-sm text-foreground">Remember me</span>
           </label>
@@ -230,16 +230,16 @@ function SignInContent() {
         </div>
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-offbase text-center space-y-2">
+        <div className="mt-6 pt-4 border-t border-line-soft text-center space-y-2">
           {enableUserSignups && (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-soft">
               Don&apos;t have an account?{' '}
               <Link href="/signup" className="underline hover:text-foreground">
                 Sign up
               </Link>
             </p>
           )}
-          <p className="text-xs text-muted">
+          <p className="text-xs text-soft">
             By signing in, you agree to our{' '}
             <button
               onClick={() => showPrivacyModal()}

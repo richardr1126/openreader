@@ -43,7 +43,7 @@ export function CookieConsentBanner() {
       leaveTo="translate-y-full opacity-0"
       className="fixed bottom-0 left-0 right-0 z-[60] px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:pt-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))]"
     >
-      <div className="mx-auto max-w-5xl rounded-xl border border-offbase bg-base p-5 shadow-2xl md:flex md:items-center md:justify-between md:gap-8">
+      <div className="mx-auto max-w-5xl rounded-lg border border-line bg-surface p-5 shadow-elev-3 md:flex md:items-center md:justify-between md:gap-8">
         <div className="mb-4 md:mb-0">
           <h3 className="mb-2 text-lg font-bold">
             🍪 We use cookies
@@ -70,7 +70,7 @@ export function CookieConsentBanner() {
             className={buttonClass({
               variant: 'primary',
               size: 'md',
-              className: 'whitespace-nowrap font-bold shadow-sm',
+              className: 'whitespace-nowrap font-bold shadow-elev-1',
             })}
           >
             Accept All

@@ -105,13 +105,13 @@ export default function SignUpPage() {
   if (!enableUserSignups) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <div className="w-full max-w-md bg-base rounded-2xl shadow-xl p-6">
+        <div className="w-full max-w-md bg-surface rounded-lg shadow-elev-3 p-6">
           <h1 className="text-xl font-semibold text-foreground">Sign-ups unavailable</h1>
-          <p className="text-sm text-muted mt-1">
+          <p className="text-sm text-soft mt-1">
             New account sign-ups are currently disabled by the site administrator.
           </p>
-          <div className="mt-6 pt-4 border-t border-offbase text-center">
-            <p className="text-xs text-muted">
+          <div className="mt-6 pt-4 border-t border-line-soft text-center">
+            <p className="text-xs text-soft">
               Already have an account?{' '}
               <Link href="/signin" className="underline hover:text-foreground">
                 Sign in
@@ -129,9 +129,9 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md bg-base rounded-2xl shadow-xl p-6">
+      <div className="w-full max-w-md bg-surface rounded-lg shadow-elev-3 p-6">
         <h1 className="text-xl font-semibold text-foreground">Sign Up</h1>
-        <p className="text-sm text-muted mt-1">Create your account to get started</p>
+        <p className="text-sm text-soft mt-1">Create your account to get started</p>
 
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
@@ -148,8 +148,8 @@ export default function SignUpPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="me@example.com"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
+                       focus:outline-none focus:ring-2 focus:ring-accent-line"
             />
           </div>
 
@@ -162,8 +162,8 @@ export default function SignUpPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
-                className="w-full rounded-lg bg-background py-2 px-3 pr-10 text-foreground shadow-sm 
-                         focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full rounded-lg bg-background py-2 px-3 pr-10 text-foreground shadow-elev-1
+                         focus:outline-none focus:ring-2 focus:ring-accent-line"
               />
               <button
                 type="button"
@@ -171,7 +171,7 @@ export default function SignUpPage() {
                 className={buttonClass({
                   variant: 'ghost',
                   size: 'icon',
-                  className: 'absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 text-muted',
+                  className: 'absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 text-soft',
                 })}
               >
                 {showPassword ? '👁️' : '👁️‍🗨️'}
@@ -185,7 +185,7 @@ export default function SignUpPage() {
                   {[0, 1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className={`h-1 flex-1 rounded ${i < strength ? strengthColors[strength - 1] : 'bg-offbase'
+                      className={`h-1 flex-1 rounded ${i < strength ? strengthColors[strength - 1] : 'bg-surface-sunken'
                         }`}
                     />
                   ))}
@@ -193,7 +193,7 @@ export default function SignUpPage() {
                 <p className={`text-xs ${strength >= 3 ? 'text-accent' : 'text-danger'}`}>
                   {strengthLabels[strength - 1] || 'Very Weak'}
                 </p>
-                <div className="text-xs space-y-0.5 text-muted">
+                <div className="text-xs space-y-0.5 text-soft">
                   {Object.entries(checks).map(([key, passed]) => (
                     <div key={key} className={`flex items-center gap-1 ${passed ? 'text-accent' : ''}`}>
                       <span>{passed ? '✓' : '○'}</span>
@@ -219,8 +219,8 @@ export default function SignUpPage() {
               value={passwordConfirmation}
               onChange={(e) => setPasswordConfirmation(e.target.value)}
               placeholder="Confirm Password"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
+                       focus:outline-none focus:ring-2 focus:ring-accent-line"
             />
             {passwordConfirmation && password && (
               <p className={`text-xs mt-1 ${password === passwordConfirmation ? 'text-accent' : 'text-danger'}`}>
@@ -241,14 +241,14 @@ export default function SignUpPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-offbase text-center space-y-2">
-          <p className="text-xs text-muted">
+        <div className="mt-6 pt-4 border-t border-line-soft text-center space-y-2">
+          <p className="text-xs text-soft">
             Already have an account?{' '}
             <Link href="/signin" className="underline hover:text-foreground">
               Sign in
             </Link>
           </p>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-soft">
             By creating an account, you agree to our{' '}
             <button
               onClick={() => showPrivacyModal()}

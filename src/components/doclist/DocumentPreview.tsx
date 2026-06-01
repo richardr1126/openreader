@@ -243,7 +243,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[3/4] overflow-hidden rounded-t-md bg-base"
+      className="relative w-full aspect-[3/4] overflow-hidden rounded-t-md bg-surface"
     >
       {imagePreview ? (
         <>

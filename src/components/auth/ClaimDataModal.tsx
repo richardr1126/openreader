@@ -99,7 +99,7 @@ export default function ClaimDataModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel data-testid="claim-modal" className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
+              <DialogPanel data-testid="claim-modal" className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground mb-4"
@@ -107,13 +107,13 @@ export default function ClaimDataModal({
                   Existing Data Found
                 </DialogTitle>
 
-                <p className="text-sm text-muted mb-2">
+                <p className="text-sm text-soft mb-2">
                   We found existing anonymous data from before auth was enabled.
                   Claim it now to attach it to your account.
                 </p>
 
-                <div className="mb-4 rounded-lg border border-offbase bg-surface-sunken p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">Claimable data</div>
+                <div className="mb-4 rounded-lg border border-line bg-surface-sunken p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-soft">Claimable data</div>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-soft">
                     <li>{claimableCounts.documents} document(s)</li>
                     <li>{claimableCounts.audiobooks} audiobook(s)</li>
@@ -132,8 +132,8 @@ export default function ClaimDataModal({
                     type="button"
                     onClick={onDismiss}
                     disabled={isClaiming}
-                    className="inline-flex justify-center rounded-lg bg-background px-3 py-1.5 text-sm 
-                             font-medium text-foreground hover:bg-offbase focus:outline-none 
+                    className="inline-flex justify-center rounded-lg bg-background px-3 py-1.5 text-sm
+                             font-medium text-foreground hover:bg-accent-wash focus:outline-none
                              focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
                              transform transition-transform duration-base ease-standard hover:text-accent
                              disabled:opacity-50"
@@ -145,8 +145,8 @@ export default function ClaimDataModal({
                     type="button"
                     onClick={handleClaim}
                     disabled={isClaiming}
-                    className="inline-flex justify-center rounded-lg bg-accent px-3 py-1.5 text-sm 
-                             font-medium text-background hover:bg-secondary-accent focus:outline-none 
+                    className="inline-flex justify-center rounded-lg bg-accent px-3 py-1.5 text-sm
+                             font-medium text-background hover:bg-secondary-accent focus:outline-none
                              focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
                              transform transition-transform duration-base ease-standard hover:text-background
                              disabled:opacity-50"

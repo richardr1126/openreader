@@ -42,7 +42,7 @@ export function CreateFolderDialog({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
+              <DialogPanel className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
                 <DialogTitle as="h3" className="text-lg font-semibold text-foreground">
                   Create New Folder
                 </DialogTitle>
@@ -53,10 +53,10 @@ export function CreateFolderDialog({
                     onChange={(e) => onFolderNameChange(e.target.value)}
                     onKeyDown={onKeyDown}
                     placeholder="Enter folder name"
-                    className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                    className="w-full rounded-lg bg-surface-sunken py-2 px-3 text-foreground shadow-elev-1 focus:outline-none focus:ring-1 focus:ring-accent-line"
                     autoFocus
                   />
-                  <p className="mt-2 text-xs text-muted">Press Enter to create or Escape to cancel</p>
+                  <p className="mt-2 text-xs text-soft">Press Enter to create or Escape to cancel</p>
                 </div>
               </DialogPanel>
             </TransitionChild>

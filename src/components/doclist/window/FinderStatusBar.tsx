@@ -19,14 +19,14 @@ export function FinderStatusBar({
     <div
       role="status"
       aria-live="polite"
-      className="min-h-6 px-3 pb-[env(safe-area-inset-bottom)] flex items-center justify-between gap-3 text-[11px] text-muted bg-base border-t border-offbase select-none"
+      className="min-h-6 px-3 pb-[env(safe-area-inset-bottom)] flex items-center justify-between gap-3 text-[11px] text-soft bg-surface border-t border-line-soft select-none"
     >
       <span className="truncate">{summary}</span>
       <span className="shrink-0">
         {selectedCount > 0
           ? `${selectedCount} of ${itemCount} selected`
           : `${itemCount} item${itemCount === 1 ? '' : 's'}`}
-        <span className="mx-1.5 text-muted">•</span>
+        <span className="mx-1.5 text-soft">•</span>
         {formatDocumentSize(totalSize)}
       </span>
     </div>

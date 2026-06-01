@@ -32,7 +32,7 @@ export function ProgressCard({
   const operationLabel = getOperationLabel();
 
   return (
-    <div className="bg-offbase rounded-lg p-3 space-y-2">
+    <div className="bg-surface-sunken rounded-lg p-3 space-y-2">
       {/* Header with operation type and cancel button */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0 space-y-1">
@@ -57,7 +57,7 @@ export function ProgressCard({
           className={buttonClass({
             variant: 'ghost',
             size: 'xs',
-            className: 'shrink-0 hover:bg-surface-sunken',
+            className: 'shrink-0 hover:bg-accent-wash',
           })}
           onClick={(e) => onCancel(e)}
         >
@@ -74,7 +74,7 @@ export function ProgressCard({
       </div>
 
       {/* Stats row */}
-      <div className="flex items-center gap-2 text-xs text-muted">
+      <div className="flex items-center gap-2 text-xs text-soft">
         {completedChapters !== undefined && (
           <>
             <span className="font-medium">{completedChapters} chapters</span>

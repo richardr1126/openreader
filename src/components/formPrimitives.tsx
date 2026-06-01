@@ -30,16 +30,16 @@ export {
   type ButtonVariant,
 };
 
-// Inputs use `bg-base` so they remain visible regardless of whether the
-// surrounding container is `bg-background` (Card) or `bg-base` (Section).
+// Inputs use `bg-surface` so they remain visible regardless of whether the
+// surrounding container is `bg-background` (Card) or `bg-surface` (Section).
 // Using the same `bg-background` as the Card would make the input blend in.
 // (Note: never use Tailwind alpha modifiers on these theme variables — they
 // resolve to CSS custom properties that don't accept opacity suffixes.)
 export const inputClass =
-  'w-full rounded-md bg-surface-sunken border border-line px-2.5 py-1.5 text-sm text-foreground transition-colors duration-fast ease-standard focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent-line';
+  'w-full rounded-md bg-surface-sunken border border-line px-2.5 py-1.5 text-sm text-foreground transition-colors duration-fast ease-standard focus:outline-none focus:ring-2 focus:ring-accent-line focus:border-accent-line';
 
 export const listboxButtonClass =
-  'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent hover:bg-accent-wash transition-colors duration-fast ease-standard';
+  'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
 export const listboxOptionsClass =
   'z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none [--anchor-gap:0.25rem]';
 export const listboxOptionClass = (active: boolean) =>

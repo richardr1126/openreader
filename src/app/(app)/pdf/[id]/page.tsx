@@ -255,9 +255,9 @@ export default function PDFViewerPage() {
         <Link
           href="/app"
           onClick={handleBackToDocuments}
-          className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition duration-base ease-standard hover:text-accent"
+          className="inline-flex items-center px-3 py-1 bg-surface text-foreground rounded-lg hover:bg-accent-wash transition duration-base ease-standard hover:text-accent"
         >
-          <svg className="w-4 h-4 mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 mr-2 text-soft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back to Documents
@@ -308,34 +308,34 @@ export default function PDFViewerPage() {
         : (isMerging ? 'Stage: merge' : 'Stage: infer'));
 
     return (
-      <div className="h-full w-full bg-base">
+      <div className="h-full w-full bg-surface">
         <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard ${showDetailedParseLoader ? 'max-w-lg' : 'max-w-md'}`}>
           {showDetailedParseLoader ? (
-            <div className="w-full rounded-xl border border-offbase bg-surface-sunken shadow-sm overflow-hidden">
+            <div className="w-full rounded-lg border border-line bg-surface-sunken shadow-elev-1 overflow-hidden">
               <div className="h-1 bg-[linear-gradient(90deg,var(--accent),transparent_80%)]" />
               <div className="p-3.5 sm:p-4">
                 <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-2 rounded-md border border-offbase bg-surface-solid px-2.5 py-1">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-solid px-2.5 py-1">
                     <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">PDF Layout Parse</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-soft">PDF Layout Parse</span>
                   </div>
                   <p className="text-sm font-semibold text-foreground">{statusText}</p>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-offbase bg-surface-solid p-2.5">
+                <div className="mt-3 rounded-lg border border-line bg-surface-solid p-2.5">
                   <div className="mb-1.5 flex items-end justify-between gap-2">
                     <p className="text-[11px] font-semibold text-foreground">
                       {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
                     </p>
-                    <p className="text-[10px] text-muted">{stageLabel}</p>
+                    <p className="text-[10px] text-soft">{stageLabel}</p>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-offbase overflow-hidden">
+                  <div className="h-2 w-full rounded-full bg-surface-sunken overflow-hidden">
                     <div
                       className="h-full bg-accent transition duration-slow ease-standard"
                       style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
                     />
                   </div>
-                  <p className="mt-1.5 text-[10px] text-muted">
+                  <p className="mt-1.5 text-[10px] text-soft">
                     {hasMeasuredProgress ? `${Math.round(progressPercent)}% complete` : statusSubText}
                   </p>
                 </div>
@@ -345,7 +345,7 @@ export default function PDFViewerPage() {
                     <button
                       type="button"
                       onClick={requestForceReparse}
-                      className="inline-flex items-center rounded-md border border-offbase bg-base px-3 py-1.5 text-xs font-medium text-foreground hover:text-accent transition-colors"
+                      className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:text-accent transition-colors"
                     >
                       Retry Parse
                     </button>
@@ -354,14 +354,14 @@ export default function PDFViewerPage() {
               </div>
             </div>
           ) : (
-            <div className="w-full rounded-xl border border-offbase bg-surface-sunken p-4 shadow-sm transition duration-slow ease-standard overflow-hidden">
+            <div className="w-full rounded-lg border border-line bg-surface-sunken p-4 shadow-elev-1 transition duration-slow ease-standard overflow-hidden">
               <div className="h-0.5 -mx-4 -mt-4 mb-3 bg-[linear-gradient(90deg,var(--accent),transparent_75%)]" />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">{compactLabel}</p>
-                  <p className="mt-1 text-xs text-muted">{compactSubLabel}</p>
+                  <p className="mt-1 text-xs text-soft">{compactSubLabel}</p>
                 </div>
-                <span className="inline-flex items-center justify-center rounded-md border border-offbase bg-base p-1.5">
+                <span className="inline-flex items-center justify-center rounded-md border border-line bg-surface p-1.5">
                   <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
                 </span>
               </div>
@@ -384,7 +384,7 @@ export default function PDFViewerPage() {
           <Link
             href="/app"
             onClick={handleBackToDocuments}
-            className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard hover:text-accent"
+            className="inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard hover:text-accent"
             aria-label="Back to documents"
           >
             <svg className="w-3 h-3 mr-2" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
@@ -440,7 +440,7 @@ export default function PDFViewerPage() {
         />
       )}
       {isAtLimit ? (
-        <div className="sticky bottom-0 z-30 w-full border-t border-offbase bg-base" data-app-ttsbar>
+        <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
           <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
             <RateLimitPauseButton />
             <RateLimitBanner />

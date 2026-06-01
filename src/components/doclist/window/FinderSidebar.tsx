@@ -58,15 +58,15 @@ function SidebarRow({
       className={
         'group w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition duration-base ease-standard text-left ' +
         (active
-          ? 'border-accent bg-offbase text-accent'
-          : 'border-transparent bg-transparent text-foreground hover:border-accent hover:text-accent') +
-        (isDropTarget ? ' ring-1 ring-accent' : '')
+          ? 'border-accent-line bg-surface-sunken text-accent'
+          : 'border-transparent bg-transparent text-foreground hover:border-accent-line hover:text-accent') +
+        (isDropTarget ? ' ring-1 ring-accent-line' : '')
       }
     >
       <span
         className={
           'w-4 h-4 shrink-0 flex items-center justify-center transition-colors duration-base ' +
-          (active ? 'text-accent' : 'text-muted group-hover:text-accent')
+          (active ? 'text-accent' : 'text-soft group-hover:text-accent')
         }
       >
         {icon}
@@ -74,7 +74,7 @@ function SidebarRow({
       <span className="truncate flex-1">{label}</span>
       {typeof count === 'number' && count > 0 && (
         <span
-          className={`text-[10px] text-muted tabular-nums transition-transform duration-base ease-standard ${countClassName ?? ''}`}
+          className={`text-[10px] text-soft tabular-nums transition-transform duration-base ease-standard ${countClassName ?? ''}`}
         >
           {count}
         </span>
@@ -137,7 +137,7 @@ function FolderRow({
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded text-muted opacity-0 group-hover/folder:opacity-100 group-focus-within/folder:opacity-100 hover:text-accent hover:bg-offbase transition"
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded text-soft opacity-0 group-hover/folder:opacity-100 group-focus-within/folder:opacity-100 hover:text-accent hover:bg-accent-wash transition"
         aria-label={`Delete ${folder.name}`}
         title={`Delete ${folder.name}`}
       >
@@ -161,7 +161,7 @@ function SectionHeader({
   return (
     <div
       className={
-        'px-2 pb-1 text-[10px] uppercase tracking-[0.08em] text-muted font-semibold leading-none flex items-center justify-between ' +
+        'px-2 pb-1 text-[10px] uppercase tracking-[0.08em] text-soft font-semibold leading-none flex items-center justify-between ' +
         (isFirst ? 'pt-1.5' : 'pt-3')
       }
     >
@@ -206,7 +206,7 @@ export function FinderSidebar({
   return (
     <aside
       style={{ '--sidebar-width': `${width}px` } as CSSProperties}
-      className="relative h-full w-full md:[width:var(--sidebar-width)] bg-base border-r border-offbase shrink-0 flex flex-col"
+      className="relative h-full w-full md:[width:var(--sidebar-width)] bg-surface border-r border-line-soft shrink-0 flex flex-col"
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="p-2 flex flex-col gap-0.5">
@@ -272,7 +272,7 @@ export function FinderSidebar({
             rightSlot={(
               <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
                 <MenuButton
-                  className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-muted hover:text-accent transition-colors duration-base ease-standard focus:outline-none"
+                  className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-soft hover:text-accent transition-colors duration-base ease-standard focus:outline-none"
                   title="Folder actions"
                   aria-label="Folder actions"
                 >
@@ -289,7 +289,7 @@ export function FinderSidebar({
                 >
                   <MenuItems
                     anchor="bottom start"
-                    className="z-50 mt-2 min-w-[180px] rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none p-1 normal-case tracking-normal font-normal"
+                    className="z-50 mt-2 min-w-[180px] rounded-md bg-surface shadow-elev-2 ring-1 ring-line-soft focus:outline-none p-1 normal-case tracking-normal font-normal"
                   >
                     <MenuItem>
                       {({ active }) => (
@@ -299,7 +299,7 @@ export function FinderSidebar({
                             onNewFolder();
                             onRowAction?.();
                           }}
-                          className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          className={`${active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                         >
                           <FolderPlusIcon className="h-4 w-4" />
                           New Folder
@@ -315,7 +315,7 @@ export function FinderSidebar({
                             onRowAction?.();
                           }}
                           disabled={disabled}
-                          className={`${disabled ? 'text-faint cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          className={`${disabled ? 'text-faint cursor-not-allowed' : active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -332,7 +332,7 @@ export function FinderSidebar({
             Folders
           </SectionHeader>
           {folders.length === 0 ? (
-            <p className="px-2 py-1 text-[11px] text-muted">No folders yet</p>
+            <p className="px-2 py-1 text-[11px] text-soft">No folders yet</p>
           ) : (
             folders.map((folder) => (
               <FolderRow
@@ -355,7 +355,7 @@ export function FinderSidebar({
       </div>
       {bottomSlot && (
         <div
-          className="shrink-0 border-t border-offbase px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-2"
+          className="shrink-0 border-t border-line-soft px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-2"
           onClick={(e) => e.stopPropagation()}
         >
           {bottomSlot}
@@ -370,7 +370,7 @@ export function FinderSidebar({
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
-        className="hidden md:block absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-offbase active:bg-accent transition-colors duration-base ease-standard"
+        className="hidden md:block absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-accent-wash active:bg-accent transition-colors duration-base ease-standard"
       />
     </aside>
   );

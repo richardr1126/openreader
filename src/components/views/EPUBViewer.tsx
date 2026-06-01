@@ -158,12 +158,12 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
 
   return (
     <div className={`h-full flex flex-col relative z-0 ${className}`} ref={containerRef}>
-      <div className="flex items-center justify-between px-2 py-1 border-b border-offbase bg-base text-xs text-muted">
+      <div className="flex items-center justify-between px-2 py-1 border-b border-line-soft bg-surface text-xs text-soft">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsTocOpen(open => !open)}
-            className="inline-flex items-center py-1 px-1 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard transform hover:text-accent"
+            className="inline-flex items-center py-1 px-1 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard transform hover:text-accent"
             aria-label={isTocOpen ? 'Hide chapters' : 'Show chapters'}
           >
             <DotsVerticalIcon className="w-4 h-4" />
@@ -171,7 +171,7 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
           <button
             type="button"
             onClick={() => handleLocationChanged('prev')}
-            className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard transform hover:text-accent"
+            className="inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard transform hover:text-accent"
             aria-label="Previous section"
           >
             <ChevronLeftIcon className="w-4 h-4" />
@@ -185,15 +185,15 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
         <button
           type="button"
           onClick={() => handleLocationChanged('next')}
-          className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard transform hover:text-accent"
+          className="inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard transform hover:text-accent"
           aria-label="Next section"
         >
           <ChevronRightIcon className="w-4 h-4" />
         </button>
       </div>
       {isTocOpen && tocRef.current && tocRef.current.length > 0 && (
-        <div className="border-b border-offbase bg-background text-xs overflow-y-auto max-h-64 p-2">
-          <div className="font-semibold text-muted pb-1">Skip to chapters</div>
+        <div className="border-b border-line-soft bg-background text-xs overflow-y-auto max-h-64 p-2">
+          <div className="font-semibold text-soft pb-1">Skip to chapters</div>
           <div className="flex flex-wrap gap-1 w-full">
             {tocRef.current.map((item, index) => (
               <button
@@ -204,9 +204,9 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
                   setIsTocOpen(false);
                 }}
                 className="
-                  px-2 py-1 rounded-md font-medium text-foreground text-center bg-base 
-                  hover:bg-offbase hover:text-accent transition-colors duration-fast
-                  whitespace-nowrap 
+                  px-2 py-1 rounded-md font-medium text-foreground text-center bg-surface
+                  hover:bg-accent-wash hover:text-accent transition-colors duration-fast
+                  whitespace-nowrap
                   flex-1 min-w-[140px]
                 "
               >

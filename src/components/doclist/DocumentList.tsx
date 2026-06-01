@@ -139,14 +139,14 @@ function SidebarUploadLoader({
   const dashOffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="rounded-md border border-offbase bg-surface-sunken px-2 py-1.5">
+    <div className="rounded-md border border-line bg-surface-sunken px-2 py-1.5">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5 text-[11px] leading-tight">
           <span className="font-medium text-foreground">{label}</span>
-          <span className="shrink-0 tabular-nums text-muted">{completedFiles}/{totalFiles}</span>
+          <span className="shrink-0 tabular-nums text-soft">{completedFiles}/{totalFiles}</span>
         </div>
         <div className="shrink-0 flex items-center gap-1 text-accent" aria-label={`Upload progress ${progress}%`}>
-          <span className="text-[10px] tabular-nums text-muted">{progress}%</span>
+          <span className="text-[10px] tabular-nums text-soft">{progress}%</span>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={phase === 'converting' ? 'animate-spin' : ''}>
             <circle
               cx={size / 2}
@@ -174,7 +174,7 @@ function SidebarUploadLoader({
         </div>
       </div>
       {currentFileName && (
-        <p className="mt-0.5 truncate text-[10px] text-muted" title={currentFileName}>
+        <p className="mt-0.5 truncate text-[10px] text-soft" title={currentFileName}>
           {currentFileName}
         </p>
       )}
@@ -649,15 +649,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       }}
     >
       {!isLoading && showHint && allDocuments.length > 1 && (
-        <div className="px-3 pt-3 shrink-0 bg-background">
-          <div className="flex items-center justify-between bg-base border border-offbase rounded-md px-3 py-1 text-[12px]">
+        <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
+          <div className="flex items-center justify-between bg-surface border border-line rounded-md px-3 py-1 text-[12px]">
             <p className="text-foreground">
               Drag files onto each other to make folders. Drop into the sidebar to move.
             </p>
             <button
               type="button"
               onClick={() => setShowHint(false)}
-              className="h-6 w-6 inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base rounded transition duration-base ease-standard"
+              className="h-6 w-6 inline-flex items-center justify-center text-soft hover:text-accent hover:bg-surface rounded transition duration-base ease-standard"
               aria-label="Dismiss hint"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

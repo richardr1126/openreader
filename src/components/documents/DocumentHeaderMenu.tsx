@@ -49,10 +49,10 @@ export function DocumentHeaderMenu({
       {onOpenSegments && (
         <button
           onClick={onOpenSegments}
-          className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard ${
+          className={`inline-flex items-center py-1 px-2 rounded-md border bg-surface text-xs transition duration-base ease-standard ${
             isSegmentsOpen
-              ? 'border-accent text-accent bg-offbase'
-              : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
+              ? 'border-accent text-accent bg-surface-sunken'
+              : 'border-line text-foreground hover:bg-accent-wash hover:text-accent'
           }`}
           aria-label={isSegmentsOpen ? 'Hide segments sidebar' : 'Open segments sidebar'}
           title={isSegmentsOpen ? 'Hide Segments' : 'Segments'}
@@ -63,10 +63,10 @@ export function DocumentHeaderMenu({
       {showAudiobookExport && onOpenAudiobook && (
         <button
           onClick={onOpenAudiobook}
-          className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard ${
+          className={`inline-flex items-center py-1 px-2 rounded-md border bg-surface text-xs transition duration-base ease-standard ${
             isAudiobookOpen
-              ? 'border-accent text-accent bg-offbase'
-              : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
+              ? 'border-accent text-accent bg-surface-sunken'
+              : 'border-line text-foreground hover:bg-accent-wash hover:text-accent'
           }`}
           aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
           title={isAudiobookOpen ? 'Hide Export Audiobook' : 'Export Audiobook'}
@@ -76,10 +76,10 @@ export function DocumentHeaderMenu({
       )}
       <button
         onClick={onOpenSettings}
-        className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard ${
+        className={`inline-flex items-center py-1 px-2 rounded-md border bg-surface text-xs transition duration-base ease-standard ${
           isSettingsOpen
-            ? 'border-accent text-accent bg-offbase'
-            : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
+            ? 'border-accent text-accent bg-surface-sunken'
+            : 'border-line text-foreground hover:bg-accent-wash hover:text-accent'
         }`}
         aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
         title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
@@ -95,7 +95,7 @@ export function DocumentHeaderMenu({
     <div className="sm:hidden flex items-center">
       <Menu as="div" className="relative inline-block text-left">
         <MenuButton
-          className="inline-flex items-center justify-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex items-center justify-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           title="Menu"
         >
           <DotsVerticalIcon className="w-4 h-4 transform transition-transform duration-base ease-standard hover:text-accent" />
@@ -109,10 +109,10 @@ export function DocumentHeaderMenu({
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <MenuItems className="absolute right-0 mt-2 min-w-max origin-top-right divide-y divide-offbase rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none z-50">
+          <MenuItems className="absolute right-0 mt-2 min-w-max origin-top-right divide-y divide-line-soft rounded-md bg-surface shadow-elev-2 ring-1 ring-line-soft focus:outline-none z-50">
             {/* Zoom Controls Section */}
             <div className="px-4 py-3">
-              <p className="text-xs font-medium text-muted mb-2">Zoom / Padding</p>
+              <p className="text-xs font-medium text-soft mb-2">Zoom / Padding</p>
               <div className="flex justify-center">
                 <ZoomControl
                   value={zoomLevel}
@@ -138,7 +138,7 @@ export function DocumentHeaderMenu({
                   {({ active }) => (
                     <button
                       onClick={onOpenSegments}
-                      className={`${active || isSegmentsOpen ? 'bg-offbase text-accent' : 'text-foreground'
+                      className={`${active || isSegmentsOpen ? 'bg-surface-sunken text-accent' : 'text-foreground'
                         } group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                     >
                       <ListIcon className="h-4 w-4" />
@@ -152,7 +152,7 @@ export function DocumentHeaderMenu({
                   {({ active }) => (
                     <button
                       onClick={onOpenAudiobook}
-                      className={`${active || isAudiobookOpen ? 'bg-offbase text-accent' : 'text-foreground'
+                      className={`${active || isAudiobookOpen ? 'bg-surface-sunken text-accent' : 'text-foreground'
                         } group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                     >
                       <DownloadIcon className="h-4 w-4" />
@@ -165,7 +165,7 @@ export function DocumentHeaderMenu({
                 {({ active }) => (
                   <button
                     onClick={onOpenSettings}
-                    className={`${active || isSettingsOpen ? 'bg-offbase text-accent' : 'text-foreground'
+                    className={`${active || isSettingsOpen ? 'bg-surface-sunken text-accent' : 'text-foreground'
                       } group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                   >
                     <FileSettingsIcon className="h-4 w-4" />
@@ -176,7 +176,7 @@ export function DocumentHeaderMenu({
             </div>
 
             {/* Auth Section */}
-            <div className="p-2 border-t border-offbase flex justify-center">
+            <div className="p-2 border-t border-line-soft flex justify-center">
               <UserMenu />
             </div>
           </MenuItems>

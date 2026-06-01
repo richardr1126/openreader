@@ -20,8 +20,8 @@ interface PrivacyModalProps {
 function PrivacyModalBody({ origin }: { origin: string }) {
   return (
     <div className="mt-4 space-y-4 text-sm text-soft">
-      <div className="rounded-lg border border-offbase bg-surface-sunken p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Service Operator</div>
+      <div className="rounded-lg border border-line bg-surface-sunken p-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-soft">Service Operator</div>
         <div className="mt-1">
           This instance is hosted at <span className="font-bold">{origin || 'this server'}</span>.
         </div>
@@ -102,7 +102,7 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel data-testid="privacy-modal" className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
+              <DialogPanel data-testid="privacy-modal" className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground"
@@ -113,7 +113,7 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
                 <PrivacyModalBody origin={origin} />
 
                 <div className="mt-6 space-y-4">
-                  <div className="flex items-start gap-3 rounded-lg border border-offbase p-3 bg-surface-sunken">
+                  <div className="flex items-start gap-3 rounded-lg border border-line p-3 bg-surface-sunken">
                     <div className="flex h-6 items-center">
                       <input
                         data-testid="privacy-agree-checkbox"
@@ -121,7 +121,7 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
                         type="checkbox"
                         checked={agreed}
                         onChange={(e) => setAgreed(e.target.checked)}
-                        className="h-4 w-4 rounded border-line text-accent focus:ring-accent bg-base"
+                        className="h-4 w-4 rounded border-line text-accent focus:ring-accent-line bg-surface"
                       />
                     </div>
                     <div className="text-sm leading-6">
@@ -216,7 +216,7 @@ export function showPrivacyModal(): void {
                     leaveFrom="opacity-100 scale-100"
                     leaveTo="opacity-0 scale-95"
                   >
-                    <DialogPanel className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
+                    <DialogPanel className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
                       <DialogTitle
                         as="h3"
                         className="text-lg font-semibold leading-6 text-foreground"

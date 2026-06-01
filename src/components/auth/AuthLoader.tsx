@@ -252,11 +252,11 @@ export function AuthLoader({ children }: { children: ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-base z-50 flex flex-col items-center justify-center gap-4">
+      <div className="fixed inset-0 bg-surface z-50 flex flex-col items-center justify-center gap-4">
         <LoadingSpinner className="w-8 h-8 text-accent" />
         {bootstrapError ? (
           <div className="flex flex-col items-center gap-3">
-            <p className="text-sm text-muted text-center">{bootstrapError}</p>
+            <p className="text-sm text-soft text-center">{bootstrapError}</p>
             <button
               type="button"
               onClick={() => {
@@ -270,7 +270,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
             </button>
           </div>
         ) : (
-          <p className="text-sm text-muted animate-pulse">
+          <p className="text-sm text-soft animate-pulse">
             {isAutoLoggingIn ? 'Starting anonymous session...' : 'Loading...'}
           </p>
         )}

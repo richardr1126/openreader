@@ -139,7 +139,7 @@ export function DocumentSelectionModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full max-w-2xl transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition flex flex-col h-[80vh]">
+              <DialogPanel className="w-full max-w-2xl transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition flex flex-col h-[80vh]">
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground mb-4 flex-shrink-0 flex justify-between items-center"
@@ -147,10 +147,10 @@ export function DocumentSelectionModal({
                   {title}
                   {files.length > 0 && (
                       <div className="flex items-center text-sm font-normal">
-                          <label className="flex items-center gap-2 cursor-pointer select-none text-muted hover:text-foreground transition-colors">
+                          <label className="flex items-center gap-2 cursor-pointer select-none text-soft hover:text-foreground transition-colors">
                               <input 
                                   type="checkbox"
-                                  className="rounded border-muted text-accent focus:ring-accent"
+                                  className="rounded border-muted text-accent focus:ring-accent-line"
                                   checked={allSelected}
                                   ref={input => {
                                       if (input) input.indeterminate = isIndeterminate;
@@ -163,13 +163,13 @@ export function DocumentSelectionModal({
                   )}
                 </DialogTitle>
 
-                <div className="flex-1 overflow-auto border border-offbase rounded-lg bg-background p-2 min-h-0">
+                <div className="flex-1 overflow-auto border border-line rounded-lg bg-background p-2 min-h-0">
                   {isLoading ? (
                     <DocumentSelectionSkeleton />
                   ) : errorMessage ? (
                     <div className="flex items-center justify-center h-full text-danger">{errorMessage}</div>
                   ) : files.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-muted">No documents found.</div>
+                    <div className="flex items-center justify-center h-full text-soft">No documents found.</div>
                   ) : (
                     <div className="space-y-0.5">
                       {files.map((file) => {
@@ -179,7 +179,7 @@ export function DocumentSelectionModal({
                             key={file.id}
                             onClick={(e) => handleRowClick(e, file.id)}
                             className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer text-sm select-none
-                                            ${isSelected ? 'bg-accent-wash' : 'hover:bg-offbase'}
+                                            ${isSelected ? 'bg-accent-wash' : 'hover:bg-accent-wash'}
                                         `}
                           >
                             <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -187,7 +187,7 @@ export function DocumentSelectionModal({
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={(e) => handleCheckboxChange(file.id, e.target.checked)}
-                                className="rounded border-muted text-accent focus:ring-accent"
+                                className="rounded border-muted text-accent focus:ring-accent-line"
                               />
                             </div>
                             <div
@@ -197,7 +197,7 @@ export function DocumentSelectionModal({
                             >
                               {file.name}
                             </div>
-                            <div className="text-muted text-xs whitespace-nowrap">{formatSize(file.size)}</div>
+                            <div className="text-soft text-xs whitespace-nowrap">{formatSize(file.size)}</div>
                           </div>
                         );
                       })}
@@ -237,9 +237,9 @@ function DocumentSelectionSkeleton() {
     <div className="h-full animate-pulse space-y-0.5" aria-label="Loading documents" aria-busy="true">
       {rows.map((_, index) => (
         <div key={index} className="flex items-center gap-3 px-3 py-2 rounded-md">
-          <div className="h-4 w-4 rounded-sm bg-offbase border border-offbase" />
-          <div className="h-3.5 flex-1 rounded bg-offbase" />
-          <div className="h-3 w-14 rounded bg-offbase" />
+          <div className="h-4 w-4 rounded-sm bg-surface-sunken border border-line" />
+          <div className="h-3.5 flex-1 rounded bg-surface-sunken" />
+          <div className="h-3 w-14 rounded bg-surface-sunken" />
         </div>
       ))}
     </div>

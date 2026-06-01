@@ -72,7 +72,7 @@ export function RateLimitIndicator({ className = '' }: RateLimitBannerProps) {
 
   if (isWarning) {
     return (
-      <span className={`text-xs text-muted ${className}`}>
+      <span className={`text-xs text-soft ${className}`}>
         {formatCharCount(status.remainingChars)} chars left
       </span>
     );
