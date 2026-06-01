@@ -30,7 +30,7 @@ export function ConfirmDialog({
   };
 
   return (
-    <ModalFrame open={isOpen} onClose={onClose} onKeyDown={handleKeyDown}>
+    <ModalFrame open={isOpen} onClose={onClose} onKeyDown={handleKeyDown} panelTestId="confirm-dialog-panel">
       <ModalTitle>{title}</ModalTitle>
       <div className="mt-2">
         <p className="text-sm text-soft break-words">{message}</p>

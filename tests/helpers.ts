@@ -497,37 +497,44 @@ export async function expectProcessingTransition(page: Page) {
 
 // Expect navigator.mediaSession.playbackState to equal given state
 export async function expectMediaState(page: Page, state: 'playing' | 'paused') {
-  // WebKit (and sometimes other engines) may not reliably update navigator.mediaSession.playbackState.
-  // Fallback heuristics:
-  // 1. Prefer mediaSession if it matches desired state.
-  // 2. Otherwise inspect any <audio> element: use paused flag and currentTime progression.
-  // 3. Allow short grace period for first frame to advance.
-  // 4. If neither detectable, keep polling until timeout.
-  await page.waitForFunction((desired) => {
-    try {
-      const msState = (navigator.mediaSession && navigator.mediaSession.playbackState) || '';
-      if (msState === desired) return true;
+  // Engines can intermittently miss mediaSession updates. Accept either:
+  // - expected UI control state (Pause button for playing, Play button for paused), or
+  // - underlying media state from mediaSession/audio element signals.
+  const desiredButtonName = state === 'playing' ? 'Pause' : 'Play';
+  await expect
+    .poll(async () => {
+      const uiMatches = await page
+        .getByRole('button', { name: desiredButtonName })
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (uiMatches) return true;
 
-      const audio: HTMLAudioElement | null = document.querySelector('audio');
-      if (audio) {
-        // Track advancement by storing last time on the element dataset
-        const last = parseFloat(audio.dataset.lastTime || '0');
-        const curr = audio.currentTime;
-        audio.dataset.lastTime = String(curr);
+      return page.evaluate((desired) => {
+        try {
+          const msState = (navigator.mediaSession && navigator.mediaSession.playbackState) || '';
+          if (msState === desired) return true;
 
-        if (desired === 'playing') {
-          // Consider playing if not paused AND time has advanced at least a tiny amount
-          if (!audio.paused && curr > 0 && curr > last) return true;
-        } else {
-          // paused target
-          if (audio.paused) return true;
+          const audio: HTMLAudioElement | null = document.querySelector('audio');
+          if (audio) {
+            const w = window as Window & { __openreaderLastAudioTime?: number };
+            const last = w.__openreaderLastAudioTime ?? -1;
+            const curr = audio.currentTime;
+            w.__openreaderLastAudioTime = curr;
+
+            if (desired === 'playing') {
+              if (!audio.paused && curr > 0 && curr > last) return true;
+            } else if (audio.paused) {
+              return true;
+            }
+          }
+          return false;
+        } catch {
+          return false;
         }
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }, state);
+      }, state);
+    }, { timeout: 45000 })
+    .toBe(true);
 }
 
 // Use Navigator to go to a specific page number (PDF)

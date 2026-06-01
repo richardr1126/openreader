@@ -39,14 +39,18 @@ test.describe('Accessibility smoke', () => {
     // Open the confirm dialog by clicking the row delete button
     await page.getByRole('button', { name: /^Delete sample\.pdf$/i }).first().click();
 
-    // Title and dialog role visible
+    // Title and dialog semantics are present
     const heading = page.getByRole('heading', { name: 'Delete Document' });
     await expect(heading).toBeVisible({ timeout: 10000 });
-    const dialog = heading.locator('xpath=ancestor::*[@role="dialog"][1]');
-    await expect(dialog).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Delete Document' }).first();
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+
+    // The visible panel content is rendered and includes destructive action
+    const panel = page.getByTestId('confirm-dialog-panel').first();
+    await expect(panel).toBeVisible();
 
     // Has a destructive action (Delete)
-    await expect(dialog.getByRole('button', { name: 'Delete' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /^Delete$/ })).toBeVisible();
 
     // Close with Escape to avoid deleting test data
     await page.keyboard.press('Escape');
