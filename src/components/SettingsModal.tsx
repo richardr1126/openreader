@@ -1252,18 +1252,20 @@ export function SettingsModal({
                                   Disconnect account
                                 </Button>
 
-                                <div className="pt-4 mt-4 border-t border-line-soft">
-                                  <label className="block text-sm font-medium text-danger mb-2">Danger Zone</label>
-                                  <Button
-                                    onClick={() => setShowDeleteAccountConfirm(true)}
-                                    className={buttonClass({ variant: 'danger', size: 'md' })}
-                                  >
-                                    Delete Account
-                                  </Button>
-                                  <p className="text-xs text-soft mt-2">
-                                    Permanently deletes your account and all data.
-                                  </p>
-                                </div>
+                                {enableDestructiveDelete && (
+                                  <div className="pt-4 mt-4 border-t border-line-soft">
+                                    <label className="block text-sm font-medium text-danger mb-2">Danger Zone</label>
+                                    <Button
+                                      onClick={() => setShowDeleteAccountConfirm(true)}
+                                      className={buttonClass({ variant: 'danger', size: 'md' })}
+                                    >
+                                      Delete Account
+                                    </Button>
+                                    <p className="text-xs text-soft mt-2">
+                                      Permanently deletes your account and all data.
+                                    </p>
+                                  </div>
+                                )}
                               </>
                             ) : (
                               <div className="pt-2 border-t border-line-soft">

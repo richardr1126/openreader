@@ -10,7 +10,6 @@ import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state'
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/documents/parse-state';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger, hashForLog } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -159,7 +158,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       ? requestedOpIdRaw.trim()
       : null;
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
     const storageUserId = authCtxOrRes.userId;
     const storageUserIdHash = hashForLog(storageUserId);
     const allowedUserIds = [storageUserId];

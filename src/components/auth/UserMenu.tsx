@@ -90,8 +90,8 @@ export function UserMenu({
   }
 
   return (
-    <div className={`flex items-center gap-2 px-2 py-1 rounded-md border border-line bg-surface ${className}`}>
-      <span className="hidden sm:block text-xs font-medium text-foreground truncate max-w-[160px]">
+    <div className={`flex h-7 items-center gap-1.5 rounded-md border border-line bg-surface px-2 ${className}`}>
+      <span className="hidden max-w-[150px] truncate text-[11px] font-medium text-foreground sm:block">
         {session.user.email || 'Account'}
       </span>
 
@@ -99,6 +99,8 @@ export function UserMenu({
         onClick={handleDisconnectAccount}
         title="Disconnect account"
         aria-label="Disconnect account"
+        size="xs"
+        className="-mr-0.5"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
