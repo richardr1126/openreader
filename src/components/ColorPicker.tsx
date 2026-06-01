@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import { isLightColor, type CustomThemeColors } from '@/contexts/ThemeContext';
 import { PaletteIcon } from '@/components/icons/Icons';
+import { IconButton, Input, cn, popoverPanelClass } from '@/components/ui';
 
 /**
  * Curated swatch palettes per color role, sourced from existing themes
@@ -78,7 +79,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
 
   return (
     <Popover className="relative flex items-center">
-      <PopoverButton className="cursor-pointer group focus:outline-none">
+      <PopoverButton as={IconButton} size="sm" className="group rounded-full p-0" aria-label={`Pick ${label} color`}>
         <div
           className="w-6 h-6 rounded-full border-2 transition duration-fast group-focus-visible:ring-2 group-focus-visible:ring-offset-1"
           style={{
@@ -91,8 +92,10 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
       <PopoverPanel
         anchor="bottom start"
         transition
-        className="z-[60] mt-2 w-56 rounded-lg shadow-elev-3 border border-line bg-background p-3 space-y-3
-          transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95"
+        className={cn(
+          popoverPanelClass,
+          'z-[60] mt-2 w-56 bg-background space-y-3 transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95',
+        )}
       >
         {/* Label */}
         <div className="flex items-center justify-between">
@@ -101,14 +104,14 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
           </span>
           {/* Eyedropper / native picker */}
           <div className="relative">
-            <button
+            <IconButton
               type="button"
               onClick={() => nativeRef.current?.click()}
-              className="p-1"
+              size="xs"
               aria-label="Open system color picker"
             >
               <PaletteIcon className="w-4 h-4 text-soft transform transition-transform duration-base ease-standard hover:text-accent" />
-            </button>
+            </IconButton>
             <input
               ref={nativeRef}
               type="color"
@@ -156,7 +159,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
               borderColor: isLightColor(value) ? '#00000018' : '#ffffff18',
             }}
           />
-          <input
+          <Input
             type="text"
             value={hexInput}
             onChange={(e) => setHexInput(e.target.value)}
@@ -166,7 +169,8 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
             }}
             spellCheck={false}
             maxLength={7}
-            className="flex-1 rounded-lg px-2 py-1 text-xs font-mono border border-line bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-accent-line"
+            controlSize="sm"
+            className="flex-1 font-mono"
           />
         </div>
       </PopoverPanel>

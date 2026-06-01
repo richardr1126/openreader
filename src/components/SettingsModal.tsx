@@ -50,6 +50,7 @@ import {
   SidebarNavItem,
   SegmentedControl,
   Button,
+  ChoiceTile,
   IconButton,
   Input,
   ModalFrame,
@@ -108,6 +109,54 @@ const CUSTOM_COLOR_FIELDS: { key: keyof CustomThemeColors; label: string }[] = [
   { key: 'foreground', label: 'Foreground' },
   { key: 'muted', label: 'Muted' },
 ];
+
+function ThemeSwatches({ colors }: { colors: ThemeColorSet }) {
+  return (
+    <div className="flex gap-1 ml-auto">
+      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
+      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
+      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
+      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
+      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
+    </div>
+  );
+}
+
+function ThemeChoice({
+  label,
+  colors,
+  selected,
+  onClick,
+  className,
+}: {
+  label: string;
+  colors: ThemeColorSet;
+  selected: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <ChoiceTile
+      selected={selected}
+      onClick={onClick}
+      className={className}
+      style={{ backgroundColor: colors.base }}
+    >
+      {selected ? (
+        <CheckIcon className="h-3.5 w-3.5 shrink-0" style={{ color: colors.accent }} />
+      ) : (
+        <span className="w-3.5 shrink-0" />
+      )}
+      <span
+        className="text-xs font-medium w-14 shrink-0"
+        style={{ color: colors.foreground }}
+      >
+        {label}
+      </span>
+      <ThemeSwatches colors={colors} />
+    </ChoiceTile>
+  );
+}
 
 type SectionId = 'api' | 'theme' | 'docs' | 'account' | 'admin';
 
@@ -880,34 +929,13 @@ export function SettingsModal({
                               const colors = getThemeColors(systemTheme.id);
                               const isActive = theme === systemTheme.id;
                               return (
-                                <button
+                                <ThemeChoice
+                                  label={systemTheme.name}
+                                  colors={colors}
+                                  selected={isActive}
                                   onClick={() => setTheme(systemTheme.id)}
-                                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 w-full text-left transition duration-base ease-standard transform border
-                                    ${isActive
-                                      ? 'border-accent'
-                                      : 'border-line hover:border-accent-line'
-                                    }`}
-                                  style={{ backgroundColor: colors.base }}
-                                >
-                                  {isActive ? (
-                                    <CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" />
-                                  ) : (
-                                    <span className="w-3.5 shrink-0" />
-                                  )}
-                                  <span
-                                    className="text-xs font-medium w-14 shrink-0"
-                                    style={{ color: colors.foreground }}
-                                  >
-                                    {systemTheme.name}
-                                  </span>
-                                  <div className="flex gap-1 ml-auto">
-                                    <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
-                                    <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
-                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
-                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
-                                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
-                                  </div>
-                                </button>
+                                  className="w-full"
+                                />
                               );
                             })()}
                           </div>
@@ -921,37 +949,16 @@ export function SettingsModal({
                               return (
                                 <div className="space-y-1.5">
                                   <div className="flex items-center gap-1">
-                                    <button
+                                    <ThemeChoice
+                                      label="Custom"
+                                      colors={colors}
+                                      selected={isActive}
                                       onClick={() => {
                                         setTheme('custom');
                                         setIsCustomExpanded(true);
                                       }}
-                                      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 flex-1 text-left transition duration-base ease-standard transform border
-                                        ${isActive
-                                          ? 'border-accent'
-                                          : 'border-line hover:border-accent-line'
-                                        }`}
-                                      style={{ backgroundColor: colors.base }}
-                                    >
-                                      {isActive ? (
-                                        <CheckIcon className="h-3.5 w-3.5 shrink-0" style={{ color: colors.accent }} />
-                                      ) : (
-                                        <span className="w-3.5 shrink-0" />
-                                      )}
-                                      <span
-                                        className="text-xs font-medium w-14 shrink-0"
-                                        style={{ color: colors.foreground }}
-                                      >
-                                        Custom
-                                      </span>
-                                      <div className="flex gap-1 ml-auto">
-                                        <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
-                                        <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
-                                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
-                                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
-                                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
-                                      </div>
-                                    </button>
+                                      className="flex-1"
+                                    />
                                     <button
                                       onClick={() => setIsCustomExpanded(!isCustomExpanded)}
                                       className="shrink-0 p-1.5 rounded-lg border border-line hover:border-accent-line transition-colors"
@@ -1023,35 +1030,13 @@ export function SettingsModal({
                                 const colors = getThemeColors(t.id);
                                 const isActive = theme === t.id;
                                 return (
-                                  <button
+                                  <ThemeChoice
                                     key={t.id}
+                                    label={t.name}
+                                    colors={colors}
+                                    selected={isActive}
                                     onClick={() => setTheme(t.id)}
-                                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition duration-base ease-standard transform border
-                                      ${isActive
-                                        ? 'border-accent'
-                                        : 'border-line hover:border-accent-line'
-                                      }`}
-                                    style={{ backgroundColor: colors.base }}
-                                  >
-                                    {isActive ? (
-                                      <CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" />
-                                    ) : (
-                                      <span className="w-3.5 shrink-0" />
-                                    )}
-                                    <span
-                                      className="text-xs font-medium w-14 shrink-0"
-                                      style={{ color: colors.foreground }}
-                                    >
-                                      {t.name}
-                                    </span>
-                                    <div className="flex gap-1 ml-auto">
-                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
-                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
-                                    </div>
-                                  </button>
+                                  />
                                 );
                               })}
                             </div>
@@ -1065,35 +1050,13 @@ export function SettingsModal({
                                 const colors = getThemeColors(t.id);
                                 const isActive = theme === t.id;
                                 return (
-                                  <button
+                                  <ThemeChoice
                                     key={t.id}
+                                    label={t.name}
+                                    colors={colors}
+                                    selected={isActive}
                                     onClick={() => setTheme(t.id)}
-                                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition duration-base ease-standard transform border
-                                      ${isActive
-                                        ? 'border-accent'
-                                        : 'border-line hover:border-accent-line'
-                                      }`}
-                                    style={{ backgroundColor: colors.base }}
-                                  >
-                                    {isActive ? (
-                                      <CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" />
-                                    ) : (
-                                      <span className="w-3.5 shrink-0" />
-                                    )}
-                                    <span
-                                      className="text-xs font-medium w-14 shrink-0"
-                                      style={{ color: colors.foreground }}
-                                    >
-                                      {t.name}
-                                    </span>
-                                    <div className="flex gap-1 ml-auto">
-                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.background }} />
-                                      <div className="w-4 h-4 rounded-full border border-line" style={{ backgroundColor: colors.offbase }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.accent }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.secondaryAccent }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: colors.muted }} />
-                                    </div>
-                                  </button>
+                                  />
                                 );
                               })}
                             </div>

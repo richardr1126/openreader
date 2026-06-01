@@ -18,7 +18,11 @@ import {
   listboxOptionClass,
   listboxOptionsClass,
   Button,
+  IconButton,
   Input,
+  MenuItemClass,
+  cn,
+  menuPanelClass,
 } from '@/components/ui';
 
 type ProviderType = TtsProviderId;
@@ -641,7 +645,9 @@ export function AdminProvidersPanel() {
                 </div>
                 <Menu as="div" className="relative shrink-0">
                   <MenuButton
-                    className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-offbase bg-base text-muted hover:text-accent hover:bg-offbase transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+                    as={IconButton}
+                    tone="surface"
+                    size="sm"
                     title="Provider actions"
                     aria-label="Provider actions"
                     disabled={!!editingId || deleteMutation.isPending || toggleEnabledMutation.isPending || setDefaultMutation.isPending}
@@ -659,14 +665,14 @@ export function AdminProvidersPanel() {
                   >
                     <MenuItems
                       anchor="bottom end"
-                      className="z-50 mt-2 min-w-[170px] rounded-md bg-base shadow-lg ring-1 ring-black/5 focus:outline-none p-1"
+                      className={cn(menuPanelClass, 'z-50 mt-2 min-w-[170px] bg-base focus:outline-none')}
                     >
                       <MenuItem>
                         {({ active }) => (
                           <button
                             type="button"
                             onClick={() => startEdit(p)}
-                            className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                            className={MenuItemClass(active)}
                           >
                             Edit
                           </button>
@@ -678,7 +684,7 @@ export function AdminProvidersPanel() {
                             type="button"
                             onClick={() => setDefault(p.slug)}
                             disabled={disabled}
-                            className={`${disabled ? 'text-faint cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                            className={cn(MenuItemClass(active), disabled ? 'cursor-not-allowed text-faint' : '')}
                           >
                             Set as default
                           </button>
@@ -689,7 +695,7 @@ export function AdminProvidersPanel() {
                           <button
                             type="button"
                             onClick={() => toggleEnabled(p)}
-                            className={`${active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                            className={MenuItemClass(active)}
                           >
                             {p.enabled ? 'Disable' : 'Enable'}
                           </button>
@@ -700,7 +706,7 @@ export function AdminProvidersPanel() {
                           <button
                             type="button"
                             onClick={() => remove(p.id)}
-                            className={`${active ? 'bg-offbase' : ''} text-danger flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                            className={MenuItemClass(active, 'danger')}
                           >
                             Delete
                           </button>

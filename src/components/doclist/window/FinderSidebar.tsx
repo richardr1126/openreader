@@ -7,7 +7,7 @@ import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
-import { IconButton, MenuItemClass, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem } from '@/components/ui';
+import { IconButton, MenuItemClass, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem, menuPanelClass } from '@/components/ui';
 
 interface FinderSidebarProps {
   filter: SidebarFilter;
@@ -222,7 +222,7 @@ export function FinderSidebar({
                 >
                   <MenuItems
                     anchor="bottom start"
-                    className="z-50 mt-2 min-w-[180px] rounded-md bg-surface shadow-elev-2 ring-1 ring-line-soft focus:outline-none p-1 normal-case tracking-normal font-normal"
+                    className={`${menuPanelClass} z-50 mt-2 min-w-[180px] focus:outline-none normal-case tracking-normal font-normal`}
                   >
                     <MenuItem>
                       {({ active }) => (
