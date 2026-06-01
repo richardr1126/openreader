@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Button, Listbox, ListboxButton, ListboxOption, ListboxOptions, Transition } from '@headlessui/react';
+import { Listbox, ListboxButton, ListboxOption, ListboxOptions, Transition } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronUpDownIcon, CheckIcon } from '@/components/icons/Icons';
@@ -13,7 +13,7 @@ import {
   listboxButtonClass,
   listboxOptionClass,
   listboxOptionsClass,
-  buttonClass,
+  Button,
 } from '@/components/ui';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
@@ -581,14 +581,16 @@ export function AdminFeaturesPanel() {
           <Button
             onClick={discardAll}
             disabled={dirty.size === 0 || saving}
-            className={buttonClass({ variant: 'secondary', size: 'sm' })}
+            variant="secondary"
+            size="sm"
           >
             Discard
           </Button>
           <Button
             onClick={saveAll}
             disabled={dirty.size === 0 || saving}
-            className={buttonClass({ variant: 'primary', size: 'sm' })}
+            variant="primary"
+            size="sm"
           >
             {saving ? 'Saving…' : dirty.size > 0 ? `Save (${dirty.size})` : 'Save'}
           </Button>

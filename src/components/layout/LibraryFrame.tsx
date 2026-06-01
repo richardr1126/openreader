@@ -1,8 +1,8 @@
 'use client';
 
-import { Dialog, DialogPanel, Transition, TransitionChild } from '@headlessui/react';
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/components/ui/cn';
+import { DrawerFrame } from '@/components/ui';
 
 const NARROW_QUERY = '(max-width: 767px)';
 
@@ -65,35 +65,10 @@ function LibrarySidebarDrawer({
   children: ReactNode;
 }) {
   return (
-    <Transition show={open} as={Fragment}>
-      <Dialog onClose={onClose ?? (() => undefined)} className="relative z-40 md:hidden">
-        <TransitionChild
-          as={Fragment}
-          enter="transition-opacity duration-fast"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="transition-opacity duration-fast"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-        </TransitionChild>
-        <div className="fixed inset-y-0 left-0 flex max-w-full">
-          <TransitionChild
-            as={Fragment}
-            enter="transition-transform duration-base ease-standard"
-            enterFrom="-translate-x-full"
-            enterTo="translate-x-0"
-            leave="transition-transform duration-fast ease-standard"
-            leaveFrom="translate-x-0"
-            leaveTo="-translate-x-full"
-          >
-            <DialogPanel className="h-full w-[80vw] max-w-[280px] bg-surface shadow-elev-3">
-              {children}
-            </DialogPanel>
-          </TransitionChild>
-        </div>
-      </Dialog>
-    </Transition>
+    <div className="md:hidden">
+      <DrawerFrame open={open} onClose={onClose ?? (() => undefined)} side="left" className="w-[80vw] max-w-[280px]">
+        {children}
+      </DrawerFrame>
+    </div>
   );
 }

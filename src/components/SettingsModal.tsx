@@ -11,8 +11,6 @@ import {
   ListboxButton,
   ListboxOptions,
   ListboxOption,
-  Button,
-  Input,
 } from '@headlessui/react';
 import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -55,8 +53,10 @@ import {
   SidebarNav,
   SidebarNavItem,
   SegmentedControl,
+  Button,
+  IconButton,
+  Input,
   inputClass,
-  buttonClass,
   listboxButtonClass,
   listboxOptionClass,
   listboxOptionsClass,
@@ -142,8 +142,10 @@ export function SettingsTrigger({
 }) {
   return (
     <Button
+      variant="secondary"
+      size="sm"
       onClick={onOpen}
-      className={`inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash hover:text-accent transition-transform transition-colors duration-base ease-standard ${className}`}
+      className={className}
       aria-label="Settings"
       tabIndex={0}
     >
@@ -549,6 +551,8 @@ export function SettingsModal({
                         Settings
                       </DialogTitle>
                       <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setIsChangelogOpen(true)}
                         className="text-sm font-medium leading-6 text-soft hover:text-accent transition-colors"
                       >
@@ -557,6 +561,8 @@ export function SettingsModal({
                     </div>
                     <div className="flex items-center">
                       <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => showPrivacyModal()}
                         className="text-sm font-medium text-soft hover:text-accent transition-colors"
                       >
@@ -842,7 +848,8 @@ export function SettingsModal({
                           <div className="pt-4 flex justify-end gap-2">
                             <Button
                               type="button"
-                              className={buttonClass({ variant: 'secondary', size: 'md' })}
+                              variant="secondary"
+                              size="md"
                               onClick={async () => {
                                 const defaults = resolveProviderDefaults({
                                   providerRef: runtimeConfig.defaultTtsProvider,
@@ -862,7 +869,8 @@ export function SettingsModal({
                             <Button
                               data-testid="settings-save-button"
                               type="button"
-                              className={buttonClass({ variant: 'primary', size: 'md' })}
+                              variant="primary"
+                              size="md"
                               disabled={!canSubmit}
                               onClick={async () => {
                                 const defaults = resolveProviderDefaults({
@@ -1128,7 +1136,8 @@ export function SettingsModal({
                             <Button
                               onClick={handleImportLibrary}
                               disabled={isBusy}
-                              className={buttonClass({ variant: 'outline', size: 'md' })}
+                              variant="outline"
+                              size="md"
                             >
                               {isImportingLibrary ? `Importing... ${Math.round(progress)}%` : 'Import from library'}
                             </Button>
@@ -1140,14 +1149,16 @@ export function SettingsModal({
                               <Button
                                 onClick={handleRefresh}
                                 disabled={isBusy}
-                                className={buttonClass({ variant: 'outline', size: 'md' })}
+                                variant="outline"
+                                size="md"
                               >
                                 Refresh
                               </Button>
                               <Button
                                 onClick={handleClearCache}
                                 disabled={isBusy}
-                                className={buttonClass({ variant: 'outline', size: 'md' })}
+                                variant="outline"
+                                size="md"
                               >
                                 Clear cache
                               </Button>
@@ -1226,7 +1237,8 @@ export function SettingsModal({
                               <>
                                 <Button
                                   onClick={handleSignOut}
-                                  className={buttonClass({ variant: 'outline', size: 'md' })}
+                                  variant="outline"
+                                  size="md"
                                 >
                                   Disconnect account
                                 </Button>
@@ -1236,7 +1248,8 @@ export function SettingsModal({
                                     <label className="block text-sm font-medium text-danger mb-2">Danger Zone</label>
                                     <Button
                                       onClick={() => setShowDeleteAccountConfirm(true)}
-                                      className={buttonClass({ variant: 'danger', size: 'md' })}
+                                      variant="danger"
+                                      size="md"
                                     >
                                       Delete Account
                                     </Button>
@@ -1259,19 +1272,19 @@ export function SettingsModal({
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                   <Link href="/signin">
-                                    <Button className={buttonClass({ variant: 'outline', size: 'md' })}>
+                                    <Button variant="outline" size="md">
                                       Connect
                                     </Button>
                                   </Link>
                                   {runtimeConfig.enableUserSignups && (
                                     <Link href="/signup">
-                                      <Button className={buttonClass({ variant: 'primary', size: 'md' })}>
+                                      <Button variant="primary" size="md">
                                         Create account
                                       </Button>
                                     </Link>
                                   )}
                                   <Link href="/?redirect=false">
-                                    <Button className={buttonClass({ variant: 'outline', size: 'md' })}>
+                                    <Button variant="outline" size="md">
                                       Back to landing page
                                     </Button>
                                   </Link>
@@ -1418,16 +1431,15 @@ function SettingsChangelogPanel({
   return (
     <div className="h-[490px] flex flex-col bg-surface">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-line-soft bg-background">
-        <Button
+        <IconButton
           onClick={onClose}
-          className="inline-flex items-center justify-center rounded-md text-soft hover:text-accent hover:bg-surface transition duration-base ease-standard transform"
           aria-label="Back to settings"
           title="Back"
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-        </Button>
+        </IconButton>
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-foreground">Changelog</h4>
           <p className="text-xs text-soft truncate">

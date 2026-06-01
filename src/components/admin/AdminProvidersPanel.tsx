@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Input, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
+import { Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -17,7 +17,8 @@ import {
   listboxButtonClass,
   listboxOptionClass,
   listboxOptionsClass,
-  buttonClass,
+  Button,
+  Input,
 } from '@/components/ui';
 
 type ProviderType = TtsProviderId;
@@ -364,7 +365,9 @@ export function AdminProvidersPanel() {
           {!editingId ? (
             <Button
               onClick={startCreate}
-              className={buttonClass({ variant: 'primary', size: 'icon', className: 'h-7 w-7' })}
+              variant="primary"
+              size="icon"
+              className="h-7 w-7"
               aria-label="Add provider"
               title="Add provider"
             >
@@ -589,13 +592,14 @@ export function AdminProvidersPanel() {
           />
 
           <div className="pt-1 flex justify-end gap-2">
-            <Button onClick={cancelEdit} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+            <Button onClick={cancelEdit} variant="secondary" size="sm">
               Cancel
             </Button>
             <Button
               onClick={submit}
               disabled={submitDisabled}
-              className={buttonClass({ variant: 'primary', size: 'sm' })}
+              variant="primary"
+              size="sm"
             >
               {saveMutation.isPending ? 'Saving…' : isEditingExisting ? 'Save changes' : 'Create'}
             </Button>
