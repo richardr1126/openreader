@@ -13,7 +13,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
-import { Button, IconButton, MenuItemClass, cn, listboxButtonClass, listboxOptionClass, listboxPanelClass, menuPanelClass, rangeInputClass } from '@/components/ui';
+import { Button, Card, IconButton, MenuItemClass, cn, listboxButtonClass, listboxOptionClass, listboxPanelClass, menuPanelClass, rangeInputClass } from '@/components/ui';
 import { 
   getAudiobookStatus, 
   deleteAudiobookChapter, 
@@ -504,17 +504,17 @@ export function AudiobookExportModal({
 			                              {settingsLocked && savedSettings ? (
 			                                <div className="space-y-3">
 			                                  <div className="grid grid-cols-2 gap-3">
-			                                    <div className="rounded-lg bg-surface p-3">
+			                                    <Card className="p-3">
 			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Voice</div>
 			                                      <div className="text-sm font-medium text-foreground truncate">{savedSettings.voice}</div>
-			                                    </div>
-			                                    <div className="rounded-lg bg-surface p-3">
+			                                    </Card>
+			                                    <Card className="p-3">
 			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Format</div>
 			                                      <div className="text-sm font-medium text-foreground">{savedSettings.format.toUpperCase()}</div>
-			                                    </div>
+			                                    </Card>
 			                                  </div>
                                   <div className="grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg bg-surface p-3">
+                                    <Card className="p-3">
                                       <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Native speed</div>
                                       <div className="text-sm font-medium text-foreground">
                                         {resolveTtsProviderModelPolicy({
@@ -525,11 +525,11 @@ export function AudiobookExportModal({
                                           ? `${formatSpeed(savedSettings.nativeSpeed)}x`
                                           : 'Not supported'}
                                       </div>
-                                    </div>
-			                                    <div className="rounded-lg bg-surface p-3">
+                                    </Card>
+			                                    <Card className="p-3">
 			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Post speed</div>
 			                                      <div className="text-sm font-medium text-foreground">{formatSpeed(savedSettings.postSpeed)}x</div>
-			                                    </div>
+			                                    </Card>
 			                                  </div>
 			                                  <p className="text-xs text-soft">
 			                                    Reset the audiobook to change generation settings.
@@ -605,7 +605,7 @@ export function AudiobookExportModal({
 			                                  </div>
 
                                   {/* Speed controls */}
-                                  <div className="rounded-lg bg-surface p-3 space-y-3">
+                                  <Card className="p-3 space-y-3">
                                     {!nativeSpeedSupported && (
                                       <div className="rounded-md border border-line bg-background px-2 py-1.5 text-[11px] text-soft">
                                         Native model speed is not available for this model.
@@ -657,7 +657,7 @@ export function AudiobookExportModal({
 			                                        <span>3x</span>
 			                                      </div>
 			                                    </div>
-			                                  </div>
+			                                  </Card>
 			                                </div>
 			                              )}
 
