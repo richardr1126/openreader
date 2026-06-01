@@ -656,14 +656,16 @@ function SourceBadge({
   return (
     <div className="flex items-center gap-1.5">
       {canReset && !dirty && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="xs"
           onClick={onReset}
           disabled={saving}
-          className="text-[11px] font-medium text-muted hover:text-accent transition-colors disabled:opacity-50"
+          className="h-auto px-1 py-0 text-[11px] font-medium text-muted hover:text-accent"
         >
           Reset
-        </button>
+        </Button>
       )}
       {dirty ? (
         <Badge tone="accent">Modified</Badge>

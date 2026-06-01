@@ -22,6 +22,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { DocumentUploader, type UploadBatchState } from '@/components/documents/DocumentUploader';
+import { IconButton } from '@/components/ui';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import {
   DocumentSelectionProvider,
@@ -664,16 +665,16 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             <p className="text-foreground">
               Drag files onto each other to make folders. Drop into the sidebar to move.
             </p>
-            <button
-              type="button"
+            <IconButton
               onClick={() => setShowHint(false)}
-              className="h-6 w-6 inline-flex items-center justify-center text-soft hover:text-accent hover:bg-surface rounded transition duration-base ease-standard"
+              size="xs"
+              className="h-6 w-6"
               aria-label="Dismiss hint"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
-            </button>
+            </IconButton>
           </div>
         </div>
       )}

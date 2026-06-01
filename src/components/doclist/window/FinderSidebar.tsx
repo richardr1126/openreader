@@ -7,7 +7,7 @@ import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
-import { IconButton, MenuItemClass, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem, menuPanelClass } from '@/components/ui';
+import { IconButton, MenuItemClass, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem, cn, menuPanelClass } from '@/components/ui';
 
 interface FinderSidebarProps {
   filter: SidebarFilter;
@@ -248,7 +248,7 @@ export function FinderSidebar({
                             onRowAction?.();
                           }}
                           disabled={disabled}
-                          className={disabled ? 'flex w-full cursor-not-allowed items-center gap-2 rounded-md px-2 py-2 text-xs text-faint' : MenuItemClass(active)}
+                          className={cn(MenuItemClass(active), disabled && 'cursor-not-allowed text-faint')}
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />

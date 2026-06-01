@@ -1168,20 +1168,20 @@ export function SettingsModal({
 
                           {/* Export Data */}
                           {session?.user && (
-                            <button
+                            <ChoiceTile
                               onClick={() => {
                                 window.open('/api/user/export', '_blank');
                               }}
-                              className="w-full rounded-lg border border-line bg-background p-4 flex items-center gap-4 hover:bg-accent-wash transition-colors text-left group"
+                              className="w-full rounded-lg bg-background p-4 text-left hover:bg-accent-wash"
                             >
-                              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center group-hover:bg-background transition-colors">
+                              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center">
                                 <DownloadIcon className="w-5 h-5 text-accent" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-foreground">Export My Data</p>
                                 <p className="text-xs text-soft">Download all your data as a ZIP file</p>
                               </div>
-                            </button>
+                            </ChoiceTile>
                           )}
 
                           {/* Actions */}
@@ -1438,7 +1438,7 @@ function SettingsChangelogPanel({
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => ({ ...prev, [entry.tag_name]: !isExpanded }))}
-                className="w-full text-left py-2 flex items-center gap-2 hover:bg-surface transition duration-base ease-standard transform"
+                className="w-full rounded-md border border-transparent px-2 py-2 text-left flex items-center gap-2 transition duration-base ease-standard hover:border-accent-line hover:bg-accent-wash"
               >
                 <ChevronRightIcon
                   className={`w-3.5 h-3.5 shrink-0 text-soft transition-transform ${
