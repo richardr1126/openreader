@@ -1,9 +1,8 @@
 'use client';
 
-import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BaseDocument } from '@/types/documents';
-import { Button, dialogPanelStyles } from '@/components/ui';
+import { Button, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface DocumentSelectionModalProps {
   isOpen: boolean;
@@ -114,116 +113,83 @@ export function DocumentSelectionModal({
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[60]" onClose={onClose}>
-        <TransitionChild
-          as={Fragment}
-          enter="ease-standard duration-slow"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-standard duration-base"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
-        </TransitionChild>
-
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
-            <TransitionChild
-              as={Fragment}
-              enter="ease-standard duration-slow"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-standard duration-base"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <DialogPanel className={dialogPanelStyles({ size: 'lg', className: 'flex h-[80vh] flex-col' })}>
-                <DialogTitle
-                  as="h3"
-                  className="text-lg font-semibold leading-6 text-foreground mb-4 flex-shrink-0 flex justify-between items-center"
-                >
-                  {title}
-                  {files.length > 0 && (
-                      <div className="flex items-center text-sm font-normal">
-                          <label className="flex items-center gap-2 cursor-pointer select-none text-soft hover:text-foreground transition-colors">
-                              <input 
-                                  type="checkbox"
-                                  className="rounded border-muted text-accent focus:ring-accent-line"
-                                  checked={allSelected}
-                                  ref={input => {
-                                      if (input) input.indeterminate = isIndeterminate;
-                                  }}
-                                  onChange={(e) => handleSelectAll(e.target.checked)}
-                              />
-                              Select All
-                          </label>
-                      </div>
-                  )}
-                </DialogTitle>
-
-                <div className="flex-1 overflow-auto border border-line rounded-lg bg-background p-2 min-h-0">
-                  {isLoading ? (
-                    <DocumentSelectionSkeleton />
-                  ) : errorMessage ? (
-                    <div className="flex items-center justify-center h-full text-danger">{errorMessage}</div>
-                  ) : files.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-soft">No documents found.</div>
-                  ) : (
-                    <div className="space-y-0.5">
-                      {files.map((file) => {
-                        const isSelected = selectedIds.has(file.id);
-                        return (
-                          <div
-                            key={file.id}
-                            onClick={(e) => handleRowClick(e, file.id)}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer text-sm select-none
-                                            ${isSelected ? 'bg-accent-wash' : 'hover:bg-accent-wash'}
-                                        `}
-                          >
-                            <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => handleCheckboxChange(file.id, e.target.checked)}
-                                className="rounded border-muted text-accent focus:ring-accent-line"
-                              />
-                            </div>
-                            <div
-                              className={`flex-1 truncate ${
-                                isSelected ? 'text-accent font-medium' : 'text-foreground'
-                              }`}
-                            >
-                              {file.name}
-                            </div>
-                            <div className="text-soft text-xs whitespace-nowrap">{formatSize(file.size)}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4 flex justify-end gap-3 flex-shrink-0">
-                  <Button variant="outline" size="md" onClick={onClose}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={handleConfirmClick}
-                    disabled={isLoading || selectedCount === 0 || isProcessing}
-                  >
-                    {isProcessing ? 'Processing...' : `${confirmLabel} ${selectedCount > 0 ? `(${selectedCount})` : ''}`}
-                  </Button>
-                </div>
-              </DialogPanel>
-            </TransitionChild>
+    <ModalFrame open={isOpen} onClose={onClose} size="lg" panelClassName="flex h-[80vh] flex-col" className="z-[60]">
+      <ModalTitle className="mb-4 flex flex-shrink-0 items-center justify-between">
+        {title}
+        {files.length > 0 && (
+          <div className="flex items-center text-sm font-normal">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-soft hover:text-foreground transition-colors">
+              <input
+                type="checkbox"
+                className="rounded border-muted text-accent focus:ring-accent-line"
+                checked={allSelected}
+                ref={input => {
+                  if (input) input.indeterminate = isIndeterminate;
+                }}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+              />
+              Select All
+            </label>
           </div>
-        </div>
-      </Dialog>
-    </Transition>
+        )}
+      </ModalTitle>
+
+      <div className="flex-1 overflow-auto border border-line rounded-lg bg-background p-2 min-h-0">
+        {isLoading ? (
+          <DocumentSelectionSkeleton />
+        ) : errorMessage ? (
+          <div className="flex items-center justify-center h-full text-danger">{errorMessage}</div>
+        ) : files.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-soft">No documents found.</div>
+        ) : (
+          <div className="space-y-0.5">
+            {files.map((file) => {
+              const isSelected = selectedIds.has(file.id);
+              return (
+                <div
+                  key={file.id}
+                  onClick={(e) => handleRowClick(e, file.id)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer text-sm select-none ${
+                    isSelected ? 'bg-accent-wash' : 'hover:bg-accent-wash'
+                  }`}
+                >
+                  <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => handleCheckboxChange(file.id, e.target.checked)}
+                      className="rounded border-muted text-accent focus:ring-accent-line"
+                    />
+                  </div>
+                  <div
+                    className={`flex-1 truncate ${
+                      isSelected ? 'text-accent font-medium' : 'text-foreground'
+                    }`}
+                  >
+                    {file.name}
+                  </div>
+                  <div className="text-soft text-xs whitespace-nowrap">{formatSize(file.size)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-3 flex-shrink-0">
+        <Button variant="outline" size="md" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          onClick={handleConfirmClick}
+          disabled={isLoading || selectedCount === 0 || isProcessing}
+        >
+          {isProcessing ? 'Processing...' : `${confirmLabel} ${selectedCount > 0 ? `(${selectedCount})` : ''}`}
+        </Button>
+      </div>
+    </ModalFrame>
   );
 }
 

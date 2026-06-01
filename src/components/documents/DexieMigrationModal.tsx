@@ -1,13 +1,12 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
-import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
+import { useCallback, useEffect, useState } from 'react';
 import { getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, updateAppConfig } from '@/lib/client/dexie';
 import { listDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
 import { useDocuments } from '@/contexts/DocumentContext';
 import type { BaseDocument } from '@/types/documents';
 import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
-import { Button, dialogPanelStyles } from '@/components/ui';
+import { Button, ModalFrame, ModalTitle } from '@/components/ui';
 
 type DexieMigrationModalProps = {
   isOpen: boolean;
@@ -137,78 +136,53 @@ export function DexieMigrationModal({
   if (!isOpen) return null;
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[80]" onClose={() => (closeDisabled ? null : onComplete())}>
-        <TransitionChild
-          as={Fragment}
-          enter="ease-standard duration-slow"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-standard duration-base"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
-        </TransitionChild>
-
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
-            <TransitionChild
-              as={Fragment}
-              enter="ease-standard duration-slow"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-standard duration-base"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <DialogPanel data-testid="migration-modal" className={dialogPanelStyles({ size: 'md' })}>
-                <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground mb-4">
-                  {title}
-                </DialogTitle>
-                <div className="space-y-2">
-                  <p className="text-sm text-soft mb-2">
-                    Found {localCount} document{localCount === 1 ? '' : 's'} stored locally from an older version.
-                    {displayMissingCount > 0 ? (
-                      <> {displayMissingCount} {displayMissingCount === 1 ? 'is' : 'are'} not here yet.</>
-                    ) : null}
-                    {' '}This app now stores documents on the server and keeps a local cache for speed.
-                  </p>
-                  {isUploading && (
-                    <div className="space-y-1">
-                      <p className="text-xs text-soft">{status}</p>
-                      <div className="h-2 w-full rounded bg-surface-sunken">
-                        <div className="h-2 rounded bg-accent" style={{ width: `${Math.max(1, Math.round(progress))}%` }} />
-                      </div>
-                    </div>
-                  )}
-                  {!isUploading && status ? <p className="text-xs text-danger">{status}</p> : null}
-                </div>
-
-                <div className="flex justify-end gap-3 mt-6">
-                  <Button
-                    data-testid="migration-skip-button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSkip}
-                    disabled={isUploading}
-                  >
-                    Skip
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleUpload}
-                    disabled={isUploading}
-                  >
-                    {isUploading ? 'Uploading…' : 'Upload'}
-                  </Button>
-                </div>
-              </DialogPanel>
-            </TransitionChild>
+    <ModalFrame
+      open={isOpen}
+      onClose={() => {
+        if (!closeDisabled) onComplete();
+      }}
+      panelTestId="migration-modal"
+      className="z-[80]"
+    >
+      <ModalTitle className="mb-4">{title}</ModalTitle>
+      <div className="space-y-2">
+        <p className="text-sm text-soft mb-2">
+          Found {localCount} document{localCount === 1 ? '' : 's'} stored locally from an older version.
+          {displayMissingCount > 0 ? (
+            <> {displayMissingCount} {displayMissingCount === 1 ? 'is' : 'are'} not here yet.</>
+          ) : null}
+          {' '}This app now stores documents on the server and keeps a local cache for speed.
+        </p>
+        {isUploading && (
+          <div className="space-y-1">
+            <p className="text-xs text-soft">{status}</p>
+            <div className="h-2 w-full rounded bg-surface-sunken">
+              <div className="h-2 rounded bg-accent" style={{ width: `${Math.max(1, Math.round(progress))}%` }} />
+            </div>
           </div>
-        </div>
-      </Dialog>
-    </Transition>
+        )}
+        {!isUploading && status ? <p className="text-xs text-danger">{status}</p> : null}
+      </div>
+
+      <div className="flex justify-end gap-3 mt-6">
+        <Button
+          data-testid="migration-skip-button"
+          variant="outline"
+          size="sm"
+          onClick={handleSkip}
+          disabled={isUploading}
+        >
+          Skip
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleUpload}
+          disabled={isUploading}
+        >
+          {isUploading ? 'Uploading…' : 'Upload'}
+        </Button>
+      </div>
+    </ModalFrame>
   );
 }

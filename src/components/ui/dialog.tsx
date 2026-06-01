@@ -43,6 +43,7 @@ export function ModalFrame({
   panelClassName,
   panelTestId,
   onKeyDown,
+  afterLeave,
 }: {
   open: boolean;
   onClose: () => void;
@@ -52,9 +53,10 @@ export function ModalFrame({
   panelClassName?: string;
   panelTestId?: string;
   onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
+  afterLeave?: () => void;
 }) {
   return (
-    <Transition appear show={open} as={Fragment}>
+    <Transition appear show={open} as={Fragment} afterLeave={afterLeave}>
       <Dialog as="div" role={undefined} className={cn('relative z-50', className)} onClose={onClose} onKeyDown={onKeyDown}>
         <TransitionChild
           as={Fragment}

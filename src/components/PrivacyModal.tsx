@@ -1,15 +1,8 @@
 'use client';
 
-import { Fragment, useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-} from '@headlessui/react';
+import { useState, useEffect } from 'react';
 import { updateAppConfig } from '@/lib/client/dexie';
-import { Button, dialogPanelStyles } from '@/components/ui';
+import { Button, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -77,81 +70,46 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[80]" onClose={onDismiss ?? (() => { })}>
-        <TransitionChild
-          as={Fragment}
-          enter="ease-standard duration-slow"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-standard duration-base"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
-        </TransitionChild>
+    <ModalFrame open={isOpen} onClose={onDismiss ?? (() => {})} panelTestId="privacy-modal" className="z-[80]">
+      <ModalTitle>Privacy & Data Usage</ModalTitle>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
-            <TransitionChild
-              as={Fragment}
-              enter="ease-standard duration-slow"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-standard duration-base"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <DialogPanel data-testid="privacy-modal" className={dialogPanelStyles({ size: 'md' })}>
-                <DialogTitle
-                  as="h3"
-                  className="text-lg font-semibold leading-6 text-foreground"
-                >
-                  Privacy & Data Usage
-                </DialogTitle>
+      <PrivacyModalBody origin={origin} />
 
-                <PrivacyModalBody origin={origin} />
-
-                <div className="mt-6 space-y-4">
-                  <div className="flex items-start gap-3 rounded-lg border border-line p-3 bg-surface-sunken">
-                    <div className="flex h-6 items-center">
-                      <input
-                        data-testid="privacy-agree-checkbox"
-                        id="privacy-agree"
-                        type="checkbox"
-                        checked={agreed}
-                        onChange={(e) => setAgreed(e.target.checked)}
-                        className="h-4 w-4 rounded border-line text-accent focus:ring-accent-line bg-surface"
-                      />
-                    </div>
-                    <div className="text-sm leading-6">
-                      <label htmlFor="privacy-agree" className="font-medium text-foreground select-none cursor-pointer">
-                        I have read and agree to the
-                      </label>{' '}
-                      <a href="/privacy" target="_blank" className="font-semibold text-accent hover:underline">
-                        Privacy Policy
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button
-                      data-testid="privacy-continue-button"
-                      variant="primary"
-                      size="lg"
-                      disabled={!agreed}
-                      onClick={handleAccept}
-                    >
-                      Continue
-                    </Button>
-                  </div>
-                </div>
-              </DialogPanel>
-            </TransitionChild>
+      <div className="mt-6 space-y-4">
+        <div className="flex items-start gap-3 rounded-lg border border-line p-3 bg-surface-sunken">
+          <div className="flex h-6 items-center">
+            <input
+              data-testid="privacy-agree-checkbox"
+              id="privacy-agree"
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="h-4 w-4 rounded border-line text-accent focus:ring-accent-line bg-surface"
+            />
+          </div>
+          <div className="text-sm leading-6">
+            <label htmlFor="privacy-agree" className="font-medium text-foreground select-none cursor-pointer">
+              I have read and agree to the
+            </label>{' '}
+            <a href="/privacy" target="_blank" className="font-semibold text-accent hover:underline">
+              Privacy Policy
+            </a>
           </div>
         </div>
-      </Dialog>
-    </Transition>
+
+        <div className="flex justify-end">
+          <Button
+            data-testid="privacy-continue-button"
+            variant="primary"
+            size="lg"
+            disabled={!agreed}
+            onClick={handleAccept}
+          >
+            Continue
+          </Button>
+        </div>
+      </div>
+    </ModalFrame>
   );
 }
 
@@ -179,64 +137,28 @@ export function showPrivacyModal(): void {
         };
 
         return (
-          <Transition
-            appear
-            show={show}
-            as={Fragment}
+          <ModalFrame
+            open={show}
+            onClose={handleClose}
             afterLeave={() => {
               root.unmount();
               container.remove();
             }}
           >
-            <Dialog as="div" className="relative z-50" onClose={handleClose}>
-              <TransitionChild
-                as={Fragment}
-                enter="ease-standard duration-slow"
-                enterFrom="opacity-0"
-                enterTo="opacity-100"
-                leave="ease-standard duration-base"
-                leaveFrom="opacity-100"
-                leaveTo="opacity-0"
+            <ModalTitle>Privacy & Data Usage</ModalTitle>
+
+            <PrivacyModalBody origin={origin} />
+
+            <div className="mt-6 flex justify-end">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={handleClose}
               >
-                <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
-              </TransitionChild>
-
-              <div className="fixed inset-0 overflow-y-auto">
-                <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
-                  <TransitionChild
-                    as={Fragment}
-                    enter="ease-standard duration-slow"
-                    enterFrom="opacity-0 scale-95"
-                    enterTo="opacity-100 scale-100"
-                    leave="ease-standard duration-base"
-                    leaveFrom="opacity-100 scale-100"
-                    leaveTo="opacity-0 scale-95"
-                  >
-                    <DialogPanel className={dialogPanelStyles({ size: 'md' })}>
-                      <DialogTitle
-                        as="h3"
-                        className="text-lg font-semibold leading-6 text-foreground"
-                      >
-                        Privacy & Data Usage
-                      </DialogTitle>
-
-                      <PrivacyModalBody origin={origin} />
-
-                      <div className="mt-6 flex justify-end">
-                        <Button
-                          variant="primary"
-                          size="lg"
-                          onClick={handleClose}
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </DialogPanel>
-                  </TransitionChild>
-                </div>
-              </div>
-            </Dialog>
-          </Transition>
+                Close
+              </Button>
+            </div>
+          </ModalFrame>
         );
       };
 
