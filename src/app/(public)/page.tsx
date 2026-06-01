@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
 import { ButtonAnchor, ButtonLink } from '@/components/ui';
 

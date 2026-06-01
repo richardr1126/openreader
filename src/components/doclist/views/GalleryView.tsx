@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import type { DocumentListDocument } from '@/types/documents';

@@ -13,7 +13,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
-import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, RangeInput, SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn } from '@/components/ui';
+import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, RangeInput, SharedListboxButton, SharedListboxOption, SharedListboxOptions } from '@/components/ui';
 import { 
   getAudiobookStatus, 
   deleteAudiobookChapter, 
