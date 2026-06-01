@@ -2,11 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
   Transition,
-  TransitionChild,
   Listbox,
   ListboxButton,
   ListboxOptions,
@@ -56,6 +52,8 @@ import {
   Button,
   IconButton,
   Input,
+  ModalFrame,
+  ModalTitle,
   inputClass,
   listboxButtonClass,
   listboxOptionClass,
@@ -514,42 +512,17 @@ export function SettingsModal({
 
   return (
     <>
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog
-          as="div"
-          className={`relative ${isChangelogOpen ? 'z-[90]' : 'z-50'}`}
-          onClose={resetToCurrent}
-        >
-          <TransitionChild
-            as={Fragment}
-            enter="ease-standard duration-slow"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-standard duration-base"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
-          </TransitionChild>
-
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
-              <TransitionChild
-                as={Fragment}
-                enter="ease-standard duration-slow"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-standard duration-base"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <DialogPanel data-testid="settings-modal" className="relative w-full max-w-4xl transform rounded-lg bg-surface text-left align-middle shadow-elev-3 transition overflow-hidden border border-line">
+      <ModalFrame
+        open={isOpen}
+        onClose={resetToCurrent}
+        size="xl"
+        panelTestId="settings-modal"
+        className={isChangelogOpen ? 'z-[90]' : 'z-50'}
+      >
                   {/* Header */}
                   <div className="flex items-center justify-between px-5 py-3 border-b border-line-soft">
                     <div className="flex items-baseline gap-4">
-                      <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground">
-                        Settings
-                      </DialogTitle>
+                      <ModalTitle>Settings</ModalTitle>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1298,12 +1271,7 @@ export function SettingsModal({
                       </div>
                     </>
                   )}
-                </DialogPanel>
-              </TransitionChild>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
+      </ModalFrame>
 
       <ConfirmDialog
         isOpen={showDeleteDocsConfirm}
