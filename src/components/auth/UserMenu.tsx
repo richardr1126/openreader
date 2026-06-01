@@ -57,16 +57,12 @@ export function UserMenu({
 
     return (
       <div className={`flex gap-2 ${className}`}>
-        <Link href="/signin">
-          <span className={buttonClass({ variant: 'secondary', size: 'sm' })}>
-            Connect
-          </span>
+        <Link href="/signin" className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+          Connect
         </Link>
         {enableUserSignups && (
-          <Link href="/signup">
-            <span className={buttonClass({ variant: 'primary', size: 'sm' })}>
-              Create account
-            </span>
+          <Link href="/signup" className={buttonClass({ variant: 'primary', size: 'sm' })}>
+            Create account
           </Link>
         )}
       </div>

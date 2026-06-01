@@ -1,6 +1,6 @@
 'use client';
 
-import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
+import { Listbox } from '@headlessui/react';
 import type { IconSize, SortBy, SortDirection, ViewMode } from '@/types/documents';
 import {
   IconsViewIcon,
@@ -10,7 +10,7 @@ import {
   HamburgerIcon,
 } from './finderIcons';
 import { ChevronUpDownIcon } from '@/components/icons/Icons';
-import { SearchField, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment, listboxCompactOptionClass, listboxCompactOptionsClass, toolbarButtonStyles } from '@/components/ui';
+import { SearchField, SharedListboxButton, SharedListboxOption, SharedListboxOptions, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment } from '@/components/ui';
 import type { ReactNode } from 'react';
 
 interface FinderToolbarProps {
@@ -145,23 +145,21 @@ export function FinderToolbar({
               {directionLabel}
             </ToolbarButton>
             <Listbox value={sortBy} onChange={onSortByChange}>
-              <ListboxButton
-                className={toolbarButtonStyles({ className: 'gap-1 min-w-[86px] justify-between' })}
-              >
+              <SharedListboxButton tone="toolbar" className="gap-1 min-w-[86px] justify-between">
                 <span>{currentSort.label}</span>
                 <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
-              </ListboxButton>
-              <ListboxOptions anchor="bottom end" className={listboxCompactOptionsClass}>
+              </SharedListboxButton>
+              <SharedListboxOptions anchor="bottom end" tone="compact">
                 {SORT_OPTIONS.map((opt) => (
-                  <ListboxOption
+                  <SharedListboxOption
                     key={opt.value}
                     value={opt.value}
-                    className={({ active, selected }) => listboxCompactOptionClass(active, selected)}
+                    tone="compact"
                   >
                     {opt.label}
-                  </ListboxOption>
+                  </SharedListboxOption>
                 ))}
-              </ListboxOptions>
+              </SharedListboxOptions>
             </Listbox>
           </div>
         )}

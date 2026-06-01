@@ -2,16 +2,13 @@
 
 import {
   Listbox,
-  ListboxButton,
-  ListboxOption,
-  ListboxOptions,
 } from '@headlessui/react';
 import { ChevronUpDownIcon, AudioWaveIcon, CheckIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useState } from 'react';
 import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
 import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { cn, listboxButtonClass, listboxOptionClass, listboxPanelClass, popoverTriggerClass } from '@/components/ui';
+import { SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn, popoverTriggerClass } from '@/components/ui';
 
 export function VoicesControlBase({
   availableVoices,
@@ -35,8 +32,9 @@ export function VoicesControlBase({
     : 'bottom-full right-0 mb-1';
 
   const buttonClass = variant === 'field'
-    ? cn(listboxButtonClass, 'bg-surface pr-10')
+    ? 'bg-surface pr-10'
     : cn(popoverTriggerClass, 'space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm');
+  const buttonTone = variant === 'field' ? 'default' : 'unstyled';
 
   const iconClass = variant === 'field'
     ? 'h-3.5 w-3.5 shrink-0'
@@ -122,7 +120,7 @@ export function VoicesControlBase({
             }
           }}
         >
-          <ListboxButton className={buttonClass}>
+          <SharedListboxButton tone={buttonTone} className={buttonClass}>
             {variant === 'field' ? (
               <>
                 <span className="flex items-center gap-2 truncate text-sm font-medium">
@@ -140,13 +138,14 @@ export function VoicesControlBase({
                 <ChevronUpDownIcon className={chevronClass} />
               </>
             )}
-          </ListboxButton>
-          <ListboxOptions className={cn(listboxPanelClass, 'absolute !h-auto !min-h-0 !max-h-[50vh]', dropdownPosition, dropdownWidth)}>
+          </SharedListboxButton>
+          <SharedListboxOptions tone="default" className={cn('absolute !h-auto !min-h-0 !max-h-[50vh]', dropdownPosition, dropdownWidth)}>
             {availableVoices.map((voiceId) => (
-              <ListboxOption
+              <SharedListboxOption
                 key={voiceId}
                 value={voiceId}
-                className={({ active, selected }) => cn(listboxOptionClass(active, selected, 'none'), 'flex items-center gap-2 py-1 sm:py-2')}
+                inset="none"
+                itemClassName="flex items-center gap-2 py-1 sm:py-2"
               >
                 {({ selected }) => (
                   <>
@@ -158,13 +157,13 @@ export function VoicesControlBase({
                     <span className="text-xs sm:text-sm">{voiceId}</span>
                   </>
                 )}
-              </ListboxOption>
+              </SharedListboxOption>
             ))}
-          </ListboxOptions>
+          </SharedListboxOptions>
         </Listbox>
       ) : (
         <Listbox value={currentVoice} onChange={onChangeVoice}>
-          <ListboxButton className={buttonClass}>
+          <SharedListboxButton tone={buttonTone} className={buttonClass}>
             {variant === 'field' ? (
               <>
                 <span className="flex items-center gap-2 truncate text-sm font-medium">
@@ -182,18 +181,19 @@ export function VoicesControlBase({
                 <ChevronUpDownIcon className={chevronClass} />
               </>
             )}
-          </ListboxButton>
-          <ListboxOptions className={cn(listboxPanelClass, 'absolute !h-auto !min-h-0 !max-h-[50vh]', dropdownPosition, dropdownWidth)}>
+          </SharedListboxButton>
+          <SharedListboxOptions tone="default" className={cn('absolute !h-auto !min-h-0 !max-h-[50vh]', dropdownPosition, dropdownWidth)}>
             {availableVoices.map((voiceId) => (
-              <ListboxOption
+              <SharedListboxOption
                 key={voiceId}
                 value={voiceId}
-                className={({ active, selected }) => cn(listboxOptionClass(active, selected, 'none'), 'py-1 sm:py-2')}
+                inset="none"
+                itemClassName="py-1 sm:py-2"
               >
                 <span className="text-xs sm:text-sm">{voiceId}</span>
-              </ListboxOption>
+              </SharedListboxOption>
             ))}
-          </ListboxOptions>
+          </SharedListboxOptions>
         </Listbox>
       )}
     </div>

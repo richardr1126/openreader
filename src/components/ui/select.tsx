@@ -1,11 +1,15 @@
 'use client';
 
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
+import type { ComponentProps } from 'react';
 import { cn } from './cn';
 export { segmentedButtonClass, segmentedGroupClass } from './segmented-control';
 
 export const listboxButtonClass =
   'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
+
+export const listboxToolbarButtonClass =
+  'inline-flex items-center rounded-md border border-line bg-surface px-2 py-1 text-xs text-foreground hover:border-accent-line hover:bg-accent-wash hover:text-accent transition-colors duration-fast ease-standard';
 
 export const listboxPanelClass =
   'z-50 max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none';
@@ -33,6 +37,68 @@ export const listboxCompactOptionClass = (active: boolean, selected = false) =>
         : 'text-foreground',
   );
 
+export function SharedListboxButton({
+  tone = 'default',
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof ListboxButton> & {
+  tone?: 'default' | 'toolbar' | 'unstyled';
+}) {
+  const baseClass = tone === 'toolbar'
+    ? listboxToolbarButtonClass
+    : tone === 'unstyled'
+      ? ''
+      : listboxButtonClass;
+  return (
+    <ListboxButton className={cn(baseClass, className)} {...props}>
+      {children}
+    </ListboxButton>
+  );
+}
+
+export function SharedListboxOptions({
+  tone = 'default',
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof ListboxOptions> & {
+  tone?: 'default' | 'compact';
+}) {
+  const baseClass = tone === 'compact' ? listboxCompactOptionsClass : listboxOptionsClass;
+  return (
+    <ListboxOptions className={cn(baseClass, className)} {...props}>
+      {children}
+    </ListboxOptions>
+  );
+}
+
+export function SharedListboxOption({
+  tone = 'default',
+  inset = 'check',
+  itemClassName,
+  children,
+  ...props
+}: Omit<ComponentProps<typeof ListboxOption>, 'className'> & {
+  tone?: 'default' | 'compact';
+  inset?: 'check' | 'none';
+  itemClassName?: string;
+}) {
+  return (
+    <ListboxOption
+      className={({ active, selected }: { active: boolean; selected: boolean }) => cn(
+        tone === 'compact'
+          ? listboxCompactOptionClass(active, selected)
+          : listboxOptionClass(active, selected, inset),
+        itemClassName,
+      )}
+      {...props}
+    >
+      {children}
+    </ListboxOption>
+  );
+}
+
 export function Select({
   value,
   onChange,
@@ -46,22 +112,22 @@ export function Select({
 
   return (
     <Listbox value={value} onChange={onChange}>
-      <ListboxButton className={listboxButtonClass}>
+      <SharedListboxButton>
         <span>{activeOption?.label ?? 'Select'}</span>
         <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-soft">v</span>
-      </ListboxButton>
-      <ListboxOptions anchor="bottom" className={listboxOptionsClass}>
+      </SharedListboxButton>
+      <SharedListboxOptions anchor="bottom">
         {options.map((option) => (
-          <ListboxOption key={option.value} value={option.value} className={({ active, selected }) => listboxOptionClass(active, selected)}>
+          <SharedListboxOption key={option.value} value={option.value}>
             {({ selected }) => (
               <>
                 <span className="absolute left-2 text-accent">{selected ? '*' : ''}</span>
                 <span>{option.label}</span>
               </>
             )}
-          </ListboxOption>
+          </SharedListboxOption>
         ))}
-      </ListboxOptions>
+      </SharedListboxOptions>
     </Listbox>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Transition, Listbox, ListboxButton, ListboxOptions, ListboxOption, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
+import { Transition, Listbox, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
@@ -13,7 +13,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
-import { Button, Card, IconButton, MenuItemClass, cn, listboxButtonClass, listboxOptionClass, listboxPanelClass, menuPanelClass, rangeInputClass } from '@/components/ui';
+import { Button, Card, IconButton, MenuItemClass, SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn, menuPanelClass, rangeInputClass } from '@/components/ui';
 import { 
   getAudiobookStatus, 
   deleteAudiobookChapter, 
@@ -561,40 +561,42 @@ export function AudiobookExportModal({
 			                                          disabled={chapters.length > 0 || settingsLocked}
 			                                        >
 			                                          <div className="relative">
-			                                            <ListboxButton className={cn(listboxButtonClass, 'bg-surface')}>
+			                                            <SharedListboxButton className="bg-surface">
 			                                              <span className="block truncate text-sm font-medium">{format.toUpperCase()}</span>
 			                                              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
 			                                                <ChevronUpDownIcon className="h-4 w-4 text-soft" />
 			                                              </span>
-			                                            </ListboxButton>
+			                                            </SharedListboxButton>
 			                                            <Transition
 			                                              as={Fragment}
 			                                              leave="transition ease-standard duration-fast"
 			                                              leaveFrom="opacity-100"
 			                                              leaveTo="opacity-0"
 			                                            >
-			                                              <ListboxOptions className={cn(listboxPanelClass, 'absolute left-0 mt-1 w-full')}>
-			                                                <ListboxOption
+			                                              <SharedListboxOptions className="absolute left-0 mt-1 w-full">
+			                                                <SharedListboxOption
 			                                                  value="m4b"
-			                                                  className={({ active, selected }) => cn(listboxOptionClass(active, selected, 'none'), 'py-2')}
+			                                                  inset="none"
+			                                                  itemClassName="py-2"
 			                                                >
 			                                                  {({ selected }) => (
 			                                                    <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
 			                                                      M4B
 			                                                    </span>
 			                                                  )}
-			                                                </ListboxOption>
-			                                                <ListboxOption
+			                                                </SharedListboxOption>
+			                                                <SharedListboxOption
 			                                                  value="mp3"
-			                                                  className={({ active, selected }) => cn(listboxOptionClass(active, selected, 'none'), 'py-2')}
+			                                                  inset="none"
+			                                                  itemClassName="py-2"
 			                                                >
 			                                                  {({ selected }) => (
 			                                                    <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
 			                                                      MP3
 			                                                    </span>
 			                                                  )}
-			                                                </ListboxOption>
-			                                              </ListboxOptions>
+			                                                </SharedListboxOption>
+			                                              </SharedListboxOptions>
 			                                            </Transition>
 			                                          </div>
 			                                        </Listbox>
