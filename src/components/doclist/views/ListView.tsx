@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { Button } from '@headlessui/react';
 import type {
   DocumentListDocument,
   SortBy,
@@ -11,6 +10,7 @@ import type {
 } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
+import { IconButton } from '@/components/ui';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -156,12 +156,12 @@ function DocRow({
       <span className="px-2 text-[11px] text-soft tabular-nums">
         {formatDate(doc.lastModified)}
       </span>
-      <Button
+      <IconButton
         onClick={(e: React.MouseEvent) => {
           e.stopPropagation();
           onDeleteDoc(doc);
         }}
-        className="h-7 w-7 flex items-center justify-center text-soft hover:text-accent hover:bg-accent-wash rounded transition duration-base ease-standard"
+        size="sm"
         aria-label={`Delete ${doc.name}`}
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,7 +172,7 @@ function DocRow({
             d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
           />
         </svg>
-      </Button>
+      </IconButton>
     </div>
   );
 }

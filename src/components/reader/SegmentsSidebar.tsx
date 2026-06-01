@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { buttonClass } from '@/components/ui';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
 import { buildSegmentKey, buildSegmentKeyPrefix } from '@/lib/shared/tts-segment-plan';

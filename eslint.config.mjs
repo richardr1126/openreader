@@ -23,6 +23,47 @@ const APP_DESIGN_SYSTEM_FILES = [
   "src/app/(app)/**/*.{ts,tsx}",
   "src/components/**/*.{ts,tsx}",
 ];
+const UI_ARCHITECTURE_FILES = [
+  "src/app/(app)/**/*.{ts,tsx}",
+  "src/components/auth/**/*.{ts,tsx}",
+  "src/components/doclist/**/*.{ts,tsx}",
+  "src/components/documents/DocumentUploader.tsx",
+  "src/components/documents/DocumentSelectionModal.tsx",
+  "src/components/documents/DexieMigrationModal.tsx",
+  "src/components/documents/ZoomControl.tsx",
+  "src/components/player/**/*.{ts,tsx}",
+  "src/components/reader/**/*.{ts,tsx}",
+];
+const COMPUTE_CORE_IMPORT_PATTERNS = [
+  {
+    group: [
+      "@openreader/compute-core/*",
+      "!@openreader/compute-core/local-runtime",
+      "!@openreader/compute-core/types",
+      "!@openreader/compute-core/api-contracts",
+    ],
+    message:
+      "Use '@openreader/compute-core' root imports for light APIs. Allowed subpaths are '@openreader/compute-core/local-runtime', '@openreader/compute-core/types', and '@openreader/compute-core/api-contracts'.",
+  },
+];
+const UI_ARCHITECTURE_IMPORT_PATHS = [
+  {
+    name: "@/components/formPrimitives",
+    message:
+      "Use '@/components/ui' primitives in migrated app surfaces; formPrimitives is a compatibility shim.",
+  },
+  {
+    name: "@/components/ui/buttonPrimitives",
+    message:
+      "Use '@/components/ui' button exports in migrated app surfaces; buttonPrimitives is a compatibility shim.",
+  },
+  {
+    name: "@headlessui/react",
+    importNames: ["Button", "Input"],
+    message:
+      "Use app UI Button/Input primitives; Headless UI should be reserved for structural primitives such as Menu, Listbox, Popover, Dialog, and Transition.",
+  },
+];
 const RESTRICTED_APP_CLASS_PATTERNS = [
   {
     selector: "Literal[value=/(bg|text|border|ring)-(gray|slate|zinc|neutral|stone|red|orange|yellow|amber|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d/]",
@@ -83,18 +124,7 @@ const eslintConfig = [
       "no-restricted-imports": [
         "error",
         {
-          patterns: [
-            {
-              group: [
-                "@openreader/compute-core/*",
-                "!@openreader/compute-core/local-runtime",
-                "!@openreader/compute-core/types",
-                "!@openreader/compute-core/api-contracts",
-              ],
-              message:
-                "Use '@openreader/compute-core' root imports for light APIs. Allowed subpaths are '@openreader/compute-core/local-runtime', '@openreader/compute-core/types', and '@openreader/compute-core/api-contracts'.",
-            },
-          ],
+          patterns: COMPUTE_CORE_IMPORT_PATTERNS,
         },
       ],
     },
@@ -103,6 +133,18 @@ const eslintConfig = [
     files: APP_DESIGN_SYSTEM_FILES,
     rules: {
       "no-restricted-syntax": ["error", ...RESTRICTED_APP_CLASS_PATTERNS],
+    },
+  },
+  {
+    files: UI_ARCHITECTURE_FILES,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: UI_ARCHITECTURE_IMPORT_PATHS,
+          patterns: COMPUTE_CORE_IMPORT_PATTERNS,
+        },
+      ],
     },
   },
   {
