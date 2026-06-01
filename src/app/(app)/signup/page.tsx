@@ -125,7 +125,7 @@ export default function SignUpPage() {
 
   const { checks, strength } = validatePassword(password);
   const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
-  const strengthColors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
+  const strengthColors = ['bg-danger', 'bg-danger', 'bg-accent', 'bg-accent', 'bg-accent'];
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -134,8 +134,8 @@ export default function SignUpPage() {
         <p className="text-sm text-muted mt-1">Create your account to get started</p>
 
         {error && (
-          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+          <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
+            <p className="text-sm text-danger dark:text-danger">{error}</p>
           </div>
         )}
 
@@ -190,12 +190,12 @@ export default function SignUpPage() {
                     />
                   ))}
                 </div>
-                <p className={`text-xs ${strength >= 3 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-xs ${strength >= 3 ? 'text-accent' : 'text-danger'}`}>
                   {strengthLabels[strength - 1] || 'Very Weak'}
                 </p>
                 <div className="text-xs space-y-0.5 text-muted">
                   {Object.entries(checks).map(([key, passed]) => (
-                    <div key={key} className={`flex items-center gap-1 ${passed ? 'text-green-600' : ''}`}>
+                    <div key={key} className={`flex items-center gap-1 ${passed ? 'text-accent' : ''}`}>
                       <span>{passed ? '✓' : '○'}</span>
                       <span>
                         {key === 'length' && 'At least 8 characters'}
@@ -223,7 +223,7 @@ export default function SignUpPage() {
                        focus:outline-none focus:ring-2 focus:ring-accent"
             />
             {passwordConfirmation && password && (
-              <p className={`text-xs mt-1 ${password === passwordConfirmation ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`text-xs mt-1 ${password === passwordConfirmation ? 'text-accent' : 'text-danger'}`}>
                 {password === passwordConfirmation ? '✓ Passwords match' : '✗ Passwords do not match'}
               </p>
             )}

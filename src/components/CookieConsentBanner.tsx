@@ -48,7 +48,7 @@ export function CookieConsentBanner() {
           <h3 className="mb-2 text-lg font-bold">
             🍪 We use cookies
           </h3>
-          <p className="text-sm leading-relaxed text-foreground/90">
+          <p className="text-sm leading-relaxed text-soft">
             We use strictly necessary cookies for authentication. Optional analytics is enabled only when you consent.
             See our <Link href="/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link> for details.
           </p>

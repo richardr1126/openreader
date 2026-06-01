@@ -285,16 +285,16 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
         </>
       ) : textPreview ? (
         <>
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-slate-200" />
+          <div className="absolute inset-0 bg-gradient-to-br from-surface-solid to-surface-sunken" />
           <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,1)_1px,transparent_0)] [background-size:12px_12px]" />
           <div className="relative z-10 h-full w-full p-2 flex flex-col">
-            <div className="mt-auto rounded-md bg-white/70 backdrop-blur-[1px] shadow-sm ring-1 ring-black/5 p-2.5 max-h-[70%] overflow-hidden">
+            <div className="mt-auto rounded-md bg-surface-solid backdrop-blur-[1px] shadow-elev-1 ring-1 ring-line-soft p-2.5 max-h-[70%] overflow-hidden">
               {isTxtFile ? (
-                <pre className="text-[10px] sm:text-[11px] leading-snug text-slate-900 whitespace-pre-wrap font-mono">
+                <pre className="text-[10px] sm:text-[11px] leading-snug text-foreground whitespace-pre-wrap font-mono">
                   {textPreview}
                 </pre>
               ) : (
-                <div className="text-[10px] sm:text-[11px] leading-snug text-slate-900 break-words [overflow-wrap:anywhere]">
+                <div className="text-[10px] sm:text-[11px] leading-snug text-foreground break-words [overflow-wrap:anywhere]">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -311,11 +311,11 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                       a: ({ children }) => <span>{children}</span>,
                       img: () => null,
                       blockquote: (props) => (
-                        <blockquote className="m-0 pl-2 border-l-2 border-slate-300 text-slate-700" {...props} />
+                        <blockquote className="m-0 pl-2 border-l-2 border-line text-soft" {...props} />
                       ),
                       code: (props) => (
                         <code
-                          className="font-mono text-[10px] bg-slate-900/5 rounded px-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                          className="font-mono text-[10px] bg-surface-sunken rounded px-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                           {...props}
                         />
                       ),

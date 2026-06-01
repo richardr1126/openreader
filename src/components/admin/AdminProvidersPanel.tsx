@@ -674,7 +674,7 @@ export function AdminProvidersPanel() {
                             type="button"
                             onClick={() => setDefault(p.slug)}
                             disabled={disabled}
-                            className={`${disabled ? 'text-muted/60 cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                            className={`${disabled ? 'text-faint cursor-not-allowed' : active ? 'bg-offbase text-accent' : 'text-foreground'} flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                           >
                             Set as default
                           </button>
@@ -696,7 +696,7 @@ export function AdminProvidersPanel() {
                           <button
                             type="button"
                             onClick={() => remove(p.id)}
-                            className={`${active ? 'bg-offbase' : ''} text-red-500 flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                            className={`${active ? 'bg-offbase' : ''} text-danger flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
                           >
                             Delete
                           </button>

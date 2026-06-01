@@ -132,16 +132,16 @@ function SignInContent() {
 
         {/* Alerts */}
         {sessionExpired && (
-          <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-            <p className="text-sm text-amber-700 dark:text-amber-400">
+          <div className="mt-4 p-3 bg-accent-wash border border-accent-line rounded-lg">
+            <p className="text-sm text-accent ">
               Your session has expired. Please sign in again.
             </p>
           </div>
         )}
 
         {error && (
-          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+          <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
+            <p className="text-sm text-danger dark:text-danger">{error}</p>
           </div>
         )}
 

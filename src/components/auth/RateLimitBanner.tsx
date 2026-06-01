@@ -19,13 +19,13 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
   const isAnonymous = status.userType === 'anonymous';
 
   return (
-    <div className={`bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 ${className}`}>
+    <div className={`bg-accent-wash border border-accent-line rounded-lg px-3 py-2 ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="text-xs sm:text-sm">
-          <span className="font-medium text-amber-700 dark:text-amber-400">
+          <span className="font-medium text-accent ">
             Daily TTS limit reached.
           </span>
-          <span className="text-amber-600 dark:text-amber-500 ml-1.5">
+          <span className="text-accent  ml-1.5">
             {`Used ${formatCharCount(status.currentCount)} / ${formatCharCount(status.limit)} characters.`}
             {' Resets in '}{timeUntilReset}.
           </span>
@@ -64,7 +64,7 @@ export function RateLimitIndicator({ className = '' }: RateLimitBannerProps) {
 
   if (isAtLimit) {
     return (
-      <span className={`text-xs font-medium text-amber-600 dark:text-amber-400 ${className}`}>
+      <span className={`text-xs font-medium text-accent  ${className}`}>
         Limit reached
       </span>
     );

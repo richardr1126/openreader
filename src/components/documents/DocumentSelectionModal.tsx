@@ -167,7 +167,7 @@ export function DocumentSelectionModal({
                   {isLoading ? (
                     <DocumentSelectionSkeleton />
                   ) : errorMessage ? (
-                    <div className="flex items-center justify-center h-full text-red-500">{errorMessage}</div>
+                    <div className="flex items-center justify-center h-full text-danger">{errorMessage}</div>
                   ) : files.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-muted">No documents found.</div>
                   ) : (
@@ -179,7 +179,7 @@ export function DocumentSelectionModal({
                             key={file.id}
                             onClick={(e) => handleRowClick(e, file.id)}
                             className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer text-sm select-none
-                                            ${isSelected ? 'bg-accent/10' : 'hover:bg-offbase'}
+                                            ${isSelected ? 'bg-accent-wash' : 'hover:bg-offbase'}
                                         `}
                           >
                             <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>

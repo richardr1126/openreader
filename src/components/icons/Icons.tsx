@@ -246,7 +246,7 @@ export function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 export function PDFIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
-      className={`w-6 h-6 sm:w-8 sm:h-8 text-red-500 ${props.className || ''}`}
+      className={`w-6 h-6 sm:w-8 sm:h-8 text-danger ${props.className || ''}`}
       fill="currentColor"
       stroke="currentColor"
       viewBox="-4 0 40 40"
@@ -261,7 +261,7 @@ export function PDFIcon(props: React.SVGProps<SVGSVGElement>) {
 export function EPUBIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
-      className={`w-6 h-6 sm:w-8 sm:h-8 text-blue-500 ${props.className || ''}`}
+      className={`w-6 h-6 sm:w-8 sm:h-8 text-accent ${props.className || ''}`}
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"

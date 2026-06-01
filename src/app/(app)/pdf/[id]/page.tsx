@@ -251,7 +251,7 @@ export default function PDFViewerPage() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
-        <p className="text-red-500 mb-4">{error}</p>
+        <p className="text-danger mb-4">{error}</p>
         <Link
           href="/app"
           onClick={handleBackToDocuments}
@@ -311,18 +311,18 @@ export default function PDFViewerPage() {
       <div className="h-full w-full bg-base">
         <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard ${showDetailedParseLoader ? 'max-w-lg' : 'max-w-md'}`}>
           {showDetailedParseLoader ? (
-            <div className="w-full rounded-xl border border-offbase bg-offbase/95 shadow-sm overflow-hidden">
+            <div className="w-full rounded-xl border border-offbase bg-surface-sunken shadow-sm overflow-hidden">
               <div className="h-1 bg-[linear-gradient(90deg,var(--accent),transparent_80%)]" />
               <div className="p-3.5 sm:p-4">
                 <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-2 rounded-md border border-offbase bg-base/70 px-2.5 py-1">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-offbase bg-surface-solid px-2.5 py-1">
                     <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
                     <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">PDF Layout Parse</span>
                   </div>
                   <p className="text-sm font-semibold text-foreground">{statusText}</p>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-offbase bg-base/75 p-2.5">
+                <div className="mt-3 rounded-lg border border-offbase bg-surface-solid p-2.5">
                   <div className="mb-1.5 flex items-end justify-between gap-2">
                     <p className="text-[11px] font-semibold text-foreground">
                       {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
@@ -354,7 +354,7 @@ export default function PDFViewerPage() {
               </div>
             </div>
           ) : (
-            <div className="w-full rounded-xl border border-offbase bg-offbase/95 p-4 shadow-sm transition duration-slow ease-standard overflow-hidden">
+            <div className="w-full rounded-xl border border-offbase bg-surface-sunken p-4 shadow-sm transition duration-slow ease-standard overflow-hidden">
               <div className="h-0.5 -mx-4 -mt-4 mb-3 bg-[linear-gradient(90deg,var(--accent),transparent_75%)]" />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -366,9 +366,9 @@ export default function PDFViewerPage() {
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-1.5">
-                <span className="h-1.5 rounded-full bg-accent/30 animate-pulse" />
-                <span className="h-1.5 rounded-full bg-accent/20 animate-pulse [animation-delay:120ms]" />
-                <span className="h-1.5 rounded-full bg-accent/15 animate-pulse [animation-delay:220ms]" />
+                <span className="h-1.5 rounded-full bg-accent-wash animate-pulse" />
+                <span className="h-1.5 rounded-full bg-accent-wash animate-pulse [animation-delay:120ms]" />
+                <span className="h-1.5 rounded-full bg-accent-wash animate-pulse [animation-delay:220ms]" />
               </div>
             </div>
           )}

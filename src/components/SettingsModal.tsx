@@ -630,7 +630,7 @@ export function SettingsModal({
                           <div className="space-y-1.5">
                             <label className={fieldLabelClass}>TTS Provider</label>
                             {ttsProviders.length === 0 ? (
-                              <p className="text-xs text-amber-500">
+                              <p className="text-xs text-accent">
                                 User API keys are restricted and no shared provider is configured. Ask an admin to add one.
                               </p>
                             ) : (
@@ -1253,7 +1253,7 @@ export function SettingsModal({
                                 </Button>
 
                                 <div className="pt-4 mt-4 border-t border-offbase">
-                                  <label className="block text-sm font-medium text-red-500 mb-2">Danger Zone</label>
+                                  <label className="block text-sm font-medium text-danger mb-2">Danger Zone</label>
                                   <Button
                                     onClick={() => setShowDeleteAccountConfirm(true)}
                                     className={buttonClass({ variant: 'danger', size: 'md' })}

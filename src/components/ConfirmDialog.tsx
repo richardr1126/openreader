@@ -70,7 +70,7 @@ export function ConfirmDialog({
                   {title}
                 </DialogTitle>
                 <div className="mt-2">
-                  <p className="text-sm text-foreground/90 break-words">{message}</p>
+                  <p className="text-sm text-soft break-words">{message}</p>
                 </div>
 
                 <div className="mt-6 flex justify-end space-x-3">

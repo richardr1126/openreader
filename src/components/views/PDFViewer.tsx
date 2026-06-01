@@ -480,7 +480,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
           return (
             <div
               key={`${block.id}:${fragment.page}:${fragment.readingOrder}`}
-              className="absolute border border-accent/70 rounded-[2px]"
+              className="absolute border border-accent-line rounded-[2px]"
               style={{
                 left: `${leftPct}%`,
                 top: `${topPct}%`,

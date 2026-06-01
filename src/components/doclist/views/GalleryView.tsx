@@ -38,8 +38,8 @@ function formatParseStatus(status: DocumentListDocument['parseStatus']): string 
 }
 
 function KindIcon({ doc, className }: { doc: DocumentListDocument; className?: string }) {
-  if (doc.type === 'pdf') return <PDFIcon className={className ?? 'w-4 h-4 text-red-500'} />;
-  if (doc.type === 'epub') return <EPUBIcon className={className ?? 'w-4 h-4 text-blue-500'} />;
+  if (doc.type === 'pdf') return <PDFIcon className={className ?? 'w-4 h-4 text-danger'} />;
+  if (doc.type === 'epub') return <EPUBIcon className={className ?? 'w-4 h-4 text-accent'} />;
   return <FileIcon className={className ?? 'w-4 h-4 text-muted'} />;
 }
 

@@ -181,7 +181,7 @@ export function DexieMigrationModal({
                       </div>
                     </div>
                   )}
-                  {!isUploading && status ? <p className="text-xs text-red-500">{status}</p> : null}
+                  {!isUploading && status ? <p className="text-xs text-danger">{status}</p> : null}
                 </div>
 
                 <div className="flex justify-end gap-3 mt-6">

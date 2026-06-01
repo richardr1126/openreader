@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, type ReactNode } from 'react';
+import { useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import {
   btnBase,
   btnDanger,
@@ -36,23 +36,111 @@ export {
 // (Note: never use Tailwind alpha modifiers on these theme variables — they
 // resolve to CSS custom properties that don't accept opacity suffixes.)
 export const inputClass =
-  'w-full rounded-md bg-background border border-offbase px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent';
+  'w-full rounded-md bg-surface-sunken border border-line px-2.5 py-1.5 text-sm text-foreground transition-colors duration-fast ease-standard focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent-line';
 
 export const listboxButtonClass =
-  'relative w-full cursor-pointer rounded-md bg-background border border-offbase py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent hover:bg-base transition-colors duration-fast ease-standard';
+  'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent hover:bg-accent-wash transition-colors duration-fast ease-standard';
 export const listboxOptionsClass =
-  'z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background p-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]';
+  'z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none [--anchor-gap:0.25rem]';
 export const listboxOptionClass = (active: boolean) =>
-  `relative cursor-pointer select-none rounded-sm py-1.5 pl-9 pr-3 text-sm ${active ? 'bg-offbase text-foreground' : 'text-foreground'}`;
+  `relative cursor-pointer select-none rounded-sm py-1.5 pl-9 pr-3 text-sm ${active ? 'bg-accent-wash text-foreground' : 'text-foreground'}`;
 
 export const segmentedGroupClass =
-  'grid gap-1 rounded-full border border-offbase bg-background p-1';
+  'grid gap-1 rounded-full border border-line bg-surface-sunken p-1';
 export const segmentedButtonClass = (active: boolean) =>
   `rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors duration-fast ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
     active
       ? 'bg-accent text-background'
-      : 'text-muted hover:bg-base hover:text-foreground'
+      : 'text-soft hover:bg-accent-wash hover:text-foreground'
   }`;
+
+type SurfaceElevation = 'none' | '1' | '2' | '3';
+
+const SURFACE_ELEVATION_CLASS: Record<SurfaceElevation, string> = {
+  none: '',
+  '1': 'shadow-elev-1',
+  '2': 'shadow-elev-2',
+  '3': 'shadow-elev-3',
+};
+
+export function Surface({
+  children,
+  className = '',
+  elevation = 'none',
+}: {
+  children: ReactNode;
+  className?: string;
+  elevation?: SurfaceElevation;
+}) {
+  return (
+    <div className={`rounded-lg border border-line bg-surface text-foreground ${SURFACE_ELEVATION_CLASS[elevation]} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+export function Panel({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Surface elevation="1" className={`overflow-hidden ${className}`}>
+      {children}
+    </Surface>
+  );
+}
+
+export function Sidebar({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <aside className={`rounded-lg border border-line bg-surface text-foreground shadow-elev-2 ${className}`}>
+      {children}
+    </aside>
+  );
+}
+
+export function Divider({ className = '' }: { className?: string }) {
+  return <div aria-hidden="true" className={`border-t border-line-soft ${className}`} />;
+}
+
+export function IconButton({
+  className = '',
+  children,
+  type = 'button',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type={type}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-soft transition-colors duration-fast ease-standard hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Menu({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-md border border-line bg-surface p-1 shadow-elev-2 ring-1 ring-line-soft ${className}`}>
+      {children}
+    </div>
+  );
+}
 
 export function Section({
   title,
@@ -69,11 +157,11 @@ export function Section({
 }) {
   if (variant === 'flat') {
     return (
-      <section className="space-y-2 pb-3 border-b border-offbase last:border-b-0">
+      <section className="space-y-2 pb-3 border-b border-line-soft last:border-b-0">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-            {subtitle ? <p className="text-xs text-muted mt-0.5">{subtitle}</p> : null}
+            {subtitle ? <p className="text-xs text-soft mt-0.5">{subtitle}</p> : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
@@ -83,12 +171,12 @@ export function Section({
   }
 
   return (
-    <section className="rounded-xl border border-offbase bg-base overflow-hidden">
-      <div className="px-3 py-2 bg-background border-b border-offbase">
+    <section className="rounded-lg border border-line bg-surface overflow-hidden">
+      <div className="px-3 py-2 bg-surface-solid border-b border-line-soft">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-            {subtitle ? <p className="text-xs text-muted mt-0.5">{subtitle}</p> : null}
+            {subtitle ? <p className="text-xs text-soft mt-0.5">{subtitle}</p> : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
@@ -108,7 +196,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-lg border border-offbase bg-background px-3 py-2 transition-colors duration-fast ease-standard ${className}`}>
+    <div className={`rounded-lg border border-line bg-surface px-3 py-2 transition-colors duration-fast ease-standard ${className}`}>
       {children}
     </div>
   );
@@ -159,13 +247,13 @@ export function Switch({
       aria-describedby={ariaDescribedBy}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-offbase transition-colors duration-fast ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${s.track} ${
-        checked ? 'bg-accent' : 'bg-offbase'
+      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-line transition-colors duration-fast ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${s.track} ${
+        checked ? 'bg-accent' : 'bg-line-strong'
       }`}
     >
       <span
         aria-hidden="true"
-        className={`pointer-events-none inline-block rounded-full bg-background shadow-sm ring-0 transition-transform duration-fast ease-standard ${s.thumb} ${
+        className={`pointer-events-none inline-block rounded-full bg-surface shadow-elev-1 ring-0 transition-transform duration-fast ease-standard ${s.thumb} ${
           checked ? s.on : s.off
         }`}
       />
@@ -194,8 +282,8 @@ export function ToggleRow({
   const descId = useId();
   const rowClass =
     variant === 'flat'
-      ? 'px-0.5 pt-1 pb-2 border-b border-offbase last:border-b-0 transition-colors duration-fast ease-standard'
-      : 'rounded-md border border-offbase bg-background px-2.5 py-1.5 transition-colors duration-fast ease-standard';
+      ? 'px-0.5 pt-1 pb-2 border-b border-line-soft last:border-b-0 transition-colors duration-fast ease-standard'
+      : 'rounded-md border border-line bg-surface px-2.5 py-1.5 transition-colors duration-fast ease-standard';
   const handleTextToggle = () => {
     if (!disabled) onChange(!checked);
   };
@@ -207,7 +295,7 @@ export function ToggleRow({
           onClick={handleTextToggle}
         >
           <span id={labelId} className="block text-sm font-medium leading-5 text-foreground">{label}</span>
-          <span id={descId} className="block text-xs leading-4 text-muted">{description}</span>
+          <span id={descId} className="block text-xs leading-4 text-soft">{description}</span>
         </div>
         {right ? <div className="shrink-0 self-start pl-1.5">{right}</div> : null}
         <Switch
@@ -273,9 +361,9 @@ export function Field({
 }) {
   return (
     <div className={`space-y-1 ${className}`}>
-      {label ? <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label> : null}
+      {label ? <label className="block text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</label> : null}
       {children}
-      {hint ? <p className="text-[11px] text-muted">{hint}</p> : null}
+      {hint ? <p className="text-[11px] text-faint">{hint}</p> : null}
     </div>
   );
 }
@@ -289,10 +377,10 @@ export function Badge({
 }) {
   const toneClass =
     tone === 'accent'
-      ? 'text-accent'
+      ? 'text-accent bg-accent-wash'
       : tone === 'foreground'
-        ? 'text-foreground bg-offbase'
-        : 'text-muted bg-offbase';
+        ? 'text-foreground bg-surface-sunken'
+        : 'text-soft bg-surface-sunken';
   return (
     <span className={`inline-flex items-center text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 ${toneClass}`}>
       {children}

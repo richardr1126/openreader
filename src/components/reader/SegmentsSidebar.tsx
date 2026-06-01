@@ -99,7 +99,7 @@ function settingsAreEqual(a: TTSSegmentSettings | null, b: TTSSegmentSettings | 
 
 function statusColor(status: TTSSegmentVariant['status']): string {
   if (status === 'completed') return 'bg-accent';
-  if (status === 'error') return 'bg-red-500';
+  if (status === 'error') return 'bg-danger';
   return 'bg-muted';
 }
 
@@ -689,7 +689,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
           ) : isManifestLoading ? (
             <div className="animate-pulse h-3 w-36 rounded bg-offbase" aria-label="Loading segment summary" aria-busy="true" />
           ) : hasManifestError ? (
-            <span className="text-red-500">error</span>
+            <span className="text-danger">error</span>
           ) : (
             <span>—</span>
           )}
@@ -698,7 +698,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
 
       <div ref={listRef} className="flex-1 overflow-y-auto">
               {hasManifestError && (
-                <div className="px-4 py-6 text-sm text-red-500">{manifestErrorMessage}</div>
+                <div className="px-4 py-6 text-sm text-danger">{manifestErrorMessage}</div>
               )}
               {isManifestLoading && (
                 <SegmentsListSkeleton />
@@ -741,10 +741,10 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                       <li
                         key={`${isSynthesized ? 'syn' : 'mfr'}::${groupKey}::${segmentIndex}::${rowIndex}`}
                         data-active-segment={isCurrent ? 'true' : undefined}
-                        className={`relative px-4 py-3 ${isCurrent ? 'bg-offbase/40' : ''}`}
+                        className={`relative px-4 py-3 ${isCurrent ? 'bg-surface-sunken' : ''}`}
                       >
                         {showGroupHeader && (
-                          <div className="mb-2 -mx-4 px-4 py-1.5 bg-offbase/30 border-y border-offbase">
+                          <div className="mb-2 -mx-4 px-4 py-1.5 bg-surface-sunken border-y border-offbase">
                             <span className="text-[10px] uppercase tracking-[0.14em] text-muted">
                               {groupLabel}
                             </span>
@@ -758,7 +758,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                             type="button"
                             onClick={() => { if (canJump) handleJump(segmentIndex, row.locator); }}
                             disabled={!canJump}
-                            className={`text-xs font-medium shrink-0 pt-0.5 ${canJump ? 'text-muted hover:text-accent' : 'text-muted/50 cursor-not-allowed'}`}
+                            className={`text-xs font-medium shrink-0 pt-0.5 ${canJump ? 'text-muted hover:text-accent' : 'text-faint cursor-not-allowed'}`}
                             title={canJump ? (playable ? 'Play this segment' : 'Jump to this segment') : 'Text not loaded yet'}
                             aria-label={`Segment ${segmentIndex + 1}`}
                           >
@@ -772,7 +772,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                               disabled={!canJump}
                               className={`block w-full text-left ${canJump ? '' : 'cursor-not-allowed'}`}
                             >
-                              <p className={`text-sm leading-snug ${isCurrent ? 'text-foreground' : 'text-foreground/90'} line-clamp-2`}>
+                              <p className={`text-sm leading-snug ${isCurrent ? 'text-foreground' : 'text-soft'} line-clamp-2`}>
                                 {sentenceText || (
                                   <span className="text-muted italic text-xs">
                                     [text not loaded — press play to fetch]
@@ -796,7 +796,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                                 </span>
                               )}
                               {!canJump && (
-                                <span className="text-[10px] text-muted/80 border border-offbase rounded px-1 py-0.5">
+                                <span className="text-[10px] text-faint border border-offbase rounded px-1 py-0.5">
                                   not loaded
                                 </span>
                               )}
@@ -820,7 +820,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                                         className={[
                                           'max-w-full whitespace-normal break-words text-left leading-none text-[10px] px-1 py-0.5 rounded border transition-colors',
                                           isActive
-                                            ? 'border-accent text-accent bg-offbase/60'
+                                            ? 'border-accent text-accent bg-surface-sunken'
                                             : known
                                               ? 'border-offbase text-muted hover:border-accent hover:text-accent'
                                               : 'border-offbase text-muted opacity-60 cursor-not-allowed',

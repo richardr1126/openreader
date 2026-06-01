@@ -112,9 +112,9 @@ export default function ClaimDataModal({
                   Claim it now to attach it to your account.
                 </p>
 
-                <div className="mb-4 rounded-lg border border-offbase bg-offbase/40 p-3">
+                <div className="mb-4 rounded-lg border border-offbase bg-surface-sunken p-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted">Claimable data</div>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground/90">
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-soft">
                     <li>{claimableCounts.documents} document(s)</li>
                     <li>{claimableCounts.audiobooks} audiobook(s)</li>
                     <li>{claimableCounts.preferences} preference set(s)</li>
@@ -122,7 +122,7 @@ export default function ClaimDataModal({
                   </ul>
                 </div>
 
-                <p className="text-xs text-muted/70 mb-6 italic">
+                <p className="text-xs text-faint mb-6 italic">
                   ⚠️ First user to claim this data will own it and revoke access for anyone else.
                 </p>
 

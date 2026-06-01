@@ -170,7 +170,7 @@ export default function EPUBPage() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
-        <p className="text-red-500 mb-4">{error}</p>
+        <p className="text-danger mb-4">{error}</p>
         <Link
           href="/app"
           className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition duration-base ease-standard hover:text-accent"

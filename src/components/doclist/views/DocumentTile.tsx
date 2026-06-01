@@ -166,9 +166,9 @@ export function DocumentTile({
         >
           <span className="flex-shrink-0 flex items-center">
             {doc.type === 'pdf' ? (
-              <PDFIcon className={`${FILE_ICON_CLASSES[iconSize]} text-red-500`} />
+              <PDFIcon className={`${FILE_ICON_CLASSES[iconSize]} text-danger`} />
             ) : doc.type === 'epub' ? (
-              <EPUBIcon className={`${FILE_ICON_CLASSES[iconSize]} text-blue-500`} />
+              <EPUBIcon className={`${FILE_ICON_CLASSES[iconSize]} text-accent`} />
             ) : (
               <FileIcon className={`${FILE_ICON_CLASSES[iconSize]} text-muted`} />
             )}

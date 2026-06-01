@@ -29,8 +29,8 @@ function formatDate(ms: number): string {
 }
 
 function KindIcon({ doc }: { doc: DocumentListDocument }) {
-  if (doc.type === 'pdf') return <PDFIcon className="w-4 h-4 shrink-0 text-red-500" />;
-  if (doc.type === 'epub') return <EPUBIcon className="w-4 h-4 shrink-0 text-blue-500" />;
+  if (doc.type === 'pdf') return <PDFIcon className="w-4 h-4 shrink-0 text-danger" />;
+  if (doc.type === 'epub') return <EPUBIcon className="w-4 h-4 shrink-0 text-accent" />;
   return <FileIcon className="w-4 h-4 shrink-0 text-muted" />;
 }
 

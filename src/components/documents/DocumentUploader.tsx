@@ -181,19 +181,19 @@ export function DocumentUploader({
         <input {...getInputProps()} />
         {children}
         {isDragActive && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-md pointer-events-none p-6">
-            <div className="w-full h-full border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center bg-base/60 text-center p-4">
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-surface backdrop-blur-md pointer-events-none p-6">
+            <div className="w-full h-full border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center bg-surface-solid text-center p-4">
               <UploadIcon className="w-14 h-14 text-accent mb-4 animate-bounce" />
               <p className="text-xl font-bold text-foreground mb-1.5">
                 Drop files here to upload
               </p>
-              <p className="text-sm text-foreground/70">
+              <p className="text-sm text-soft">
                 {enableDocx
                   ? 'Accepts PDF, EPUB, TXT, MD, or DOCX'
                   : 'Accepts PDF, EPUB, TXT, or MD'}
               </p>
               {error && (
-                <p className="mt-3 text-sm text-red-500">
+                <p className="mt-3 text-sm text-danger">
                   Upload failed: {error} — try again.
                 </p>
               )}
@@ -201,7 +201,7 @@ export function DocumentUploader({
           </div>
         )}
         {!isDragActive && error && (
-          <div className="absolute inset-x-4 bottom-4 z-40 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-center text-sm text-red-500 pointer-events-none">
+          <div className="absolute inset-x-4 bottom-4 z-40 rounded-md border border-danger bg-danger-wash px-3 py-2 text-center text-sm text-danger pointer-events-none">
             Upload failed: {error} — try again.
           </div>
         )}
@@ -227,7 +227,7 @@ export function DocumentUploader({
               <p className="text-[12px] truncate flex-1">
                 {isDragActive ? 'Drop files here' : 'Upload documents'}
               </p>
-              {error && <p className="text-[10px] text-red-500 truncate shrink-0">{error}</p>}
+              {error && <p className="text-[10px] text-danger truncate shrink-0">{error}</p>}
             </div>
           )}
         </div>
@@ -246,7 +246,7 @@ export function DocumentUploader({
               <p className="text-xs sm:text-sm text-muted">
                 {enableDocx ? 'PDF, EPUB, TXT, MD, or DOCX files are accepted' : 'PDF, EPUB, TXT, or MD files are accepted'}
               </p>
-              {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+              {error && <p className="mt-2 text-sm text-danger">{error}</p>}
             </>
           )}
         </div>

@@ -490,7 +490,7 @@ export function AudiobookExportModal({
 
 			                            <div className="p-4">
 			                              {isLegacyAudiobookMissingSettings && (
-			                                <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-foreground">
+			                                <div className="mb-4 rounded-lg border border-accent-line bg-accent-wash p-3 text-xs text-foreground">
 			                                  <div className="font-medium">Saved generation settings not found</div>
 			                                  <div className="mt-1 text-muted">
 			                                    This audiobook was likely created before v1 metadata was introduced, so OpenReader can&apos;t know
@@ -694,9 +694,9 @@ export function AudiobookExportModal({
 			                                  <Button
 			                                    onClick={() => setShowResetConfirm(true)}
 			                                    disabled={isGenerating}
-			                                    className="inline-flex justify-center rounded-lg border border-red-500 bg-transparent px-3 py-2 text-sm
-			                                           font-medium text-red-500 hover:bg-red-500 hover:text-background focus:outline-none
-			                                           focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2
+			                                    className="inline-flex justify-center rounded-lg border border-danger bg-transparent px-3 py-2 text-sm
+			                                           font-medium text-danger hover:bg-danger-wash hover:text-background focus:outline-none
+			                                           focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2
 			                                           transform transition-transform duration-base ease-standard"
 			                                    title="Delete all generated chapters/pages for this document"
 			                                  >
@@ -760,7 +760,7 @@ export function AudiobookExportModal({
                                       <Button
                                         onClick={() => handleRegenerateChapter(chapter)}
                                         disabled={regeneratingChapter !== null || chapter.status === 'generating' || isGenerating}
-                                        className="inline-flex items-center justify-center rounded-full bg-offbase text-accent hover:bg-accent/20 p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="inline-flex items-center justify-center rounded-full bg-offbase text-accent hover:bg-accent-wash p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
                                         title={chapter.status === 'generating' ? 'Generating...' : 'Regenerate this chapter'}
                                       >
                                         <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index || chapter.status === 'generating' ? 'animate-spin' : ''}`} />
@@ -807,7 +807,7 @@ export function AudiobookExportModal({
                                                   {({ active }) => (
                                                     <button
                                                       onClick={() => setPendingDeleteChapter(chapter)}
-                                                      className={`${active ? 'bg-offbase' : ''} text-red-500 group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                      className={`${active ? 'bg-offbase' : ''} text-danger group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
                                                       title="Delete this chapter"
                                                     >
                                                       <XCircleIcon className="h-4 w-4" />
@@ -833,7 +833,7 @@ export function AudiobookExportModal({
                                                 {({ active }) => (
                                                   <button
                                                     onClick={handleCancel}
-                                                    className={`${active ? 'bg-offbase text-red-500' : 'text-red-500'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                    className={`${active ? 'bg-offbase text-danger' : 'text-danger'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
                                                     title="Cancel this chapter regeneration"
                                                   >
                                                     <XCircleIcon className="h-4 w-4" />

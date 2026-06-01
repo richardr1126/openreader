@@ -139,7 +139,7 @@ function SidebarUploadLoader({
   const dashOffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="rounded-md border border-offbase bg-offbase/60 px-2 py-1.5">
+    <div className="rounded-md border border-offbase bg-surface-sunken px-2 py-1.5">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-1.5 text-[11px] leading-tight">
           <span className="font-medium text-foreground">{label}</span>

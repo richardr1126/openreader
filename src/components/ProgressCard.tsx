@@ -57,7 +57,7 @@ export function ProgressCard({
           className={buttonClass({
             variant: 'ghost',
             size: 'xs',
-            className: 'shrink-0 hover:bg-background/50',
+            className: 'shrink-0 hover:bg-surface-sunken',
           })}
           onClick={(e) => onCancel(e)}
         >

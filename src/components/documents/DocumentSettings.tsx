@@ -214,14 +214,14 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
             action={
               <div className="flex flex-col items-end gap-1">
                 <span className="flex items-center gap-1 text-muted">
-                  <SparkleIcon className="h-3 w-3 text-accent/70" />
+                  <SparkleIcon className="h-3 w-3 text-accent" />
                   <span className="text-xs">PP-DocLayout-V3</span>
                 </span>
                 <span className="flex items-center gap-1 text-xs text-muted">
                   <span>{pdf.parseStatus ?? 'pending'}</span>
                   <button
                     type="button"
-                    className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 hover:scale-[1.1] shrink-0' })}
+                    className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 shrink-0' })}
                     onClick={pdf.onForceReparse}
                     disabled={isForceReparseDisabled(pdf.parseStatus)}
                     title="Force reparse"
@@ -240,7 +240,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
               disabled={pdf.parseStatus !== 'ready'}
               variant="flat"
             />
-            <details className="rounded-md border border-offbase bg-base/50 px-3 py-2">
+            <details className="rounded-md border border-offbase bg-surface-solid px-3 py-2">
               <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted">
                 Skip Block Kinds While Reading Aloud
               </summary>
