@@ -7,7 +7,7 @@ import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
-import { IconButton, MenuItemClass, Sidebar as SidebarShell } from '@/components/ui';
+import { IconButton, MenuItemClass, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem } from '@/components/ui';
 
 interface FinderSidebarProps {
   filter: SidebarFilter;
@@ -30,60 +30,6 @@ interface FinderSidebarProps {
 
 const MIN_WIDTH = 168;
 const MAX_WIDTH = 320;
-
-interface SidebarRowProps {
-  active: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-  label: string;
-  count?: number;
-  countClassName?: string;
-  trailing?: ReactNode;
-  isDropTarget?: boolean;
-}
-
-function SidebarRow({
-  active,
-  onClick,
-  icon,
-  label,
-  count,
-  countClassName,
-  trailing,
-  isDropTarget,
-}: SidebarRowProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        'group w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition duration-base ease-standard text-left ' +
-        (active
-          ? 'border-accent-line bg-surface-sunken text-accent'
-          : 'border-transparent bg-transparent text-foreground hover:border-accent-line hover:text-accent') +
-        (isDropTarget ? ' ring-1 ring-accent-line' : '')
-      }
-    >
-      <span
-        className={
-          'w-4 h-4 shrink-0 flex items-center justify-center transition-colors duration-base ' +
-          (active ? 'text-accent' : 'text-soft group-hover:text-accent')
-        }
-      >
-        {icon}
-      </span>
-      <span className="truncate flex-1">{label}</span>
-      {typeof count === 'number' && count > 0 && (
-        <span
-          className={`text-[10px] text-soft tabular-nums transition-transform duration-base ease-standard ${countClassName ?? ''}`}
-        >
-          {count}
-        </span>
-      )}
-      {trailing}
-    </button>
-  );
-}
 
 function FolderRow({
   folder,
@@ -123,7 +69,8 @@ function FolderRow({
       ref={dropRef as unknown as React.RefObject<HTMLDivElement>}
       className="group/folder relative"
     >
-      <SidebarRow
+      <SidebarNavItem
+        compact
         active={active}
         onClick={onClick}
         icon={<FolderIcon className="w-3.5 h-3.5" />}
@@ -146,28 +93,6 @@ function FolderRow({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
-    </div>
-  );
-}
-
-function SectionHeader({
-  children,
-  isFirst,
-  rightSlot,
-}: {
-  children: ReactNode;
-  isFirst?: boolean;
-  rightSlot?: ReactNode;
-}) {
-  return (
-    <div
-      className={
-        'px-2 pb-1 text-[10px] uppercase tracking-[0.08em] text-soft font-semibold leading-none flex items-center justify-between ' +
-        (isFirst ? 'pt-1.5' : 'pt-3')
-      }
-    >
-      <span>{children}</span>
-      {rightSlot && <span className="inline-flex items-center leading-none shrink-0">{rightSlot}</span>}
     </div>
   );
 }
@@ -210,14 +135,15 @@ export function FinderSidebar({
       className="relative h-full w-full md:[width:var(--sidebar-width)] rounded-none border-y-0 border-l-0 border-r border-line-soft shadow-none shrink-0 flex flex-col"
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="p-2 flex flex-col gap-0.5">
+        <SidebarNav className="p-2">
           {topSlot && (
             <div className="mb-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
               {topSlot}
             </div>
           )}
-          <SectionHeader isFirst={!!topSlot}>Library</SectionHeader>
-          <SidebarRow
+          <SidebarNavGroup isFirst={!!topSlot}>Library</SidebarNavGroup>
+          <SidebarNavItem
+            compact
             active={filter === 'all'}
             onClick={() => {
               onFilterChange('all');
@@ -227,7 +153,8 @@ export function FinderSidebar({
             label="All Documents"
             count={counts.all}
           />
-          <SidebarRow
+          <SidebarNavItem
+            compact
             active={filter === 'recents'}
             onClick={() => {
               onFilterChange('recents');
@@ -237,8 +164,9 @@ export function FinderSidebar({
             label="Recently Opened"
           />
 
-          <SectionHeader>Kinds</SectionHeader>
-          <SidebarRow
+          <SidebarNavGroup>Kinds</SidebarNavGroup>
+          <SidebarNavItem
+            compact
             active={filter === 'pdf'}
             onClick={() => {
               onFilterChange('pdf');
@@ -248,7 +176,8 @@ export function FinderSidebar({
             label="PDF"
             count={counts.pdf}
           />
-          <SidebarRow
+          <SidebarNavItem
+            compact
             active={filter === 'epub'}
             onClick={() => {
               onFilterChange('epub');
@@ -258,7 +187,8 @@ export function FinderSidebar({
             label="EPUB"
             count={counts.epub}
           />
-          <SidebarRow
+          <SidebarNavItem
+            compact
             active={filter === 'html'}
             onClick={() => {
               onFilterChange('html');
@@ -269,8 +199,8 @@ export function FinderSidebar({
             count={counts.html}
           />
 
-          <SectionHeader
-            rightSlot={(
+          <SidebarNavGroup
+            action={(
               <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
                 <MenuButton
                   as={IconButton}
@@ -333,7 +263,7 @@ export function FinderSidebar({
             )}
           >
             Folders
-          </SectionHeader>
+          </SidebarNavGroup>
           {folders.length === 0 ? (
             <p className="px-2 py-1 text-[11px] text-soft">No folders yet</p>
           ) : (
@@ -354,7 +284,7 @@ export function FinderSidebar({
               />
             ))
           )}
-        </div>
+        </SidebarNav>
       </div>
       {bottomSlot && (
         <div

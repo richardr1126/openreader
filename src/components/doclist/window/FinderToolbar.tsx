@@ -10,7 +10,7 @@ import {
   HamburgerIcon,
 } from './finderIcons';
 import { ChevronUpDownIcon } from '@/components/icons/Icons';
-import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment, toolbarButtonStyles } from '@/components/ui';
+import { SearchField, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment, listboxOptionClass, listboxOptionsClass, toolbarButtonStyles } from '@/components/ui';
 import type { ReactNode } from 'react';
 
 interface FinderToolbarProps {
@@ -151,19 +151,12 @@ export function FinderToolbar({
                 <span>{currentSort.label}</span>
                 <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
               </ListboxButton>
-              <ListboxOptions
-                anchor="bottom end"
-                className="z-50 mt-1 rounded-md bg-surface-sunken border border-line shadow-elev-2 p-1 focus:outline-none"
-              >
+              <ListboxOptions anchor="bottom end" className={listboxOptionsClass}>
                 {SORT_OPTIONS.map((opt) => (
                   <ListboxOption
                     key={opt.value}
                     value={opt.value}
-                    className={({ active, selected }) =>
-                      `cursor-pointer select-none rounded-sm py-1.5 px-2.5 text-xs ${
-                        active ? 'bg-surface-sunken text-accent' : 'text-foreground'
-                      } ${selected ? 'font-semibold' : ''}`
-                    }
+                    className={({ active, selected }) => listboxOptionClass(active || selected)}
                   >
                     {opt.label}
                   </ListboxOption>
@@ -175,16 +168,13 @@ export function FinderToolbar({
 
         <div className="flex-1 min-w-0" />
 
-        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-sunken border border-line hover:border-accent-line focus-within:ring-1 focus-within:ring-accent-line focus-within:border-accent-line transition-colors duration-base ease-standard w-[160px] md:w-[200px]">
-          <SearchIcon className="w-3.5 h-3.5 text-soft shrink-0" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search"
-            className="flex-1 min-w-0 bg-transparent outline-none text-xs text-foreground placeholder:text-soft"
-          />
-        </div>
+        <SearchField
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search"
+          className="hidden w-[160px] md:w-[200px] sm:flex"
+          icon={<SearchIcon className="w-3.5 h-3.5" />}
+        />
 
         {rightSlot && (
           <div className="shrink-0 flex items-center gap-2 pl-1 sm:pl-2 sm:border-l sm:border-line ml-0.5">

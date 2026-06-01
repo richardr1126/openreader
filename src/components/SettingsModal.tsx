@@ -52,14 +52,15 @@ import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
 import { useLibraryDocumentsQuery } from '@/hooks/useLibraryDocumentsQuery';
 import {
+  SidebarNav,
+  SidebarNavItem,
+  SegmentedControl,
   inputClass,
+  buttonClass,
   listboxButtonClass,
   listboxOptionClass,
   listboxOptionsClass,
-  segmentedButtonClass,
-  segmentedGroupClass,
-} from '@/components/formPrimitives';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+} from '@/components/ui';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { fetchChangelogManifest, fetchChangelogReleaseBody } from '@/lib/client/changelog';
@@ -572,50 +573,42 @@ export function SettingsModal({
                     />
                   ) : (
                     <>
-                      {/* Mobile: 2x2 grid nav */}
-                      <div className="grid grid-cols-2 gap-1 sm:hidden border-b border-line-soft bg-background p-2">
+                      {/* Mobile nav */}
+                      <SidebarNav layout="grid" className="sm:hidden border-b border-line-soft bg-background p-2">
                         {visibleSections.map((section) => {
                           const Icon = section.icon;
                           return (
-                            <button
+                            <SidebarNavItem
+                              compact
                               key={section.id}
                               onClick={() => setActiveSection(section.id)}
-                              className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                activeSection === section.id
-                                  ? 'bg-accent text-background'
-                                  : 'text-foreground hover:bg-accent-wash hover:text-accent'
-                              }`}
-                            >
-                              <Icon className="w-3.5 h-3.5" />
-                              {section.label}
-                            </button>
+                              active={activeSection === section.id}
+                              icon={<Icon className="w-3.5 h-3.5" />}
+                              label={section.label}
+                            />
                           );
                         })}
-                      </div>
+                      </SidebarNav>
 
                       <div className="flex flex-row h-[490px]">
                     {/* Desktop: vertical sidebar */}
                     <nav className="hidden sm:block w-44 shrink-0 border-r border-line-soft bg-background p-2">
-                      <div className="flex flex-col gap-1">
+                      <SidebarNav>
                         {visibleSections.map((section) => {
                           const Icon = section.icon;
                           const active = activeSection === section.id;
                           return (
-                            <button
+                            <SidebarNavItem
                               key={section.id}
                               onClick={() => setActiveSection(section.id)}
-                              className={`w-full flex items-center gap-2.5 text-left px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                                active
-                                  ? 'bg-accent text-background'
-                                  : 'text-foreground hover:bg-surface hover:text-accent'
-                              }`}
-                            >
-                              <Icon className="w-4 h-4 shrink-0" />
-                              {section.label}
-                            </button>
+                              active={active}
+                              icon={<Icon className="w-4 h-4" />}
+                              label={section.label}
+                              className="whitespace-nowrap"
+                            />
                           );
                         })}
-                      </div>
+                      </SidebarNav>
                     </nav>
 
                     {/* Content */}
@@ -1166,30 +1159,16 @@ export function SettingsModal({
                       {/* Admin Section */}
                       {activeSection === 'admin' && isAdmin && (
                         <div className="space-y-4">
-                          <div
-                            role="radiogroup"
-                            aria-label="Admin tab"
-                            className={`${segmentedGroupClass} grid-cols-2`}
-                          >
-                            {([
-                              { id: 'providers', label: 'Shared providers' },
-                              { id: 'features', label: 'Site features' },
-                            ] as { id: AdminSubTab; label: string }[]).map((tab) => {
-                              const active = adminSubTab === tab.id;
-                              return (
-                                <button
-                                  key={tab.id}
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={active}
-                                  onClick={() => setAdminSubTab(tab.id)}
-                                  className={segmentedButtonClass(active)}
-                                >
-                                  {tab.label}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <SegmentedControl
+                            value={adminSubTab}
+                            options={[
+                              { value: 'providers', label: 'Shared providers' },
+                              { value: 'features', label: 'Site features' },
+                            ]}
+                            onChange={setAdminSubTab}
+                            ariaLabel="Admin tab"
+                            className="grid-cols-2"
+                          />
                           {adminSubTab === 'providers' && <AdminProvidersPanel />}
                           {adminSubTab === 'features' && <AdminFeaturesPanel />}
                         </div>

@@ -7,3 +7,7 @@ export const rangeInputClass = cn(
   '[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-lg [&::-moz-range-track]:bg-surface-sunken',
   '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent',
 );
+
+export function rangeInputClassName(className?: string) {
+  return cn(rangeInputClass, className);
+}

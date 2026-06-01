@@ -15,8 +15,7 @@ import {
   clampSegmentPreloadSentenceLookahead,
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
-import { Section, ToggleRow, CheckItem, segmentedButtonClass, segmentedGroupClass } from '@/components/formPrimitives';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { Section, ToggleRow, CheckItem, SegmentedControl, buttonClass, rangeInputClass } from '@/components/ui';
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
@@ -50,8 +49,6 @@ const viewTypeTextMapping = [
   { id: 'dual', name: 'Two Pages' },
   { id: 'scroll', name: 'Continuous Scroll' },
 ];
-
-const rangeInputClassName = 'w-full bg-offbase rounded-md appearance-none cursor-pointer accent-accent [&::-webkit-slider-runnable-track]:bg-offbase [&::-webkit-slider-runnable-track]:rounded-md [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-moz-range-track]:bg-offbase [&::-moz-range-track]:rounded-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent';
 
 type RangeSettingProps = {
   label: string;
@@ -87,7 +84,7 @@ function RangeSetting({
           step={step}
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
-          className={`flex-1 ${rangeInputClassName}`}
+          className={`flex-1 ${rangeInputClass}`}
         />
         <span className={`${valueWidth} text-xs font-semibold text-right text-foreground`}>{formatter(value)}</span>
       </div>
@@ -163,27 +160,13 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
           >
             <div className="space-y-1.5">
               <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Page mode</label>
-              <div
-                role="radiogroup"
-                aria-label="Page mode"
-                className={`${segmentedGroupClass} grid-cols-3`}
-              >
-                {viewTypeTextMapping.map((view) => {
-                  const active = selectedView.id === view.id;
-                  return (
-                    <button
-                      key={view.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => updateConfigKey('viewType', view.id as ViewType)}
-                      className={segmentedButtonClass(active)}
-                    >
-                      {view.name}
-                    </button>
-                  );
-                })}
-              </div>
+              <SegmentedControl
+                value={selectedView.id as ViewType}
+                options={viewTypeTextMapping.map((view) => ({ value: view.id as ViewType, label: view.name }))}
+                onChange={(nextViewType) => updateConfigKey('viewType', nextViewType)}
+                ariaLabel="Page mode"
+                className="grid-cols-3"
+              />
               {selectedView.id === 'scroll' ? (
                 <p className="text-xs text-warning">Scroll mode may be slower on large PDFs.</p>
               ) : null}

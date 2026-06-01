@@ -1,13 +1,15 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from './cn';
 
+export const menuPanelClass = 'rounded-md border border-line bg-surface p-1 shadow-elev-2 ring-1 ring-line-soft';
+
 export function Menu({
   children,
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={cn('rounded-md border border-line bg-surface p-1 shadow-elev-2 ring-1 ring-line-soft', className)} {...props}>
+    <div className={cn(menuPanelClass, className)} {...props}>
       {children}
     </div>
   );
