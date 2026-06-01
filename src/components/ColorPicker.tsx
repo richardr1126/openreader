@@ -1,10 +1,10 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
+import { Popover, PopoverButton } from '@headlessui/react';
 import { isLightColor, type CustomThemeColors } from '@/contexts/ThemeContext';
 import { PaletteIcon } from '@/components/icons/Icons';
-import { IconButton, Input, cn, popoverPanelClass } from '@/components/ui';
+import { IconButton, Input, PopoverSurface } from '@/components/ui';
 
 /**
  * Curated swatch palettes per color role, sourced from existing themes
@@ -89,13 +89,10 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
         />
       </PopoverButton>
 
-      <PopoverPanel
+      <PopoverSurface
         anchor="bottom start"
         transition
-        className={cn(
-          popoverPanelClass,
-          'z-[60] mt-2 w-56 bg-background space-y-3 transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95',
-        )}
+        className="z-[60] mt-2 w-56 bg-background space-y-3 transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95"
       >
         {/* Label */}
         <div className="flex items-center justify-between">
@@ -173,7 +170,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
             className="flex-1 font-mono"
           />
         </div>
-      </PopoverPanel>
+      </PopoverSurface>
     </Popover>
   );
 }

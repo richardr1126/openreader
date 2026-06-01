@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Transition, Listbox, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
+import { Transition, Listbox, Menu, MenuButton } from '@headlessui/react';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
@@ -13,7 +13,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
-import { Button, Card, IconButton, MenuItemClass, SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn, menuPanelClass, rangeInputClass } from '@/components/ui';
+import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, RangeInput, SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn } from '@/components/ui';
 import { 
   getAudiobookStatus, 
   deleteAudiobookChapter, 
@@ -621,14 +621,12 @@ export function AudiobookExportModal({
                                             <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Native model speed</label>
                                             <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(nativeSpeed)}x</span>
                                           </div>
-                                          <input
-                                            type="range"
+                                          <RangeInput
                                             min="0.5"
                                             max="3"
                                             step="0.1"
                                             value={nativeSpeed}
                                             onChange={(e) => setNativeSpeed(parseFloat(e.target.value))}
-                                            className={rangeInputClass}
                                           />
                                           <div className="flex justify-between text-[10px] text-soft">
                                             <span>0.5x</span>
@@ -645,14 +643,12 @@ export function AudiobookExportModal({
 			                                        <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Post-generation speed</label>
 			                                        <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(postSpeed)}x</span>
 			                                      </div>
-			                                      <input
-			                                        type="range"
+			                                      <RangeInput
 			                                        min="0.5"
 			                                        max="3"
 			                                        step="0.1"
 			                                        value={postSpeed}
 			                                        onChange={(e) => setPostSpeed(parseFloat(e.target.value))}
-			                                        className={rangeInputClass}
 			                                      />
 			                                      <div className="flex justify-between text-[10px] text-soft">
 			                                        <span>0.5x</span>
@@ -794,68 +790,48 @@ export function AudiobookExportModal({
                                           leaveFrom="transform opacity-100 scale-100"
                                           leaveTo="transform opacity-0 scale-95"
                                         >
-                                          <MenuItems
+                                          <MenuItemsSurface
                                             anchor={{ to: 'bottom end', gap: '8px', padding: '12px' }}
                                             portal
-                                            className={cn(menuPanelClass, 'z-[70] w-44 origin-top-right bg-background focus:outline-none')}
+                                            className="z-[70] w-44 origin-top-right bg-background focus:outline-none"
                                           >
                                             {chapter.status === 'completed' && (
                                               <>
-                                                <MenuItem>
-                                                  {({ active }) => (
-                                                    <button
-                                                      onClick={() => setPendingDeleteChapter(chapter)}
-                                                      className={MenuItemClass(active, 'danger')}
-                                                      title="Delete this chapter"
-                                                    >
-                                                      <XCircleIcon className="h-4 w-4" />
-                                                      <span>Delete</span>
-                                                    </button>
-                                                  )}
-                                                </MenuItem>
-                                                <MenuItem>
-                                                  {({ active }) => (
-                                                    <button
-                                                      onClick={() => handleDownloadChapter(chapter)}
-                                                      className={MenuItemClass(active)}
-                                                    >
-                                                      <DownloadIcon className="h-4 w-4" />
-                                                      <span>Download</span>
-                                                    </button>
-                                                  )}
-                                                </MenuItem>
+                                                <MenuActionItem
+                                                  tone="danger"
+                                                  onClick={() => setPendingDeleteChapter(chapter)}
+                                                  title="Delete this chapter"
+                                                >
+                                                  <XCircleIcon className="h-4 w-4" />
+                                                  <span>Delete</span>
+                                                </MenuActionItem>
+                                                <MenuActionItem onClick={() => handleDownloadChapter(chapter)}>
+                                                  <DownloadIcon className="h-4 w-4" />
+                                                  <span>Download</span>
+                                                </MenuActionItem>
                                               </>
                                             )}
                                             {regeneratingChapter === chapter.index && (
-                                              <MenuItem>
-                                                {({ active }) => (
-                                                  <button
-                                                    onClick={handleCancel}
-                                                    className={MenuItemClass(active, 'danger')}
-                                                    title="Cancel this chapter regeneration"
-                                                  >
-                                                    <XCircleIcon className="h-4 w-4" />
-                                                    <span>Cancel</span>
-                                                  </button>
-                                                )}
-                                              </MenuItem>
+                                              <MenuActionItem
+                                                tone="danger"
+                                                onClick={handleCancel}
+                                                title="Cancel this chapter regeneration"
+                                              >
+                                                <XCircleIcon className="h-4 w-4" />
+                                                <span>Cancel</span>
+                                              </MenuActionItem>
                                             )}
                                             {onRegenerateChapter && !isGenerating && (
-                                              <MenuItem disabled={regeneratingChapter !== null}>
-                                                {({ active, disabled }) => (
-                                                  <button
-                                                    onClick={() => handleRegenerateChapter(chapter)}
-                                                    disabled={disabled}
-                                                    className={cn(MenuItemClass(active), 'disabled:cursor-not-allowed disabled:opacity-50')}
-                                                    title="Regenerate this chapter"
-                                                  >
-                                                    <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index ? 'animate-spin' : ''}`} />
-                                                    <span>{regeneratingChapter === chapter.index ? 'Regenerating...' : 'Regenerate'}</span>
-                                                  </button>
-                                                )}
-                                              </MenuItem>
+                                              <MenuActionItem
+                                                disabled={regeneratingChapter !== null}
+                                                onClick={() => handleRegenerateChapter(chapter)}
+                                                title="Regenerate this chapter"
+                                              >
+                                                <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index ? 'animate-spin' : ''}`} />
+                                                <span>{regeneratingChapter === chapter.index ? 'Regenerating...' : 'Regenerate'}</span>
+                                              </MenuActionItem>
                                             )}
-                                          </MenuItems>
+                                          </MenuItemsSurface>
                                           {/* end of menu items */}
                                         </Transition>
                                       </Menu>

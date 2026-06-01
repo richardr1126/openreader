@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { buttonClass } from '@/components/ui';
+import { ButtonAnchor, ButtonLink } from '@/components/ui';
 
 export const metadata: Metadata = {
   title: 'Privacy & Data Usage',
@@ -181,25 +181,13 @@ export default async function PrivacyPage() {
                 want full infrastructure control.
               </p>
               <div className="policy-actions">
-                <a
-                  href="https://github.com/richardr1126/openreader/issues"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonClass({ variant: 'primary', size: 'md' })}
-                >
+                <ButtonAnchor href="https://github.com/richardr1126/openreader/issues" target="_blank" rel="noopener noreferrer" variant="primary" size="md">
                   Open an Issue
-                </a>
-                <a
-                  href="https://github.com/richardr1126/openreader#readme"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonClass({ variant: 'outline', size: 'md' })}
-                >
+                </ButtonAnchor>
+                <ButtonAnchor href="https://github.com/richardr1126/openreader#readme" target="_blank" rel="noopener noreferrer" variant="outline" size="md">
                   Self-Hosting Guide
-                </a>
-                <Link href="/?redirect=false" className={buttonClass({ variant: 'ghost', size: 'md' })}>
-                  Back to landing
-                </Link>
+                </ButtonAnchor>
+                <ButtonLink href="/?redirect=false" variant="ghost" size="md">Back to landing</ButtonLink>
               </div>
             </section>
           </div>

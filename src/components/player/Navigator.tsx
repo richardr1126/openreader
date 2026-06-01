@@ -1,8 +1,8 @@
 'use client';
 
-import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
+import { Popover } from '@headlessui/react';
 import { useState, useEffect, useRef } from 'react';
-import { IconButton, Input, cn, popoverPanelClass, popoverTriggerClass } from '@/components/ui';
+import { IconButton, Input, PopoverSurface, PopoverTrigger } from '@/components/ui';
 
 export const Navigator = ({ currentPage, numPages, skipToLocation }: {
   currentPage: number;
@@ -67,15 +67,12 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
 
       {/* Page number popup */}
       <Popover className="relative mb-1">
-        <PopoverButton
-          className={cn(popoverTriggerClass, 'rounded-full bg-surface-sunken px-2 py-0.5 text-xs')}
-          onClick={handlePopoverOpen}
-        >
+        <PopoverTrigger className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs" onClick={handlePopoverOpen}>
           <p className="text-xs whitespace-nowrap">
             {currentPage} / {numPages || 1}
           </p>
-        </PopoverButton>
-        <PopoverPanel anchor="top" className={popoverPanelClass}>
+        </PopoverTrigger>
+        <PopoverSurface anchor="top">
           <div className="flex flex-col space-y-2">
             <div className="text-xs font-medium text-foreground">Go to page</div>
             <Input
@@ -94,7 +91,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
             />
             <div className="text-xs text-soft text-center">of {numPages || 1}</div>
           </div>
-        </PopoverPanel>
+        </PopoverSurface>
       </Popover>
 
       {/* Page forward */}

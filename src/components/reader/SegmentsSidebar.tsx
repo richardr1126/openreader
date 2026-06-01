@@ -1,14 +1,14 @@
 'use client';
 
 import { Fragment, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react';
+import { Popover, PopoverButton, Transition } from '@headlessui/react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Book } from 'epubjs';
 import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
-import { Button, IconButton, popoverPanelClass } from '@/components/ui';
+import { Button, IconButton, PopoverSurface } from '@/components/ui';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
 import { buildSegmentKey, buildSegmentKeyPrefix } from '@/lib/shared/tts-segment-plan';
@@ -903,9 +903,9 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
         leaveFrom="opacity-100 translate-y-0"
         leaveTo="opacity-0 translate-y-1"
       >
-        <PopoverPanel
+        <PopoverSurface
           anchor="bottom end"
-          className={`${popoverPanelClass} z-[60] w-[300px] mt-1`}
+          className="z-[60] w-[300px] mt-1"
         >
           <dl className="space-y-2">
             <Row label="locator">
@@ -958,7 +958,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
               </div>
             ))}
           </dl>
-        </PopoverPanel>
+        </PopoverSurface>
       </Transition>
     </Popover>
   );

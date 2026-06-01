@@ -1,11 +1,11 @@
 'use client';
 
-import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
+import { Menu, MenuButton, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon, ListIcon } from '@/components/icons/Icons';
 import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
-import { IconButton, MenuItemClass, ToolbarButton, menuPanelClass } from '@/components/ui';
+import { IconButton, MenuActionItem, MenuItemsSurface, ToolbarButton } from '@/components/ui';
 
 interface DocumentHeaderMenuProps {
   zoomLevel: number;
@@ -100,7 +100,7 @@ export function DocumentHeaderMenu({
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <MenuItems className={`${menuPanelClass} absolute right-0 z-50 mt-2 min-w-max origin-top-right divide-y divide-line-soft focus:outline-none`}>
+          <MenuItemsSurface className="absolute right-0 z-50 mt-2 min-w-max origin-top-right divide-y divide-line-soft focus:outline-none">
             {/* Zoom Controls Section */}
             <div className="px-4 py-3">
               <p className="text-xs font-medium text-soft mb-2">Zoom / Padding</p>
@@ -125,49 +125,28 @@ export function DocumentHeaderMenu({
             {/* Actions Section */}
             <div className="p-1">
               {onOpenSegments && (
-                <MenuItem>
-                  {({ active }) => (
-                    <button
-                      onClick={onOpenSegments}
-                      className={MenuItemClass(active || isSegmentsOpen)}
-                    >
-                      <ListIcon className="h-4 w-4" />
-                      {isSegmentsOpen ? 'Hide Segments' : 'Segments'}
-                    </button>
-                  )}
-                </MenuItem>
+                <MenuActionItem onClick={onOpenSegments} activeOverride={isSegmentsOpen}>
+                  <ListIcon className="h-4 w-4" />
+                  {isSegmentsOpen ? 'Hide Segments' : 'Segments'}
+                </MenuActionItem>
               )}
               {showAudiobookExport && onOpenAudiobook && (
-                <MenuItem>
-                  {({ active }) => (
-                    <button
-                      onClick={onOpenAudiobook}
-                      className={MenuItemClass(active || isAudiobookOpen)}
-                    >
-                      <DownloadIcon className="h-4 w-4" />
-                      {isAudiobookOpen ? 'Hide Audiobook' : 'Export Audiobook'}
-                    </button>
-                  )}
-                </MenuItem>
+                <MenuActionItem onClick={onOpenAudiobook} activeOverride={isAudiobookOpen}>
+                  <DownloadIcon className="h-4 w-4" />
+                  {isAudiobookOpen ? 'Hide Audiobook' : 'Export Audiobook'}
+                </MenuActionItem>
               )}
-              <MenuItem>
-                {({ active }) => (
-                  <button
-                    onClick={onOpenSettings}
-                    className={MenuItemClass(active || isSettingsOpen)}
-                  >
-                    <FileSettingsIcon className="h-4 w-4" />
-                    {isSettingsOpen ? 'Hide Settings' : 'Settings'}
-                  </button>
-                )}
-              </MenuItem>
+              <MenuActionItem onClick={onOpenSettings} activeOverride={isSettingsOpen}>
+                <FileSettingsIcon className="h-4 w-4" />
+                {isSettingsOpen ? 'Hide Settings' : 'Settings'}
+              </MenuActionItem>
             </div>
 
             {/* Auth Section */}
             <div className="p-2 border-t border-line-soft flex justify-center">
               <UserMenu />
             </div>
-          </MenuItems>
+          </MenuItemsSurface>
         </Transition>
       </Menu>
     </div>

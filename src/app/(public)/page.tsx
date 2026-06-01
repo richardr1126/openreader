@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
-import { buttonClass } from '@/components/ui';
+import { ButtonAnchor, ButtonLink } from '@/components/ui';
 
 export const metadata: Metadata = {
   title: 'Open Source Read-Along Workspace',
@@ -98,24 +98,13 @@ export default async function LandingPage() {
             </p>
 
             <div className="public-actions">
-              <Link href="/app" className={buttonClass({ variant: 'primary', size: 'lg' })}>
-                Open the reader
-              </Link>
+              <ButtonLink href="/app" variant="primary" size="lg">Open the reader</ButtonLink>
               {enableUserSignups ? (
-                <Link href="/signup" className={buttonClass({ variant: 'outline', size: 'lg' })}>
-                  Create account
-                </Link>
+                <ButtonLink href="/signup" variant="outline" size="lg">Create account</ButtonLink>
               ) : (
-                <Link href="/signin" className={buttonClass({ variant: 'outline', size: 'lg' })}>
-                  Sign in
-                </Link>
+                <ButtonLink href="/signin" variant="outline" size="lg">Sign in</ButtonLink>
               )}
-              <Link
-                href="https://docs.openreader.richardr.dev/"
-                className={buttonClass({ variant: 'ghost', size: 'lg' })}
-              >
-                Read the docs →
-              </Link>
+              <ButtonLink href="https://docs.openreader.richardr.dev/" variant="ghost" size="lg">Read the docs →</ButtonLink>
             </div>
 
             <div className="public-formats" aria-label="Supported formats">
@@ -316,22 +305,12 @@ export default async function LandingPage() {
                 external compute worker. Every piece is yours to host.
               </p>
               <div className="public-actions">
-                <a
-                  href="https://github.com/richardr1126/openreader#readme"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonClass({ variant: 'primary', size: 'lg' })}
-                >
+                <ButtonAnchor href="https://github.com/richardr1126/openreader#readme" target="_blank" rel="noopener noreferrer" variant="primary" size="lg">
                   View the repository
-                </a>
-                <a
-                  href="https://docs.openreader.richardr.dev/docker-quick-start"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonClass({ variant: 'outline', size: 'lg' })}
-                >
+                </ButtonAnchor>
+                <ButtonAnchor href="https://docs.openreader.richardr.dev/docker-quick-start" target="_blank" rel="noopener noreferrer" variant="outline" size="lg">
                   Deployment guides
-                </a>
+                </ButtonAnchor>
               </div>
             </div>
 

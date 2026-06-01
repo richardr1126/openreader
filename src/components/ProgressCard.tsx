@@ -1,4 +1,4 @@
-import { buttonClass } from '@/components/ui';
+import { Button } from '@/components/ui';
 
 interface ProgressCardProps {
   progress: number;
@@ -52,17 +52,15 @@ export function ProgressCard({
             </div>
           )}
         </div>
-        <button
+        <Button
           type="button"
-          className={buttonClass({
-            variant: 'ghost',
-            size: 'xs',
-            className: 'shrink-0 hover:bg-accent-wash',
-          })}
+          variant="ghost"
+          size="xs"
+          className="shrink-0"
           onClick={(e) => onCancel(e)}
         >
           <span>{cancelText}</span>
-        </button>
+        </Button>
       </div>
 
       {/* Progress bar */}

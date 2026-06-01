@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
-import { buttonClass } from '@/components/ui';
+import { ButtonAnchor, ButtonLink } from '@/components/ui';
 import './public.css';
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
@@ -42,12 +42,8 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                   GitHub
                 </a>
                 <span className="public-nav-divider" aria-hidden="true" />
-                <Link href="/signin" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
-                  Sign in
-                </Link>
-                <Link href="/app" className={buttonClass({ variant: 'primary', size: 'sm' })}>
-                  Open app
-                </Link>
+                <ButtonLink href="/signin" variant="ghost" size="sm">Sign in</ButtonLink>
+                <ButtonLink href="/app" variant="primary" size="sm">Open app</ButtonLink>
               </nav>
             </header>
           </div>
@@ -70,18 +66,11 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                 </p>
                 <div className="public-footer-cta">
                   {enableUserSignups ? (
-                    <Link href="/signup" className={buttonClass({ variant: 'outline', size: 'sm' })}>
-                      Create account
-                    </Link>
+                    <ButtonLink href="/signup" variant="outline" size="sm">Create account</ButtonLink>
                   ) : null}
-                  <a
-                    href="https://github.com/richardr1126/openreader"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={buttonClass({ variant: 'ghost', size: 'sm' })}
-                  >
+                  <ButtonAnchor href="https://github.com/richardr1126/openreader" target="_blank" rel="noopener noreferrer" variant="ghost" size="sm">
                     Star on GitHub
-                  </a>
+                  </ButtonAnchor>
                 </div>
               </div>
 

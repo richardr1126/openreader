@@ -5,29 +5,32 @@ import type { ComponentProps } from 'react';
 import { cn } from './cn';
 export { segmentedButtonClass, segmentedGroupClass } from './segmented-control';
 
-export const listboxButtonClass =
+const listboxButtonClass =
   'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
 
-export const listboxToolbarButtonClass =
+const listboxToolbarButtonClass =
   'inline-flex items-center rounded-md border border-line bg-surface px-2 py-1 text-xs text-foreground hover:border-accent-line hover:bg-accent-wash hover:text-accent transition-colors duration-fast ease-standard';
 
-export const listboxPanelClass =
+const listboxPopoverButtonClass =
+  'inline-flex items-center rounded-md text-foreground hover:bg-accent-wash hover:text-accent focus:outline-none transition-colors duration-fast ease-standard';
+
+const listboxPanelClass =
   'z-50 max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none';
 
-export const listboxOptionsClass =
+const listboxOptionsClass =
   cn(listboxPanelClass, 'w-[var(--button-width)] [--anchor-gap:0.25rem]');
 
-export const listboxCompactOptionsClass =
+const listboxCompactOptionsClass =
   'z-50 min-w-[8rem] rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none [--anchor-gap:0.25rem]';
 
-export const listboxOptionClass = (active: boolean, selected = false, inset: 'check' | 'none' = 'check') =>
+const listboxOptionClass = (active: boolean, selected = false, inset: 'check' | 'none' = 'check') =>
   cn(
     'relative cursor-pointer select-none rounded-sm py-1.5 text-sm',
     inset === 'check' ? 'pl-9 pr-3' : 'px-2.5',
     selected ? 'bg-accent text-background font-medium' : active ? 'bg-accent-wash text-foreground' : 'text-foreground',
   );
 
-export const listboxCompactOptionClass = (active: boolean, selected = false) =>
+const listboxCompactOptionClass = (active: boolean, selected = false) =>
   cn(
     'relative cursor-pointer select-none rounded-sm px-2 py-1 text-xs',
     active
@@ -43,10 +46,12 @@ export function SharedListboxButton({
   children,
   ...props
 }: ComponentProps<typeof ListboxButton> & {
-  tone?: 'default' | 'toolbar' | 'unstyled';
+  tone?: 'default' | 'toolbar' | 'popover' | 'unstyled';
 }) {
   const baseClass = tone === 'toolbar'
     ? listboxToolbarButtonClass
+    : tone === 'popover'
+      ? listboxPopoverButtonClass
     : tone === 'unstyled'
       ? ''
       : listboxButtonClass;

@@ -15,7 +15,7 @@ import {
   clampSegmentPreloadSentenceLookahead,
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
-import { Section, ToggleRow, CheckItem, SegmentedControl, buttonClass, rangeInputClass } from '@/components/ui';
+import { IconButton, RangeInput, Section, ToggleRow, CheckItem, SegmentedControl } from '@/components/ui';
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
@@ -77,14 +77,13 @@ function RangeSetting({
     <div className="space-y-1.5">
       <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label>
       <div className="flex items-center gap-3">
-        <input
-          type="range"
+        <RangeInput
           min={min}
           max={max}
           step={step}
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
-          className={`flex-1 ${rangeInputClass}`}
+          className="flex-1"
         />
         <span className={`${valueWidth} text-xs font-semibold text-right text-foreground`}>{formatter(value)}</span>
       </div>
@@ -202,15 +201,15 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
                 </span>
                 <span className="flex items-center gap-1 text-xs text-muted">
                   <span>{pdf.parseStatus ?? 'pending'}</span>
-                  <button
-                    type="button"
-                    className={buttonClass({ variant: 'ghost', size: 'icon', className: '!h-5 !w-5 shrink-0' })}
+                  <IconButton
+                    size="xs"
+                    className="!h-5 !w-5 shrink-0"
                     onClick={pdf.onForceReparse}
                     disabled={isForceReparseDisabled(pdf.parseStatus)}
                     title="Force reparse"
                   >
                     <RefreshIcon className={`h-3 w-3 ${isForceReparseDisabled(pdf.parseStatus) ? 'animate-spin' : ''}`} />
-                  </button>
+                  </IconButton>
                 </span>
               </div>
             }

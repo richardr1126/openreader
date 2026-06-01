@@ -1,11 +1,11 @@
 'use client';
 
-import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
+import { Popover } from '@headlessui/react';
 import { ChevronUpDownIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { popoverPanelClass, popoverTriggerClass, rangeInputClass } from '@/components/ui';
+import { PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
 
 export const SpeedControl = ({ 
   setSpeedAndRestart, 
@@ -89,13 +89,13 @@ export const SpeedControl = ({
 
   return (
     <Popover className="relative">
-      <PopoverButton className={`${popoverTriggerClass} space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm`}>
+      <PopoverTrigger className="space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm">
         <SpeedometerIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         <span className="sm:hidden">{compactTriggerLabel}</span>
         <span className="hidden sm:inline">{triggerLabel}</span>
         <ChevronUpDownIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-      </PopoverButton>
-      <PopoverPanel anchor="top" className={popoverPanelClass}>
+      </PopoverTrigger>
+      <PopoverSurface anchor="top">
         <div className="flex flex-col space-y-4">
           {!nativeSpeedSupported && (
             <div className="rounded-md border border-line bg-background px-2 py-1.5 text-[11px] text-soft">
@@ -113,8 +113,7 @@ export const SpeedControl = ({
                 </span>
                 <span className="text-xs">{max.toFixed(1)}x</span>
               </div>
-              <input
-                type="range"
+              <RangeInput
                 min={min}
                 max={max}
                 step={step}
@@ -123,7 +122,6 @@ export const SpeedControl = ({
                 onMouseUp={handleVoiceSpeedChangeComplete}
                 onKeyUp={handleVoiceSpeedChangeComplete}
                 onTouchEnd={handleVoiceSpeedChangeComplete}
-                className={rangeInputClass}
               />
             </div>
           )}
@@ -137,8 +135,7 @@ export const SpeedControl = ({
               </span>
               <span className="text-xs">{max.toFixed(1)}x</span>
             </div>
-            <input
-              type="range"
+            <RangeInput
               min={min}
               max={max}
               step={step}
@@ -147,11 +144,10 @@ export const SpeedControl = ({
               onMouseUp={handleAudioSpeedChangeComplete}
               onKeyUp={handleAudioSpeedChangeComplete}
               onTouchEnd={handleAudioSpeedChangeComplete}
-              className={rangeInputClass}
             />
           </div>
         </div>
-      </PopoverPanel>
+      </PopoverSurface>
     </Popover>
   );
 };

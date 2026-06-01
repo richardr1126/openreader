@@ -2,7 +2,6 @@
 
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
@@ -20,7 +19,7 @@ import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { LoadingSpinner } from '@/components/Spinner';
-import { buttonClass } from '@/components/ui';
+import { Button, ButtonLink } from '@/components/ui';
 import {
   FORCE_REPARSE_CONFIRM_MESSAGE,
   FORCE_REPARSE_CONFIRM_TEXT,
@@ -253,16 +252,12 @@ export default function PDFViewerPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <p className="text-danger mb-4">{error}</p>
-        <Link
-          href="/app"
-          onClick={handleBackToDocuments}
-          className={buttonClass({ variant: 'secondary', size: 'md', className: 'gap-2' })}
-        >
+        <ButtonLink href="/app" onClick={handleBackToDocuments} variant="secondary" size="md" className="gap-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back to Documents
-        </Link>
+        </ButtonLink>
       </div>
     );
   }
@@ -343,13 +338,14 @@ export default function PDFViewerPage() {
 
                 {!isLoading && parseUiState === 'failed' ? (
                   <div className="mt-3 flex justify-start">
-                    <button
+                    <Button
                       type="button"
                       onClick={requestForceReparse}
-                      className={buttonClass({ variant: 'secondary', size: 'sm' })}
+                      variant="secondary"
+                      size="sm"
                     >
                       Retry Parse
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -382,17 +378,12 @@ export default function PDFViewerPage() {
     <>
       <Header
         left={
-          <Link
-            href="/app"
-            onClick={handleBackToDocuments}
-            className={buttonClass({ variant: 'secondary', size: 'sm', className: 'gap-2' })}
-            aria-label="Back to documents"
-          >
+          <ButtonLink href="/app" onClick={handleBackToDocuments} variant="secondary" size="sm" className="gap-2" aria-label="Back to documents">
             <svg className="w-3 h-3" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             Documents
-          </Link>
+          </ButtonLink>
         }
         title={isLoading ? 'Loading…' : (currDocName || '')}
         right={

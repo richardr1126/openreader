@@ -1,13 +1,13 @@
 'use client';
 
-import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
+import { Menu, MenuButton, Transition } from '@headlessui/react';
 import { Fragment, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useDrop } from 'react-dnd';
 import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
-import { IconButton, MenuItemClass, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem, cn, menuPanelClass } from '@/components/ui';
+import { IconButton, MenuActionItem, MenuItemsSurface, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem } from '@/components/ui';
 
 interface FinderSidebarProps {
   filter: SidebarFilter;
@@ -220,44 +220,32 @@ export function FinderSidebar({
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
-                  <MenuItems
+                  <MenuItemsSurface
                     anchor="bottom start"
-                    className={`${menuPanelClass} z-50 mt-2 min-w-[180px] focus:outline-none normal-case tracking-normal font-normal`}
+                    className="z-50 mt-2 min-w-[180px] focus:outline-none normal-case tracking-normal font-normal"
                   >
-                    <MenuItem>
-                      {({ active }) => (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onNewFolder();
-                            onRowAction?.();
-                          }}
-                          className={MenuItemClass(active)}
-                        >
-                          <FolderPlusIcon className="h-4 w-4" />
-                          New Folder
-                        </button>
-                      )}
-                    </MenuItem>
-                    <MenuItem disabled={folders.length === 0}>
-                      {({ active, disabled }) => (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onClearFolders();
-                            onRowAction?.();
-                          }}
-                          disabled={disabled}
-                          className={cn(MenuItemClass(active), disabled && 'cursor-not-allowed text-faint')}
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          Remove All Folders
-                        </button>
-                      )}
-                    </MenuItem>
-                  </MenuItems>
+                    <MenuActionItem
+                      onClick={() => {
+                        onNewFolder();
+                        onRowAction?.();
+                      }}
+                    >
+                      <FolderPlusIcon className="h-4 w-4" />
+                      New Folder
+                    </MenuActionItem>
+                    <MenuActionItem
+                      disabled={folders.length === 0}
+                      onClick={() => {
+                        onClearFolders();
+                        onRowAction?.();
+                      }}
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Remove All Folders
+                    </MenuActionItem>
+                  </MenuItemsSurface>
                 </Transition>
               </Menu>
             )}

@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import Link, { type LinkProps } from 'next/link';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from './cn';
 import { variants } from './variants';
 import { focusRing, motionColors } from './tokens';
@@ -45,7 +46,7 @@ export const btnOutline = buttonStyles({ variant: 'outline', size: 'md' });
 export const btnDanger = buttonStyles({ variant: 'danger', size: 'md' });
 export const btnGhost = buttonStyles({ variant: 'ghost', size: 'md' });
 
-export function buttonClass({
+function buttonClass({
   variant = 'secondary',
   size = 'md',
   className = '',
@@ -73,5 +74,41 @@ export function Button({
     <button type={type} className={buttonClass({ variant, size, className })} {...props}>
       {children}
     </button>
+  );
+}
+
+export function ButtonLink({
+  variant = 'secondary',
+  size = 'md',
+  className,
+  children,
+  ...props
+}: LinkProps & AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  children: ReactNode;
+}) {
+  return (
+    <Link className={buttonClass({ variant, size, className })} {...props}>
+      {children}
+    </Link>
+  );
+}
+
+export function ButtonAnchor({
+  variant = 'secondary',
+  size = 'md',
+  className,
+  children,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  children: ReactNode;
+}) {
+  return (
+    <a className={buttonClass({ variant, size, className })} {...props}>
+      {children}
+    </a>
   );
 }

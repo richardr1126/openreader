@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Listbox, ListboxButton, ListboxOption, ListboxOptions, Transition } from '@headlessui/react';
+import { Listbox, Transition } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronUpDownIcon, CheckIcon } from '@/components/icons/Icons';
@@ -10,9 +10,9 @@ import {
   Section,
   ToggleRow,
   inputClass,
-  listboxButtonClass,
-  listboxOptionClass,
-  listboxOptionsClass,
+  SharedListboxButton,
+  SharedListboxOption,
+  SharedListboxOptions,
   Button,
 } from '@/components/ui';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
@@ -205,24 +205,23 @@ export function AdminFeaturesPanel() {
           </div>
           {providerOptions.length > 0 ? (
             <Listbox value={selectedProviderOption} onChange={handleProviderChange}>
-              <ListboxButton className={listboxButtonClass}>
+              <SharedListboxButton>
                 <span className="block truncate">{selectedProviderOption?.name ?? 'Select provider'}</span>
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                   <ChevronUpDownIcon className="h-4 w-4 text-muted" />
                 </span>
-              </ListboxButton>
+              </SharedListboxButton>
               <Transition
                 as={Fragment}
                 leave="transition ease-in duration-100"
                 leaveFrom="opacity-100"
                 leaveTo="opacity-0"
               >
-                <ListboxOptions anchor="bottom start" className={listboxOptionsClass}>
+                <SharedListboxOptions anchor="bottom start">
                   {providerOptions.map((opt) => (
-                    <ListboxOption
+                    <SharedListboxOption
                       key={opt.id}
                       value={opt}
-                      className={({ active }) => listboxOptionClass(active)}
                     >
                       {({ selected }) => (
                         <>
@@ -236,9 +235,9 @@ export function AdminFeaturesPanel() {
                           )}
                         </>
                       )}
-                    </ListboxOption>
+                    </SharedListboxOption>
                   ))}
-                </ListboxOptions>
+                </SharedListboxOptions>
               </Transition>
             </Listbox>
           ) : (

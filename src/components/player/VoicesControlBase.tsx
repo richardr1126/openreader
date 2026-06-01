@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
 import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn, popoverTriggerClass } from '@/components/ui';
+import { SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn } from '@/components/ui';
 
 export function VoicesControlBase({
   availableVoices,
@@ -33,8 +33,8 @@ export function VoicesControlBase({
 
   const buttonClass = variant === 'field'
     ? 'bg-surface pr-10'
-    : cn(popoverTriggerClass, 'space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm');
-  const buttonTone = variant === 'field' ? 'default' : 'unstyled';
+    : 'space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm';
+  const buttonTone = variant === 'field' ? 'default' : 'popover';
 
   const iconClass = variant === 'field'
     ? 'h-3.5 w-3.5 shrink-0'

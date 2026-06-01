@@ -4,9 +4,6 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Transition,
   Listbox,
-  ListboxButton,
-  ListboxOptions,
-  ListboxOption,
 } from '@headlessui/react';
 import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -56,9 +53,9 @@ import {
   ModalFrame,
   ModalTitle,
   inputClass,
-  listboxButtonClass,
-  listboxOptionClass,
-  listboxOptionsClass,
+  SharedListboxButton,
+  SharedListboxOption,
+  SharedListboxOptions,
 } from '@/components/ui';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -692,28 +689,26 @@ export function SettingsModal({
                                   setCustomModelInput('');
                                 }}
                               >
-                                <ListboxButton className={listboxButtonClass}>
+                                <SharedListboxButton>
                                   <span className="block truncate">
                                     {selectedProviderOption?.name || 'Select Provider'}
                                   </span>
                                   <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                                     <ChevronUpDownIcon className="h-5 w-5 text-soft" />
                                   </span>
-                                </ListboxButton>
+                                </SharedListboxButton>
                                 <Transition
                                   as={Fragment}
                                   leave="transition ease-standard duration-fast"
                                   leaveFrom="opacity-100"
                                   leaveTo="opacity-0"
                                 >
-                                  <ListboxOptions
+                                  <SharedListboxOptions
                                     anchor="bottom start"
-                                    className={listboxOptionsClass}
                                   >
                                     {ttsProviders.map((provider) => (
-                                      <ListboxOption
+                                      <SharedListboxOption
                                         key={provider.id}
-                                        className={({ active }) => listboxOptionClass(active)}
                                         value={provider}
                                       >
                                         {({ selected }) => (
@@ -728,9 +723,9 @@ export function SettingsModal({
                                             )}
                                           </>
                                         )}
-                                      </ListboxOption>
+                                      </SharedListboxOption>
                                     ))}
-                                  </ListboxOptions>
+                                  </SharedListboxOptions>
                                 </Transition>
                               </Listbox>
                             )}
@@ -797,7 +792,7 @@ export function SettingsModal({
                                   }
                                 }}
                               >
-                                <ListboxButton className={listboxButtonClass}>
+                                <SharedListboxButton>
                                   {selectedModel ? (
                                     <span className="block">
                                       <span className="block truncate">
@@ -815,21 +810,19 @@ export function SettingsModal({
                                   <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                                     <ChevronUpDownIcon className="h-5 w-5 text-soft" />
                                   </span>
-                                </ListboxButton>
+                                </SharedListboxButton>
                                 <Transition
                                   as={Fragment}
                                   leave="transition ease-standard duration-fast"
                                   leaveFrom="opacity-100"
                                   leaveTo="opacity-0"
                                 >
-                                  <ListboxOptions
+                                  <SharedListboxOptions
                                     anchor="bottom start"
-                                    className={listboxOptionsClass}
                                   >
                                     {ttsModels.map((model) => (
-                                      <ListboxOption
+                                      <SharedListboxOption
                                         key={model.id}
-                                        className={({ active }) => listboxOptionClass(active)}
                                         value={model}
                                     >
                                       {({ selected }) => (
@@ -849,9 +842,9 @@ export function SettingsModal({
                                             )}
                                           </>
                                         )}
-                                      </ListboxOption>
+                                      </SharedListboxOption>
                                     ))}
-                                  </ListboxOptions>
+                                  </SharedListboxOptions>
                                 </Transition>
                               </Listbox>
 

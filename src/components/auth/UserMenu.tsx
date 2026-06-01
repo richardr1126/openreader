@@ -7,7 +7,7 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useRouter } from 'next/navigation';
 import { UserIcon } from '@/components/icons/Icons';
-import { IconButton, SidebarNavItem, SidebarNavLink, buttonClass } from '@/components/ui';
+import { ButtonLink, IconButton, SidebarNavItem, SidebarNavLink } from '@/components/ui';
 
 type UserMenuVariant = 'toolbar' | 'sidebar';
 
@@ -57,13 +57,13 @@ export function UserMenu({
 
     return (
       <div className={`flex gap-2 ${className}`}>
-        <Link href="/signin" className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+        <ButtonLink href="/signin" variant="secondary" size="sm">
           Connect
-        </Link>
+        </ButtonLink>
         {enableUserSignups && (
-          <Link href="/signup" className={buttonClass({ variant: 'primary', size: 'sm' })}>
+          <ButtonLink href="/signup" variant="primary" size="sm">
             Create account
-          </Link>
+          </ButtonLink>
         )}
       </div>
     );

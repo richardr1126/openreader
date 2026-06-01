@@ -1,4 +1,4 @@
-import { buttonClass } from '@/components/ui';
+import { IconButton } from '@/components/ui';
 
 export function ZoomControl({
   value,
@@ -15,33 +15,25 @@ export function ZoomControl({
 }) {
   return (
     <div className="flex items-center gap-1 select-none" aria-label="Zoom controls">
-      <button
-        type="button"
+      <IconButton
         onClick={onDecrease}
         disabled={value <= min}
-        className={buttonClass({
-          variant: 'ghost',
-          size: 'icon',
-          className: 'h-6 w-6 text-sm leading-none',
-        })}
+        size="sm"
+        className="h-6 w-6 text-sm leading-none"
         aria-label="Zoom out"
       >
         −
-      </button>
+      </IconButton>
       <span className="text-xs tabular-nums w-12 text-center text-soft">{value}%</span>
-      <button
-        type="button"
+      <IconButton
         onClick={onIncrease}
         disabled={value >= max}
-        className={buttonClass({
-          variant: 'ghost',
-          size: 'icon',
-          className: 'h-6 w-6 text-sm leading-none',
-        })}
+        size="sm"
+        className="h-6 w-6 text-sm leading-none"
         aria-label="Zoom in"
       >
         ＋
-      </button>
+      </IconButton>
     </div>
   );
 }

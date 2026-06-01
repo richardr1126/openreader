@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getConsentState, setConsentState } from '@/lib/client/analytics';
 import { Transition } from '@headlessui/react';
-import { buttonClass } from '@/components/ui';
+import { Button } from '@/components/ui';
 
 export function CookieConsentBanner() {
   const [show, setShow] = useState(false);
@@ -55,26 +55,22 @@ export function CookieConsentBanner() {
         </div>
 
         <div className="flex flex-col gap-3 min-w-fit sm:flex-row">
-          <button
+          <Button
             onClick={handleDecline}
-            className={buttonClass({
-              variant: 'ghost',
-              size: 'md',
-              className: 'whitespace-nowrap',
-            })}
+            variant="ghost"
+            size="md"
+            className="whitespace-nowrap"
           >
             Decline Non-Essential
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleAccept}
-            className={buttonClass({
-              variant: 'primary',
-              size: 'md',
-              className: 'whitespace-nowrap font-bold shadow-elev-1',
-            })}
+            variant="primary"
+            size="md"
+            className="whitespace-nowrap font-bold shadow-elev-1"
           >
             Accept All
-          </button>
+          </Button>
         </div>
       </div>
     </Transition>

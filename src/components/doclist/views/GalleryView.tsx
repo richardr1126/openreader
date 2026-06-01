@@ -7,7 +7,7 @@ import type { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
-import { buttonClass } from '@/components/ui';
+import { Button, ButtonLink } from '@/components/ui';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -198,20 +198,17 @@ export function GalleryView({
                 </p>
               </div>
               <div className="flex gap-2">
-                <Link
-                  href={openHref || '/app'}
-                  prefetch={false}
-                  className={buttonClass({ variant: 'primary', size: 'sm' })}
-                >
+                <ButtonLink href={openHref || '/app'} prefetch={false} variant="primary" size="sm">
                   Open
-                </Link>
-                <button
+                </ButtonLink>
+                <Button
                   type="button"
                   onClick={() => onDeleteDoc(activeDoc)}
-                  className={buttonClass({ variant: 'secondary', size: 'sm' })}
+                  variant="secondary"
+                  size="sm"
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             </div>
             <dl className="w-full max-w-[280px] sm:max-w-[360px] md:max-w-[340px] grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md border border-line bg-surface px-3 py-2 text-[11px] md:self-center">
