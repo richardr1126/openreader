@@ -1,3 +1,6 @@
+'use client';
+
+import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 import { cn } from './cn';
 
 export const listboxButtonClass =
@@ -16,3 +19,36 @@ export const segmentedButtonClass = (active: boolean) =>
     'rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors duration-fast ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
     active ? 'bg-accent text-background' : 'text-soft hover:bg-accent-wash hover:text-foreground',
   );
+
+export function Select({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  const activeOption = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <Listbox value={value} onChange={onChange}>
+      <ListboxButton className={listboxButtonClass}>
+        <span>{activeOption?.label ?? 'Select'}</span>
+        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-soft">v</span>
+      </ListboxButton>
+      <ListboxOptions anchor="bottom" className={listboxOptionsClass}>
+        {options.map((option) => (
+          <ListboxOption key={option.value} value={option.value} className={({ active }) => listboxOptionClass(active)}>
+            {({ selected }) => (
+              <>
+                <span className="absolute left-2 text-accent">{selected ? '*' : ''}</span>
+                <span>{option.label}</span>
+              </>
+            )}
+          </ListboxOption>
+        ))}
+      </ListboxOptions>
+    </Listbox>
+  );
+}
