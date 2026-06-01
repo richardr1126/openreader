@@ -9,6 +9,7 @@ import { useEPUBTheme, getThemeStyles } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import { DotsVerticalIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
+import { ToolbarButton } from '@/components/ui';
 
 const ReactReader = dynamic(() => import('react-reader').then(mod => mod.ReactReader), {
   ssr: false,
@@ -160,36 +161,34 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
     <div className={`h-full flex flex-col relative z-0 ${className}`} ref={containerRef}>
       <div className="flex items-center justify-between px-2 py-1 border-b border-line-soft bg-surface text-xs text-soft">
         <div className="flex items-center gap-2">
-          <button
+          <ToolbarButton
             type="button"
             onClick={() => setIsTocOpen(open => !open)}
-            className="inline-flex items-center py-1 px-1 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard transform hover:text-accent"
             aria-label={isTocOpen ? 'Hide chapters' : 'Show chapters'}
+            className="px-1"
           >
             <DotsVerticalIcon className="w-4 h-4" />
-          </button>
-          <button
+          </ToolbarButton>
+          <ToolbarButton
             type="button"
             onClick={() => handleLocationChanged('prev')}
-            className="inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard transform hover:text-accent"
             aria-label="Previous section"
           >
             <ChevronLeftIcon className="w-4 h-4" />
-          </button>
+          </ToolbarButton>
         </div>
         {currDocPages !== undefined && typeof currDocPage === 'number' && (
           <span className="px-2 tabular-nums">
             {currDocPage} / {currDocPages}
           </span>
         )}
-        <button
+        <ToolbarButton
           type="button"
           onClick={() => handleLocationChanged('next')}
-          className="inline-flex items-center py-1 px-2 rounded-md border border-line bg-surface text-foreground text-xs hover:bg-accent-wash transition duration-base ease-standard transform hover:text-accent"
           aria-label="Next section"
         >
           <ChevronRightIcon className="w-4 h-4" />
-        </button>
+        </ToolbarButton>
       </div>
       {isTocOpen && tocRef.current && tocRef.current.length > 0 && (
         <div className="border-b border-line-soft bg-background text-xs overflow-y-auto max-h-64 p-2">
