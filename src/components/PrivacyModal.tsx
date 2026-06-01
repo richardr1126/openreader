@@ -7,9 +7,9 @@ import {
   DialogTitle,
   Transition,
   TransitionChild,
-  Button,
 } from '@headlessui/react';
 import { updateAppConfig } from '@/lib/client/dexie';
+import { Button, dialogPanelStyles } from '@/components/ui';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -102,7 +102,7 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel data-testid="privacy-modal" className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
+              <DialogPanel data-testid="privacy-modal" className={dialogPanelStyles({ size: 'md' })}>
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground"
@@ -137,13 +137,9 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
                   <div className="flex justify-end">
                     <Button
                       data-testid="privacy-continue-button"
-                      type="button"
+                      variant="primary"
+                      size="lg"
                       disabled={!agreed}
-                      className="inline-flex justify-center rounded-lg bg-accent px-4 py-2 text-sm 
-                               font-medium text-background hover:bg-secondary-accent
-                               disabled:opacity-50 disabled:cursor-not-allowed
-                               focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                               transform transition-transform duration-base ease-standard"
                       onClick={handleAccept}
                     >
                       Continue
@@ -216,7 +212,7 @@ export function showPrivacyModal(): void {
                     leaveFrom="opacity-100 scale-100"
                     leaveTo="opacity-0 scale-95"
                   >
-                    <DialogPanel className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
+                    <DialogPanel className={dialogPanelStyles({ size: 'md' })}>
                       <DialogTitle
                         as="h3"
                         className="text-lg font-semibold leading-6 text-foreground"
@@ -228,11 +224,8 @@ export function showPrivacyModal(): void {
 
                       <div className="mt-6 flex justify-end">
                         <Button
-                          type="button"
-                          className="inline-flex justify-center rounded-lg bg-accent px-4 py-2 text-sm 
-                                   font-medium text-background hover:bg-secondary-accent focus:outline-none 
-                                   focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                                   transform transition-transform duration-base ease-standard"
+                          variant="primary"
+                          size="lg"
                           onClick={handleClose}
                         >
                           Close

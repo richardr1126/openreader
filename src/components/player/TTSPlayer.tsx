@@ -1,7 +1,6 @@
 'use client';
 
 import { useTTS } from '@/contexts/TTSContext';
-import { Button } from '@headlessui/react';
 import {
   PlayIcon,
   PauseIcon,
@@ -12,6 +11,7 @@ import { LoadingSpinner } from '@/components/Spinner';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
 import { Navigator } from '@/components/player/Navigator';
+import { IconButton } from '@/components/ui';
 
 export default function TTSPlayer({ currentPage, numPages }: {
   currentPage?: number;
@@ -49,32 +49,29 @@ export default function TTSPlayer({ currentPage, numPages }: {
         )}
 
         {/* Playback Controls */}
-        <Button
+        <IconButton
           onClick={skipBackward}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label="Skip backward"
           disabled={isProcessing}
         >
           {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
-        </Button>
+        </IconButton>
 
-        <Button
+        <IconButton
           onClick={togglePlay}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label={isPlaying ? 'Pause' : 'Play'}
           disabled={isProcessing && !isPlaying}
         >
           {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
-        </Button>
+        </IconButton>
 
-        <Button
+        <IconButton
           onClick={skipForward}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label="Skip forward"
           disabled={isProcessing}
         >
           {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}
-        </Button>
+        </IconButton>
 
         {/* Voice control */}
         <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from './cn';
 import { variants } from './variants';
 import { focusRing, motionColors } from './tokens';
@@ -27,21 +27,21 @@ export const iconButtonStyles = variants({
   },
 });
 
-export function IconButton({
+export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
+  children: ReactNode;
+  tone?: IconButtonTone;
+  size?: IconButtonSize;
+}>(function IconButton({
   className,
   children,
   tone = 'ghost',
   size = 'md',
   type = 'button',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  children: ReactNode;
-  tone?: IconButtonTone;
-  size?: IconButtonSize;
-}) {
+}, ref) {
   return (
-    <button type={type} className={iconButtonStyles({ tone, size, className })} {...props}>
+    <button ref={ref} type={type} className={iconButtonStyles({ tone, size, className })} {...props}>
       {children}
     </button>
   );
-}
+});

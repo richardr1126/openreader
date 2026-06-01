@@ -1,8 +1,8 @@
 'use client';
 
-import { Button } from '@headlessui/react';
 import { PauseIcon } from '@/components/icons/Icons';
 import { useTTS } from '@/contexts/TTSContext';
+import { IconButton } from '@/components/ui';
 
 export function RateLimitPauseButton() {
   const { isPlaying, togglePlay } = useTTS();
@@ -12,14 +12,13 @@ export function RateLimitPauseButton() {
   if (!isPlaying) return null;
 
   return (
-    <Button
+    <IconButton
       onClick={() => {
         if (isPlaying) togglePlay();
       }}
-      className="relative p-1.5 rounded-md text-foreground hover:bg-accent-wash transition duration-base focus:outline-none h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
       aria-label="Pause"
     >
       <PauseIcon className="w-5 h-5" />
-    </Button>
+    </IconButton>
   );
 }

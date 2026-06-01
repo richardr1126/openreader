@@ -7,6 +7,7 @@ import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
+import { IconButton, MenuItemClass, Sidebar as SidebarShell } from '@/components/ui';
 
 interface FinderSidebarProps {
   filter: SidebarFilter;
@@ -204,9 +205,9 @@ export function FinderSidebar({
   };
 
   return (
-    <aside
+    <SidebarShell
       style={{ '--sidebar-width': `${width}px` } as CSSProperties}
-      className="relative h-full w-full md:[width:var(--sidebar-width)] bg-surface border-r border-line-soft shrink-0 flex flex-col"
+      className="relative h-full w-full md:[width:var(--sidebar-width)] rounded-none border-y-0 border-l-0 border-r border-line-soft shadow-none shrink-0 flex flex-col"
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="p-2 flex flex-col gap-0.5">
@@ -272,7 +273,9 @@ export function FinderSidebar({
             rightSlot={(
               <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
                 <MenuButton
-                  className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-soft hover:text-accent transition-colors duration-base ease-standard focus:outline-none"
+                  as={IconButton}
+                  size="xs"
+                  className="h-3.5 w-5"
                   title="Folder actions"
                   aria-label="Folder actions"
                 >
@@ -299,7 +302,7 @@ export function FinderSidebar({
                             onNewFolder();
                             onRowAction?.();
                           }}
-                          className={`${active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          className={MenuItemClass(active)}
                         >
                           <FolderPlusIcon className="h-4 w-4" />
                           New Folder
@@ -315,7 +318,7 @@ export function FinderSidebar({
                             onRowAction?.();
                           }}
                           disabled={disabled}
-                          className={`${disabled ? 'text-faint cursor-not-allowed' : active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs`}
+                          className={disabled ? 'flex w-full cursor-not-allowed items-center gap-2 rounded-md px-2 py-2 text-xs text-faint' : MenuItemClass(active)}
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -372,6 +375,6 @@ export function FinderSidebar({
         onPointerCancel={onResizeEnd}
         className="hidden md:block absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-accent-wash active:bg-accent transition-colors duration-base ease-standard"
       />
-    </aside>
+    </SidebarShell>
   );
 }

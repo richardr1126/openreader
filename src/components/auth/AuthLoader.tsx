@@ -7,7 +7,7 @@ import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { LoadingSpinner } from '@/components/Spinner';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { Button } from '@/components/ui';
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -257,17 +257,17 @@ export function AuthLoader({ children }: { children: ReactNode }) {
         {bootstrapError ? (
           <div className="flex flex-col items-center gap-3">
             <p className="text-sm text-soft text-center">{bootstrapError}</p>
-            <button
-              type="button"
+            <Button
               onClick={() => {
                 attemptedForNullSessionRef.current = false;
                 setBootstrapError(null);
                 setRetryNonce((v) => v + 1);
               }}
-              className={buttonClass({ variant: 'primary', size: 'sm' })}
+              variant="primary"
+              size="sm"
             >
               Retry
-            </button>
+            </Button>
           </div>
         ) : (
           <p className="text-sm text-soft animate-pulse">

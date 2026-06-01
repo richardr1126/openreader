@@ -7,7 +7,7 @@ import type { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { buttonClass } from '@/components/ui';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 

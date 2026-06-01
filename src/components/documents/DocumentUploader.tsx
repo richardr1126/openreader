@@ -6,6 +6,7 @@ import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { uploadDocxAsPdf } from '@/lib/client/api/documents';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { dropzoneSurfaceClass } from '@/components/ui';
 
 interface DocumentUploaderProps {
   className?: string;
@@ -155,24 +156,7 @@ export function DocumentUploader({
     noKeyboard: variant === 'overlay'
   });
 
-  const containerBase = `group w-full rounded transition duration-base ease-standard ${
-    isUploading || isConverting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-  } ${className}`;
-
-  const borderBgClass =
-    variant === 'compact'
-      ? `${
-          isDragActive
-            ? 'border border-accent bg-surface-sunken text-accent'
-            : 'border border-dashed border-line text-foreground hover:border-accent hover:bg-accent-wash hover:text-accent'
-        }`
-      : `${
-          isDragActive
-            ? 'border-2 border-dashed border-accent bg-surface text-foreground'
-            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-surface'
-        }`;
-
-  const paddingClass = variant === 'compact' ? 'py-1 px-2 rounded-md' : 'py-5 px-3 rounded-lg';
+  const isDisabled = isUploading || isConverting;
 
   if (variant === 'overlay') {
     const rootProps = getRootProps();
@@ -183,7 +167,7 @@ export function DocumentUploader({
         {isDragActive && (
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-surface backdrop-blur-md pointer-events-none p-6">
             <div className="w-full h-full border-2 border-dashed border-accent rounded-lg flex flex-col items-center justify-center bg-surface-solid text-center p-4">
-              <UploadIcon className="w-14 h-14 text-accent mb-4 animate-bounce" />
+              <UploadIcon className="w-14 h-14 text-accent mb-4" />
               <p className="text-xl font-bold text-foreground mb-1.5">
                 Drop files here to upload
               </p>
@@ -212,7 +196,12 @@ export function DocumentUploader({
   return (
     <div
       {...getRootProps()}
-      className={`${containerBase} ${borderBgClass} ${paddingClass}`}
+      className={dropzoneSurfaceClass({
+        variant: variant === 'compact' ? 'compact' : 'default',
+        active: isDragActive,
+        disabled: isDisabled,
+        className,
+      })}
     >
       <input {...getInputProps()} />
       {variant === 'compact' ? (

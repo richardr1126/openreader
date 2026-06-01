@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Input } from '@headlessui/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
@@ -9,7 +8,7 @@ import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { Button, Field, IconButton, Input, Surface } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 export default function SignUpPage() {
@@ -105,7 +104,7 @@ export default function SignUpPage() {
   if (!enableUserSignups) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <div className="w-full max-w-md bg-surface rounded-lg shadow-elev-3 p-6">
+        <Surface elevation="3" className="w-full max-w-md p-6">
           <h1 className="text-xl font-semibold text-foreground">Sign-ups unavailable</h1>
           <p className="text-sm text-soft mt-1">
             New account sign-ups are currently disabled by the site administrator.
@@ -118,7 +117,7 @@ export default function SignUpPage() {
               </Link>
             </p>
           </div>
-        </div>
+        </Surface>
       </div>
     );
   }
@@ -129,53 +128,45 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md bg-surface rounded-lg shadow-elev-3 p-6">
+      <Surface elevation="3" className="w-full max-w-md p-6">
         <h1 className="text-xl font-semibold text-foreground">Sign Up</h1>
         <p className="text-sm text-soft mt-1">Create your account to get started</p>
 
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
-            <p className="text-sm text-danger dark:text-danger">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
           </div>
         )}
 
         <div className="mt-6 space-y-4">
           {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Email</label>
+          <Field label="Email">
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="me@example.com"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
-                       focus:outline-none focus:ring-2 focus:ring-accent-line"
+              controlSize="lg"
             />
-          </div>
+          </Field>
 
           {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Password</label>
+          <Field label="Password">
             <div className="relative">
               <Input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
-                className="w-full rounded-lg bg-background py-2 px-3 pr-10 text-foreground shadow-elev-1
-                         focus:outline-none focus:ring-2 focus:ring-accent-line"
+                controlSize="lg"
+                className="pr-10"
               />
-              <button
-                type="button"
+              <IconButton
                 onClick={() => setShowPassword(!showPassword)}
-                className={buttonClass({
-                  variant: 'ghost',
-                  size: 'icon',
-                  className: 'absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 text-soft',
-                })}
+                className="absolute right-2 top-1/2 h-7 w-7 -translate-y-1/2"
               >
                 {showPassword ? '👁️' : '👁️‍🗨️'}
-              </button>
+              </IconButton>
             </div>
 
             {/* Password Strength */}
@@ -209,32 +200,32 @@ export default function SignUpPage() {
                 </div>
               </div>
             )}
-          </div>
+          </Field>
 
           {/* Confirm Password */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Confirm Password</label>
+          <Field label="Confirm Password">
             <Input
               type={showPassword ? 'text' : 'password'}
               value={passwordConfirmation}
               onChange={(e) => setPasswordConfirmation(e.target.value)}
               placeholder="Confirm Password"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
-                       focus:outline-none focus:ring-2 focus:ring-accent-line"
+              controlSize="lg"
             />
             {passwordConfirmation && password && (
               <p className={`text-xs mt-1 ${password === passwordConfirmation ? 'text-accent' : 'text-danger'}`}>
                 {password === passwordConfirmation ? '✓ Passwords match' : '✗ Passwords do not match'}
               </p>
             )}
-          </div>
+          </Field>
 
           {/* Sign Up Button */}
           <Button
             type="submit"
             disabled={loading}
             onClick={handleSignUp}
-            className={buttonClass({ variant: 'primary', size: 'md', className: 'w-full' })}
+            variant="primary"
+            size="md"
+            className="w-full"
           >
             {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Create Account'}
           </Button>
@@ -258,7 +249,7 @@ export default function SignUpPage() {
             </button>
           </p>
         </div>
-      </div>
+      </Surface>
     </div>
   );
 }

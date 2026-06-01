@@ -1,6 +1,6 @@
 import { Fragment, KeyboardEvent } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { Button, dialogPanelStyles } from '@/components/ui';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -62,7 +62,7 @@ export function ConfirmDialog({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel role='dialog' className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
+              <DialogPanel role='dialog' className={dialogPanelStyles({ size: 'md' })}>
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground"
@@ -74,27 +74,17 @@ export function ConfirmDialog({
                 </div>
 
                 <div className="mt-6 flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    className={buttonClass({
-                      variant: 'outline',
-                      size: 'sm',
-                    })}
-                    onClick={onClose}
-                  >
+                  <Button variant="outline" size="sm" onClick={onClose}>
                     {cancelText}
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonClass({
-                      variant: isDangerous ? 'danger' : 'primary',
-                      size: 'sm',
-                      className: 'text-wrap',
-                    })}
+                  </Button>
+                  <Button
+                    variant={isDangerous ? 'danger' : 'primary'}
+                    size="sm"
+                    className="text-wrap"
                     onClick={onConfirm}
                   >
                     {confirmText}
-                  </button>
+                  </Button>
                 </div>
               </DialogPanel>
             </TransitionChild>

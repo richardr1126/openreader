@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from './cn';
 import { variants } from './variants';
 import { motionColors } from './tokens';
@@ -21,13 +21,13 @@ export const inputStyles = variants({
 
 export const inputClass = inputStyles();
 
-export function Input({
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { controlSize?: InputControlSize }>(function Input({
   className,
   controlSize = 'md',
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { controlSize?: InputControlSize }) {
-  return <input className={inputStyles({ size: controlSize, className })} {...props} />;
-}
+}, ref) {
+  return <input ref={ref} className={inputStyles({ size: controlSize, className })} {...props} />;
+});
 
 export function Textarea({
   className,

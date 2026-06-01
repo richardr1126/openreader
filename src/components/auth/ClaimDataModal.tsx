@@ -7,10 +7,10 @@ import {
   DialogTitle,
   Transition,
   TransitionChild,
-  Button,
 } from '@headlessui/react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { Button, dialogPanelStyles } from '@/components/ui';
 
 export type ClaimableCounts = {
   documents: number;
@@ -99,7 +99,7 @@ export default function ClaimDataModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel data-testid="claim-modal" className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
+              <DialogPanel data-testid="claim-modal" className={dialogPanelStyles({ size: 'md' })}>
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground mb-4"
@@ -129,27 +129,19 @@ export default function ClaimDataModal({
                 <div className="flex justify-end gap-3">
                   <Button
                     data-testid="claim-dismiss-button"
-                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={onDismiss}
                     disabled={isClaiming}
-                    className="inline-flex justify-center rounded-lg bg-background px-3 py-1.5 text-sm
-                             font-medium text-foreground hover:bg-accent-wash focus:outline-none
-                             focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-base ease-standard hover:text-accent
-                             disabled:opacity-50"
                   >
                     Dismiss
                   </Button>
                   <Button
                     data-testid="claim-submit-button"
-                    type="button"
+                    variant="primary"
+                    size="sm"
                     onClick={handleClaim}
                     disabled={isClaiming}
-                    className="inline-flex justify-center rounded-lg bg-accent px-3 py-1.5 text-sm
-                             font-medium text-background hover:bg-secondary-accent focus:outline-none
-                             focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-base ease-standard hover:text-background
-                             disabled:opacity-50"
                   >
                     {isClaiming ? 'Claiming...' : 'Claim Data'}
                   </Button>

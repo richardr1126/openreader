@@ -10,6 +10,7 @@ import {
   HamburgerIcon,
 } from './finderIcons';
 import { ChevronUpDownIcon } from '@/components/icons/Icons';
+import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment, toolbarButtonStyles } from '@/components/ui';
 import type { ReactNode } from 'react';
 
 interface FinderToolbarProps {
@@ -52,22 +53,6 @@ const ICON_SIZES: Array<{ value: IconSize; label: string }> = [
   { value: 'xl', label: 'XL' },
 ];
 
-// Match SettingsModal / UserMenu trigger sizing exactly so all bar buttons share one rhythm.
-const TOOLBAR_BTN =
-  'inline-flex items-center py-1 px-2 rounded-md border bg-surface text-xs transition duration-base ease-standard';
-const TOOLBAR_BTN_INACTIVE =
-  'border-line text-foreground hover:text-accent hover:border-accent-line hover:bg-accent-wash';
-const TOOLBAR_BTN_ACTIVE = 'border-accent-line bg-surface-sunken text-accent';
-
-// Pill-grouped segmented control. Outer pill carries the border; inner segments are
-// borderless and rely on bg/text color to show active/hover. Sized so the whole pill
-// matches the height of a standalone TOOLBAR_BTN.
-const PILL = 'inline-flex items-center rounded-md border border-line bg-surface p-0.5 gap-0.5 shrink-0';
-const PILL_SEGMENT =
-  'inline-flex items-center justify-center rounded-sm text-xs transition-colors duration-base ease-standard';
-const PILL_SEGMENT_INACTIVE = 'text-soft hover:bg-accent-wash hover:text-accent';
-const PILL_SEGMENT_ACTIVE = 'bg-surface-sunken text-accent';
-
 export function FinderToolbar({
   viewMode,
   onViewModeChange,
@@ -89,26 +74,25 @@ export function FinderToolbar({
   const directionLabel = sortDirection === 'asc' ? currentSort.asc : currentSort.desc;
 
   return (
-    <div className="sticky top-0 z-40 w-full border-b border-line-soft bg-surface">
-      <div className="px-2 sm:px-3 py-1 min-h-10 flex items-center gap-1.5 sm:gap-2">
+    <Toolbar>
         {leftSlot && (
           <div className="shrink-0 flex items-center gap-2 pr-1 sm:pr-2 sm:border-r sm:border-line">
             {leftSlot}
           </div>
         )}
 
-        <button
-          type="button"
+        <ToolbarButton
           onClick={onToggleSidebar}
-          className={`${TOOLBAR_BTN} ${isSidebarOpen ? TOOLBAR_BTN_ACTIVE : TOOLBAR_BTN_INACTIVE} shrink-0`}
+          active={isSidebarOpen}
+          className="shrink-0"
           aria-pressed={isSidebarOpen}
           aria-label="Toggle sidebar"
           title="Toggle sidebar"
         >
           <HamburgerIcon className="w-4 h-4" />
-        </button>
+        </ToolbarButton>
 
-        <div className={PILL}>
+        <ToolbarGroup>
           {VIEW_BUTTONS.map(({ value, label, Icon }) => {
             const active = viewMode === value;
             const isIconsToggle = value === 'icons';
@@ -117,65 +101,52 @@ export function FinderToolbar({
                 key={value}
                 className={isIconsToggle ? 'relative group/icons inline-flex items-center' : 'inline-flex items-center'}
               >
-                <button
-                  type="button"
+                <ToolbarSegment
                   onClick={() => onViewModeChange(value)}
+                  active={active}
                   aria-pressed={active}
                   aria-label={`${label} view`}
                   title={`${label} view`}
-                  className={
-                    PILL_SEGMENT +
-                    ' h-6 w-7 ' +
-                    (active ? PILL_SEGMENT_ACTIVE : PILL_SEGMENT_INACTIVE)
-                  }
+                  className="w-7"
                 >
                   <Icon className="w-4 h-4" />
-                </button>
+                </ToolbarSegment>
                 {isIconsToggle && viewMode === 'icons' && (
                   <div
                     className="absolute top-full left-1/2 z-30 -translate-x-1/2 pt-1 opacity-0 pointer-events-none transition-opacity duration-fast group-hover/icons:opacity-100 group-hover/icons:pointer-events-auto group-focus-within/icons:opacity-100 group-focus-within/icons:pointer-events-auto"
                   >
-                    <div className={`${PILL} shadow-elev-2`}>
+                    <ToolbarGroup className="shadow-elev-2">
                       {ICON_SIZES.map(({ value: sizeValue, label: sizeLabel }) => {
                         const sizeActive = iconSize === sizeValue;
                         return (
-                          <button
+                          <ToolbarSegment
                             key={sizeValue}
-                            type="button"
                             onClick={() => onIconSizeChange(sizeValue)}
+                            active={sizeActive}
                             aria-pressed={sizeActive}
                             aria-label={`Icon size ${sizeLabel}`}
-                            className={
-                              PILL_SEGMENT +
-                              ' h-6 min-w-[26px] px-1.5 font-semibold tracking-wide ' +
-                              (sizeActive ? PILL_SEGMENT_ACTIVE : PILL_SEGMENT_INACTIVE)
-                            }
+                            className="min-w-[26px] px-1.5 font-semibold tracking-wide"
                           >
                             {sizeLabel}
-                          </button>
+                          </ToolbarSegment>
                         );
                       })}
-                    </div>
+                    </ToolbarGroup>
                   </div>
                 )}
               </div>
             );
           })}
-        </div>
+        </ToolbarGroup>
 
         {showSortControls && (
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onSortDirectionToggle}
-              className={`${TOOLBAR_BTN} ${TOOLBAR_BTN_INACTIVE} whitespace-nowrap`}
-              title="Toggle sort direction"
-            >
+            <ToolbarButton onClick={onSortDirectionToggle} className="whitespace-nowrap" title="Toggle sort direction">
               {directionLabel}
-            </button>
+            </ToolbarButton>
             <Listbox value={sortBy} onChange={onSortByChange}>
               <ListboxButton
-                className={`${TOOLBAR_BTN} ${TOOLBAR_BTN_INACTIVE} gap-1 min-w-[90px] justify-between`}
+                className={toolbarButtonStyles({ className: 'gap-1 min-w-[90px] justify-between' })}
               >
                 <span>{currentSort.label}</span>
                 <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
@@ -220,7 +191,6 @@ export function FinderToolbar({
             {rightSlot}
           </div>
         )}
-      </div>
-    </div>
+    </Toolbar>
   );
 }

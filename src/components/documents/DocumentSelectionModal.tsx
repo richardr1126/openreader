@@ -3,7 +3,7 @@
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
 import { Fragment, useEffect, useState } from 'react';
 import { BaseDocument } from '@/types/documents';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { Button, dialogPanelStyles } from '@/components/ui';
 
 interface DocumentSelectionModalProps {
   isOpen: boolean;
@@ -139,7 +139,7 @@ export function DocumentSelectionModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full max-w-2xl transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition flex flex-col h-[80vh]">
+              <DialogPanel className={dialogPanelStyles({ size: 'lg', className: 'flex h-[80vh] flex-col' })}>
                 <DialogTitle
                   as="h3"
                   className="text-lg font-semibold leading-6 text-foreground mb-4 flex-shrink-0 flex justify-between items-center"
@@ -206,21 +206,17 @@ export function DocumentSelectionModal({
                 </div>
 
                 <div className="mt-4 flex justify-end gap-3 flex-shrink-0">
-                  <button
-                    type="button"
-                    className={buttonClass({ variant: 'outline', size: 'md' })}
-                    onClick={onClose}
-                  >
+                  <Button variant="outline" size="md" onClick={onClose}>
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonClass({ variant: 'primary', size: 'md' })}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
                     onClick={handleConfirmClick}
                     disabled={isLoading || selectedCount === 0 || isProcessing}
                   >
                     {isProcessing ? 'Processing...' : `${confirmLabel} ${selectedCount > 0 ? `(${selectedCount})` : ''}`}
-                  </button>
+                  </Button>
                 </div>
               </DialogPanel>
             </TransitionChild>

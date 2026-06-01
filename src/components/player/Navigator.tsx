@@ -1,7 +1,8 @@
 'use client';
 
-import { Button, Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
+import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
 import { useState, useEffect, useRef } from 'react';
+import { IconButton, Input, cn, popoverPanelClass, popoverTriggerClass } from '@/components/ui';
 
 export const Navigator = ({ currentPage, numPages, skipToLocation }: {
   currentPage: number;
@@ -53,36 +54,37 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
   return (
     <div className="flex items-center space-x-1">
       {/* Page back */}
-      <Button
+      <IconButton
         onClick={() => skipToLocation(currentPage - 1, true)}
         disabled={currentPage <= 1}
-        className="relative p-2 rounded-full text-foreground hover:bg-accent-wash data-[hover]:bg-accent-wash data-[active]:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
+        className="rounded-full"
         aria-label="Previous page"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7m0 0l7-7m-7 7h18" />
         </svg>
-      </Button>
+      </IconButton>
 
       {/* Page number popup */}
       <Popover className="relative mb-1">
         <PopoverButton
-          className="bg-surface-sunken px-2 py-0.5 rounded-full focus:outline-none cursor-pointer hover:bg-accent-wash transform transition-transform duration-base ease-standard hover:text-accent"
+          className={cn(popoverTriggerClass, 'rounded-full bg-surface-sunken px-2 py-0.5 text-xs')}
           onClick={handlePopoverOpen}
         >
           <p className="text-xs whitespace-nowrap">
             {currentPage} / {numPages || 1}
           </p>
         </PopoverButton>
-        <PopoverPanel anchor="top" className="absolute z-50 bg-surface p-3 rounded-md shadow-elev-2 border border-line">
+        <PopoverPanel anchor="top" className={popoverPanelClass}>
           <div className="flex flex-col space-y-2">
             <div className="text-xs font-medium text-foreground">Go to page</div>
-            <input
+            <Input
               ref={inputRef}
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              className="w-20 px-2 py-1 text-xs text-accent bg-surface-sunken rounded border-none outline-none appearance-none text-center"
+              controlSize="sm"
+              className="w-20 appearance-none border-none text-center text-accent"
               value={inputValue}
               onChange={handleInputChange}
               onBlur={handleInputConfirm}
@@ -96,16 +98,16 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       </Popover>
 
       {/* Page forward */}
-      <Button
+      <IconButton
         onClick={() => skipToLocation(currentPage + 1, true)}
         disabled={currentPage >= (numPages || 1)}
-        className="relative p-2 rounded-full text-foreground hover:bg-accent-wash data-[hover]:bg-accent-wash data-[active]:bg-accent-wash transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
+        className="rounded-full"
         aria-label="Next page"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
         </svg>
-      </Button>
+      </IconButton>
     </div>
   );
 }

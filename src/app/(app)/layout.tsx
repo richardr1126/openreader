@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
 
 import { Providers } from '@/app/providers';
+import { AppMain, AppShell } from '@/components/layout';
 import { getAuthBaseUrl, isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '@/lib/server/auth/config';
 
 export const dynamic = 'force-dynamic';
@@ -32,9 +33,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       allowAnonymousAuthSessions={allowAnonymousAuthSessions}
       githubAuthEnabled={githubAuthEnabled}
     >
-      <div className="app-shell h-dvh flex flex-col bg-background overflow-hidden">
-        <main className="flex-1 min-h-0 flex flex-col">{children}</main>
-      </div>
+      <AppShell>
+        <AppMain>{children}</AppMain>
+      </AppShell>
       <Toaster
         toastOptions={{
           style: {

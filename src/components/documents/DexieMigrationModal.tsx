@@ -1,12 +1,13 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild, Button } from '@headlessui/react';
+import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
 import { getAllEpubDocuments, getAllHtmlDocuments, getAllPdfDocuments, updateAppConfig } from '@/lib/client/dexie';
 import { listDocuments, mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
 import { useDocuments } from '@/contexts/DocumentContext';
 import type { BaseDocument } from '@/types/documents';
 import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
+import { Button, dialogPanelStyles } from '@/components/ui';
 
 type DexieMigrationModalProps = {
   isOpen: boolean;
@@ -161,7 +162,7 @@ export function DexieMigrationModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel data-testid="migration-modal" className="w-full max-w-md transform rounded-lg bg-surface p-6 text-left align-middle shadow-elev-3 transition">
+              <DialogPanel data-testid="migration-modal" className={dialogPanelStyles({ size: 'md' })}>
                 <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground mb-4">
                   {title}
                 </DialogTitle>
@@ -187,24 +188,18 @@ export function DexieMigrationModal({
                 <div className="flex justify-end gap-3 mt-6">
                   <Button
                     data-testid="migration-skip-button"
+                    variant="outline"
+                    size="sm"
                     onClick={handleSkip}
                     disabled={isUploading}
-                    className="inline-flex justify-center rounded-lg bg-background px-3 py-1.5 text-sm
-                             font-medium text-foreground hover:bg-accent-wash focus:outline-none
-                             focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-base ease-standard hover:text-accent
-                             disabled:opacity-50"
                   >
                     Skip
                   </Button>
                   <Button
+                    variant="primary"
+                    size="sm"
                     onClick={handleUpload}
                     disabled={isUploading}
-                    className="inline-flex justify-center rounded-lg bg-accent px-3 py-1.5 text-sm
-                             font-medium text-background hover:bg-secondary-accent focus:outline-none
-                             focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-base ease-standard hover:text-background
-                             disabled:opacity-50"
                   >
                     {isUploading ? 'Uploading…' : 'Upload'}
                   </Button>

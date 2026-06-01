@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { Button, Input } from '@headlessui/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
@@ -10,7 +9,7 @@ import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { GithubIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { Button, Field, Input, Surface } from '@/components/ui';
 
 function SessionExpiredLoader({ setSessionExpired }: { setSessionExpired: (v: boolean) => void }) {
   const searchParams = useSearchParams();
@@ -120,7 +119,7 @@ function SignInContent() {
         <SessionExpiredLoader setSessionExpired={setSessionExpired} />
       </Suspense>
 
-        <div className="w-full max-w-md bg-surface rounded-lg shadow-elev-3 p-6">
+        <Surface elevation="3" className="w-full max-w-md p-6">
           <h1 className="text-xl font-semibold text-foreground">
             {sessionExpired ? 'Session Expired' : 'Connect Account'}
           </h1>
@@ -141,36 +140,32 @@ function SignInContent() {
 
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
-            <p className="text-sm text-danger dark:text-danger">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
           </div>
         )}
 
         <div className="mt-6 space-y-4">
           {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Email</label>
+          <Field label="Email">
             <Input
               type="email"
               value={email}
               onChange={(e) => { setEmail(e.target.value); setError(null); }}
               placeholder="me@example.com"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
-                       focus:outline-none focus:ring-2 focus:ring-accent-line"
+              controlSize="lg"
             />
-          </div>
+          </Field>
 
           {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Password</label>
+          <Field label="Password">
             <Input
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(null); }}
               placeholder="Password"
-              className="w-full rounded-lg bg-background py-2 px-3 text-foreground shadow-elev-1
-                       focus:outline-none focus:ring-2 focus:ring-accent-line"
+              controlSize="lg"
             />
-          </div>
+          </Field>
 
           {/* Remember Me */}
           <label className="flex items-center gap-2 cursor-pointer">
@@ -188,7 +183,9 @@ function SignInContent() {
             type="submit"
             disabled={isAnyLoading}
             onClick={handleSignIn}
-            className={buttonClass({ variant: 'primary', size: 'md', className: 'w-full' })}
+            variant="primary"
+            size="md"
+            className="w-full"
           >
             {loadingEmail ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Connect'}
           </Button>
@@ -199,11 +196,9 @@ function SignInContent() {
             type="button"
             disabled={isAnyLoading}
             onClick={handleGithubSignIn}
-            className={buttonClass({
-              variant: 'outline',
-              size: 'md',
-              className: 'w-full flex items-center justify-center gap-2',
-            })}
+            variant="outline"
+            size="md"
+            className="w-full gap-2"
           >
             {loadingGithub ? (
               <LoadingSpinner className="w-4 h-4" />
@@ -222,7 +217,9 @@ function SignInContent() {
               type="button"
               disabled={isAnyLoading}
               onClick={handleAnonymousContinue}
-              className={buttonClass({ variant: 'outline', size: 'md', className: 'w-full' })}
+              variant="outline"
+              size="md"
+              className="w-full"
             >
               {loadingAnonymous ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Continue anonymously'}
             </Button>
@@ -249,7 +246,7 @@ function SignInContent() {
             </button>
           </p>
         </div>
-      </div>
+      </Surface>
     </div>
   );
 }

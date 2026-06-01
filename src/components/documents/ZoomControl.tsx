@@ -1,4 +1,4 @@
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { buttonClass } from '@/components/ui';
 
 export function ZoomControl({
   value,

@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
 import { cn } from './cn';
 import { variants } from './variants';
 import { motionColors } from './tokens';
@@ -34,7 +34,7 @@ export function ToolbarButton({
   children,
   type = 'button',
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean;
   children: ReactNode;
 }) {
@@ -63,7 +63,7 @@ export function ToolbarSegment({
   children,
   type = 'button',
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean;
   children: ReactNode;
 }) {
