@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Transition, Button, Listbox, ListboxButton, ListboxOptions, ListboxOption, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
+import { Transition, Listbox, ListboxButton, ListboxOptions, ListboxOption, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
@@ -13,6 +13,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
+import { Button, IconButton, MenuItemClass, cn, listboxButtonClass, listboxOptionClass, listboxPanelClass, menuPanelClass, rangeInputClass } from '@/components/ui';
 import { 
   getAudiobookStatus, 
   deleteAudiobookChapter, 
@@ -560,7 +561,7 @@ export function AudiobookExportModal({
 			                                          disabled={chapters.length > 0 || settingsLocked}
 			                                        >
 			                                          <div className="relative">
-			                                            <ListboxButton className="relative cursor-pointer rounded-lg bg-surface py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line transform transition-transform duration-base ease-standard hover:text-accent w-full">
+			                                            <ListboxButton className={cn(listboxButtonClass, 'bg-surface')}>
 			                                              <span className="block truncate text-sm font-medium">{format.toUpperCase()}</span>
 			                                              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
 			                                                <ChevronUpDownIcon className="h-4 w-4 text-soft" />
@@ -572,12 +573,10 @@ export function AudiobookExportModal({
 			                                              leaveFrom="opacity-100"
 			                                              leaveTo="opacity-0"
 			                                            >
-			                                              <ListboxOptions className="absolute left-0 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-surface py-1 shadow-elev-2 ring-1 ring-line-soft focus:outline-none z-10">
+			                                              <ListboxOptions className={cn(listboxPanelClass, 'absolute left-0 mt-1 w-full')}>
 			                                                <ListboxOption
 			                                                  value="m4b"
-			                                                  className={({ active }) =>
-			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-surface-sunken text-accent' : 'text-foreground'}`
-			                                                  }
+			                                                  className={({ active, selected }) => cn(listboxOptionClass(active, selected, 'none'), 'py-2')}
 			                                                >
 			                                                  {({ selected }) => (
 			                                                    <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
@@ -587,9 +586,7 @@ export function AudiobookExportModal({
 			                                                </ListboxOption>
 			                                                <ListboxOption
 			                                                  value="mp3"
-			                                                  className={({ active }) =>
-			                                                    `relative cursor-pointer select-none py-2 pl-3 pr-4 ${active ? 'bg-surface-sunken text-accent' : 'text-foreground'}`
-			                                                  }
+			                                                  className={({ active, selected }) => cn(listboxOptionClass(active, selected, 'none'), 'py-2')}
 			                                                >
 			                                                  {({ selected }) => (
 			                                                    <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
@@ -629,7 +626,7 @@ export function AudiobookExportModal({
                                             step="0.1"
                                             value={nativeSpeed}
                                             onChange={(e) => setNativeSpeed(parseFloat(e.target.value))}
-                                            className="w-full h-1.5 bg-surface-sunken rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-surface-sunken [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-elev-1 [&::-moz-range-track]:bg-surface-sunken [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
+                                            className={rangeInputClass}
                                           />
                                           <div className="flex justify-between text-[10px] text-soft">
                                             <span>0.5x</span>
@@ -653,7 +650,7 @@ export function AudiobookExportModal({
 			                                        step="0.1"
 			                                        value={postSpeed}
 			                                        onChange={(e) => setPostSpeed(parseFloat(e.target.value))}
-			                                        className="w-full h-1.5 bg-surface-sunken rounded-full appearance-none cursor-pointer [&::-webkit-slider-runnable-track]:bg-surface-sunken [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:shadow-elev-1 [&::-moz-range-track]:bg-surface-sunken [&::-moz-range-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-0"
+			                                        className={rangeInputClass}
 			                                      />
 			                                      <div className="flex justify-between text-[10px] text-soft">
 			                                        <span>0.5x</span>
@@ -670,10 +667,9 @@ export function AudiobookExportModal({
 			                                  <Button
 			                                    onClick={handleStartGeneration}
 			                                    disabled={!canGenerate}
-			                                    className="flex-1 inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
-			                                            font-medium text-background hover:bg-secondary-accent focus:outline-none
-			                                            focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-			                                            transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
+			                                    variant="primary"
+			                                    size="md"
+			                                    className="flex-1"
 			                                  >
 			                                    Start Generation
 			                                  </Button>
@@ -682,10 +678,9 @@ export function AudiobookExportModal({
 			                                  <Button
 			                                    onClick={handleStartGeneration}
 			                                    disabled={!canGenerate}
-			                                    className="flex-1 inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
-			                                            font-medium text-background hover:bg-secondary-accent focus:outline-none
-			                                            focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-			                                            transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
+			                                    variant="primary"
+			                                    size="md"
+			                                    className="flex-1"
 			                                  >
 			                                    Resume
 			                                  </Button>
@@ -694,10 +689,8 @@ export function AudiobookExportModal({
 			                                  <Button
 			                                    onClick={() => setShowResetConfirm(true)}
 			                                    disabled={isGenerating}
-			                                    className="inline-flex justify-center rounded-lg border border-danger bg-transparent px-3 py-2 text-sm
-			                                           font-medium text-danger hover:bg-danger-wash hover:text-background focus:outline-none
-			                                           focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2
-			                                           transform transition-transform duration-base ease-standard"
+			                                    variant="danger"
+			                                    size="md"
 			                                    title="Delete all generated chapters/pages for this document"
 			                                  >
 			                                    Reset
@@ -714,15 +707,15 @@ export function AudiobookExportModal({
                               <br />
                               Change the TTS playback options or restart the server to force uncached regeneration
                             </p>
-                            <Button
+                            <IconButton
                               onClick={() => setShowRegenerateHint(false)}
-                              className="ml-3 p-1 rounded-md hover:bg-surface hover:text-accent transition-colors"
+                              className="ml-3"
                               aria-label="Dismiss regenerate hint"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                               </svg>
-                            </Button>
+                            </IconButton>
                           </div>
                         )}
                         {/* Progress Info */}
@@ -757,14 +750,16 @@ export function AudiobookExportModal({
                                     {chapter.status === 'completed' ? (
                                       <CheckCircleIcon className="h-5 w-5 text-accent" />
                                     ) : onRegenerateChapter ? (
-                                      <Button
+                                      <IconButton
                                         onClick={() => handleRegenerateChapter(chapter)}
                                         disabled={regeneratingChapter !== null || chapter.status === 'generating' || isGenerating}
-                                        className="inline-flex items-center justify-center rounded-full bg-surface-sunken text-accent hover:bg-accent-wash p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
+                                        tone="ghost"
+                                        size="sm"
+                                        className="rounded-full bg-surface-sunken text-accent"
                                         title={chapter.status === 'generating' ? 'Generating...' : 'Regenerate this chapter'}
                                       >
                                         <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index || chapter.status === 'generating' ? 'animate-spin' : ''}`} />
-                                      </Button>
+                                      </IconButton>
                                     ) : (
                                       <ClockIcon className="h-5 w-5 text-soft" />
                                     )}
@@ -782,7 +777,8 @@ export function AudiobookExportModal({
                                     {((onRegenerateChapter && !isGenerating) || chapter.status === 'completed') && (
                                       <Menu as="div" className="relative inline-block text-left">
                                         <MenuButton
-                                          className="inline-flex items-center justify-center rounded-md p-1.5 hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-accent text-soft hover:text-foreground transform transition-transform duration-base ease-standard"
+                                          as={IconButton}
+                                          size="sm"
                                           title="Chapter actions"
                                         >
                                           <DotsVerticalIcon className="h-5 w-5" />
@@ -799,7 +795,7 @@ export function AudiobookExportModal({
                                           <MenuItems
                                             anchor={{ to: 'bottom end', gap: '8px', padding: '12px' }}
                                             portal
-                                            className="w-44 rounded-md bg-background shadow-elev-2 ring-1 ring-line-soft focus:outline-none z-[70] p-1 origin-top-right"
+                                            className={cn(menuPanelClass, 'z-[70] w-44 origin-top-right bg-background focus:outline-none')}
                                           >
                                             {chapter.status === 'completed' && (
                                               <>
@@ -807,7 +803,7 @@ export function AudiobookExportModal({
                                                   {({ active }) => (
                                                     <button
                                                       onClick={() => setPendingDeleteChapter(chapter)}
-                                                      className={`${active ? 'bg-surface-sunken' : ''} text-danger group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                      className={MenuItemClass(active, 'danger')}
                                                       title="Delete this chapter"
                                                     >
                                                       <XCircleIcon className="h-4 w-4" />
@@ -819,7 +815,7 @@ export function AudiobookExportModal({
                                                   {({ active }) => (
                                                     <button
                                                       onClick={() => handleDownloadChapter(chapter)}
-                                                      className={`${active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                      className={MenuItemClass(active)}
                                                     >
                                                       <DownloadIcon className="h-4 w-4" />
                                                       <span>Download</span>
@@ -833,7 +829,7 @@ export function AudiobookExportModal({
                                                 {({ active }) => (
                                                   <button
                                                     onClick={handleCancel}
-                                                    className={`${active ? 'bg-surface-sunken text-danger' : 'text-danger'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm`}
+                                                    className={MenuItemClass(active, 'danger')}
                                                     title="Cancel this chapter regeneration"
                                                   >
                                                     <XCircleIcon className="h-4 w-4" />
@@ -848,7 +844,7 @@ export function AudiobookExportModal({
                                                   <button
                                                     onClick={() => handleRegenerateChapter(chapter)}
                                                     disabled={disabled}
-                                                    className={`${active ? 'bg-surface-sunken text-accent' : 'text-foreground'} group flex w-full items-center gap-2 rounded px-2 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                    className={cn(MenuItemClass(active), 'disabled:cursor-not-allowed disabled:opacity-50')}
                                                     title="Regenerate this chapter"
                                                   >
                                                     <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index ? 'animate-spin' : ''}`} />
@@ -872,11 +868,9 @@ export function AudiobookExportModal({
                                 <Button
                                   onClick={handleDownloadComplete}
                                   disabled={isCombining}
-                                  className="w-full inline-flex justify-center items-center space-x-2 rounded-lg bg-accent px-3 py-1.5 text-sm
-                                        disabled:opacity-50 disabled:cursor-not-allowed
-                                        font-medium text-background hover:bg-secondary-accent focus:outline-none 
-                                        focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                                        transform transition-transform duration-base ease-standard hover:text-background"
+                                  variant="primary"
+                                  size="md"
+                                  className="w-full space-x-2"
                                 >
                                   <DownloadIcon className="h-5 w-5" />
                                   <span>{isCombining ? 'Combining chapters...' : `Full Download (${format.toUpperCase()})`}</span>

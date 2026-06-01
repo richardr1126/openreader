@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { buttonClass } from '@/components/ui';
 
 export const metadata: Metadata = {
   title: 'Privacy & Data Usage',

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getConsentState, setConsentState } from '@/lib/client/analytics';
 import { Transition } from '@headlessui/react';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+import { buttonClass } from '@/components/ui';
 
 export function CookieConsentBanner() {
   const [show, setShow] = useState(false);

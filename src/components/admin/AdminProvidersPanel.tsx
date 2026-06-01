@@ -17,8 +17,8 @@ import {
   listboxButtonClass,
   listboxOptionClass,
   listboxOptionsClass,
-} from '@/components/formPrimitives';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+  buttonClass,
+} from '@/components/ui';
 
 type ProviderType = TtsProviderId;
 

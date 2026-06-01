@@ -50,12 +50,12 @@ const UI_ARCHITECTURE_IMPORT_PATHS = [
   {
     name: "@/components/formPrimitives",
     message:
-      "Use '@/components/ui' primitives in migrated app surfaces; formPrimitives is a compatibility shim.",
+      "Use '@/components/ui' primitives; formPrimitives has been removed.",
   },
   {
     name: "@/components/ui/buttonPrimitives",
     message:
-      "Use '@/components/ui' button exports in migrated app surfaces; buttonPrimitives is a compatibility shim.",
+      "Use '@/components/ui' button exports; buttonPrimitives has been removed.",
   },
   {
     name: "@headlessui/react",

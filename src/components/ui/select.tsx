@@ -7,11 +7,18 @@ export { segmentedButtonClass, segmentedGroupClass } from './segmented-control';
 export const listboxButtonClass =
   'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
 
-export const listboxOptionsClass =
-  'z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none [--anchor-gap:0.25rem]';
+export const listboxPanelClass =
+  'z-50 max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none';
 
-export const listboxOptionClass = (active: boolean) =>
-  cn('relative cursor-pointer select-none rounded-sm py-1.5 pl-9 pr-3 text-sm', active ? 'bg-accent-wash text-foreground' : 'text-foreground');
+export const listboxOptionsClass =
+  cn(listboxPanelClass, 'w-[var(--button-width)] [--anchor-gap:0.25rem]');
+
+export const listboxOptionClass = (active: boolean, selected = false, inset: 'check' | 'none' = 'check') =>
+  cn(
+    'relative cursor-pointer select-none rounded-sm py-1.5 text-sm',
+    inset === 'check' ? 'pl-9 pr-3' : 'px-2.5',
+    selected ? 'bg-accent text-background font-medium' : active ? 'bg-accent-wash text-foreground' : 'text-foreground',
+  );
 
 export function Select({
   value,
@@ -32,7 +39,7 @@ export function Select({
       </ListboxButton>
       <ListboxOptions anchor="bottom" className={listboxOptionsClass}>
         {options.map((option) => (
-          <ListboxOption key={option.value} value={option.value} className={({ active }) => listboxOptionClass(active)}>
+          <ListboxOption key={option.value} value={option.value} className={({ active, selected }) => listboxOptionClass(active, selected)}>
             {({ selected }) => (
               <>
                 <span className="absolute left-2 text-accent">{selected ? '*' : ''}</span>

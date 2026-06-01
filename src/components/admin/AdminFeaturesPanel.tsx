@@ -13,8 +13,8 @@ import {
   listboxButtonClass,
   listboxOptionClass,
   listboxOptionsClass,
-} from '@/components/formPrimitives';
-import { buttonClass } from '@/components/ui/buttonPrimitives';
+  buttonClass,
+} from '@/components/ui';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 
