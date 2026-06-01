@@ -39,6 +39,7 @@ const PDFViewer = dynamic(
 );
 
 const PARSE_LOADER_EXPAND_DELAY_MS = 320;
+const INITIAL_LOADER_DELAY_MS = 180;
 
 export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
@@ -70,6 +71,7 @@ export default function PDFViewerPage() {
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'segments'>(null);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [showDetailedParseLoader, setShowDetailedParseLoader] = useState(false);
+  const [showInitialLoader, setShowInitialLoader] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
@@ -90,6 +92,7 @@ export default function PDFViewerPage() {
     setIsPdfViewerReady(false);
     setError(null);
     setActiveSidebar(null);
+    setShowInitialLoader(false);
     inFlightDocIdRef.current = null;
     loadedDocIdRef.current = null;
   }, [id]);
@@ -154,6 +157,17 @@ export default function PDFViewerPage() {
   }, [loadDocument]);
 
   useUnmountCleanupRef(clearCurrDoc);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setShowInitialLoader(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setShowInitialLoader(true);
+    }, INITIAL_LOADER_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [isLoading, id]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -281,6 +295,7 @@ export default function PDFViewerPage() {
       : 0;
     const hasMeasuredProgress = totalPages > 0;
     const isMerging = parseProgress?.phase === 'merge';
+    const compactProgressWidth = hasMeasuredProgress ? `${progressPercent}%` : '24%';
 
     let statusText = 'Loading PDF...';
     let statusSubText = 'Initializing document renderer';
@@ -365,10 +380,11 @@ export default function PDFViewerPage() {
                   <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
                 </span>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-1.5">
-                <span className="h-1.5 rounded-full bg-accent-wash animate-pulse" />
-                <span className="h-1.5 rounded-full bg-accent-wash animate-pulse [animation-delay:120ms]" />
-                <span className="h-1.5 rounded-full bg-accent-wash animate-pulse [animation-delay:220ms]" />
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-solid">
+                <div
+                  className={`h-full rounded-full bg-accent transition duration-slow ease-standard ${hasMeasuredProgress ? '' : 'animate-pulse'}`}
+                  style={{ width: compactProgressWidth }}
+                />
               </div>
             </div>
           )}
@@ -423,7 +439,7 @@ export default function PDFViewerPage() {
             />
           </div>
         ) : null}
-        {isLoading || !isParseReady || !isPdfViewerReady ? (
+        {(!isLoading || showInitialLoader) && (isLoading || !isParseReady || !isPdfViewerReady) ? (
           <div className="absolute inset-0 z-10" data-testid="pdf-status-loader">
             {renderPdfStatusLoader()}
           </div>
