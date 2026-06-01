@@ -21,10 +21,10 @@ export function CreateFolderDialog({
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <TransitionChild
           as={Fragment}
-          enter="ease-out duration-300"
+          enter="ease-standard duration-slow"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="ease-standard duration-base"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
@@ -35,14 +35,14 @@ export function CreateFolderDialog({
           <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
             <TransitionChild
               as={Fragment}
-              enter="ease-out duration-300"
+              enter="ease-standard duration-slow"
               enterFrom="opacity-0 scale-95"
               enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
+              leave="ease-standard duration-base"
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition-all">
+              <DialogPanel className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
                 <DialogTitle as="h3" className="text-lg font-semibold text-foreground">
                   Create New Folder
                 </DialogTitle>

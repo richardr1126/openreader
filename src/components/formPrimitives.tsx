@@ -39,7 +39,7 @@ export const inputClass =
   'w-full rounded-md bg-background border border-offbase px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent';
 
 export const listboxButtonClass =
-  'relative w-full cursor-pointer rounded-md bg-background border border-offbase py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent hover:bg-base transition-transform duration-200 ease-out hover:scale-[1.01]';
+  'relative w-full cursor-pointer rounded-md bg-background border border-offbase py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent hover:bg-base transition-colors duration-fast ease-standard';
 export const listboxOptionsClass =
   'z-50 w-[var(--button-width)] max-h-60 overflow-y-auto overscroll-contain rounded-md bg-background p-1 shadow-lg ring-1 ring-offbase focus:outline-none [--anchor-gap:0.25rem]';
 export const listboxOptionClass = (active: boolean) =>
@@ -48,10 +48,10 @@ export const listboxOptionClass = (active: boolean) =>
 export const segmentedGroupClass =
   'grid gap-1 rounded-full border border-offbase bg-background p-1';
 export const segmentedButtonClass = (active: boolean) =>
-  `rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors transition-transform duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+  `rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors duration-fast ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
     active
-      ? 'bg-accent text-background hover:scale-[1.01]'
-      : 'text-muted hover:bg-base hover:text-foreground hover:scale-[1.02]'
+      ? 'bg-accent text-background'
+      : 'text-muted hover:bg-base hover:text-foreground'
   }`;
 
 export function Section({
@@ -108,7 +108,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-lg border border-offbase bg-background px-3 py-2 transition-transform duration-200 ease-out hover:scale-[1.005] ${className}`}>
+    <div className={`rounded-lg border border-offbase bg-background px-3 py-2 transition-colors duration-fast ease-standard ${className}`}>
       {children}
     </div>
   );
@@ -159,13 +159,13 @@ export function Switch({
       aria-describedby={ariaDescribedBy}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-offbase transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${s.track} ${
+      className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-offbase transition-colors duration-fast ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${s.track} ${
         checked ? 'bg-accent' : 'bg-offbase'
       }`}
     >
       <span
         aria-hidden="true"
-        className={`pointer-events-none inline-block rounded-full bg-background shadow-sm ring-0 transition-transform duration-200 ease-out ${s.thumb} ${
+        className={`pointer-events-none inline-block rounded-full bg-background shadow-sm ring-0 transition-transform duration-fast ease-standard ${s.thumb} ${
           checked ? s.on : s.off
         }`}
       />
@@ -194,8 +194,8 @@ export function ToggleRow({
   const descId = useId();
   const rowClass =
     variant === 'flat'
-      ? 'px-0.5 pt-1 pb-2 border-b border-offbase last:border-b-0 transition-transform duration-200 ease-out hover:scale-[1.003]'
-      : 'rounded-md border border-offbase bg-background px-2.5 py-1.5 transition-transform duration-200 ease-out hover:scale-[1.005]';
+      ? 'px-0.5 pt-1 pb-2 border-b border-offbase last:border-b-0 transition-colors duration-fast ease-standard'
+      : 'rounded-md border border-offbase bg-background px-2.5 py-1.5 transition-colors duration-fast ease-standard';
   const handleTextToggle = () => {
     if (!disabled) onChange(!checked);
   };
@@ -243,7 +243,7 @@ export function CheckItem({
       <span
         id={labelId}
         onClick={handleTextToggle}
-        className={`flex-1 min-w-0 truncate text-xs leading-4 text-foreground select-none transition-colors duration-200 ease-out group-hover:text-accent ${
+        className={`flex-1 min-w-0 truncate text-xs leading-4 text-foreground select-none transition-colors duration-fast ease-standard group-hover:text-accent ${
           disabled ? '' : 'cursor-pointer'
         }`}
       >

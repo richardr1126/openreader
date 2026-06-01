@@ -34,8 +34,8 @@ export function VoicesControlBase({
     : 'bottom-full right-0 mb-1';
 
   const buttonClass = variant === 'field'
-    ? 'relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.01] hover:text-accent w-full'
-    : 'flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent';
+    ? 'relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-base ease-standard hover:text-accent w-full'
+    : 'flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-base ease-standard hover:text-accent';
 
   const iconClass = variant === 'field'
     ? 'h-3.5 w-3.5 shrink-0'

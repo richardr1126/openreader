@@ -24,7 +24,7 @@ export function CodeBlock({ children }: { children: string }) {
         className={buttonClass({
           variant: 'secondary',
           size: 'icon',
-          className: 'absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:scale-[1.05]',
+          className: 'absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100',
         })}
         title="Copy to clipboard"
       >

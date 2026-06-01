@@ -155,9 +155,7 @@ export function DocumentUploader({
     noKeyboard: variant === 'overlay'
   });
 
-  const containerBase = `group w-full rounded transform transition-all duration-200 ease-in-out ${
-    variant === 'compact' ? 'hover:scale-[1.01]' : ''
-  } ${
+  const containerBase = `group w-full rounded transition duration-base ease-standard ${
     isUploading || isConverting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
   } ${className}`;
 
@@ -171,7 +169,7 @@ export function DocumentUploader({
       : `${
           isDragActive
             ? 'border-2 border-dashed border-accent bg-base text-foreground'
-            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-base hover:scale-[1.01]'
+            : 'border-2 border-dashed border-muted bg-transparent text-foreground hover:border-accent hover:bg-base'
         }`;
 
   const paddingClass = variant === 'compact' ? 'py-1 px-2 rounded-md' : 'py-5 px-3 rounded-lg';
@@ -219,7 +217,7 @@ export function DocumentUploader({
       <input {...getInputProps()} />
       {variant === 'compact' ? (
         <div className="flex items-center gap-2 text-left w-full min-w-0">
-          <UploadIcon className="w-3.5 h-3.5 text-muted group-hover:text-accent shrink-0 transition-colors duration-200" />
+          <UploadIcon className="w-3.5 h-3.5 text-muted group-hover:text-accent shrink-0 transition-colors duration-base" />
           {isUploading ? (
             <p className="text-[12px] font-medium truncate flex-1">Uploading…</p>
           ) : isConverting ? (

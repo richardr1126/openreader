@@ -36,7 +36,7 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
             href="/signup"
             className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-md
                      bg-accent text-background hover:bg-secondary-accent
-                     transform transition-transform duration-200 hover:scale-[1.04]"
+                     transform transition-transform duration-base"
           >
             Sign up for a higher limit
           </Link>

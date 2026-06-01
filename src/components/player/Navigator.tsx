@@ -56,7 +56,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       <Button
         onClick={() => skipToLocation(currentPage - 1, true)}
         disabled={currentPage <= 1}
-        className="relative p-2 rounded-full text-foreground hover:bg-offbase data-[hover]:bg-offbase data-[active]:bg-offbase transition-all duration-200 focus:outline-none disabled:opacity-50 transform ease-in-out hover:scale-[1.09] hover:text-accent"
+        className="relative p-2 rounded-full text-foreground hover:bg-offbase data-[hover]:bg-offbase data-[active]:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
         aria-label="Previous page"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -67,7 +67,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       {/* Page number popup */}
       <Popover className="relative mb-1">
         <PopoverButton
-          className="bg-offbase px-2 py-0.5 rounded-full focus:outline-none cursor-pointer hover:bg-offbase transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
+          className="bg-offbase px-2 py-0.5 rounded-full focus:outline-none cursor-pointer hover:bg-offbase transform transition-transform duration-base ease-standard hover:text-accent"
           onClick={handlePopoverOpen}
         >
           <p className="text-xs whitespace-nowrap">
@@ -99,7 +99,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       <Button
         onClick={() => skipToLocation(currentPage + 1, true)}
         disabled={currentPage >= (numPages || 1)}
-        className="relative p-2 rounded-full text-foreground hover:bg-offbase data-[hover]:bg-offbase data-[active]:bg-offbase transition-all duration-200 focus:outline-none disabled:opacity-50 transform ease-in-out hover:scale-[1.09] hover:text-accent"
+        className="relative p-2 rounded-full text-foreground hover:bg-offbase data-[hover]:bg-offbase data-[active]:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 transform ease-standard hover:text-accent"
         aria-label="Next page"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">

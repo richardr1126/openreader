@@ -62,7 +62,7 @@ function HeaderCell({
         onSortChange(field, nextDir);
       }}
       className={
-        'flex items-center gap-1 px-2 py-1.5 text-[10px] uppercase tracking-wide font-semibold transition-colors duration-200 ease-out hover:text-accent ' +
+        'flex items-center gap-1 px-2 py-1.5 text-[10px] uppercase tracking-wide font-semibold transition-colors duration-base ease-standard hover:text-accent ' +
         (active ? 'text-accent' : 'text-muted') +
         (align === 'right' ? ' justify-end' : '') +
         ' ' +
@@ -131,7 +131,7 @@ function DocRow({
       data-doc-tile
       aria-selected={isSelected}
       className={
-        'grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px] items-center text-[12px] border-b border-offbase transition-colors duration-200 ease-out ' +
+        'grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px] items-center text-[12px] border-b border-offbase transition-colors duration-base ease-standard ' +
         (isSelected
           ? 'bg-offbase text-accent'
           : 'text-foreground hover:bg-offbase') +
@@ -161,7 +161,7 @@ function DocRow({
           e.stopPropagation();
           onDeleteDoc(doc);
         }}
-        className="h-7 w-7 flex items-center justify-center text-muted hover:text-accent hover:bg-offbase hover:scale-[1.02] rounded transition-all duration-200 ease-out"
+        className="h-7 w-7 flex items-center justify-center text-muted hover:text-accent hover:bg-offbase rounded transition duration-base ease-standard"
         aria-label={`Delete ${doc.name}`}
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

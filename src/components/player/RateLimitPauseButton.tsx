@@ -16,7 +16,7 @@ export function RateLimitPauseButton() {
       onClick={() => {
         if (isPlaying) togglePlay();
       }}
-      className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition-all duration-200 focus:outline-none h-8 w-8 flex items-center justify-center transform ease-in-out hover:scale-[1.09] hover:text-accent"
+      className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
       aria-label="Pause"
     >
       <PauseIcon className="w-5 h-5" />

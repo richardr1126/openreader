@@ -22,7 +22,7 @@ export function ZoomControl({
         className={buttonClass({
           variant: 'ghost',
           size: 'icon',
-          className: 'h-6 w-6 text-sm leading-none hover:scale-[1.09]',
+          className: 'h-6 w-6 text-sm leading-none',
         })}
         aria-label="Zoom out"
       >
@@ -36,7 +36,7 @@ export function ZoomControl({
         className={buttonClass({
           variant: 'ghost',
           size: 'icon',
-          className: 'h-6 w-6 text-sm leading-none hover:scale-[1.09]',
+          className: 'h-6 w-6 text-sm leading-none',
         })}
         aria-label="Zoom in"
       >

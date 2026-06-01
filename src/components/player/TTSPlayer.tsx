@@ -51,7 +51,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
         {/* Playback Controls */}
         <Button
           onClick={skipBackward}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition-all duration-200 focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-in-out hover:scale-[1.09] hover:text-accent"
+          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label="Skip backward"
           disabled={isProcessing}
         >
@@ -60,7 +60,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
 
         <Button
           onClick={togglePlay}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition-all duration-200 focus:outline-none h-8 w-8 flex items-center justify-center transform ease-in-out hover:scale-[1.09] hover:text-accent"
+          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label={isPlaying ? 'Pause' : 'Play'}
           disabled={isProcessing && !isPlaying}
         >
@@ -69,7 +69,7 @@ export default function TTSPlayer({ currentPage, numPages }: {
 
         <Button
           onClick={skipForward}
-          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition-all duration-200 focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-in-out hover:scale-[1.09] hover:text-accent"
+          className="relative p-1.5 rounded-md text-foreground hover:bg-offbase transition duration-base focus:outline-none disabled:opacity-50 h-8 w-8 flex items-center justify-center transform ease-standard hover:text-accent"
           aria-label="Skip forward"
           disabled={isProcessing}
         >

@@ -261,7 +261,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             ref={imageRef}
             src={imagePreview}
             alt={`${doc.name} preview`}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${isImageReady ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-fast ${isImageReady ? 'opacity-100' : 'opacity-0'}`}
             draggable={false}
             loading="lazy"
             onLoad={() => {

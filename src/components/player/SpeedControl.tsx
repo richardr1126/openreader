@@ -88,7 +88,7 @@ export const SpeedControl = ({
 
   return (
     <Popover className="relative">
-      <PopoverButton className="flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent">
+      <PopoverButton className="flex items-center space-x-0.5 sm:space-x-1 bg-transparent text-foreground text-xs sm:text-sm focus:outline-none cursor-pointer hover:bg-offbase rounded pl-1.5 sm:pl-2 pr-0.5 sm:pr-1 py-0.5 sm:py-1 transform transition-transform duration-base ease-standard hover:text-accent">
         <SpeedometerIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         <span className="sm:hidden">{compactTriggerLabel}</span>
         <span className="hidden sm:inline">{triggerLabel}</span>

@@ -138,7 +138,7 @@ export function DocumentTile({
       data-doc-tile
       aria-selected={isSelected}
       className={
-        'group relative flex flex-col rounded-md overflow-hidden border transition-all duration-200 ease-out hover:scale-[1.01] ' +
+        'group relative flex flex-col rounded-md overflow-hidden border transition duration-base ease-standard ' +
         (isSelected
           ? 'border-accent bg-offbase'
           : 'border-offbase bg-base hover:bg-offbase hover:border-accent') +
@@ -187,7 +187,7 @@ export function DocumentTile({
         {showDeleteButton && (
           <Button
             onClick={() => onDelete(doc)}
-            className={`inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base focus:outline-none transition-colors duration-200 ${TRASH_BTN_CLASSES[iconSize]}`}
+            className={`inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base focus:outline-none transition-colors duration-base ${TRASH_BTN_CLASSES[iconSize]}`}
             aria-label={`Delete ${doc.name}`}
           >
             <svg className={TRASH_ICON_CLASSES[iconSize]} fill="none" stroke="currentColor" viewBox="0 0 24 24">

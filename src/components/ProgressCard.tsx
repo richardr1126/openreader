@@ -57,7 +57,7 @@ export function ProgressCard({
           className={buttonClass({
             variant: 'ghost',
             size: 'xs',
-            className: 'shrink-0 hover:bg-background/50 hover:scale-[1.04]',
+            className: 'shrink-0 hover:bg-background/50',
           })}
           onClick={(e) => onCancel(e)}
         >
@@ -68,7 +68,7 @@ export function ProgressCard({
       {/* Progress bar */}
       <div className="w-full bg-background rounded-full overflow-hidden h-1.5">
         <div
-          className="h-full bg-accent transition-all duration-300 ease-out"
+          className="h-full bg-accent transition duration-slow ease-standard"
           style={{ width: `${progress}%` }}
         />
       </div>

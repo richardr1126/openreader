@@ -142,11 +142,11 @@ export function SettingsTrigger({
   return (
     <Button
       onClick={onOpen}
-      className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-200 ease-out hover:scale-[1.01] ${className}`}
+      className={`inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase hover:text-accent transition-transform transition-colors duration-base ease-standard ${className}`}
       aria-label="Settings"
       tabIndex={0}
     >
-      <SettingsIcon className="w-4 h-4 transition-transform duration-200 ease-out hover:scale-[1.01] hover:rotate-45" />
+      <SettingsIcon className="w-4 h-4 transition-transform duration-base ease-standard hover:rotate-45" />
       {triggerLabel && <span className="ml-2">{triggerLabel}</span>}
     </Button>
   );
@@ -519,10 +519,10 @@ export function SettingsModal({
         >
           <TransitionChild
             as={Fragment}
-            enter="ease-out duration-300"
+            enter="ease-standard duration-slow"
             enterFrom="opacity-0"
             enterTo="opacity-100"
-            leave="ease-in duration-200"
+            leave="ease-standard duration-base"
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
@@ -533,14 +533,14 @@ export function SettingsModal({
             <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
               <TransitionChild
                 as={Fragment}
-                enter="ease-out duration-300"
+                enter="ease-standard duration-slow"
                 enterFrom="opacity-0 scale-95"
                 enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
+                leave="ease-standard duration-base"
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel data-testid="settings-modal" className="relative w-full max-w-4xl transform rounded-xl bg-base text-left align-middle shadow-xl transition-all overflow-hidden border border-offbase">
+                <DialogPanel data-testid="settings-modal" className="relative w-full max-w-4xl transform rounded-xl bg-base text-left align-middle shadow-xl transition overflow-hidden border border-offbase">
                   {/* Header */}
                   <div className="flex items-center justify-between px-5 py-3 border-b border-offbase">
                     <div className="flex items-baseline gap-4">
@@ -666,7 +666,7 @@ export function SettingsModal({
                                 </ListboxButton>
                                 <Transition
                                   as={Fragment}
-                                  leave="transition ease-in duration-100"
+                                  leave="transition ease-standard duration-fast"
                                   leaveFrom="opacity-100"
                                   leaveTo="opacity-0"
                                 >
@@ -782,7 +782,7 @@ export function SettingsModal({
                                 </ListboxButton>
                                 <Transition
                                   as={Fragment}
-                                  leave="transition ease-in duration-100"
+                                  leave="transition ease-standard duration-fast"
                                   leaveFrom="opacity-100"
                                   leaveTo="opacity-0"
                                 >
@@ -908,7 +908,7 @@ export function SettingsModal({
                               return (
                                 <button
                                   onClick={() => setTheme(systemTheme.id)}
-                                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 w-full text-left transition-all duration-200 ease-in-out transform hover:scale-[1.02] border
+                                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 w-full text-left transition duration-base ease-standard transform border
                                     ${isActive
                                       ? 'border-accent'
                                       : 'border-offbase hover:border-muted'
@@ -952,7 +952,7 @@ export function SettingsModal({
                                         setTheme('custom');
                                         setIsCustomExpanded(true);
                                       }}
-                                      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 flex-1 text-left transition-all duration-200 ease-in-out transform hover:scale-[1.02] border
+                                      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 flex-1 text-left transition duration-base ease-standard transform border
                                         ${isActive
                                           ? 'border-accent'
                                           : 'border-offbase hover:border-muted'
@@ -984,7 +984,7 @@ export function SettingsModal({
                                       style={{ color: colors.muted, backgroundColor: colors.base }}
                                       aria-label={isCustomExpanded ? 'Collapse color picker' : 'Expand color picker'}
                                     >
-                                      <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isCustomExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <svg className={`w-3.5 h-3.5 transition-transform duration-base ${isCustomExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                       </svg>
                                     </button>
@@ -1052,7 +1052,7 @@ export function SettingsModal({
                                   <button
                                     key={t.id}
                                     onClick={() => setTheme(t.id)}
-                                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-200 ease-in-out transform hover:scale-[1.02] border
+                                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition duration-base ease-standard transform border
                                       ${isActive
                                         ? 'border-accent'
                                         : 'border-offbase hover:border-muted'
@@ -1094,7 +1094,7 @@ export function SettingsModal({
                                   <button
                                     key={t.id}
                                     onClick={() => setTheme(t.id)}
-                                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-200 ease-in-out transform hover:scale-[1.02] border
+                                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition duration-base ease-standard transform border
                                       ${isActive
                                         ? 'border-accent'
                                         : 'border-offbase hover:border-muted'
@@ -1247,7 +1247,7 @@ export function SettingsModal({
                               <>
                                 <Button
                                   onClick={handleSignOut}
-                                  className={buttonClass({ variant: 'outline', size: 'md', className: 'hover:scale-[1.04]' })}
+                                  className={buttonClass({ variant: 'outline', size: 'md' })}
                                 >
                                   Disconnect account
                                 </Button>
@@ -1278,19 +1278,19 @@ export function SettingsModal({
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                   <Link href="/signin">
-                                    <Button className={buttonClass({ variant: 'outline', size: 'md', className: 'hover:scale-[1.04]' })}>
+                                    <Button className={buttonClass({ variant: 'outline', size: 'md' })}>
                                       Connect
                                     </Button>
                                   </Link>
                                   {runtimeConfig.enableUserSignups && (
                                     <Link href="/signup">
-                                      <Button className={buttonClass({ variant: 'primary', size: 'md', className: 'hover:scale-[1.04]' })}>
+                                      <Button className={buttonClass({ variant: 'primary', size: 'md' })}>
                                         Create account
                                       </Button>
                                     </Link>
                                   )}
                                   <Link href="/?redirect=false">
-                                    <Button className={buttonClass({ variant: 'outline', size: 'md', className: 'hover:scale-[1.04]' })}>
+                                    <Button className={buttonClass({ variant: 'outline', size: 'md' })}>
                                       Back to landing page
                                     </Button>
                                   </Link>
@@ -1439,7 +1439,7 @@ function SettingsChangelogPanel({
       <div className="flex items-center gap-3 px-4 py-3 border-b border-offbase bg-background">
         <Button
           onClick={onClose}
-          className="inline-flex items-center justify-center rounded-md text-muted hover:text-accent hover:bg-base transition-all duration-200 ease-in-out transform hover:scale-[1.01]"
+          className="inline-flex items-center justify-center rounded-md text-muted hover:text-accent hover:bg-base transition duration-base ease-standard transform"
           aria-label="Back to settings"
           title="Back"
         >
@@ -1472,7 +1472,7 @@ function SettingsChangelogPanel({
               href="https://github.com/richardr1126/openreader/releases"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex text-xs font-medium text-accent hover:underline transition-all duration-200 ease-in-out transform hover:scale-[1.02]"
+              className="inline-flex text-xs font-medium text-accent hover:underline transition duration-base ease-standard transform"
             >
               Open GitHub Releases
             </a>
@@ -1497,7 +1497,7 @@ function SettingsChangelogPanel({
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => ({ ...prev, [entry.tag_name]: !isExpanded }))}
-                className="w-full text-left py-2 flex items-center gap-2 hover:bg-base transition-all duration-200 ease-in-out transform hover:scale-[1.01]"
+                className="w-full text-left py-2 flex items-center gap-2 hover:bg-base transition duration-base ease-standard transform"
               >
                 <ChevronRightIcon
                   className={`w-3.5 h-3.5 shrink-0 text-muted transition-transform ${
@@ -1542,7 +1542,7 @@ function SettingsChangelogPanel({
                     href={entry.html_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex text-xs font-medium text-accent hover:underline transition-all duration-200 ease-in-out transform hover:scale-[1.02]"
+                    className="inline-flex text-xs font-medium text-accent hover:underline transition duration-base ease-standard transform"
                   >
                     View on GitHub
                   </a>

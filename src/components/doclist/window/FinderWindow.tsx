@@ -69,10 +69,10 @@ export function FinderWindow({
         >
           <TransitionChild
             as={Fragment}
-            enter="transition-opacity duration-150"
+            enter="transition-opacity duration-fast"
             enterFrom="opacity-0"
             enterTo="opacity-100"
-            leave="transition-opacity duration-100"
+            leave="transition-opacity duration-fast"
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
@@ -81,10 +81,10 @@ export function FinderWindow({
           <div className="fixed inset-y-0 left-0 flex max-w-full">
             <TransitionChild
               as={Fragment}
-              enter="transition-transform duration-200 ease-out"
+              enter="transition-transform duration-base ease-standard"
               enterFrom="-translate-x-full"
               enterTo="translate-x-0"
-              leave="transition-transform duration-150 ease-in"
+              leave="transition-transform duration-fast ease-standard"
               leaveFrom="translate-x-0"
               leaveTo="-translate-x-full"
             >

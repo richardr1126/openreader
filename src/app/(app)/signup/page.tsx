@@ -234,7 +234,7 @@ export default function SignUpPage() {
             type="submit"
             disabled={loading}
             onClick={handleSignUp}
-            className={buttonClass({ variant: 'primary', size: 'md', className: 'w-full hover:scale-[1.02]' })}
+            className={buttonClass({ variant: 'primary', size: 'md', className: 'w-full' })}
           >
             {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Create Account'}
           </Button>

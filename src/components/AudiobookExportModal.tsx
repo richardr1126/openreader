@@ -560,7 +560,7 @@ export function AudiobookExportModal({
 			                                          disabled={chapters.length > 0 || settingsLocked}
 			                                        >
 			                                          <div className="relative">
-			                                            <ListboxButton className="relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.01] hover:text-accent w-full">
+			                                            <ListboxButton className="relative cursor-pointer rounded-lg bg-base py-1.5 pl-3 pr-10 text-left text-foreground focus:outline-none focus:ring-2 focus:ring-accent transform transition-transform duration-base ease-standard hover:text-accent w-full">
 			                                              <span className="block truncate text-sm font-medium">{format.toUpperCase()}</span>
 			                                              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
 			                                                <ChevronUpDownIcon className="h-4 w-4 text-muted" />
@@ -568,7 +568,7 @@ export function AudiobookExportModal({
 			                                            </ListboxButton>
 			                                            <Transition
 			                                              as={Fragment}
-			                                              leave="transition ease-in duration-100"
+			                                              leave="transition ease-standard duration-fast"
 			                                              leaveFrom="opacity-100"
 			                                              leaveTo="opacity-0"
 			                                            >
@@ -673,7 +673,7 @@ export function AudiobookExportModal({
 			                                    className="flex-1 inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
 			                                            font-medium text-background hover:bg-secondary-accent focus:outline-none
 			                                            focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-			                                            transform transition-transform duration-200 ease-in-out hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+			                                            transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
 			                                  >
 			                                    Start Generation
 			                                  </Button>
@@ -685,7 +685,7 @@ export function AudiobookExportModal({
 			                                    className="flex-1 inline-flex justify-center rounded-lg bg-accent px-3 py-2 text-sm
 			                                            font-medium text-background hover:bg-secondary-accent focus:outline-none
 			                                            focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-			                                            transform transition-transform duration-200 ease-in-out hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+			                                            transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
 			                                  >
 			                                    Resume
 			                                  </Button>
@@ -697,7 +697,7 @@ export function AudiobookExportModal({
 			                                    className="inline-flex justify-center rounded-lg border border-red-500 bg-transparent px-3 py-2 text-sm
 			                                           font-medium text-red-500 hover:bg-red-500 hover:text-background focus:outline-none
 			                                           focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2
-			                                           transform transition-transform duration-200 ease-in-out hover:scale-[1.01]"
+			                                           transform transition-transform duration-base ease-standard"
 			                                    title="Delete all generated chapters/pages for this document"
 			                                  >
 			                                    Reset
@@ -760,7 +760,7 @@ export function AudiobookExportModal({
                                       <Button
                                         onClick={() => handleRegenerateChapter(chapter)}
                                         disabled={regeneratingChapter !== null || chapter.status === 'generating' || isGenerating}
-                                        className="inline-flex items-center justify-center rounded-full bg-offbase text-accent hover:bg-accent/20 p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-200 ease-in-out hover:scale-[1.04] disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="inline-flex items-center justify-center rounded-full bg-offbase text-accent hover:bg-accent/20 p-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transform transition-transform duration-base ease-standard disabled:opacity-50 disabled:cursor-not-allowed"
                                         title={chapter.status === 'generating' ? 'Generating...' : 'Regenerate this chapter'}
                                       >
                                         <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index || chapter.status === 'generating' ? 'animate-spin' : ''}`} />
@@ -782,17 +782,17 @@ export function AudiobookExportModal({
                                     {((onRegenerateChapter && !isGenerating) || chapter.status === 'completed') && (
                                       <Menu as="div" className="relative inline-block text-left">
                                         <MenuButton
-                                          className="inline-flex items-center justify-center rounded-md p-1.5 hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-accent text-muted hover:text-foreground transform transition-transform duration-200 ease-in-out hover:scale-[1.04]"
+                                          className="inline-flex items-center justify-center rounded-md p-1.5 hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-accent text-muted hover:text-foreground transform transition-transform duration-base ease-standard"
                                           title="Chapter actions"
                                         >
                                           <DotsVerticalIcon className="h-5 w-5" />
                                         </MenuButton>
                                         <Transition
                                           as={Fragment}
-                                          enter="transition ease-out duration-100"
+                                          enter="transition ease-standard duration-fast"
                                           enterFrom="transform opacity-0 scale-95"
                                           enterTo="transform opacity-100 scale-100"
-                                          leave="transition ease-in duration-75"
+                                          leave="transition ease-standard duration-fast"
                                           leaveFrom="transform opacity-100 scale-100"
                                           leaveTo="transform opacity-0 scale-95"
                                         >
@@ -873,10 +873,10 @@ export function AudiobookExportModal({
                                   onClick={handleDownloadComplete}
                                   disabled={isCombining}
                                   className="w-full inline-flex justify-center items-center space-x-2 rounded-lg bg-accent px-3 py-1.5 text-sm
-                                        disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
+                                        disabled:opacity-50 disabled:cursor-not-allowed
                                         font-medium text-background hover:bg-secondary-accent focus:outline-none 
                                         focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                                        transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-background"
+                                        transform transition-transform duration-base ease-standard hover:text-background"
                                 >
                                   <DownloadIcon className="h-5 w-5" />
                                   <span>{isCombining ? 'Combining chapters...' : `Full Download (${format.toUpperCase()})`}</span>

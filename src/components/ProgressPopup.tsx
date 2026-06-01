@@ -32,10 +32,10 @@ export function ProgressPopup({
     <Transition
       show={isOpen}
       as={Fragment}
-      enter="transform transition ease-out duration-300"
+      enter="transform transition ease-standard duration-slow"
       enterFrom="opacity-0 -translate-y-4"
       enterTo="opacity-100 translate-y-0"
-      leave="transform transition ease-in duration-200"
+      leave="transform transition ease-standard duration-base"
       leaveFrom="opacity-100 translate-y-0"
       leaveTo="opacity-0 -translate-y-4"
     >

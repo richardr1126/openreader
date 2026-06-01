@@ -140,10 +140,10 @@ export function DexieMigrationModal({
       <Dialog as="div" className="relative z-[80]" onClose={() => (closeDisabled ? null : onComplete())}>
         <TransitionChild
           as={Fragment}
-          enter="ease-out duration-300"
+          enter="ease-standard duration-slow"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="ease-standard duration-base"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
@@ -154,14 +154,14 @@ export function DexieMigrationModal({
           <div className="flex min-h-full items-start justify-center p-4 pt-6 text-center sm:items-center sm:pt-4">
             <TransitionChild
               as={Fragment}
-              enter="ease-out duration-300"
+              enter="ease-standard duration-slow"
               enterFrom="opacity-0 scale-95"
               enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
+              leave="ease-standard duration-base"
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel data-testid="migration-modal" className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition-all">
+              <DialogPanel data-testid="migration-modal" className="w-full max-w-md transform rounded-2xl bg-base p-6 text-left align-middle shadow-xl transition">
                 <DialogTitle as="h3" className="text-lg font-semibold leading-6 text-foreground mb-4">
                   {title}
                 </DialogTitle>
@@ -192,7 +192,7 @@ export function DexieMigrationModal({
                     className="inline-flex justify-center rounded-lg bg-background px-3 py-1.5 text-sm 
                              font-medium text-foreground hover:bg-offbase focus:outline-none 
                              focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-accent
+                             transform transition-transform duration-base ease-standard hover:text-accent
                              disabled:opacity-50"
                   >
                     Skip
@@ -203,7 +203,7 @@ export function DexieMigrationModal({
                     className="inline-flex justify-center rounded-lg bg-accent px-3 py-1.5 text-sm 
                              font-medium text-background hover:bg-secondary-accent focus:outline-none 
                              focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2
-                             transform transition-transform duration-200 ease-in-out hover:scale-[1.04] hover:text-background
+                             transform transition-transform duration-base ease-standard hover:text-background
                              disabled:opacity-50"
                   >
                     {isUploading ? 'Uploading…' : 'Upload'}

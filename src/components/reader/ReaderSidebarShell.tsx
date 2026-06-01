@@ -41,10 +41,10 @@ export function ReaderSidebarShell({
       >
         <Transition.Child
           as={Fragment}
-          enter="transition-opacity ease-out duration-200"
+          enter="transition-opacity ease-standard duration-base"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="transition-opacity ease-in duration-150"
+          leave="transition-opacity ease-standard duration-fast"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
@@ -58,10 +58,10 @@ export function ReaderSidebarShell({
 
         <Transition.Child
           as={Fragment}
-          enter="transition ease-out duration-220"
+          enter="transition ease-standard duration-base"
           enterFrom="translate-x-full"
           enterTo="translate-x-0"
-          leave="transition ease-in duration-180"
+          leave="transition ease-standard duration-base"
           leaveFrom="translate-x-0"
           leaveTo="translate-x-full"
         >

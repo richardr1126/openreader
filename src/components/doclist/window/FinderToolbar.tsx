@@ -54,7 +54,7 @@ const ICON_SIZES: Array<{ value: IconSize; label: string }> = [
 
 // Match SettingsModal / UserMenu trigger sizing exactly so all bar buttons share one rhythm.
 const TOOLBAR_BTN =
-  'inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition-all duration-200 ease-out hover:scale-[1.01]';
+  'inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard';
 const TOOLBAR_BTN_INACTIVE =
   'border-offbase text-foreground hover:text-accent hover:border-accent hover:bg-offbase';
 const TOOLBAR_BTN_ACTIVE = 'border-accent bg-offbase text-accent';
@@ -64,7 +64,7 @@ const TOOLBAR_BTN_ACTIVE = 'border-accent bg-offbase text-accent';
 // matches the height of a standalone TOOLBAR_BTN.
 const PILL = 'inline-flex items-center rounded-md border border-offbase bg-base p-0.5 gap-0.5 shrink-0';
 const PILL_SEGMENT =
-  'inline-flex items-center justify-center rounded-[5px] text-xs transition-colors duration-200 ease-out';
+  'inline-flex items-center justify-center rounded-[5px] text-xs transition-colors duration-base ease-standard';
 const PILL_SEGMENT_INACTIVE = 'text-muted hover:bg-offbase hover:text-accent';
 const PILL_SEGMENT_ACTIVE = 'bg-offbase text-accent';
 
@@ -133,7 +133,7 @@ export function FinderToolbar({
                 </button>
                 {isIconsToggle && viewMode === 'icons' && (
                   <div
-                    className="absolute top-full left-1/2 z-30 -translate-x-1/2 pt-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover/icons:opacity-100 group-hover/icons:pointer-events-auto group-focus-within/icons:opacity-100 group-focus-within/icons:pointer-events-auto"
+                    className="absolute top-full left-1/2 z-30 -translate-x-1/2 pt-1 opacity-0 pointer-events-none transition-opacity duration-fast group-hover/icons:opacity-100 group-hover/icons:pointer-events-auto group-focus-within/icons:opacity-100 group-focus-within/icons:pointer-events-auto"
                   >
                     <div className={`${PILL} shadow-lg`}>
                       {ICON_SIZES.map(({ value: sizeValue, label: sizeLabel }) => {
@@ -204,7 +204,7 @@ export function FinderToolbar({
 
         <div className="flex-1 min-w-0" />
 
-        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-background border border-offbase hover:border-accent focus-within:ring-1 focus-within:ring-accent focus-within:border-accent transition-colors duration-200 ease-out w-[160px] md:w-[200px]">
+        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-background border border-offbase hover:border-accent focus-within:ring-1 focus-within:ring-accent focus-within:border-accent transition-colors duration-base ease-standard w-[160px] md:w-[200px]">
           <SearchIcon className="w-3.5 h-3.5 text-muted shrink-0" />
           <input
             type="search"

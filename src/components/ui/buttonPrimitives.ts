@@ -1,9 +1,9 @@
 export const btnBase =
-  'inline-flex items-center justify-center rounded-md text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transition-colors transition-transform duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100';
-export const btnPrimary = `${btnBase} bg-accent text-background hover:bg-secondary-accent hover:scale-[1.03]`;
-export const btnSecondary = `${btnBase} bg-base text-foreground border border-offbase hover:bg-offbase hover:scale-[1.03]`;
-export const btnOutline = `${btnBase} bg-background border border-offbase text-foreground hover:bg-base hover:text-accent hover:scale-[1.02]`;
-export const btnDanger = `${btnBase} bg-red-600 text-white border border-red-700 hover:bg-red-700 hover:scale-[1.02]`;
+  'inline-flex items-center justify-center rounded-md text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 transition-colors duration-fast ease-standard disabled:opacity-50 disabled:cursor-not-allowed';
+export const btnPrimary = `${btnBase} bg-accent text-background hover:bg-secondary-accent`;
+export const btnSecondary = `${btnBase} bg-base text-foreground border border-offbase hover:bg-offbase`;
+export const btnOutline = `${btnBase} bg-background border border-offbase text-foreground hover:bg-base hover:text-accent`;
+export const btnDanger = `${btnBase} bg-danger text-background border border-danger hover:bg-danger`;
 export const btnGhost = `${btnBase} bg-transparent text-foreground hover:bg-base hover:text-accent`;
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';

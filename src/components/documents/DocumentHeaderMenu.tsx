@@ -49,7 +49,7 @@ export function DocumentHeaderMenu({
       {onOpenSegments && (
         <button
           onClick={onOpenSegments}
-          className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition-all duration-200 ease-in-out hover:scale-[1.09] ${
+          className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard ${
             isSegmentsOpen
               ? 'border-accent text-accent bg-offbase'
               : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
@@ -57,13 +57,13 @@ export function DocumentHeaderMenu({
           aria-label={isSegmentsOpen ? 'Hide segments sidebar' : 'Open segments sidebar'}
           title={isSegmentsOpen ? 'Hide Segments' : 'Segments'}
         >
-          <ListIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09]" />
+          <ListIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
         </button>
       )}
       {showAudiobookExport && onOpenAudiobook && (
         <button
           onClick={onOpenAudiobook}
-          className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition-all duration-200 ease-in-out hover:scale-[1.09] ${
+          className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard ${
             isAudiobookOpen
               ? 'border-accent text-accent bg-offbase'
               : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
@@ -71,12 +71,12 @@ export function DocumentHeaderMenu({
           aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
           title={isAudiobookOpen ? 'Hide Export Audiobook' : 'Export Audiobook'}
         >
-          <DownloadIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09]" />
+          <DownloadIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
         </button>
       )}
       <button
         onClick={onOpenSettings}
-        className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition-all duration-200 ease-in-out hover:scale-[1.09] ${
+        className={`inline-flex items-center py-1 px-2 rounded-md border bg-base text-xs transition duration-base ease-standard ${
           isSettingsOpen
             ? 'border-accent text-accent bg-offbase'
             : 'border-offbase text-foreground hover:bg-offbase hover:text-accent'
@@ -84,7 +84,7 @@ export function DocumentHeaderMenu({
         aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
         title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
       >
-        <FileSettingsIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09]" />
+        <FileSettingsIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
       </button>
       <UserMenu />
     </div>
@@ -95,17 +95,17 @@ export function DocumentHeaderMenu({
     <div className="sm:hidden flex items-center">
       <Menu as="div" className="relative inline-block text-left">
         <MenuButton
-          className="inline-flex items-center justify-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.09] hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="inline-flex items-center justify-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           title="Menu"
         >
-          <DotsVerticalIcon className="w-4 h-4 transform transition-transform duration-200 ease-in-out hover:scale-[1.09] hover:text-accent" />
+          <DotsVerticalIcon className="w-4 h-4 transform transition-transform duration-base ease-standard hover:text-accent" />
         </MenuButton>
         <Transition
           as={Fragment}
-          enter="transition ease-out duration-100"
+          enter="transition ease-standard duration-fast"
           enterFrom="transform opacity-0 scale-95"
           enterTo="transform opacity-100 scale-100"
-          leave="transition ease-in duration-75"
+          leave="transition ease-standard duration-fast"
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >

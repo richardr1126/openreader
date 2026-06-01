@@ -163,7 +163,7 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
           <button
             type="button"
             onClick={() => setIsTocOpen(open => !open)}
-            className="inline-flex items-center py-1 px-1 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out transform hover:scale-[1.09] hover:text-accent"
+            className="inline-flex items-center py-1 px-1 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard transform hover:text-accent"
             aria-label={isTocOpen ? 'Hide chapters' : 'Show chapters'}
           >
             <DotsVerticalIcon className="w-4 h-4" />
@@ -171,7 +171,7 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
           <button
             type="button"
             onClick={() => handleLocationChanged('prev')}
-            className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out transform hover:scale-[1.09] hover:text-accent"
+            className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard transform hover:text-accent"
             aria-label="Previous section"
           >
             <ChevronLeftIcon className="w-4 h-4" />
@@ -185,7 +185,7 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
         <button
           type="button"
           onClick={() => handleLocationChanged('next')}
-          className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out transform hover:scale-[1.09] hover:text-accent"
+          className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard transform hover:text-accent"
           aria-label="Next section"
         >
           <ChevronRightIcon className="w-4 h-4" />
@@ -205,7 +205,7 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
                 }}
                 className="
                   px-2 py-1 rounded-md font-medium text-foreground text-center bg-base 
-                  hover:bg-offbase hover:text-accent transition-colors duration-150
+                  hover:bg-offbase hover:text-accent transition-colors duration-fast
                   whitespace-nowrap 
                   flex-1 min-w-[140px]
                 "

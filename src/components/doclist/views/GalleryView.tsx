@@ -92,7 +92,7 @@ function GalleryThumb({
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
       className={
-        'group relative w-[98px] sm:w-[110px] shrink-0 cursor-pointer rounded-lg overflow-hidden border bg-base snap-start transition-all duration-200 ease-out ' +
+        'group relative w-[98px] sm:w-[110px] shrink-0 cursor-pointer rounded-lg overflow-hidden border bg-base snap-start transition duration-base ease-standard ' +
         (active
           ? 'border-accent shadow-[0_10px_24px_-18px_rgba(0,0,0,0.85)] -translate-y-0.5'
           : 'border-offbase hover:border-accent hover:-translate-y-0.5') +
@@ -106,20 +106,20 @@ function GalleryThumb({
       </div>
       <div
         className={
-          'px-2 py-1.5 flex items-center gap-1.5 border-t transition-colors duration-200 ' +
+          'px-2 py-1.5 flex items-center gap-1.5 border-t transition-colors duration-base ' +
           (active ? 'bg-offbase border-accent' : 'bg-base border-offbase')
         }
       >
         <KindIcon
           doc={doc}
           className={
-            'w-3 h-3 shrink-0 transition-colors duration-200 ' +
+            'w-3 h-3 shrink-0 transition-colors duration-base ' +
             (active ? 'text-accent' : 'text-muted')
           }
         />
         <span
           className={
-            'truncate text-[10px] leading-none transition-colors duration-200 ' +
+            'truncate text-[10px] leading-none transition-colors duration-base ' +
             (active ? 'text-accent font-medium' : 'text-foreground')
           }
         >

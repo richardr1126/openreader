@@ -255,7 +255,7 @@ export default function PDFViewerPage() {
         <Link
           href="/app"
           onClick={handleBackToDocuments}
-          className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
+          className="inline-flex items-center px-3 py-1 bg-base text-foreground rounded-lg hover:bg-offbase transition duration-base ease-standard hover:text-accent"
         >
           <svg className="w-4 h-4 mr-2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -309,7 +309,7 @@ export default function PDFViewerPage() {
 
     return (
       <div className="h-full w-full bg-base">
-        <div className={`mx-auto flex h-full items-center px-4 py-6 transition-all duration-300 ease-out ${showDetailedParseLoader ? 'max-w-lg' : 'max-w-md'}`}>
+        <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard ${showDetailedParseLoader ? 'max-w-lg' : 'max-w-md'}`}>
           {showDetailedParseLoader ? (
             <div className="w-full rounded-xl border border-offbase bg-offbase/95 shadow-sm overflow-hidden">
               <div className="h-1 bg-[linear-gradient(90deg,var(--accent),transparent_80%)]" />
@@ -331,7 +331,7 @@ export default function PDFViewerPage() {
                   </div>
                   <div className="h-2 w-full rounded-full bg-offbase overflow-hidden">
                     <div
-                      className="h-full bg-accent transition-all duration-300 ease-out"
+                      className="h-full bg-accent transition duration-slow ease-standard"
                       style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
                     />
                   </div>
@@ -354,7 +354,7 @@ export default function PDFViewerPage() {
               </div>
             </div>
           ) : (
-            <div className="w-full rounded-xl border border-offbase bg-offbase/95 p-4 shadow-sm transition-all duration-300 ease-out overflow-hidden">
+            <div className="w-full rounded-xl border border-offbase bg-offbase/95 p-4 shadow-sm transition duration-slow ease-standard overflow-hidden">
               <div className="h-0.5 -mx-4 -mt-4 mb-3 bg-[linear-gradient(90deg,var(--accent),transparent_75%)]" />
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -384,7 +384,7 @@ export default function PDFViewerPage() {
           <Link
             href="/app"
             onClick={handleBackToDocuments}
-            className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition-all duration-200 ease-in-out hover:scale-[1.04] hover:text-accent"
+            className="inline-flex items-center py-1 px-2 rounded-md border border-offbase bg-base text-foreground text-xs hover:bg-offbase transition duration-base ease-standard hover:text-accent"
             aria-label="Back to documents"
           >
             <svg className="w-3 h-3 mr-2" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">

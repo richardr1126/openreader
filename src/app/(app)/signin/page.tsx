@@ -188,7 +188,7 @@ function SignInContent() {
             type="submit"
             disabled={isAnyLoading}
             onClick={handleSignIn}
-            className={buttonClass({ variant: 'primary', size: 'md', className: 'w-full hover:scale-[1.02]' })}
+            className={buttonClass({ variant: 'primary', size: 'md', className: 'w-full' })}
           >
             {loadingEmail ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Connect'}
           </Button>
@@ -202,7 +202,7 @@ function SignInContent() {
             className={buttonClass({
               variant: 'outline',
               size: 'md',
-              className: 'w-full hover:scale-[1.02] flex items-center justify-center gap-2',
+              className: 'w-full flex items-center justify-center gap-2',
             })}
           >
             {loadingGithub ? (
@@ -222,7 +222,7 @@ function SignInContent() {
               type="button"
               disabled={isAnyLoading}
               onClick={handleAnonymousContinue}
-              className={buttonClass({ variant: 'outline', size: 'md', className: 'w-full hover:scale-[1.02]' })}
+              className={buttonClass({ variant: 'outline', size: 'md', className: 'w-full' })}
             >
               {loadingAnonymous ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Continue anonymously'}
             </Button>

@@ -80,7 +80,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
     <Popover className="relative flex items-center">
       <PopoverButton className="cursor-pointer group focus:outline-none">
         <div
-          className="w-6 h-6 rounded-full border-2 transition-all duration-150 group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-offset-1"
+          className="w-6 h-6 rounded-full border-2 transition duration-fast group-focus-visible:ring-2 group-focus-visible:ring-offset-1"
           style={{
             backgroundColor: value,
             borderColor: isLightColor(value) ? '#00000022' : '#ffffff22',
@@ -92,7 +92,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
         anchor="bottom start"
         transition
         className="z-[60] mt-2 w-56 rounded-xl shadow-xl border border-offbase bg-background p-3 space-y-3
-          transition duration-150 ease-out data-[closed]:opacity-0 data-[closed]:scale-95"
+          transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95"
       >
         {/* Label */}
         <div className="flex items-center justify-between">
@@ -107,7 +107,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
               className="p-1"
               aria-label="Open system color picker"
             >
-              <PaletteIcon className="w-4 h-4 text-muted transform transition-transform duration-200 ease-in-out hover:scale-[1.09] hover:text-accent" />
+              <PaletteIcon className="w-4 h-4 text-muted transform transition-transform duration-base ease-standard hover:text-accent" />
             </button>
             <input
               ref={nativeRef}
@@ -130,7 +130,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
                 key={color}
                 type="button"
                 onClick={() => onChange(color)}
-                className="group/swatch relative w-full aspect-square rounded-full transition-transform duration-100 hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                className="group/swatch relative w-full aspect-square rounded-full transition-transform duration-fast focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
                 style={{
                   backgroundColor: color,
                   boxShadow: selected ? '0 0 0 2px var(--background), 0 0 0 4px var(--foreground)' : undefined,

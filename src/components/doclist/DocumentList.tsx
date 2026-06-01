@@ -168,7 +168,7 @@ function SidebarUploadLoader({
               strokeDasharray={`${circumference} ${circumference}`}
               strokeDashoffset={dashOffset}
               transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              style={{ transition: 'stroke-dashoffset 200ms ease-out' }}
+              style={{ transition: 'stroke-dashoffset 200ms ease-standard' }}
             />
           </svg>
         </div>
@@ -657,7 +657,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             <button
               type="button"
               onClick={() => setShowHint(false)}
-              className="h-6 w-6 inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base hover:scale-[1.01] rounded transition-all duration-200 ease-out"
+              className="h-6 w-6 inline-flex items-center justify-center text-muted hover:text-accent hover:bg-base rounded transition duration-base ease-standard"
               aria-label="Dismiss hint"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

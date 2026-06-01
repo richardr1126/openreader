@@ -56,7 +56,7 @@ function SidebarRow({
       type="button"
       onClick={onClick}
       className={
-        'group w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition-all duration-200 ease-out text-left hover:scale-[1.01] ' +
+        'group w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] border transform transition duration-base ease-standard text-left ' +
         (active
           ? 'border-accent bg-offbase text-accent'
           : 'border-transparent bg-transparent text-foreground hover:border-accent hover:text-accent') +
@@ -65,7 +65,7 @@ function SidebarRow({
     >
       <span
         className={
-          'w-4 h-4 shrink-0 flex items-center justify-center transition-colors duration-200 ' +
+          'w-4 h-4 shrink-0 flex items-center justify-center transition-colors duration-base ' +
           (active ? 'text-accent' : 'text-muted group-hover:text-accent')
         }
       >
@@ -74,7 +74,7 @@ function SidebarRow({
       <span className="truncate flex-1">{label}</span>
       {typeof count === 'number' && count > 0 && (
         <span
-          className={`text-[10px] text-muted tabular-nums transition-transform duration-200 ease-out ${countClassName ?? ''}`}
+          className={`text-[10px] text-muted tabular-nums transition-transform duration-base ease-standard ${countClassName ?? ''}`}
         >
           {count}
         </span>
@@ -272,7 +272,7 @@ export function FinderSidebar({
             rightSlot={(
               <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
                 <MenuButton
-                  className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-muted hover:text-accent transition-colors duration-200 ease-out focus:outline-none"
+                  className="inline-flex items-center justify-center h-3.5 w-5 rounded-sm text-muted hover:text-accent transition-colors duration-base ease-standard focus:outline-none"
                   title="Folder actions"
                   aria-label="Folder actions"
                 >
@@ -280,10 +280,10 @@ export function FinderSidebar({
                 </MenuButton>
                 <Transition
                   as={Fragment}
-                  enter="transition ease-out duration-100"
+                  enter="transition ease-standard duration-fast"
                   enterFrom="transform opacity-0 scale-95"
                   enterTo="transform opacity-100 scale-100"
-                  leave="transition ease-in duration-75"
+                  leave="transition ease-standard duration-fast"
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
@@ -370,7 +370,7 @@ export function FinderSidebar({
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
-        className="hidden md:block absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-offbase active:bg-accent transition-colors duration-200 ease-out"
+        className="hidden md:block absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-offbase active:bg-accent transition-colors duration-base ease-standard"
       />
     </aside>
   );
