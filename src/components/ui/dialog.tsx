@@ -135,7 +135,7 @@ export function DrawerFrame({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
         </TransitionChild>
         <div className={cn('fixed inset-y-0 flex max-w-full', sideClass)}>
           <TransitionChild

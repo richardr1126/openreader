@@ -103,7 +103,7 @@ export default async function LandingPage() {
               ) : (
                 <ButtonLink href="/signin" variant="outline" size="lg">Sign in</ButtonLink>
               )}
-              <ButtonLink href="https://docs.openreader.richardr.dev/" variant="ghost" size="lg">Read the docs →</ButtonLink>
+              <ButtonAnchor href="https://docs.openreader.richardr.dev/" target="_blank" rel="noopener noreferrer" variant="ghost" size="lg">Read the docs →</ButtonAnchor>
             </div>
 
             <div className="public-formats" aria-label="Supported formats">

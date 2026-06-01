@@ -1,6 +1,6 @@
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { cn } from './cn';
-import { focusRing, motionColors } from './tokens';
+import { motionColors } from './tokens';
 
 export function SearchField({
   icon,
@@ -16,7 +16,6 @@ export function SearchField({
       className={cn(
         'flex min-w-0 items-center gap-1.5 rounded-md border border-line bg-surface-sunken px-2 py-1',
         'focus-within:border-accent-line focus-within:ring-1 focus-within:ring-accent-line hover:border-accent-line',
-        focusRing,
         motionColors,
         className,
       )}

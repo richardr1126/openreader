@@ -133,8 +133,6 @@ export function DexieMigrationModal({
     }
   }, [loadLocalDexieDocs, onComplete, refreshDocuments]);
 
-  if (!isOpen) return null;
-
   return (
     <ModalFrame
       open={isOpen}

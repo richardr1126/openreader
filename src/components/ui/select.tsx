@@ -3,6 +3,7 @@
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 import type { ComponentProps } from 'react';
 import { cn } from './cn';
+import { CheckIcon, ChevronRightIcon } from '@/components/icons/Icons';
 
 const listboxButtonClass =
   'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
@@ -118,14 +119,18 @@ export function Select({
     <Listbox value={value} onChange={onChange}>
       <SharedListboxButton>
         <span>{activeOption?.label ?? 'Select'}</span>
-        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-soft">v</span>
+        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-soft">
+          <ChevronRightIcon className="h-4 w-4 rotate-90" aria-hidden="true" />
+        </span>
       </SharedListboxButton>
       <SharedListboxOptions anchor="bottom">
         {options.map((option) => (
           <SharedListboxOption key={option.value} value={option.value}>
             {({ selected }) => (
               <>
-                <span className="absolute left-2 text-accent">{selected ? '*' : ''}</span>
+                <span className="absolute left-2 flex items-center text-accent">
+                  {selected ? <CheckIcon className="h-4 w-4" aria-hidden="true" /> : null}
+                </span>
                 <span>{option.label}</span>
               </>
             )}

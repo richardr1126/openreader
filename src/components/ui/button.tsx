@@ -18,7 +18,7 @@ export const buttonStyles = variants({
       primary: 'bg-accent text-background hover:bg-secondary-accent',
       secondary: 'border border-line bg-surface text-foreground hover:bg-accent-wash',
       outline: 'border border-line bg-surface-sunken text-foreground hover:bg-accent-wash hover:text-accent',
-      danger: 'border border-danger bg-danger text-background hover:bg-danger',
+      danger: 'border border-danger bg-danger text-background hover:bg-danger-strong hover:border-danger-strong',
       ghost: 'bg-transparent text-foreground hover:bg-accent-wash hover:text-accent',
     },
     size: {

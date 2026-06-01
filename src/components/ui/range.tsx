@@ -54,7 +54,7 @@ export function RangeInput({
   className,
   style,
   ...props
-}: InputHTMLAttributes<HTMLInputElement>) {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   const rangeStyle: RangeStyle = {
     ...style,
     '--range-progress': `${resolveRangeProgress(props)}%`,

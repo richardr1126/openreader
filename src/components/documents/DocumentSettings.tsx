@@ -203,7 +203,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
                   <span>{pdf.parseStatus ?? 'pending'}</span>
                   <IconButton
                     size="xs"
-                    className="!h-5 !w-5 shrink-0"
+                    className="shrink-0"
                     onClick={pdf.onForceReparse}
                     disabled={isForceReparseDisabled(pdf.parseStatus)}
                     title="Force reparse"

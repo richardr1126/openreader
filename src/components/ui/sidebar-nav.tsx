@@ -63,7 +63,7 @@ export function sidebarNavItemClass({
 } = {}) {
   return cn(
     'group w-full min-w-0 border text-left font-medium',
-    'inline-flex items-center transition duration-base ease-standard',
+    'inline-flex items-center',
     focusRing,
     motionColors,
     compact ? 'gap-1.5 rounded-md px-2 py-1 text-xs' : 'gap-2 rounded-md px-2.5 py-1.5 text-sm',

@@ -35,6 +35,6 @@ export function dropzoneSurfaceClass({
   return dropzoneStyles({
     variant,
     active: active ? 'true' : 'false',
-    className: cn(disabled && 'cursor-not-allowed opacity-50', className),
+    className: cn(disabled && 'pointer-events-none cursor-not-allowed opacity-50', className),
   });
 }

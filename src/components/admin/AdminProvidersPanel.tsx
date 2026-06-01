@@ -370,7 +370,6 @@ export function AdminProvidersPanel() {
               onClick={startCreate}
               variant="primary"
               size="icon"
-              className="h-7 w-7"
               aria-label="Add provider"
               title="Add provider"
             >

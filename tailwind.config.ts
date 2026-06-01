@@ -30,6 +30,7 @@ export default {
         "accent-line": "var(--accent-line)",
         "accent-strong": "var(--accent-strong)",
         danger: "var(--danger)",
+        "danger-strong": "var(--danger-strong)",
         "danger-wash": "var(--danger-wash)",
       },
       boxShadow: {

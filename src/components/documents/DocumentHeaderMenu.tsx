@@ -107,14 +107,7 @@ export function DocumentHeaderMenu({
               <div className="flex justify-center">
                 <ZoomControl
                   value={zoomLevel}
-                  onIncrease={() => {
-                    // We wrap in a handler to stop propagation if needed, 
-                    // but ZoomControl buttons handle their own clicks.
-                    // However, Menu might close on click?
-                    // Headless UI Menu closes on click inside MenuItem, but these are just buttons in a div.
-                    // It should NOT close unless we click a MenuItem.
-                    onZoomIncrease();
-                  }}
+                  onIncrease={onZoomIncrease}
                   onDecrease={onZoomDecrease}
                   min={minZoom}
                   max={maxZoom}

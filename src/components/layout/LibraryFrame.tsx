@@ -7,9 +7,7 @@ import { DrawerFrame } from '@/components/ui';
 const NARROW_QUERY = '(max-width: 767px)';
 
 export function useIsNarrow(): boolean {
-  const [isNarrow, setIsNarrow] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia(NARROW_QUERY).matches : false,
-  );
+  const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia(NARROW_QUERY);
@@ -48,9 +46,11 @@ export function LibraryFrame({
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">{children}</div>
       </div>
       {statusBar}
-      <LibrarySidebarDrawer open={isNarrow && sidebarOpen} onClose={onRequestSidebarClose}>
-        {sidebar}
-      </LibrarySidebarDrawer>
+      {isNarrow && (
+        <LibrarySidebarDrawer open={sidebarOpen} onClose={onRequestSidebarClose}>
+          {sidebar}
+        </LibrarySidebarDrawer>
+      )}
     </div>
   );
 }

@@ -86,9 +86,7 @@ export function UserMenu({
             <line x1="21" y1="12" x2="9" y2="12"></line>
           </svg>
         )}
-      >
-        {session.user.email || 'Account'}
-      </SidebarNavItem>
+      />
     );
   }
 
