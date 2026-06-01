@@ -182,6 +182,16 @@ function SidebarUploadLoader({
   );
 }
 
+function DocumentListStateLoader() {
+  return (
+    <div
+      className="h-full w-full min-h-0 bg-surface-sunken animate-pulse"
+      aria-label="Loading documents"
+      aria-busy="true"
+    />
+  );
+}
+
 function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const cachedState = cachedDocumentListState;
   const [sortBy, setSortBy] = useState<SortBy>(cachedState?.sortBy ?? DEFAULT_STATE.sortBy);
@@ -670,7 +680,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
       {isLoading ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
+          {isInitialized ? (
+            <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
+          ) : (
+            <DocumentListStateLoader />
+          )}
         </div>
       ) : allDocuments.length === 0 ? (
         <div className="flex-1 min-h-0 flex items-center justify-center p-6">

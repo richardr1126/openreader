@@ -181,12 +181,27 @@ type AdminSubTab = 'providers' | 'features';
 export function SettingsTrigger({
   className = '',
   triggerLabel,
+  variant = 'button',
   onOpen,
 }: {
   className?: string;
   triggerLabel?: string;
+  variant?: 'button' | 'sidebar';
   onOpen: () => void;
 }) {
+  if (variant === 'sidebar') {
+    return (
+      <SidebarNavItem
+        compact
+        onClick={onOpen}
+        className={className}
+        aria-label="Settings"
+        icon={<SettingsIcon className="w-3.5 h-3.5" />}
+        label={triggerLabel ?? 'Settings'}
+      />
+    );
+  }
+
   return (
     <Button
       variant="secondary"
@@ -959,16 +974,18 @@ export function SettingsModal({
                                       }}
                                       className="flex-1"
                                     />
-                                    <button
+                                    <IconButton
                                       onClick={() => setIsCustomExpanded(!isCustomExpanded)}
-                                      className="shrink-0 p-1.5 rounded-lg border border-line hover:border-accent-line transition-colors"
+                                      tone="surface"
+                                      size="sm"
+                                      className="shrink-0"
                                       style={{ color: colors.muted, backgroundColor: colors.base }}
                                       aria-label={isCustomExpanded ? 'Collapse color picker' : 'Expand color picker'}
                                     >
                                       <svg className={`w-3.5 h-3.5 transition-transform duration-base ${isCustomExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                       </svg>
-                                    </button>
+                                    </IconButton>
                                   </div>
 
                                   {isCustomExpanded && (

@@ -110,7 +110,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
               size="xs"
               aria-label="Open system color picker"
             >
-              <PaletteIcon className="w-4 h-4 text-soft transform transition-transform duration-base ease-standard hover:text-accent" />
+              <PaletteIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
             </IconButton>
             <input
               ref={nativeRef}

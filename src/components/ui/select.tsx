@@ -13,11 +13,24 @@ export const listboxPanelClass =
 export const listboxOptionsClass =
   cn(listboxPanelClass, 'w-[var(--button-width)] [--anchor-gap:0.25rem]');
 
+export const listboxCompactOptionsClass =
+  'z-50 min-w-[8rem] rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none [--anchor-gap:0.25rem]';
+
 export const listboxOptionClass = (active: boolean, selected = false, inset: 'check' | 'none' = 'check') =>
   cn(
     'relative cursor-pointer select-none rounded-sm py-1.5 text-sm',
     inset === 'check' ? 'pl-9 pr-3' : 'px-2.5',
     selected ? 'bg-accent text-background font-medium' : active ? 'bg-accent-wash text-foreground' : 'text-foreground',
+  );
+
+export const listboxCompactOptionClass = (active: boolean, selected = false) =>
+  cn(
+    'relative cursor-pointer select-none rounded-sm px-2 py-1 text-xs',
+    active
+      ? 'bg-accent-wash text-accent'
+      : selected
+        ? 'bg-surface-sunken text-accent font-medium'
+        : 'text-foreground',
   );
 
 export function Select({

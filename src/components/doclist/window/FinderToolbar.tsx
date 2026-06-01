@@ -10,7 +10,7 @@ import {
   HamburgerIcon,
 } from './finderIcons';
 import { ChevronUpDownIcon } from '@/components/icons/Icons';
-import { SearchField, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment, listboxOptionClass, listboxOptionsClass, toolbarButtonStyles } from '@/components/ui';
+import { SearchField, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment, listboxCompactOptionClass, listboxCompactOptionsClass, toolbarButtonStyles } from '@/components/ui';
 import type { ReactNode } from 'react';
 
 interface FinderToolbarProps {
@@ -146,17 +146,17 @@ export function FinderToolbar({
             </ToolbarButton>
             <Listbox value={sortBy} onChange={onSortByChange}>
               <ListboxButton
-                className={toolbarButtonStyles({ className: 'gap-1 min-w-[90px] justify-between' })}
+                className={toolbarButtonStyles({ className: 'gap-1 min-w-[86px] justify-between' })}
               >
                 <span>{currentSort.label}</span>
                 <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
               </ListboxButton>
-              <ListboxOptions anchor="bottom end" className={listboxOptionsClass}>
+              <ListboxOptions anchor="bottom end" className={listboxCompactOptionsClass}>
                 {SORT_OPTIONS.map((opt) => (
                   <ListboxOption
                     key={opt.value}
                     value={opt.value}
-                    className={({ active, selected }) => listboxOptionClass(active || selected)}
+                    className={({ active, selected }) => listboxCompactOptionClass(active, selected)}
                   >
                     {opt.label}
                   </ListboxOption>

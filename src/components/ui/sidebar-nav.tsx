@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
 import { cn } from './cn';
 import { focusRing, motionColors } from './tokens';
 
@@ -50,6 +50,82 @@ export function SidebarNavGroup({
   );
 }
 
+export function sidebarNavItemClass({
+  active = false,
+  compact = false,
+  isDropTarget = false,
+  className,
+}: {
+  active?: boolean;
+  compact?: boolean;
+  isDropTarget?: boolean;
+  className?: string;
+} = {}) {
+  return cn(
+    'group w-full min-w-0 border text-left font-medium',
+    'inline-flex items-center transition duration-base ease-standard',
+    focusRing,
+    motionColors,
+    compact ? 'gap-1.5 rounded-md px-2 py-1 text-xs' : 'gap-2 rounded-md px-2.5 py-1.5 text-sm',
+    active
+      ? 'border-accent-line bg-surface-sunken text-accent'
+      : 'border-transparent bg-transparent text-foreground hover:border-accent-line hover:bg-accent-wash hover:text-accent',
+    isDropTarget ? 'ring-1 ring-accent-line' : '',
+    className,
+  );
+}
+
+export function sidebarNavIconClass({
+  active = false,
+  compact = false,
+}: {
+  active?: boolean;
+  compact?: boolean;
+} = {}) {
+  return cn(
+    'shrink-0 inline-flex items-center justify-center transition-colors duration-base',
+    compact ? 'h-4 w-4' : 'h-5 w-5',
+    active ? 'text-accent' : 'text-soft group-hover:text-accent',
+  );
+}
+
+function SidebarNavItemContent({
+  active = false,
+  icon,
+  label,
+  count,
+  countClassName,
+  trailing,
+  compact = false,
+  children,
+}: {
+  active?: boolean;
+  icon?: ReactNode;
+  label?: ReactNode;
+  count?: number;
+  countClassName?: string;
+  trailing?: ReactNode;
+  compact?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      {icon ? (
+        <span className={sidebarNavIconClass({ active, compact })}>
+          {icon}
+        </span>
+      ) : null}
+      {label ?? children ? <span className="min-w-0 flex-1 truncate">{label ?? children}</span> : null}
+      {typeof count === 'number' && count > 0 ? (
+        <span className={cn('text-[10px] text-soft tabular-nums transition-transform duration-base ease-standard', countClassName)}>
+          {count}
+        </span>
+      ) : null}
+      {trailing}
+    </>
+  );
+}
+
 export function SidebarNavItem({
   active = false,
   icon,
@@ -76,38 +152,62 @@ export function SidebarNavItem({
   return (
     <button
       type={type}
-      className={cn(
-        'group w-full min-w-0 border text-left font-medium',
-        'inline-flex items-center transition duration-base ease-standard',
-        focusRing,
-        motionColors,
-        compact ? 'gap-1.5 rounded-md px-2 py-1 text-xs' : 'gap-2 rounded-md px-2.5 py-1.5 text-sm',
-        active
-          ? 'border-accent-line bg-surface-sunken text-accent'
-          : 'border-transparent bg-transparent text-foreground hover:border-accent-line hover:bg-accent-wash hover:text-accent',
-        isDropTarget ? 'ring-1 ring-accent-line' : '',
-        className,
-      )}
+      className={sidebarNavItemClass({ active, compact, isDropTarget, className })}
       {...props}
     >
-      {icon ? (
-        <span
-          className={cn(
-            'shrink-0 inline-flex items-center justify-center transition-colors duration-base',
-            compact ? 'h-4 w-4' : 'h-5 w-5',
-            active ? 'text-accent' : 'text-soft group-hover:text-accent',
-          )}
-        >
-          {icon}
-        </span>
-      ) : null}
-      {label ?? children ? <span className="min-w-0 flex-1 truncate">{label ?? children}</span> : null}
-      {typeof count === 'number' && count > 0 ? (
-        <span className={cn('text-[10px] text-soft tabular-nums transition-transform duration-base ease-standard', countClassName)}>
-          {count}
-        </span>
-      ) : null}
-      {trailing}
+      <SidebarNavItemContent
+        active={active}
+        compact={compact}
+        icon={icon}
+        label={label}
+        count={count}
+        countClassName={countClassName}
+        trailing={trailing}
+      >
+        {children}
+      </SidebarNavItemContent>
     </button>
+  );
+}
+
+export function SidebarNavLink({
+  active = false,
+  icon,
+  label,
+  count,
+  countClassName,
+  trailing,
+  isDropTarget = false,
+  className,
+  compact = false,
+  children,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  active?: boolean;
+  icon?: ReactNode;
+  label?: ReactNode;
+  count?: number;
+  countClassName?: string;
+  trailing?: ReactNode;
+  isDropTarget?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <a
+      className={sidebarNavItemClass({ active, compact, isDropTarget, className })}
+      {...props}
+    >
+      <SidebarNavItemContent
+        active={active}
+        compact={compact}
+        icon={icon}
+        label={label}
+        count={count}
+        countClassName={countClassName}
+        trailing={trailing}
+      >
+        {children}
+      </SidebarNavItemContent>
+    </a>
   );
 }

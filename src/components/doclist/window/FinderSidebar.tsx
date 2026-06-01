@@ -79,20 +79,20 @@ function FolderRow({
         countClassName="group-hover/folder:-translate-x-6 group-focus-within/folder:-translate-x-6"
         isDropTarget={isDropTarget}
       />
-      <button
-        type="button"
+      <IconButton
         onClick={(e) => {
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded text-soft opacity-0 group-hover/folder:opacity-100 group-focus-within/folder:opacity-100 hover:text-accent hover:bg-accent-wash transition"
+        size="xs"
+        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/folder:opacity-100 group-focus-within/folder:opacity-100"
         aria-label={`Delete ${folder.name}`}
         title={`Delete ${folder.name}`}
       >
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
-      </button>
+      </IconButton>
     </div>
   );
 }

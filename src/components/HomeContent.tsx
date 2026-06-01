@@ -21,8 +21,8 @@ export function HomeContent() {
   const appActions = (
     <div className="flex flex-col gap-0.5 w-full">
       <SettingsTrigger
+        variant="sidebar"
         triggerLabel="Settings"
-        className="w-full justify-start gap-2 px-2 py-1 text-[12px] border-transparent hover:border-accent"
         onOpen={() => setSettingsOpen(true)}
       />
       <UserMenu variant="sidebar" />

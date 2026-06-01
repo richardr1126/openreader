@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
-import { buttonClass } from '@/components/ui';
+import { Button, IconButton, popoverPanelClass } from '@/components/ui';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
 import { buildSegmentKey, buildSegmentKeyPrefix } from '@/lib/shared/tts-segment-plan';
@@ -632,33 +632,27 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
 
   const headerActions = (
     <>
-      <button
-        type="button"
+      <Button
         onClick={() => void handleClearCache()}
         aria-label="Clear segments cache"
         title="Clear cache for listed segments"
         disabled={isClearingSegments}
-        className={buttonClass({
-          variant: 'secondary',
-          size: 'xs',
-          className: 'h-8 px-2 text-soft',
-        })}
+        variant="secondary"
+        size="xs"
+        className="h-8 px-2 text-soft"
       >
         {isClearingSegments ? 'Clearing…' : 'Clear'}
-      </button>
-      <button
-        type="button"
+      </Button>
+      <IconButton
         onClick={handleRefresh}
         aria-label="Refresh segments"
         title="Refresh"
-        className={buttonClass({
-          variant: 'secondary',
-          size: 'icon',
-          className: 'h-8 w-8 text-soft',
-        })}
+        tone="surface"
+        size="md"
+        className="h-8 w-8 text-soft"
       >
         <RefreshIcon className="w-3.5 h-3.5" />
-      </button>
+      </IconButton>
     </>
   );
 
@@ -893,9 +887,10 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
   return (
     <Popover className="relative shrink-0">
       <PopoverButton
+        as={IconButton}
+        size="sm"
         aria-label="Segment metadata"
         title="Metadata"
-        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-transparent text-soft hover:bg-accent-wash hover:border-line hover:text-accent transition-colors"
       >
         <InfoIcon className="w-3.5 h-3.5" />
       </PopoverButton>
@@ -910,7 +905,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
       >
         <PopoverPanel
           anchor="bottom end"
-          className="z-[60] w-[300px] mt-1 rounded-lg border border-line bg-surface shadow-elev-3 p-3"
+          className={`${popoverPanelClass} z-[60] w-[300px] mt-1`}
         >
           <dl className="space-y-2">
             <Row label="locator">
