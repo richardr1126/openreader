@@ -201,6 +201,56 @@ html.custom {
   );
 }
 
+:root {
+  --shadow-rgb: 15 23 42;
+
+  --surface: var(--base);
+  --surface-solid: color-mix(in srgb, var(--base) 96%, var(--background));
+  --surface-sunken: color-mix(in srgb, var(--base) 80%, var(--background));
+
+  --line: color-mix(in srgb, var(--offbase) 70%, transparent);
+  --line-soft: color-mix(in srgb, var(--offbase) 45%, transparent);
+  --line-strong: var(--offbase);
+
+  --soft: color-mix(in srgb, var(--foreground) 74%, var(--muted));
+  --faint: color-mix(in srgb, var(--foreground) 52%, var(--muted));
+
+  --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 40%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 88%, var(--foreground));
+
+  --danger: #dc2626;
+  --danger-wash: color-mix(in srgb, var(--danger) 12%, transparent);
+
+  --elev-1: 0 1px 2px rgb(var(--shadow-rgb) / 0.10);
+  --elev-2: 0 6px 16px rgb(var(--shadow-rgb) / 0.16);
+  --elev-3: 0 18px 45px rgb(var(--shadow-rgb) / 0.22);
+
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+html.light,
+html.lavender,
+html.rose,
+html.sand,
+html.sky,
+html.slate {
+  --shadow-rgb: 15 23 42;
+}
+
+html.dark,
+html.ocean,
+html.forest,
+html.sunset,
+html.sea,
+html.mint,
+html.custom {
+  --shadow-rgb: 0 0 0;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -246,6 +296,17 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes pdf-canvas-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
 }
 
 /* Hide react-pdf's default tiny "Loading page..." placeholder to avoid jarring layout shifts. */
