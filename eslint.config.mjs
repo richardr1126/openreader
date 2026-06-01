@@ -19,6 +19,62 @@ const LOGGER_RECEIVER_SELECTOR =
 const SERVER_LOGGER_CALL_SELECTOR = `:matches(${STATIC_LOGGER_CALL_SELECTOR}${LOGGER_RECEIVER_SELECTOR},${DYNAMIC_LOGGER_CALL_SELECTOR}${LOGGER_RECEIVER_SELECTOR})`;
 const NEXT_RESPONSE_ERROR_JSON_SELECTOR =
   "CallExpression[callee.type='MemberExpression'][callee.object.name='NextResponse'][callee.property.name='json'][arguments.0.type='ObjectExpression']:has(Property[key.name='error'])";
+const APP_DESIGN_SYSTEM_FILES = [
+  "src/app/(app)/**/*.{ts,tsx}",
+  "src/components/**/*.{ts,tsx}",
+];
+const RESTRICTED_APP_CLASS_PATTERNS = [
+  {
+    selector: "Literal[value=/(bg|text|border|ring)-(gray|slate|zinc|neutral|stone|red|orange|yellow|amber|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d/]",
+    message:
+      "Use semantic design-system tokens instead of literal Tailwind palette color classes in app surfaces.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/(bg|text|border|ring)-(gray|slate|zinc|neutral|stone|red|orange|yellow|amber|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d/]",
+    message:
+      "Use semantic design-system tokens instead of literal Tailwind palette color classes in app surfaces.",
+  },
+  {
+    selector: "Literal[value=/transition-all/]",
+    message:
+      "Use scoped transition utilities; transition-all is banned by the app design system.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/transition-all/]",
+    message:
+      "Use scoped transition utilities; transition-all is banned by the app design system.",
+  },
+  {
+    selector: "Literal[value=/(bg|text|border|from|via|to)-(accent|background|foreground|base|offbase|muted|secondary-accent|surface|surface-solid|surface-sunken|line|line-soft|line-strong|soft|faint|accent-wash|accent-line|accent-strong|danger|danger-wash)\\/\\d/]",
+    message:
+      "Do not use Tailwind alpha modifiers on theme-token colors; use dedicated wash/semantic tokens.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/(bg|text|border|from|via|to)-(accent|background|foreground|base|offbase|muted|secondary-accent|surface|surface-solid|surface-sunken|line|line-soft|line-strong|soft|faint|accent-wash|accent-line|accent-strong|danger|danger-wash)\\/\\d/]",
+    message:
+      "Do not use Tailwind alpha modifiers on theme-token colors; use dedicated wash/semantic tokens.",
+  },
+  {
+    selector: "Literal[value=/rounded-\\[[^\\]]*px\\]/]",
+    message:
+      "Use the app radius scale instead of arbitrary rounded-[…px] utilities.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/rounded-\\[[^\\]]*px\\]/]",
+    message:
+      "Use the app radius scale instead of arbitrary rounded-[…px] utilities.",
+  },
+  {
+    selector: "Literal[value=/duration-\\[[^\\]]*ms\\]/]",
+    message:
+      "Use the shared motion duration tokens instead of arbitrary duration-[…ms] utilities.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/duration-\\[[^\\]]*ms\\]/]",
+    message:
+      "Use the shared motion duration tokens instead of arbitrary duration-[…ms] utilities.",
+  },
+];
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
@@ -41,6 +97,12 @@ const eslintConfig = [
           ],
         },
       ],
+    },
+  },
+  {
+    files: APP_DESIGN_SYSTEM_FILES,
+    rules: {
+      "no-restricted-syntax": ["error", ...RESTRICTED_APP_CLASS_PATTERNS],
     },
   },
   {
