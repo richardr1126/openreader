@@ -133,4 +133,43 @@ describe('runLayoutModel', () => {
       expect.closeTo(40, 5),
     ]);
   });
+
+  test('drops unlabeled query winners and keeps only labeled regions', async () => {
+    mockState.runOutput = {
+      logits: {
+        data: new Float32Array([
+          0.1,
+          0.2,
+          5,
+          4,
+          0.1,
+          0.1,
+        ]),
+      },
+      pred_boxes: {
+        data: new Float32Array([
+          0.25, 0.25, 0.3, 0.3,
+          0.75, 0.75, 0.3, 0.3,
+        ]),
+      },
+    };
+
+    const { runLayoutModel } = await import('../../src/pdf/runLayoutModel');
+    const regions = await runLayoutModel({
+      pageWidth: 100,
+      pageHeight: 100,
+      textItems: [{} as never],
+      pageImage: Buffer.from([1]),
+    });
+
+    expect(regions).toHaveLength(1);
+    expect(regions[0]?.label).toBe('text');
+    expect(regions[0]?.confidence).toBeCloseTo(0.96109135, 5);
+    expect(regions[0]?.bbox).toEqual([
+      expect.closeTo(60, 5),
+      expect.closeTo(60, 5),
+      expect.closeTo(90, 5),
+      expect.closeTo(90, 5),
+    ]);
+  });
 });
