@@ -2,6 +2,7 @@ import { db } from '@/db';
 import { documents, audiobooks, audiobookChapters, userPreferences, userDocumentProgress } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { UNCLAIMED_USER_ID } from '../storage/docstore-legacy';
+import { cleanupClaimedLegacyFsSources } from './legacy-fs-claim-cleanup';
 import {
   deleteAudiobookObject,
   getAudiobookObjectBuffer,
@@ -9,6 +10,8 @@ import {
   putAudiobookObject,
 } from '../audiobooks/blobstore';
 import { isS3Configured } from '../storage/s3';
+import { logDegraded } from '../errors/logging';
+import { hashForLog, serverLogger } from '../logger';
 
 type AudiobookRow = {
   id: string;
@@ -91,12 +94,45 @@ export async function claimAnonymousData(userId: string, unclaimedUserId: string
     return { documents: 0, audiobooks: 0, preferences: 0, progress: 0 };
   }
 
+  const [claimableDocumentRows, claimableAudiobookRows] = await Promise.all([
+    db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(eq(documents.userId, unclaimedUserId)) as Promise<Array<{ id: string }>>,
+    db
+      .select({ id: audiobooks.id })
+      .from(audiobooks)
+      .where(eq(audiobooks.userId, unclaimedUserId)) as Promise<Array<{ id: string }>>,
+  ]);
+
   const [documentsClaimed, audiobooksClaimed, preferencesClaimed, progressClaimed] = await Promise.all([
     transferUserDocuments(unclaimedUserId, userId),
     transferUserAudiobooks(unclaimedUserId, userId, namespace),
     transferUserPreferences(unclaimedUserId, userId),
     transferUserProgress(unclaimedUserId, userId),
   ]);
+
+  if (claimableDocumentRows.length > 0 || claimableAudiobookRows.length > 0) {
+    await cleanupClaimedLegacyFsSources({
+      documentIds: claimableDocumentRows.map((row) => row.id),
+      audiobookIds: claimableAudiobookRows.map((row) => row.id),
+      namespace,
+    }).catch((error) => {
+      logDegraded(serverLogger, {
+        event: 'user.claim.legacy_fs_cleanup.failed',
+        msg: 'Failed to remove claimed legacy filesystem sources',
+        step: 'cleanup_claimed_legacy_fs_sources',
+        context: {
+          claimedUserIdHash: hashForLog(userId),
+          unclaimedUserIdHash: hashForLog(unclaimedUserId),
+          documentCount: claimableDocumentRows.length,
+          audiobookCount: claimableAudiobookRows.length,
+          namespace,
+        },
+        error,
+      });
+    });
+  }
 
   return {
     documents: documentsClaimed,

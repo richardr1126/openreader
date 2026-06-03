@@ -44,7 +44,6 @@ function parseBool(value, fallback = false) {
 function parseArgs(argv) {
   const args = {
     dryRun: false,
-    deleteLocal: false,
     namespace: null,
   };
 
@@ -57,15 +56,6 @@ function parseArgs(argv) {
     }
     if (raw.startsWith('--dry-run=')) {
       args.dryRun = parseBool(raw.slice('--dry-run='.length), true);
-      continue;
-    }
-    if (raw === '--delete-local' && argv[i + 1]) {
-      args.deleteLocal = parseBool(argv[i + 1], true);
-      i += 1;
-      continue;
-    }
-    if (raw.startsWith('--delete-local=')) {
-      args.deleteLocal = parseBool(raw.slice('--delete-local='.length), true);
       continue;
     }
     if (raw === '--namespace' && argv[i + 1]) {
@@ -801,7 +791,7 @@ async function migrateDatabaseRows(database, userId, docCandidates, audiobookBoo
 
 async function main() {
   loadEnvFiles();
-  const { dryRun, deleteLocal, namespace } = parseArgs(process.argv.slice(2));
+  const { dryRun, namespace } = parseArgs(process.argv.slice(2));
   const unclaimedUserId = getUnclaimedUserIdForNamespace(namespace);
   const docsDir = applyNamespacePath(DOCUMENTS_V1_DIR, namespace);
   const audiobooksDir = applyNamespacePath(AUDIOBOOKS_V1_DIR, namespace);
@@ -815,8 +805,6 @@ async function main() {
 
   let uploaded = 0;
   let alreadyPresent = 0;
-  let deletedLocal = 0;
-
   for (const candidate of documentCandidates) {
     if (!dryRun) {
       try {
@@ -837,17 +825,10 @@ async function main() {
       }
     }
 
-    if (deleteLocal && !dryRun) {
-      for (const localPath of candidate.localPaths) {
-        const removed = await fsp.unlink(localPath).then(() => true).catch(() => false);
-        if (removed) deletedLocal += 1;
-      }
-    }
   }
 
   let audiobookUploaded = 0;
   let audiobookAlreadyPresent = 0;
-  let audiobookDeletedLocal = 0;
 
   for (const book of audiobookBooks) {
     for (const upload of book.uploads) {
@@ -871,16 +852,6 @@ async function main() {
         }
       }
 
-      if (deleteLocal && !dryRun) {
-        const removed = await fsp.unlink(upload.sourcePath).then(() => true).catch(() => false);
-        if (removed) audiobookDeletedLocal += 1;
-      }
-    }
-
-    if (deleteLocal && !dryRun) {
-      for (const dirPath of book.sourceDirs) {
-        await fsp.rm(dirPath, { recursive: true, force: true }).catch(() => { });
-      }
     }
   }
 
@@ -897,7 +868,6 @@ async function main() {
     const result = {
       success: true,
       dryRun,
-      deleteLocal,
       docsDir,
       audiobooksDir,
       namespace,
@@ -905,14 +875,12 @@ async function main() {
       uploaded,
       alreadyPresent,
       skippedInvalid,
-      deletedLocal,
       dbRowsUpdated: dbStats.dbRowsUpdated,
       dbRowsSeeded: dbStats.dbRowsSeeded,
       audiobookBooksScanned: audiobookStats.booksScanned,
       audiobookFilesScanned: audiobookStats.filesScanned,
       audiobookUploaded,
       audiobookAlreadyPresent,
-      audiobookDeletedLocal,
       audiobookSkippedTransient: audiobookStats.skippedTransient,
       audiobookDbBooksSeeded: dbStats.audiobookDbBooksSeeded,
       audiobookDbChaptersSeeded: dbStats.audiobookDbChaptersSeeded,
