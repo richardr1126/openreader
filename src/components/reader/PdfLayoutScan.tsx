@@ -116,8 +116,6 @@ export function PdfLayoutScan() {
       </div>
 
       <div className={styles.page}>
-        <div className={styles.grid} />
-
         <div className={styles.solos}>
           {SCAN_BLOCKS.map((block, i) => {
             const size = SHAPE_SIZE[block.shape];

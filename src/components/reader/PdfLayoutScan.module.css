@@ -25,19 +25,6 @@
   overflow: hidden;
 }
 
-.grid {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent calc(100% / 22 - 1px),
-    color-mix(in srgb, var(--foreground) 6%, transparent) calc(100% / 22 - 1px),
-    color-mix(in srgb, var(--foreground) 6%, transparent) calc(100% / 22)
-  );
-  background-size: 100% calc(100% / 22 * 4);
-}
-
 /* ── readout chip (in the stage band, above the page) ─────────────────── */
 .tagRow {
   position: absolute;
