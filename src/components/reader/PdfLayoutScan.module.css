@@ -58,6 +58,28 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ── failed / halted state ────────────────────────────────────────────── */
+.tagFailed {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+  box-shadow: none;
+  animation: none;
+}
+
+.pageFailed {
+  display: grid;
+  place-items: center;
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+.alert {
+  width: 38%;
+  height: 38%;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  color: var(--accent);
+}
+
 /* ── region boxes (one shown at a time, centered) ─────────────────────── */
 .solos {
   position: absolute;

@@ -14,6 +14,10 @@ import styles from './PdfLayoutScan.module.css';
  * (see PARSED_PDF_BLOCK_KINDS in types/parsed-pdf). Purely decorative; honours
  * prefers-reduced-motion by freezing on a single region. Styles live in the
  * adjacent CSS module so they stay out of the global stylesheet.
+ *
+ * When `failed` is set the animation is replaced by a static "halted" view —
+ * the beam stops, the page dims, and an alert glyph sits on it — so the loader
+ * never implies active work after a parse failure.
  */
 
 // Only a handful of real shapes — most regions are just text lines.
@@ -92,18 +96,44 @@ function BlockContent({ shape }: { shape: BlockShape }) {
   );
 }
 
-export function PdfLayoutScan() {
+export function PdfLayoutScan({ failed = false }: { failed?: boolean }) {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || failed) return; // no cycling once halted
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduced) return; // freeze on the first region for reduced-motion users
     const id = window.setInterval(() => {
       setActive((i) => (i + 1) % SCAN_BLOCKS.length);
     }, STEP_MS);
     return () => window.clearInterval(id);
-  }, []);
+  }, [failed]);
+
+  if (failed) {
+    return (
+      <div className={styles.stage} aria-hidden>
+        <div className={styles.tagRow}>
+          <span className={cx(styles.tag, styles.tagFailed)}>Parse halted</span>
+        </div>
+
+        <div className={cx(styles.page, styles.pageFailed)}>
+          <svg className={styles.alert} viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M12 3.5 21 19H3L12 3.5Z"
+              strokeLinejoin="round"
+            />
+            <path d="M12 10v4" strokeLinecap="round" />
+            <circle cx="12" cy="16.5" r="0.6" fill="currentColor" stroke="none" />
+          </svg>
+
+          <span className={cx(styles.corner, styles.cornerTl)} />
+          <span className={cx(styles.corner, styles.cornerTr)} />
+          <span className={cx(styles.corner, styles.cornerBl)} />
+          <span className={cx(styles.corner, styles.cornerBr)} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.stage} aria-hidden>

@@ -326,7 +326,13 @@ export default function PDFViewerPage() {
                 {/* header: status badge + model attribution */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-solid px-2.5 py-1">
-                    <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
+                    {parseUiState === 'failed' ? (
+                      <svg className="h-3.5 w-3.5 text-accent" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z" />
+                      </svg>
+                    ) : (
+                      <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
+                    )}
                     <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-soft">PDF Layout Parse</span>
                   </div>
                   <div className="inline-flex items-center gap-1.5 rounded-md border border-accent-line bg-accent-wash px-2 py-1">
@@ -336,33 +342,36 @@ export default function PDFViewerPage() {
                 </div>
 
                 <div className="mt-3 flex flex-col gap-3">
-                  {/* animated layout scanner */}
+                  {/* animated layout scanner — static "halted" view when failed */}
                   <div className="mx-auto w-full max-w-[15rem]">
-                    <PdfLayoutScan />
+                    <PdfLayoutScan failed={parseUiState === 'failed'} />
                   </div>
 
                   {/* live status + progress */}
-                  <div className="min-w-0">
-                    {parseUiState === 'failed' ? (
-                      <p className="mb-3 text-sm font-semibold text-foreground">{statusText}</p>
-                    ) : null}
-
-                    <div className="flex items-end justify-between gap-2">
-                      <p className="text-[11px] font-semibold text-foreground tabular-nums">
-                        {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
+                  {parseUiState === 'failed' ? (
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{statusText}</p>
+                      <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.06em] text-soft">{stageLabel}</p>
+                    </div>
+                  ) : (
+                    <div className="min-w-0">
+                      <div className="flex items-end justify-between gap-2">
+                        <p className="text-[11px] font-semibold text-foreground tabular-nums">
+                          {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
+                        </p>
+                        <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-soft">{stageLabel}</p>
+                      </div>
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-solid ring-1 ring-line">
+                        <div
+                          className="progress-fill h-full rounded-full bg-accent transition-[width] duration-slow ease-standard"
+                          style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 text-[10px] tabular-nums text-soft">
+                        {hasMeasuredProgress ? `${Math.round(progressPercent)}% complete` : 'Calibrating layout pass'}
                       </p>
-                      <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-soft">{stageLabel}</p>
                     </div>
-                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-solid ring-1 ring-line">
-                      <div
-                        className="progress-fill h-full rounded-full bg-accent transition-[width] duration-slow ease-standard"
-                        style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-[10px] tabular-nums text-soft">
-                      {hasMeasuredProgress ? `${Math.round(progressPercent)}% complete` : 'Calibrating layout pass'}
-                    </p>
-                  </div>
+                  )}
                 </div>
 
                 {/* attribution footer */}
