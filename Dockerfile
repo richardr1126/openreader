@@ -11,7 +11,7 @@ RUN cp "$(command -v nats-server)" /tmp/nats-server
 
 
 # Stage 2: build the Next.js app
-FROM node:lts-alpine AS app-builder
+FROM node:lts-slim AS app-builder
 
 # Install pnpm globally
 RUN npm install -g pnpm@11.1.2
@@ -44,12 +44,14 @@ RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
 
 
 # Stage 3: minimal runtime image
-FROM node:lts-alpine AS runner
+FROM node:lts-slim AS runner
 
 # Add runtime OS dependencies:
 # - libreoffice-writer: required for DOCX → PDF conversion
 # ffmpeg is provided by ffmpeg-static from node_modules.
-RUN apk add --no-cache ca-certificates libreoffice-writer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates libreoffice-writer && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install pnpm for runtime process commands.
 RUN npm install -g pnpm@10.33.4
@@ -75,6 +77,11 @@ RUN chmod +x /usr/local/bin/nats-server
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
 COPY --from=app-builder /app/compute/core/src/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+
+# Bind the worker's health endpoint before downloading ONNX models, so cold
+# starts don't exceed the entrypoint's 30s /health/ready gate. Models load
+# lazily on first job instead.
+ENV COMPUTE_PREWARM_MODELS=false
 
 # Expose the port the app runs on
 EXPOSE 3003
