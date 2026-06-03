@@ -69,6 +69,7 @@ const COMPUTE_STATE_BUCKET = 'compute_state';
 const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
+const OP_EVENTS_KEEPALIVE_MS = 15_000;
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
@@ -863,6 +864,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
     let closed = false;
     let unsubscribe: (() => void) | null = null;
+    let keepalive: NodeJS.Timeout | null = null;
 
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
@@ -884,6 +886,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         unsubscribe();
         unsubscribe = null;
       }
+      if (keepalive) {
+        clearInterval(keepalive);
+        keepalive = null;
+      }
       activeSse = Math.max(0, activeSse - 1);
       markActivity();
       if (!reply.raw.writableEnded) {
@@ -902,6 +908,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       if (isTerminalStatus(current.status)) {
         return reply;
       }
+
+      keepalive = setInterval(() => {
+        if (closed || reply.raw.writableEnded) return;
+        reply.raw.write(': keepalive\n\n');
+      }, OP_EVENTS_KEEPALIVE_MS);
 
       unsubscribe = await operationEventStream.subscribe({
         opId: params.data.opId,
@@ -1247,6 +1258,17 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
       const result = await input.run(decoded.payload, context.queueWaitTiming?.queueWaitMs ?? 0, {
         onProgress: async (progress) => {
+          try {
+            input.msg.working();
+          } catch (ackError) {
+            app.log.warn({
+              worker: input.workerLabel,
+              kind: context?.decoded.kind,
+              opId: context?.decoded.opId,
+              jobId: context?.decoded.jobId,
+              error: toErrorMessage(ackError),
+            }, 'failed to extend JetStream ack wait on progress');
+          }
           await markProgress(context!, progress, Date.now());
         },
       });

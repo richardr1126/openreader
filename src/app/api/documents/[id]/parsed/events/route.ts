@@ -5,7 +5,7 @@ import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { getWorkerClientConfigFromEnv } from '@/lib/server/compute/worker';
 import { isAbortLikeError } from '@/lib/server/compute/abort-like-error';
-import { snapshotFromWorkerState } from '@/lib/server/compute/worker-parse-state';
+import { isWorkerOperationStateStale, snapshotFromWorkerState } from '@/lib/server/compute/worker-parse-state';
 import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/documents/parse-state';
@@ -16,6 +16,7 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
+import { getComputeOpStaleMs } from '@openreader/compute-core';
 import type { PdfLayoutJobResult, WorkerOperationEvent, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function toSnapshotState(row: ParseRow, preferredOpId?: string | null): Promise<SnapshotState> {
+  const opStaleMs = getComputeOpStaleMs();
   const state = await healStaleDocumentParseState({
     documentId: row.id,
     userId: row.userId,
@@ -68,7 +70,11 @@ async function toSnapshotState(row: ParseRow, preferredOpId?: string | null): Pr
   // the per-user document row currently says "ready" or has a different opId.
   if (opId && (requestedOpId !== null || parseStatus !== 'ready')) {
     const workerState = await fetchWorkerOperationState<PdfLayoutJobResult>(opId);
-    if (workerState && workerState.opId === opId) {
+    if (
+      workerState
+      && workerState.opId === opId
+      && !isWorkerOperationStateStale(workerState, opStaleMs)
+    ) {
       return {
         snapshot: {
           ...snapshotFromWorkerState(workerState),
@@ -325,119 +331,136 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               continue;
             }
 
-            workerAbort = new AbortController();
-            const query = lastEventId && lastEventId > 0
-              ? `?sinceEventId=${encodeURIComponent(String(lastEventId))}`
-              : '';
-            const response = await fetch(
-              `${workerCfg.baseUrl}/ops/${encodeURIComponent(currentOpId)}/events${query}`,
-              {
-                method: 'GET',
-                headers: {
-                  Authorization: `Bearer ${workerCfg.token}`,
-                  Accept: 'text/event-stream',
-                  ...(lastEventId && lastEventId > 0 ? { 'Last-Event-ID': String(lastEventId) } : {}),
+            try {
+              workerAbort = new AbortController();
+              const query = lastEventId && lastEventId > 0
+                ? `?sinceEventId=${encodeURIComponent(String(lastEventId))}`
+                : '';
+              const response = await fetch(
+                `${workerCfg.baseUrl}/ops/${encodeURIComponent(currentOpId)}/events${query}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    Authorization: `Bearer ${workerCfg.token}`,
+                    Accept: 'text/event-stream',
+                    ...(lastEventId && lastEventId > 0 ? { 'Last-Event-ID': String(lastEventId) } : {}),
+                  },
+                  cache: 'no-store',
+                  signal: workerAbort.signal,
                 },
-                cache: 'no-store',
-                signal: workerAbort.signal,
-              },
-            );
+              );
 
-            if (closed) return;
+              if (closed) return;
 
-            if (!response.ok) {
-              const upstreamResponseBody = await response.text().catch(() => '');
-              logger.warn({
-                event: 'documents.parsed.events.worker_stream_request_failed',
-                degraded: true,
-                step: 'worker_stream_request',
-                documentId: id,
-                opId: currentOpId,
-                status: response.status,
-                upstreamResponseBody,
-                error: {
-                  name: 'WorkerStreamRequestFailed',
-                  message: `Worker stream request failed with status ${response.status}`,
-                },
-              }, 'Worker stream request failed');
-              await sleep(500);
-              continue;
-            }
-            if (!response.body) {
-              logger.warn({
-                event: 'documents.parsed.events.worker_stream_missing_body',
-                degraded: true,
-                step: 'worker_stream_body',
-                documentId: id,
-                opId: currentOpId,
-                error: {
-                  name: 'WorkerStreamMissingBody',
-                  message: 'Worker stream response missing body',
-                },
-              }, 'Worker stream response missing body');
-              await sleep(500);
-              continue;
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            let streamEnded = false;
-
-            while (!closed && !streamEnded) {
-              const read = await reader.read();
-              if (read.done) {
-                streamEnded = true;
-                break;
+              if (!response.ok) {
+                const upstreamResponseBody = await response.text().catch(() => '');
+                logger.warn({
+                  event: 'documents.parsed.events.worker_stream_request_failed',
+                  degraded: true,
+                  step: 'worker_stream_request',
+                  documentId: id,
+                  opId: currentOpId,
+                  status: response.status,
+                  upstreamResponseBody,
+                  error: {
+                    name: 'WorkerStreamRequestFailed',
+                    message: `Worker stream request failed with status ${response.status}`,
+                  },
+                }, 'Worker stream request failed');
+                await sleep(500);
+                continue;
+              }
+              if (!response.body) {
+                logger.warn({
+                  event: 'documents.parsed.events.worker_stream_missing_body',
+                  degraded: true,
+                  step: 'worker_stream_body',
+                  documentId: id,
+                  opId: currentOpId,
+                  error: {
+                    name: 'WorkerStreamMissingBody',
+                    message: 'Worker stream response missing body',
+                  },
+                }, 'Worker stream response missing body');
+                await sleep(500);
+                continue;
               }
 
-              buffer += decoder.decode(read.value, { stream: true });
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder();
+              let buffer = '';
+              let streamEnded = false;
 
-              while (true) {
-                const frameEnd = buffer.indexOf('\n\n');
-                if (frameEnd < 0) break;
-                const frame = buffer.slice(0, frameEnd);
-                buffer = buffer.slice(frameEnd + 2);
-
-                const eventId = parseSseEventId(frame);
-                if (eventId && eventId > 0) {
-                  lastEventId = eventId;
+              while (!closed && !streamEnded) {
+                const read = await reader.read();
+                if (read.done) {
+                  streamEnded = true;
+                  break;
                 }
 
-                const payload = parseSsePayload(frame);
-                if (!payload) continue;
+                buffer += decoder.decode(read.value, { stream: true });
 
-                let parsed: WorkerOperationEvent<PdfLayoutJobResult> | WorkerOperationState<PdfLayoutJobResult>;
-                try {
-                  parsed = JSON.parse(payload) as WorkerOperationEvent<PdfLayoutJobResult> | WorkerOperationState<PdfLayoutJobResult>;
-                } catch {
-                  continue;
-                }
+                while (true) {
+                  const frameEnd = buffer.indexOf('\n\n');
+                  if (frameEnd < 0) break;
+                  const frame = buffer.slice(0, frameEnd);
+                  buffer = buffer.slice(frameEnd + 2);
 
-                const workerSnapshot: WorkerOperationState<PdfLayoutJobResult> = (
-                  parsed && typeof parsed === 'object' && 'snapshot' in parsed
-                    ? parsed.snapshot
-                    : parsed as WorkerOperationState<PdfLayoutJobResult>
-                );
-                if (!workerSnapshot || workerSnapshot.opId !== currentOpId) continue;
+                  const eventId = parseSseEventId(frame);
+                  if (eventId && eventId > 0) {
+                    lastEventId = eventId;
+                  }
 
-                const nextSnapshot: ParsedSnapshot = {
-                  ...snapshotFromWorkerState(workerSnapshot),
-                  opId: workerSnapshot.opId,
-                };
-                const nextSignature = JSON.stringify(nextSnapshot);
-                if (nextSignature !== signature) {
-                  current = nextSnapshot;
-                  signature = nextSignature;
-                  currentFromWorker = true;
-                  writeSnapshot(current);
-                }
+                  const payload = parseSsePayload(frame);
+                  if (!payload) continue;
 
-                if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
-                  closeStream();
-                  return;
+                  let parsed: WorkerOperationEvent<PdfLayoutJobResult> | WorkerOperationState<PdfLayoutJobResult>;
+                  try {
+                    parsed = JSON.parse(payload) as WorkerOperationEvent<PdfLayoutJobResult> | WorkerOperationState<PdfLayoutJobResult>;
+                  } catch {
+                    continue;
+                  }
+
+                  const workerSnapshot: WorkerOperationState<PdfLayoutJobResult> = (
+                    parsed && typeof parsed === 'object' && 'snapshot' in parsed
+                      ? parsed.snapshot
+                      : parsed as WorkerOperationState<PdfLayoutJobResult>
+                  );
+                  if (!workerSnapshot || workerSnapshot.opId !== currentOpId) continue;
+
+                  const nextSnapshot: ParsedSnapshot = {
+                    ...snapshotFromWorkerState(workerSnapshot),
+                    opId: workerSnapshot.opId,
+                  };
+                  const nextSignature = JSON.stringify(nextSnapshot);
+                  if (nextSignature !== signature) {
+                    current = nextSnapshot;
+                    signature = nextSignature;
+                    currentFromWorker = true;
+                    writeSnapshot(current);
+                  }
+
+                  if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
+                    closeStream();
+                    return;
+                  }
                 }
               }
+            } catch (error) {
+              if (closed || isAbortLikeError(error)) return;
+              logDegraded(logger, {
+                event: 'documents.parsed.events.worker_stream_read_failed',
+                msg: 'Worker stream read failed; reconnecting',
+                step: 'worker_stream_read',
+                context: {
+                  documentId: id,
+                  opId: currentOpId,
+                  requestId,
+                },
+                error,
+              });
+              await sleep(500);
+              continue;
             }
 
             if (closed) return;
