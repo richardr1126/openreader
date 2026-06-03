@@ -70,6 +70,7 @@ docker run --name openreader \
   -p 8333:8333 \
   -v openreader_docstore:/app/docstore \
   -e API_BASE=http://host.docker.internal:8880/v1 \
+  -e API_KEY=none \
   -e BASE_URL=http://<YOUR_LAN_IP>:3003 \
   -e AUTH_SECRET=$(openssl rand -hex 32) \
   -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003 \
@@ -87,6 +88,7 @@ What this command enables:
 - `AUTH_TRUSTED_ORIGINS` allows localhost loopback origins in addition to your primary LAN origin.
 - `USE_ANONYMOUS_AUTH_SESSIONS=true` allows guest sessions while auth is enabled.
 - `API_BASE` seeds the default TTS endpoint into the admin-managed `default-openai` shared provider on first boot. Edit it from **Settings → Admin → Shared providers** after that.
+- `API_KEY` seeds the default provider's key (encrypted at rest). After first boot, manage keys from the admin panel or set per-user keys if `restrictUserApiKeys=false`. Always needed for seeding the default provider.
 - `ADMIN_EMAILS=...` (optional) auto-promotes the listed email(s) to admin so they can manage shared providers and site feature flags from the UI.
 - `openreader_docstore` volume keeps data persistent across restarts.
 
