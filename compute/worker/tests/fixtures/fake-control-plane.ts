@@ -13,6 +13,7 @@ type ComputeEvent = WorkerOperationEvent<ComputeResult>;
 
 export class FakeControlPlane {
   private readonly stateByOpId = new Map<string, ComputeState>();
+  private readonly revisionByOpId = new Map<string, number>();
   private readonly opIdByOpKey = new Map<string, string>();
   private readonly eventsByOpId = new Map<string, ComputeEvent[]>();
   private nextOpId = 1;
@@ -44,9 +45,18 @@ export class FakeControlPlane {
         updatedAt: input.updatedAt,
         timing: input.timing,
       }),
+      markFailedIfUnchanged: async (input) => this.compareAndSetFailed(input),
     },
     operationStateStore: {
       getOpState: async (opId) => this.stateByOpId.get(opId) ?? null,
+      getOpStateRecord: async (opId) => {
+        const state = this.stateByOpId.get(opId);
+        if (!state) return null;
+        return {
+          state,
+          revision: this.revisionByOpId.get(opId) ?? 0,
+        };
+      },
       listOpStates: async () => Array.from(this.stateByOpId.values()),
     },
     operationEventStream: {
@@ -63,6 +73,7 @@ export class FakeControlPlane {
 
   seedState(state: ComputeState): void {
     this.stateByOpId.set(state.opId, state);
+    this.revisionByOpId.set(state.opId, (this.revisionByOpId.get(state.opId) ?? 0) + 1);
     this.opIdByOpKey.set(state.opKey, state.opId);
   }
 
@@ -96,9 +107,28 @@ export class FakeControlPlane {
     };
 
     this.stateByOpId.set(opId, state);
+    this.revisionByOpId.set(opId, 1);
     this.opIdByOpKey.set(request.opKey, opId);
     this.seedEvent(opId, { eventId: 1, snapshot: state });
     return state;
+  }
+
+  private async compareAndSetFailed(input: {
+    current: ComputeState;
+    expectedRevision: number;
+    error: { message: string; code?: string } | string;
+    updatedAt?: number;
+    timing?: ComputeState['timing'];
+  }): Promise<ComputeState | null> {
+    const currentRevision = this.revisionByOpId.get(input.current.opId) ?? 0;
+    if (currentRevision !== input.expectedRevision) return null;
+    return this.updateState(input.current.opId, {
+      ...input.current,
+      status: 'failed',
+      error: typeof input.error === 'string' ? { message: input.error } : input.error,
+      updatedAt: input.updatedAt,
+      timing: input.timing,
+    });
   }
 
   private async updateState(
@@ -115,6 +145,7 @@ export class FakeControlPlane {
       updatedAt: patch.updatedAt ?? Date.now(),
     };
     this.stateByOpId.set(opId, next);
+    this.revisionByOpId.set(opId, (this.revisionByOpId.get(opId) ?? 0) + 1);
     const currentEvents = this.eventsByOpId.get(opId) ?? [];
     const nextEventId = (currentEvents.at(-1)?.eventId ?? 0) + 1;
     currentEvents.push({ eventId: nextEventId, snapshot: next });

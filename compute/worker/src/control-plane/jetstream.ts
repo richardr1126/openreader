@@ -81,15 +81,42 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   }
 
   async getOpState(opId: string): Promise<OperationState<Result> | null> {
+    const record = await this.getOpStateRecord(opId);
+    return record?.state ?? null;
+  }
+
+  async getOpStateRecord(opId: string): Promise<{ state: OperationState<Result>; revision: number } | null> {
     const kv = await this.getKv();
     const entry = await kv.get(opStateKvKey(opId));
     if (!isPut(entry)) return null;
-    return this.opStateCodec.decode(entry.value);
+    return {
+      state: this.opStateCodec.decode(entry.value),
+      revision: entry.revision,
+    };
   }
 
   async putOpState(state: OperationState<Result>): Promise<void> {
     const kv = await this.getKv();
     await kv.put(opStateKvKey(state.opId), this.opStateCodec.encode(state));
+  }
+
+  async compareAndSetOpState(input: {
+    opId: string;
+    expectedRevision: number;
+    newState: OperationState<Result>;
+  }): Promise<boolean> {
+    const kv = await this.getKv();
+    try {
+      await kv.update(
+        opStateKvKey(input.opId),
+        this.opStateCodec.encode(input.newState),
+        input.expectedRevision,
+      );
+      return true;
+    } catch (error) {
+      if (isCasConflictError(error)) return false;
+      throw error;
+    }
   }
 
   async listOpStates(): Promise<OperationState<Result>[]> {

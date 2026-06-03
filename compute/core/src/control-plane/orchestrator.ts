@@ -263,6 +263,36 @@ export class OperationOrchestrator {
     return next;
   }
 
+  async markFailedIfUnchanged(input: {
+    current: WorkerOperationState;
+    expectedRevision: number;
+    error: WorkerJobErrorShape | string;
+    updatedAt?: number;
+    timing?: WorkerJobTiming;
+  }): Promise<WorkerOperationState | null> {
+    const now = input.updatedAt ?? this.clock.now();
+    const shape = typeof input.error === 'string' ? { message: input.error } : input.error;
+
+    const next: WorkerOperationState = {
+      ...input.current,
+      status: 'failed',
+      startedAt: input.current.startedAt ?? now,
+      updatedAt: now,
+      error: shape,
+      ...(input.timing ? { timing: input.timing } : {}),
+    };
+
+    const updated = await this.stateStore.compareAndSetOpState({
+      opId: input.current.opId,
+      expectedRevision: input.expectedRevision,
+      newState: next,
+    });
+    if (!updated) return null;
+
+    await this.eventStream.append(next.opId, next);
+    return next;
+  }
+
   async explainReuseDecision(input: {
     current: WorkerOperationState;
     requestKind: WorkerOperationKind;

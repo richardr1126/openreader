@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import type { WorkerOperationRequest } from '../../src/api-contracts';
+import { OperationOrchestrator } from '../../src/control-plane';
 import {
   InMemoryOperationEventStream,
   InMemoryOperationQueue,
   InMemoryOperationStateStore,
-  OperationOrchestrator,
-} from '../../src/control-plane';
+} from '../helpers/in-memory-control-plane';
 
 function buildRequest(opKey: string): WorkerOperationRequest {
   return {
@@ -65,7 +65,9 @@ describe('operation orchestrator', () => {
     let firstAttempt = true;
     const conflictStore = {
       getOpState: store.getOpState.bind(store),
+      getOpStateRecord: store.getOpStateRecord.bind(store),
       putOpState: store.putOpState.bind(store),
+      compareAndSetOpState: store.compareAndSetOpState.bind(store),
       getOpIndex: store.getOpIndex.bind(store),
       compareAndSetOpIndex: async (input: { opKey: string; newOpId: string; expectedOpId: string | null }) => {
         if (firstAttempt && input.expectedOpId === null) {
@@ -91,5 +93,46 @@ describe('operation orchestrator', () => {
     const created = await orchestrator.enqueueOrReuse(buildRequest('cas-key'));
     expect(created.opId).toMatch(/^op-/);
     expect(await store.getOpIndex('cas-key')).toEqual({ opId: created.opId });
+  });
+
+  test('markFailedIfUnchanged only writes once for the expected revision', async () => {
+    const queue = new InMemoryOperationQueue();
+    const stateStore = new InMemoryOperationStateStore();
+    const eventStream = new InMemoryOperationEventStream();
+    const orchestrator = new OperationOrchestrator({
+      queue,
+      stateStore,
+      eventStream,
+      config: { opStaleMs: 2_000, maxCasRetries: 5 },
+    });
+
+    const created = await orchestrator.enqueueOrReuse(buildRequest('stale-op'));
+    await orchestrator.markRunning({ opId: created.opId, updatedAt: 2_000 });
+
+    const record = await stateStore.getOpStateRecord(created.opId);
+    expect(record).not.toBeNull();
+
+    const first = await orchestrator.markFailedIfUnchanged({
+      current: record!.state,
+      expectedRevision: record!.revision,
+      error: { code: 'WORKER_ORPHANED_OP', message: 'stale op' },
+      updatedAt: 3_000,
+    });
+    const second = await orchestrator.markFailedIfUnchanged({
+      current: record!.state,
+      expectedRevision: record!.revision,
+      error: { code: 'WORKER_ORPHANED_OP', message: 'stale op' },
+      updatedAt: 3_000,
+    });
+
+    expect(first).toMatchObject({
+      opId: created.opId,
+      status: 'failed',
+      error: { code: 'WORKER_ORPHANED_OP' },
+    });
+    expect(second).toBeNull();
+
+    const events = await eventStream.listSince(created.opId, 0);
+    expect(events.filter((event) => event.snapshot.status === 'failed')).toHaveLength(1);
   });
 });

@@ -120,6 +120,7 @@ interface OperationEventStreamLike {
 
 interface OperationStateStoreLike {
   getOpState(opId: string): Promise<StreamedOperationState | null>;
+  getOpStateRecord?(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
   listOpStates?(): Promise<StreamedOperationState[]>;
 }
 
@@ -149,6 +150,13 @@ interface OrchestratorLike {
     updatedAt?: number;
     timing?: WorkerJobTiming;
   }): Promise<StreamedOperationState>;
+  markFailedIfUnchanged?(input: {
+    current: StreamedOperationState;
+    expectedRevision: number;
+    error: { message: string; code?: string } | string;
+    updatedAt?: number;
+    timing?: WorkerJobTiming;
+  }): Promise<StreamedOperationState | null>;
 }
 
 export interface ComputeWorkerRouteDeps {
@@ -181,6 +189,20 @@ function requireEnv(name: string): string {
 
 function isInflightStatus(status: WorkerJobState): boolean {
   return status === 'queued' || status === 'running';
+}
+
+function getOrphanRecoveryThresholdMs(input: {
+  state: StreamedOperationState;
+  whisperTimeoutMs: number;
+  pdfTimeoutMs: number;
+  opStaleMs: number;
+}): number | null {
+  if (!isInflightStatus(input.state.status)) return null;
+  if (input.state.status === 'running') {
+    return input.state.kind === 'whisper_align' ? input.whisperTimeoutMs : input.pdfTimeoutMs;
+  }
+  if (input.state.kind !== 'pdf_layout') return null;
+  return input.opStaleMs;
 }
 
 function readIntEnv(name: string, fallback: number): number {
@@ -744,6 +766,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const ensureOrphanedOpRecovery = async (): Promise<void> => {
     if (typeof operationStateStore.listOpStates !== 'function') return;
+    if (typeof operationStateStore.getOpStateRecord !== 'function') return;
+    if (typeof orchestrator.markFailedIfUnchanged !== 'function') return;
     if (orphanRecoveryDoneForGeneration === sessionGeneration) return;
     if (orphanRecoveryPromise) {
       await orphanRecoveryPromise;
@@ -753,35 +777,51 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     orphanRecoveryPromise = (async () => {
       const now = Date.now();
       const states = await operationStateStore.listOpStates!();
-      const staleStates = states.filter((state) => {
-        if (!isInflightStatus(state.status)) return false;
-        const ageMs = now - state.updatedAt;
-        if (state.status === 'running') {
-          const runningTimeoutMs = state.kind === 'whisper_align' ? whisperTimeoutMs : pdfTimeoutMs;
-          return ageMs > runningTimeoutMs;
-        }
-        if (state.kind !== 'pdf_layout') return false;
-        return ageMs > opStaleMs;
-      });
+      const candidateStates = states.filter((state) => (
+        getOrphanRecoveryThresholdMs({
+          state,
+          whisperTimeoutMs,
+          pdfTimeoutMs,
+          opStaleMs,
+        }) !== null
+      ));
+      const recoveredStates: Array<Pick<StreamedOperationState, 'opId' | 'kind' | 'status'>> = [];
 
-      for (const state of staleStates) {
-        const staleAfterMs = state.status === 'running'
-          ? (state.kind === 'whisper_align' ? whisperTimeoutMs : pdfTimeoutMs)
-          : opStaleMs;
-        await orchestrator.markFailed({
-          opId: state.opId,
+      for (const candidate of candidateStates) {
+        const record = await operationStateStore.getOpStateRecord!(candidate.opId);
+        if (!record) continue;
+        const staleAfterMs = getOrphanRecoveryThresholdMs({
+          state: record.state,
+          whisperTimeoutMs,
+          pdfTimeoutMs,
+          opStaleMs,
+        });
+        if (staleAfterMs === null) continue;
+        const ageMs = now - record.state.updatedAt;
+        if (ageMs <= staleAfterMs) continue;
+
+        const recovered = await orchestrator.markFailedIfUnchanged!({
+          current: record.state,
+          expectedRevision: record.revision,
           error: {
             code: 'WORKER_ORPHANED_OP',
             message: `Worker stopped before completion; stale operation recovered on startup after ${staleAfterMs}ms`,
           },
           updatedAt: now,
         });
+        if (!recovered) continue;
+
+        recoveredStates.push({
+          opId: recovered.opId,
+          kind: recovered.kind,
+          status: record.state.status,
+        });
       }
 
-      if (staleStates.length > 0) {
+      if (recoveredStates.length > 0) {
         app.log.warn({
-          recoveredCount: staleStates.length,
-          ops: staleStates.map((state) => ({
+          recoveredCount: recoveredStates.length,
+          ops: recoveredStates.map((state) => ({
             opId: state.opId,
             kind: state.kind,
             status: state.status,

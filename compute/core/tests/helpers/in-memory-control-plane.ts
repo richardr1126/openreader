@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { WorkerOperationKind } from '../../src/api-contracts';
 import type {
   OperationEvent,
   OperationEventStream,
@@ -7,8 +8,7 @@ import type {
   OperationState,
   OperationStateStore,
   QueuedOperation,
-} from './types';
-import type { WorkerOperationKind } from '../api-contracts';
+} from '../../src/control-plane/types';
 
 function topicFor(opId: string): string {
   return `op.${opId}`;
@@ -49,14 +49,39 @@ export class InMemoryOperationQueue implements OperationQueue {
 
 export class InMemoryOperationStateStore implements OperationStateStore {
   private readonly stateByOpId = new Map<string, OperationState>();
+  private readonly revisionByOpId = new Map<string, number>();
   private readonly opIndexByKey = new Map<string, string>();
 
   async getOpState(opId: string): Promise<OperationState | null> {
     return this.stateByOpId.get(opId) ?? null;
   }
 
+  async getOpStateRecord(opId: string): Promise<{ state: OperationState; revision: number } | null> {
+    const state = this.stateByOpId.get(opId);
+    if (!state) return null;
+    return {
+      state,
+      revision: this.revisionByOpId.get(opId) ?? 0,
+    };
+  }
+
   async putOpState(state: OperationState): Promise<void> {
     this.stateByOpId.set(state.opId, state);
+    this.revisionByOpId.set(state.opId, (this.revisionByOpId.get(state.opId) ?? 0) + 1);
+  }
+
+  async compareAndSetOpState(input: {
+    opId: string;
+    expectedRevision: number;
+    newState: OperationState;
+  }): Promise<boolean> {
+    const currentState = this.stateByOpId.get(input.opId);
+    if (!currentState) return false;
+    const currentRevision = this.revisionByOpId.get(input.opId) ?? 0;
+    if (currentRevision !== input.expectedRevision) return false;
+    this.stateByOpId.set(input.opId, input.newState);
+    this.revisionByOpId.set(input.opId, currentRevision + 1);
+    return true;
   }
 
   async getOpIndex(opKey: string): Promise<OperationIndexEntry | null> {
