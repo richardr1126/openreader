@@ -298,7 +298,7 @@ export default function PDFViewerPage() {
 
     return (
       <div className="h-full w-full bg-surface">
-        <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard ${showDetailedParseLoader ? 'max-w-sm' : 'max-w-md'}`}>
+        <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard max-w-sm`}>
           {showDetailedParseLoader ? (
             <div className="relative w-full overflow-hidden rounded-lg border border-line bg-surface-sunken shadow-elev-2">
               {/* prism top edge + corner glow for depth */}
@@ -380,7 +380,7 @@ export default function PDFViewerPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-6-8h6M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />
                   </svg>
                   <p className="text-[10px] leading-snug text-faint">
-                    Classifying titles, text, tables, figures, formulas, seals &amp; more with <span className="font-semibold text-soft">PP-DocLayout-V3</span>.
+                    Classifying footnotes, titles, tables, figures, formulas, &amp; more with <span className="font-semibold text-soft">PP-DocLayout-V3</span>.
                   </p>
                 </div>
 
