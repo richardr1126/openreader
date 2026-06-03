@@ -424,3 +424,116 @@ h1, h2, h3, h4, h5, h6 {
   -webkit-mask: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
   border-radius: 999px; /* subtle rounding to reinforce taper */
 }
+
+/* Range slider — "precision gauge": a hairline rail with ruler notches per step
+   and a slim accent needle instead of a ball. Per-instance values
+   (--range-progress, --range-tick-size, --range-tick-color) come from inline styles. */
+.range-input {
+  --range-track-h: 2px;
+  --range-needle-h: 1rem;
+  --range-needle-w: 3px;
+  --range-tick-size: 25%;            /* segment width; only used when ticks are enabled */
+  --range-tick-color: transparent;  /* set to a real color inline for discrete sliders */
+  --range-fill: var(--muted);
+  --range-empty: color-mix(in srgb, var(--offbase) 82%, var(--background));
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+.range-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.range-input:focus-visible {
+  outline: none;
+}
+
+/* Ticks ride above the muted fill / empty rail (first listed background = top). */
+.range-input::-webkit-slider-runnable-track {
+  height: var(--range-track-h);
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      var(--range-tick-color) 0,
+      var(--range-tick-color) 1.5px,
+      transparent 1.5px,
+      transparent var(--range-tick-size)
+    ),
+    linear-gradient(
+      to right,
+      var(--range-fill) 0,
+      var(--range-fill) var(--range-progress),
+      var(--range-empty) var(--range-progress),
+      var(--range-empty) 100%
+    );
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--range-needle-w);
+  height: var(--range-needle-h);
+  margin-top: calc((var(--range-track-h) - var(--range-needle-h)) / 2);
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--background) 70%, transparent),
+    0 1px 6px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.range-input:hover::-webkit-slider-thumb {
+  transform: scaleY(1.3);
+}
+.range-input:active::-webkit-slider-thumb {
+  transform: scaleY(1.55);
+}
+.range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 1px 6px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Firefox: track + native progress fill + matching needle. */
+.range-input::-moz-range-track {
+  height: var(--range-track-h);
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      var(--range-tick-color) 0,
+      var(--range-tick-color) 1.5px,
+      transparent 1.5px,
+      transparent var(--range-tick-size)
+    ),
+    var(--range-empty);
+}
+.range-input::-moz-range-progress {
+  height: var(--range-track-h);
+  border-radius: 999px;
+  background: var(--range-fill);
+}
+.range-input::-moz-range-thumb {
+  width: var(--range-needle-w);
+  height: var(--range-needle-h);
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--background) 70%, transparent),
+    0 1px 6px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.range-input:hover::-moz-range-thumb {
+  transform: scaleY(1.3);
+}
+.range-input:active::-moz-range-thumb {
+  transform: scaleY(1.55);
+}
+.range-input:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 1px 6px color-mix(in srgb, var(--accent) 55%, transparent);
+}
