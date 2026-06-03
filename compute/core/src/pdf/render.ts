@@ -1,5 +1,5 @@
-import path from 'path';
 import type { Canvas } from '@napi-rs/canvas';
+import { resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
 
 type CanvasRuntime = {
   DOMMatrixCtor: unknown;
@@ -8,11 +8,6 @@ type CanvasRuntime = {
 };
 
 let canvasRuntimePromise: Promise<CanvasRuntime> | null = null;
-
-function resolvePdfjsStandardFontDataUrl(): string {
-  const standardFontDir = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts');
-  return `${standardFontDir.replace(/\/?$/, '/')}`;
-}
 
 async function loadCanvasRuntime(): Promise<CanvasRuntime> {
   if (!canvasRuntimePromise) {

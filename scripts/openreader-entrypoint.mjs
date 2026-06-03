@@ -219,6 +219,28 @@ function spawnMainCommand(command, env) {
   return { child, exitPromise };
 }
 
+function resolveEmbeddedWorkerLaunch() {
+  const candidateDirs = [
+    path.join(process.cwd(), 'embedded-compute-worker'),
+    path.join(process.cwd(), 'compute', 'worker'),
+  ];
+
+  for (const workerDir of candidateDirs) {
+    const serverEntry = path.join(workerDir, 'src', 'server.ts');
+    if (!fs.existsSync(serverEntry)) continue;
+    return {
+      cmd: process.execPath,
+      args: ['--import', 'tsx', 'src/server.ts'],
+      cwd: workerDir,
+    };
+  }
+
+  throw new Error(
+    'Could not find an embedded compute worker runtime. '
+    + 'Include embedded-compute-worker/src/server.ts in the runtime image or keep compute/worker available locally.',
+  );
+}
+
 function runDbMigrations(env) {
   const migrateScript = path.join(process.cwd(), 'drizzle', 'scripts', 'migrate.mjs');
   if (!fs.existsSync(migrateScript)) {
@@ -541,13 +563,14 @@ async function main() {
         ...runtimeEnv,
         PORT: String(embeddedWorkerPort),
       };
+      const workerLaunch = resolveEmbeddedWorkerLaunch();
       workerProc = spawn(
-        'pnpm',
-        ['--filter', '@openreader/compute-worker', 'start'],
+        workerLaunch.cmd,
+        workerLaunch.args,
         {
+          cwd: workerLaunch.cwd,
           env: workerEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
-          shell: process.platform === 'win32',
         },
       );
       stopWorkerStdoutForward = forwardChildStream(workerProc.stdout, process.stdout);

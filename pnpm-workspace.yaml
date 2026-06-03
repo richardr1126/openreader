@@ -1,6 +1,7 @@
 packages:
   - .
   - compute/*
+  - docker/*
 
 allowBuilds:
   '@napi-rs/canvas': true

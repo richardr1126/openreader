@@ -24,6 +24,7 @@ const serverExternalPackages = [
 ];
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   async headers() {
     return [
       {
@@ -52,12 +53,15 @@ const nextConfig: NextConfig = {
     ],
     '/api/documents/blob/preview/ensure': [
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**/*',
     ],
     '/api/documents/blob/preview/presign': [
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**/*',
     ],
     '/api/documents/blob/preview/fallback': [
       './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      './node_modules/pdfjs-dist/standard_fonts/**/*',
     ],
   },
   outputFileTracingExcludes: {

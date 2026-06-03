@@ -1,9 +1,9 @@
-import path from 'path';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import type { ParsedPdfDocument, ParsedPdfPage } from '../types/parsed-pdf';
 import { ensureModel } from './model';
 import { runLayoutModel } from './runLayoutModel';
 import { mergeTextWithRegions } from './merge';
+import { resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
 import { stitchCrossPageBlocks } from './stitch';
 import { renderPage } from './render';
 import { normalizeTextItemsForLayout } from './normalize-text';
@@ -23,11 +23,6 @@ interface ParsePdfInput {
 }
 
 const LAYOUT_RENDER_SCALE = 1.5;
-
-function resolvePdfjsStandardFontDataUrl(): string {
-  const standardFontDir = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts');
-  return `${standardFontDir.replace(/\/?$/, '/')}`;
-}
 
 export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument> {
   await ensureModel();
