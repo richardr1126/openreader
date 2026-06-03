@@ -292,6 +292,10 @@ export function usePdfDocument(): PdfDocumentState {
   }, [pdfDocument]);
 
   useEffect(() => {
+    pageTextCacheRef.current.clear();
+  }, [parsedDocument, documentSettings.pdf?.skipBlockKinds]);
+
+  useEffect(() => {
     setCurrDocPage(currDocPageNumber);
   }, [currDocPageNumber]);
 
@@ -538,7 +542,10 @@ export function usePdfDocument(): PdfDocumentState {
     if (!currDocId) return;
     try {
       const forced = await forceReparsePdfDocument(currDocId);
+      loadSeqRef.current += 1;
+      pageTextCacheRef.current.clear();
       setParsedDocument(null);
+      setCurrDocText(undefined);
       setParseStatus(forced.status);
       setParseProgress(null);
       setActiveParseOpId(forced.opId ?? null);

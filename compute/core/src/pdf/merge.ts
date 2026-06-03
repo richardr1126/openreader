@@ -53,7 +53,11 @@ function joinText(items: PdfTextItem[]): string {
     const prevEndX = prev.x + prev.width;
     const gap = item.x - prevEndX;
     const lineJump = item.y - prev.y;
-    const lineBreak = lineJump > Math.max(2, Math.min(prev.height, item.height) * 0.6);
+    const prevBottom = prev.y + prev.height;
+    const itemBottom = item.y + item.height;
+    const verticalOverlap = Math.max(0, Math.min(prevBottom, itemBottom) - Math.max(prev.y, item.y));
+    const sharesLineBand = verticalOverlap >= Math.max(1, Math.min(prev.height, item.height) * 0.5);
+    const lineBreak = !sharesLineBand && lineJump > Math.max(2, Math.min(prev.height, item.height) * 0.6);
     const avgCharWidth = item.width / Math.max(1, item.text.length);
     const needsSpace = lineBreak || gap > Math.max(avgCharWidth * 0.3, 2);
     out += needsSpace ? ` ${item.text}` : item.text;

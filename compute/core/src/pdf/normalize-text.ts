@@ -6,6 +6,11 @@ interface ViewportLike {
   transform: readonly number[];
 }
 
+interface TextStyleLike {
+  ascent?: number;
+  descent?: number;
+}
+
 function applyViewportTransform(
   x: number,
   y: number,
@@ -23,7 +28,25 @@ function applyViewportTransform(
   };
 }
 
-export function normalizeTextItemsForLayout(items: TextItem[], viewport: ViewportLike): PdfTextItem[] {
+function resolveTopOffset(height: number, style: TextStyleLike | undefined): number {
+  const ascent = Number(style?.ascent);
+  if (Number.isFinite(ascent) && ascent > 0) {
+    return height * ascent;
+  }
+
+  const descent = Number(style?.descent);
+  if (Number.isFinite(descent) && descent < 0) {
+    return height * (1 + descent);
+  }
+
+  return height;
+}
+
+export function normalizeTextItemsForLayout(
+  items: TextItem[],
+  viewport: ViewportLike,
+  styles: Record<string, TextStyleLike> = {},
+): PdfTextItem[] {
   return items
     .filter((item) => {
       if (!(typeof item.str === 'string' && item.str.trim().length > 0)) return false;
@@ -46,11 +69,13 @@ export function normalizeTextItemsForLayout(items: TextItem[], viewport: Viewpor
       );
       const width = Math.max(0, Number(item.width ?? 0));
       const height = Math.max(1, Math.abs(Number(item.transform[3] ?? 1)));
+      const topOffset = resolveTopOffset(height, styles[item.fontName ?? '']);
       // pdf.js text transforms are in PDF user-space and may include non-zero
       // page origins via the viewport transform. Map the text baseline into
-      // viewport coordinates first, then convert baseline to top-left.
+      // viewport coordinates first, then adjust upward using font ascent,
+      // which matches how pdf.js positions glyph runs in its text layer.
       const x = Math.max(0, origin.x);
-      const y = Math.max(0, origin.y - height);
+      const y = Math.max(0, origin.y - topOffset);
       return {
         text: item.str,
         x,
