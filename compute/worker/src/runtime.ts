@@ -56,6 +56,10 @@ import {
   hashOpKey,
 } from './control-plane/jetstream';
 import { type JsonCodec, createJsonCodec } from './control-plane/json-codec';
+import {
+  recoverOrphanedOperations,
+  type StreamedOperationState,
+} from './orphan-recovery';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 
@@ -79,6 +83,7 @@ const NATS_API_TIMEOUT_MS = 60_000;
 // put it to sleep. Reconnect happens lazily on the next inbound request.
 const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
+const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
 // Bounded pull window so consumer loops yield periodically and can be stopped
 // cleanly when going idle, instead of blocking on a long-lived pull.
 const PULL_EXPIRES_MS = 5_000;
@@ -106,8 +111,6 @@ interface NatsSession {
   whisperConsumer: Consumer;
   layoutConsumer: Consumer;
 }
-
-type StreamedOperationState = WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>;
 
 interface OperationEventStreamLike {
   subscribe(input: {
@@ -185,24 +188,6 @@ function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
-}
-
-function isInflightStatus(status: WorkerJobState): boolean {
-  return status === 'queued' || status === 'running';
-}
-
-function getOrphanRecoveryThresholdMs(input: {
-  state: StreamedOperationState;
-  whisperTimeoutMs: number;
-  pdfTimeoutMs: number;
-  opStaleMs: number;
-}): number | null {
-  if (!isInflightStatus(input.state.status)) return null;
-  if (input.state.status === 'running') {
-    return input.state.kind === 'whisper_align' ? input.whisperTimeoutMs : input.pdfTimeoutMs;
-  }
-  if (input.state.kind !== 'pdf_layout') return null;
-  return input.opStaleMs;
 }
 
 function readIntEnv(name: string, fallback: number): number {
@@ -568,6 +553,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   let connecting: Promise<NatsSession> | null = null;
   let workerLoops: Promise<void>[] = [];
   let idleTimer: NodeJS.Timeout | null = null;
+  let orphanSweepTimer: NodeJS.Timeout | null = null;
   let stopping = false;
   let loopStopRequested = false;
 
@@ -596,6 +582,19 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     idleTimer.unref?.();
   }
 
+  function startOrphanSweepTimer(): void {
+    if (orphanSweepTimer) return;
+    orphanSweepTimer = setInterval(() => {
+      if (!session || stopping) return;
+      void runOrphanedOpRecovery({ force: true }).catch((error) => {
+        app.log.error({
+          error: toErrorMessage(error),
+        }, 'periodic orphaned operation recovery failed');
+      });
+    }, ORPHAN_SWEEP_INTERVAL_MS);
+    orphanSweepTimer.unref?.();
+  }
+
   async function disconnect(reason: string): Promise<void> {
     const current = session;
     if (!current) return;
@@ -606,6 +605,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     if (idleTimer) {
       clearInterval(idleTimer);
       idleTimer = null;
+    }
+    if (orphanSweepTimer) {
+      clearInterval(orphanSweepTimer);
+      orphanSweepTimer = null;
     }
     try {
       await current.nc.close();
@@ -649,6 +652,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       markActivity();
       startWorkerLoops(next);
       startIdleTimer();
+      startOrphanSweepTimer();
       // Safety net: if the connection closes for any reason (network drop after
       // exhausting reconnects, or our own disconnect), drop the stale session so
       // the next request reconnects cleanly.
@@ -764,59 +768,35 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   let orphanRecoveryDoneForGeneration = -1;
   let sessionGeneration = options.routeDeps ? 0 : -1;
 
-  const ensureOrphanedOpRecovery = async (): Promise<void> => {
+  const runOrphanedOpRecovery = async (options?: { force?: boolean }): Promise<void> => {
     if (typeof operationStateStore.listOpStates !== 'function') return;
     if (typeof operationStateStore.getOpStateRecord !== 'function') return;
     if (typeof orchestrator.markFailedIfUnchanged !== 'function') return;
-    if (orphanRecoveryDoneForGeneration === sessionGeneration) return;
+    if (!options?.force && orphanRecoveryDoneForGeneration === sessionGeneration) return;
     if (orphanRecoveryPromise) {
       await orphanRecoveryPromise;
       return;
     }
 
     orphanRecoveryPromise = (async () => {
-      const now = Date.now();
-      const states = await operationStateStore.listOpStates!();
-      const candidateStates = states.filter((state) => (
-        getOrphanRecoveryThresholdMs({
-          state,
-          whisperTimeoutMs,
-          pdfTimeoutMs,
-          opStaleMs,
-        }) !== null
-      ));
-      const recoveredStates: Array<Pick<StreamedOperationState, 'opId' | 'kind' | 'status'>> = [];
-
-      for (const candidate of candidateStates) {
-        const record = await operationStateStore.getOpStateRecord!(candidate.opId);
-        if (!record) continue;
-        const staleAfterMs = getOrphanRecoveryThresholdMs({
-          state: record.state,
-          whisperTimeoutMs,
-          pdfTimeoutMs,
-          opStaleMs,
-        });
-        if (staleAfterMs === null) continue;
-        const ageMs = now - record.state.updatedAt;
-        if (ageMs <= staleAfterMs) continue;
-
-        const recovered = await orchestrator.markFailedIfUnchanged!({
-          current: record.state,
-          expectedRevision: record.revision,
-          error: {
-            code: 'WORKER_ORPHANED_OP',
-            message: `Worker stopped before completion; stale operation recovered on startup after ${staleAfterMs}ms`,
-          },
-          updatedAt: now,
-        });
-        if (!recovered) continue;
-
-        recoveredStates.push({
-          opId: recovered.opId,
-          kind: recovered.kind,
-          status: record.state.status,
-        });
-      }
+      const recoveredStates = await recoverOrphanedOperations({
+        operationStateStore: operationStateStore as typeof operationStateStore & {
+          getOpStateRecord(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
+          listOpStates(): Promise<StreamedOperationState[]>;
+        },
+        orchestrator: orchestrator as typeof orchestrator & {
+          markFailedIfUnchanged(input: {
+            current: StreamedOperationState;
+            expectedRevision: number;
+            error: { message: string; code?: string } | string;
+            updatedAt?: number;
+            timing?: WorkerJobTiming;
+          }): Promise<StreamedOperationState | null>;
+        },
+        whisperTimeoutMs,
+        pdfTimeoutMs,
+        opStaleMs,
+      });
 
       if (recoveredStates.length > 0) {
         app.log.warn({
@@ -826,7 +806,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
             kind: state.kind,
             status: state.status,
           })),
-        }, 'recovered stale in-flight operations on startup');
+        }, 'recovered stale in-flight operations during reconciliation');
       }
 
       orphanRecoveryDoneForGeneration = sessionGeneration;
@@ -835,6 +815,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     });
 
     await orphanRecoveryPromise;
+  };
+
+  const ensureOrphanedOpRecovery = async (): Promise<void> => {
+    await runOrphanedOpRecovery();
   };
 
   const getOpState = async (opId: string): Promise<StreamedOperationState | null> => {
@@ -1508,6 +1492,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     if (idleTimer) {
       clearInterval(idleTimer);
       idleTimer = null;
+    }
+    if (orphanSweepTimer) {
+      clearInterval(orphanSweepTimer);
+      orphanSweepTimer = null;
     }
     await app.close();
     await Promise.allSettled(workerLoops);
