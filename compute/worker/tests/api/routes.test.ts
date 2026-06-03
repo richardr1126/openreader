@@ -120,7 +120,7 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('"status":"succeeded"');
   });
 
-  test('marks stale running whisper and pdf ops failed during startup reconciliation but leaves queued ops on the conservative path', async () => {
+  test('marks stale running whisper and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {
     const now = Date.now();
     fake.seedState({
       opId: 'op-stale-whisper-running',
@@ -159,6 +159,8 @@ describe('compute worker API routes', () => {
       updatedAt: now - 310_000,
     });
 
+    // GET /ops/:opId resolves via getOpState(), which first awaits the shared
+    // orphanRecoveryPromise path through ensureOrphanedOpRecovery().
     const fetch = await runtime.app.inject({
       method: 'GET',
       url: '/ops/op-stale-whisper-running',
