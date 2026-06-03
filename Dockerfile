@@ -78,11 +78,6 @@ RUN chmod +x /usr/local/bin/nats-server
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
 COPY --from=app-builder /app/compute/core/src/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
 
-# Bind the worker's health endpoint before downloading ONNX models, so cold
-# starts don't exceed the entrypoint's 30s /health/ready gate. Models load
-# lazily on first job instead.
-ENV COMPUTE_PREWARM_MODELS=false
-
 # Expose the port the app runs on
 EXPOSE 3003
 

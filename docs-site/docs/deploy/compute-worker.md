@@ -51,7 +51,7 @@ Common optional variables:
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `PORT=8081` for local/manual runs. Platforms like Railway usually inject `PORT`.
 - `LOG_FORMAT=json` and `COMPUTE_LOG_LEVEL=info`
-- `COMPUTE_PREWARM_MODELS=true`
+- `COMPUTE_PREWARM_MODELS=false` by default. Set it to `true` to pre-download ONNX models during worker startup.
 - `COMPUTE_JOB_CONCURRENCY=1`
 - `COMPUTE_WHISPER_TIMEOUT_MS=30000`
 - `COMPUTE_PDF_TIMEOUT_MS=300000`
