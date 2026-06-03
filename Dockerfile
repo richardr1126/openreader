@@ -14,7 +14,7 @@ RUN cp "$(command -v nats-server)" /tmp/nats-server
 FROM node:lts-slim AS app-builder
 
 # Install pnpm globally
-RUN npm install -g pnpm@11.1.2
+RUN npm install -g pnpm@10.33.4
 
 # Create app directory
 WORKDIR /app
