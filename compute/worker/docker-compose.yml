@@ -24,7 +24,7 @@ services:
       PORT: ${PORT:-8081}
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
       S3_PREFIX: ${S3_PREFIX:-openreader}
-      COMPUTE_PREWARM_MODELS: ${COMPUTE_PREWARM_MODELS:-true}
+      COMPUTE_PREWARM_MODELS: ${COMPUTE_PREWARM_MODELS:-false}
     ports:
       - "8081:8081"
     develop:

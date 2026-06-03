@@ -11,10 +11,10 @@ RUN cp "$(command -v nats-server)" /tmp/nats-server
 
 
 # Stage 2: build the Next.js app
-FROM node:lts-alpine AS app-builder
+FROM node:lts-slim AS app-builder
 
 # Install pnpm globally
-RUN npm install -g pnpm@11.1.2
+RUN npm install -g pnpm@10.33.4
 
 # Create app directory
 WORKDIR /app
@@ -44,12 +44,14 @@ RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
 
 
 # Stage 3: minimal runtime image
-FROM node:lts-alpine AS runner
+FROM node:lts-slim AS runner
 
 # Add runtime OS dependencies:
 # - libreoffice-writer: required for DOCX → PDF conversion
 # ffmpeg is provided by ffmpeg-static from node_modules.
-RUN apk add --no-cache ca-certificates libreoffice-writer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates libreoffice-writer && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install pnpm for runtime process commands.
 RUN npm install -g pnpm@10.33.4

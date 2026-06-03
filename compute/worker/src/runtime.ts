@@ -510,7 +510,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const pdfTimeoutMs = timeoutConfig.pdfTimeoutMs;
   const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
   const pdfAttempts = readIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
-  const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', true);
+  const prewarmModels = parseBoolEnv('COMPUTE_PREWARM_MODELS', false);
   const jobsStreamMaxBytes = readIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
   const eventsStreamMaxBytes = readIntEnv('COMPUTE_EVENTS_STREAM_MAX_BYTES', 128 * 1024 * 1024);
   const jobStatesMaxBytes = readIntEnv('COMPUTE_JOB_STATES_MAX_BYTES', 64 * 1024 * 1024);
