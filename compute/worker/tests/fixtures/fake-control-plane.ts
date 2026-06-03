@@ -47,6 +47,7 @@ export class FakeControlPlane {
     },
     operationStateStore: {
       getOpState: async (opId) => this.stateByOpId.get(opId) ?? null,
+      listOpStates: async () => Array.from(this.stateByOpId.values()),
     },
     operationEventStream: {
       subscribe: async ({ opId, sinceEventId, onEvent }) => {
@@ -69,6 +70,10 @@ export class FakeControlPlane {
     const list = this.eventsByOpId.get(opId) ?? [];
     list.push(event);
     this.eventsByOpId.set(opId, list);
+  }
+
+  getState(opId: string): ComputeState | null {
+    return this.stateByOpId.get(opId) ?? null;
   }
 
   private async enqueueOrReuse(request: WorkerOperationRequest): Promise<ComputeState> {

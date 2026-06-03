@@ -119,4 +119,37 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('id: 7');
     expect(stream.body).toContain('"status":"succeeded"');
   });
+
+  test('marks stale in-flight pdf ops failed during startup reconciliation', async () => {
+    fake.seedState({
+      opId: 'op-stale',
+      opKey: 'k-stale',
+      kind: 'pdf_layout',
+      jobId: 'job-op-stale',
+      status: 'running',
+      queuedAt: 1,
+      updatedAt: 1,
+    });
+
+    const fetch = await runtime.app.inject({
+      method: 'GET',
+      url: '/ops/op-stale',
+      headers: AUTH,
+    });
+
+    expect(fetch.statusCode).toBe(200);
+    expect(fetch.json()).toMatchObject({
+      opId: 'op-stale',
+      status: 'failed',
+      error: {
+        code: 'WORKER_ORPHANED_OP',
+      },
+    });
+    expect(fake.getState('op-stale')).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'WORKER_ORPHANED_OP',
+      },
+    });
+  });
 });

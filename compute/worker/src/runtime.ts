@@ -120,6 +120,7 @@ interface OperationEventStreamLike {
 
 interface OperationStateStoreLike {
   getOpState(opId: string): Promise<StreamedOperationState | null>;
+  listOpStates?(): Promise<StreamedOperationState[]>;
 }
 
 interface OrchestratorLike {
@@ -176,6 +177,10 @@ function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+function isInflightStatus(status: WorkerJobState): boolean {
+  return status === 'queued' || status === 'running';
 }
 
 function readIntEnv(name: string, fallback: number): number {
@@ -617,6 +622,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       const layoutConsumer = await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME);
       const next: NatsSession = { nc, js, jsm, kv, whisperConsumer, layoutConsumer };
       session = next;
+      sessionGeneration += 1;
+      orphanRecoveryDoneForGeneration = -1;
       markActivity();
       startWorkerLoops(next);
       startIdleTimer();
@@ -731,8 +738,55 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const operationStateStore = options.routeDeps?.operationStateStore ?? defaultOperationStateStore;
   const operationEventStream = options.routeDeps?.operationEventStream ?? defaultOperationEventStream;
   const orchestrator = options.routeDeps?.orchestrator ?? defaultOrchestrator;
+  let orphanRecoveryPromise: Promise<void> | null = null;
+  let orphanRecoveryDoneForGeneration = -1;
+  let sessionGeneration = options.routeDeps ? 0 : -1;
+
+  const ensureOrphanedOpRecovery = async (): Promise<void> => {
+    if (typeof operationStateStore.listOpStates !== 'function') return;
+    if (orphanRecoveryDoneForGeneration === sessionGeneration) return;
+    if (orphanRecoveryPromise) {
+      await orphanRecoveryPromise;
+      return;
+    }
+
+    orphanRecoveryPromise = (async () => {
+      const now = Date.now();
+      const states = await operationStateStore.listOpStates!();
+      const stalePdfStates = states.filter((state) => (
+        state.kind === 'pdf_layout'
+        && isInflightStatus(state.status)
+        && (now - state.updatedAt) > opStaleMs
+      ));
+
+      for (const state of stalePdfStates) {
+        await orchestrator.markFailed({
+          opId: state.opId,
+          error: {
+            code: 'WORKER_ORPHANED_OP',
+            message: `Worker stopped before completion; stale operation recovered on startup after ${opStaleMs}ms`,
+          },
+          updatedAt: now,
+        });
+      }
+
+      if (stalePdfStates.length > 0) {
+        app.log.warn({
+          recoveredCount: stalePdfStates.length,
+          opIds: stalePdfStates.map((state) => state.opId),
+        }, 'recovered stale in-flight pdf operations on startup');
+      }
+
+      orphanRecoveryDoneForGeneration = sessionGeneration;
+    })().finally(() => {
+      orphanRecoveryPromise = null;
+    });
+
+    await orphanRecoveryPromise;
+  };
 
   const getOpState = async (opId: string): Promise<StreamedOperationState | null> => {
+    await ensureOrphanedOpRecovery();
     return await operationStateStore.getOpState(opId);
   };
 
@@ -798,6 +852,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     }
 
     const requestOp = parsed.data as WorkerOperationRequest;
+    await ensureOrphanedOpRecovery();
     const op = await orchestrator.enqueueOrReuse(requestOp);
     app.log.info({
       kind: requestOp.kind,

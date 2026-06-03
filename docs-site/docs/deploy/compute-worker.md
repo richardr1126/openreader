@@ -41,7 +41,7 @@ S3_SECRET_ACCESS_KEY=...
 
 - Embedded/local mode: configure the root `.env` only.
 - External worker mode: set `COMPUTE_WORKER_URL` and `COMPUTE_WORKER_TOKEN` on the app, and worker runtime values on the worker service.
-- Keep shared values aligned across app and worker: `COMPUTE_WORKER_TOKEN`, `S3_*`, `COMPUTE_WHISPER_TIMEOUT_MS`, `COMPUTE_PDF_TIMEOUT_MS`, and `COMPUTE_OP_STALE_MS`.
+- Keep shared values aligned across app and worker: `COMPUTE_WORKER_TOKEN`, `S3_*`, `COMPUTE_WHISPER_TIMEOUT_MS`, `COMPUTE_PDF_TIMEOUT_MS`, `COMPUTE_PDF_JOB_ATTEMPTS`, and `COMPUTE_OP_STALE_MS`.
 :::
 
 Common optional variables:
@@ -76,6 +76,7 @@ COMPUTE_WORKER_TOKEN=<same-token-as-worker>
 # Optional shared overrides:
 # COMPUTE_WHISPER_TIMEOUT_MS=30000
 # COMPUTE_PDF_TIMEOUT_MS=300000
+# COMPUTE_PDF_JOB_ATTEMPTS=1
 # COMPUTE_OP_STALE_MS=1800000
 ```
 
