@@ -120,36 +120,49 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('"status":"succeeded"');
   });
 
-  test('marks stale in-flight pdf ops failed during startup reconciliation', async () => {
+  test('marks stale running pdf ops failed during startup reconciliation but leaves queued ops on the conservative path', async () => {
+    const now = Date.now();
     fake.seedState({
-      opId: 'op-stale',
-      opKey: 'k-stale',
+      opId: 'op-stale-running',
+      opKey: 'k-stale-running',
       kind: 'pdf_layout',
-      jobId: 'job-op-stale',
+      jobId: 'job-op-stale-running',
       status: 'running',
       queuedAt: 1,
-      updatedAt: 1,
+      updatedAt: now - 310_000,
+    });
+    fake.seedState({
+      opId: 'op-stale-queued',
+      opKey: 'k-stale-queued',
+      kind: 'pdf_layout',
+      jobId: 'job-op-stale-queued',
+      status: 'queued',
+      queuedAt: 1,
+      updatedAt: now - 310_000,
     });
 
     const fetch = await runtime.app.inject({
       method: 'GET',
-      url: '/ops/op-stale',
+      url: '/ops/op-stale-running',
       headers: AUTH,
     });
 
     expect(fetch.statusCode).toBe(200);
     expect(fetch.json()).toMatchObject({
-      opId: 'op-stale',
+      opId: 'op-stale-running',
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',
       },
     });
-    expect(fake.getState('op-stale')).toMatchObject({
+    expect(fake.getState('op-stale-running')).toMatchObject({
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',
       },
+    });
+    expect(fake.getState('op-stale-queued')).toMatchObject({
+      status: 'queued',
     });
   });
 });

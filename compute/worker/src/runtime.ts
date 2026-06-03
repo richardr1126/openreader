@@ -753,18 +753,22 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     orphanRecoveryPromise = (async () => {
       const now = Date.now();
       const states = await operationStateStore.listOpStates!();
-      const stalePdfStates = states.filter((state) => (
-        state.kind === 'pdf_layout'
-        && isInflightStatus(state.status)
-        && (now - state.updatedAt) > opStaleMs
-      ));
+      const stalePdfStates = states.filter((state) => {
+        if (state.kind !== 'pdf_layout' || !isInflightStatus(state.status)) return false;
+        const ageMs = now - state.updatedAt;
+        if (state.status === 'running') {
+          return ageMs > pdfTimeoutMs;
+        }
+        return ageMs > opStaleMs;
+      });
 
       for (const state of stalePdfStates) {
+        const staleAfterMs = state.status === 'running' ? pdfTimeoutMs : opStaleMs;
         await orchestrator.markFailed({
           opId: state.opId,
           error: {
             code: 'WORKER_ORPHANED_OP',
-            message: `Worker stopped before completion; stale operation recovered on startup after ${opStaleMs}ms`,
+            message: `Worker stopped before completion; stale operation recovered on startup after ${staleAfterMs}ms`,
           },
           updatedAt: now,
         });
