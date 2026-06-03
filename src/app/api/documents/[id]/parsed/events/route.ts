@@ -8,8 +8,15 @@ import { isAbortLikeError } from '@/lib/server/compute/abort-like-error';
 import { isWorkerOperationStateStale, snapshotFromWorkerState } from '@/lib/server/compute/worker-parse-state';
 import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
-import { normalizeParseStatus, parseDocumentParseState } from '@/lib/server/documents/parse-state';
+import {
+  normalizeParseStatus,
+  parseDocumentParseState,
+  stringifyDocumentParseState,
+} from '@/lib/server/documents/parse-state';
+import { backfillPendingPdfParseOperation } from '@/lib/server/documents/parse-state-backfill';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
+import { documentParseStateFromWorkerState } from '@/lib/server/compute/worker-parse-state';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger, hashForLog } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -113,6 +120,17 @@ async function loadPreferredRow(input: {
   return rows.find((candidate) => candidate.userId === input.storageUserId) ?? rows[0] ?? null;
 }
 
+async function writeParseRowState(input: {
+  documentId: string;
+  userId: string;
+  parseState: string;
+}): Promise<void> {
+  await db
+    .update(documents)
+    .set({ parseState: input.parseState })
+    .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)));
+}
+
 async function syncFromDb(input: {
   documentId: string;
   storageUserId: string;
@@ -163,6 +181,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const requestedOpId = typeof requestedOpIdRaw === 'string' && requestedOpIdRaw.trim()
       ? requestedOpIdRaw.trim()
       : null;
+    const testNamespace = getOpenReaderTestNamespace(req.headers);
 
     const storageUserId = authCtxOrRes.userId;
     const storageUserIdHash = hashForLog(storageUserId);
@@ -178,7 +197,31 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const initialState = await toSnapshotState(row, requestedOpId);
+    let initialState = await toSnapshotState(row, requestedOpId);
+    if (!requestedOpId && !initialState.opId && initialState.snapshot.parseStatus !== 'ready' && initialState.snapshot.parseStatus !== 'failed') {
+      const state = parseDocumentParseState(row.parseState);
+      const created = await backfillPendingPdfParseOperation({
+        documentId: id,
+        userId: row.userId,
+        namespace: testNamespace,
+        state,
+      });
+      if (created) {
+        await writeParseRowState({
+          documentId: row.id,
+          userId: row.userId,
+          parseState: stringifyDocumentParseState(documentParseStateFromWorkerState(created)),
+        });
+        initialState = {
+          snapshot: {
+            ...snapshotFromWorkerState(created),
+            opId: created.opId,
+          },
+          opId: created.opId,
+          fromWorker: true,
+        };
+      }
+    }
     const workerCfg = getWorkerClientConfigFromEnv();
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({

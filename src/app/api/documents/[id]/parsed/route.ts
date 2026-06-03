@@ -24,6 +24,7 @@ import {
   parseDocumentParseState,
   stringifyDocumentParseState,
 } from '@/lib/server/documents/parse-state';
+import { backfillPendingPdfParseOperation } from '@/lib/server/documents/parse-state-backfill';
 import { healStaleDocumentParseState } from '@/lib/server/documents/parse-state-healing';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { checkJobRate, recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
@@ -269,6 +270,28 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           namespace: testNamespace,
           logger,
         });
+      }
+    }
+
+    if (!effectiveOpId && (effectiveStatus === 'pending' || effectiveStatus === 'running')) {
+      const created = await backfillPendingPdfParseOperation({
+        documentId: id,
+        userId: row.userId,
+        namespace: testNamespace,
+        state,
+      });
+      if (created) {
+        const snapshot = snapshotFromWorkerState(created);
+        await writeParseRowState({
+          documentId: row.id,
+          userId: row.userId,
+          parseState: stringifyDocumentParseState(documentParseStateFromWorkerState(created)),
+        });
+        return NextResponse.json({
+          parseStatus: snapshot.parseStatus,
+          parseProgress: snapshot.parseProgress,
+          opId: created.opId,
+        }, { status: 202 });
       }
     }
 
