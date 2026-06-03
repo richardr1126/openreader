@@ -1,5 +1,6 @@
 import type { CSSProperties, InputHTMLAttributes } from 'react';
 import { cn } from './cn';
+import styles from './range.module.css';
 
 type RangeStyle = CSSProperties & {
   '--range-progress'?: string;
@@ -55,5 +56,5 @@ export function RangeInput({
       : {}),
   };
 
-  return <input type="range" className={cn('range-input', className)} style={rangeStyle} {...props} />;
+  return <input type="range" className={cn(styles.range, className)} style={rangeStyle} {...props} />;
 }

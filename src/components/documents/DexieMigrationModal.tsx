@@ -155,7 +155,7 @@ export function DexieMigrationModal({
           <div className="space-y-1">
             <p className="text-xs text-soft">{status}</p>
             <div className="h-2 w-full rounded bg-surface-sunken">
-              <div className="h-2 rounded bg-accent" style={{ width: `${Math.max(1, Math.round(progress))}%` }} />
+              <div className="progress-fill h-2 rounded bg-accent" style={{ width: `${Math.max(1, Math.round(progress))}%` }} />
             </div>
           </div>
         )}
