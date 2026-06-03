@@ -196,8 +196,10 @@ function preprocessResized(
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  // Match the upstream image processor more closely. The official
+  // implementation explicitly disables antialiasing during resize to stay
+  // close to OpenCV semantics for PP-DocLayoutV3 inputs.
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(image, 0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
 
   const imageData = ctx.getImageData(0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
@@ -232,24 +234,40 @@ function clampBox(
   return [x0, y0, x1, y1];
 }
 
-function softmaxMax(logits: Float32Array, offset: number, count: number): { index: number; score: number } {
-  let maxLogit = Number.NEGATIVE_INFINITY;
-  let maxIndex = 0;
-  for (let i = 0; i < count; i += 1) {
-    const value = logits[offset + i];
-    if (value > maxLogit) {
-      maxLogit = value;
-      maxIndex = i;
+function sigmoid(value: number): number {
+  if (value >= 0) {
+    const z = Math.exp(-value);
+    return 1 / (1 + z);
+  }
+  const z = Math.exp(value);
+  return z / (1 + z);
+}
+
+function buildOrderSequence(orderLogits: Float32Array, numQueries: number): number[] {
+  const orderVotes = new Float32Array(numQueries);
+
+  for (let col = 0; col < numQueries; col += 1) {
+    let votes = 0;
+
+    for (let row = 0; row < col; row += 1) {
+      votes += sigmoid(orderLogits[row * numQueries + col] ?? 0);
     }
+
+    for (let row = col + 1; row < numQueries; row += 1) {
+      votes += 1 - sigmoid(orderLogits[col * numQueries + row] ?? 0);
+    }
+
+    orderVotes[col] = votes;
   }
 
-  let sum = 0;
-  for (let i = 0; i < count; i += 1) {
-    sum += Math.exp(logits[offset + i] - maxLogit);
+  const pointers = Array.from({ length: numQueries }, (_, index) => index)
+    .sort((a, b) => orderVotes[a]! - orderVotes[b]!);
+  const orderSeq = new Array<number>(numQueries);
+  for (let rank = 0; rank < pointers.length; rank += 1) {
+    const queryIndex = pointers[rank]!;
+    orderSeq[queryIndex] = rank;
   }
-
-  const score = sum > 0 ? (1 / sum) : 0;
-  return { index: maxIndex, score };
+  return orderSeq;
 }
 
 function normalizeModelLabel(rawLabel: string): string {
@@ -283,25 +301,26 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
 
     const logits = output.logits?.data as Float32Array | undefined;
     const predBoxes = output.pred_boxes?.data as Float32Array | undefined;
+    const orderLogits = output.order_logits?.data as Float32Array | undefined;
     if (!logits || !predBoxes) return [];
 
     const numQueries = Math.floor(predBoxes.length / 4);
     if (numQueries <= 0) return [];
     const classCount = Math.floor(logits.length / numQueries);
     if (classCount <= 0) return [];
+    const orderSeq = orderLogits && orderLogits.length >= numQueries * numQueries
+      ? buildOrderSequence(orderLogits, numQueries)
+      : null;
 
-    const regions: LayoutRegion[] = [];
+    const detections: Array<{
+      queryIdx: number;
+      classIdx: number;
+      score: number;
+      order: number;
+      rawBox: [number, number, number, number];
+    }> = [];
 
     for (let queryIdx = 0; queryIdx < numQueries; queryIdx += 1) {
-      const cls = softmaxMax(logits, queryIdx * classCount, classCount);
-      const rawLabel = idToLabel[cls.index];
-      if (!rawLabel) continue;
-      const mapped = LABEL_MAP[normalizeModelLabel(rawLabel)];
-      if (!mapped) continue;
-
-      const minScore = CLASS_MIN_SCORE[mapped] ?? MIN_SCORE;
-      if (!Number.isFinite(cls.score) || cls.score < minScore) continue;
-
       const cx = predBoxes[queryIdx * 4 + 0] * pageWidth;
       const cy = predBoxes[queryIdx * 4 + 1] * pageHeight;
       const w = predBoxes[queryIdx * 4 + 2] * pageWidth;
@@ -313,7 +332,33 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
         cy + h / 2,
       ];
 
-      const clamped = clampBox(rawBox, pageWidth, pageHeight);
+      for (let classIdx = 0; classIdx < classCount; classIdx += 1) {
+        detections.push({
+          queryIdx,
+          classIdx,
+          score: sigmoid(logits[queryIdx * classCount + classIdx] ?? 0),
+          order: orderSeq?.[queryIdx] ?? queryIdx,
+          rawBox,
+        });
+      }
+    }
+
+    const regions: LayoutRegion[] = [];
+    detections.sort((a, b) => {
+      if (Math.abs(b.score - a.score) > 1e-6) return b.score - a.score;
+      return a.order - b.order;
+    });
+
+    for (const detection of detections.slice(0, numQueries)) {
+      const rawLabel = idToLabel[detection.classIdx];
+      if (!rawLabel) continue;
+      const mapped = LABEL_MAP[normalizeModelLabel(rawLabel)];
+      if (!mapped) continue;
+
+      const minScore = CLASS_MIN_SCORE[mapped] ?? MIN_SCORE;
+      if (!Number.isFinite(detection.score) || detection.score < minScore) continue;
+
+      const clamped = clampBox(detection.rawBox, pageWidth, pageHeight);
       if (!clamped) continue;
 
       const sizeRule = MIN_REGION_SIZE[mapped];
@@ -326,7 +371,7 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
       regions.push({
         bbox: clamped,
         label: mapped,
-        confidence: cls.score,
+        confidence: detection.score,
       });
     }
 

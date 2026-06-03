@@ -72,7 +72,7 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
       const textContent = await page.getTextContent();
       const textItems = normalizeTextItemsForLayout(
         textContent.items.filter((item): item is TextItem => 'str' in item && 'transform' in item),
-        viewport.height,
+        viewport,
       );
 
       if (textItems.length > 0) sawText = true;
