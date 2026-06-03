@@ -1,4 +1,5 @@
-import { forwardRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
+import Link from 'next/link';
+import { forwardRef, type ButtonHTMLAttributes, type ComponentPropsWithoutRef, type HTMLAttributes, type ReactNode } from 'react';
 import { cn } from './cn';
 import { focusRing, motionColors } from './tokens';
 
@@ -170,7 +171,7 @@ export function SidebarNavItem({
   );
 }
 
-export const SidebarNavLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & {
+type SidebarNavLinkProps = ComponentPropsWithoutRef<typeof Link> & {
   active?: boolean;
   icon?: ReactNode;
   label?: ReactNode;
@@ -179,7 +180,9 @@ export const SidebarNavLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes
   trailing?: ReactNode;
   isDropTarget?: boolean;
   compact?: boolean;
-}>(function SidebarNavLink({
+};
+
+export const SidebarNavLink = forwardRef<HTMLAnchorElement, SidebarNavLinkProps>(function SidebarNavLink({
   active = false,
   icon,
   label,
@@ -193,7 +196,7 @@ export const SidebarNavLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes
   ...props
 }, ref) {
   return (
-    <a
+    <Link
       ref={ref}
       className={sidebarNavItemClass({ active, compact, isDropTarget, className })}
       {...props}
@@ -209,6 +212,6 @@ export const SidebarNavLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes
       >
         {children}
       </SidebarNavItemContent>
-    </a>
+    </Link>
   );
 });
