@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -35,21 +34,19 @@ export function UserMenu({
     if (variant === 'sidebar') {
       return (
         <div className={`flex w-full flex-col gap-0.5 ${className}`}>
-          <Link href="/signin" legacyBehavior passHref>
+          <SidebarNavLink
+            href="/signin"
+            compact
+            icon={<UserIcon className="h-3.5 w-3.5" />}
+            label="Connect"
+          />
+          {enableUserSignups && (
             <SidebarNavLink
+              href="/signup"
               compact
               icon={<UserIcon className="h-3.5 w-3.5" />}
-              label="Connect"
+              label="Create account"
             />
-          </Link>
-          {enableUserSignups && (
-            <Link href="/signup" legacyBehavior passHref>
-              <SidebarNavLink
-                compact
-                icon={<UserIcon className="h-3.5 w-3.5" />}
-                label="Create account"
-              />
-            </Link>
           )}
         </div>
       );

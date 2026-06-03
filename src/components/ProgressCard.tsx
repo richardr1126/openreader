@@ -66,7 +66,7 @@ export function ProgressCard({
       {/* Progress bar */}
       <div className="w-full bg-background rounded-full overflow-hidden h-1.5">
         <div
-          className="h-full bg-accent transition duration-slow ease-standard"
+          className="progress-fill h-full bg-accent transition duration-slow ease-standard"
           style={{ width: `${progress}%` }}
         />
       </div>

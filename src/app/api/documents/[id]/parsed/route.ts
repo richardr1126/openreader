@@ -7,6 +7,7 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { createOrReusePdfWorkerOperation } from '@/lib/server/compute/worker-op-create';
 import {
   documentParseStateFromWorkerState,
+  isWorkerOperationStateStale,
   snapshotFromWorkerState,
 } from '@/lib/server/compute/worker-parse-state';
 import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
@@ -33,6 +34,7 @@ import { createRequestLogger, hashForLog, type ServerLogger } from '@/lib/server
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { logDegraded } from '@/lib/server/errors/logging';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
+import { getComputeOpStaleMs } from '@openreader/compute-core';
 import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 
 export const dynamic = 'force-dynamic';
@@ -192,6 +194,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     request: req,
   });
   try {
+    const opStaleMs = getComputeOpStaleMs();
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
     const authCtxOrRes = await requireAuthContext(req);
@@ -255,7 +258,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     if (effectiveOpId && effectiveStatus !== 'ready') {
       const workerState = await fetchWorkerOperationState<PdfLayoutJobResult>(effectiveOpId);
-      if (workerState && workerState.opId === effectiveOpId) {
+      if (
+        workerState
+        && workerState.opId === effectiveOpId
+        && !isWorkerOperationStateStale(workerState, opStaleMs)
+      ) {
         return finalizeFromWorkerState({
           workerState,
           row,
@@ -348,6 +355,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     request: req,
   });
   try {
+    const opStaleMs = getComputeOpStaleMs();
     if (!isS3Configured()) return s3NotConfiguredResponse();
 
     const authCtxOrRes = await requireAuthContext(req);
@@ -388,7 +396,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const existingOpId = normalizeOpId(state.opId);
     if (existingOpId) {
       const existing = await fetchWorkerOperationState<PdfLayoutJobResult>(existingOpId);
-      if (existing && (existing.status === 'queued' || existing.status === 'running') && !replace) {
+      if (
+        existing
+        && !isWorkerOperationStateStale(existing, opStaleMs)
+        && (existing.status === 'queued' || existing.status === 'running')
+        && !replace
+      ) {
         const snapshot = snapshotFromWorkerState(existing);
         return NextResponse.json({
           error: 'Parse operation already in progress',

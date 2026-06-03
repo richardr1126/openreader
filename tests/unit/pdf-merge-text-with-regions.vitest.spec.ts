@@ -34,4 +34,19 @@ describe('mergeTextWithRegions', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].text).toBe('inside');
   });
+
+  test('keeps decorative drop caps attached to the same line when boxes overlap vertically', () => {
+    const regions = [
+      { bbox: [0, 0, 200, 120] as [number, number, number, number], label: 'text' as const },
+    ];
+
+    const textItems = [
+      { text: 'I', x: 0, y: 10, width: 12, height: 60 },
+      { text: 't’s funny,', x: 12, y: 40, width: 50, height: 12 },
+    ];
+
+    const merged = mergeTextWithRegions(regions, textItems);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('It’s funny,');
+  });
 });

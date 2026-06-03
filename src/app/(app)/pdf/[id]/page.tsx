@@ -19,6 +19,7 @@ import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { LoadingSpinner } from '@/components/Spinner';
+import { PdfLayoutScan } from '@/components/reader/PdfLayoutScan';
 import { Button, ButtonLink } from '@/components/ui';
 import {
   FORCE_REPARSE_CONFIRM_MESSAGE,
@@ -279,21 +280,13 @@ export default function PDFViewerPage() {
     const isMerging = parseProgress?.phase === 'merge';
 
     let statusText = 'Loading PDF...';
-    let statusSubText = 'Initializing document renderer';
     if (!isLoading) {
       if (parseUiState === 'pending') {
         statusText = 'Preparing PDF layout...';
-        statusSubText = parseProgress?.phase === 'merge'
-          ? 'Finalizing stitched block structure'
-          : 'Queueing parser and preparing page extraction';
       } else if (parseUiState === 'running') {
         statusText = 'Parsing PDF layout blocks...';
-        statusSubText = parseProgress?.phase === 'merge'
-          ? 'Merging cross-page sections'
-          : 'Inferring reading order and text regions';
       } else if (parseUiState === 'failed') {
         statusText = 'PDF parsing failed. Retry to continue.';
-        statusSubText = 'The parser could not build a usable layout map';
       }
     }
 
@@ -305,34 +298,89 @@ export default function PDFViewerPage() {
 
     return (
       <div className="h-full w-full bg-surface">
-        <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard ${showDetailedParseLoader ? 'max-w-lg' : 'max-w-md'}`}>
+        <div className={`mx-auto flex h-full items-center px-4 py-6 transition duration-slow ease-standard max-w-sm`}>
           {showDetailedParseLoader ? (
-            <div className="w-full rounded-lg border border-line bg-surface-sunken shadow-elev-1 overflow-hidden">
-              <div className="h-1 bg-[linear-gradient(90deg,var(--accent),transparent_80%)]" />
-              <div className="p-3.5 sm:p-4">
-                <div className="space-y-1.5">
+            <div className="relative w-full overflow-hidden rounded-lg border border-line bg-surface-sunken shadow-elev-2">
+              {/* prism top edge + corner glow for depth */}
+              <div className="prism-divider" />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full blur-3xl"
+                style={{ background: 'var(--accent-wash)' }}
+              />
+              {/* dotted texture spanning the whole loader */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  backgroundImage:
+                    'radial-gradient(color-mix(in srgb, var(--foreground) 14%, transparent) 1px, transparent 1px)',
+                  backgroundSize: '12px 12px',
+                  opacity: 0.35,
+                  WebkitMaskImage: 'radial-gradient(120% 100% at 50% 40%, #000 55%, transparent 100%)',
+                  maskImage: 'radial-gradient(120% 100% at 50% 40%, #000 55%, transparent 100%)',
+                }}
+              />
+
+              <div className="relative p-3.5 sm:p-4">
+                {/* header: status badge + model attribution */}
+                <div className="flex items-start justify-between gap-3">
                   <div className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-solid px-2.5 py-1">
-                    <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
+                    {parseUiState === 'failed' ? (
+                      <svg className="h-3.5 w-3.5 text-accent" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z" />
+                      </svg>
+                    ) : (
+                      <LoadingSpinner className="h-3.5 w-3.5 text-accent" />
+                    )}
                     <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-soft">PDF Layout Parse</span>
                   </div>
-                  <p className="text-sm font-semibold text-foreground">{statusText}</p>
+                  <div className="inline-flex items-center gap-1.5 rounded-md border border-accent-line bg-accent-wash px-2 py-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                    <span className="text-[10px] font-semibold tracking-tight text-accent-strong">PP-DocLayout-V3</span>
+                  </div>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-line bg-surface-solid p-2.5">
-                  <div className="mb-1.5 flex items-end justify-between gap-2">
-                    <p className="text-[11px] font-semibold text-foreground">
-                      {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
-                    </p>
-                    <p className="text-[10px] text-soft">{stageLabel}</p>
+                <div className="mt-3 flex flex-col gap-3">
+                  {/* animated layout scanner — static "halted" view when failed */}
+                  <div className="mx-auto w-full max-w-[15rem]">
+                    <PdfLayoutScan failed={parseUiState === 'failed'} />
                   </div>
-                  <div className="h-2 w-full rounded-full bg-surface-sunken overflow-hidden">
-                    <div
-                      className="h-full bg-accent transition duration-slow ease-standard"
-                      style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-[10px] text-soft">
-                    {hasMeasuredProgress ? `${Math.round(progressPercent)}% complete` : statusSubText}
+
+                  {/* live status + progress */}
+                  {parseUiState === 'failed' ? (
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{statusText}</p>
+                      <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.06em] text-soft">{stageLabel}</p>
+                    </div>
+                  ) : (
+                    <div className="min-w-0">
+                      <div className="flex items-end justify-between gap-2">
+                        <p className="text-[11px] font-semibold text-foreground tabular-nums">
+                          {hasMeasuredProgress ? `Page ${pagesParsed} / ${totalPages}` : 'Awaiting first page'}
+                        </p>
+                        <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-soft">{stageLabel}</p>
+                      </div>
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-solid ring-1 ring-line">
+                        <div
+                          className="progress-fill h-full rounded-full bg-accent transition-[width] duration-slow ease-standard"
+                          style={{ width: `${hasMeasuredProgress ? progressPercent : 6}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 text-[10px] tabular-nums text-soft">
+                        {hasMeasuredProgress ? `${Math.round(progressPercent)}% complete` : 'Calibrating layout pass'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* attribution footer */}
+                <div className="mt-3 flex items-center gap-2 border-t border-line-soft pt-3">
+                  <svg className="h-3.5 w-3.5 shrink-0 text-faint" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m-6-8h6M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />
+                  </svg>
+                  <p className="text-[10px] leading-snug text-faint">
+                    Classifying footnotes, titles, tables, figures, formulas, &amp; more with <span className="font-semibold text-soft">PP-DocLayout-V3</span>.
                   </p>
                 </div>
 

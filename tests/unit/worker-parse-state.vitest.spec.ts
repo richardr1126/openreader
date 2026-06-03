@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
 import {
   documentParseStateFromWorkerState,
+  isWorkerOperationStateStale,
   snapshotFromWorkerState,
 } from '../../src/lib/server/compute/worker-parse-state';
 
@@ -87,5 +88,31 @@ describe('worker parse state mapping', () => {
       jobId: 'job-123',
       error: 'layout model crashed',
     });
+  });
+
+  test('treats old inflight worker states as stale', () => {
+    const workerState = makeWorkerState({
+      status: 'running',
+      updatedAt: 1_000,
+      progress: {
+        totalPages: 500,
+        pagesParsed: 250,
+        currentPage: 251,
+        phase: 'infer',
+      },
+    });
+
+    expect(isWorkerOperationStateStale(workerState, 5_000, 6_001)).toBe(true);
+    expect(isWorkerOperationStateStale(workerState, 5_000, 5_999)).toBe(false);
+  });
+
+  test('never treats terminal worker states as stale', () => {
+    const failedState = makeWorkerState({
+      status: 'failed',
+      updatedAt: 1_000,
+      error: { code: 'PDF_PARSE_FAILED', message: 'crashed' },
+    });
+
+    expect(isWorkerOperationStateStale(failedState, 5_000, 99_999)).toBe(false);
   });
 });

@@ -26,9 +26,20 @@ export interface OperationIndexEntry {
   opId: string;
 }
 
+export interface OperationStateRecord<Result = unknown> {
+  state: OperationState<Result>;
+  revision: number;
+}
+
 export interface OperationStateStore<Result = unknown> {
   getOpState(opId: string): Promise<OperationState<Result> | null>;
+  getOpStateRecord(opId: string): Promise<OperationStateRecord<Result> | null>;
   putOpState(state: OperationState<Result>): Promise<void>;
+  compareAndSetOpState(input: {
+    opId: string;
+    expectedRevision: number;
+    newState: OperationState<Result>;
+  }): Promise<boolean>;
   getOpIndex(opKey: string): Promise<OperationIndexEntry | null>;
   compareAndSetOpIndex(input: {
     opKey: string;

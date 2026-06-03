@@ -48,6 +48,7 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 | `COMPUTE_JOB_CONCURRENCY` | Compute | `1` | Shared compute concurrency cap |
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Compute | `30000` | Whisper alignment timeout budget |
 | `COMPUTE_PDF_TIMEOUT_MS` | Compute | `300000` | PDF parse timeout budget |
+| `COMPUTE_PDF_JOB_ATTEMPTS` | Compute | `1` | Max JetStream deliveries for PDF layout jobs |
 | `COMPUTE_OP_STALE_MS` | Compute | `max(30m, 4x max compute timeout)` | Shared stale window for compute op replacement |
 | `WHISPER_MODEL_BASE_URL` | Compute model source | onnx-community default | Override Whisper ONNX model base URL |
 | `PDF_LAYOUT_MODEL_BASE_URL` | Compute model source | PP-DocLayoutV3 default | Override PDF layout ONNX model base URL |
@@ -306,6 +307,13 @@ Whisper alignment timeout budget.
 PDF parse timeout budget.
 
 - Default: `300000`
+
+### COMPUTE_PDF_JOB_ATTEMPTS
+
+Max JetStream deliveries for PDF layout jobs.
+
+- Default: `1`
+- In embedded worker mode, set this in the root `.env`
 
 ### COMPUTE_OP_STALE_MS
 

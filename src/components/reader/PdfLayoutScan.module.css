@@ -1,0 +1,211 @@
+/* Scanner visualization for the PDF layout-parse loader. Scoped via CSS Module
+   so it stays out of the global stylesheet and works across the helper that
+   renders region content. Used by PdfLayoutScan.tsx. */
+
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+
+.page {
+  position: relative;
+  width: 68%;
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--background) 92%, var(--foreground)), var(--background));
+  border: 1px solid var(--line);
+  box-shadow:
+    var(--elev-2),
+    0 0 0 1px color-mix(in srgb, var(--background) 60%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 6%, transparent);
+  overflow: hidden;
+}
+
+/* ── readout chip (in the stage band, above the page) ─────────────────── */
+.tagRow {
+  position: absolute;
+  top: 4%;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 5;
+  padding: 0 4%;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: var(--background);
+  background: var(--accent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: tag-in 0.34s var(--ease);
+}
+@keyframes tag-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── failed / halted state ────────────────────────────────────────────── */
+.tagFailed {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+  box-shadow: none;
+  animation: none;
+}
+
+.pageFailed {
+  display: grid;
+  place-items: center;
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+.alert {
+  width: 38%;
+  height: 38%;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  color: var(--accent);
+}
+
+/* ── region boxes (one shown at a time, centered) ─────────────────────── */
+.solos {
+  position: absolute;
+  inset: 8%;
+  display: grid;
+  place-items: center;
+}
+.solo {
+  grid-area: 1 / 1; /* stack so regions cross-fade in place */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  box-shadow:
+    0 0 0 1px var(--accent-line),
+    0 0 22px color-mix(in srgb, var(--accent) 30%, transparent);
+  padding: 4px 7px;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.32s var(--ease), transform 0.32s var(--ease);
+  will-change: opacity, transform;
+}
+.solo.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* inner content so each region reads as real document material */
+.lines {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 11%;
+  width: 100%;
+  height: 100%;
+}
+.linesHeading { gap: 22%; }
+.lines > span {
+  display: block;
+  height: 3px;
+  width: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 26%, transparent);
+}
+.linesHeading > span {
+  height: 6px;
+  background: color-mix(in srgb, var(--foreground) 46%, transparent);
+}
+
+.glyph {
+  width: 100%;
+  height: 100%;
+  stroke: color-mix(in srgb, var(--foreground) 36%, transparent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  fill: none;
+}
+.glyph circle {
+  fill: color-mix(in srgb, var(--foreground) 30%, transparent);
+  stroke: none;
+}
+
+.table {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  background: color-mix(in srgb, var(--foreground) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--foreground) 16%, transparent);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.table > span {
+  background: color-mix(in srgb, var(--background) 82%, var(--foreground));
+}
+.table > span:nth-child(-n + 4) {
+  background: color-mix(in srgb, var(--foreground) 22%, transparent);
+}
+
+/* ── scan beam ────────────────────────────────────────────────────────── */
+.beam {
+  position: absolute;
+  left: -4%;
+  right: -4%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: beam 1.05s var(--ease) infinite;
+  will-change: top, opacity;
+}
+.beam::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1px;
+  height: 30px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 18%, transparent), transparent);
+}
+@keyframes beam {
+  0% { top: -4%; opacity: 0; }
+  8% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 104%; opacity: 0; }
+}
+
+/* camera-style corner reticles */
+.corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--accent-line);
+  pointer-events: none;
+}
+.cornerTl { top: 5px; left: 5px; border-right: 0; border-bottom: 0; border-top-left-radius: 3px; }
+.cornerTr { top: 5px; right: 5px; border-left: 0; border-bottom: 0; border-top-right-radius: 3px; }
+.cornerBl { bottom: 5px; left: 5px; border-right: 0; border-top: 0; border-bottom-left-radius: 3px; }
+.cornerBr { bottom: 5px; right: 5px; border-left: 0; border-top: 0; border-bottom-right-radius: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .beam { animation: none; opacity: 0; }
+  .tag { animation: none; }
+  .solo { transition: none; }
+}

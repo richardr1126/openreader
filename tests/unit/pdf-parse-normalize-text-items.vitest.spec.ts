@@ -32,7 +32,12 @@ describe('normalizeTextItemsForLayout', () => {
       [0, 10, -10, 0, 30, 400],
     );
 
-    const normalized = normalizeTextItemsForLayout([horizontal, rotated], 800);
+    const normalized = normalizeTextItemsForLayout([horizontal, rotated], {
+      height: 800,
+      transform: [1, 0, 0, -1, 0, 800],
+    }, {
+      test: { ascent: 0.8, descent: -0.2 },
+    });
     expect(normalized).toHaveLength(1);
     expect(normalized[0]?.text).toBe('Powered by large language models');
   });
@@ -41,7 +46,49 @@ describe('normalizeTextItemsForLayout', () => {
     const vertical = makeTextItem('Side label', [0, 10, -10, 0, 30, 200]);
     const skewed = makeTextItem('Watermark', [10, 5, 2, 10, 200, 500]);
 
-    const normalized = normalizeTextItemsForLayout([vertical, skewed], 800);
+    const normalized = normalizeTextItemsForLayout([vertical, skewed], {
+      height: 800,
+      transform: [1, 0, 0, -1, 0, 800],
+    }, {
+      test: { ascent: 0.8, descent: -0.2 },
+    });
     expect(normalized).toEqual([]);
+  });
+
+  test('accounts for non-zero page origins in the viewport transform', () => {
+    const croppedPageLine = makeTextItem(
+      'Vasher turned away.',
+      [11.2, 0, 0, 11.2, 127.5, 644.4128],
+      100,
+    );
+
+    const normalized = normalizeTextItemsForLayout([croppedPageLine], {
+      height: 666.0074,
+      transform: [1, 0, 0, -1, -53.4352, 720.565],
+    }, {
+      test: { ascent: 0.716, descent: -0.269 },
+    });
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]?.x).toBeCloseTo(74.0648, 4);
+    expect(normalized[0]?.y).toBeCloseTo(68.1356, 2);
+  });
+
+  test('uses font ascent to place decorative initials closer to the visible glyph top', () => {
+    const dropCap = makeTextItem(
+      'I',
+      [60, 0, 0, 60, 111.1326, 434.46],
+      9.18,
+    );
+
+    const normalized = normalizeTextItemsForLayout([dropCap], {
+      height: 666.0074,
+      transform: [1, 0, 0, -1, -53.4352, 720.565],
+    }, {
+      test: { ascent: 0.638, descent: -0.134 },
+    });
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]?.y).toBeCloseTo(247.825, 3);
   });
 });

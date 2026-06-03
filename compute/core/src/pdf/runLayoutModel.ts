@@ -196,8 +196,10 @@ function preprocessResized(
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  // Match the upstream image processor more closely. The official
+  // implementation explicitly disables antialiasing during resize to stay
+  // close to OpenCV semantics for PP-DocLayoutV3 inputs.
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(image, 0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
 
   const imageData = ctx.getImageData(0, 0, preprocessor.inputWidth, preprocessor.inputHeight);
@@ -284,12 +286,29 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
     const logits = output.logits?.data as Float32Array | undefined;
     const predBoxes = output.pred_boxes?.data as Float32Array | undefined;
     if (!logits || !predBoxes) return [];
+    if (predBoxes.length === 0 && logits.length === 0) return [];
+    if (predBoxes.length === 0 || logits.length === 0) {
+      throw new Error(
+        `layout-model-invalid-output-shape: pred_boxes length=${predBoxes.length}, logits length=${logits.length}`,
+      );
+    }
 
-    const numQueries = Math.floor(predBoxes.length / 4);
-    if (numQueries <= 0) return [];
-    const classCount = Math.floor(logits.length / numQueries);
-    if (classCount <= 0) return [];
-
+    if (predBoxes.length % 4 !== 0) {
+      throw new Error(`layout-model-invalid-pred-box-shape: length ${predBoxes.length} is not divisible by 4`);
+    }
+    const numQueries = predBoxes.length / 4;
+    if (numQueries <= 0) {
+      throw new Error(`layout-model-invalid-pred-box-shape: expected positive query count, got ${numQueries}`);
+    }
+    if (logits.length % numQueries !== 0) {
+      throw new Error(
+        `layout-model-invalid-logit-shape: length ${logits.length} is not divisible by query count ${numQueries}`,
+      );
+    }
+    const classCount = logits.length / numQueries;
+    if (classCount <= 0) {
+      throw new Error(`layout-model-invalid-logit-shape: expected positive class count, got ${classCount}`);
+    }
     const regions: LayoutRegion[] = [];
 
     for (let queryIdx = 0; queryIdx < numQueries; queryIdx += 1) {

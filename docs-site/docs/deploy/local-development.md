@@ -189,8 +189,10 @@ COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
 ```
 
 Ownership in external worker mode:
-- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale overrides
+- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale/retry overrides such as `COMPUTE_PDF_JOB_ATTEMPTS`
 - `compute/worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
+
+For embedded worker startup (`COMPUTE_WORKER_URL` unset), worker tuning values such as `COMPUTE_PDF_JOB_ATTEMPTS` must be set in the root `.env` because `compute/worker/.env*` is ignored in that mode.
 
 Worker mode requires worker-reachable shared object storage (S3-compatible endpoint).
 For external worker mode, object storage must be shared/reachable by both app and worker services.

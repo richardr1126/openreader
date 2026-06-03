@@ -27,6 +27,7 @@ export interface KvStoreLike {
   put(key: string, data: Uint8Array): Promise<unknown>;
   create(key: string, data: Uint8Array): Promise<unknown>;
   update(key: string, data: Uint8Array, version: number): Promise<unknown>;
+  keys(filter?: string | string[]): Promise<AsyncIterable<string>>;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -80,15 +81,54 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   }
 
   async getOpState(opId: string): Promise<OperationState<Result> | null> {
+    const record = await this.getOpStateRecord(opId);
+    return record?.state ?? null;
+  }
+
+  async getOpStateRecord(opId: string): Promise<{ state: OperationState<Result>; revision: number } | null> {
     const kv = await this.getKv();
     const entry = await kv.get(opStateKvKey(opId));
     if (!isPut(entry)) return null;
-    return this.opStateCodec.decode(entry.value);
+    return {
+      state: this.opStateCodec.decode(entry.value),
+      revision: entry.revision,
+    };
   }
 
   async putOpState(state: OperationState<Result>): Promise<void> {
     const kv = await this.getKv();
     await kv.put(opStateKvKey(state.opId), this.opStateCodec.encode(state));
+  }
+
+  async compareAndSetOpState(input: {
+    opId: string;
+    expectedRevision: number;
+    newState: OperationState<Result>;
+  }): Promise<boolean> {
+    const kv = await this.getKv();
+    try {
+      await kv.update(
+        opStateKvKey(input.opId),
+        this.opStateCodec.encode(input.newState),
+        input.expectedRevision,
+      );
+      return true;
+    } catch (error) {
+      if (isCasConflictError(error)) return false;
+      throw error;
+    }
+  }
+
+  async listOpStates(): Promise<OperationState<Result>[]> {
+    const kv = await this.getKv();
+    const keys = await kv.keys('op_state.*');
+    const states: OperationState<Result>[] = [];
+    for await (const key of keys) {
+      const entry = await kv.get(key);
+      if (!isPut(entry)) continue;
+      states.push(this.opStateCodec.decode(entry.value));
+    }
+    return states;
   }
 
   async getOpIndex(opKey: string): Promise<{ opId: string } | null> {

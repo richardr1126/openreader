@@ -56,6 +56,10 @@ import {
   hashOpKey,
 } from './control-plane/jetstream';
 import { type JsonCodec, createJsonCodec } from './control-plane/json-codec';
+import {
+  recoverOrphanedOperations,
+  type StreamedOperationState,
+} from './orphan-recovery';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 
@@ -69,6 +73,7 @@ const COMPUTE_STATE_BUCKET = 'compute_state';
 const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
+const OP_EVENTS_KEEPALIVE_MS = 15_000;
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const WHISPER_MAX_DELIVER = 1;
@@ -78,6 +83,7 @@ const NATS_API_TIMEOUT_MS = 60_000;
 // put it to sleep. Reconnect happens lazily on the next inbound request.
 const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
+const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
 // Bounded pull window so consumer loops yield periodically and can be stopped
 // cleanly when going idle, instead of blocking on a long-lived pull.
 const PULL_EXPIRES_MS = 5_000;
@@ -106,8 +112,6 @@ interface NatsSession {
   layoutConsumer: Consumer;
 }
 
-type StreamedOperationState = WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>;
-
 interface OperationEventStreamLike {
   subscribe(input: {
     opId: string;
@@ -119,6 +123,8 @@ interface OperationEventStreamLike {
 
 interface OperationStateStoreLike {
   getOpState(opId: string): Promise<StreamedOperationState | null>;
+  getOpStateRecord?(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
+  listOpStates?(): Promise<StreamedOperationState[]>;
 }
 
 interface OrchestratorLike {
@@ -147,6 +153,13 @@ interface OrchestratorLike {
     updatedAt?: number;
     timing?: WorkerJobTiming;
   }): Promise<StreamedOperationState>;
+  markFailedIfUnchanged?(input: {
+    current: StreamedOperationState;
+    expectedRevision: number;
+    error: { message: string; code?: string } | string;
+    updatedAt?: number;
+    timing?: WorkerJobTiming;
+  }): Promise<StreamedOperationState | null>;
 }
 
 export interface ComputeWorkerRouteDeps {
@@ -540,6 +553,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   let connecting: Promise<NatsSession> | null = null;
   let workerLoops: Promise<void>[] = [];
   let idleTimer: NodeJS.Timeout | null = null;
+  let orphanSweepTimer: NodeJS.Timeout | null = null;
   let stopping = false;
   let loopStopRequested = false;
 
@@ -568,6 +582,19 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     idleTimer.unref?.();
   }
 
+  function startOrphanSweepTimer(): void {
+    if (orphanSweepTimer) return;
+    orphanSweepTimer = setInterval(() => {
+      if (!session || stopping) return;
+      void runOrphanedOpRecovery({ force: true }).catch((error) => {
+        app.log.error({
+          error: toErrorMessage(error),
+        }, 'periodic orphaned operation recovery failed');
+      });
+    }, ORPHAN_SWEEP_INTERVAL_MS);
+    orphanSweepTimer.unref?.();
+  }
+
   async function disconnect(reason: string): Promise<void> {
     const current = session;
     if (!current) return;
@@ -578,6 +605,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     if (idleTimer) {
       clearInterval(idleTimer);
       idleTimer = null;
+    }
+    if (orphanSweepTimer) {
+      clearInterval(orphanSweepTimer);
+      orphanSweepTimer = null;
     }
     try {
       await current.nc.close();
@@ -616,9 +647,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       const layoutConsumer = await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME);
       const next: NatsSession = { nc, js, jsm, kv, whisperConsumer, layoutConsumer };
       session = next;
+      sessionGeneration += 1;
+      orphanRecoveryDoneForGeneration = -1;
       markActivity();
       startWorkerLoops(next);
       startIdleTimer();
+      startOrphanSweepTimer();
       // Safety net: if the connection closes for any reason (network drop after
       // exhausting reconnects, or our own disconnect), drop the stale session so
       // the next request reconnects cleanly.
@@ -730,8 +764,65 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const operationStateStore = options.routeDeps?.operationStateStore ?? defaultOperationStateStore;
   const operationEventStream = options.routeDeps?.operationEventStream ?? defaultOperationEventStream;
   const orchestrator = options.routeDeps?.orchestrator ?? defaultOrchestrator;
+  let orphanRecoveryPromise: Promise<void> | null = null;
+  let orphanRecoveryDoneForGeneration = -1;
+  let sessionGeneration = options.routeDeps ? 0 : -1;
+
+  const runOrphanedOpRecovery = async (options?: { force?: boolean }): Promise<void> => {
+    if (typeof operationStateStore.listOpStates !== 'function') return;
+    if (typeof operationStateStore.getOpStateRecord !== 'function') return;
+    if (typeof orchestrator.markFailedIfUnchanged !== 'function') return;
+    if (!options?.force && orphanRecoveryDoneForGeneration === sessionGeneration) return;
+    if (orphanRecoveryPromise) {
+      await orphanRecoveryPromise;
+      return;
+    }
+
+    orphanRecoveryPromise = (async () => {
+      const recoveredStates = await recoverOrphanedOperations({
+        operationStateStore: operationStateStore as typeof operationStateStore & {
+          getOpStateRecord(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
+          listOpStates(): Promise<StreamedOperationState[]>;
+        },
+        orchestrator: orchestrator as typeof orchestrator & {
+          markFailedIfUnchanged(input: {
+            current: StreamedOperationState;
+            expectedRevision: number;
+            error: { message: string; code?: string } | string;
+            updatedAt?: number;
+            timing?: WorkerJobTiming;
+          }): Promise<StreamedOperationState | null>;
+        },
+        whisperTimeoutMs,
+        pdfTimeoutMs,
+        opStaleMs,
+      });
+
+      if (recoveredStates.length > 0) {
+        app.log.warn({
+          recoveredCount: recoveredStates.length,
+          ops: recoveredStates.map((state) => ({
+            opId: state.opId,
+            kind: state.kind,
+            status: state.status,
+          })),
+        }, 'recovered stale in-flight operations during reconciliation');
+      }
+
+      orphanRecoveryDoneForGeneration = sessionGeneration;
+    })().finally(() => {
+      orphanRecoveryPromise = null;
+    });
+
+    await orphanRecoveryPromise;
+  };
+
+  const ensureOrphanedOpRecovery = async (): Promise<void> => {
+    await runOrphanedOpRecovery();
+  };
 
   const getOpState = async (opId: string): Promise<StreamedOperationState | null> => {
+    await ensureOrphanedOpRecovery();
     return await operationStateStore.getOpState(opId);
   };
 
@@ -797,6 +888,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     }
 
     const requestOp = parsed.data as WorkerOperationRequest;
+    await ensureOrphanedOpRecovery();
     const op = await orchestrator.enqueueOrReuse(requestOp);
     app.log.info({
       kind: requestOp.kind,
@@ -863,6 +955,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
     let closed = false;
     let unsubscribe: (() => void) | null = null;
+    let keepalive: NodeJS.Timeout | null = null;
 
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
@@ -884,6 +977,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         unsubscribe();
         unsubscribe = null;
       }
+      if (keepalive) {
+        clearInterval(keepalive);
+        keepalive = null;
+      }
       activeSse = Math.max(0, activeSse - 1);
       markActivity();
       if (!reply.raw.writableEnded) {
@@ -902,6 +999,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       if (isTerminalStatus(current.status)) {
         return reply;
       }
+
+      keepalive = setInterval(() => {
+        if (closed || reply.raw.writableEnded) return;
+        reply.raw.write(': keepalive\n\n');
+      }, OP_EVENTS_KEEPALIVE_MS);
 
       unsubscribe = await operationEventStream.subscribe({
         opId: params.data.opId,
@@ -1247,6 +1349,17 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
       const result = await input.run(decoded.payload, context.queueWaitTiming?.queueWaitMs ?? 0, {
         onProgress: async (progress) => {
+          try {
+            input.msg.working();
+          } catch (ackError) {
+            app.log.warn({
+              worker: input.workerLabel,
+              kind: context?.decoded.kind,
+              opId: context?.decoded.opId,
+              jobId: context?.decoded.jobId,
+              error: toErrorMessage(ackError),
+            }, 'failed to extend JetStream ack wait on progress');
+          }
           await markProgress(context!, progress, Date.now());
         },
       });
@@ -1379,6 +1492,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     if (idleTimer) {
       clearInterval(idleTimer);
       idleTimer = null;
+    }
+    if (orphanSweepTimer) {
+      clearInterval(orphanSweepTimer);
+      orphanSweepTimer = null;
     }
     await app.close();
     await Promise.allSettled(workerLoops);

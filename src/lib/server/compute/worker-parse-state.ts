@@ -2,6 +2,10 @@ import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compu
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { DocumentParseState } from '@/lib/server/documents/parse-state';
 
+function isInflightWorkerStatus(status: WorkerOperationState['status']): boolean {
+  return status === 'queued' || status === 'running';
+}
+
 export function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']): PdfParseStatus {
   switch (status) {
     case 'queued':
@@ -42,6 +46,18 @@ export function documentParseStateFromWorkerState(
     ...(typeof state.jobId === 'string' && state.jobId.trim() ? { jobId: state.jobId } : {}),
     ...(parseStatus === 'failed' && state.error?.message ? { error: state.error.message } : {}),
   };
+}
+
+export function isWorkerOperationStateStale(
+  state: WorkerOperationState<PdfLayoutJobResult>,
+  staleMs: number,
+  nowMs = Date.now(),
+): boolean {
+  if (!isInflightWorkerStatus(state.status)) return false;
+  if (!Number.isFinite(staleMs) || staleMs <= 0) return false;
+  const updatedAt = Number(state.updatedAt ?? 0);
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) return false;
+  return (nowMs - updatedAt) > staleMs;
 }
 
 export function mergeNonReadyParseSnapshot(input: {

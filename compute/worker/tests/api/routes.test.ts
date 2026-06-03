@@ -119,4 +119,79 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('id: 7');
     expect(stream.body).toContain('"status":"succeeded"');
   });
+
+  test('marks stale running whisper and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {
+    const now = Date.now();
+    fake.seedState({
+      opId: 'op-stale-whisper-running',
+      opKey: 'k-stale-whisper-running',
+      kind: 'whisper_align',
+      jobId: 'job-op-stale-whisper-running',
+      status: 'running',
+      queuedAt: 1,
+      updatedAt: now - 40_000,
+    });
+    fake.seedState({
+      opId: 'op-stale-whisper-queued',
+      opKey: 'k-stale-whisper-queued',
+      kind: 'whisper_align',
+      jobId: 'job-op-stale-whisper-queued',
+      status: 'queued',
+      queuedAt: 1,
+      updatedAt: now - 40_000,
+    });
+    fake.seedState({
+      opId: 'op-stale-pdf-running',
+      opKey: 'k-stale-pdf-running',
+      kind: 'pdf_layout',
+      jobId: 'job-op-stale-pdf-running',
+      status: 'running',
+      queuedAt: 1,
+      updatedAt: now - 310_000,
+    });
+    fake.seedState({
+      opId: 'op-stale-pdf-queued',
+      opKey: 'k-stale-pdf-queued',
+      kind: 'pdf_layout',
+      jobId: 'job-op-stale-pdf-queued',
+      status: 'queued',
+      queuedAt: 1,
+      updatedAt: now - 310_000,
+    });
+
+    // GET /ops/:opId resolves via getOpState(), which first awaits the shared
+    // orphanRecoveryPromise path through ensureOrphanedOpRecovery().
+    const fetch = await runtime.app.inject({
+      method: 'GET',
+      url: '/ops/op-stale-whisper-running',
+      headers: AUTH,
+    });
+
+    expect(fetch.statusCode).toBe(200);
+    expect(fetch.json()).toMatchObject({
+      opId: 'op-stale-whisper-running',
+      status: 'failed',
+      error: {
+        code: 'WORKER_ORPHANED_OP',
+      },
+    });
+    expect(fake.getState('op-stale-whisper-running')).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'WORKER_ORPHANED_OP',
+      },
+    });
+    expect(fake.getState('op-stale-whisper-queued')).toMatchObject({
+      status: 'queued',
+    });
+    expect(fake.getState('op-stale-pdf-running')).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'WORKER_ORPHANED_OP',
+      },
+    });
+    expect(fake.getState('op-stale-pdf-queued')).toMatchObject({
+      status: 'queued',
+    });
+  });
 });
