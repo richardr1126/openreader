@@ -753,17 +753,21 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     orphanRecoveryPromise = (async () => {
       const now = Date.now();
       const states = await operationStateStore.listOpStates!();
-      const stalePdfStates = states.filter((state) => {
-        if (state.kind !== 'pdf_layout' || !isInflightStatus(state.status)) return false;
+      const staleStates = states.filter((state) => {
+        if (!isInflightStatus(state.status)) return false;
         const ageMs = now - state.updatedAt;
         if (state.status === 'running') {
-          return ageMs > pdfTimeoutMs;
+          const runningTimeoutMs = state.kind === 'whisper_align' ? whisperTimeoutMs : pdfTimeoutMs;
+          return ageMs > runningTimeoutMs;
         }
+        if (state.kind !== 'pdf_layout') return false;
         return ageMs > opStaleMs;
       });
 
-      for (const state of stalePdfStates) {
-        const staleAfterMs = state.status === 'running' ? pdfTimeoutMs : opStaleMs;
+      for (const state of staleStates) {
+        const staleAfterMs = state.status === 'running'
+          ? (state.kind === 'whisper_align' ? whisperTimeoutMs : pdfTimeoutMs)
+          : opStaleMs;
         await orchestrator.markFailed({
           opId: state.opId,
           error: {
@@ -774,11 +778,15 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         });
       }
 
-      if (stalePdfStates.length > 0) {
+      if (staleStates.length > 0) {
         app.log.warn({
-          recoveredCount: stalePdfStates.length,
-          opIds: stalePdfStates.map((state) => state.opId),
-        }, 'recovered stale in-flight pdf operations on startup');
+          recoveredCount: staleStates.length,
+          ops: staleStates.map((state) => ({
+            opId: state.opId,
+            kind: state.kind,
+            status: state.status,
+          })),
+        }, 'recovered stale in-flight operations on startup');
       }
 
       orphanRecoveryDoneForGeneration = sessionGeneration;
