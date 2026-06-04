@@ -82,31 +82,20 @@ export async function getDocumentMetadata(id: string, options?: { signal?: Abort
 
 export async function getParsedPdfDocument(
   id: string,
-  options?: { signal?: AbortSignal; retryFailed?: boolean; opId?: string },
-): Promise<
-  | { status: 'ready'; parsed: ParsedPdfDocument }
-  | { status: 'pending' | 'running' | 'failed'; parseProgress?: PdfParseProgress | null; opId?: string | null }
-> {
-  const params = new URLSearchParams();
-  if (options?.retryFailed) params.set('retry', '1');
-  if (options?.opId) params.set('opId', options.opId);
-  const query = params.size > 0 ? `?${params.toString()}` : '';
-  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed${query}`, {
+  options?: { signal?: AbortSignal },
+): Promise<ParsedPdfDocument> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
     signal: options?.signal,
     cache: 'no-store',
   });
 
-  if (res.status === 202) {
+  if (res.status === 409) {
     const data = (await res.json().catch(() => null)) as {
       parseStatus?: string;
       parseProgress?: PdfParseProgress | null;
       opId?: string | null;
     } | null;
-    const parseStatus = data?.parseStatus;
-    if (parseStatus === 'pending' || parseStatus === 'running' || parseStatus === 'failed') {
-      return { status: parseStatus, parseProgress: data?.parseProgress ?? null, opId: data?.opId ?? null };
-    }
-    return { status: 'pending', parseProgress: data?.parseProgress ?? null, opId: data?.opId ?? null };
+    throw new Error(data?.parseStatus ? `Parsed PDF is not ready (${data.parseStatus})` : 'Parsed PDF is not ready');
   }
 
   if (!res.ok) {
@@ -114,8 +103,7 @@ export async function getParsedPdfDocument(
     throw new Error(data?.error || 'Failed to load parsed PDF');
   }
 
-  const parsed = (await res.json()) as ParsedPdfDocument;
-  return { status: 'ready', parsed };
+  return (await res.json()) as ParsedPdfDocument;
 }
 
 export function subscribeParsedPdfDocumentEvents(

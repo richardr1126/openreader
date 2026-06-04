@@ -27,6 +27,9 @@ import { PDF_PARSER_VERSION } from '@openreader/compute-core';
 type UserPdfLayoutJobRequest = PdfLayoutJobBase & {
   userId: string;
   forceToken?: string;
+  initialOpId?: string;
+  initialJobId?: string;
+  initialStatus?: 'pending' | 'running';
 };
 
 const running = new Set<string>();
@@ -47,6 +50,11 @@ function keyFor(input: UserPdfLayoutJobRequest): string {
     return `force:${input.documentId}:${input.namespace || ''}:${forceToken}`;
   }
   return `shared:${input.documentId}`;
+}
+
+function normalizeOpId(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -212,6 +220,8 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
   }
   running.add(key);
 
+  let activeOpId = normalizeOpId(input.initialOpId);
+  let activeJobId = normalizeOpId(input.initialJobId);
   try {
     const scopedRows = await loadScopedRows(input);
     const scopedUserIds = userIdsFromRows(scopedRows);
@@ -257,18 +267,21 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
     const coordinator = [...scopedRows].sort((a, b) => a.userId.localeCompare(b.userId))[0];
     if (!coordinator) return;
 
-    const runningStateData: DocumentParseState = {
-      status: 'running',
+    const initialInflightStatus = input.initialStatus === 'running' ? 'running' : 'pending';
+    const inflightStateData: DocumentParseState = {
+      status: initialInflightStatus,
       progress: null,
       updatedAt: Date.now(),
       parserVersion: PDF_PARSER_VERSION,
+      ...(activeOpId ? { opId: activeOpId } : {}),
+      ...(activeJobId ? { jobId: activeJobId } : {}),
     };
-    const runningState = stringifyDocumentParseState(runningStateData);
+    const inflightState = stringifyDocumentParseState(inflightStateData);
 
     const claimRows = (await db
       .update(documents)
       .set({
-        parseState: runningState,
+        parseState: inflightState,
       })
       .where(
         and(
@@ -291,12 +304,10 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
     await updateParseStateForUsers({
       documentId: input.documentId,
       userIds: cohortUserIds,
-      parseState: runningState,
+      parseState: inflightState,
     });
 
     const compute = await getCompute();
-    let activeOpId: string | undefined;
-    let activeJobId: string | undefined;
     let lastProgressWriteAt = 0;
     let lastSnapshotWriteAt = 0;
     let lastSnapshotStatus: 'pending' | 'running' | null = null;
@@ -395,6 +406,8 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
       progress: null,
       updatedAt: Date.now(),
       parserVersion: resolveParsedPdfParserVersion(parsedDoc),
+      ...(activeOpId ? { opId: activeOpId } : {}),
+      ...(activeJobId ? { jobId: activeJobId } : {}),
     };
     const readyUserIds = finalUserIds.length > 0 ? finalUserIds : cohortUserIds;
     await updateParseStateForUsers({
@@ -448,6 +461,8 @@ export async function parsePdfJob(input: UserPdfLayoutJobRequest): Promise<void>
         updatedAt: Date.now(),
         error: message,
         parserVersion: PDF_PARSER_VERSION,
+        ...(activeOpId ? { opId: activeOpId } : {}),
+        ...(activeJobId ? { jobId: activeJobId } : {}),
       };
       const failedUserIds = scopedUserIds.length > 0 ? scopedUserIds : [input.userId];
       await updateParseStateForUsers({

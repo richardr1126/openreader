@@ -69,7 +69,7 @@ vi.mock('@/lib/server/logger', () => ({
   hashForLog: vi.fn(() => 'user-hash'),
 }));
 
-describe('GET /api/documents/[id]/parsed legacy backfill', () => {
+describe('GET /api/documents/[id]/parsed pure data fetch', () => {
   beforeEach(async () => {
     process.env.BASE_URL = 'http://localhost:3003';
     process.env.AUTH_SECRET = 'test-secret';
@@ -108,40 +108,19 @@ describe('GET /api/documents/[id]/parsed legacy backfill', () => {
     hoisted.healStaleDocumentParseState.mockClear();
   });
 
-  test('creates a worker op for legacy pending PDFs without opId', async () => {
-    hoisted.backfillPendingPdfParseOperation.mockResolvedValue({
-      opId: 'op-legacy-1',
-      opKey: 'pdf_layout|v1|doc-1||doc-1|',
-      jobId: 'job-legacy-1',
-      kind: 'pdf_layout',
-      status: 'queued',
-      queuedAt: Date.now(),
-      progress: null,
-      result: undefined,
-      error: undefined,
-      updatedAt: Date.now(),
-    });
-
+  test('returns non-ready status without creating a worker op for legacy pending PDFs without opId', async () => {
     const { GET } = await import('../../src/app/api/documents/[id]/parsed/route');
     const request = new NextRequest('http://localhost/api/documents/doc-1/parsed');
     const response = await GET(request, {
       params: Promise.resolve({ id: 'doc-1' }),
     });
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({
       parseStatus: 'pending',
-      opId: 'op-legacy-1',
+      opId: null,
     });
-    expect(hoisted.backfillPendingPdfParseOperation).toHaveBeenCalledWith(expect.objectContaining({
-      documentId: 'doc-1',
-      userId: 'user-1',
-      namespace: null,
-      state: expect.objectContaining({ status: 'pending' }),
-    }));
-    const parseState = String(hoisted.row.parseState ?? '');
-    expect(parseState).toContain('"status":"pending"');
-    expect(parseState).toContain('"opId":"op-legacy-1"');
-    expect(parseState).toContain('"jobId":"job-legacy-1"');
+    expect(hoisted.backfillPendingPdfParseOperation).not.toHaveBeenCalled();
+    expect(hoisted.row.parseState).toBeNull();
   });
 });

@@ -68,7 +68,7 @@ export function mergeNonReadyParseSnapshot(input: {
   workerState: WorkerOperationState<PdfLayoutJobResult>;
 }): { parseStatus: PdfParseStatus; parseProgress: PdfParseProgress | null } {
   const workerSnapshot = snapshotFromWorkerState(input.workerState);
-  if (workerSnapshot.parseStatus === 'ready') {
+  if (workerSnapshot.parseStatus === 'ready' || workerSnapshot.parseStatus === 'failed') {
     return {
       parseStatus: input.parseStatus,
       parseProgress: input.parseProgress,

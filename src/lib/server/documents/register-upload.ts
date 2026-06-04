@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import {
@@ -6,10 +5,9 @@ import {
 } from '@/lib/server/documents/previews';
 import { findReusableParsedPdfResult } from '@/lib/server/documents/parsed-pdf-reuse';
 import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
+import { startPdfParseOperation } from '@/lib/server/documents/pdf-parse-operation';
 import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
-import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
-import { getPdfLayoutRateConfig, recordJobEvent } from '@/lib/server/rate-limit/job-rate-limiter';
 import { PDF_PARSER_VERSION } from '@openreader/compute-core';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
@@ -27,12 +25,19 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
   const reusableParsedPdf = input.type === 'pdf'
     ? await findReusableParsedPdfResult(input.documentId)
     : null;
+  const startedParse = input.type === 'pdf' && !reusableParsedPdf
+    ? await startPdfParseOperation({
+      documentId: input.documentId,
+      userId: input.userId,
+      namespace: input.namespace,
+    })
+    : null;
   const parsedJsonKey = reusableParsedPdf?.parsedJsonKey ?? null;
   const parseState = input.type === 'pdf'
     ? stringifyDocumentParseState(
       reusableParsedPdf
         ? { status: 'ready', progress: null, updatedAt: Date.now(), parserVersion: PDF_PARSER_VERSION }
-        : { status: 'pending', progress: null, updatedAt: Date.now(), parserVersion: PDF_PARSER_VERSION },
+        : (startedParse?.parseState ?? { status: 'pending', progress: null, updatedAt: Date.now(), parserVersion: PDF_PARSER_VERSION }),
     )
     : null;
 
@@ -79,13 +84,14 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     }, 'Failed to enqueue document preview');
   });
 
-  if (input.type === 'pdf' && !reusableParsedPdf) {
-    const pdfRateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
-    await recordJobEvent(input.userId, 'pdf_layout', `register:${randomUUID()}`, pdfRateConfig);
+  if (startedParse) {
     enqueueParsePdfJob({
       documentId: input.documentId,
       userId: input.userId,
       namespace: input.namespace,
+      initialOpId: startedParse.workerState.opId,
+      initialJobId: startedParse.workerState.jobId,
+      initialStatus: startedParse.parseState.status === 'running' ? 'running' : 'pending',
     });
   }
 

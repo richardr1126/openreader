@@ -10,16 +10,14 @@ import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { safeDocumentName } from '@/lib/server/documents/utils';
 import { enqueueDocumentPreview } from '@/lib/server/documents/previews';
+import { startPdfParseOperation } from '@/lib/server/documents/pdf-parse-operation';
 import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
-import { recordJobEvent, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
-import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { putDocumentBlob } from '@/lib/server/documents/blobstore';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { PDF_PARSER_VERSION } from '@openreader/compute-core';
 
 const DOCSTORE_DIR = path.join(process.cwd(), 'docstore');
 const TEMP_DIR = path.join(DOCSTORE_DIR, 'tmp');
@@ -132,6 +130,11 @@ export async function POST(req: NextRequest) {
 
       const derivedName = safeDocumentName(`${path.parse(file.name).name}.pdf`, `${id}.pdf`);
       const lastModified = Number.isFinite(file.lastModified) ? file.lastModified : Date.now();
+      const startedParse = await startPdfParseOperation({
+        documentId: id,
+        userId: storageUserId,
+        namespace: testNamespace,
+      });
 
       await db
         .insert(documents)
@@ -143,12 +146,7 @@ export async function POST(req: NextRequest) {
           size: pdfContent.length,
           lastModified,
           filePath: id,
-          parseState: stringifyDocumentParseState({
-            status: 'pending',
-            progress: null,
-            updatedAt: Date.now(),
-            parserVersion: PDF_PARSER_VERSION,
-          }),
+          parseState: stringifyDocumentParseState(startedParse.parseState),
           parsedJsonKey: null,
         })
         .onConflictDoUpdate({
@@ -159,12 +157,7 @@ export async function POST(req: NextRequest) {
             size: pdfContent.length,
             lastModified,
             filePath: id,
-            parseState: stringifyDocumentParseState({
-              status: 'pending',
-              progress: null,
-              updatedAt: Date.now(),
-              parserVersion: PDF_PARSER_VERSION,
-            }),
+            parseState: stringifyDocumentParseState(startedParse.parseState),
             parsedJsonKey: null,
           },
         });
@@ -186,13 +179,13 @@ export async function POST(req: NextRequest) {
         }, 'Failed to enqueue preview for converted DOCX');
       });
 
-      // Record upload-driven parse load (see register route for rationale).
-      const pdfRateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
-      await recordJobEvent(storageUserId, 'pdf_layout', `docx:${randomUUID()}`, pdfRateConfig);
       enqueueParsePdfJob({
         documentId: id,
         userId: storageUserId,
         namespace: testNamespace,
+        initialOpId: startedParse.workerState.opId,
+        initialJobId: startedParse.workerState.jobId,
+        initialStatus: startedParse.parseState.status === 'running' ? 'running' : 'pending',
       });
 
       return NextResponse.json({

@@ -5,7 +5,11 @@ import { documents } from '@/db/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { getWorkerClientConfigFromEnv } from '@/lib/server/compute/worker';
 import { isAbortLikeError } from '@/lib/server/compute/abort-like-error';
-import { isWorkerOperationStateStale, snapshotFromWorkerState } from '@/lib/server/compute/worker-parse-state';
+import {
+  isWorkerOperationStateStale,
+  mergeNonReadyParseSnapshot,
+  snapshotFromWorkerState,
+} from '@/lib/server/compute/worker-parse-state';
 import { fetchWorkerOperationState } from '@/lib/server/compute/worker-op-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import {
@@ -83,13 +87,20 @@ async function toSnapshotState(row: ParseRow, preferredOpId?: string | null): Pr
       && workerState.opId === opId
       && !isWorkerOperationStateStale(workerState, opStaleMs)
     ) {
+      const merged = mergeNonReadyParseSnapshot({
+        parseStatus,
+        parseProgress: state.progress ?? null,
+        workerState,
+      });
+      const workerSnapshot = snapshotFromWorkerState(workerState);
+      const fromWorker = workerSnapshot.parseStatus === 'pending' || workerSnapshot.parseStatus === 'running';
       return {
         snapshot: {
-          ...snapshotFromWorkerState(workerState),
+          ...merged,
           opId: workerState.opId,
         },
         opId: workerState.opId,
-        fromWorker: true,
+        fromWorker,
       };
     }
   }
@@ -262,22 +273,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           let current = initialState.snapshot;
           let signature = JSON.stringify(current);
           let currentOpId = requestedOpId ?? initialState.opId;
-          let currentFromWorker = initialState.fromWorker;
           let lastEventId: number | null = null;
           let loggedMissingOpId = false;
           const pinnedRequestedOp = requestedOpId ?? null;
-          const shouldCloseForTerminalSnapshot = (snapshot: ParsedSnapshot, fromWorker: boolean): boolean => {
+          const shouldCloseForTerminalSnapshot = (snapshot: ParsedSnapshot): boolean => {
             const isTerminal = snapshot.parseStatus === 'ready' || snapshot.parseStatus === 'failed';
             if (!isTerminal) return false;
-            // If caller pinned an opId, keep streaming until worker confirms that
-            // op state. DB fallback can report stale terminal status for other rows.
-            if (pinnedRequestedOp && snapshot.opId === pinnedRequestedOp && !fromWorker) return false;
+            if (pinnedRequestedOp && snapshot.opId !== pinnedRequestedOp) return false;
             return true;
           };
 
           writeSnapshot(current);
 
-          if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
+          if (shouldCloseForTerminalSnapshot(current)) {
             closeStream();
             return;
           }
@@ -304,7 +312,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               }
               current = next.snapshot;
               signature = next.signature;
-              currentFromWorker = next.fromWorker;
               if (!requestedOpId && next.opId !== currentOpId) {
                 currentOpId = next.opId;
                 lastEventId = null;
@@ -313,7 +320,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                   workerAbort = null;
                 }
               }
-              if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
+              if (shouldCloseForTerminalSnapshot(current)) {
                 closeStream();
               }
             }).catch((error) => {
@@ -350,7 +357,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               }
               current = next.snapshot;
               signature = next.signature;
-              currentFromWorker = next.fromWorker;
               currentOpId = requestedOpId ?? next.opId;
               if (!currentOpId) {
                 if (!loggedMissingOpId) {
@@ -358,7 +364,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                   logger.warn({
                     event: 'documents.parsed.events.missing_opid_non_terminal',
                     degraded: true,
-                    step: 'poll_without_worker_op',
+                    step: 'missing_opid_fallback',
                     documentId: id,
                     storageUserIdHash,
                     parseStatus: current.parseStatus,
@@ -368,7 +374,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               } else if (loggedMissingOpId) {
                 loggedMissingOpId = false;
               }
-              if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
+              if (shouldCloseForTerminalSnapshot(current)) {
                 closeStream();
                 return;
               }
@@ -472,19 +478,23 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
                   );
                   if (!workerSnapshot || workerSnapshot.opId !== currentOpId) continue;
 
+                  const mergedSnapshot = mergeNonReadyParseSnapshot({
+                    parseStatus: current.parseStatus,
+                    parseProgress: current.parseProgress,
+                    workerState: workerSnapshot,
+                  });
                   const nextSnapshot: ParsedSnapshot = {
-                    ...snapshotFromWorkerState(workerSnapshot),
+                    ...mergedSnapshot,
                     opId: workerSnapshot.opId,
                   };
                   const nextSignature = JSON.stringify(nextSnapshot);
                   if (nextSignature !== signature) {
                     current = nextSnapshot;
                     signature = nextSignature;
-                    currentFromWorker = true;
                     writeSnapshot(current);
                   }
 
-                  if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
+                  if (shouldCloseForTerminalSnapshot(current)) {
                     closeStream();
                     return;
                   }
@@ -523,12 +533,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             }
             current = next.snapshot;
             signature = next.signature;
-            currentFromWorker = next.fromWorker;
             if (!requestedOpId && next.opId !== currentOpId) {
               currentOpId = next.opId;
               lastEventId = null;
             }
-            if (shouldCloseForTerminalSnapshot(current, currentFromWorker)) {
+            if (shouldCloseForTerminalSnapshot(current)) {
               closeStream();
               return;
             }
