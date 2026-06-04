@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
@@ -11,6 +12,9 @@ import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
+const TEMP_UPLOAD_TOKEN_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TEMP_UPLOAD_USER_ID_REGEX = /^[a-zA-Z0-9._:-]{1,256}$/;
+export const TEMP_DOCUMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 function sanitizeNamespace(namespace: string | null): string | null {
   if (!namespace) return null;
@@ -69,6 +73,17 @@ export function isValidDocumentId(id: string): boolean {
   return DOCUMENT_ID_REGEX.test(id);
 }
 
+export function isValidTempUploadToken(token: string): boolean {
+  return TEMP_UPLOAD_TOKEN_REGEX.test(token);
+}
+
+function sanitizeTempUploadUserId(userId: string): string {
+  if (!TEMP_UPLOAD_USER_ID_REGEX.test(userId)) {
+    throw new Error(`Invalid temp upload user id: ${userId}`);
+  }
+  return encodeURIComponent(userId);
+}
+
 export function documentKey(id: string, namespace: string | null): string {
   if (!isValidDocumentId(id)) {
     throw new Error(`Invalid document id: ${id}`);
@@ -88,6 +103,27 @@ export function documentParsedKey(id: string, namespace: string | null): string 
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
   return `${cfg.prefix}/documents_v1/parsed_v1/${nsSegment}${id}.json`;
+}
+
+export function tempDocumentUploadPrefix(userId: string, namespace: string | null): string {
+  const cfg = getS3Config();
+  const ns = sanitizeNamespace(namespace);
+  const nsSegment = ns ? `ns/${ns}/` : '';
+  return `${cfg.prefix}/document_uploads_temp_v1/${nsSegment}users/${sanitizeTempUploadUserId(userId)}/`;
+}
+
+export function tempDocumentUploadKey(token: string, userId: string, namespace: string | null): string {
+  if (!isValidTempUploadToken(token)) {
+    throw new Error(`Invalid temp upload token: ${token}`);
+  }
+  return `${tempDocumentUploadPrefix(userId, namespace)}${token}.bin`;
+}
+
+export function tempDocumentUploadReceiptKey(token: string, userId: string, namespace: string | null): string {
+  if (!isValidTempUploadToken(token)) {
+    throw new Error(`Invalid temp upload token: ${token}`);
+  }
+  return `${tempDocumentUploadPrefix(userId, namespace)}${token}.receipt.json`;
 }
 
 function legacyDocumentParsedKey(id: string, namespace: string | null): string {
@@ -138,6 +174,40 @@ export async function presignPut(
   };
 }
 
+export async function presignTempPut(
+  token: string,
+  userId: string,
+  contentType: string,
+  namespace: string | null,
+  options?: { contentLength?: number },
+): Promise<{ url: string; headers: Record<string, string> }> {
+  const cfg = getS3Config();
+  const client = getS3Client();
+  const key = tempDocumentUploadKey(token, userId, namespace);
+  const normalizedType = (contentType || 'application/octet-stream').trim() || 'application/octet-stream';
+  const contentLength =
+    typeof options?.contentLength === 'number' && Number.isFinite(options.contentLength) && options.contentLength > 0
+      ? Math.floor(options.contentLength)
+      : undefined;
+
+  const command = new PutObjectCommand({
+    Bucket: cfg.bucket,
+    Key: key,
+    ContentType: normalizedType,
+    ServerSideEncryption: 'AES256',
+    ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
+  });
+  const url = await getSignedUrl(client, command, { expiresIn: 60 * 5 });
+
+  return {
+    url,
+    headers: {
+      'Content-Type': normalizedType,
+      'x-amz-server-side-encryption': 'AES256',
+    },
+  };
+}
+
 export async function headDocumentBlob(
   id: string,
   namespace: string | null,
@@ -150,6 +220,23 @@ export async function headDocumentBlob(
     contentLength: Number(res.ContentLength ?? 0),
     contentType: res.ContentType ?? null,
     eTag: res.ETag ?? null,
+  };
+}
+
+export async function headTempDocumentBlob(
+  token: string,
+  userId: string,
+  namespace: string | null,
+): Promise<{ contentLength: number; contentType: string | null; eTag: string | null; lastModified: number | null }> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const key = tempDocumentUploadKey(token, userId, namespace);
+  const res = await client.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }));
+  return {
+    contentLength: Number(res.ContentLength ?? 0),
+    contentType: res.ContentType ?? null,
+    eTag: res.ETag ?? null,
+    lastModified: res.LastModified?.getTime() ?? null,
   };
 }
 
@@ -185,6 +272,23 @@ export async function getDocumentBlob(id: string, namespace: string | null): Pro
   return bodyToBuffer(res.Body);
 }
 
+export async function getTempDocumentBlob(
+  token: string,
+  userId: string,
+  namespace: string | null,
+): Promise<Buffer> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const key = tempDocumentUploadKey(token, userId, namespace);
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+    }),
+  );
+  return bodyToBuffer(res.Body);
+}
+
 export async function getDocumentBlobStream(id: string, namespace: string | null): Promise<DocumentBlobBody> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();
@@ -196,6 +300,29 @@ export async function getDocumentBlobStream(id: string, namespace: string | null
     }),
   );
   return res.Body as DocumentBlobBody;
+}
+
+export async function getTempDocumentFinalizeReceipt<T>(
+  token: string,
+  userId: string,
+  namespace: string | null,
+): Promise<T | null> {
+  try {
+    const cfg = getS3Config();
+    const client = getS3ProxyClient();
+    const key = tempDocumentUploadReceiptKey(token, userId, namespace);
+    const res = await client.send(
+      new GetObjectCommand({
+        Bucket: cfg.bucket,
+        Key: key,
+      }),
+    );
+    const body = await bodyToBuffer(res.Body);
+    return JSON.parse(body.toString('utf8')) as T;
+  } catch (error) {
+    if (isMissingBlobError(error)) return null;
+    throw error;
+  }
 }
 
 export async function getParsedDocumentBlob(id: string, namespace: string | null): Promise<Buffer> {
@@ -241,6 +368,26 @@ export async function putParsedDocumentBlob(id: string, body: Buffer, namespace:
   return key;
 }
 
+export async function putTempDocumentFinalizeReceipt(
+  token: string,
+  userId: string,
+  namespace: string | null,
+  body: Buffer,
+): Promise<void> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const key = tempDocumentUploadReceiptKey(token, userId, namespace);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+      Body: body,
+      ContentType: 'application/json',
+      ServerSideEncryption: 'AES256',
+    }),
+  );
+}
+
 export async function presignGet(
   id: string,
   namespace: string | null,
@@ -264,6 +411,7 @@ export async function putDocumentBlob(
   body: Buffer,
   contentType: string,
   namespace: string | null,
+  options?: { ifNoneMatch?: boolean },
 ): Promise<void> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();
@@ -274,6 +422,49 @@ export async function putDocumentBlob(
       Key: key,
       Body: body,
       ContentType: contentType,
+      ServerSideEncryption: 'AES256',
+      ...(options?.ifNoneMatch ? { IfNoneMatch: '*' } : {}),
+    }),
+  );
+}
+
+export async function putTempDocumentBlob(
+  token: string,
+  userId: string,
+  body: Buffer,
+  contentType: string,
+  namespace: string | null,
+): Promise<void> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const key = tempDocumentUploadKey(token, userId, namespace);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      ServerSideEncryption: 'AES256',
+    }),
+  );
+}
+
+export async function copyTempDocumentBlobToDocument(
+  token: string,
+  userId: string,
+  documentId: string,
+  namespace: string | null,
+  contentType: string,
+): Promise<void> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: cfg.bucket,
+      Key: documentKey(documentId, namespace),
+      CopySource: `${cfg.bucket}/${tempDocumentUploadKey(token, userId, namespace)}`,
+      ContentType: contentType,
+      MetadataDirective: 'REPLACE',
       ServerSideEncryption: 'AES256',
     }),
   );
@@ -290,6 +481,18 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey })).catch(() => undefined);
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey })).catch(() => undefined);
   await deleteDocumentPrefix(`${key}/`).catch(() => undefined);
+}
+
+export async function deleteTempDocumentUpload(token: string, userId: string, namespace: string | null): Promise<void> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: tempDocumentUploadKey(token, userId, namespace) }));
+}
+
+export async function deleteTempDocumentFinalizeReceipt(token: string, userId: string, namespace: string | null): Promise<void> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: tempDocumentUploadReceiptKey(token, userId, namespace) }));
 }
 
 export function isMissingBlobError(error: unknown): boolean {
@@ -336,6 +539,56 @@ export async function deleteDocumentPrefix(prefix: string): Promise<number> {
 
     continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
   } while (continuationToken);
+
+  return deleted;
+}
+
+export async function deleteExpiredTempDocumentUploads(
+  userId: string,
+  namespace: string | null,
+  olderThanMs: number,
+): Promise<number> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const prefix = tempDocumentUploadPrefix(userId, namespace);
+  let continuationToken: string | undefined;
+  const keys: string[] = [];
+
+  do {
+    const listRes = await client.send(
+      new ListObjectsV2Command({
+        Bucket: cfg.bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    for (const item of listRes.Contents ?? []) {
+      const key = item.Key;
+      const lastModified = item.LastModified?.getTime() ?? 0;
+      if (!key || lastModified <= 0 || lastModified >= olderThanMs) continue;
+      keys.push(key);
+    }
+
+    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  if (keys.length === 0) return 0;
+
+  let deleted = 0;
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    const deleteRes = await client.send(
+      new DeleteObjectsCommand({
+        Bucket: cfg.bucket,
+        Delete: {
+          Objects: batch.map((Key) => ({ Key })),
+          Quiet: true,
+        },
+      }),
+    );
+    deleted += deleteRes.Deleted?.length ?? 0;
+  }
 
   return deleted;
 }

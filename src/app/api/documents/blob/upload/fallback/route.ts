@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { isValidDocumentId, putDocumentBlob } from '@/lib/server/documents/blobstore';
+import { isValidTempUploadToken, putTempDocumentBlob } from '@/lib/server/documents/blobstore';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
@@ -26,11 +26,12 @@ export async function PUT(req: NextRequest) {
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
+    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const url = new URL(req.url);
-    const id = (url.searchParams.get('id') || '').trim().toLowerCase();
-    if (!isValidDocumentId(id)) {
-      return NextResponse.json({ error: 'Invalid document id' }, { status: 400 });
+    const token = (url.searchParams.get('token') || '').trim().toLowerCase();
+    if (!isValidTempUploadToken(token)) {
+      return NextResponse.json({ error: 'Invalid upload token' }, { status: 400 });
     }
 
     const contentType = (req.headers.get('content-type') || 'application/octet-stream').trim() || 'application/octet-stream';
@@ -86,7 +87,7 @@ export async function PUT(req: NextRequest) {
     const namespace = getOpenReaderTestNamespace(req.headers);
 
     try {
-      await putDocumentBlob(id, body, contentType, namespace);
+      await putTempDocumentBlob(token, ctxOrRes.userId, body, contentType, namespace);
     } catch (error) {
       if (!isPreconditionFailed(error)) {
         throw error;
@@ -97,12 +98,12 @@ export async function PUT(req: NextRequest) {
       event: 'documents.blob.upload.fallback.proxy_used',
       degraded: true,
       fallbackPath: 'upload_proxy',
-      documentId: id,
+      uploadToken: token,
       contentType,
       bytes: body.byteLength,
     }, 'Document upload fallback proxy used');
 
-    return NextResponse.json({ success: true, id });
+    return NextResponse.json({ success: true, token });
   } catch (error) {
     serverLogger.error({
       event: 'documents.blob.upload.fallback.failed',

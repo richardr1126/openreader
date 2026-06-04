@@ -30,6 +30,29 @@ test.describe('Document Upload Tests', () => {
     await expectDocumentListed(page, 'sample.txt');
   });
 
+  test('reuses the same canonical id for identical uploads', async ({ page }) => {
+    await uploadFile(page, 'sample.pdf');
+    await uploadFile(page, 'sample.pdf');
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch('/api/documents', { cache: 'no-store' });
+      if (!res.ok) {
+        return { ok: false as const, reason: `status:${res.status}` };
+      }
+      const data = await res.json() as { documents?: Array<{ id: string; name: string }> };
+      const matching = (data.documents || []).filter((doc) => doc.name === 'sample.pdf');
+      const uniqueIds = Array.from(new Set(matching.map((doc) => doc.id)));
+      return { ok: true as const, matchingCount: matching.length, uniqueIds };
+    });
+
+    expect(result.ok).toBeTruthy();
+    if (!result.ok) {
+      throw new Error(`Failed to inspect uploaded documents: ${result.reason}`);
+    }
+    expect(result.matchingCount).toBe(1);
+    expect(result.uniqueIds).toHaveLength(1);
+  });
+
   test('hashes text/HTML docs using UTF-8 encoded stored string', async ({ page }) => {
     await uploadFile(page, 'sample.txt');
     await expectDocumentListed(page, 'sample.txt');

@@ -1,10 +1,8 @@
-import { sha256HexFromArrayBuffer } from '@/lib/client/sha256';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 import type { ParsedPdfDocument, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { DocumentSettings } from '@/types/document-settings';
 
 export type UploadSource = {
-  id: string;
   name: string;
   type: DocumentType;
   size: number;
@@ -23,8 +21,12 @@ function toUploadBody(body: UploadSource['body']): BodyInit {
   return body as unknown as BodyInit;
 }
 
-async function uploadDocumentSourceViaProxy(source: UploadSource, options?: UploadOptions): Promise<void> {
-  const res = await fetch(`/api/documents/blob/upload/fallback?id=${encodeURIComponent(source.id)}`, {
+async function uploadDocumentSourceViaProxy(
+  source: UploadSource,
+  token: string,
+  options?: UploadOptions,
+): Promise<void> {
+  const res = await fetch(`/api/documents/blob/upload/fallback?token=${encodeURIComponent(token)}`, {
     method: 'PUT',
     headers: { 'Content-Type': source.contentType || 'application/octet-stream' },
     body: toUploadBody(source.body),
@@ -241,7 +243,6 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       uploads: sources.map((source) => ({
-        id: source.id,
         contentType: source.contentType,
         size: source.size,
       })),
@@ -255,14 +256,18 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
   }
 
   const presigned = (await presignRes.json()) as {
-    uploads?: Array<{ id: string; url: string; headers?: Record<string, string> }>;
+    uploads?: Array<{ token: string; url: string; headers?: Record<string, string> }>;
   };
-  const byId = new Map((presigned.uploads || []).map((upload) => [upload.id, upload]));
+  const uploads = presigned.uploads || [];
+  if (uploads.length !== sources.length) {
+    throw new Error('Upload preparation returned an unexpected number of temp uploads');
+  }
 
-  for (const source of sources) {
-    const upload = byId.get(source.id);
-    if (!upload?.url) {
-      throw new Error(`Missing presigned upload for document ${source.id}`);
+  for (let index = 0; index < sources.length; index += 1) {
+    const source = sources[index];
+    const upload = uploads[index];
+    if (!upload?.url || !upload.token) {
+      throw new Error(`Missing presigned upload for document ${source.name}`);
     }
 
     let putError: unknown = null;
@@ -285,7 +290,7 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     }
 
     try {
-      await uploadDocumentSourceViaProxy(source, options);
+      await uploadDocumentSourceViaProxy(source, upload.token, options);
     } catch (proxyError) {
       const directMessage = putError instanceof Error ? putError.message : 'unknown direct upload error';
       const proxyMessage = proxyError instanceof Error ? proxyError.message : 'unknown proxy upload error';
@@ -293,27 +298,26 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     }
   }
 
-  const registerRes = await fetch('/api/documents', {
+  const finalizeRes = await fetch('/api/documents/blob/upload/finalize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      documents: sources.map((source) => ({
-        id: source.id,
+      uploads: sources.map((source, index) => ({
+        token: uploads[index]?.token,
         name: source.name,
         type: source.type,
-        size: source.size,
         lastModified: source.lastModified,
       })),
     }),
     signal: options?.signal,
   });
 
-  if (!registerRes.ok) {
-    const data = (await registerRes.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to register uploaded documents');
+  if (!finalizeRes.ok) {
+    const data = (await finalizeRes.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to finalize uploaded documents');
   }
 
-  const data = (await registerRes.json()) as { stored: BaseDocument[] };
+  const data = (await finalizeRes.json()) as { stored: BaseDocument[] };
   return data.stored || [];
 }
 
@@ -322,13 +326,10 @@ export async function uploadDocuments(files: File[], options?: UploadOptions): P
 
   const sources: UploadSource[] = [];
   for (const file of files) {
-    const bytes = await file.arrayBuffer();
-    const id = await sha256HexFromArrayBuffer(bytes);
     const type = documentTypeForName(file.name);
-    const name = file.name || `${id}.${type}`;
+    const name = file.name || `upload.${type}`;
     const contentType = file.type || mimeTypeForDoc({ name, type });
     sources.push({
-      id,
       name,
       type,
       size: file.size,

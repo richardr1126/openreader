@@ -971,11 +971,9 @@ export async function syncDocumentsToServer(
 
   for (const doc of pdfDocs) {
     const bytes = new Uint8Array(doc.data);
-    const id = await sha256HexFromBytes(bytes);
     uploads.push({
       oldId: doc.id,
       source: {
-        id,
         name: doc.name,
         type: 'pdf',
         size: bytes.byteLength,
@@ -992,11 +990,9 @@ export async function syncDocumentsToServer(
 
   for (const doc of epubDocs) {
     const bytes = new Uint8Array(doc.data);
-    const id = await sha256HexFromBytes(bytes);
     uploads.push({
       oldId: doc.id,
       source: {
-        id,
         name: doc.name,
         type: 'epub',
         size: bytes.byteLength,
@@ -1013,11 +1009,9 @@ export async function syncDocumentsToServer(
 
   for (const doc of htmlDocs) {
     const encoded = textEncoder.encode(doc.data);
-    const id = await sha256HexFromBytes(encoded);
     uploads.push({
       oldId: doc.id,
       source: {
-        id,
         name: doc.name,
         type: 'html',
         size: encoded.byteLength,
@@ -1036,11 +1030,13 @@ export async function syncDocumentsToServer(
     onProgress(50, 'Uploading to server...');
   }
 
-  await uploadDocumentSources(uploads.map((entry) => entry.source), { signal });
+  const stored = await uploadDocumentSources(uploads.map((entry) => entry.source), { signal });
 
-  for (const entry of uploads) {
-    if (entry.oldId === entry.source.id) continue;
-    await applyDocumentIdMapping(entry.oldId, entry.source.id);
+  for (let index = 0; index < uploads.length; index += 1) {
+    const entry = uploads[index];
+    const nextId = stored[index]?.id;
+    if (!nextId || entry.oldId === nextId) continue;
+    await applyDocumentIdMapping(entry.oldId, nextId);
   }
 
   if (onProgress) {
@@ -1064,11 +1060,9 @@ export async function syncSelectedDocumentsToServer(
       const data = await getPdfDocument(doc.id);
       if (data) {
         const bytes = new Uint8Array(data.data);
-        const id = await sha256HexFromBytes(bytes);
         uploads.push({
           oldId: data.id,
           source: {
-            id,
             name: data.name,
             type: 'pdf',
             size: bytes.byteLength,
@@ -1082,11 +1076,9 @@ export async function syncSelectedDocumentsToServer(
       const data = await getEpubDocument(doc.id);
       if (data) {
         const bytes = new Uint8Array(data.data);
-        const id = await sha256HexFromBytes(bytes);
         uploads.push({
           oldId: data.id,
           source: {
-            id,
             name: data.name,
             type: 'epub',
             size: bytes.byteLength,
@@ -1100,11 +1092,9 @@ export async function syncSelectedDocumentsToServer(
       const data = await getHtmlDocument(doc.id);
       if (data) {
         const bytes = textEncoder.encode(data.data);
-        const id = await sha256HexFromBytes(bytes);
         uploads.push({
           oldId: data.id,
           source: {
-            id,
             name: data.name,
             type: 'html',
             size: bytes.byteLength,
@@ -1121,11 +1111,13 @@ export async function syncSelectedDocumentsToServer(
   }
 
   if (onProgress) onProgress(50, 'Uploading to server...');
-  await uploadDocumentSources(uploads.map((entry) => entry.source), { signal });
+  const stored = await uploadDocumentSources(uploads.map((entry) => entry.source), { signal });
 
-  for (const entry of uploads) {
-    if (entry.oldId === entry.source.id) continue;
-    await applyDocumentIdMapping(entry.oldId, entry.source.id);
+  for (let index = 0; index < uploads.length; index += 1) {
+    const entry = uploads[index];
+    const nextId = stored[index]?.id;
+    if (!nextId || entry.oldId === nextId) continue;
+    await applyDocumentIdMapping(entry.oldId, nextId);
   }
 
   if (onProgress) {
