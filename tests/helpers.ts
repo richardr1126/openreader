@@ -1,6 +1,4 @@
 import { Page, expect, type TestInfo, type Locator } from '@playwright/test';
-import fs from 'fs';
-import path from 'path';
 import { createHash } from 'crypto';
 
 const DIR = './tests/files/';
@@ -8,14 +6,6 @@ const DIR = './tests/files/';
 // Small util to safely use filenames inside regex patterns
 function escapeRegExp(input: string) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function fixturePath(fileName: string) {
-  return path.join(__dirname, 'files', fileName);
-}
-
-function sha256HexOfFile(filePath: string) {
-  return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
 async function waitForPdfViewerReady(page: Page, timeout = 60000) {
@@ -40,7 +30,7 @@ async function waitForPdfViewerReady(page: Page, timeout = 60000) {
 }
 
 /**
- * Upload a sample epub or pdf
+ * Upload a sample document fixture
  */
 export async function uploadFile(page: Page, filePath: string) {
   const input = page.locator('input[type=file]').first();
@@ -50,7 +40,7 @@ export async function uploadFile(page: Page, filePath: string) {
   await input.setInputFiles(`${DIR}${filePath}`);
 
   // Wait for the uploader to finish processing. The input is disabled while
-  // uploading/converting via react-dropzone's `disabled` prop.
+  // uploading via react-dropzone's `disabled` prop.
   // Tolerate extremely fast operations where the disabled state may be missed.
   try {
     await expect(input).toBeDisabled({ timeout: 2000 });
@@ -69,14 +59,8 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
   const lower = fileName.toLowerCase();
 
   if (lower.endsWith('.docx')) {
-    // Best-effort: conversion can complete before we observe this UI state.
-    try {
-      await expect(page.getByText('Converting DOCX to PDF...')).toBeVisible({ timeout: 5000 });
-    } catch {
-      // ignore
-    }
-    const expectedId = sha256HexOfFile(fixturePath(fileName));
-    const targetLink = page.locator(`a[href$="/pdf/${expectedId}"]`).first();
+    const convertedName = `${fileName.replace(/\.[^.]+$/, '')}.pdf`;
+    const targetLink = page.getByRole('link', { name: new RegExp(escapeRegExp(convertedName), 'i') }).first();
     await expect(targetLink).toBeVisible({ timeout: 15000 });
     await dismissOnboardingModals(page);
     await targetLink.click();

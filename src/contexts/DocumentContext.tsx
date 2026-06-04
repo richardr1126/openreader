@@ -110,6 +110,26 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       stored.map(async (document, index) => {
         const file = files[index];
         if (!file) return;
+        const sourceType = file.name
+          ? (
+            file.name.toLowerCase().endsWith('.pdf')
+              ? 'pdf'
+              : file.name.toLowerCase().endsWith('.epub')
+                ? 'epub'
+                : file.name.toLowerCase().endsWith('.docx')
+                  ? 'docx'
+                  : 'html'
+          )
+          : (
+            file.type === 'application/pdf'
+              ? 'pdf'
+              : file.type === 'application/epub+zip'
+                ? 'epub'
+                : file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                  ? 'docx'
+                  : 'html'
+          );
+        if (document.type !== sourceType) return;
         await cacheStoredDocumentFromBytes(document, await file.arrayBuffer());
       }),
     );

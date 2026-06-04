@@ -504,23 +504,3 @@ export async function getDocumentPreviewStatus(
 
   throw new Error(`Failed to load preview status (status ${res.status})`);
 }
-
-export async function uploadDocxAsPdf(file: File, options?: { signal?: AbortSignal }): Promise<BaseDocument> {
-  const form = new FormData();
-  form.append('file', file);
-
-  const res = await fetch('/api/documents/docx-to-pdf/upload', {
-    method: 'POST',
-    body: form,
-    signal: options?.signal,
-  });
-
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to convert DOCX');
-  }
-
-  const data = (await res.json()) as { stored: BaseDocument };
-  if (!data?.stored) throw new Error('DOCX conversion succeeded but returned no document');
-  return data.stored;
-}

@@ -11,7 +11,6 @@ export interface BaseDocument {
   parsedJsonKey?: string | null;
   scope?: 'user';
   folderId?: string;
-  isConverting?: boolean;
 }
 
 export interface PDFDocument extends BaseDocument {

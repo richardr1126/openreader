@@ -100,13 +100,7 @@ test.describe('Document Upload Tests', () => {
 
   test('uploads and converts a DOCX document', async ({ page }) => {
     await uploadFile(page, 'sample.docx');
-    // Should see the converting message (best-effort; conversion may complete extremely fast)
-    try {
-      await expect(page.getByText('Converting DOCX to PDF...')).toBeVisible({ timeout: 5000 });
-    } catch {
-      // ignore
-    }
-    // After conversion, should see the PDF with the same name
+    // DOCX uploads are normalized into stored PDFs with the same basename.
     await expectDocumentListed(page, 'sample.pdf');
   });
 

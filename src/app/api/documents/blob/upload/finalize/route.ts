@@ -1,3 +1,4 @@
+import path from 'path';
 import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
@@ -12,8 +13,10 @@ import {
   isMissingBlobError,
   isPreconditionFailed,
   isValidTempUploadToken,
+  putDocumentBlob,
   putTempDocumentFinalizeReceipt,
 } from '@/lib/server/documents/blobstore';
+import { convertDocxBufferToPdfBuffer } from '@/lib/server/documents/docx-convert';
 import { registerUploadedDocument } from '@/lib/server/documents/register-upload';
 import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -133,23 +136,48 @@ async function finalizeOne(input: {
     throw new Error('Temporary upload expired before finalize');
   }
 
-  const documentId = createHash('sha256').update(temp.body).digest('hex');
+  const isDocxUpload = input.upload.type === 'docx';
+  const finalizedType: DocumentType = isDocxUpload ? 'pdf' : input.upload.type;
+  const finalizedBody = isDocxUpload
+    ? await convertDocxBufferToPdfBuffer(temp.body)
+    : temp.body;
+  const finalizedContentType = finalizedType === 'pdf'
+    ? 'application/pdf'
+    : temp.contentType;
+  const finalizedName = finalizedType === 'pdf' && input.upload.type === 'docx'
+    ? safeDocumentName(`${path.parse(input.upload.name).name}.pdf`, 'upload.pdf')
+    : input.upload.name;
+  const documentId = createHash('sha256').update(finalizedBody).digest('hex');
 
   try {
     await headDocumentBlob(documentId, input.namespace);
   } catch (error) {
     if (!isMissingBlobError(error)) throw error;
-    try {
-      await copyTempDocumentBlobToDocument(
-        input.upload.token,
-        input.userId,
-        documentId,
-        input.namespace,
-        temp.contentType,
-        { ifNoneMatch: true },
-      );
-    } catch (copyError) {
-      if (!isPreconditionFailed(copyError)) throw copyError;
+    if (!isDocxUpload) {
+      try {
+        await copyTempDocumentBlobToDocument(
+          input.upload.token,
+          input.userId,
+          documentId,
+          input.namespace,
+          finalizedContentType,
+          { ifNoneMatch: true },
+        );
+      } catch (copyError) {
+        if (!isPreconditionFailed(copyError)) throw copyError;
+      }
+    } else {
+      try {
+        await putDocumentBlob(
+          documentId,
+          finalizedBody,
+          finalizedContentType,
+          input.namespace,
+          { ifNoneMatch: true },
+        );
+      } catch (putError) {
+        if (!isPreconditionFailed(putError)) throw putError;
+      }
     }
   }
 
@@ -158,9 +186,9 @@ async function finalizeOne(input: {
     documentId,
     userId: input.userId,
     namespace: input.namespace,
-    name: input.upload.name,
-    type: input.upload.type,
-    size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : temp.size,
+    name: finalizedName,
+    type: finalizedType,
+    size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
     lastModified: input.upload.lastModified,
   });
 
