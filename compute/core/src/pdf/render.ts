@@ -1,5 +1,5 @@
 import type { Canvas } from '@napi-rs/canvas';
-import { resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
+import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
 
 type CanvasRuntime = {
   DOMMatrixCtor: unknown;
@@ -106,11 +106,7 @@ export async function renderPage({
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-
-  if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
-    pdfjs.GlobalWorkerOptions.workerPort = null;
-  }
+  configurePdfjsNodeRuntime(pdfjs);
 
   const standardFontDataUrl = resolvePdfjsStandardFontDataUrl();
 

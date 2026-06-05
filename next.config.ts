@@ -16,13 +16,18 @@ const securityHeaders = [
 ];
 
 const bundleWorkerCompute = true;
+const pdfjsTraceFiles = [
+  './node_modules/pdfjs-dist/package.json',
+  './node_modules/pdfjs-dist/legacy/build/pdf.mjs',
+  './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+  './node_modules/pdfjs-dist/standard_fonts/**/*',
+];
 const serverExternalPackages = [
   '@napi-rs/canvas',
   'better-sqlite3',
   'ffmpeg-static',
-  // Keep pdfjs-dist out of the bundle: it resolves its own on-disk assets
-  // (standard_fonts) at runtime via require.resolve, which only works if it
-  // stays a real package in node_modules rather than being inlined.
+  // Keep pdfjs-dist as a real package in node_modules. Server-side preview
+  // rendering resolves pdf.js runtime assets from the filesystem at runtime.
   'pdfjs-dist',
   ...(!bundleWorkerCompute ? ['onnxruntime-node', '@huggingface/tokenizers'] : []),
 ];
@@ -56,19 +61,15 @@ const nextConfig: NextConfig = {
       './node_modules/ffmpeg-static/ffmpeg',
     ],
     '/api/documents/blob/preview/ensure': [
-      // standard_fonts + the worker are loaded by path/specifier, not a static
-      // import, so trace them explicitly. The rest of pdfjs-dist is pulled in
-      // automatically now that it is a server-external package.
-      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-      './node_modules/pdfjs-dist/standard_fonts/**/*',
+      // pdf.js runtime assets are resolved through filesystem paths at runtime,
+      // so trace them explicitly for Vercel/standalone serverless bundles.
+      ...pdfjsTraceFiles,
     ],
     '/api/documents/blob/preview/presign': [
-      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-      './node_modules/pdfjs-dist/standard_fonts/**/*',
+      ...pdfjsTraceFiles,
     ],
     '/api/documents/blob/preview/fallback': [
-      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-      './node_modules/pdfjs-dist/standard_fonts/**/*',
+      ...pdfjsTraceFiles,
     ],
   },
   outputFileTracingExcludes: {

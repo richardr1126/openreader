@@ -3,7 +3,7 @@ import type { ParsedPdfDocument, ParsedPdfPage } from '../types/parsed-pdf';
 import { ensureModel } from './model';
 import { runLayoutModel } from './runLayoutModel';
 import { mergeTextWithRegions } from './merge';
-import { resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
+import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
 import { PDF_PARSER_VERSION } from './parser-version';
 import { stitchCrossPageBlocks } from './stitch';
 import { renderPage } from './render';
@@ -36,10 +36,7 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
-    pdfjs.GlobalWorkerOptions.workerPort = null;
-  }
+  configurePdfjsNodeRuntime(pdfjs);
   const standardFontDataUrl = resolvePdfjsStandardFontDataUrl();
 
   const loadingTask = pdfjs.getDocument({
