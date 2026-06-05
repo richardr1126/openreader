@@ -9,10 +9,6 @@ jobs:
   e2e-testing:
     timeout-minutes: 30
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [chromium, firefox, webkit]
     env:
       USE_EMBEDDED_WEED_MINI: true
       ENABLE_TEST_NAMESPACE: true
@@ -61,11 +57,11 @@ jobs:
       env:
         API_BASE: https://api.deepinfra.com/v1/openai
         API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
-      run: pnpm exec playwright test --project=${{ matrix.project }} --max-failures=5 --reporter=list,github,html
+      run: pnpm exec playwright test --max-failures=5 --reporter=list,github,html
     - uses: actions/upload-artifact@v7
       if: ${{ always() }}
       with:
-        name: playwright-report-${{ matrix.project }}
+        name: playwright-report
         path: |
           playwright-report/
           tests/results/
