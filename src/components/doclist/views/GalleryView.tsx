@@ -28,14 +28,6 @@ function formatDateTime(value: number | undefined): string {
   });
 }
 
-function formatParseStatus(status: DocumentListDocument['parseStatus']): string {
-  if (!status) return 'N/A';
-  if (status === 'pending') return 'Pending';
-  if (status === 'running') return 'Running';
-  if (status === 'ready') return 'Ready';
-  return 'Failed';
-}
-
 function KindIcon({ doc, className }: { doc: DocumentListDocument; className?: string }) {
   if (doc.type === 'pdf') return <PDFIcon className={className ?? 'w-4 h-4 text-danger'} />;
   if (doc.type === 'epub') return <EPUBIcon className={className ?? 'w-4 h-4 text-accent'} />;
@@ -242,12 +234,6 @@ export function GalleryView({
                   <dd className="text-foreground text-right truncate" title={folderNameById?.[activeDoc.folderId] ?? activeDoc.folderId}>
                     {folderNameById?.[activeDoc.folderId] ?? activeDoc.folderId}
                   </dd>
-                </>
-              )}
-              {activeDoc.type === 'pdf' && (
-                <>
-                  <dt className="text-soft">Parse status</dt>
-                  <dd className="text-foreground text-right">{formatParseStatus(activeDoc.parseStatus)}</dd>
                 </>
               )}
             </dl>

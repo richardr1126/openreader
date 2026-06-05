@@ -57,7 +57,7 @@ vi.mock('@/lib/server/logger', () => ({
   })),
 }));
 
-describe('GET /api/documents/[id]/parsed/events worker proxy', () => {
+describe('GET /api/documents/[id]/parsed/events worker event proxy', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {

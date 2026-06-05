@@ -7,8 +7,6 @@ export interface BaseDocument {
   lastModified: number;
   recentlyOpenedAt?: number;
   type: DocumentType;
-  parseStatus?: 'pending' | 'running' | 'ready' | 'failed' | null;
-  parsedJsonKey?: string | null;
   scope?: 'user';
   folderId?: string;
 }

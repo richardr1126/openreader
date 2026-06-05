@@ -76,7 +76,7 @@ vi.mock('@/lib/server/logger', () => ({
   })),
 }));
 
-describe('GET/POST /api/documents/[id]/parsed worker-owned flow', () => {
+describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
   beforeEach(() => {
     hoisted.db = {
       select: vi.fn(() => ({

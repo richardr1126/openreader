@@ -67,8 +67,6 @@ export async function GET(req: NextRequest) {
       size: number;
       lastModified: number;
       filePath: string;
-      parseState: string | null;
-      parsedJsonKey: string | null;
     }>;
 
     const results: BaseDocument[] = rows.map((doc) => {
@@ -79,8 +77,6 @@ export async function GET(req: NextRequest) {
         size: Number(doc.size),
         lastModified: Number(doc.lastModified),
         type,
-        parseStatus: null,
-        parsedJsonKey: null,
         scope: 'user',
       };
     });
