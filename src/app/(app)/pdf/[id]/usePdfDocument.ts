@@ -19,10 +19,12 @@ import {
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import {
+  ensureParsedPdfDocumentOperation,
   forceReparsePdfDocument,
   getDocumentMetadata,
   getDocumentSettings,
   getParsedPdfDocument,
+  ParsedPdfNotReadyError,
   putDocumentSettings,
   subscribeParsedPdfDocumentEvents,
 } from '@/lib/client/api/documents';
@@ -117,6 +119,10 @@ export interface PdfDocumentState {
   isAudioCombining: boolean;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Main PDF route hook.
  */
@@ -205,18 +211,18 @@ export function usePdfDocument(): PdfDocumentState {
     }
   }, []);
 
-  const startParsedEventStream = useCallback((documentId: string, initialOpId?: string | null) => {
+  const startParsedEventStream = useCallback((documentId: string, initialOpId: string) => {
     parseStreamAbortRef.current?.abort();
     parseSseCloseRef.current?.();
     parseSseCloseRef.current = null;
     setParseProgress(null);
-    setActiveParseOpId(initialOpId?.trim() || null);
+    setActiveParseOpId(initialOpId.trim() || null);
     const controller = new AbortController();
     parseStreamAbortRef.current = controller;
     let isResolvingTerminalState = false;
 
     const closeSse = subscribeParsedPdfDocumentEvents(documentId, {
-      opId: initialOpId?.trim() || null,
+      opId: initialOpId.trim(),
     }, {
       onSnapshot: (snapshot) => {
         if (controller.signal.aborted) return;
@@ -229,13 +235,20 @@ export function usePdfDocument(): PdfDocumentState {
         if (snapshot.parseStatus === 'ready') {
           isResolvingTerminalState = true;
           void (async () => {
-            try {
-              await loadParsedDocumentOnce(documentId, controller.signal);
-            } catch (error) {
-              if (error instanceof DOMException && error.name === 'AbortError') return;
-              console.error('Failed to load parsed PDF after ready status:', error);
-              resetParsedDocumentState();
-            } finally {
+            let loaded = false;
+            let retryMs = 500;
+            while (!controller.signal.aborted && !loaded) {
+              try {
+                await loadParsedDocumentOnce(documentId, controller.signal);
+                loaded = true;
+              } catch (error) {
+                if (error instanceof DOMException && error.name === 'AbortError') return;
+                console.warn('Parsed PDF reported ready before artifact was readable; retrying:', error);
+                await delay(retryMs);
+                retryMs = Math.min(retryMs * 2, 2_000);
+              }
+            }
+            if (loaded) {
               if (parseSseCloseRef.current === closeSse) {
                 closeSse();
                 parseSseCloseRef.current = null;
@@ -280,6 +293,60 @@ export function usePdfDocument(): PdfDocumentState {
       }
     }, { once: true });
   }, [loadParsedDocumentOnce, resetParsedDocumentState, setActiveParseOpId]);
+
+  const resolveParsedDocumentState = useCallback(async (
+    documentId: string,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    try {
+      await loadParsedDocumentOnce(documentId, signal);
+    } catch (error) {
+      if (signal.aborted) return;
+      if (!(error instanceof ParsedPdfNotReadyError)) {
+        throw error;
+      }
+
+      resetParsedDocumentState();
+      setParseStatus(error.parseStatus);
+      setParseProgress(error.parseProgress);
+      setActiveParseOpId(error.opId);
+
+      if (error.parseStatus === 'failed') {
+        return;
+      }
+
+      let nextOpId = error.opId;
+      let nextStatus: PdfParseStatus = error.parseStatus;
+      let nextProgress = error.parseProgress;
+
+      if (!nextOpId) {
+        const ensured = await ensureParsedPdfDocumentOperation(documentId, { signal });
+        if (signal.aborted) return;
+        nextOpId = ensured.opId;
+        nextStatus = ensured.parseStatus;
+        nextProgress = ensured.parseProgress;
+        setParseStatus(nextStatus);
+        setParseProgress(nextProgress);
+        setActiveParseOpId(nextOpId);
+      }
+
+      if (nextStatus === 'ready') {
+        await loadParsedDocumentOnce(documentId, signal);
+        return;
+      }
+
+      if (nextStatus === 'failed' || !nextOpId) {
+        return;
+      }
+
+      startParsedEventStream(documentId, nextOpId);
+    }
+  }, [
+    loadParsedDocumentOnce,
+    resetParsedDocumentState,
+    setActiveParseOpId,
+    startParsedEventStream,
+  ]);
 
   useEffect(() => {
     pdfDocumentRef.current = pdfDocument;
@@ -487,12 +554,11 @@ export function usePdfDocument(): PdfDocumentState {
         return false;
       }
       if (meta.type === 'pdf') {
-        const initialParseStatus = (meta.parseStatus ?? null) as PdfParseStatus | null;
-        setParseStatus(initialParseStatus);
-        setParseProgress(null);
-        setActiveParseOpId(null);
-        startParsedEventStream(id, null);
         void fetchDocumentSettings(id, controller.signal);
+        void resolveParsedDocumentState(id, controller.signal).catch((error) => {
+          if (controller.signal.aborted) return;
+          console.error('Failed to resolve parsed PDF state:', error);
+        });
       }
 
       const doc = await ensureCachedDocument(meta, { signal: controller.signal });
@@ -526,7 +592,7 @@ export function usePdfDocument(): PdfDocumentState {
     setCurrDocText,
     setPdfDocument,
     fetchDocumentSettings,
-    startParsedEventStream,
+    resolveParsedDocumentState,
   ]);
 
   const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {
@@ -553,7 +619,9 @@ export function usePdfDocument(): PdfDocumentState {
       setParseStatus(forced.status);
       setParseProgress(null);
       setActiveParseOpId(forced.opId ?? null);
-      startParsedEventStream(currDocId, forced.opId ?? null);
+      if (forced.opId) {
+        startParsedEventStream(currDocId, forced.opId);
+      }
     } catch (error) {
       console.error('Failed to force PDF reparse:', error);
     }

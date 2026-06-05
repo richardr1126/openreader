@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ComputeBackend, PdfLayoutInput, WhisperAlignInput, WhisperAlignResult } from '@/lib/server/compute/types';
 import { parseSseEventId, parseSsePayload } from '@openreader/compute-core';
-import { getWorkerClientWaitTimeoutMs, PDF_PARSER_VERSION } from '@openreader/compute-core';
+import { getWorkerClientWaitTimeoutMs } from '@openreader/compute-core';
+import { PDF_PARSER_VERSION } from '@openreader/compute-core/api-contracts';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import type {

@@ -17,6 +17,7 @@ export {
 export { renderPage } from './pdf/render';
 export { mergeTextWithRegions } from './pdf/merge';
 export { PDF_PARSER_VERSION } from './pdf/parser-version';
+export { encodeParserVersion } from './pdf/parser-version-key';
 export { stitchCrossPageBlocks } from './pdf/stitch';
 export { normalizeTextItemsForLayout } from './pdf/normalize-text';
 export { mapWordsToSentenceOffsets, type WhisperWord } from './whisper/alignment-map';

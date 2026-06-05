@@ -64,6 +64,13 @@
       "when": 1780162695101,
       "tag": "0008_user_job_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1780625663601,
+      "tag": "0009_drop_pdf_parse",
+      "breakpoints": true
     }
   ]
 }
