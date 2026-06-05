@@ -1,4 +1,4 @@
-import { PDF_PARSER_VERSION } from '@openreader/compute-core';
+import { PDF_PARSER_VERSION } from '@openreader/compute-core/api-contracts';
 import {
   documentParsedKeyForVersion,
   getParsedDocumentBlobByKey,

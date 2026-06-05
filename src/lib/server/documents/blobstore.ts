@@ -8,7 +8,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { PDF_PARSER_VERSION } from '@openreader/compute-core';
+import { PDF_PARSER_VERSION } from '@openreader/compute-core/api-contracts';
 import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
