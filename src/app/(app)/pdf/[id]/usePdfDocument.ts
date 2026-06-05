@@ -19,10 +19,12 @@ import {
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import {
+  ensureParsedPdfDocumentOperation,
   forceReparsePdfDocument,
   getDocumentMetadata,
   getDocumentSettings,
   getParsedPdfDocument,
+  ParsedPdfNotReadyError,
   putDocumentSettings,
   subscribeParsedPdfDocumentEvents,
 } from '@/lib/client/api/documents';
@@ -205,18 +207,18 @@ export function usePdfDocument(): PdfDocumentState {
     }
   }, []);
 
-  const startParsedEventStream = useCallback((documentId: string, initialOpId?: string | null) => {
+  const startParsedEventStream = useCallback((documentId: string, initialOpId: string) => {
     parseStreamAbortRef.current?.abort();
     parseSseCloseRef.current?.();
     parseSseCloseRef.current = null;
     setParseProgress(null);
-    setActiveParseOpId(initialOpId?.trim() || null);
+    setActiveParseOpId(initialOpId.trim() || null);
     const controller = new AbortController();
     parseStreamAbortRef.current = controller;
     let isResolvingTerminalState = false;
 
     const closeSse = subscribeParsedPdfDocumentEvents(documentId, {
-      opId: initialOpId?.trim() || null,
+      opId: initialOpId.trim(),
     }, {
       onSnapshot: (snapshot) => {
         if (controller.signal.aborted) return;
@@ -280,6 +282,60 @@ export function usePdfDocument(): PdfDocumentState {
       }
     }, { once: true });
   }, [loadParsedDocumentOnce, resetParsedDocumentState, setActiveParseOpId]);
+
+  const resolveParsedDocumentState = useCallback(async (
+    documentId: string,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    try {
+      await loadParsedDocumentOnce(documentId, signal);
+    } catch (error) {
+      if (signal.aborted) return;
+      if (!(error instanceof ParsedPdfNotReadyError)) {
+        throw error;
+      }
+
+      resetParsedDocumentState();
+      setParseStatus(error.parseStatus);
+      setParseProgress(error.parseProgress);
+      setActiveParseOpId(error.opId);
+
+      if (error.parseStatus === 'failed') {
+        return;
+      }
+
+      let nextOpId = error.opId;
+      let nextStatus: PdfParseStatus = error.parseStatus;
+      let nextProgress = error.parseProgress;
+
+      if (!nextOpId) {
+        const ensured = await ensureParsedPdfDocumentOperation(documentId, { signal });
+        if (signal.aborted) return;
+        nextOpId = ensured.opId;
+        nextStatus = ensured.parseStatus;
+        nextProgress = ensured.parseProgress;
+        setParseStatus(nextStatus);
+        setParseProgress(nextProgress);
+        setActiveParseOpId(nextOpId);
+      }
+
+      if (nextStatus === 'ready') {
+        await loadParsedDocumentOnce(documentId, signal);
+        return;
+      }
+
+      if (nextStatus === 'failed' || !nextOpId) {
+        return;
+      }
+
+      startParsedEventStream(documentId, nextOpId);
+    }
+  }, [
+    loadParsedDocumentOnce,
+    resetParsedDocumentState,
+    setActiveParseOpId,
+    startParsedEventStream,
+  ]);
 
   useEffect(() => {
     pdfDocumentRef.current = pdfDocument;
@@ -487,12 +543,11 @@ export function usePdfDocument(): PdfDocumentState {
         return false;
       }
       if (meta.type === 'pdf') {
-        const initialParseStatus = (meta.parseStatus ?? null) as PdfParseStatus | null;
-        setParseStatus(initialParseStatus);
-        setParseProgress(null);
-        setActiveParseOpId(null);
-        startParsedEventStream(id, null);
         void fetchDocumentSettings(id, controller.signal);
+        void resolveParsedDocumentState(id, controller.signal).catch((error) => {
+          if (controller.signal.aborted) return;
+          console.error('Failed to resolve parsed PDF state:', error);
+        });
       }
 
       const doc = await ensureCachedDocument(meta, { signal: controller.signal });
@@ -526,7 +581,7 @@ export function usePdfDocument(): PdfDocumentState {
     setCurrDocText,
     setPdfDocument,
     fetchDocumentSettings,
-    startParsedEventStream,
+    resolveParsedDocumentState,
   ]);
 
   const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {
@@ -553,7 +608,9 @@ export function usePdfDocument(): PdfDocumentState {
       setParseStatus(forced.status);
       setParseProgress(null);
       setActiveParseOpId(forced.opId ?? null);
-      startParsedEventStream(currDocId, forced.opId ?? null);
+      if (forced.opId) {
+        startParsedEventStream(currDocId, forced.opId);
+      }
     } catch (error) {
       console.error('Failed to force PDF reparse:', error);
     }

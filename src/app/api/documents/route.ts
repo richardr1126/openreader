@@ -11,11 +11,6 @@ import {
   deleteDocumentPreviewRows,
 } from '@/lib/server/documents/previews';
 import { deleteDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
-import {
-  normalizeDocumentParseStateForCurrentParserVersion,
-  normalizeParseStatus,
-  parseDocumentParseState,
-} from '@/lib/server/documents/parse-state';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
@@ -78,17 +73,14 @@ export async function GET(req: NextRequest) {
 
     const results: BaseDocument[] = rows.map((doc) => {
       const type = normalizeDocumentType(doc.type, doc.name);
-      const parseState = type === 'pdf'
-        ? normalizeDocumentParseStateForCurrentParserVersion(parseDocumentParseState(doc.parseState))
-        : null;
       return {
         id: doc.id,
         name: doc.name,
         size: Number(doc.size),
         lastModified: Number(doc.lastModified),
         type,
-        parseStatus: type === 'pdf' && parseState ? normalizeParseStatus(parseState.status) : null,
-        parsedJsonKey: doc.parsedJsonKey,
+        parseStatus: null,
+        parsedJsonKey: null,
         scope: 'user',
       };
     });

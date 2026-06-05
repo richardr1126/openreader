@@ -3,12 +3,7 @@ import { documents } from '@/db/schema';
 import {
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
-import { findReusableParsedPdfResult } from '@/lib/server/documents/parsed-pdf-reuse';
-import { stringifyDocumentParseState } from '@/lib/server/documents/parse-state';
-import { startPdfParseOperation } from '@/lib/server/documents/pdf-parse-operation';
-import { enqueueParsePdfJob } from '@/lib/server/jobs/user-pdf-layout-job';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
-import { PDF_PARSER_VERSION } from '@openreader/compute-core';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
 type RegisterUploadedDocumentInput = {
@@ -22,24 +17,8 @@ type RegisterUploadedDocumentInput = {
 };
 
 export async function registerUploadedDocument(input: RegisterUploadedDocumentInput): Promise<BaseDocument> {
-  const reusableParsedPdf = input.type === 'pdf'
-    ? await findReusableParsedPdfResult(input.documentId)
-    : null;
-  const startedParse = input.type === 'pdf' && !reusableParsedPdf
-    ? await startPdfParseOperation({
-      documentId: input.documentId,
-      userId: input.userId,
-      namespace: input.namespace,
-    })
-    : null;
-  const parsedJsonKey = reusableParsedPdf?.parsedJsonKey ?? null;
-  const parseState = input.type === 'pdf'
-    ? stringifyDocumentParseState(
-      reusableParsedPdf
-        ? { status: 'ready', progress: null, updatedAt: Date.now(), parserVersion: PDF_PARSER_VERSION }
-        : (startedParse?.parseState ?? { status: 'pending', progress: null, updatedAt: Date.now(), parserVersion: PDF_PARSER_VERSION }),
-    )
-    : null;
+  const parseState = null;
+  const parsedJsonKey = null;
 
   await db
     .insert(documents)
@@ -83,17 +62,6 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
       error: errorToLog(error),
     }, 'Failed to enqueue document preview');
   });
-
-  if (startedParse) {
-    enqueueParsePdfJob({
-      documentId: input.documentId,
-      userId: input.userId,
-      namespace: input.namespace,
-      initialOpId: startedParse.workerState.opId,
-      initialJobId: startedParse.workerState.jobId,
-      initialStatus: startedParse.parseState.status === 'running' ? 'running' : 'pending',
-    });
-  }
 
   return {
     id: input.documentId,

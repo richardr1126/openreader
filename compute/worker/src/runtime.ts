@@ -30,6 +30,7 @@ import {
   getComputeOpStaleMs,
   getAvailableCpuCores,
   getOnnxThreadsPerJob,
+  PDF_PARSER_VERSION,
   withIdleTimeoutAndHardCap,
   withTimeout,
 } from '@openreader/compute-core';
@@ -124,6 +125,7 @@ interface OperationEventStreamLike {
 interface OperationStateStoreLike {
   getOpState(opId: string): Promise<StreamedOperationState | null>;
   getOpStateRecord?(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
+  getOpIndex?(opKey: string): Promise<{ opId: string } | null>;
   listOpStates?(): Promise<StreamedOperationState[]>;
 }
 
@@ -243,13 +245,18 @@ function sanitizeNamespace(namespace: string | null): string | null {
   return SAFE_NAMESPACE_REGEX.test(namespace) ? namespace : null;
 }
 
+function encodeParserVersion(parserVersion: string): string {
+  const normalized = parserVersion.trim() || 'unknown-parser';
+  return encodeURIComponent(normalized);
+}
+
 function documentParsedKey(id: string, namespace: string | null, prefix: string): string {
   if (!DOCUMENT_ID_REGEX.test(id)) {
     throw new Error(`Invalid document id: ${id}`);
   }
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
-  return `${prefix}/documents_v1/parsed_v1/${nsSegment}${id}.json`;
+  return `${prefix}/documents_v1/parsed_v2/${nsSegment}${id}/${encodeParserVersion(PDF_PARSER_VERSION)}.json`;
 }
 
 function buildS3Client(): S3Client {
@@ -424,6 +431,10 @@ const operationCreateSchema = z.discriminatedUnion('kind', [
     payload: layoutSchema,
   }),
 ]);
+
+const operationLookupSchema = z.object({
+  opKey: z.string().trim().min(1).max(1024),
+});
 
 async function ensureJetStreamResources(
   jsm: JetStreamManager,
@@ -899,6 +910,36 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     }, 'op.accepted');
     reply.code(202);
     return op;
+  });
+
+  app.post('/ops/lookup', async (request, reply) => {
+    const parsed = operationLookupSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: 'Invalid request body',
+        issues: parsed.error.issues,
+      };
+    }
+
+    await ensureOrphanedOpRecovery();
+    if (typeof operationStateStore.getOpIndex !== 'function') {
+      reply.code(501);
+      return { error: 'Operation lookup by opKey is not supported by this state store' };
+    }
+    const indexEntry = await operationStateStore.getOpIndex(parsed.data.opKey);
+    if (!indexEntry?.opId) {
+      reply.code(404);
+      return { error: 'Operation not found' };
+    }
+
+    const state = await operationStateStore.getOpState(indexEntry.opId);
+    if (!state) {
+      reply.code(404);
+      return { error: 'Operation not found' };
+    }
+
+    return state;
   });
 
   app.get('/ops/:opId', async (request, reply) => {
