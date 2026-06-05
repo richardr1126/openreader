@@ -12,9 +12,10 @@ function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']): P
       return 'ready';
     case 'failed':
       return 'failed';
-    default:
-      return 'pending';
   }
+
+  const exhaustive: never = status;
+  return exhaustive;
 }
 
 export function parsedObjectKeyFromWorkerState(

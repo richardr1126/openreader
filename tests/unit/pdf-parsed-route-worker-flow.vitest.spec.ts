@@ -174,4 +174,55 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     });
     expect(hoisted.createOrReuseCurrentPdfParseOperation).toHaveBeenCalled();
   });
+
+  test('POST does not report ready for a succeeded op until its artifact is readable', async () => {
+    hoisted.lookupCurrentPdfParseOperation.mockResolvedValue({
+      opId: 'op-ready-1',
+      opKey: 'pdf_layout|v1|parser|doc-1||doc-key|',
+      kind: 'pdf_layout',
+      jobId: 'job-ready-1',
+      status: 'succeeded',
+      queuedAt: Date.now() - 1000,
+      updatedAt: Date.now(),
+      result: { parsedObjectKey: 'missing-parsed-key.json' },
+    });
+    hoisted.readParsedPdfArtifactByKey.mockResolvedValue(null);
+
+    const { POST } = await import('../../src/app/api/documents/[id]/parsed/route');
+    const request = new NextRequest('http://localhost/api/documents/doc-1/parsed', {
+      method: 'POST',
+      body: JSON.stringify({ replace: false }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const response = await POST(request, {
+      params: Promise.resolve({ id: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      parseStatus: 'running',
+      opId: 'op-ready-1',
+    });
+    expect(hoisted.readParsedPdfArtifactByKey).toHaveBeenCalledWith('missing-parsed-key.json');
+    expect(hoisted.createOrReuseCurrentPdfParseOperation).not.toHaveBeenCalled();
+  });
+
+  test('POST returns the rate-limited response without creating a worker op', async () => {
+    const sentinel = new Response('rate limited', { status: 429 });
+    hoisted.checkJobRate.mockResolvedValue({ allowed: false });
+    hoisted.buildComputeRateLimitedResponse.mockReturnValue(sentinel);
+
+    const { POST } = await import('../../src/app/api/documents/[id]/parsed/route');
+    const request = new NextRequest('http://localhost/api/documents/doc-1/parsed', {
+      method: 'POST',
+      body: JSON.stringify({ replace: true }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const response = await POST(request, {
+      params: Promise.resolve({ id: 'doc-1' }),
+    });
+
+    expect(response).toBe(sentinel);
+    expect(hoisted.createOrReuseCurrentPdfParseOperation).not.toHaveBeenCalled();
+  });
 });

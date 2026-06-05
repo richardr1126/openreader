@@ -119,6 +119,10 @@ export interface PdfDocumentState {
   isAudioCombining: boolean;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Main PDF route hook.
  */
@@ -231,13 +235,20 @@ export function usePdfDocument(): PdfDocumentState {
         if (snapshot.parseStatus === 'ready') {
           isResolvingTerminalState = true;
           void (async () => {
-            try {
-              await loadParsedDocumentOnce(documentId, controller.signal);
-            } catch (error) {
-              if (error instanceof DOMException && error.name === 'AbortError') return;
-              console.error('Failed to load parsed PDF after ready status:', error);
-              resetParsedDocumentState();
-            } finally {
+            let loaded = false;
+            let retryMs = 500;
+            while (!controller.signal.aborted && !loaded) {
+              try {
+                await loadParsedDocumentOnce(documentId, controller.signal);
+                loaded = true;
+              } catch (error) {
+                if (error instanceof DOMException && error.name === 'AbortError') return;
+                console.warn('Parsed PDF reported ready before artifact was readable; retrying:', error);
+                await delay(retryMs);
+                retryMs = Math.min(retryMs * 2, 2_000);
+              }
+            }
+            if (loaded) {
               if (parseSseCloseRef.current === closeSse) {
                 closeSse();
                 parseSseCloseRef.current = null;

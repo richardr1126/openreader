@@ -192,7 +192,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         if (snapshot.parseStatus === 'failed') {
           return jsonSnapshot(snapshot);
         }
-        return jsonSnapshot(snapshot, snapshot.parseStatus === 'ready' ? 200 : 202);
+        if (snapshot.parseStatus === 'ready') {
+          const artifactKey = parsedObjectKeyFromWorkerState(currentOp);
+          if (artifactKey && await readParsedPdfArtifactByKey(artifactKey)) {
+            return jsonSnapshot(snapshot, 200);
+          }
+          return jsonSnapshot({
+            parseStatus: 'running',
+            parseProgress: null,
+            opId: snapshot.opId,
+          }, 202);
+        }
+        return jsonSnapshot(snapshot, 202);
       }
     }
 

@@ -18,6 +18,7 @@ export type {
 export const ALIGN_QUEUE_NAME = 'whisper-align';
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
 export { PDF_PARSER_VERSION } from '../pdf/parser-version';
+export { encodeParserVersion } from '../pdf/parser-version-key';
 
 export interface WhisperAlignJobBase {
   text: string;

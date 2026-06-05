@@ -31,6 +31,7 @@ import {
   getAvailableCpuCores,
   getOnnxThreadsPerJob,
   PDF_PARSER_VERSION,
+  encodeParserVersion,
   withIdleTimeoutAndHardCap,
   withTimeout,
 } from '@openreader/compute-core';
@@ -243,11 +244,6 @@ function normalizeS3Prefix(prefix: string | undefined): string {
 function sanitizeNamespace(namespace: string | null): string | null {
   if (!namespace) return null;
   return SAFE_NAMESPACE_REGEX.test(namespace) ? namespace : null;
-}
-
-function encodeParserVersion(parserVersion: string): string {
-  const normalized = parserVersion.trim() || 'unknown-parser';
-  return encodeURIComponent(normalized);
 }
 
 function documentParsedKey(id: string, namespace: string | null, prefix: string): string {

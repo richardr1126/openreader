@@ -150,6 +150,19 @@ export async function fetchWorkerOperationStateByKey<Result>(
       });
       return null;
     }
+    if (typeof parsed.opKey !== 'string' || parsed.opKey.trim() !== normalized) {
+      logDegraded(serverLogger, {
+        event: 'compute.worker_op_lookup.response.mismatch',
+        msg: 'Worker op lookup response did not match requested op key',
+        step: 'validate_worker_op_lookup_response',
+        context: {
+          opKey: normalized,
+          responseOpId: parsed.opId,
+          responseOpKey: typeof parsed.opKey === 'string' ? parsed.opKey : null,
+        },
+      });
+      return null;
+    }
     return parsed;
   } catch (error) {
     logDegraded(serverLogger, {

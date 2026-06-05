@@ -129,6 +129,20 @@ describe('GET /api/documents/[id]/parsed/events worker event proxy', () => {
     );
   });
 
+  test('denies proxying when the op does not belong to the document', async () => {
+    hoisted.isPdfParseOperationForDocument.mockReturnValue(false);
+
+    const { GET } = await import('../../src/app/api/documents/[id]/parsed/events/route');
+    const response = await GET(new NextRequest('http://localhost/api/documents/doc-1/parsed/events?opId=op-1'), {
+      params: Promise.resolve({ id: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: 'Operation not found' });
+    expect(hoisted.fetchPdfParseOperation).toHaveBeenCalledWith('op-1');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     global.fetch = originalFetch;
   });

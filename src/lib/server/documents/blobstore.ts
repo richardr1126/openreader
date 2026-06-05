@@ -8,7 +8,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { PDF_PARSER_VERSION } from '@openreader/compute-core/api-contracts';
+import { PDF_PARSER_VERSION, encodeParserVersion } from '@openreader/compute-core/api-contracts';
 import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
@@ -104,11 +104,6 @@ export function documentKey(id: string, namespace: string | null): string {
 
 export function documentParsedKey(id: string, namespace: string | null): string {
   return documentParsedKeyForVersion(id, namespace, PDF_PARSER_VERSION);
-}
-
-function encodeParserVersion(parserVersion: string): string {
-  const normalized = parserVersion.trim() || PDF_PARSER_VERSION;
-  return encodeURIComponent(normalized);
 }
 
 export function documentParsedKeyForVersion(
