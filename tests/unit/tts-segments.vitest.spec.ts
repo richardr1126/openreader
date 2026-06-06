@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  buildTtsSegmentDocumentPrefix,
   buildProportionalAlignment,
   buildTtsSegmentEntryId,
   buildTtsSegmentId,
@@ -12,6 +13,15 @@ import {
 } from '../../src/lib/server/tts/segments';
 
 describe('tts segment helpers', () => {
+  test('builds a user/document-scoped audio prefix across every version and variant', () => {
+    expect(buildTtsSegmentDocumentPrefix({
+      storagePrefix: 'openreader',
+      namespace: 'test namespace',
+      userId: 'user/name',
+      documentId: 'doc-id',
+    })).toBe('openreader/tts_segments_v2/ns/test namespace/users/user%2Fname/docs/doc-id/');
+  });
+
   test('builds stable settings hash', () => {
     const a = buildTtsSegmentSettingsHash({
       providerRef: 'openai',

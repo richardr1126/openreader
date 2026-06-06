@@ -54,7 +54,7 @@ export const audiobookChapters = pgTable('audiobook_chapters', {
 // defined here. Only application-specific tables belong in this file.
 
 export const userTtsChars = pgTable("user_tts_chars", {
-  userId: text('user_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   date: date('date').notNull(),
   charCount: bigint('char_count', { mode: 'number' }).default(0),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
@@ -71,7 +71,7 @@ export const userTtsChars = pgTable("user_tts_chars", {
 // worker bounds each op by a hard cap, "ops created in the last hard-cap
 // window" is an upper bound on in-flight ops. Old rows are pruned opportunistically.
 export const userJobEvents = pgTable('user_job_events', {
-  userId: text('user_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   action: text('action').notNull(),
   opId: text('op_id').notNull(),
   createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),

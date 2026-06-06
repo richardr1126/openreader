@@ -13,6 +13,7 @@ import {
 import { deleteDocumentBlob, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
 export const dynamic = 'force-dynamic';
@@ -134,6 +135,25 @@ export async function DELETE(req: NextRequest) {
 
     if (targetIds.length === 0) {
       return NextResponse.json({ success: true, deleted: 0 });
+    }
+
+    const ownedRows = (await db
+      .select({ id: documents.id, userId: documents.userId })
+      .from(documents)
+      .where(and(inArray(documents.userId, targetUserIds), inArray(documents.id, targetIds)))) as Array<{
+      id: string;
+      userId: string;
+    }>;
+
+    // TTS audio is user-scoped even when the underlying document blob is
+    // shared. Remove it before deleting ownership metadata so failures remain
+    // retryable and cannot create untraceable S3 objects.
+    for (const row of ownedRows) {
+      await deleteDocumentTtsSegmentCache({
+        userId: row.userId,
+        documentId: row.id,
+        namespace: testNamespace,
+      });
     }
 
     const deletedRows = (await db

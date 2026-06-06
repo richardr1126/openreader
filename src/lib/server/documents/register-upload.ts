@@ -1,9 +1,11 @@
 import { db } from '@/db';
 import { documents } from '@/db/schema';
+import { and, eq } from 'drizzle-orm';
 import {
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
 type RegisterUploadedDocumentInput = {
@@ -17,6 +19,23 @@ type RegisterUploadedDocumentInput = {
 };
 
 export async function registerUploadedDocument(input: RegisterUploadedDocumentInput): Promise<BaseDocument> {
+  const [existing] = await db
+    .select({ lastModified: documents.lastModified })
+    .from(documents)
+    .where(and(
+      eq(documents.id, input.documentId),
+      eq(documents.userId, input.userId),
+    ))
+    .limit(1);
+
+  if (existing && Number(existing.lastModified) !== input.lastModified) {
+    await deleteDocumentTtsSegmentCache({
+      userId: input.userId,
+      documentId: input.documentId,
+      namespace: input.namespace,
+    });
+  }
+
   await db
     .insert(documents)
     .values({

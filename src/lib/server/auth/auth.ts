@@ -96,8 +96,9 @@ const createAuth = () => betterAuth({
             context: { userIdHash: hashForLog(user.id) },
             error,
           });
-          // Don't throw – allow the user deletion to proceed even if S3 cleanup fails.
-          // Orphaned blobs are preferable to a blocked account deletion.
+          // Without a durable cleanup queue, proceeding would permanently
+          // orphan user-scoped storage and non-cascading database rows.
+          throw error;
         }
       },
     },

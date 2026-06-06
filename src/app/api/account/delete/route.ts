@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/server/auth/auth';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { deleteUserStorageData } from '@/lib/server/user/data-cleanup';
-import { errorToLog, hashForLog, serverLogger } from '@/lib/server/logger';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
 export async function DELETE() {
@@ -18,21 +18,12 @@ export async function DELETE() {
   }
 
   try {
-    // Best-effort cleanup for test namespaced storage using request context.
-    // The Better Auth beforeDelete hook still runs and handles non-namespaced data.
+    // Clean test-namespaced storage using request context. The Better Auth
+    // beforeDelete hook handles non-namespaced storage and blocks deletion if
+    // either cleanup cannot complete.
     const testNamespace = getOpenReaderTestNamespace(reqHeaders);
     if (testNamespace) {
-      try {
-        await deleteUserStorageData(session.user.id, testNamespace);
-      } catch (error) {
-        serverLogger.warn({
-          event: 'account.delete.storage_cleanup_failed',
-          degraded: true,
-          step: 'namespaced_storage_cleanup',
-          userIdHash: hashForLog(session.user.id),
-          error: errorToLog(error),
-        }, 'Failed to clean up namespaced user storage before deletion');
-      }
+      await deleteUserStorageData(session.user.id, testNamespace);
     }
 
     // Use Better Auth's built-in deleteUser to handle cascading cleanup

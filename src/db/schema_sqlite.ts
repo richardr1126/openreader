@@ -54,7 +54,7 @@ export const audiobookChapters = sqliteTable('audiobook_chapters', {
 // defined here. Only application-specific tables belong in this file.
 
 export const userTtsChars = sqliteTable("user_tts_chars", {
-  userId: text('user_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   date: text('date').notNull(), // SQLite doesn't have native DATE type, text YYYY-MM-DD is standard
   charCount: integer('char_count').default(0),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
@@ -71,7 +71,7 @@ export const userTtsChars = sqliteTable("user_tts_chars", {
 // worker bounds each op by a hard cap, "ops created in the last hard-cap
 // window" is an upper bound on in-flight ops. Old rows are pruned opportunistically.
 export const userJobEvents = sqliteTable('user_job_events', {
-  userId: text('user_id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   action: text('action').notNull(),
   opId: text('op_id').notNull(),
   createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),

@@ -255,7 +255,11 @@ export async function deleteAudiobookPrefix(prefix: string): Promise<number> {
           },
         }),
       );
-      deleted += deleteRes.Deleted?.length ?? 0;
+      const errors = deleteRes.Errors ?? [];
+      if (errors.length > 0) {
+        throw new Error(`Failed deleting ${errors.length} audiobook storage objects`);
+      }
+      deleted += keys.length;
     }
 
     continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;

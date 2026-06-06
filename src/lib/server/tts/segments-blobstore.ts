@@ -244,7 +244,12 @@ export async function deleteTtsSegmentPrefix(prefix: string): Promise<number> {
           },
         }),
       );
-      deleted += deleteRes.Deleted?.length ?? 0;
+      const errors = deleteRes.Errors ?? [];
+      if (errors.length > 0) {
+        throw new Error(`Failed deleting ${errors.length} TTS segment audio objects`);
+      }
+      // Quiet=true commonly omits Deleted entries on successful requests.
+      deleted += keys.length;
     }
 
     continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;

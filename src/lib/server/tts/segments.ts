@@ -226,6 +226,17 @@ export function buildTtsSegmentAudioKey(input: {
   return `${input.storagePrefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.segmentId}.mp3`;
 }
 
+export function buildTtsSegmentDocumentPrefix(input: {
+  storagePrefix: string;
+  namespace: string | null;
+  userId: string;
+  documentId: string;
+  storageVersion?: 'v1' | 'v2';
+}): string {
+  const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
+  return `${input.storagePrefix}/tts_segments_${input.storageVersion ?? 'v2'}/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/`;
+}
+
 export async function probeAudioDurationMsFromBuffer(buffer: Buffer, signal?: AbortSignal): Promise<number> {
   let workDir: string | null = null;
   try {

@@ -507,10 +507,10 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   const parsedPrefix = `${cfg.prefix}/documents_v1/parsed_v2/${nsSegment}${id}/`;
 
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey })).catch(() => undefined);
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey })).catch(() => undefined);
-  await deleteDocumentPrefix(parsedPrefix).catch(() => undefined);
-  await deleteDocumentPrefix(`${key}/`).catch(() => undefined);
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey }));
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey }));
+  await deleteDocumentPrefix(parsedPrefix);
+  await deleteDocumentPrefix(`${key}/`);
 }
 
 export async function deleteTempDocumentUpload(token: string, userId: string, namespace: string | null): Promise<void> {
@@ -564,7 +564,11 @@ export async function deleteDocumentPrefix(prefix: string): Promise<number> {
           },
         }),
       );
-      deleted += deleteRes.Deleted?.length ?? 0;
+      const errors = deleteRes.Errors ?? [];
+      if (errors.length > 0) {
+        throw new Error(`Failed deleting ${errors.length} document storage objects`);
+      }
+      deleted += keys.length;
     }
 
     continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
