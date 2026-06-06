@@ -72,6 +72,7 @@ export type AppendUserExportArchiveInput = {
   audiobookChapters: ExportAudiobookChapter[];
   ttsSegmentEntries: ExportTtsSegmentEntry[];
   ttsSegmentVariants: ExportTtsSegmentVariant[];
+  storageEnabled: boolean;
   getDocumentBlobStream: (documentId: string) => Promise<ExportBlobBody>;
   listAudiobookObjects: (bookId: string, userId: string) => Promise<ExportAudiobookObject[]>;
   getAudiobookObjectStream: (bookId: string, userId: string, fileName: string) => Promise<ExportBlobBody>;
@@ -154,6 +155,7 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     audiobookChapters,
     ttsSegmentEntries,
     ttsSegmentVariants,
+    storageEnabled,
     getDocumentBlobStream,
     listAudiobookObjects,
     getAudiobookObjectStream,
@@ -192,7 +194,7 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
   }));
   appendJson(archive, 'library_audiobooks.json', audiobooksWithChapters);
 
-  for (const doc of documents) {
+  for (const doc of storageEnabled ? documents : []) {
     const documentId = toSafePathSegment(doc.id, 'document');
     const fileName = toSafePathSegment(doc.name || `${doc.id}.bin`, `${documentId}.bin`);
     const entryName = `files/documents/${documentId}/${fileName}`;
@@ -212,7 +214,7 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     }
   }
 
-  for (const book of audiobooks) {
+  for (const book of storageEnabled ? audiobooks : []) {
     let objects: ExportAudiobookObject[] = [];
     try {
       objects = await listAudiobookObjects(book.id, userId);
@@ -253,11 +255,9 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
   const documentIdByEntryId = new Map(
     ttsSegmentEntries.map((entry) => [entry.segmentEntryId, entry.documentId]),
   );
-  const exportedAudioKeys = new Set<string>();
-  for (const variant of ttsSegmentVariants) {
+  for (const variant of storageEnabled ? ttsSegmentVariants : []) {
     const audioKey = typeof variant.audioKey === 'string' ? variant.audioKey : '';
-    if (!audioKey || exportedAudioKeys.has(audioKey)) continue;
-    exportedAudioKeys.add(audioKey);
+    if (!audioKey) continue;
 
     const documentId = toSafePathSegment(
       documentIdByEntryId.get(variant.segmentEntryId) ?? 'unknown-document',
@@ -304,9 +304,9 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     },
     includes: {
       metadata: true,
-      documentFiles: true,
-      audiobookFiles: true,
-      ttsSegmentFiles: true,
+      documentFiles: storageEnabled,
+      audiobookFiles: storageEnabled,
+      ttsSegmentFiles: storageEnabled,
       credentialSecrets: false,
       temporaryUploads: false,
       derivedDocumentPreviews: false,

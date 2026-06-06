@@ -22,7 +22,7 @@ import { deleteTtsSegmentPrefix } from '@/lib/server/tts/segments-blobstore';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 
-type DocumentRow = { id: string };
+type DocumentRow = typeof documents.$inferSelect;
 type AudiobookRow = { id: string };
 
 /**
@@ -48,21 +48,75 @@ export async function deleteUserStorageData(
 
   // --- Documents & previews ---
   const userDocs: DocumentRow[] = await database
-    .select({ id: documents.id })
+    .select()
     .from(documents)
     .where(eq(documents.userId, userId));
 
   let docsDeleted = 0;
+  const removedDocs: DocumentRow[] = [];
+  const restoreRemovedDocs = async () => {
+    if (removedDocs.length === 0) return;
+    const docsToRestore = [...removedDocs];
+    await database.insert(documents).values(docsToRestore).onConflictDoNothing();
+    removedDocs.length = 0;
+  };
+  const removeOwnershipAndCheckLastOwner = async (doc: DocumentRow) => {
+    const run = async (tx: typeof database) => {
+      // Lock every ownership row for this document so concurrent account
+      // deletions cannot both observe the other owner's uncommitted row.
+      await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(eq(documents.id, doc.id))
+        .for('update');
+
+      const [removedDoc] = await tx
+        .delete(documents)
+        .where(and(eq(documents.id, doc.id), eq(documents.userId, userId)))
+        .returning();
+      if (!removedDoc) return { removedDoc: null, isLastOwner: false };
+
+      const otherOwners = await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(and(
+          eq(documents.id, doc.id),
+          ne(documents.userId, userId),
+        ))
+        .limit(1);
+      return { removedDoc, isLastOwner: otherOwners.length === 0 };
+    };
+
+    if (process.env.POSTGRES_URL) {
+      return database.transaction(run);
+    }
+
+    return database.transaction((tx: typeof database) => {
+      const removedRows = tx
+        .delete(documents)
+        .where(and(eq(documents.id, doc.id), eq(documents.userId, userId)))
+        .returning()
+        .all();
+      const removedDoc = removedRows[0] ?? null;
+      if (!removedDoc) return { removedDoc: null, isLastOwner: false };
+
+      const otherOwners = tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(and(
+          eq(documents.id, doc.id),
+          ne(documents.userId, userId),
+        ))
+        .limit(1)
+        .all();
+      return { removedDoc, isLastOwner: otherOwners.length === 0 };
+    }, { behavior: 'immediate' });
+  };
+
   for (const doc of userDocs) {
-    const otherOwners = await database
-      .select({ id: documents.id })
-      .from(documents)
-      .where(and(
-        eq(documents.id, doc.id),
-        ne(documents.userId, userId),
-      ))
-      .limit(1);
-    const isLastOwner = otherOwners.length === 0;
+    const { removedDoc, isLastOwner } = await removeOwnershipAndCheckLastOwner(doc);
+    if (!removedDoc) continue;
+    removedDocs.push(removedDoc);
 
     if (s3Enabled && isLastOwner) {
       try {
@@ -99,9 +153,9 @@ export async function deleteUserStorageData(
       }
     }
 
-    // Preview rows/artifacts are shared by document id, so only the final
-    // owner may remove them.
-    if (isLastOwner) {
+    // Preview metadata is global, so only the canonical final-owner pass may
+    // remove it.
+    if (namespace === null && isLastOwner) {
       try {
         await deleteDocumentPreviewRows(doc.id, namespace);
       } catch (error) {
@@ -117,6 +171,10 @@ export async function deleteUserStorageData(
           error,
         });
       }
+    }
+
+    if (namespace !== null) {
+      await restoreRemovedDocs();
     }
   }
 
@@ -185,6 +243,7 @@ export async function deleteUserStorageData(
   }
 
   if (failures.length > 0) {
+    await restoreRemovedDocs();
     throw new AggregateError(failures, `User storage cleanup failed in ${failures.length} operation(s)`);
   }
 
@@ -225,6 +284,7 @@ export async function deleteUserStorageData(
   }
 
   if (failures.length > 0) {
+    await restoreRemovedDocs();
     throw new AggregateError(failures, `User database cleanup failed in ${failures.length} operation(s)`);
   }
 }

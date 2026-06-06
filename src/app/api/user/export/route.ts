@@ -201,6 +201,7 @@ export async function GET(req: NextRequest) {
         audiobookChapters: allChapters,
         ttsSegmentEntries: segmentEntries,
         ttsSegmentVariants: segmentVariants,
+        storageEnabled,
         getDocumentBlobStream: async (documentId: string) => {
           requireStorage();
           return getDocumentBlobStream(documentId, testNamespace);

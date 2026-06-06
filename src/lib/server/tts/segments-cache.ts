@@ -40,6 +40,11 @@ export async function clearTtsSegmentCache(
     conditions.push(eq(ttsSegmentEntries.readerType, input.readerType));
   }
 
+  const entryRows = (await db
+    .select({ segmentEntryId: ttsSegmentEntries.segmentEntryId })
+    .from(ttsSegmentEntries)
+    .where(and(...conditions))) as Array<{ segmentEntryId: string }>;
+
   const rows = (await db
     .select({
       segmentId: ttsSegmentVariants.segmentId,
@@ -90,7 +95,7 @@ export async function clearTtsSegmentCache(
   }
 
   return {
-    deletedSegments: warning ? 0 : rows.length,
+    deletedSegments: warning ? 0 : new Set(entryRows.map((row) => row.segmentEntryId)).size,
     requestedAudioObjects: uniqueAudioKeys.length,
     deletedAudioObjects,
     ...(warning ? { warning } : {}),
