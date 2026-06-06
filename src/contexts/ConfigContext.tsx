@@ -209,54 +209,54 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   }, [appConfig]);
 
   useEffect(() => {
-    if (!ttsProvidersTabDisabled || !isDBReady || !appConfig || sharedProvidersLoading) return;
+    if (ttsProvidersTabDisabled && isDBReady && appConfig && !sharedProvidersLoading) {
+      const resetPatch: Partial<AppConfigRow> = {};
 
-    const resetPatch: Partial<AppConfigRow> = {};
+      // When the provider tab is hidden, clear any user-set provider config back to
+      // "inherit the admin default" (empty) rather than baking in a concrete value.
+      if (appConfig.apiKey !== '') resetPatch.apiKey = '';
+      if (appConfig.baseUrl !== '') resetPatch.baseUrl = '';
+      if (appConfig.providerRef !== '') resetPatch.providerRef = '';
+      if (appConfig.providerType !== 'unknown') resetPatch.providerType = 'unknown';
+      if (appConfig.ttsModel !== '') resetPatch.ttsModel = '';
+      if (appConfig.ttsInstructions !== '') resetPatch.ttsInstructions = '';
+      // Keep voice selection state intact so player/Audiobook voice pickers still
+      // work when the TTS providers tab is hidden. This reset is only for provider
+      // configuration fields.
 
-    // When the provider tab is hidden, clear any user-set provider config back to
-    // "inherit the admin default" (empty) rather than baking in a concrete value.
-    if (appConfig.apiKey !== '') resetPatch.apiKey = '';
-    if (appConfig.baseUrl !== '') resetPatch.baseUrl = '';
-    if (appConfig.providerRef !== '') resetPatch.providerRef = '';
-    if (appConfig.providerType !== 'unknown') resetPatch.providerType = 'unknown';
-    if (appConfig.ttsModel !== '') resetPatch.ttsModel = '';
-    if (appConfig.ttsInstructions !== '') resetPatch.ttsInstructions = '';
-    // Keep voice selection state intact so player/Audiobook voice pickers still
-    // work when the TTS providers tab is hidden. This reset is only for provider
-    // configuration fields.
+      if (Object.keys(resetPatch).length === 0) return;
 
-    if (Object.keys(resetPatch).length === 0) return;
-
-    updateAppConfig(resetPatch).catch((error) => {
-      console.warn('Failed to clear hidden TTS provider settings:', error);
-    });
-    queueSyncedPreferencePatch(resetPatch);
+      updateAppConfig(resetPatch).catch((error) => {
+        console.warn('Failed to clear hidden TTS provider settings:', error);
+      });
+      queueSyncedPreferencePatch(resetPatch);
+    }
   }, [ttsProvidersTabDisabled, isDBReady, appConfig, queueSyncedPreferencePatch, sharedProvidersLoading]);
 
   useEffect(() => {
-    if (!restrictUserApiKeys || !isDBReady || !appConfig || sharedProvidersLoading) return;
+    if (restrictUserApiKeys && isDBReady && appConfig && !sharedProvidersLoading) {
+      const resetPatch: Partial<AppConfigRow> = {};
 
-    const resetPatch: Partial<AppConfigRow> = {};
+      if (appConfig.apiKey !== '') resetPatch.apiKey = '';
+      if (appConfig.baseUrl !== '') resetPatch.baseUrl = '';
+      // Built-in providers aren't selectable in restricted mode. Clear any stale
+      // built-in selection (including the old 'custom-openai' default that used to
+      // be baked into every config) back to "inherit the admin default" so the
+      // user follows whatever shared provider the admin has configured.
+      if (isBuiltInTtsProviderId(appConfig.providerRef)) {
+        resetPatch.providerRef = '';
+        resetPatch.providerType = 'unknown';
+        resetPatch.ttsModel = '';
+        resetPatch.ttsInstructions = '';
+      }
 
-    if (appConfig.apiKey !== '') resetPatch.apiKey = '';
-    if (appConfig.baseUrl !== '') resetPatch.baseUrl = '';
-    // Built-in providers aren't selectable in restricted mode. Clear any stale
-    // built-in selection (including the old 'custom-openai' default that used to
-    // be baked into every config) back to "inherit the admin default" so the
-    // user follows whatever shared provider the admin has configured.
-    if (isBuiltInTtsProviderId(appConfig.providerRef)) {
-      resetPatch.providerRef = '';
-      resetPatch.providerType = 'unknown';
-      resetPatch.ttsModel = '';
-      resetPatch.ttsInstructions = '';
+      if (Object.keys(resetPatch).length === 0) return;
+
+      updateAppConfig(resetPatch).catch((error) => {
+        console.warn('Failed to enforce restricted user API key mode:', error);
+      });
+      queueSyncedPreferencePatch(resetPatch);
     }
-
-    if (Object.keys(resetPatch).length === 0) return;
-
-    updateAppConfig(resetPatch).catch((error) => {
-      console.warn('Failed to enforce restricted user API key mode:', error);
-    });
-    queueSyncedPreferencePatch(resetPatch);
   }, [restrictUserApiKeys, isDBReady, appConfig, queueSyncedPreferencePatch, sharedProvidersLoading]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   sanitizePreferencesPatch,
+  sanitizeSavedVoices,
   type PreferenceNormalizationContext,
 } from '../../src/lib/server/user/preferences-normalize';
 
@@ -95,5 +96,13 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     expect('providerRef' in patch).toBe(false);
     expect('providerType' in patch).toBe(false);
     expect('ttsModel' in patch).toBe(false);
+  });
+
+  test('rejects arrays where preference records are expected', () => {
+    expect(sanitizePreferencesPatch(['voice'], makeContext(), { fillMissingProvider: false })).toEqual({
+      patch: {},
+      migrated: false,
+    });
+    expect(sanitizeSavedVoices(['af_sarah'])).toEqual({});
   });
 });
