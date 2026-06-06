@@ -32,7 +32,7 @@ type SeedProviderInput = {
   slug: string;
   displayName: string;
   providerType: TtsProviderId;
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string | null;
   defaultModel?: string | null;
   defaultInstructions?: string | null;
@@ -187,8 +187,8 @@ function validateSeedProviderEntry(value: unknown, index: number): SeedProviderI
   if (typeof rec.providerType !== 'string') {
     throw new Error(`Seed JSON providers[${index}].providerType must be a string`);
   }
-  if (typeof rec.apiKey !== 'string' || !rec.apiKey.trim()) {
-    throw new Error(`Seed JSON providers[${index}].apiKey must be a non-empty string`);
+  if (rec.apiKey !== undefined && typeof rec.apiKey !== 'string') {
+    throw new Error(`Seed JSON providers[${index}].apiKey must be a string when provided`);
   }
 
   if (rec.baseUrl !== undefined && rec.baseUrl !== null && typeof rec.baseUrl !== 'string') {
@@ -208,7 +208,7 @@ function validateSeedProviderEntry(value: unknown, index: number): SeedProviderI
     slug: validateSlug(rec.slug),
     displayName: rec.displayName.trim(),
     providerType: validateProviderType(rec.providerType),
-    apiKey: rec.apiKey.trim(),
+    ...(rec.apiKey !== undefined ? { apiKey: rec.apiKey.trim() } : {}),
     ...(rec.baseUrl !== undefined ? { baseUrl: normalizeOptionalString(rec.baseUrl) } : {}),
     ...(rec.defaultModel !== undefined ? { defaultModel: normalizeOptionalString(rec.defaultModel) } : {}),
     ...(rec.defaultInstructions !== undefined ? { defaultInstructions: normalizeOptionalString(rec.defaultInstructions) } : {}),
@@ -246,7 +246,8 @@ async function seedAdminProvidersFromJson(providers: SeedProviderInput[]): Promi
     if (existing.length > 0) continue;
 
     try {
-      const encrypted = encryptSecret(provider.apiKey);
+      const apiKey = provider.apiKey ?? '';
+      const encrypted = encryptSecret(apiKey);
       await db.insert(adminProviders).values({
         id: randomUUID(),
         slug: provider.slug,
@@ -255,7 +256,7 @@ async function seedAdminProvidersFromJson(providers: SeedProviderInput[]): Promi
         baseUrl: provider.baseUrl ?? null,
         apiKeyCiphertext: encrypted.ciphertext,
         apiKeyIv: encrypted.iv,
-        apiKeyLast4: apiKeyLast4(provider.apiKey),
+        apiKeyLast4: apiKeyLast4(apiKey),
         defaultModel: provider.defaultModel ?? null,
         defaultInstructions: provider.defaultInstructions ?? null,
         enabled: provider.enabled === false ? 0 : 1,
@@ -278,8 +279,9 @@ async function seedAdminProvidersFromJson(providers: SeedProviderInput[]): Promi
 }
 
 async function seedDefaultAdminProviderFromEnvFallback(): Promise<void> {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || !apiKey.trim()) return;
+  const apiKey = process.env.API_KEY?.trim() ?? '';
+  const baseUrl = process.env.API_BASE?.trim() || null;
+  if (!apiKey && !baseUrl) return;
 
   let existing: Array<unknown>;
   try {
@@ -295,7 +297,6 @@ async function seedDefaultAdminProviderFromEnvFallback(): Promise<void> {
   }
   if (existing.length > 0) return;
 
-  const baseUrl = process.env.API_BASE?.trim() || null;
   const now = Date.now();
   let enc: ReturnType<typeof encryptSecret>;
   try {

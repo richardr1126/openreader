@@ -5,6 +5,8 @@ import { adminProviders } from '../../src/db/schema';
 
 import {
   AdminProviderError,
+  createAdminProvider,
+  decryptedKeyFor,
   listAdminProviders,
   toMasked,
   validateProviderType,
@@ -51,6 +53,23 @@ describe('admin provider validation', () => {
     };
 
     expect(toMasked(record).apiKeyMask).toBe('••••abcd');
+  });
+
+  test('creates providers without an API key', async () => {
+    const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    const created = await createAdminProvider({
+      slug: `keyless-${suffix}`,
+      displayName: 'Keyless Provider',
+      providerType: 'custom-openai',
+      baseUrl: 'http://localhost:8880/v1',
+    });
+
+    try {
+      expect(toMasked(created).apiKeyMask).toBe('(not set)');
+      await expect(decryptedKeyFor(created)).resolves.toBe('');
+    } finally {
+      await db.delete(adminProviders).where(inArray(adminProviders.id, [created.id]));
+    }
   });
 
   test('lists providers in deterministic updated/created/slug order', async () => {

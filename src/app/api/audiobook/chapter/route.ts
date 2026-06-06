@@ -501,7 +501,7 @@ export async function POST(request: NextRequest) {
         normalize: { code: 'AUDIOBOOK_CHAPTER_UNSUPPORTED_PROVIDER', errorClass: 'validation', httpStatus: 500 },
       });
     }
-    const openApiKey = credResolved.apiKey || 'none';
+    const openApiKey = credResolved.apiKey;
     const openApiBaseUrl = credResolved.baseUrl;
     const effectiveProviderRef = credResolved.adminRecord?.slug || requestedProvider;
     const model = resolveTtsModelForProvider({

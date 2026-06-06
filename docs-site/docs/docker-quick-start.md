@@ -42,7 +42,6 @@ docker run --name openreader \
   -p 8333:8333 \
   -v openreader_docstore:/app/docstore \
   -e API_BASE=http://host.docker.internal:8880/v1 \
-  -e API_KEY=none \
   -e BASE_URL=http://localhost:3003 \
   -e AUTH_SECRET=$(openssl rand -hex 32) \
   -e ADMIN_EMAILS=you@example.com \
@@ -54,7 +53,7 @@ What this command enables:
 - `-p 3003:3003`: exposes the OpenReader web app/API.
 - `-p 8333:8333`: exposes embedded SeaweedFS S3 endpoint for direct browser presigned upload/download.
 - `-v openreader_docstore:/app/docstore`: persists SQLite metadata, SeaweedFS blob data, and migration/runtime state.
-- `-e API_BASE=...` / `-e API_KEY=...`: **first-boot seed only.** On the first container start, these are auto-migrated into a `default-openai` admin shared provider stored in the DB (key encrypted at rest). After that, the running app no longer reads them — manage the provider from **Settings → Admin → Shared providers**. See [Admin Panel](./configure/admin-panel).
+- `-e API_BASE=...` / optional `-e API_KEY=...`: **first-boot seed only.** On the first container start, these are auto-migrated into a `default-openai` admin shared provider stored in the DB (key encrypted at rest when provided). After that, the running app no longer reads them — manage the provider from **Settings → Admin → Shared providers**. See [Admin Panel](./configure/admin-panel).
 - `-e BASE_URL=...` and `-e AUTH_SECRET=...`: required for v4+ auth/session startup.
 - `-e ADMIN_EMAILS=...`: (optional, requires auth) comma-separated emails auto-promoted to admin. Admins see the **Admin** tab in Settings.
 
@@ -70,7 +69,6 @@ docker run --name openreader \
   -p 8333:8333 \
   -v openreader_docstore:/app/docstore \
   -e API_BASE=http://host.docker.internal:8880/v1 \
-  -e API_KEY=none \
   -e BASE_URL=http://<YOUR_LAN_IP>:3003 \
   -e AUTH_SECRET=$(openssl rand -hex 32) \
   -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003 \
@@ -88,7 +86,7 @@ What this command enables:
 - `AUTH_TRUSTED_ORIGINS` allows localhost loopback origins in addition to your primary LAN origin.
 - `USE_ANONYMOUS_AUTH_SESSIONS=true` allows guest sessions while auth is enabled.
 - `API_BASE` seeds the default TTS endpoint into the admin-managed `default-openai` shared provider on first boot. Edit it from **Settings → Admin → Shared providers** after that.
-- `API_KEY` seeds the default provider's key (encrypted at rest). After first boot, manage keys from the admin panel or set per-user keys if `restrictUserApiKeys=false`. Always needed for seeding the default provider.
+- `API_KEY` optionally seeds the default provider's key (encrypted at rest). Omit it for an upstream that does not require authentication.
 - `ADMIN_EMAILS=...` (optional) auto-promotes the listed email(s) to admin so they can manage shared providers and site feature flags from the UI.
 - `openreader_docstore` volume keeps data persistent across restarts.
 
@@ -112,7 +110,7 @@ What this command enables:
 - Fast startup with only the required auth env vars.
 - No persistent volume (`/app/docstore` stays container-local), so data is ephemeral unless you add a mount.
 - The app still requires `BASE_URL` + `AUTH_SECRET` in v4+, so include them even in minimal mode.
-- No TTS provider preset by default. Configure `API_BASE`/`API_KEY` on first boot if you want a seeded shared provider, or run auth+admin mode and manage providers from the admin panel.
+- No TTS provider preset by default. Configure `API_BASE` and, when required, `API_KEY` on first boot if you want a seeded shared provider, or run auth+admin mode and manage providers from the admin panel.
 
 </TabItem>
 </Tabs>

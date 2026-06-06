@@ -50,10 +50,10 @@ Whether users can supply their own personal built-in provider keys is controlled
 
 ### Auto-seeded "default-openai"
 
-On first boot, if `admin_providers` is empty and the legacy `API_KEY` env var is set, OpenReader creates a single shared provider with:
+On first boot, if `admin_providers` is empty and `API_BASE` or `API_KEY` is set, OpenReader creates a single shared provider with:
 
 - slug `default-openai`, displayName `Default (from env)`, providerType `custom-openai`
-- baseUrl from `API_BASE`, apiKey from `API_KEY` (encrypted)
+- baseUrl from `API_BASE`, apiKey from `API_KEY` when provided (blank keys are supported)
 - defaultModel set to `kokoro` (you can edit it in Admin → Shared providers)
 
 After this seed runs, the legacy `API_KEY` / `API_BASE` env vars are no longer read by the TTS routes — the DB row is authoritative. You can rename, edit, disable, or delete this row like any other from the admin UI, and remove the env vars from your `.env` when convenient.
@@ -124,7 +124,7 @@ In v4, runtime site features are managed by admin settings and optional JSON see
 1. Deploy this version with your existing env values in place.
 2. Boot the app once. Open Settings → Admin and verify:
    - Seeded settings appear as **from seed** (if you supplied a runtime JSON seed).
-   - A `default-openai` row exists in **Shared providers** (if you had `API_KEY` set).
+   - A `default-openai` row exists in **Shared providers** (if you had `API_BASE` or `API_KEY` set).
 3. Remove any bootstrap env vars you no longer need from `.env`.
 4. Redeploy. Behavior is unchanged — the DB is now the source of truth.
 

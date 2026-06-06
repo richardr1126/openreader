@@ -377,7 +377,7 @@ async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise
     const response = await fetch(`${normalizedBaseUrl}/audio/voices`, {
       signal: controller.signal,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         'Content-Type': 'application/json',
       },
     });

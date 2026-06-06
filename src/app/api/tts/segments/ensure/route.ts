@@ -644,7 +644,7 @@ export async function POST(request: NextRequest) {
           instructions: effectiveSettings.ttsInstructions,
           language: effectiveSettings.language,
           provider: requestCreds.provider,
-          apiKey: requestCreds.apiKey || 'none',
+          apiKey: requestCreds.apiKey,
           baseUrl: requestCreds.baseUrl,
           testNamespace: scope.testNamespace,
         }, request.signal, {

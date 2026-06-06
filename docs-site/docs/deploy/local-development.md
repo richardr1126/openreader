@@ -249,7 +249,6 @@ Use one of these `.env` mode templates:
 
 ```env
 API_BASE=http://host.docker.internal:8880/v1
-API_KEY=none
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # Optional when you need multiple local origins:
@@ -260,10 +259,9 @@ AUTH_SECRET=<generate-with-openssl-rand-hex-32>
   <TabItem value="auth-with-admin" label="Auth + Admin Panel">
 
 ```env
-# API_BASE / API_KEY are seeded into the admin "default-openai" shared provider
+# API_BASE and optional API_KEY are seeded into the admin "default-openai" shared provider
 # on first boot, then no longer read. Manage them in Settings → Admin afterwards.
 API_BASE=http://host.docker.internal:8880/v1
-API_KEY=none
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # Comma-separated emails to auto-promote to admin on signin.
@@ -275,7 +273,6 @@ ADMIN_EMAILS=you@example.com
 
 ```env
 API_BASE=http://host.docker.internal:8880/v1
-API_KEY=none
 USE_EMBEDDED_WEED_MINI=false
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
@@ -293,7 +290,6 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 
 ```env
 API_BASE=http://host.docker.internal:8880/v1
-API_KEY=none
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 COMPUTE_WORKER_URL=http://localhost:8081

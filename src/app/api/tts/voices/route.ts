@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     const voices = await resolveVoices({
       provider: resolved.provider,
       model: requestedModel,
-      apiKey: resolved.apiKey || 'none',
+      apiKey: resolved.apiKey,
       baseUrl: resolved.baseUrl,
     });
     return NextResponse.json({ voices });

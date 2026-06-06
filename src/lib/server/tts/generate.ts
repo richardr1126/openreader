@@ -641,6 +641,7 @@ async function runProviderRequest(
   const openai = new OpenAI({
     apiKey: request.apiKey,
     baseURL: request.baseUrl,
+    defaultHeaders: request.apiKey ? undefined : { Authorization: null },
     maxRetries: 0,
     timeout: upstreamSettings.ttsUpstreamTimeoutMs,
   });

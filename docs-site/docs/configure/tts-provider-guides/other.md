@@ -26,7 +26,7 @@ Known compatible implementations: [Kokoro-FastAPI](./kokoro-fastapi), [KittenTTS
 
 ```env
 API_BASE=http://your-tts-server/v1
-API_KEY=optional-key-if-required
+# API_KEY=optional-key-if-required
 ```
 
 **Or in-app via Settings → TTS Provider:**

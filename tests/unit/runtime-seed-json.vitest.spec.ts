@@ -160,6 +160,26 @@ describe('runtime seed JSON parsing', () => {
     expect(__seedInternals.shouldUseEnvProviderFallback(false)).toBe(true);
     expect(__seedInternals.shouldUseEnvProviderFallback(true)).toBe(false);
   });
+
+  test('accepts seeded providers without an API key', () => {
+    const parsed = __seedInternals.parseRuntimeSeedDocument(JSON.stringify({
+      version: 1,
+      providers: [{
+        slug: 'keyless-provider',
+        displayName: 'Keyless Provider',
+        providerType: 'custom-openai',
+        baseUrl: 'http://localhost:8880/v1',
+      }],
+    }));
+
+    expect(parsed.seed.providers?.[0]).toMatchObject({
+      slug: 'keyless-provider',
+      displayName: 'Keyless Provider',
+      providerType: 'custom-openai',
+      baseUrl: 'http://localhost:8880/v1',
+    });
+    expect(parsed.seed.providers?.[0]).not.toHaveProperty('apiKey');
+  });
 });
 
 describe('runtime config JSON seeding', () => {
@@ -374,6 +394,44 @@ describe('provider seeding and fallback precedence', () => {
         baseUrl: 'http://localhost:8880/v1',
         defaultModel: 'kokoro',
         apiKeyLast4: '9876',
+      });
+    } finally {
+      await restoreProvidersBySlug(testSlugs, providerSnapshot);
+    }
+  });
+
+  test('falls back to API_BASE with a blank API_KEY', async () => {
+    const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
+    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { enableUserSignups: true } });
+
+    try {
+      await db.delete(adminProviders).where(inArray(adminProviders.slug, testSlugs));
+      const blockedByOtherRows = await hasNonTestProviderRows(testSlugs);
+      if (blockedByOtherRows) return;
+
+      await withEnv({
+        RUNTIME_SEED_JSON: runtimeSeed,
+        RUNTIME_SEED_JSON_PATH: undefined,
+        API_BASE: 'http://localhost:8880/v1',
+        API_KEY: '',
+        AUTH_SECRET: 'seed-test-auth-secret-keyless',
+      }, async () => {
+        await __seedInternals.runSeed();
+      });
+
+      const rows = await db
+        .select({
+          slug: adminProviders.slug,
+          baseUrl: adminProviders.baseUrl,
+          apiKeyLast4: adminProviders.apiKeyLast4,
+        })
+        .from(adminProviders);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        slug: 'default-openai',
+        baseUrl: 'http://localhost:8880/v1',
+        apiKeyLast4: '',
       });
     } finally {
       await restoreProvidersBySlug(testSlugs, providerSnapshot);

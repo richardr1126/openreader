@@ -85,7 +85,7 @@ App server log level.
 Optional first-boot bootstrap base URL for the auto-created `default-openai` shared provider.
 
 - Example: `http://host.docker.internal:8880/v1`
-- Read only for provider bootstrap when shared providers are empty and `API_KEY` is set.
+- Read only for provider bootstrap when shared providers are empty. Setting `API_BASE` is sufficient; `API_KEY` may be blank.
 - After bootstrap, provider configuration is DB-backed and managed in **Settings → Admin → Shared providers**.
 
 ### API_KEY
@@ -446,7 +446,6 @@ Example:
       "displayName": "Default (seeded)",
       "providerType": "custom-openai",
       "baseUrl": "http://localhost:8880/v1",
-      "apiKey": "api_key_optional",
       "defaultModel": "kokoro",
       "enabled": true
     }
@@ -457,7 +456,7 @@ Example:
 Provider fallback behavior:
 
 - If the JSON seed includes `providers` (including an empty array), `API_BASE` / `API_KEY` fallback is skipped.
-- If the JSON seed does not include a `providers` key, the legacy `API_BASE` / `API_KEY` bootstrap fallback can still create `default-openai` when provider rows are empty.
+- If the JSON seed does not include a `providers` key, the legacy `API_BASE` / `API_KEY` bootstrap fallback can still create `default-openai` when provider rows are empty. `API_BASE` alone is sufficient for an upstream that does not require authentication.
 
 Precedence summary:
 
