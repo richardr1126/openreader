@@ -1,11 +1,10 @@
 'use client';
 
-import { Popover } from '@headlessui/react';
 import { ChevronUpDownIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
+import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
 
 export const SpeedControl = ({ 
   setSpeedAndRestart, 
@@ -88,7 +87,7 @@ export const SpeedControl = ({
   const step = 0.1;
 
   return (
-    <Popover className="relative">
+    <PopoverRoot className="relative">
       <PopoverTrigger className="space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm">
         <SpeedometerIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         <span className="sm:hidden">{compactTriggerLabel}</span>
@@ -148,6 +147,6 @@ export const SpeedControl = ({
           </div>
         </div>
       </PopoverSurface>
-    </Popover>
+    </PopoverRoot>
   );
 };

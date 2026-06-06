@@ -1,13 +1,12 @@
 'use client';
 
-import { Menu, MenuButton, Transition } from '@headlessui/react';
-import { Fragment, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useRef, type CSSProperties, type ReactNode } from 'react';
 import { useDrop } from 'react-dnd';
 import type { Folder, SidebarFilter } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon, DotsHorizontalIcon } from '@/components/icons/Icons';
 import { FolderIcon, HomeIcon, ClockIcon, FolderPlusIcon } from './finderIcons';
 import { DND_DOCUMENT, type DocumentDragItem } from '../dnd/dndTypes';
-import { IconButton, MenuActionItem, MenuItemsSurface, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem } from '@/components/ui';
+import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, Sidebar as SidebarShell, SidebarNav, SidebarNavGroup, SidebarNavItem } from '@/components/ui';
 
 interface FinderSidebarProps {
   filter: SidebarFilter;
@@ -201,8 +200,8 @@ export function FinderSidebar({
 
           <SidebarNavGroup
             action={(
-              <Menu as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
-                <MenuButton
+              <MenuRoot as="div" className="relative inline-flex items-center leading-none text-left shrink-0 normal-case tracking-normal font-normal">
+                <MenuTrigger
                   as={IconButton}
                   size="xs"
                   className="h-3.5 w-5"
@@ -210,16 +209,8 @@ export function FinderSidebar({
                   aria-label="Folder actions"
                 >
                   <DotsHorizontalIcon className="w-4 h-2.5" />
-                </MenuButton>
-                <Transition
-                  as={Fragment}
-                  enter="transition ease-standard duration-fast"
-                  enterFrom="transform opacity-0 scale-95"
-                  enterTo="transform opacity-100 scale-100"
-                  leave="transition ease-standard duration-fast"
-                  leaveFrom="transform opacity-100 scale-100"
-                  leaveTo="transform opacity-0 scale-95"
-                >
+                </MenuTrigger>
+                <MenuTransition>
                   <MenuItemsSurface
                     anchor="bottom start"
                     className="z-50 mt-2 min-w-[180px] focus:outline-none normal-case tracking-normal font-normal"
@@ -246,8 +237,8 @@ export function FinderSidebar({
                       Remove All Folders
                     </MenuActionItem>
                   </MenuItemsSurface>
-                </Transition>
-              </Menu>
+                </MenuTransition>
+              </MenuRoot>
             )}
           >
             Folders

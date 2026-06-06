@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { updateAppConfig } from '@/lib/client/dexie';
-import { Button, ModalFrame, ModalTitle } from '@/components/ui';
+import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -78,13 +78,11 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
       <div className="mt-6 space-y-4">
         <div className="flex items-start gap-3 rounded-lg border border-line p-3 bg-surface-sunken">
           <div className="flex h-6 items-center">
-            <input
+            <Checkbox
               data-testid="privacy-agree-checkbox"
               id="privacy-agree"
-              type="checkbox"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="h-4 w-4 rounded border-line text-accent focus:ring-accent-line bg-surface"
             />
           </div>
           <div className="text-sm leading-6">

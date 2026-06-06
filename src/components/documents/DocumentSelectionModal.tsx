@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { BaseDocument } from '@/types/documents';
-import { Button, ModalFrame, ModalTitle } from '@/components/ui';
+import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface DocumentSelectionModalProps {
   isOpen: boolean;
@@ -119,9 +119,7 @@ export function DocumentSelectionModal({
         {files.length > 0 && (
           <div className="flex items-center text-sm font-normal">
             <label className="flex items-center gap-2 cursor-pointer select-none text-soft hover:text-foreground transition-colors">
-              <input
-                type="checkbox"
-                className="rounded border-muted text-accent focus:ring-accent-line"
+              <Checkbox
                 checked={allSelected}
                 ref={input => {
                   if (input) input.indeterminate = isIndeterminate;
@@ -154,11 +152,9 @@ export function DocumentSelectionModal({
                   }`}
                 >
                   <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={isSelected}
                       onChange={(e) => handleCheckboxChange(file.id, e.target.checked)}
-                      className="rounded border-muted text-accent focus:ring-accent-line"
                     />
                   </div>
                   <div

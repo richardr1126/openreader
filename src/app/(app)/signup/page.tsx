@@ -8,7 +8,7 @@ import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
-import { Button, Field, IconButton, Input, Surface } from '@/components/ui';
+import { Button, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 export default function SignUpPage() {
@@ -241,12 +241,9 @@ export default function SignUpPage() {
           </p>
           <p className="text-xs text-soft">
             By creating an account, you agree to our{' '}
-            <button
-              onClick={() => showPrivacyModal()}
-              className="underline hover:text-foreground"
-            >
+            <InlineButton onClick={() => showPrivacyModal()}>
               Privacy Policy
-            </button>
+            </InlineButton>
           </p>
         </div>
       </Surface>

@@ -5,7 +5,7 @@ import { motionColors } from './tokens';
 
 export type InputControlSize = 'sm' | 'md' | 'lg';
 
-export const inputStyles = variants({
+const inputStyles = variants({
   base: cn('w-full border border-line bg-surface-sunken text-foreground placeholder:text-soft focus:border-accent-line focus:outline-none focus:ring-2 focus:ring-accent-line', motionColors),
   variants: {
     size: {
@@ -18,8 +18,6 @@ export const inputStyles = variants({
     size: 'md',
   },
 });
-
-export const inputClass = inputStyles();
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { controlSize?: InputControlSize }>(function Input({
   className,

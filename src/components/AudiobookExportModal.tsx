@@ -1,7 +1,6 @@
 'use client';
 
-import { Fragment, useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Transition, Menu, MenuButton } from '@headlessui/react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
@@ -14,7 +13,7 @@ import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import { getTtsLanguageCompatibilityWarnings, resolveTtsLanguage } from '@/lib/shared/language';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
-import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, RangeInput, Select } from '@/components/ui';
+import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, RangeInput, Select } from '@/components/ui';
 import { 
   getAudiobookStatus, 
   deleteAudiobookChapter, 
@@ -762,23 +761,15 @@ export function AudiobookExportModal({
                                   </div>
                                   <div className="flex items-center">
                                     {((onRegenerateChapter && !isGenerating) || chapter.status === 'completed') && (
-                                      <Menu as="div" className="relative inline-block text-left">
-                                        <MenuButton
+                                      <MenuRoot as="div" className="relative inline-block text-left">
+                                        <MenuTrigger
                                           as={IconButton}
                                           size="sm"
                                           title="Chapter actions"
                                         >
                                           <DotsVerticalIcon className="h-5 w-5" />
-                                        </MenuButton>
-                                        <Transition
-                                          as={Fragment}
-                                          enter="transition ease-standard duration-fast"
-                                          enterFrom="transform opacity-0 scale-95"
-                                          enterTo="transform opacity-100 scale-100"
-                                          leave="transition ease-standard duration-fast"
-                                          leaveFrom="transform opacity-100 scale-100"
-                                          leaveTo="transform opacity-0 scale-95"
-                                        >
+                                        </MenuTrigger>
+                                        <MenuTransition>
                                           <MenuItemsSurface
                                             anchor={{ to: 'bottom end', gap: '8px', padding: '12px' }}
                                             portal
@@ -822,8 +813,8 @@ export function AudiobookExportModal({
                                             )}
                                           </MenuItemsSurface>
                                           {/* end of menu items */}
-                                        </Transition>
-                                      </Menu>
+                                        </MenuTransition>
+                                      </MenuRoot>
                                     )}
                                   </div>
                                 </div>

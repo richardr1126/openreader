@@ -7,9 +7,9 @@ import {
   Badge,
   Section,
   ToggleRow,
-  inputClass,
   Select,
   Button,
+  Input,
 } from '@/components/ui';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
@@ -274,11 +274,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Anonymous per-user daily limit</label>
                 {renderSource('ttsDailyLimitAnonymous')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.ttsDailyLimitAnonymous ?? '')}
                 onChange={(event) => updatePositiveIntDraft('ttsDailyLimitAnonymous', event.target.value)}
               />
@@ -288,11 +287,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Authenticated per-user daily limit</label>
                 {renderSource('ttsDailyLimitAuthenticated')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.ttsDailyLimitAuthenticated ?? '')}
                 onChange={(event) => updatePositiveIntDraft('ttsDailyLimitAuthenticated', event.target.value)}
               />
@@ -302,11 +300,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Anonymous IP daily backstop</label>
                 {renderSource('ttsIpDailyLimitAnonymous')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.ttsIpDailyLimitAnonymous ?? '')}
                 onChange={(event) => updatePositiveIntDraft('ttsIpDailyLimitAnonymous', event.target.value)}
               />
@@ -316,11 +313,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Authenticated IP daily backstop</label>
                 {renderSource('ttsIpDailyLimitAuthenticated')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.ttsIpDailyLimitAuthenticated ?? '')}
                 onChange={(event) => updatePositiveIntDraft('ttsIpDailyLimitAuthenticated', event.target.value)}
               />
@@ -343,11 +339,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Burst limit (parses)</label>
                 {renderSource('computeParseBurstMax')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.computeParseBurstMax ?? '')}
                 onChange={(event) => updatePositiveIntDraft('computeParseBurstMax', event.target.value)}
               />
@@ -357,11 +352,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Burst window (seconds)</label>
                 {renderSource('computeParseBurstWindowSec')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.computeParseBurstWindowSec ?? '')}
                 onChange={(event) => updatePositiveIntDraft('computeParseBurstWindowSec', event.target.value)}
               />
@@ -371,11 +365,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Sustained limit (parses)</label>
                 {renderSource('computeParseSustainedMax')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.computeParseSustainedMax ?? '')}
                 onChange={(event) => updatePositiveIntDraft('computeParseSustainedMax', event.target.value)}
               />
@@ -385,11 +378,10 @@ export function AdminFeaturesPanel() {
                 <label className="text-xs font-medium text-foreground">Sustained window (seconds)</label>
                 {renderSource('computeParseSustainedWindowSec')}
               </div>
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
-                className={inputClass}
                 value={String(draft.computeParseSustainedWindowSec ?? '')}
                 onChange={(event) => updatePositiveIntDraft('computeParseSustainedWindowSec', event.target.value)}
               />
@@ -405,13 +397,13 @@ export function AdminFeaturesPanel() {
             </div>
             <div className="shrink-0 self-start pl-1.5">{renderSource('maxUploadMb')}</div>
             <div className="shrink-0 flex items-center gap-1.5">
-              <input
+              <Input
                 type="number"
                 min={1}
                 step={1}
                 inputMode="numeric"
                 aria-label="Max upload size in megabytes"
-                className="w-20 rounded-md bg-background border border-offbase px-2.5 py-1.5 text-sm text-foreground text-right focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-20 text-right"
                 value={String(draft.maxUploadMb ?? '')}
                 onChange={(event) => updatePositiveIntDraft('maxUploadMb', event.target.value)}
               />
@@ -436,9 +428,8 @@ export function AdminFeaturesPanel() {
             </div>
             <div className="shrink-0">{renderSource('changelogFeedUrl')}</div>
           </div>
-          <input
+          <Input
             type="text"
-            className={inputClass}
             value={String(draft.changelogFeedUrl ?? '')}
             onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
@@ -481,11 +472,10 @@ export function AdminFeaturesPanel() {
               <label className="text-xs font-medium text-foreground">Retry attempts</label>
               {renderSource('ttsUpstreamMaxRetries')}
             </div>
-            <input
+            <Input
               type="number"
               min={1}
               step={1}
-              className={inputClass}
               value={String(draft.ttsUpstreamMaxRetries ?? '')}
               onChange={(event) => updatePositiveIntDraft('ttsUpstreamMaxRetries', event.target.value)}
             />
@@ -495,11 +485,10 @@ export function AdminFeaturesPanel() {
               <label className="text-xs font-medium text-foreground">Upstream timeout (ms)</label>
               {renderSource('ttsUpstreamTimeoutMs')}
             </div>
-            <input
+            <Input
               type="number"
               min={1}
               step={1}
-              className={inputClass}
               value={String(draft.ttsUpstreamTimeoutMs ?? '')}
               onChange={(event) => updatePositiveIntDraft('ttsUpstreamTimeoutMs', event.target.value)}
             />
@@ -509,11 +498,10 @@ export function AdminFeaturesPanel() {
               <label className="text-xs font-medium text-foreground">Audio cache size (bytes)</label>
               {renderSource('ttsCacheMaxSizeBytes')}
             </div>
-            <input
+            <Input
               type="number"
               min={1}
               step={1}
-              className={inputClass}
               value={String(draft.ttsCacheMaxSizeBytes ?? '')}
               onChange={(event) => updatePositiveIntDraft('ttsCacheMaxSizeBytes', event.target.value)}
             />
@@ -523,11 +511,10 @@ export function AdminFeaturesPanel() {
               <label className="text-xs font-medium text-foreground">Audio cache TTL (ms)</label>
               {renderSource('ttsCacheTtlMs')}
             </div>
-            <input
+            <Input
               type="number"
               min={1}
               step={1}
-              className={inputClass}
               value={String(draft.ttsCacheTtlMs ?? '')}
               onChange={(event) => updatePositiveIntDraft('ttsCacheTtlMs', event.target.value)}
             />

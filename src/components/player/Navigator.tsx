@@ -1,8 +1,7 @@
 'use client';
 
-import { Popover } from '@headlessui/react';
 import { useState, useEffect, useRef } from 'react';
-import { IconButton, Input, PopoverSurface, PopoverTrigger } from '@/components/ui';
+import { IconButton, Input, PopoverRoot, PopoverSurface, PopoverTrigger } from '@/components/ui';
 
 export const Navigator = ({ currentPage, numPages, skipToLocation }: {
   currentPage: number;
@@ -66,7 +65,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       </IconButton>
 
       {/* Page number popup */}
-      <Popover className="relative mb-1">
+      <PopoverRoot className="relative mb-1">
         <PopoverTrigger className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs" onClick={handlePopoverOpen}>
           <p className="text-xs whitespace-nowrap">
             {currentPage} / {numPages || 1}
@@ -92,7 +91,7 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
             <div className="text-xs text-soft text-center">of {numPages || 1}</div>
           </div>
         </PopoverSurface>
-      </Popover>
+      </PopoverRoot>
 
       {/* Page forward */}
       <IconButton

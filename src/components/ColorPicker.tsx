@@ -1,10 +1,9 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Popover, PopoverButton } from '@headlessui/react';
 import { isLightColor, type CustomThemeColors } from '@/contexts/ThemeContext';
 import { PaletteIcon } from '@/components/icons/Icons';
-import { IconButton, Input, PopoverSurface } from '@/components/ui';
+import { IconButton, Input, PopoverIconTrigger, PopoverRoot, PopoverSurface } from '@/components/ui';
 
 /**
  * Curated swatch palettes per color role, sourced from existing themes
@@ -78,8 +77,8 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
   const swatches = ROLE_SWATCHES[field];
 
   return (
-    <Popover className="relative flex items-center">
-      <PopoverButton as={IconButton} size="sm" className="group rounded-full p-0" aria-label={`Pick ${label} color`}>
+    <PopoverRoot className="relative flex items-center">
+      <PopoverIconTrigger size="sm" className="group rounded-full p-0" aria-label={`Pick ${label} color`}>
         <div
           className="w-6 h-6 rounded-full border-2 transition duration-fast group-focus-visible:ring-2 group-focus-visible:ring-offset-1"
           style={{
@@ -87,7 +86,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
             borderColor: isLightColor(value) ? '#00000022' : '#ffffff22',
           }}
         />
-      </PopoverButton>
+      </PopoverIconTrigger>
 
       <PopoverSurface
         anchor="bottom start"
@@ -171,6 +170,6 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
           />
         </div>
       </PopoverSurface>
-    </Popover>
+    </PopoverRoot>
   );
 }

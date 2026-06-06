@@ -46,10 +46,10 @@ import {
   ChoiceTile,
   IconButton,
   Input,
+  Textarea,
   ModalFrame,
   ModalTitle,
   Select,
-  inputClass,
 } from '@/components/ui';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -697,7 +697,6 @@ export function SettingsModal({
                                 value={localBaseUrl}
                                 onChange={(e) => handleInputChange('baseUrl', e.target.value)}
                                 placeholder="Using environment variable"
-                                className={inputClass}
                               />
                             </div>
                           )}
@@ -713,7 +712,6 @@ export function SettingsModal({
                                 value={localApiKey}
                                 onChange={(e) => handleInputChange('apiKey', e.target.value)}
                                 placeholder="Using environment variable"
-                                className={inputClass}
                               />
                             </div>
                           )}
@@ -774,7 +772,6 @@ export function SettingsModal({
                                     setModelValue(e.target.value);
                                   }}
                                   placeholder="Enter custom model name"
-                                  className={inputClass}
                                 />
                               )}
                             </div>
@@ -783,11 +780,11 @@ export function SettingsModal({
                           {providerModelPolicy.supportsInstructions && (
                             <div className="space-y-1.5">
                               <label className={fieldLabelClass}>TTS Instructions</label>
-                              <textarea
+                              <Textarea
                                 value={localTTSInstructions}
                                 onChange={(e) => setLocalTTSInstructions(e.target.value)}
                                 placeholder="Enter instructions for the TTS model"
-                                className={`${inputClass} h-24 resize-none`}
+                                className="h-24 resize-none"
                               />
                             </div>
                           )}

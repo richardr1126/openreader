@@ -9,7 +9,7 @@ import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { GithubIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
-import { Button, Field, Input, Surface } from '@/components/ui';
+import { Button, Checkbox, Field, InlineButton, Input, Surface } from '@/components/ui';
 
 function SessionExpiredLoader({ setSessionExpired }: { setSessionExpired: (v: boolean) => void }) {
   const searchParams = useSearchParams();
@@ -169,11 +169,9 @@ function SignInContent() {
 
           {/* Remember Me */}
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="rounded border-muted text-accent focus:ring-accent-line"
             />
             <span className="text-sm text-foreground">Remember me</span>
           </label>
@@ -238,12 +236,9 @@ function SignInContent() {
           )}
           <p className="text-xs text-soft">
             By signing in, you agree to our{' '}
-            <button
-              onClick={() => showPrivacyModal()}
-              className="underline hover:text-foreground"
-            >
+            <InlineButton onClick={() => showPrivacyModal()}>
               Privacy Policy
-            </button>
+            </InlineButton>
           </p>
         </div>
       </Surface>

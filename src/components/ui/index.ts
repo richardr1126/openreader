@@ -1,5 +1,6 @@
 export * from './badge';
 export * from './button';
+export * from './checkbox';
 export * from './choice-tile';
 export * from './cn';
 export * from './dialog';

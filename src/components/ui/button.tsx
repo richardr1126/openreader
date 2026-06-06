@@ -7,7 +7,7 @@ import { focusRing, motionColors } from './tokens';
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
 
-export const buttonStyles = variants({
+const buttonStyles = variants({
   base: cn(
     'inline-flex items-center justify-center font-medium disabled:cursor-not-allowed disabled:opacity-50',
     focusRing,
@@ -34,17 +34,6 @@ export const buttonStyles = variants({
     size: 'md',
   },
 });
-
-export const btnBase = cn(
-  'inline-flex items-center justify-center rounded-md text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
-  focusRing,
-  motionColors,
-);
-export const btnPrimary = buttonStyles({ variant: 'primary', size: 'md' });
-export const btnSecondary = buttonStyles({ variant: 'secondary', size: 'md' });
-export const btnOutline = buttonStyles({ variant: 'outline', size: 'md' });
-export const btnDanger = buttonStyles({ variant: 'danger', size: 'md' });
-export const btnGhost = buttonStyles({ variant: 'ghost', size: 'md' });
 
 function buttonClass({
   variant = 'secondary',
@@ -110,5 +99,24 @@ export function ButtonAnchor({
     <a className={buttonClass({ variant, size, className })} {...props}>
       {children}
     </a>
+  );
+}
+
+export function InlineButton({
+  className,
+  children,
+  type = 'button',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type={type}
+      className={cn('underline hover:text-foreground', focusRing, motionColors, className)}
+      {...props}
+    >
+      {children}
+    </button>
   );
 }

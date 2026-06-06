@@ -1,11 +1,9 @@
 'use client';
 
-import { Menu, MenuButton, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
 import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon, ListIcon } from '@/components/icons/Icons';
 import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
-import { IconButton, MenuActionItem, MenuItemsSurface, ToolbarButton } from '@/components/ui';
+import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
 
 interface DocumentHeaderMenuProps {
   zoomLevel: number;
@@ -82,24 +80,16 @@ export function DocumentHeaderMenu({
   // --- Mobile View ---
   const MobileView = (
     <div className="sm:hidden flex items-center">
-      <Menu as="div" className="relative inline-block text-left">
-        <MenuButton
+      <MenuRoot as="div" className="relative inline-block text-left">
+        <MenuTrigger
           as={IconButton}
           tone="surface"
           size="sm"
           title="Menu"
         >
           <DotsVerticalIcon className="w-4 h-4 transform transition-transform duration-base ease-standard hover:text-accent" />
-        </MenuButton>
-        <Transition
-          as={Fragment}
-          enter="transition ease-standard duration-fast"
-          enterFrom="transform opacity-0 scale-95"
-          enterTo="transform opacity-100 scale-100"
-          leave="transition ease-standard duration-fast"
-          leaveFrom="transform opacity-100 scale-100"
-          leaveTo="transform opacity-0 scale-95"
-        >
+        </MenuTrigger>
+        <MenuTransition>
           <MenuItemsSurface className="absolute right-0 z-50 mt-2 min-w-max origin-top-right divide-y divide-line-soft focus:outline-none">
             {/* Zoom Controls Section */}
             <div className="px-4 py-3">
@@ -140,8 +130,8 @@ export function DocumentHeaderMenu({
               <UserMenu />
             </div>
           </MenuItemsSurface>
-        </Transition>
-      </Menu>
+        </MenuTransition>
+      </MenuRoot>
     </div>
   );
 

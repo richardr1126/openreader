@@ -1,19 +1,33 @@
-import { MenuItem, MenuItems } from '@headlessui/react';
+import {
+  Menu as HeadlessMenu,
+  MenuButton as HeadlessMenuButton,
+  MenuItem,
+  MenuItems,
+  Transition,
+} from '@headlessui/react';
+import { Fragment } from 'react';
 import type { ComponentProps } from 'react';
-import type { HTMLAttributes, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { cn } from './cn';
 
 const menuPanelClass = 'rounded-md border border-line bg-surface p-1 shadow-elev-2 ring-1 ring-line-soft';
 
-export function Menu({
-  children,
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+export const MenuRoot = HeadlessMenu;
+export const MenuTrigger = HeadlessMenuButton;
+
+export function MenuTransition({ children }: { children: ReactNode }) {
   return (
-    <div className={cn(menuPanelClass, className)} {...props}>
+    <Transition
+      as={Fragment}
+      enter="transition ease-standard duration-fast"
+      enterFrom="transform opacity-0 scale-95"
+      enterTo="transform opacity-100 scale-100"
+      leave="transition ease-standard duration-fast"
+      leaveFrom="transform opacity-100 scale-100"
+      leaveTo="transform opacity-0 scale-95"
+    >
       {children}
-    </div>
+    </Transition>
   );
 }
 

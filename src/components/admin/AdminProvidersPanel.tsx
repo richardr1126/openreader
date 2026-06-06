@@ -1,8 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Menu, MenuButton, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { DotsHorizontalIcon, PlusIcon } from '@/components/icons/Icons';
@@ -13,13 +11,16 @@ import {
   Field,
   Section,
   ToggleRow,
-  inputClass,
   Select,
   Button,
   IconButton,
   Input,
+  Textarea,
   MenuItemsSurface,
   MenuActionItem,
+  MenuRoot,
+  MenuTrigger,
+  MenuTransition,
 } from '@/components/ui';
 
 type ProviderType = TtsProviderId;
@@ -394,7 +395,6 @@ export function AdminProvidersPanel() {
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
                 placeholder="kokoro-prod"
-                className={inputClass}
                 disabled={isEditingExisting}
               />
             </Field>
@@ -404,7 +404,6 @@ export function AdminProvidersPanel() {
                 value={form.displayName}
                 onChange={(e) => setForm({ ...form, displayName: e.target.value })}
                 placeholder="Kokoro (production)"
-                className={inputClass}
               />
             </Field>
             <Field label="Provider type">
@@ -483,7 +482,6 @@ export function AdminProvidersPanel() {
                       });
                     }}
                     placeholder="Enter custom model id"
-                    className={inputClass}
                   />
                 )}
               </div>
@@ -494,11 +492,11 @@ export function AdminProvidersPanel() {
                 className="sm:col-span-2"
                 hint="Optional. Applied by default when this shared provider is selected."
               >
-                <textarea
+                <Textarea
                   value={form.defaultInstructions}
                   onChange={(e) => setForm({ ...form, defaultInstructions: e.target.value })}
                   placeholder="Enter instructions for this model"
-                  className={`${inputClass} min-h-24 resize-y`}
+                  className="min-h-24 resize-y"
                 />
               </Field>
             )}
@@ -509,7 +507,6 @@ export function AdminProvidersPanel() {
                   value={form.baseUrl}
                   onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
                   placeholder={baseUrlPlaceholder}
-                  className={inputClass}
                 />
               </Field>
             )}
@@ -523,7 +520,6 @@ export function AdminProvidersPanel() {
                 value={form.apiKey}
                 onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
                 placeholder={isEditingExisting ? `keep existing (${editingProvider?.apiKeyMask ?? ''})` : 'Optional'}
-                className={inputClass}
               />
             </Field>
           </div>
@@ -584,8 +580,8 @@ export function AdminProvidersPanel() {
                     {p.baseUrl ? p.baseUrl : 'provider base URL default'} · key {p.apiKeyMask}
                   </div>
                 </div>
-                <Menu as="div" className="relative shrink-0">
-                  <MenuButton
+                <MenuRoot as="div" className="relative shrink-0">
+                  <MenuTrigger
                     as={IconButton}
                     tone="surface"
                     size="sm"
@@ -594,16 +590,8 @@ export function AdminProvidersPanel() {
                     disabled={!!editingId || deleteMutation.isPending || toggleEnabledMutation.isPending || setDefaultMutation.isPending}
                   >
                     <DotsHorizontalIcon className="h-3 w-4" />
-                  </MenuButton>
-                  <Transition
-                    as={Fragment}
-                    enter="transition ease-out duration-100"
-                    enterFrom="transform opacity-0 scale-95"
-                    enterTo="transform opacity-100 scale-100"
-                    leave="transition ease-in duration-75"
-                    leaveFrom="transform opacity-100 scale-100"
-                    leaveTo="transform opacity-0 scale-95"
-                  >
+                  </MenuTrigger>
+                  <MenuTransition>
                     <MenuItemsSurface
                       anchor="bottom end"
                       className="z-50 mt-2 min-w-[170px] bg-base focus:outline-none"
@@ -624,8 +612,8 @@ export function AdminProvidersPanel() {
                         Delete
                       </MenuActionItem>
                     </MenuItemsSurface>
-                  </Transition>
-                </Menu>
+                  </MenuTransition>
+                </MenuRoot>
               </div>
             </div>
           ))
