@@ -1,5 +1,5 @@
 import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
-import type { TTSSentenceAlignment } from '@/types/tts';
+import type { TTSSentenceAlignment, TTSSentenceWord } from '@/types/tts';
 import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
 
 export type EpubCanonicalWordToken = {
@@ -10,6 +10,20 @@ export type EpubCanonicalWordToken = {
 
 export const normalizeWordForHighlight = (text: string): string =>
   normalizeUnicodeToken(text);
+
+export const resolveAlignmentWordSourceRange = (
+  segment: CanonicalTtsSegment,
+  word: TTSSentenceWord,
+): { sourceStart: number; sourceEnd: number } | null => {
+  const { charStart, charEnd } = word;
+  if (!Number.isInteger(charStart) || !Number.isInteger(charEnd)) return null;
+  if (charStart < 0 || charEnd <= charStart || charEnd > segment.text.length) return null;
+
+  return {
+    sourceStart: segment.startAnchor.offset + charStart,
+    sourceEnd: segment.startAnchor.offset + charEnd,
+  };
+};
 
 export const tokenizeCanonicalSegment = (
   segment: CanonicalTtsSegment,

@@ -13,7 +13,7 @@ const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 interface HighlightTokenMatchRequest {
   id: string;
   type: 'tokenMatch';
-  pattern: string;
+  patternTokens: string[];
   tokenTexts: string[];
 }
 
@@ -46,7 +46,7 @@ function getHighlightWorker(): Worker | null {
 }
 
 function runHighlightTokenMatch(
-  pattern: string,
+  patternTokens: string[],
   tokenTexts: string[]
 ): Promise<HighlightTokenMatchResponse | null> {
   const worker = getHighlightWorker();
@@ -71,7 +71,7 @@ function runHighlightTokenMatch(
     const message: HighlightTokenMatchRequest = {
       id,
       type: 'tokenMatch',
-      pattern,
+      patternTokens,
       tokenTexts,
     };
     worker.postMessage(message);
@@ -612,9 +612,10 @@ export function highlightPattern(
   };
 
   const tokenTexts = tokens.map((t) => t.text);
+  const patternTokens = segmentWords(cleanPattern, options?.language).map((token) => token.text);
 
   // Fire-and-forget async worker call; UI thread returns immediately
-  runHighlightTokenMatch(cleanPattern, tokenTexts)
+  runHighlightTokenMatch(patternTokens, tokenTexts)
     .then((result) => {
       if (seq !== highlightPatternSeq) return;
       if (!result || result.bestStart === -1) {

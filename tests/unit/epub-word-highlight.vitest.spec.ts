@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   buildMonotonicWordToTokenMap,
+  resolveAlignmentWordSourceRange,
   tokenizeCanonicalSegment,
 } from '../../src/lib/client/epub/epub-word-highlight';
 import type { CanonicalTtsSegment } from '../../src/lib/shared/tts-segment-plan';
@@ -36,6 +37,35 @@ describe('EPUB word highlight mapping', () => {
     const chinese = tokenizeCanonicalSegment(segment('这是中文。', 10), 'zh');
     expect(chinese.length).toBeGreaterThan(1);
     expect(chinese.map((token) => token.norm).join('')).toBe('这是中文');
+  });
+
+  test('resolves Japanese alignment chunks directly from character offsets', () => {
+    const japanese = segment('これは日本語です。', 25);
+    const word: TTSSentenceAlignment['words'][number] = {
+      text: 'これは',
+      startSec: 0,
+      endSec: 0.5,
+      charStart: 0,
+      charEnd: 3,
+    };
+
+    expect(resolveAlignmentWordSourceRange(japanese, word)).toEqual({
+      sourceStart: 25,
+      sourceEnd: 28,
+    });
+  });
+
+  test('rejects invalid alignment character offsets so token mapping can be used', () => {
+    const japanese = segment('これは日本語です。', 25);
+    const word: TTSSentenceAlignment['words'][number] = {
+      text: '範囲外',
+      startSec: 0,
+      endSec: 0.5,
+      charStart: 20,
+      charEnd: 23,
+    };
+
+    expect(resolveAlignmentWordSourceRange(japanese, word)).toBeNull();
   });
 
   test('tokenizes canonical segment words with source offsets', () => {

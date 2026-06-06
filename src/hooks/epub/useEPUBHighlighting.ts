@@ -6,6 +6,7 @@ import type { Rendition } from 'epubjs';
 import {
   buildMonotonicWordToTokenMap,
   buildWordHighlightCacheKey,
+  resolveAlignmentWordSourceRange,
   tokenizeCanonicalSegment,
   type EpubCanonicalWordToken,
 } from '@/lib/client/epub/epub-word-highlight';
@@ -117,6 +118,40 @@ export function useEPUBHighlighting({
 
     const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
     if (!resolved || segment.startAnchor.sourceKey !== resolved.map.sourceKey) return;
+
+    const alignmentRange = resolveAlignmentWordSourceRange(segment, words[wordIndex]);
+    if (
+      alignmentRange
+      && alignmentRange.sourceStart >= resolved.startOffset
+      && alignmentRange.sourceEnd <= resolved.endOffset
+    ) {
+      const wordRange = createRangeFromMappedOffsets(
+        resolved.map,
+        alignmentRange.sourceStart,
+        alignmentRange.sourceEnd,
+      );
+      if (wordRange) {
+        try {
+          const wordCfi = resolved.map.content.cfiFromRange(wordRange);
+          currentWordHighlightCfiRef.current = wordCfi;
+          renditionRef.current.annotations.add(
+            'highlight',
+            wordCfi,
+            {},
+            () => { },
+            '',
+            {
+              fill: 'var(--accent)',
+              'fill-opacity': '0.4',
+              'mix-blend-mode': 'multiply',
+            }
+          );
+          return;
+        } catch (error) {
+          console.error('Error highlighting EPUB word from alignment offsets:', error);
+        }
+      }
+    }
 
     const cacheKey = buildWordHighlightCacheKey(segment, alignment, language);
     if (wordHighlightMapCacheRef.current?.key !== cacheKey) {
