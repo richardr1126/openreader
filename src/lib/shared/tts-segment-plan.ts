@@ -2,7 +2,7 @@ import { preprocessSentenceForAudio, splitTextToTtsBlocks, splitTextToTtsBlocksE
 import type { TTSSegmentLocator } from '@/types/client';
 import type { ReaderType } from '@/types/user-state';
 
-export const TTS_SEGMENT_PLAN_VERSION = 'tts-segment-plan-v1';
+export const TTS_SEGMENT_PLAN_VERSION = 'tts-segment-plan-v2';
 
 export interface CanonicalTtsSourceUnit {
   sourceKey: string;
@@ -38,6 +38,7 @@ export interface CanonicalTtsSegmentPlanOptions {
   maxBlockLength?: number;
   keyPrefix?: string;
   enforceSourceBoundaries?: boolean;
+  language?: string;
 }
 
 interface PreparedSourceUnit {
@@ -215,7 +216,10 @@ export function planCanonicalTtsSegments(
   }
 
   const canonicalText = textParts.join('');
-  const splitOptions = { maxBlockLength: options.maxBlockLength };
+  const splitOptions = {
+    maxBlockLength: options.maxBlockLength,
+    language: options.language,
+  };
   const splitIntoBlocks = (text: string): string[] =>
     readerType === 'epub'
       ? splitTextToTtsBlocksEPUB(text, splitOptions)

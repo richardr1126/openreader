@@ -30,6 +30,7 @@ type UseEpubHighlightingParams = {
   currentWordHighlightCfiRef: MutableRefObject<string | null>;
   renderedTextMapsRef: MutableRefObject<EpubRenderedTextMap[]>;
   wordHighlightMapCacheRef: MutableRefObject<EpubWordHighlightMapCache | null>;
+  language?: string;
 };
 
 type UseEpubHighlightingResult = {
@@ -52,6 +53,7 @@ export function useEPUBHighlighting({
   currentWordHighlightCfiRef,
   renderedTextMapsRef,
   wordHighlightMapCacheRef,
+  language,
 }: UseEpubHighlightingParams): UseEpubHighlightingResult {
   const clearWordHighlights = useCallback(() => {
     if (!renditionRef.current) return;
@@ -116,9 +118,9 @@ export function useEPUBHighlighting({
     const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
     if (!resolved || segment.startAnchor.sourceKey !== resolved.map.sourceKey) return;
 
-    const cacheKey = buildWordHighlightCacheKey(segment, alignment);
+    const cacheKey = buildWordHighlightCacheKey(segment, alignment, language);
     if (wordHighlightMapCacheRef.current?.key !== cacheKey) {
-      const tokens = tokenizeCanonicalSegment(segment);
+      const tokens = tokenizeCanonicalSegment(segment, language);
       wordHighlightMapCacheRef.current = {
         key: cacheKey,
         tokens,
@@ -162,6 +164,7 @@ export function useEPUBHighlighting({
     renderedTextMapsRef,
     renditionRef,
     wordHighlightMapCacheRef,
+    language,
   ]);
 
   const setRenderedTextMaps = useCallback((maps: EpubRenderedTextMap[]) => {

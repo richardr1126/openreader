@@ -5,13 +5,14 @@
  * It handles text preprocessing, sentence splitting, and block creation for optimal TTS processing.
  */
 
-import nlp from 'compromise';
+import { normalizeLanguageTag, segmentSentences, toBaseLanguageCode } from '@/lib/shared/language';
 
 export const MAX_BLOCK_LENGTH = 450;
 const MIN_BLOCK_LENGTH = 50;
 
 export interface TtsSplitOptions {
   maxBlockLength?: number;
+  language?: string;
 }
 
 function resolveMaxBlockLength(options?: TtsSplitOptions): number {
@@ -27,9 +28,9 @@ const splitOversizedText = (text: string, maxLen: number): string[] => {
 
   const parts: string[] = [];
   const MAX_OVERFLOW = maxLen; // allow finishing the sentence up to +maxLen chars
-  const CLOSERS = new Set(['"', "'", '”', '’', ')', ']', '}']);
-  const BREAK_CHARS = new Set(['.', '!', '?']);
-  const SOFT_BREAK_CHARS = new Set([';', ':']);
+  const CLOSERS = new Set(['"', "'", '”', '’', ')', ']', '}', '」', '』', '】']);
+  const BREAK_CHARS = new Set(['.', '!', '?', '。', '！', '？', '؟', '।']);
+  const SOFT_BREAK_CHARS = new Set([';', ':', '；', '：']);
 
   const findPunctuationCut = (s: string, limit: number): number | null => {
     for (let i = limit; i >= 0; i--) {
@@ -48,7 +49,7 @@ const splitOversizedText = (text: string, maxLen: number): string[] => {
 
       // Allow a boundary at end/whitespace, or common PDF artifact where
       // the next sentence starts immediately with an uppercase letter.
-      if (!after || /\s/.test(after) || /[A-Z]/.test(after)) return end;
+      if (!after || /\s/u.test(after) || /\p{Lu}/u.test(after)) return end;
     }
     return null;
   };
@@ -74,7 +75,7 @@ const splitOversizedText = (text: string, maxLen: number): string[] => {
       while (cut < s.length && CLOSERS.has(s[cut])) cut++;
       const after = cut < s.length ? s[cut] : '';
 
-      if (!after || /\s/.test(after) || /[A-Z]/.test(after)) return cut;
+      if (!after || /\s/u.test(after) || /\p{Lu}/u.test(after)) return cut;
     }
     return null;
   };
@@ -87,7 +88,7 @@ const splitOversizedText = (text: string, maxLen: number): string[] => {
       let end = i + 1;
       while (end < s.length && CLOSERS.has(s[end])) end++;
       const after = end < s.length ? s[end] : '';
-      if (!after || /\s/.test(after) || /[A-Z]/.test(after)) return end;
+      if (!after || /\s/u.test(after) || /\p{Lu}/u.test(after)) return end;
     }
     return null;
   };
@@ -123,8 +124,8 @@ const normalizeSentenceBoundariesForNlp = (text: string): string => {
   // Insert a space only when it looks like a sentence boundary (lower/digit before,
   // uppercase after) to avoid breaking abbreviations like "U.S.A".
   return text
-    .replace(/([a-z0-9])([.!?])(?=[A-Z])/g, '$1$2 ')
-    .replace(/([a-z0-9][.!?][\"”’)\]])(?=[A-Z])/g, '$1 ');
+    .replace(/([\p{Ll}\p{N}])([.!?])(?=\p{Lu})/gu, '$1$2 ')
+    .replace(/([\p{Ll}\p{N}][.!?]["”’)\]])(?=\p{Lu})/gu, '$1 ');
 };
 
 /**
@@ -136,7 +137,7 @@ const normalizeSentenceBoundariesForNlp = (text: string): string => {
 export const preprocessSentenceForAudio = (text: string): string => {
   return text
     .replace(/\S*(?:https?:\/\/|www\.)([^\/\s]+)(?:\/\S*)?/gi, '- (link to $1) -')
-    .replace(/(\w+)-\s+(\w+)/g, '$1$2') // Remove hyphenation
+    .replace(/([\p{L}\p{N}\p{M}]+)-\s+([\p{L}\p{N}\p{M}]+)/gu, '$1$2') // Remove hyphenation
     // Remove special character *
     .replace(/\*/g, '')
     .replace(/\s+/g, ' ')
@@ -151,6 +152,8 @@ export const preprocessSentenceForAudio = (text: string): string => {
  */
 export const splitTextToTtsBlocks = (text: string, options?: TtsSplitOptions): string[] => {
   const maxBlockLength = resolveMaxBlockLength(options);
+  const language = normalizeLanguageTag(options?.language);
+  const blockSeparator = ['ja', 'zh'].includes(toBaseLanguageCode(language)) ? '' : ' ';
   // Treat double-newlines as paragraph boundaries; single newlines are usually
   // just PDF line wrapping and should not force sentence/block boundaries.
   const paragraphs = text.split(/\n{2,}/);
@@ -162,8 +165,7 @@ export const splitTextToTtsBlocks = (text: string, options?: TtsSplitOptions): s
     const cleanedText = normalizeSentenceBoundariesForNlp(
       preprocessSentenceForAudio(paragraph)
     );
-    const doc = nlp(cleanedText);
-    const rawSentences = doc.sentences().out('array') as string[];
+    const rawSentences = segmentSentences(cleanedText, language);
     
     // Merge multi-sentence dialogue enclosed in quotes into single items
     const mergedSentences = mergeQuotedDialogue(rawSentences);
@@ -179,8 +181,8 @@ export const splitTextToTtsBlocks = (text: string, options?: TtsSplitOptions): s
           blocks.push(currentBlock.trim());
           currentBlock = sentencePart;
         } else {
-          currentBlock = currentBlock 
-            ? `${currentBlock} ${sentencePart}`
+          currentBlock = currentBlock
+            ? `${currentBlock}${blockSeparator}${sentencePart}`
             : sentencePart;
         }
       }
@@ -200,6 +202,8 @@ export const splitTextToTtsBlocks = (text: string, options?: TtsSplitOptions): s
  */
 export const splitTextToTtsBlocksEPUB = (text: string, options?: TtsSplitOptions): string[] => {
   const maxBlockLength = resolveMaxBlockLength(options);
+  const language = normalizeLanguageTag(options?.language);
+  const blockSeparator = ['ja', 'zh'].includes(toBaseLanguageCode(language)) ? '' : ' ';
   const paragraphs = text.split(/\n+/);
   const blocks: string[] = [];
 
@@ -207,8 +211,7 @@ export const splitTextToTtsBlocksEPUB = (text: string, options?: TtsSplitOptions
     if (!paragraph.trim()) continue;
 
     const cleanedText = preprocessSentenceForAudio(paragraph);
-    const doc = nlp(cleanedText);
-    const rawSentences = doc.sentences().out('array') as string[];
+    const rawSentences = segmentSentences(cleanedText, language);
 
     const mergedSentences = mergeQuotedDialogue(rawSentences);
 
@@ -227,7 +230,7 @@ export const splitTextToTtsBlocksEPUB = (text: string, options?: TtsSplitOptions
           currentBlock = sentencePart;
         } else {
           currentBlock = currentBlock
-            ? `${currentBlock} ${sentencePart}`
+            ? `${currentBlock}${blockSeparator}${sentencePart}`
             : sentencePart;
         }
       }
@@ -248,8 +251,11 @@ export const splitTextToTtsBlocksEPUB = (text: string, options?: TtsSplitOptions
  * @param {string} text - The text to process
  * @returns {string} Normalized text
  */
-export const normalizeTextForTts = (text: string, options?: TtsSplitOptions): string =>
-  splitTextToTtsBlocks(text, options).join(' ');
+export const normalizeTextForTts = (text: string, options?: TtsSplitOptions): string => {
+  const language = normalizeLanguageTag(options?.language);
+  const separator = ['ja', 'zh'].includes(toBaseLanguageCode(language)) ? '' : ' ';
+  return splitTextToTtsBlocks(text, options).join(separator);
+};
 
 // Helper functions to merge quoted dialogue across sentences
 const countDoubleQuotes = (s: string): number => {
@@ -265,8 +271,8 @@ const countNonApostropheSingleQuotes = (s: string): number => {
     if (ch === "'" || ch === '‘' || ch === '’') {
       const prev = i > 0 ? s[i - 1] : '';
       const next = i + 1 < s.length ? s[i + 1] : '';
-      const isPrevAlphaNum = /[A-Za-z0-9]/.test(prev);
-      const isNextAlphaNum = /[A-Za-z0-9]/.test(next);
+      const isPrevAlphaNum = /[\p{L}\p{N}\p{M}]/u.test(prev);
+      const isNextAlphaNum = /[\p{L}\p{N}\p{M}]/u.test(next);
       // Treat as a real quote mark only when it's not clearly an apostrophe
       // between two alphanumeric characters (e.g., don't, WizardLM’s).
       if (!(isPrevAlphaNum && isNextAlphaNum)) {

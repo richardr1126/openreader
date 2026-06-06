@@ -19,6 +19,7 @@ import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
+import { useDocumentLanguage } from '@/hooks/useDocumentLanguage';
 import { ButtonLink } from '@/components/ui';
 import { useEpubDocument } from './useEpubDocument';
 
@@ -37,7 +38,8 @@ export default function EPUBPage() {
     regenerateChapter: regenerateEPUBChapter,
     bookRef,
   } = epubState;
-  const { stop } = useTTS();
+  const { stop, setDocumentLanguage } = useTTS();
+  const { language, updateLanguage } = useDocumentLanguage(routeDocumentId);
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,6 +107,10 @@ export default function EPUBPage() {
   }, [loadDocument, isLoading]);
 
   useUnmountCleanupRef(clearCurrDoc);
+
+  useEffect(() => {
+    setDocumentLanguage(language);
+  }, [language, setDocumentLanguage]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -249,6 +255,10 @@ export default function EPUBPage() {
         epub
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        language={language}
+        onLanguageChange={(nextLanguage) => {
+          void updateLanguage(nextLanguage);
+        }}
       />
       <SegmentsSidebar
         isOpen={activeSidebar === 'segments'}

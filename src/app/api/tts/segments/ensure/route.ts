@@ -33,6 +33,7 @@ import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tt
 import { userWhisperAlignJob } from '@/lib/server/jobs/user-whisper-align-job';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { resolveTtsModelForProvider } from '@/lib/shared/tts-provider-policy';
+import { normalizeLanguageTag } from '@/lib/shared/language';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
 import { createRequestLogger, errorToLog } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -62,6 +63,8 @@ function parseSettings(value: unknown): TTSSegmentSettings | null {
   if (typeof rec.voice !== 'string') return null;
   if (!Number.isFinite(Number(rec.nativeSpeed))) return null;
   if (rec.ttsInstructions !== undefined && typeof rec.ttsInstructions !== 'string') return null;
+  if (rec.language !== undefined && typeof rec.language !== 'string') return null;
+  if (typeof rec.language === 'string' && rec.language.length > 64) return null;
 
   return {
     providerRef: rec.providerRef,
@@ -70,6 +73,7 @@ function parseSettings(value: unknown): TTSSegmentSettings | null {
     voice: rec.voice,
     nativeSpeed: Number(rec.nativeSpeed),
     ...(typeof rec.ttsInstructions === 'string' ? { ttsInstructions: rec.ttsInstructions } : {}),
+    ...(typeof rec.language === 'string' ? { language: normalizeLanguageTag(rec.language) } : {}),
   };
 }
 
@@ -406,6 +410,7 @@ export async function POST(request: NextRequest) {
             alignment = await userWhisperAlignJob({
               audioObjectKey: existing.audioKey,
               text: segment.text,
+              lang: effectiveSettings.language,
               sentenceIndex: segment.original.segmentIndex,
             });
             stageTimings.selfHealAlignMs = Date.now() - alignStartedAt;
@@ -674,6 +679,7 @@ export async function POST(request: NextRequest) {
             alignment = await userWhisperAlignJob({
               audioObjectKey: audioKey,
               text: segment.text,
+              lang: effectiveSettings.language,
               sentenceIndex: segment.original.segmentIndex,
             });
             stageTimings.whisperAlignMs = Date.now() - alignStartedAt;

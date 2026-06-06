@@ -35,6 +35,7 @@ export function HTMLViewer({
     currentSentence,
     currentSentenceAlignment,
     currentWordIndex,
+    resolvedLanguage,
   } = useTTS();
   const { htmlHighlightEnabled, htmlWordHighlightEnabled } = useConfig();
 
@@ -96,7 +97,7 @@ export function HTMLViewer({
       // here (not in cleanup) avoids a Strict-Mode-induced wipe of the very
       // first highlight.
       clearHtmlSentenceHighlight();
-      const matched = highlightHtmlSentence(container, currentSentence);
+      const matched = highlightHtmlSentence(container, currentSentence, resolvedLanguage);
       if (matched) {
         scrollSentenceIntoView(scrollRef.current);
         return;
@@ -118,6 +119,7 @@ export function HTMLViewer({
   }, [
     htmlHighlightEnabled,
     currentSentence,
+    resolvedLanguage,
     blocks,
     clearSentenceTimeouts,
     scheduleSentence,

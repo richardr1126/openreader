@@ -5,6 +5,7 @@ import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 import { CmpStr } from 'cmpstr';
 import type { TTSSegmentLocator } from '@/types/client';
+import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 
@@ -181,10 +182,7 @@ function getOrCreateHighlightLayer(span: HTMLElement): {
 }
 
 const normalizeWordForMatch = (text: string): string =>
-  text
-    .trim()
-    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
-    .toLowerCase();
+  normalizeUnicodeToken(text);
 
 // Highlighting functions
 let highlightPatternSeq = 0;
@@ -193,6 +191,7 @@ type HighlightPatternOptions = {
   parsedDocument?: ParsedPdfDocument | null;
   locator?: TTSSegmentLocator | null;
   useBlockGeometryOnly?: boolean;
+  language?: string;
 };
 
 function getHighlightLayerForPage(pageElement: HTMLElement): {
@@ -451,17 +450,13 @@ export function highlightPattern(
 
     const textNode = node as Text;
     const textContent = textNode.textContent || '';
-    const wordRegex = /\S+/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = wordRegex.exec(textContent)) !== null) {
-      const word = match[0];
+    for (const token of segmentWords(textContent, options?.language)) {
       tokens.push({
         spanIndex,
         textNode,
-        text: word,
-        startOffset: match.index,
-        endOffset: match.index + word.length,
+        text: token.text,
+        startOffset: token.start,
+        endOffset: token.end,
       });
     }
   });

@@ -1,5 +1,6 @@
 import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
 
 export type EpubCanonicalWordToken = {
   norm: string;
@@ -8,35 +9,19 @@ export type EpubCanonicalWordToken = {
 };
 
 export const normalizeWordForHighlight = (text: string): string =>
-  text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
+  normalizeUnicodeToken(text);
 
-export const tokenizeCanonicalSegment = (segment: CanonicalTtsSegment): EpubCanonicalWordToken[] => {
-  const tokens: EpubCanonicalWordToken[] = [];
-  const wordRegex = /\S+/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = wordRegex.exec(segment.text)) !== null) {
-    const raw = match[0];
-    const leading = raw.match(/^[^A-Za-z0-9]*/)?.[0].length ?? 0;
-    const trailing = raw.match(/[^A-Za-z0-9]*$/)?.[0].length ?? 0;
-    const start = match.index + leading;
-    const end = match.index + raw.length - trailing;
-    if (end <= start) continue;
-
-    const norm = normalizeWordForHighlight(raw.slice(leading, raw.length - trailing));
-    if (!norm) continue;
-
-    tokens.push({
-      norm,
-      sourceStart: segment.startAnchor.offset + start,
-      sourceEnd: segment.startAnchor.offset + end,
-    });
-  }
-
-  return tokens;
-};
+export const tokenizeCanonicalSegment = (
+  segment: CanonicalTtsSegment,
+  language?: string,
+): EpubCanonicalWordToken[] =>
+  segmentWords(segment.text, language)
+    .map((token) => ({
+      norm: normalizeWordForHighlight(token.text),
+      sourceStart: segment.startAnchor.offset + token.start,
+      sourceEnd: segment.startAnchor.offset + token.end,
+    }))
+    .filter((token) => Boolean(token.norm));
 
 export const buildMonotonicWordToTokenMap = (
   alignmentWords: TTSSentenceAlignment['words'],
@@ -105,10 +90,12 @@ export const buildMonotonicWordToTokenMap = (
 export const buildWordHighlightCacheKey = (
   segment: CanonicalTtsSegment,
   alignment: TTSSentenceAlignment,
+  language?: string,
 ): string =>
   [
     segment.key,
     segment.text.length,
+    language || '',
     alignment.words.length,
     alignment.words.map((word) => normalizeWordForHighlight(word.text)).join('|'),
   ].join('::');

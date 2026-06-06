@@ -45,6 +45,7 @@ export interface AudiobookGenerationSettings {
   postSpeed: number;
   format: TTSAudiobookFormat;
   ttsInstructions?: string;
+  language?: string;
 }
 
 export interface CreateChapterPayload {
@@ -70,6 +71,7 @@ export interface TTSSegmentSettings {
   voice: string;
   nativeSpeed: number;
   ttsInstructions?: string;
+  language?: string;
 }
 
 type TTSReaderType = 'pdf' | 'epub' | 'html';

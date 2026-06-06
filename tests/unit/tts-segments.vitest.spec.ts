@@ -195,4 +195,19 @@ describe('tts segment helpers', () => {
     expect(alignment.words[2].endSec).toBeGreaterThan(1.4);
     expect(alignment.words[1].charStart).toBeGreaterThan(alignment.words[0].charStart);
   });
+
+  test('builds proportional alignment for no-space languages', () => {
+    const sentence = 'これは日本語です';
+    const alignment = buildProportionalAlignment({
+      sentence,
+      sentenceIndex: 2,
+      durationMs: 1200,
+      language: 'ja',
+    });
+
+    expect(alignment.words.length).toBeGreaterThan(1);
+    for (const word of alignment.words) {
+      expect(sentence.slice(word.charStart, word.charEnd)).toBe(word.text);
+    }
+  });
 });

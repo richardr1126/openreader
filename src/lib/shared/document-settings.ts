@@ -3,6 +3,7 @@ import {
   type DocumentSettings,
 } from '@/types/document-settings';
 import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import { normalizeLanguageTag } from '@/lib/shared/language';
 
 function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
   if (!Array.isArray(value)) return [...(DEFAULT_DOCUMENT_SETTINGS.pdf?.skipBlockKinds ?? [])];
@@ -22,6 +23,7 @@ export function mergeDocumentSettings(
 ): DocumentSettings {
   const base: DocumentSettings = {
     schemaVersion: 1,
+    language: defaults.language || 'auto',
     pdf: {
       skipBlockKinds: [...(defaults.pdf?.skipBlockKinds ?? [])],
     },
@@ -29,12 +31,17 @@ export function mergeDocumentSettings(
 
   if (!stored || typeof stored !== 'object') return base;
   const rec = stored as Record<string, unknown>;
+  const rawLanguage = typeof rec.language === 'string' ? rec.language.trim() : '';
+  const language = !rawLanguage || rawLanguage.toLowerCase() === 'auto'
+    ? 'auto'
+    : normalizeLanguageTag(rawLanguage, defaults.language || 'en');
   const pdf = rec.pdf;
-  if (!pdf || typeof pdf !== 'object') return base;
+  if (!pdf || typeof pdf !== 'object') return { ...base, language };
   const pdfRec = pdf as Record<string, unknown>;
 
   return {
     schemaVersion: 1,
+    language,
     pdf: {
       skipBlockKinds: normalizeSkipKinds(pdfRec.skipBlockKinds),
     },

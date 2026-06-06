@@ -1,0 +1,23 @@
+English
+OpenReader should split this sentence correctly. This is the second sentence.
+
+French
+OpenReader doit correctement segmenter cette phrase. Voici la deuxieme phrase.
+
+Spanish
+OpenReader debe segmentar correctamente esta frase. Esta es la segunda frase.
+
+Arabic
+يجب أن يقسم أوبن ريدر هذه الجملة بشكل صحيح. هذه هي الجملة الثانية.
+
+Hindi
+ओपनरीडर को इस वाक्य को सही ढंग से विभाजित करना चाहिए। यह दूसरा वाक्य है।
+
+Japanese
+OpenReaderはこの文を正しく分割する必要があります。これは二番目の文です。
+
+Chinese
+OpenReader应该正确地分割这个句子。这是第二句话。
+
+Thai
+OpenReader ควรแบ่งประโยคนี้อย่างถูกต้อง นี่คือประโยคที่สอง

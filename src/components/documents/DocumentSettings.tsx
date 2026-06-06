@@ -50,6 +50,20 @@ const viewTypeTextMapping = [
   { id: 'scroll', name: 'Continuous Scroll' },
 ];
 
+const DOCUMENT_LANGUAGE_OPTIONS = [
+  { value: 'auto', label: 'Automatic (voice or metadata)' },
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'it', label: 'Italian' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'pt-BR', label: 'Portuguese (Brazil)' },
+  { value: 'zh-CN', label: 'Chinese (Simplified)' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'th', label: 'Thai' },
+];
+
 type RangeSettingProps = {
   label: string;
   value: number;
@@ -92,11 +106,13 @@ function RangeSetting({
   );
 }
 
-export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
+export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, onLanguageChange, pdf }: {
   isOpen: boolean,
   setIsOpen: (isOpen: boolean) => void,
   epub?: boolean,
   html?: boolean,
+  language?: string,
+  onLanguageChange?: (language: string) => void,
   pdf?: {
     parseStatus: PdfParseStatus | null;
     parsedOverlayEnabled: boolean;
@@ -151,6 +167,30 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, pdf }: {
       panelClassName="w-full sm:w-[30rem]"
     >
       <div className="space-y-4">
+        {language && onLanguageChange ? (
+          <Section
+            title="Language"
+            subtitle="Controls sentence splitting and synchronized word alignment."
+            variant="flat"
+          >
+            <label className="block space-y-1.5">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted">
+                Document language
+              </span>
+              <select
+                value={language}
+                onChange={(event) => onLanguageChange(event.target.value)}
+                className="w-full rounded-md border border-offbase bg-surface-solid px-3 py-2 text-sm text-foreground"
+              >
+                {DOCUMENT_LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </Section>
+        ) : null}
         {isPdfMode && pdf && (
           <Section
             title="PDF Essentials"

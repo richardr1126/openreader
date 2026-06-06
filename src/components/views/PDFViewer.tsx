@@ -59,6 +59,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     currentSentenceAlignment,
     currentSegment,
     skipToLocation,
+    resolvedLanguage,
   } = useTTS();
 
   const {
@@ -207,6 +208,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
         parsedDocument,
         locator: activeLocator,
         useBlockGeometryOnly,
+        language: resolvedLanguage,
       });
     };
 
@@ -224,6 +226,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
     parsedDocument,
+    resolvedLanguage,
     layoutKey,
     isPageRendering,
     clearSentenceHighlightTimeouts,

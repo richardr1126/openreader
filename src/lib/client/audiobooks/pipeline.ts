@@ -12,6 +12,7 @@ import type {
   TTSAudiobookChapter,
   TTSAudiobookFormat,
 } from '@/types/tts';
+import { normalizeTextForTts } from '@/lib/shared/nlp';
 
 export interface PreparedAudiobookChapter {
   index: number;
@@ -109,7 +110,10 @@ export async function runAudiobookGeneration({
     maxDelay: 300,
   },
 }: RunAudiobookGenerationOptions): Promise<string> {
-  const chapters = await adapter.prepareChapters();
+  const chapters = (await adapter.prepareChapters()).map((chapter) => ({
+    ...chapter,
+    text: normalizeTextForTts(chapter.text, { language: settings?.language }),
+  }));
   const totalLength = chapters.reduce((sum, chapter) => sum + chapter.text.trim().length, 0);
   if (totalLength === 0) {
     throw new Error(adapter.noContentMessage);
@@ -228,7 +232,7 @@ export async function regenerateAudiobookChapter({
   },
 }: RegenerateAudiobookChapterOptions): Promise<TTSAudiobookChapter> {
   const chapter = await adapter.prepareChapter(chapterIndex);
-  const trimmedText = chapter.text.trim();
+  const trimmedText = normalizeTextForTts(chapter.text, { language: settings?.language }).trim();
   if (!trimmedText) {
     throw new Error(adapter.noContentMessage);
   }

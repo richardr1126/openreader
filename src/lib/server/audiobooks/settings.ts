@@ -9,6 +9,7 @@ import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
 import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
 import { resolvePreferredSharedProviderSlug } from '@/lib/shared/shared-provider-selection';
+import { normalizeLanguageTag } from '@/lib/shared/language';
 
 function isAudiobookFormat(value: unknown): value is TTSAudiobookFormat {
   return value === 'mp3' || value === 'm4b';
@@ -68,6 +69,7 @@ export function coerceAudiobookGenerationSettings(
     postSpeed,
     format,
     ...(typeof record.ttsInstructions === 'string' ? { ttsInstructions: record.ttsInstructions } : {}),
+    ...(typeof record.language === 'string' ? { language: normalizeLanguageTag(record.language) } : {}),
   };
 
   const migrated =

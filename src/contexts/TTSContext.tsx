@@ -65,6 +65,7 @@ import {
 } from '@/lib/client/epub/tts-epub-handoff';
 import { normalizeTtsLocationKey } from '@/lib/shared/tts-locator';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { resolveTtsLanguage } from '@/lib/shared/language';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
   EpubRenderedLocationWalker,
@@ -146,6 +147,9 @@ interface TTSContextType extends TTSPlaybackState {
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   setVoiceAndRestart: (voice: string) => void;
+  documentLanguage: string;
+  resolvedLanguage: string;
+  setDocumentLanguage: (language: string) => void;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
@@ -234,8 +238,9 @@ const normalizeLocationKey = normalizeTtsLocationKey;
 
 const normalizeBlockFingerprint = (text: string): string => {
   const normalized = preprocessSentenceForAudio(text)
+    .normalize('NFKC')
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^\p{L}\p{N}\p{M}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return normalized.slice(0, 200);
@@ -249,6 +254,7 @@ const buildCacheKey = (
   model: string,
   providerType: string,
   instructions: string,
+  language: string,
 ) => {
   return [
     `provider=${provider || ''}`,
@@ -257,6 +263,7 @@ const buildCacheKey = (
     `voice=${voice || ''}`,
     `speed=${Number.isFinite(speed) ? speed : ''}`,
     `instructions=${instructions || ''}`,
+    `language=${language || ''}`,
     `text=${sentence}`,
   ].join('|');
 };
@@ -271,10 +278,11 @@ const buildScopedSegmentCacheKey = (
   model: string,
   providerType: string,
   instructions: string,
+  language: string,
   segmentKey?: string | null,
 ) => {
   return [
-    buildCacheKey(sentence, voice, speed, provider, model, providerType, instructions),
+    buildCacheKey(sentence, voice, speed, provider, model, providerType, instructions, language),
     `segmentKey=${segmentKey || ''}`,
     `locator=${segmentKey ? '' : buildLocatorRequestKey(locator)}`,
     `segmentIndex=${segmentKey ? '' : segmentIndex}`,
@@ -567,6 +575,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [voice, setVoice] = useState(configVoice);
   const [ttsModel, setTTSModel] = useState(configTTSModel);
   const [ttsInstructions, setTTSInstructions] = useState(configTTSInstructions);
+  const [documentLanguage, setDocumentLanguage] = useState('auto');
+  const resolvedLanguage = useMemo(
+    () => resolveTtsLanguage({ configuredLanguage: documentLanguage, voice }),
+    [documentLanguage, voice],
+  );
   const providerModelPolicy = useMemo(
     () => resolveTtsProviderModelPolicy({
       providerRef: configProviderRef,
@@ -1231,6 +1244,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       maxBlockLength: ttsSegmentMaxBlockLength,
       keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
       enforceSourceBoundaries: activeReaderType === 'pdf' && currentUnits !== null && currentUnits.length > 0,
+      language: resolvedLanguage,
     });
     const currentSegments = plan.segments.filter((segment) => currentSourceKeySet.has(segment.ownerSourceKey));
     const newSentences = currentSegments.map((segment) => segment.text);
@@ -1383,6 +1397,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPage,
     documentId,
     ttsSegmentMaxBlockLength,
+    resolvedLanguage,
     clearPendingEpubJump,
   ]);
 
@@ -1496,6 +1511,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       voice,
       effectiveNativeSpeed,
       providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+      resolvedLanguage,
       ttsSegmentMaxBlockLength,
     ].join('|');
 
@@ -1516,6 +1532,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     effectiveNativeSpeed,
     providerModelPolicy.supportsInstructions,
     ttsInstructions,
+    resolvedLanguage,
     ttsSegmentMaxBlockLength,
     clearPendingEpubJump,
     bumpEpubPreloadGeneration,
@@ -1589,6 +1606,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ttsModel,
       configProviderType,
       providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+      resolvedLanguage,
       segmentKey,
     );
 
@@ -1669,6 +1687,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
               voice,
               nativeSpeed: effectiveNativeSpeed,
               ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
+              language: resolvedLanguage,
             },
             segments: persistSegments,
           }, reqHeaders, controller.signal),
@@ -1772,6 +1791,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     effectiveNativeSpeed,
     ttsModel,
     ttsInstructions,
+    resolvedLanguage,
     openApiKey,
     openApiBaseUrl,
     configProviderRef,
@@ -2253,6 +2273,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ttsModel,
       configProviderType,
       providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+      resolvedLanguage,
       playbackSegment?.key,
     );
     const cachedAlignment = sentenceAlignmentCacheRef.current.get(alignmentKey);
@@ -2290,6 +2311,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     configProviderType,
     providerModelPolicy.supportsInstructions,
     ttsInstructions,
+    resolvedLanguage,
     isEPUB,
     currDocPage,
     currDocPageNumber,
@@ -2388,6 +2410,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           ttsModel,
           configProviderType,
           providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+          resolvedLanguage,
           nextSegment?.key,
         );
         if (segmentManifestCacheRef.current.has(cacheKey)) {
@@ -2498,6 +2521,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             readerType: 'epub',
             maxBlockLength: ttsSegmentMaxBlockLength,
             keyPrefix: buildSegmentKeyPrefix(documentId, 'epub'),
+            language: resolvedLanguage,
           });
           const uniqueCandidates: Array<EpubLocationPreloadCandidate & { locator: TTSSegmentLocator }> = [];
           const seenCandidates = new Set<string>();
@@ -2520,6 +2544,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
                 ttsModel,
                 configProviderType,
                 providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+                resolvedLanguage,
                 segment.key,
               );
               if (seenCandidates.has(requestKey)) continue;
@@ -2564,6 +2589,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
                   voice,
                   nativeSpeed: effectiveNativeSpeed,
                   ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
+                  language: resolvedLanguage,
                 },
                 segments: persistPayload,
               }, reqHeaders, controller.signal),
@@ -2660,6 +2686,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         ttsModel,
         configProviderType,
         providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+        resolvedLanguage,
         plannedSegment?.key,
       );
       const requestKey = buildSegmentRequestKey(locator, sentenceIndex, sentence, plannedSegment?.key);
@@ -2691,6 +2718,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           ttsModel,
           configProviderType,
           providerModelPolicy.supportsInstructions ? ttsInstructions : '',
+          resolvedLanguage,
           segment.key,
         );
         const requestKey = buildSegmentRequestKey(segmentLocator, index, sentence, segment.key);
@@ -2755,6 +2783,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
               voice,
               nativeSpeed: effectiveNativeSpeed,
               ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
+              language: resolvedLanguage,
             },
             segments: persistPayload,
           }, reqHeaders, controller.signal),
@@ -2841,6 +2870,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     openApiBaseUrl,
     providerModelPolicy.supportsInstructions,
     ttsInstructions,
+    resolvedLanguage,
     onTTSStart,
     onTTSComplete,
     processSentence,
@@ -3145,6 +3175,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    documentLanguage,
+    resolvedLanguage,
+    setDocumentLanguage,
     clearSegmentCaches,
     skipToLocation,
     registerLocationChangeHandler,
@@ -3176,6 +3209,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    documentLanguage,
+    resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
     registerLocationChangeHandler,

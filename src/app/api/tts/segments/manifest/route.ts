@@ -71,9 +71,10 @@ function parseSettingsValue(value: unknown): TTSSegmentSettings | null {
   const nativeSpeed = Number.isFinite(Number(speedSource)) ? Number(speedSource) : 1;
   const instructionsSource = rec.ttsInstructions ?? rec.instructions;
   const ttsInstructions = typeof instructionsSource === 'string' ? instructionsSource : '';
+  const language = typeof rec.language === 'string' ? rec.language : 'en';
 
   if (!providerRef || !providerType || !ttsModel || !voice) return null;
-  return { providerRef, providerType, ttsModel, voice, nativeSpeed, ttsInstructions };
+  return { providerRef, providerType, ttsModel, voice, nativeSpeed, ttsInstructions, language };
 }
 
 function locatorFromProjection(row: ManifestGroupRow): TTSSegmentLocator | null {

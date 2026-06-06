@@ -28,6 +28,16 @@ const alignmentWords = (words: string[]): TTSSentenceAlignment['words'] =>
   }));
 
 describe('EPUB word highlight mapping', () => {
+  test('tokenizes Japanese and Chinese using locale-aware word boundaries', () => {
+    const japanese = tokenizeCanonicalSegment(segment('これは日本語です。', 5), 'ja');
+    expect(japanese.length).toBeGreaterThan(1);
+    expect(japanese.every((token) => token.norm.length > 0)).toBe(true);
+
+    const chinese = tokenizeCanonicalSegment(segment('这是中文。', 10), 'zh');
+    expect(chinese.length).toBeGreaterThan(1);
+    expect(chinese.map((token) => token.norm).join('')).toBe('这是中文');
+  });
+
   test('tokenizes canonical segment words with source offsets', () => {
     const tokens = tokenizeCanonicalSegment(segment('"Hello," she said.', 12));
 

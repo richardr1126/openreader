@@ -493,6 +493,14 @@ export default function PDFViewerPage() {
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        language={documentSettings.language ?? 'auto'}
+        onLanguageChange={(language) => {
+          void updateDocumentSettings({
+            ...documentSettings,
+            schemaVersion: 1,
+            language,
+          });
+        }}
         pdf={{
           parseStatus,
           parsedOverlayEnabled,

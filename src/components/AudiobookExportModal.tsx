@@ -12,6 +12,7 @@ import { useTTS } from '@/contexts/TTSContext';
 import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { resolveTtsLanguage } from '@/lib/shared/language';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
 import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, RangeInput, SharedListboxButton, SharedListboxOption, SharedListboxOptions } from '@/components/ui';
 import { 
@@ -50,7 +51,7 @@ export function AudiobookExportModal({
   onRegenerateChapter
 }: AudiobookExportModalProps) {
   const { isLoading, isDBReady, providerRef, providerType, ttsModel, ttsInstructions, voice: configVoice, voiceSpeed, audioPlayerSpeed } = useConfig();
-  const { availableVoices } = useTTS();
+  const { availableVoices, documentLanguage } = useTTS();
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const [isGenerating, setIsGenerating] = useState(false);
   const [chapters, setChapters] = useState<TTSAudiobookChapter[]>([]);
@@ -125,8 +126,12 @@ export function AudiobookExportModal({
       postSpeed,
       format,
       ttsInstructions: providerModelPolicy.supportsInstructions ? ttsInstructions : undefined,
+      language: resolveTtsLanguage({
+        configuredLanguage: documentLanguage,
+        voice: nextVoice,
+      }),
     };
-  }, [savedSettings, audiobookVoice, configVoice, availableVoices, providerRef, providerType, ttsModel, ttsInstructions, effectiveNativeSpeed, postSpeed, format, providerModelPolicy.supportsInstructions]);
+  }, [savedSettings, audiobookVoice, configVoice, availableVoices, providerRef, providerType, ttsModel, ttsInstructions, effectiveNativeSpeed, postSpeed, format, providerModelPolicy.supportsInstructions, documentLanguage]);
 
   const fetchExistingChapters = useCallback(async (soft: boolean = false) => {
     if (soft) {

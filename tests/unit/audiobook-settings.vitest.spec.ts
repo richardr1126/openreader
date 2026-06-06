@@ -15,6 +15,7 @@ describe('coerceAudiobookGenerationSettings', () => {
       postSpeed: 1,
       format: 'mp3',
       ttsInstructions: 'keep calm',
+      language: 'ja-jp',
     });
 
     expect(result.migrated).toBe(false);
@@ -27,6 +28,7 @@ describe('coerceAudiobookGenerationSettings', () => {
       postSpeed: 1,
       format: 'mp3',
       ttsInstructions: 'keep calm',
+      language: 'ja-JP',
     });
   });
 

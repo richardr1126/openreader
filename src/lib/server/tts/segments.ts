@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
+import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
 import { locatorIdentityKey } from '@/lib/shared/tts-locator';
 import { ffprobeAudio } from '@/lib/server/audiobooks/chapters';
 import type {
@@ -32,6 +33,7 @@ function settingsCanonical(settings: TTSSegmentSettings): string {
     voice: settings.voice,
     speed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
     instructions: settings.ttsInstructions || '',
+    language: settings.language || 'en',
     format: 'mp3',
   });
 }
@@ -48,6 +50,7 @@ export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSe
     voice: settings.voice,
     nativeSpeed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
     ttsInstructions: settings.ttsInstructions || '',
+    language: settings.language || 'en',
   };
   // Postgres jsonb accepts the object directly; SQLite text needs a canonical JSON string.
   return process.env.POSTGRES_URL ? canonical : settingsCanonical(settings);
@@ -242,35 +245,24 @@ export async function probeAudioDurationMsFromBuffer(buffer: Buffer, signal?: Ab
   }
 }
 
-function alignWordsToText(sentence: string): Array<{ text: string; charStart: number; charEnd: number }> {
-  const words = sentence.match(/\S+/g) || [];
-  const aligned: Array<{ text: string; charStart: number; charEnd: number }> = [];
-  let cursor = 0;
-  const lowerSentence = sentence.toLowerCase();
-
-  for (const token of words) {
-    const clean = token.trim();
-    if (!clean) continue;
-    const idx = lowerSentence.indexOf(clean.toLowerCase(), cursor);
-    const start = idx >= 0 ? idx : cursor;
-    const end = Math.min(sentence.length, start + clean.length);
-    cursor = Math.max(cursor, end);
-    aligned.push({
-      text: clean,
-      charStart: start,
-      charEnd: end,
-    });
-  }
-
-  return aligned;
+function alignWordsToText(
+  sentence: string,
+  language?: string,
+): Array<{ text: string; charStart: number; charEnd: number }> {
+  return segmentWords(sentence, language).map((token) => ({
+    text: token.text,
+    charStart: token.start,
+    charEnd: token.end,
+  }));
 }
 
 export function buildProportionalAlignment(input: {
   sentence: string;
   sentenceIndex: number;
   durationMs: number;
+  language?: string;
 }): TTSSentenceAlignment {
-  const wordsWithOffsets = alignWordsToText(input.sentence);
+  const wordsWithOffsets = alignWordsToText(input.sentence, input.language);
   if (wordsWithOffsets.length === 0 || input.durationMs <= 0) {
     return {
       sentence: input.sentence,
@@ -281,7 +273,7 @@ export function buildProportionalAlignment(input: {
 
   const weighted = wordsWithOffsets.map((word) => ({
     ...word,
-    weight: Math.max(1, word.text.replace(/[^a-zA-Z0-9]/g, '').length),
+    weight: Math.max(1, normalizeUnicodeToken(word.text).length),
   }));
   const totalWeight = weighted.reduce((sum, word) => sum + word.weight, 0);
 

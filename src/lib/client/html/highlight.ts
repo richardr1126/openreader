@@ -18,6 +18,7 @@
  */
 import { CmpStr } from 'cmpstr';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
 
 export const HTML_SENTENCE_CLASS = 'openreader-html-highlight-sentence';
 export const HTML_WORD_CLASS = 'openreader-html-highlight-word';
@@ -53,21 +54,11 @@ interface SentenceState {
 let sentenceState: SentenceState | null = null;
 
 function normalizeWord(word: string): string {
-  return word
-    .toLowerCase()
-    .replace(/[\p{P}\p{S}]+/gu, '')
-    .trim();
+  return normalizeUnicodeToken(word);
 }
 
-function tokenizePattern(pattern: string): string[] {
-  const out: string[] = [];
-  const wordRe = /\S+/g;
-  let m: RegExpExecArray | null;
-  while ((m = wordRe.exec(pattern)) !== null) {
-    const norm = normalizeWord(m[0]);
-    if (norm) out.push(norm);
-  }
-  return out;
+function tokenizePattern(pattern: string, language?: string): string[] {
+  return segmentWords(pattern, language).map((token) => normalizeWord(token.text)).filter(Boolean);
 }
 
 function unwrap(span: HTMLSpanElement): void {
@@ -108,7 +99,11 @@ function isHighlightWrapper(node: Node | null): node is HTMLSpanElement {
   return el.classList.contains(HTML_SENTENCE_CLASS) || el.classList.contains(HTML_WORD_CLASS);
 }
 
-function collectDomTokens(root: HTMLElement, opts: { skipHighlightWraps: boolean } = { skipHighlightWraps: true }): DomToken[] {
+function collectDomTokens(
+  root: HTMLElement,
+  language?: string,
+  opts: { skipHighlightWraps: boolean } = { skipHighlightWraps: true },
+): DomToken[] {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
@@ -131,15 +126,13 @@ function collectDomTokens(root: HTMLElement, opts: { skipHighlightWraps: boolean
   while (current) {
     const textNode = current as Text;
     const text = textNode.nodeValue || '';
-    const wordRe = /\S+/g;
-    let m: RegExpExecArray | null;
-    while ((m = wordRe.exec(text)) !== null) {
-      const norm = normalizeWord(m[0]);
+    for (const token of segmentWords(text, language)) {
+      const norm = normalizeWord(token.text);
       if (!norm) continue;
       tokens.push({
         textNode,
-        startOffset: m.index,
-        endOffset: m.index + m[0].length,
+        startOffset: token.start,
+        endOffset: token.end,
         norm,
       });
     }
@@ -153,7 +146,7 @@ function collectDomTokens(root: HTMLElement, opts: { skipHighlightWraps: boolean
  * wrap is applied; lets us index just the words *within* the highlighted
  * sentence rather than the whole document).
  */
-function collectTokensInsideWraps(wraps: HTMLSpanElement[]): DomToken[] {
+function collectTokensInsideWraps(wraps: HTMLSpanElement[], language?: string): DomToken[] {
   const tokens: DomToken[] = [];
   for (const wrap of wraps) {
     const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT);
@@ -161,15 +154,13 @@ function collectTokensInsideWraps(wraps: HTMLSpanElement[]): DomToken[] {
     while (current) {
       const t = current as Text;
       const text = t.nodeValue || '';
-      const wordRe = /\S+/g;
-      let m: RegExpExecArray | null;
-      while ((m = wordRe.exec(text)) !== null) {
-        const norm = normalizeWord(m[0]);
+      for (const token of segmentWords(text, language)) {
+        const norm = normalizeWord(token.text);
         if (!norm) continue;
         tokens.push({
           textNode: t,
-          startOffset: m.index,
-          endOffset: m.index + m[0].length,
+          startOffset: token.start,
+          endOffset: token.end,
           norm,
         });
       }
@@ -260,14 +251,15 @@ function wrapTokenRange(tokens: DomToken[], start: number, end: number, classNam
 export function highlightHtmlSentence(
   container: HTMLElement | null | undefined,
   sentence: string | null | undefined,
+  language?: string,
 ): boolean {
   clearHtmlSentenceHighlight();
   if (!container || !sentence?.trim()) return false;
 
-  const patternTokens = tokenizePattern(sentence);
+  const patternTokens = tokenizePattern(sentence, language);
   if (!patternTokens.length) return false;
 
-  const domTokens = collectDomTokens(container);
+  const domTokens = collectDomTokens(container, language);
   if (!domTokens.length) return false;
 
   const win = findBestWindow(domTokens, patternTokens);
@@ -280,7 +272,7 @@ export function highlightHtmlSentence(
   // can look up individual word tokens without re-walking the doc.
   sentenceState = {
     sentence,
-    wordTokens: collectTokensInsideWraps(sentenceWraps),
+    wordTokens: collectTokensInsideWraps(sentenceWraps, language),
     alignment: null,
     wordToToken: null,
   };

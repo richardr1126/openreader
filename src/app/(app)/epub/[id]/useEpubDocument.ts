@@ -93,7 +93,16 @@ export interface EpubDocumentState {
  * Route-local EPUB reader hook.
  */
 export function useEpubDocument(documentId?: string): EpubDocumentState {
-  const { setText: setTTSText, currDocPage, currDocPages, setCurrDocPages, stop, skipToLocation, setIsEPUB } = useTTS();
+  const {
+    setText: setTTSText,
+    currDocPage,
+    currDocPages,
+    setCurrDocPages,
+    stop,
+    skipToLocation,
+    setIsEPUB,
+    resolvedLanguage,
+  } = useTTS();
   // Configuration context to get TTS settings
   const {
     apiKey,
@@ -145,6 +154,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     currentWordHighlightCfiRef: currentWordHighlightCfi,
     renderedTextMapsRef,
     wordHighlightMapCacheRef,
+    language: resolvedLanguage,
   });
 
   useEffect(() => () => {

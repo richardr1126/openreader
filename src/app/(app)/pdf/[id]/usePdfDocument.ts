@@ -91,6 +91,7 @@ export interface PdfDocumentState {
       parsedDocument?: ParsedPdfDocument | null;
       locator?: TTSSegmentLocator | null;
       useBlockGeometryOnly?: boolean;
+      language?: string;
     },
   ) => void;
   clearHighlights: () => void;
@@ -134,6 +135,7 @@ export function usePdfDocument(): PdfDocumentState {
     currDocPages,
     setCurrDocPages,
     setIsEPUB,
+    setDocumentLanguage,
     registerVisualPageChangeHandler,
   } = useTTS();
   const {
@@ -156,6 +158,10 @@ export function usePdfDocument(): PdfDocumentState {
   const [parseProgress, setParseProgress] = useState<PdfParseProgress | null>(null);
   const [, setActiveParseOpId] = useState<string | null>(null);
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
+  useEffect(() => {
+    setDocumentLanguage(documentSettings.language ?? 'auto');
+    lastPreparedPlaybackPageRef.current = null;
+  }, [documentSettings.language, setDocumentLanguage]);
   const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
   const [isAudioCombining] = useState(false);
   const audiobookAdapter = useMemo(() => createPdfAudiobookSourceAdapter({

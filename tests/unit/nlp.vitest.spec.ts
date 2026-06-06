@@ -46,6 +46,20 @@ describe('preprocessSentenceForAudio', () => {
 });
 
 describe('splitTextToTtsBlocks (PDF-oriented)', () => {
+  test('uses locale-aware sentence boundaries for Japanese and Chinese', () => {
+    expect(splitTextToTtsBlocks(
+      'これは最初の文です。これは二番目の文です。',
+      { language: 'ja', maxBlockLength: 50 },
+    )).toEqual(['これは最初の文です。これは二番目の文です。']);
+
+    const chinese = splitTextToTtsBlocks(
+      Array(12).fill('这是一个用于测试分句的中文句子。').join(''),
+      { language: 'zh', maxBlockLength: 50 },
+    );
+    expect(chinese.length).toBeGreaterThan(1);
+    expect(chinese.join('')).toContain('用于测试分句');
+  });
+
   test('returns [] for empty input', () => {
     expect(splitTextToTtsBlocks('')).toEqual([]);
     expect(splitTextToTtsBlocks('   ')).toEqual([]);
@@ -200,5 +214,12 @@ describe('normalizeTextForTts', () => {
     expect(normalized).not.toMatch(/\n/);
     expect(normalized).not.toMatch(/\s{2,}/);
     expect(normalized.length).toBeGreaterThan(0);
+  });
+
+  test('does not insert spaces between normalized Japanese blocks', () => {
+    expect(normalizeTextForTts('最初の文です。次の文です。', {
+      language: 'ja',
+      maxBlockLength: 7,
+    })).toBe('最初の文です。次の文です。');
   });
 });
