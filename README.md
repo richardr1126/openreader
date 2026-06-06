@@ -10,7 +10,7 @@
 
 # 📄🔊 OpenReader
 
-OpenReader is an open source, self-host-friendly text-to-speech document reader built with Next.js for **EPUB, PDF, TXT, MD, and DOCX** with synchronized read-along playback.
+OpenReader is an open source, self-host-friendly text-to-speech document reader built with Next.js for **EPUB, PDF, TXT, MD, and DOCX** with multilingual, synchronized read-along playback.
 
 > Previously named **OpenReader-WebUI**.
 
@@ -22,6 +22,7 @@ OpenReader is an open source, self-host-friendly text-to-speech document reader 
 - ⏱️ **Word-by-word highlighting** via ONNX Whisper alignment through the compute worker control plane (NATS JetStream-backed).
 - ⚡ **Segment-based read-along** for EPUB, PDF, TXT, MD, and DOCX — sentence-aware TTS with cached audio segments, background preloading, and resumable playback.
 - 🎯 **Multi-provider TTS** — self-hosted OpenAI-compatible servers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI) or cloud APIs (OpenAI, Replicate, DeepInfra).
+- 🌐 **Multilingual support** — choose a document language for language-aware narration and highlighting. Available languages depend on the configured TTS provider and voice.
 - 🎧 **Audiobook export** in `m4b`/`mp3` with resumable chapter processing.
 - 🗂️ **Flexible backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync.
 - 🐳 **Self-host friendly** — Docker (amd64/arm64), built-in auth/session support, and automatic startup migrations.

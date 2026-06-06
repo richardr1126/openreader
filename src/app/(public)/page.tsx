@@ -6,9 +6,9 @@ import { ButtonAnchor, ButtonLink } from '@/components/ui';
 export const metadata: Metadata = {
   title: 'Open Source Read-Along Workspace',
   description:
-    'OpenReader converts EPUB, PDF, TXT, MD, and DOCX files into synchronized read-along audio with multi-provider text-to-speech support.',
+    'OpenReader converts EPUB, PDF, TXT, MD, and DOCX files into multilingual, synchronized read-along audio with multi-provider text-to-speech support.',
   keywords:
-    'OpenReader, document reader, PDF read aloud, EPUB read aloud, text to speech, OpenAI compatible TTS, self-hosted reader',
+    'OpenReader, document reader, multilingual text to speech, PDF read aloud, EPUB read aloud, OpenAI compatible TTS, self-hosted reader',
   alternates: {
     canonical: '/',
   },
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     siteName: 'OpenReader',
     title: 'OpenReader | Read documents with synchronized audio',
     description:
-      'Upload documents and turn them into a synchronized listening experience with word-level highlighting and audiobook export.',
+      'Upload documents and turn them into a multilingual, synchronized listening experience with word-level highlighting and audiobook export.',
     images: [
       {
         url: '/web-app-manifest-512x512.png',
@@ -91,7 +91,7 @@ export default async function LandingPage() {
             <p className="public-hero-copy">
               OpenReader turns EPUB, PDF, TXT, Markdown, and DOCX into a
               synchronized read-along surface, reading your original file in a
-              native viewer with genuine text-to-speech, word-level
+              native viewer with multilingual text-to-speech, language-aware
               highlighting, and audiobook export. It&rsquo;s open source, and
               entirely yours to self-host.
             </p>
@@ -126,7 +126,7 @@ export default async function LandingPage() {
               <span className="public-reader-dot" data-tone="b" />
               <span className="public-reader-dot" data-tone="c" />
               <span className="public-reader-file">wizard-of-oz.epub</span>
-              <span className="public-reader-voice">Kokoro · af_sky</span>
+              <span className="public-reader-voice">English · Kokoro · af_sky</span>
             </div>
 
             <div className="public-reader-body">
@@ -203,7 +203,8 @@ export default async function LandingPage() {
               <p>
                 Choose a provider and model: hosted OpenAI, Replicate, or
                 DeepInfra, or your own self-hosted Kokoro, KittenTTS, or Orpheus
-                server. Set the speed to your pace.
+                server. Set the document language, choose a compatible voice,
+                and adjust the speed to your pace.
               </p>
             </li>
             <li className="public-step">
@@ -251,11 +252,11 @@ export default async function LandingPage() {
             </article>
 
             <article className="public-feature">
-              <span className="public-feature-kicker">Voices</span>
-              <h3>Multi-provider TTS</h3>
+              <span className="public-feature-kicker">Languages</span>
+              <h3>Multilingual support</h3>
               <p>
-                Mix cloud APIs with OpenAI-compatible local servers. Bring your
-                own keys and endpoints, with no lock-in to a single vendor.
+                Choose a document language for language-aware narration,
+                highlighting, and compatible voice selection.
               </p>
             </article>
 
