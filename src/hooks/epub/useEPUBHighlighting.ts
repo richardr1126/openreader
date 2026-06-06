@@ -4,12 +4,15 @@ import { useCallback, useEffect, type MutableRefObject, type RefObject } from 'r
 import type { Rendition } from 'epubjs';
 
 import {
-  buildMonotonicWordToTokenMap,
   buildWordHighlightCacheKey,
   resolveAlignmentWordSourceRange,
   tokenizeCanonicalSegment,
   type EpubCanonicalWordToken,
 } from '@/lib/client/epub/epub-word-highlight';
+import {
+  buildAlignmentTokenRanges,
+  type HighlightTokenRange,
+} from '@/lib/client/highlight-token-alignment';
 import {
   createRangeFromMappedOffsets,
   resolveVisibleSegmentRange,
@@ -20,7 +23,7 @@ import type { TTSSentenceAlignment } from '@/types/tts';
 
 export type EpubWordHighlightMapCache = {
   key: string;
-  wordToToken: number[];
+  wordToTokenRange: Array<HighlightTokenRange | null>;
   tokens: EpubCanonicalWordToken[];
 };
 
@@ -159,19 +162,28 @@ export function useEPUBHighlighting({
       wordHighlightMapCacheRef.current = {
         key: cacheKey,
         tokens,
-        wordToToken: buildMonotonicWordToTokenMap(words, tokens),
+        wordToTokenRange: buildAlignmentTokenRanges(
+          words,
+          tokens.map((token) => token.norm),
+          { minimumSimilarity: 0.8 },
+        ),
       };
     }
 
     const cached = wordHighlightMapCacheRef.current;
-    const tokenIndex = cached.wordToToken[wordIndex] ?? -1;
-    if (tokenIndex < 0) return;
+    const tokenRange = cached.wordToTokenRange[wordIndex];
+    if (!tokenRange) return;
 
-    const token = cached.tokens[tokenIndex];
-    if (!token) return;
-    if (token.sourceStart < resolved.startOffset || token.sourceEnd > resolved.endOffset) return;
+    const firstToken = cached.tokens[tokenRange.start];
+    const lastToken = cached.tokens[tokenRange.end];
+    if (!firstToken || !lastToken) return;
+    if (firstToken.sourceStart < resolved.startOffset || lastToken.sourceEnd > resolved.endOffset) return;
 
-    const wordRange = createRangeFromMappedOffsets(resolved.map, token.sourceStart, token.sourceEnd);
+    const wordRange = createRangeFromMappedOffsets(
+      resolved.map,
+      firstToken.sourceStart,
+      lastToken.sourceEnd,
+    );
     if (!wordRange) return;
 
     try {

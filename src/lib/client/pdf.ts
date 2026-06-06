@@ -3,11 +3,12 @@ import { TextLayer } from 'pdfjs-dist';
 import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
-import { CmpStr } from 'cmpstr';
 import type { TTSSegmentLocator } from '@/types/client';
-import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
-
-const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
+import { segmentWords } from '@/lib/shared/language';
+import {
+  buildAlignmentTokenRanges,
+  type HighlightTokenRange,
+} from '@/lib/client/highlight-token-alignment';
 
 // Worker coordination for offloading highlight token matching
 interface HighlightTokenMatchRequest {
@@ -152,7 +153,7 @@ let lastSpanNodes: HTMLElement[] = [];
 let lastTokens: PDFToken[] = [];
 let lastSentenceTokenWindow: { start: number; end: number } | null = null;
 let lastSentencePattern: string | null = null;
-let lastSentenceWordToTokenMap: number[] | null = null;
+let lastSentenceWordToTokenRangeMap: Array<HighlightTokenRange | null> | null = null;
 
 function getOrCreateHighlightLayer(span: HTMLElement): {
   layer: HTMLElement;
@@ -180,9 +181,6 @@ function getOrCreateHighlightLayer(span: HTMLElement): {
 
   return { layer, pageElement, pageRect: pageElement.getBoundingClientRect() };
 }
-
-const normalizeWordForMatch = (text: string): string =>
-  normalizeUnicodeToken(text);
 
 // Highlighting functions
 let highlightPatternSeq = 0;
@@ -421,7 +419,7 @@ export function highlightPattern(
   const cleanPattern = pattern.trim().replace(/\s+/g, ' ');
   if (!cleanPattern) return;
   lastSentencePattern = cleanPattern;
-  lastSentenceWordToTokenMap = null;
+  lastSentenceWordToTokenRangeMap = null;
   lastSentenceTokenWindow = null;
   const parsedDocument = options?.parsedDocument ?? null;
   const locator = options?.locator ?? null;
@@ -672,158 +670,61 @@ export function highlightWordIndex(
   const end = lastSentenceTokenWindow.end;
   if (end < start) return;
 
-  // Lazily build or refresh the mapping from alignment word
-  // indices to PDF token indices for this sentence window.
+  // Lazily build or refresh the shared mapping from alignment words to PDF
+  // token ranges for this sentence window.
   if (
-    !lastSentenceWordToTokenMap ||
-    lastSentenceWordToTokenMap.length !== words.length
+    !lastSentenceWordToTokenRangeMap ||
+    lastSentenceWordToTokenRangeMap.length !== words.length
   ) {
-    const pdfFiltered: { tokenIndex: number; norm: string }[] = [];
-    for (let i = start; i <= end; i++) {
-      const norm = normalizeWordForMatch(lastTokens[i].text);
-      if (!norm) continue;
-      pdfFiltered.push({ tokenIndex: i, norm });
-    }
-
-    const ttsFiltered: { wordIndex: number; norm: string }[] = [];
-    for (let i = 0; i < words.length; i++) {
-      const norm = normalizeWordForMatch(words[i].text);
-      if (!norm) continue;
-      ttsFiltered.push({ wordIndex: i, norm });
-    }
-
-    const wordToToken = new Array<number>(words.length).fill(-1);
-
-    const m = pdfFiltered.length;
-    const n = ttsFiltered.length;
-
-    if (m && n) {
-      const dp: number[][] = Array.from({ length: m + 1 }, () =>
-        new Array<number>(n + 1).fill(Number.POSITIVE_INFINITY)
-      );
-      const bt: number[][] = Array.from({ length: m + 1 }, () =>
-        new Array<number>(n + 1).fill(0)
-      ); // 0=diag,1=up,2=left
-
-      dp[0][0] = 0;
-      const GAP_COST = 0.7;
-
-      for (let i = 0; i <= m; i++) {
-        for (let j = 0; j <= n; j++) {
-          if (i > 0 && j > 0) {
-            const a = pdfFiltered[i - 1].norm;
-            const b = ttsFiltered[j - 1].norm;
-            const sim = cmp.compare(a, b);
-            const subCost = 1 - sim;
-            const cand = dp[i - 1][j - 1] + subCost;
-            if (cand < dp[i][j]) {
-              dp[i][j] = cand;
-              bt[i][j] = 0;
-            }
-          }
-          if (i > 0) {
-            const cand = dp[i - 1][j] + GAP_COST;
-            if (cand < dp[i][j]) {
-              dp[i][j] = cand;
-              bt[i][j] = 1;
-            }
-          }
-          if (j > 0) {
-            const cand = dp[i][j - 1] + GAP_COST;
-            if (cand < dp[i][j]) {
-              dp[i][j] = cand;
-              bt[i][j] = 2;
-            }
-          }
-        }
-      }
-
-      let i = m;
-      let j = n;
-      while (i > 0 || j > 0) {
-        const move = bt[i][j];
-        if (i > 0 && j > 0 && move === 0) {
-          const pdfIdx = pdfFiltered[i - 1].tokenIndex;
-          const ttsIdx = ttsFiltered[j - 1].wordIndex;
-          if (wordToToken[ttsIdx] === -1) {
-            wordToToken[ttsIdx] = pdfIdx;
-          }
-          i -= 1;
-          j -= 1;
-        } else if (i > 0 && (move === 1 || j === 0)) {
-          i -= 1;
-        } else if (j > 0 && (move === 2 || i === 0)) {
-          j -= 1;
-        } else {
-          break;
-        }
-      }
-
-      // Propagate nearest known mapping to fill gaps
-      let lastSeen = -1;
-      for (let k = 0; k < wordToToken.length; k++) {
-        if (wordToToken[k] !== -1) {
-          lastSeen = wordToToken[k];
-        } else if (lastSeen !== -1) {
-          wordToToken[k] = lastSeen;
-        }
-      }
-      let nextSeen = -1;
-      for (let k = wordToToken.length - 1; k >= 0; k--) {
-        if (wordToToken[k] !== -1) {
-          nextSeen = wordToToken[k];
-        } else if (nextSeen !== -1) {
-          wordToToken[k] = nextSeen;
-        }
-      }
-    }
-
-    lastSentenceWordToTokenMap = wordToToken;
+    const relativeRanges = buildAlignmentTokenRanges(
+      words,
+      lastTokens.slice(start, end + 1).map((token) => token.text),
+      { fillGaps: true },
+    );
+    lastSentenceWordToTokenRangeMap = relativeRanges.map((range) => (
+      range ? { start: range.start + start, end: range.end + start } : null
+    ));
   }
 
-  const mappedIndex =
-    lastSentenceWordToTokenMap && wordIndex < lastSentenceWordToTokenMap.length
-      ? lastSentenceWordToTokenMap[wordIndex]
-      : -1;
+  const tokenRange = lastSentenceWordToTokenRangeMap[wordIndex];
+  if (!tokenRange) return;
 
-  if (mappedIndex === -1) return;
+  for (let tokenIndex = tokenRange.start; tokenIndex <= tokenRange.end; tokenIndex += 1) {
+    const token = lastTokens[tokenIndex];
+    const span = lastSpanNodes[token.spanIndex];
+    if (!span) continue;
 
-  const chosenTokenIndex = mappedIndex;
+    const node = token.textNode;
+    if (!node || node.nodeType !== Node.TEXT_NODE) continue;
 
-  const token = lastTokens[chosenTokenIndex];
-  const span = lastSpanNodes[token.spanIndex];
-  if (!span) return;
+    try {
+      const range = document.createRange();
+      range.setStart(node, token.startOffset);
+      range.setEnd(node, token.endOffset);
 
-  const node = token.textNode;
-  if (!node || node.nodeType !== Node.TEXT_NODE) return;
+      const highlightTarget = getOrCreateHighlightLayer(span);
+      if (!highlightTarget) continue;
 
-  try {
-    const range = document.createRange();
-    range.setStart(node, token.startOffset);
-    range.setEnd(node, token.endOffset);
+      const { layer: highlightLayer, pageRect } = highlightTarget;
+      const rects = Array.from(range.getClientRects());
 
-    const highlightTarget = getOrCreateHighlightLayer(span);
-    if (!highlightTarget) return;
-
-    const { layer: highlightLayer, pageRect } = highlightTarget;
-    const rects = Array.from(range.getClientRects());
-
-    rects.forEach((rect) => {
-      const highlight = document.createElement('div');
-      highlight.className = 'pdf-word-highlight-overlay';
-      highlight.style.position = 'absolute';
-      highlight.style.backgroundColor = 'var(--accent)';
-      highlight.style.opacity = '0.4';
-      highlight.style.pointerEvents = 'none';
-      highlight.style.left = `${rect.left - pageRect.left}px`;
-      highlight.style.top = `${rect.top - pageRect.top}px`;
-      highlight.style.width = `${rect.width}px`;
-      highlight.style.height = `${rect.height}px`;
-      highlight.style.zIndex = '2';
-      highlightLayer.appendChild(highlight);
-    });
-  } catch {
-    // Ignore range errors
+      rects.forEach((rect) => {
+        const highlight = document.createElement('div');
+        highlight.className = 'pdf-word-highlight-overlay';
+        highlight.style.position = 'absolute';
+        highlight.style.backgroundColor = 'var(--accent)';
+        highlight.style.opacity = '0.4';
+        highlight.style.pointerEvents = 'none';
+        highlight.style.left = `${rect.left - pageRect.left}px`;
+        highlight.style.top = `${rect.top - pageRect.top}px`;
+        highlight.style.width = `${rect.width}px`;
+        highlight.style.height = `${rect.height}px`;
+        highlight.style.zIndex = '2';
+        highlightLayer.appendChild(highlight);
+      });
+    } catch {
+      // Ignore range errors
+    }
   }
 }
 

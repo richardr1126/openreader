@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { findBestHighlightTokenMatch } from './pdf-highlight-match';
+import { findBestHighlightTokenMatch } from './highlight-token-alignment';
 
 interface TokenMatchRequest {
   id: string;
@@ -43,7 +43,10 @@ self.onmessage = (event: MessageEvent<TokenMatchRequest>) => {
   const response: TokenMatchResponse = {
     id,
     type: 'tokenMatchResult',
-    ...result,
+    bestStart: result.start,
+    bestEnd: result.end,
+    rating: result.rating,
+    lengthDiff: result.lengthDiff,
   };
 
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(response);
