@@ -521,7 +521,6 @@ async function addReplicateLanguageInput(
   input: Record<string, unknown>,
   request: ResolvedServerTTSRequest,
 ): Promise<Record<string, unknown>> {
-  if (!request.language) return input;
   if (request.model === REPLICATE_KOKORO_82M_VERSIONED_MODEL) {
     const languageCode = resolveReplicateKokoroLanguageCode({
       language: request.language,
@@ -532,6 +531,7 @@ async function addReplicateLanguageInput(
     }
     return input;
   }
+  if (!request.language) return input;
   const languageInput = await resolveReplicateLanguageInput({
     provider: 'replicate',
     model: request.model as string,

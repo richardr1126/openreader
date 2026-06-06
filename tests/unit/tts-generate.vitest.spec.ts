@@ -105,5 +105,20 @@ describe('Replicate language schema values', () => {
       voice: 'bf_emma',
       language_code: 'b',
     });
+
+    await expect(buildReplicateInput({
+      text: 'Hello world',
+      voice: 'af_sarah',
+      speed: 1,
+      format: 'mp3',
+      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+      provider: 'replicate',
+      apiKey: 'r8_token',
+      testNamespace: null,
+    })).resolves.toEqual({
+      text: 'Hello world',
+      voice: 'af_sarah',
+      language_code: 'a',
+    });
   });
 });
