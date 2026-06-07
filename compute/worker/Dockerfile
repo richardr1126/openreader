@@ -4,7 +4,7 @@ RUN npm install -g pnpm@11.1.2
 
 WORKDIR /workspace
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY compute/worker/package.json compute/worker/package.json
 COPY compute/core/package.json compute/core/package.json
 
