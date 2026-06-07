@@ -24,6 +24,7 @@ import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
+import { withDocumentMutationLock } from '@/lib/server/documents/mutation-lock';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,47 +150,49 @@ async function finalizeOne(input: {
     : input.upload.name;
   const documentId = createHash('sha256').update(finalizedBody).digest('hex');
 
-  try {
-    await headDocumentBlob(documentId, input.namespace);
-  } catch (error) {
-    if (!isMissingBlobError(error)) throw error;
-    if (!isDocxUpload) {
-      try {
-        await copyTempDocumentBlobToDocument(
-          input.upload.token,
-          input.userId,
-          documentId,
-          input.namespace,
-          finalizedContentType,
-          { ifNoneMatch: true },
-        );
-      } catch (copyError) {
-        if (!isPreconditionFailed(copyError)) throw copyError;
-      }
-    } else {
-      try {
-        await putDocumentBlob(
-          documentId,
-          finalizedBody,
-          finalizedContentType,
-          input.namespace,
-          { ifNoneMatch: true },
-        );
-      } catch (putError) {
-        if (!isPreconditionFailed(putError)) throw putError;
+  const stored = await withDocumentMutationLock(documentId, async () => {
+    try {
+      await headDocumentBlob(documentId, input.namespace);
+    } catch (error) {
+      if (!isMissingBlobError(error)) throw error;
+      if (!isDocxUpload) {
+        try {
+          await copyTempDocumentBlobToDocument(
+            input.upload.token,
+            input.userId,
+            documentId,
+            input.namespace,
+            finalizedContentType,
+            { ifNoneMatch: true },
+          );
+        } catch (copyError) {
+          if (!isPreconditionFailed(copyError)) throw copyError;
+        }
+      } else {
+        try {
+          await putDocumentBlob(
+            documentId,
+            finalizedBody,
+            finalizedContentType,
+            input.namespace,
+            { ifNoneMatch: true },
+          );
+        } catch (putError) {
+          if (!isPreconditionFailed(putError)) throw putError;
+        }
       }
     }
-  }
 
-  const canonicalHead = await headDocumentBlob(documentId, input.namespace);
-  const stored = await registerUploadedDocument({
-    documentId,
-    userId: input.userId,
-    namespace: input.namespace,
-    name: finalizedName,
-    type: finalizedType,
-    size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
-    lastModified: input.upload.lastModified,
+    const canonicalHead = await headDocumentBlob(documentId, input.namespace);
+    return registerUploadedDocument({
+      documentId,
+      userId: input.userId,
+      namespace: input.namespace,
+      name: finalizedName,
+      type: finalizedType,
+      size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
+      lastModified: input.upload.lastModified,
+    });
   });
 
   await putTempDocumentFinalizeReceipt(

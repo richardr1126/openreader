@@ -49,7 +49,13 @@ import type {
   WorkerOperationState,
   PdfLayoutProgress,
 } from '@openreader/compute-core/api-contracts';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import {
   JetStreamOperationEventStream,
   OP_EVENTS_SUBJECT_WILDCARD,
@@ -64,6 +70,7 @@ import {
 } from './orphan-recovery';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
+import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
 
 const JOBS_STREAM_NAME = 'compute_jobs';
 const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
@@ -701,6 +708,42 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     return toArrayBuffer(new Uint8Array(bytes));
   };
 
+  const objectExists = async (key: string): Promise<boolean> => {
+    if (!s3) {
+      throw new Error('S3 access is disabled for this worker app instance');
+    }
+    const safeKey = ensureSafeKey(key);
+    try {
+      await s3.send(new HeadObjectCommand({
+        Bucket: s3Bucket,
+        Key: safeKey,
+      }));
+      return true;
+    } catch (error) {
+      const maybe = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+      if (
+        maybe.$metadata?.httpStatusCode === 404
+        || maybe.name === 'NotFound'
+        || maybe.name === 'NoSuchKey'
+        || maybe.Code === 'NotFound'
+        || maybe.Code === 'NoSuchKey'
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  };
+
+  const deleteObjectByKey = async (key: string): Promise<void> => {
+    if (!s3) {
+      throw new Error('S3 access is disabled for this worker app instance');
+    }
+    await s3.send(new DeleteObjectCommand({
+      Bucket: s3Bucket,
+      Key: ensureSafeKey(key),
+    }));
+  };
+
   const putParsedObject = async (documentId: string, namespace: string | null, parsed: unknown): Promise<string> => {
     if (!s3) {
       throw new Error('S3 access is disabled for this worker app instance');
@@ -1175,7 +1218,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         phase: 'merge',
       });
     }
-    const parsedObjectKey = await putParsedObject(parsed.documentId, parsed.namespace, result.parsed);
+    const parsedObjectKey = await persistParsedPdfWhileSourceExists({
+      sourceObjectKey: parsed.documentObjectKey,
+      sourceExists: objectExists,
+      putParsedObject: () => putParsedObject(parsed.documentId, parsed.namespace, result.parsed),
+      deleteParsedObject: deleteObjectByKey,
+    });
     return {
       parsedObjectKey,
       timing: {

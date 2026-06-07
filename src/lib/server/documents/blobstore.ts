@@ -506,11 +506,14 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   const nsSegment = ns ? `ns/${ns}/` : '';
   const parsedPrefix = `${cfg.prefix}/documents_v1/parsed_v2/${nsSegment}${id}/`;
 
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey }));
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey }));
   await deleteDocumentPrefix(parsedPrefix);
   await deleteDocumentPrefix(`${key}/`);
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey }));
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey }));
+  // Delete the source after the initial derived-artifact cleanup, then sweep
+  // parsed output once more to catch a worker that finished during deletion.
+  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
+  await deleteDocumentPrefix(parsedPrefix);
 }
 
 export async function deleteTempDocumentUpload(token: string, userId: string, namespace: string | null): Promise<void> {

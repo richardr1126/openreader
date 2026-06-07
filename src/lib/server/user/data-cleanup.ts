@@ -21,6 +21,7 @@ import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks/
 import { deleteTtsSegmentPrefix } from '@/lib/server/tts/segments-blobstore';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
+import { withDocumentMutationLock } from '@/lib/server/documents/mutation-lock';
 
 type DocumentRow = typeof documents.$inferSelect;
 type AudiobookRow = { id: string };
@@ -114,68 +115,72 @@ export async function deleteUserStorageData(
   };
 
   for (const doc of userDocs) {
-    const { removedDoc, isLastOwner } = await removeOwnershipAndCheckLastOwner(doc);
-    if (!removedDoc) continue;
-    removedDocs.push(removedDoc);
+    await withDocumentMutationLock(doc.id, async () => {
+      const { removedDoc, isLastOwner } = await removeOwnershipAndCheckLastOwner(doc);
+      if (!removedDoc) return;
+      removedDocs.push(removedDoc);
 
-    if (s3Enabled && isLastOwner) {
-      try {
-        await deleteDocumentBlob(doc.id, namespace);
-        docsDeleted++;
-      } catch (error) {
-        failures.push(error);
-        logDegraded(serverLogger, {
-          event: 'user.data_cleanup.document_blob_delete.failed',
-          msg: 'Failed to delete document blob',
-          step: 'delete_document_blob',
-          context: {
-            documentId: doc.id,
-            userIdHash: hashForLog(userId),
-          },
-          error,
-        });
+      if (s3Enabled && isLastOwner) {
+        try {
+          await deleteDocumentPreviewArtifacts(doc.id, namespace);
+        } catch (error) {
+          failures.push(error);
+          logDegraded(serverLogger, {
+            event: 'user.data_cleanup.document_preview_delete.failed',
+            msg: 'Failed to delete preview artifacts',
+            step: 'delete_document_preview_artifacts',
+            context: {
+              documentId: doc.id,
+              userIdHash: hashForLog(userId),
+            },
+            error,
+          });
+        }
       }
 
-      try {
-        await deleteDocumentPreviewArtifacts(doc.id, namespace);
-      } catch (error) {
-        failures.push(error);
-        logDegraded(serverLogger, {
-          event: 'user.data_cleanup.document_preview_delete.failed',
-          msg: 'Failed to delete preview artifacts',
-          step: 'delete_document_preview_artifacts',
-          context: {
-            documentId: doc.id,
-            userIdHash: hashForLog(userId),
-          },
-          error,
-        });
+      // Preview metadata is global, so only the canonical final-owner pass may
+      // remove it.
+      if (namespace === null && isLastOwner) {
+        try {
+          await deleteDocumentPreviewRows(doc.id, namespace);
+        } catch (error) {
+          failures.push(error);
+          logDegraded(serverLogger, {
+            event: 'user.data_cleanup.document_preview_rows_delete.failed',
+            msg: 'Failed to delete preview rows',
+            step: 'delete_document_preview_rows',
+            context: {
+              documentId: doc.id,
+              userIdHash: hashForLog(userId),
+            },
+            error,
+          });
+        }
       }
-    }
 
-    // Preview metadata is global, so only the canonical final-owner pass may
-    // remove it.
-    if (namespace === null && isLastOwner) {
-      try {
-        await deleteDocumentPreviewRows(doc.id, namespace);
-      } catch (error) {
-        failures.push(error);
-        logDegraded(serverLogger, {
-          event: 'user.data_cleanup.document_preview_rows_delete.failed',
-          msg: 'Failed to delete preview rows',
-          step: 'delete_document_preview_rows',
-          context: {
-            documentId: doc.id,
-            userIdHash: hashForLog(userId),
-          },
-          error,
-        });
+      if (s3Enabled && isLastOwner) {
+        try {
+          await deleteDocumentBlob(doc.id, namespace);
+          docsDeleted++;
+        } catch (error) {
+          failures.push(error);
+          logDegraded(serverLogger, {
+            event: 'user.data_cleanup.document_blob_delete.failed',
+            msg: 'Failed to delete document blob',
+            step: 'delete_document_blob',
+            context: {
+              documentId: doc.id,
+              userIdHash: hashForLog(userId),
+            },
+            error,
+          });
+        }
       }
-    }
 
-    if (namespace !== null) {
-      await restoreRemovedDocs();
-    }
+      if (namespace !== null) {
+        await restoreRemovedDocs();
+      }
+    });
   }
 
   // --- Audiobooks ---

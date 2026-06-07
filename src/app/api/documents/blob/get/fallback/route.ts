@@ -9,7 +9,7 @@ import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace'
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
+import { deleteOwnedDocument } from '@/lib/server/documents/delete-owned';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,14 +81,11 @@ export async function GET(req: NextRequest) {
       });
     } catch (error) {
       if (isMissingBlobError(error)) {
-        await deleteDocumentTtsSegmentCache({
+        await deleteOwnedDocument({
           userId: doc.userId,
           documentId: id,
           namespace: testNamespace,
         });
-        await db
-          .delete(documents)
-          .where(and(eq(documents.id, id), eq(documents.userId, doc.userId)));
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
       throw error;

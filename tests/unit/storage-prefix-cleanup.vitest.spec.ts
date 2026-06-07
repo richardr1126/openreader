@@ -11,7 +11,7 @@ vi.mock('@/lib/server/storage/s3', () => ({
 }));
 
 import { deleteAudiobookPrefix } from '../../src/lib/server/audiobooks/blobstore';
-import { deleteDocumentPrefix } from '../../src/lib/server/documents/blobstore';
+import { deleteDocumentBlob, deleteDocumentPrefix } from '../../src/lib/server/documents/blobstore';
 
 describe('storage prefix cleanup', () => {
   beforeEach(() => {
@@ -46,5 +46,43 @@ describe('storage prefix cleanup', () => {
       });
 
     await expect(removePrefix('prefix/')).rejects.toThrow('Failed deleting 1');
+  });
+
+  test('deletes the source after derived artifacts and then sweeps late parsed output', async () => {
+    mocks.send
+      .mockResolvedValueOnce({ Contents: [], IsTruncated: false })
+      .mockResolvedValueOnce({ Contents: [], IsTruncated: false })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Contents: [], IsTruncated: false });
+
+    const documentId = 'a'.repeat(64);
+    await deleteDocumentBlob(documentId, null);
+
+    const commands = mocks.send.mock.calls.map(([command]) => command);
+    const sourceDeleteIndex = commands.findIndex((command) =>
+      command.constructor.name === 'DeleteObjectCommand'
+      && command.input.Key === `openreader-test/documents_v1/${documentId}`);
+    const finalCommand = commands.at(-1);
+
+    expect(sourceDeleteIndex).toBeGreaterThan(1);
+    expect(finalCommand?.constructor.name).toBe('ListObjectsV2Command');
+    expect(finalCommand?.input.Prefix).toBe(
+      `openreader-test/documents_v1/parsed_v2/${documentId}/`,
+    );
+  });
+
+  test('keeps the source document when derived-artifact cleanup fails', async () => {
+    mocks.send.mockRejectedValueOnce(new Error('list failed'));
+
+    const documentId = 'b'.repeat(64);
+    await expect(deleteDocumentBlob(documentId, null)).rejects.toThrow('list failed');
+
+    const sourceDelete = mocks.send.mock.calls
+      .map(([command]) => command)
+      .find((command) => command.constructor.name === 'DeleteObjectCommand'
+        && command.input.Key === `openreader-test/documents_v1/${documentId}`);
+    expect(sourceDelete).toBeUndefined();
   });
 });

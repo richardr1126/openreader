@@ -12,6 +12,7 @@ import {
 import { isS3Configured } from '../storage/s3';
 import { logDegraded } from '../errors/logging';
 import { hashForLog, serverLogger } from '../logger';
+import { deleteOwnedDocument } from '../documents/delete-owned';
 
 type AudiobookRow = {
   id: string;
@@ -106,7 +107,7 @@ export async function claimAnonymousData(userId: string, unclaimedUserId: string
   ]);
 
   const [documentsClaimed, audiobooksClaimed, preferencesClaimed, progressClaimed] = await Promise.all([
-    transferUserDocuments(unclaimedUserId, userId),
+    transferUserDocuments(unclaimedUserId, userId, { namespace }),
     transferUserAudiobooks(unclaimedUserId, userId, namespace),
     transferUserPreferences(unclaimedUserId, userId),
     transferUserProgress(unclaimedUserId, userId),
@@ -154,7 +155,7 @@ export async function transferUserDocuments(
   fromUserId: string,
   toUserId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { db?: any },
+  options?: { db?: any; namespace?: string | null },
 ): Promise<number> {
   if (!fromUserId || !toUserId) return 0;
   if (fromUserId === toUserId) return 0;
@@ -163,6 +164,21 @@ export async function transferUserDocuments(
 
   const rows = await database.select().from(documents).where(eq(documents.userId, fromUserId));
   if (rows.length === 0) return 0;
+
+  if (!options?.db && isS3Configured()) {
+    for (const row of rows) {
+      await db
+        .insert(documents)
+        .values({ ...row, userId: toUserId })
+        .onConflictDoNothing();
+      await deleteOwnedDocument({
+        userId: fromUserId,
+        documentId: row.id,
+        namespace: options?.namespace ?? null,
+      });
+    }
+    return rows.length;
+  }
 
   await database
     .insert(documents)

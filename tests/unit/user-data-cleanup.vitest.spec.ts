@@ -52,6 +52,7 @@ vi.mock('@/db', () => {
     insert: vi.fn(() => ({
       values: mocks.insertValues,
     })),
+    execute: vi.fn(async () => undefined),
     transaction: vi.fn((callback: (tx: unknown) => unknown) => callback(database)),
   };
   return { db: database };

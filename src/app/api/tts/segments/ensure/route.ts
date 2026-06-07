@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
+import { documents, ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
 import { isS3Configured, getS3Config } from '@/lib/server/storage/s3';
 import { generateTTSBuffer } from '@/lib/server/tts/generate';
 import {
   getTtsSegmentAudioObject,
+  deleteTtsSegmentAudioObjects,
   putTtsSegmentAudioObject,
 } from '@/lib/server/tts/segments-blobstore';
 import {
@@ -300,6 +301,28 @@ export async function POST(request: NextRequest) {
 
     const existingById = new Map(rows.map((row) => [row.segmentId, row]));
     const manifest: TTSSegmentManifestItem[] = [];
+    const documentOwnershipExists = async (): Promise<boolean> => {
+      const [row] = await db
+        .select({ id: documents.id })
+        .from(documents)
+        .where(and(
+          eq(documents.id, parsed.documentId),
+          eq(documents.userId, scope.storageUserId),
+        ))
+        .limit(1);
+      return Boolean(row);
+    };
+    const assertDocumentOwnership = async (): Promise<void> => {
+      if (!await documentOwnershipExists()) {
+        throw new Error('Document ownership was removed during TTS generation');
+      }
+    };
+    const deleteAbandonedSegmentMetadata = async (): Promise<void> => {
+      await db.delete(ttsSegmentEntries).where(and(
+        eq(ttsSegmentEntries.userId, scope.storageUserId),
+        eq(ttsSegmentEntries.documentId, parsed.documentId),
+      ));
+    };
     const upsertSegmentEntry = async (input: {
       segmentEntryId: string;
       segmentIndex: number;
@@ -308,6 +331,7 @@ export async function POST(request: NextRequest) {
       textHash: string;
       textLength: number;
     }): Promise<void> => {
+      await assertDocumentOwnership();
       await db
         .insert(ttsSegmentEntries)
         .values({
@@ -337,6 +361,10 @@ export async function POST(request: NextRequest) {
             updatedAt: nowMs,
           },
         });
+      if (!await documentOwnershipExists()) {
+        await deleteAbandonedSegmentMetadata();
+        throw new Error('Document ownership was removed during TTS metadata persistence');
+      }
     };
 
     for (const segment of normalized) {
@@ -657,7 +685,13 @@ export async function POST(request: NextRequest) {
 
         failedStage = 's3.put_audio';
         const putStartedAt = Date.now();
+        await assertDocumentOwnership();
         await putTtsSegmentAudioObject(audioKey, ttsBuffer);
+        if (!await documentOwnershipExists()) {
+          await deleteTtsSegmentAudioObjects([audioKey]);
+          await deleteAbandonedSegmentMetadata();
+          throw new Error('Document ownership was removed during TTS audio persistence');
+        }
         stageTimings.putAudioMs = Date.now() - putStartedAt;
 
         let persistedBuffer = ttsBuffer;
