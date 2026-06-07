@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Badge, Button, Input, Section, Switch } from '@/components/ui';
-import type { BadgeTone } from '@/components/ui/badge';
+import { Button, Card, Input, Section, Switch } from '@/components/ui';
+import { ClockIcon, RefreshIcon } from '@/components/icons/Icons';
 
 type TaskRunStatus = 'idle' | 'running' | 'ok' | 'error';
 
@@ -31,12 +31,14 @@ async function fetchTasks(): Promise<TaskView[]> {
   return ((await res.json()) as { tasks: TaskView[] }).tasks;
 }
 
-const STATUS_TONE: Record<TaskRunStatus, BadgeTone> = {
-  idle: 'muted',
-  running: 'accent',
-  ok: 'foreground',
-  error: 'danger',
-};
+function RunningDot() {
+  return (
+    <span className="relative flex size-2 shrink-0 items-center justify-center" title="Running" aria-label="Running">
+      <span className="absolute inline-flex size-2 animate-ping rounded-full bg-accent opacity-60" />
+      <span className="relative inline-flex size-2 rounded-full bg-accent" />
+    </span>
+  );
+}
 
 function formatRelative(ms: number | null): string {
   if (ms == null) return 'never';
@@ -115,6 +117,7 @@ export function AdminTasksPanel() {
             key={task.key}
             task={task}
             busy={patchTask.isPending || runTask.isPending}
+            runPending={runTask.isPending && runTask.variables === task.key}
             onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
             onSaveInterval={(intervalMs) => patchTask.mutate({ key: task.key, patch: { intervalMs } })}
             onRun={() => runTask.mutate(task.key)}
@@ -131,12 +134,14 @@ export function AdminTasksPanel() {
 function TaskRow({
   task,
   busy,
+  runPending,
   onToggle,
   onSaveInterval,
   onRun,
 }: {
   task: TaskView;
   busy: boolean;
+  runPending: boolean;
   onToggle: (enabled: boolean) => void;
   onSaveInterval: (intervalMs: number) => void;
   onRun: () => void;
@@ -152,60 +157,73 @@ function TaskRow({
   const intervalDirty =
     Number.isFinite(parsedMinutes) && parsedMinutes > 0 && newIntervalMs !== task.intervalMs;
 
+  const running = task.running || runPending;
+
   return (
-    <div className="rounded-lg border border-line bg-surface px-3 py-2 space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-foreground truncate">{task.name}</span>
-            <Badge tone={STATUS_TONE[task.lastStatus]}>{task.lastStatus}</Badge>
+    <Card>
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              {running && <RunningDot />}
+              <span className="truncate text-sm font-medium text-foreground">{task.name}</span>
+            </div>
+            {task.description && <p className="mt-0.5 text-xs text-soft">{task.description}</p>}
           </div>
-          {task.description && <p className="text-xs text-soft mt-0.5">{task.description}</p>}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Switch checked={task.enabled} onChange={onToggle} ariaLabel={`Enable ${task.name}`} disabled={busy} />
-          <Button variant="outline" size="sm" onClick={onRun} disabled={busy || task.running}>
-            {task.running ? 'Running…' : 'Run now'}
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-soft">
-        <span>Last run: {formatRelative(task.lastRunAt)}</span>
-        <span>Duration: {formatDuration(task.lastDurationMs)}</span>
-        <span>Next run: {task.enabled ? formatRelative(task.nextRunAt) : 'disabled'}</span>
-        <span className="flex items-center gap-1">
-          Every
-          <Input
-            type="number"
-            min={0.001}
-            step="any"
-            controlSize="sm"
-            className="w-16"
-            value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
-            aria-label={`${task.name} interval in minutes`}
-          />
-          min
-          {intervalDirty && (
-            <Button
-              variant="primary"
-              size="xs"
-              onClick={() => onSaveInterval(newIntervalMs)}
-              disabled={busy}
-            >
-              Save
+          <div className="flex shrink-0 items-center gap-2">
+            <Switch checked={task.enabled} onChange={onToggle} ariaLabel={`Enable ${task.name}`} disabled={busy} />
+            <Button variant="outline" size="sm" onClick={onRun} disabled={busy || running}>
+              {running ? 'Running…' : 'Run now'}
             </Button>
-          )}
-        </span>
-      </div>
+          </div>
+        </div>
 
-      {task.lastStatus === 'error' && task.lastError && (
-        <p className="text-xs text-danger truncate" title={task.lastError}>{task.lastError}</p>
-      )}
-      {task.lastStatus === 'ok' && task.lastResult && (
-        <p className="text-xs text-soft truncate" title={task.lastResult}>{task.lastResult}</p>
-      )}
-    </div>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-soft">
+            <span
+              className="inline-flex items-center gap-1"
+              title={`Ran in ${formatDuration(task.lastDurationMs)}`}
+            >
+              <ClockIcon className="size-3 text-faint" />
+              {formatRelative(task.lastRunAt)}
+            </span>
+            {task.enabled && task.nextRunAt != null && (
+              <span className="inline-flex items-center gap-1 text-faint">
+                <RefreshIcon className="size-3" />
+                next {formatRelative(task.nextRunAt)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-faint">
+            <span>Every</span>
+            <Input
+              type="number"
+              min={0.001}
+              step="any"
+              controlSize="sm"
+              className="w-14 text-center"
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+              aria-label={`${task.name} interval in minutes`}
+            />
+            <span>min</span>
+            {intervalDirty && (
+              <Button variant="primary" size="xs" onClick={() => onSaveInterval(newIntervalMs)} disabled={busy}>
+                Save
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {task.lastStatus === 'error' && task.lastError ? (
+          <p className="truncate text-xs text-danger" title={task.lastError}>{task.lastError}</p>
+        ) : (
+          task.lastStatus === 'ok' && task.lastResult && (
+            <p className="truncate text-xs text-faint" title={task.lastResult}>{task.lastResult}</p>
+          )
+        )}
+      </div>
+    </Card>
   );
 }
