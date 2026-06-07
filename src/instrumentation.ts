@@ -4,9 +4,7 @@
  * nothing to keep a loop alive, so a cron route drives the ticks instead.
  */
 export async function register(): Promise<void> {
-  if (process.env.VERCEL) return;
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
-
-  const { startTaskScheduler } = await import('@/lib/server/tasks/scheduler');
-  startTaskScheduler();
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('./instrumentation.node');
+  }
 }
