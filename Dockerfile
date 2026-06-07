@@ -76,6 +76,7 @@ COPY --from=app-builder /opt/entrypoint-migration-tools/node_modules /tmp/runtim
 RUN mkdir -p /app/node_modules && \
     rm -rf /tmp/runtime-tools-node_modules/@aws-sdk \
            /tmp/runtime-tools-node_modules/better-sqlite3 \
+           /tmp/runtime-tools-node_modules/ffmpeg-static \
            /tmp/runtime-tools-node_modules/pg && \
     cp -an /tmp/runtime-tools-node_modules/. /app/node_modules/ && \
     rm -rf /tmp/runtime-tools-node_modules
