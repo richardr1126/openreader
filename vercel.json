@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/admin/tasks/tick",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
