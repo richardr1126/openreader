@@ -45,6 +45,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        userAgent: `${devices['Desktop Chrome'].userAgent} OpenReader-Playwright/chromium`,
         extraHTTPHeaders: { 'x-openreader-test-namespace': 'chromium' },
       },
     },
@@ -53,6 +54,7 @@ export default defineConfig({
       name: 'firefox',
       use: {
         ...devices['Desktop Firefox'],
+        userAgent: `${devices['Desktop Firefox'].userAgent} OpenReader-Playwright/firefox`,
         extraHTTPHeaders: { 'x-openreader-test-namespace': 'firefox' },
       },
     },
@@ -61,6 +63,7 @@ export default defineConfig({
       name: 'webkit',
       use: {
         ...devices['Desktop Safari'],
+        userAgent: `${devices['Desktop Safari'].userAgent} OpenReader-Playwright/webkit`,
         extraHTTPHeaders: { 'x-openreader-test-namespace': 'webkit' },
       },
     },
