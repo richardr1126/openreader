@@ -45,5 +45,15 @@ describe('document blob lease', () => {
 
     expect(replacement).not.toBeNull();
     expect(replacement?.owner).not.toBe(first?.owner);
+
+    // Releasing the now-stale original lease must not delete the replacement,
+    // since release() is scoped to the original owner.
+    await first?.release();
+
+    const rows = await holder.db
+      .select()
+      .from(sqliteSchema.documentBlobLeases);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.leaseOwner).toBe(replacement?.owner);
   });
 });

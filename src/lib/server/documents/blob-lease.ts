@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, lt, or } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/db';
 import { documentBlobLeases } from '@/db/schema';
+import { errorToLog, serverLogger } from '@/lib/server/logger';
 
 const DEFAULT_LEASE_MS = 15 * 60 * 1000;
 const RETRY_DELAY_MS = 100;
@@ -29,10 +30,7 @@ export async function tryAcquireDocumentBlobLease(
     .onConflictDoUpdate({
       target: documentBlobLeases.documentId,
       set: { leaseOwner: owner, leaseUntilMs },
-      where: or(
-        lt(documentBlobLeases.leaseUntilMs, now),
-        eq(documentBlobLeases.leaseOwner, owner),
-      ),
+      where: lt(documentBlobLeases.leaseUntilMs, now),
     })
     .returning({ owner: documentBlobLeases.leaseOwner });
 
@@ -70,6 +68,17 @@ export async function withDocumentBlobLease<T>(
   try {
     return await fn();
   } finally {
-    await lease.release();
+    // Release in its own try/catch so a failing release never masks the
+    // original error (or result) produced by fn().
+    try {
+      await lease.release();
+    } catch (releaseError) {
+      serverLogger.warn({
+        event: 'documents.blobLease.release.failed',
+        degraded: true,
+        documentId,
+        error: errorToLog(releaseError),
+      }, 'Failed to release document blob lease');
+    }
   }
 }
