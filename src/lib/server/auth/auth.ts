@@ -164,134 +164,30 @@ const createAuth = () => betterAuth({
                 import('@/lib/server/user/claim-data'),
               ]);
 
-              // Transfer rate limiting data (TTS char counts) from anonymous user to authenticated user
-              try {
-                await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
-                serverLogger.info({
-                  event: 'auth.link_account.transfer.rate_limit.succeeded',
-                  anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                  newUserIdHash: hashForLog(newUser.user.id),
-                }, 'Transferred rate limit data during account linking');
-              } catch (error) {
-                logDegraded(serverLogger, {
-                  event: 'auth.link_account.transfer.rate_limit.failed',
-                  msg: 'Failed transferring rate limit data during account linking',
-                  step: 'transfer_rate_limit',
-                  context: {
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  },
-                  error,
-                });
-                // Don't throw here to prevent blocking the account linking process
-              }
-
-              // Transfer audiobooks from anonymous user to new authenticated user
-              try {
-                const transferred = await claimData.transferUserAudiobooks(anonymousUser.user.id, newUser.user.id);
-                if (transferred > 0) {
-                  serverLogger.info({
-                    event: 'auth.link_account.transfer.audiobooks.succeeded',
-                    transferred,
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  }, 'Transferred audiobooks during account linking');
-                }
-              } catch (error) {
-                logDegraded(serverLogger, {
-                  event: 'auth.link_account.transfer.audiobooks.failed',
-                  msg: 'Failed transferring audiobooks during account linking',
-                  step: 'transfer_audiobooks',
-                  context: {
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  },
-                  error,
-                });
-                // Don't throw here to prevent blocking the account linking process
-              }
-
-              // Transfer documents from anonymous user to new authenticated user
-              try {
-                const transferred = await claimData.transferUserDocuments(anonymousUser.user.id, newUser.user.id);
-                if (transferred > 0) {
-                  serverLogger.info({
-                    event: 'auth.link_account.transfer.documents.succeeded',
-                    transferred,
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  }, 'Transferred documents during account linking');
-                }
-              } catch (error) {
-                logDegraded(serverLogger, {
-                  event: 'auth.link_account.transfer.documents.failed',
-                  msg: 'Failed transferring documents during account linking',
-                  step: 'transfer_documents',
-                  context: {
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  },
-                  error,
-                });
-                // Don't throw here to prevent blocking the account linking process
-              }
-
-              // Transfer preferences from anonymous user to new authenticated user
-              try {
-                const transferred = await claimData.transferUserPreferences(anonymousUser.user.id, newUser.user.id);
-                if (transferred > 0) {
-                  serverLogger.info({
-                    event: 'auth.link_account.transfer.preferences.succeeded',
-                    transferred,
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  }, 'Transferred preferences during account linking');
-                }
-              } catch (error) {
-                logDegraded(serverLogger, {
-                  event: 'auth.link_account.transfer.preferences.failed',
-                  msg: 'Failed transferring preferences during account linking',
-                  step: 'transfer_preferences',
-                  context: {
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  },
-                  error,
-                });
-                // Don't throw here to prevent blocking the account linking process
-              }
-
-              // Transfer reading progress from anonymous user to new authenticated user
-              try {
-                const transferred = await claimData.transferUserProgress(anonymousUser.user.id, newUser.user.id);
-                if (transferred > 0) {
-                  serverLogger.info({
-                    event: 'auth.link_account.transfer.progress.succeeded',
-                    transferred,
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  }, 'Transferred reading progress during account linking');
-                }
-              } catch (error) {
-                logDegraded(serverLogger, {
-                  event: 'auth.link_account.transfer.progress.failed',
-                  msg: 'Failed transferring reading progress during account linking',
-                  step: 'transfer_progress',
-                  context: {
-                    anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                    newUserIdHash: hashForLog(newUser.user.id),
-                  },
-                  error,
-                });
-                // Don't throw here to prevent blocking the account linking process
-              }
+              const transferred = await claimData.claimAnonymousData(
+                newUser.user.id,
+                anonymousUser.user.id,
+                null,
+                { cleanupLegacySources: false },
+              );
+              await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
+              const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
+              await deleteUserStorageData(anonymousUser.user.id, null);
+              serverLogger.info({
+                event: 'auth.link_account.transfer.succeeded',
+                transferred,
+                anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+                newUserIdHash: hashForLog(newUser.user.id),
+              }, 'Transferred anonymous user data during account linking');
             } catch (error) {
               logServerError(serverLogger, {
                 event: 'auth.link_account.failed',
                 msg: 'onLinkAccount callback failed',
                 error,
               });
-              // Don't throw here to prevent blocking the account linking process
+              // Better Auth deletes the anonymous user after this callback.
+              // Block linking when transfer is incomplete so data remains retryable.
+              throw error;
             }
             // Note: Anonymous user will be automatically deleted after this callback completes
           },

@@ -30,6 +30,7 @@ const EMPTY_CLAIM_COUNTS: ClaimableCounts = {
   audiobooks: 0,
   preferences: 0,
   progress: 0,
+  documentSettings: 0,
 };
 
 function toClaimableCounts(value: unknown): ClaimableCounts {
@@ -39,6 +40,7 @@ function toClaimableCounts(value: unknown): ClaimableCounts {
     audiobooks: Number(rec.audiobooks ?? 0),
     preferences: Number(rec.preferences ?? 0),
     progress: Number(rec.progress ?? 0),
+    documentSettings: Number(rec.documentSettings ?? 0),
   };
 }
 
@@ -148,7 +150,11 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
     if (isClaimEligible) {
       claimCounts = await fetchClaimableCounts();
-      const total = claimCounts.documents + claimCounts.audiobooks + claimCounts.preferences + claimCounts.progress;
+      const total = claimCounts.documents
+        + claimCounts.audiobooks
+        + claimCounts.preferences
+        + claimCounts.progress
+        + claimCounts.documentSettings;
       claimHasData = total > 0;
       if (!claimHasData && userId) {
         claimDismissedUsersRef.current.add(userId);

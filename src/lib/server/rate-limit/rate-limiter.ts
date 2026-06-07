@@ -320,36 +320,34 @@ export class RateLimiter {
    * Transfer char counts when anonymous user creates an account
    */
   async transferAnonymousUsage(anonymousUserId: string, authenticatedUserId: string): Promise<void> {
-    const today = new Date().toISOString().split('T')[0];
-    const dateValue = today as unknown as UserTtsCharsDateValue;
     const updatedAt = this.getUpdatedAtValue() as unknown as UserTtsCharsUpdatedAtValue;
 
-    const anonymousResult = await safeDb().select({ charCount: userTtsChars.charCount })
-      .from(userTtsChars)
-      .where(and(eq(userTtsChars.userId, anonymousUserId), eq(userTtsChars.date, dateValue)));
+    await this.runMutation(async (conn) => {
+      const anonymousRows = await conn.select({
+        date: userTtsChars.date,
+        charCount: userTtsChars.charCount,
+      })
+        .from(userTtsChars)
+        .where(eq(userTtsChars.userId, anonymousUserId));
 
-    if (anonymousResult.length === 0) return;
+      for (const anonymousRow of anonymousRows) {
+        const dateValue = anonymousRow.date as unknown as UserTtsCharsDateValue;
+        const anonymousCount = Number(anonymousRow.charCount ?? 0);
 
-    const anonymousCount = Number(anonymousResult[0].charCount);
-
-    const existingAuth = await safeDb().select({ charCount: userTtsChars.charCount })
-      .from(userTtsChars)
-      .where(and(eq(userTtsChars.userId, authenticatedUserId), eq(userTtsChars.date, dateValue)));
-
-    if (existingAuth.length === 0) {
-      await safeDb().insert(userTtsChars)
-        .values({ userId: authenticatedUserId, date: dateValue, charCount: anonymousCount });
-    } else {
-      const existingCount = Number(existingAuth[0].charCount);
-      if (anonymousCount > existingCount) {
-        await safeDb().update(userTtsChars)
-          .set({ charCount: anonymousCount, updatedAt })
-          .where(and(eq(userTtsChars.userId, authenticatedUserId), eq(userTtsChars.date, dateValue)));
+        await conn.insert(userTtsChars)
+          .values({ userId: authenticatedUserId, date: dateValue, charCount: anonymousCount })
+          .onConflictDoUpdate({
+            target: [userTtsChars.userId, userTtsChars.date],
+            set: {
+              charCount: sql`${userTtsChars.charCount} + ${anonymousCount}`,
+              updatedAt,
+            },
+          });
       }
-    }
 
-    await safeDb().delete(userTtsChars)
-      .where(and(eq(userTtsChars.userId, anonymousUserId), eq(userTtsChars.date, dateValue)));
+      await conn.delete(userTtsChars)
+        .where(eq(userTtsChars.userId, anonymousUserId));
+    });
   }
 
   /**

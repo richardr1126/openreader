@@ -54,7 +54,8 @@ export const audiobookChapters = pgTable('audiobook_chapters', {
 // defined here. Only application-specific tables belong in this file.
 
 export const userTtsChars = pgTable("user_tts_chars", {
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  // Also stores device:* and ip:* backstop buckets, so this cannot reference user.id.
+  userId: text('user_id').notNull(),
   date: date('date').notNull(),
   charCount: bigint('char_count', { mode: 'number' }).default(0),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),

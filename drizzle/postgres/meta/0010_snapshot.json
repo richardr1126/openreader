@@ -1,5 +1,5 @@
 {
-  "id": "7aaaea38-619e-42d8-b683-6231e6221d33",
+  "id": "1099cbe6-0c2e-4ea8-ae3c-6883c931169d",
   "prevId": "23b90a4b-fb63-4f9a-9230-09ca218d0b78",
   "version": "7",
   "dialect": "postgresql",
@@ -1509,21 +1509,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "user_tts_chars_user_id_user_id_fk": {
-          "name": "user_tts_chars_user_id_user_id_fk",
-          "tableFrom": "user_tts_chars",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {
         "user_tts_chars_user_id_date_pk": {
           "name": "user_tts_chars_user_id_date_pk",

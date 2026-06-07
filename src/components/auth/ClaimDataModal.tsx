@@ -10,6 +10,7 @@ export type ClaimableCounts = {
   audiobooks: number;
   preferences: number;
   progress: number;
+  documentSettings: number;
 };
 
 function toClaimableCounts(value: unknown): ClaimableCounts {
@@ -19,6 +20,7 @@ function toClaimableCounts(value: unknown): ClaimableCounts {
     audiobooks: Number(rec.audiobooks ?? 0),
     preferences: Number(rec.preferences ?? 0),
     progress: Number(rec.progress ?? 0),
+    documentSettings: Number(rec.documentSettings ?? 0),
   };
 }
 
@@ -51,7 +53,8 @@ export default function ClaimDataModal({
           `Successfully claimed ${claimed.documents} documents, `
           + `${claimed.audiobooks} audiobooks, `
           + `${claimed.preferences} preference set(s), and `
-          + `${claimed.progress} reading progress record(s)!`,
+          + `${claimed.progress} reading progress record(s) and `
+          + `${claimed.documentSettings} document setting(s)!`,
         );
         onClaimed();
         router.refresh();
@@ -82,6 +85,7 @@ export default function ClaimDataModal({
           <li>{claimableCounts.audiobooks} audiobook(s)</li>
           <li>{claimableCounts.preferences} preference set(s)</li>
           <li>{claimableCounts.progress} reading progress record(s)</li>
+          <li>{claimableCounts.documentSettings} document setting(s)</li>
         </ul>
       </div>
 

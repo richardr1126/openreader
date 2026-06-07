@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6f0bbd3d-f8aa-49d1-8565-853f2b2654cb",
+  "id": "a32ae7d4-c074-44f0-9e90-2473949376ef",
   "prevId": "2c23f770-269c-4cae-a71e-4ef88355681f",
   "tables": {
     "admin_providers": {
@@ -1356,21 +1356,7 @@
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "user_tts_chars_user_id_user_id_fk": {
-          "name": "user_tts_chars_user_id_user_id_fk",
-          "tableFrom": "user_tts_chars",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {
         "user_tts_chars_user_id_date_pk": {
           "columns": [

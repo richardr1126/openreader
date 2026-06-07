@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -256,4 +257,39 @@ export async function deleteTtsSegmentPrefix(prefix: string): Promise<number> {
   } while (continuationToken);
 
   return deleted;
+}
+
+export async function copyTtsSegmentPrefix(sourcePrefix: string, destinationPrefix: string): Promise<number> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const source = sourcePrefix.replace(/^\/+/, '');
+  const destination = destinationPrefix.replace(/^\/+/, '');
+  if (source === destination) return 0;
+
+  let copied = 0;
+  let continuationToken: string | undefined;
+  do {
+    const listRes = await client.send(new ListObjectsV2Command({
+      Bucket: cfg.bucket,
+      Prefix: source,
+      ContinuationToken: continuationToken,
+    }));
+    const keys = (listRes.Contents ?? [])
+      .map((item) => item.Key)
+      .filter((value): value is string => typeof value === 'string' && value.startsWith(source));
+
+    for (const key of keys) {
+      await client.send(new CopyObjectCommand({
+        Bucket: cfg.bucket,
+        Key: `${destination}${key.slice(source.length)}`,
+        CopySource: `${cfg.bucket}/${key}`,
+        ServerSideEncryption: 'AES256',
+      }));
+      copied += 1;
+    }
+
+    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return copied;
 }
