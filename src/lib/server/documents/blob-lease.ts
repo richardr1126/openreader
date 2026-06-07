@@ -6,6 +6,7 @@ import { errorToLog, serverLogger } from '@/lib/server/logger';
 
 const DEFAULT_LEASE_MS = 15 * 60 * 1000;
 const RETRY_DELAY_MS = 100;
+const MAX_RETRY_DELAY_MS = 2_000;
 
 export type DocumentBlobLease = {
   owner: string;
@@ -56,10 +57,20 @@ export async function withDocumentBlobLease<T>(
 ): Promise<T> {
   const deadline = Date.now() + (options?.waitMs ?? 30_000);
   let lease: DocumentBlobLease | null = null;
+  let backoffMs = RETRY_DELAY_MS;
 
-  while (!lease && Date.now() <= deadline) {
+  while (!lease && Date.now() < deadline) {
     lease = await tryAcquireDocumentBlobLease(documentId, options);
-    if (!lease) await sleep(RETRY_DELAY_MS);
+    if (lease) break;
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+
+    // Exponential backoff with jitter to avoid thundering-herd retries under
+    // contention, capped and never sleeping past the deadline.
+    const jitterMs = Math.random() * backoffMs * 0.1;
+    await sleep(Math.min(backoffMs + jitterMs, remainingMs));
+    backoffMs = Math.min(backoffMs * 2, MAX_RETRY_DELAY_MS);
   }
   if (!lease) {
     throw new Error(`Timed out waiting for document blob lease: ${documentId}`);
