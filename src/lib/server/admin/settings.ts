@@ -264,25 +264,13 @@ export async function setRuntimeConfigKey<K extends RuntimeConfigKey>(
   }
   const serialized = serializeForStorage(validated);
   const now = Date.now();
-  // Upsert with onConflict.
-  const isPg = !!process.env.POSTGRES_URL;
-  if (isPg) {
-    await db
-      .insert(adminSettings)
-      .values({ key, valueJson: serialized as never, source: 'admin', updatedAt: now })
-      .onConflictDoUpdate({
-        target: adminSettings.key,
-        set: { valueJson: serialized as never, source: 'admin', updatedAt: now },
-      });
-  } else {
-    await db
-      .insert(adminSettings)
-      .values({ key, valueJson: serialized as never, source: 'admin', updatedAt: now })
-      .onConflictDoUpdate({
-        target: adminSettings.key,
-        set: { valueJson: serialized as never, source: 'admin', updatedAt: now },
-      });
-  }
+  await db
+    .insert(adminSettings)
+    .values({ key, valueJson: serialized as never, source: 'admin', updatedAt: now })
+    .onConflictDoUpdate({
+      target: adminSettings.key,
+      set: { valueJson: serialized as never, source: 'admin', updatedAt: now },
+    });
 }
 
 /** Delete a runtime config row (resets to default/implicit behavior). */

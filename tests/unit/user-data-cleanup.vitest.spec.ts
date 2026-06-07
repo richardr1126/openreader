@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   documentDeleteResults: [] as unknown[][],
   deleteWhere: vi.fn(async () => undefined),
   insertValues: vi.fn(() => ({ onConflictDoNothing: vi.fn(async () => undefined) })),
-  forUpdate: vi.fn(),
+  execute: vi.fn(async () => undefined),
   deleteDocumentBlob: vi.fn(async () => undefined),
   deleteDocumentPrefix: vi.fn(async () => 0),
   deleteDocumentPreviewArtifacts: vi.fn(async () => 0),
@@ -22,10 +22,6 @@ function resultBuilder(result: unknown[]) {
   };
   return {
     all: () => result,
-    for: vi.fn((mode: string) => {
-      mocks.forUpdate(mode);
-      return Promise.resolve(result);
-    }),
     limit: () => limitedResult,
     then: (resolve: (value: unknown[]) => unknown, reject: (error: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),
@@ -52,7 +48,7 @@ vi.mock('@/db', () => {
     insert: vi.fn(() => ({
       values: mocks.insertValues,
     })),
-    execute: vi.fn(async () => undefined),
+    execute: mocks.execute,
     transaction: vi.fn((callback: (tx: unknown) => unknown) => callback(database)),
   };
   return { db: database };
@@ -112,7 +108,7 @@ describe('user data cleanup', () => {
     }
     mocks.deleteWhere.mockResolvedValue(undefined);
     mocks.insertValues.mockReturnValue({ onConflictDoNothing: vi.fn(async () => undefined) });
-    mocks.forUpdate.mockReset();
+    mocks.execute.mockResolvedValue(undefined);
     mocks.deleteDocumentBlob.mockResolvedValue(undefined);
     mocks.deleteDocumentPrefix.mockResolvedValue(0);
     mocks.deleteDocumentPreviewArtifacts.mockResolvedValue(0);
@@ -177,7 +173,7 @@ describe('user data cleanup', () => {
     expect(mocks.insertValues).toHaveBeenCalledWith([{ id: 'doc-1' }]);
   });
 
-  test('locks all document owners before the Postgres ownership decision', async () => {
+  test('acquires a Postgres advisory lock before the ownership decision', async () => {
     vi.stubEnv('POSTGRES_URL', 'postgres://test');
     mocks.selectResults = [
       [{ id: 'doc-1' }],
@@ -189,6 +185,8 @@ describe('user data cleanup', () => {
 
     await deleteUserStorageData('user-1', null);
 
-    expect(mocks.forUpdate).toHaveBeenCalledWith('update');
+    // The mutation lock serializes the read-modify-write via a transaction-scoped
+    // advisory lock instead of SELECT ... FOR UPDATE.
+    expect(mocks.execute).toHaveBeenCalled();
   });
 });

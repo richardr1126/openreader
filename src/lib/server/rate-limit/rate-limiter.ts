@@ -1,4 +1,5 @@
 import { db } from '@/db';
+import { runInDbTransaction } from '@/db/run-in-transaction';
 import { userTtsChars } from '@/db/schema';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
@@ -127,23 +128,8 @@ function getRowsAffected(result: unknown): number {
 export class RateLimiter {
   constructor() { }
 
-  private isPostgres(): boolean {
-    return Boolean(process.env.POSTGRES_URL);
-  }
-
   private getUpdatedAtValue(): number {
     return nowTimestampMs();
-  }
-
-  // Use a transaction only when running with Postgres.
-  // better-sqlite3 transactions require sync callbacks and cannot be awaited.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async runMutation<T>(fn: (conn: any) => Promise<T>): Promise<T> {
-    if (this.isPostgres()) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return safeDb().transaction(async (tx: any) => fn(tx));
-    }
-    return fn(safeDb());
   }
 
   /**
@@ -189,7 +175,7 @@ export class RateLimiter {
 
     try {
       const updatedAt = this.getUpdatedAtValue() as unknown as UserTtsCharsUpdatedAtValue;
-      return await this.runMutation(async (conn) => {
+      return await runInDbTransaction(async (conn) => {
         // Ensure records exist for each bucket
         for (const bucket of buckets) {
           await conn.insert(userTtsChars)
@@ -322,7 +308,7 @@ export class RateLimiter {
   async transferAnonymousUsage(anonymousUserId: string, authenticatedUserId: string): Promise<void> {
     const updatedAt = this.getUpdatedAtValue() as unknown as UserTtsCharsUpdatedAtValue;
 
-    await this.runMutation(async (conn) => {
+    await runInDbTransaction(async (conn) => {
       const anonymousRows = await conn.select({
         date: userTtsChars.date,
         charCount: userTtsChars.charCount,

@@ -1,5 +1,4 @@
 import { and, eq, ne } from 'drizzle-orm';
-import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { deleteDocumentBlob } from '@/lib/server/documents/blobstore';
 import {
@@ -7,73 +6,38 @@ import {
   deleteDocumentPreviewRows,
 } from '@/lib/server/documents/previews';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
-import { withDocumentMutationLock } from '@/lib/server/documents/mutation-lock';
+import { withDocumentLock } from '@/lib/server/documents/document-lock';
 
 type DocumentRow = typeof documents.$inferSelect;
 
-async function restoreDocumentOwnership(row: DocumentRow): Promise<void> {
-  await db.insert(documents).values(row).onConflictDoNothing();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function restoreDocumentOwnership(conn: any, row: DocumentRow): Promise<void> {
+  await conn.insert(documents).values(row).onConflictDoNothing();
 }
 
-async function removeOwnershipAndCheckLastOwner(input: {
-  userId: string;
-  documentId: string;
-}): Promise<{ removed: DocumentRow | null; isLastOwner: boolean }> {
+async function removeOwnershipAndCheckLastOwner(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const database = db as any;
-  const runAsync = async (tx: typeof database) => {
-    await tx
-      .select({ id: documents.id })
-      .from(documents)
-      .where(eq(documents.id, input.documentId))
-      .for('update');
+  conn: any,
+  input: { userId: string; documentId: string },
+): Promise<{ removed: DocumentRow | null; isLastOwner: boolean }> {
+  const [removed] = await conn
+    .delete(documents)
+    .where(and(
+      eq(documents.id, input.documentId),
+      eq(documents.userId, input.userId),
+    ))
+    .returning();
+  if (!removed) return { removed: null, isLastOwner: false };
 
-    const [removed] = await tx
-      .delete(documents)
-      .where(and(
-        eq(documents.id, input.documentId),
-        eq(documents.userId, input.userId),
-      ))
-      .returning();
-    if (!removed) return { removed: null, isLastOwner: false };
-
-    const otherOwners = await tx
-      .select({ id: documents.id })
-      .from(documents)
-      .where(and(
-        eq(documents.id, input.documentId),
-        ne(documents.userId, input.userId),
-      ))
-      .limit(1);
-    return { removed, isLastOwner: otherOwners.length === 0 };
-  };
-
-  if (process.env.POSTGRES_URL) {
-    return database.transaction(runAsync);
-  }
-
-  return database.transaction((tx: typeof database) => {
-    const removed = tx
-      .delete(documents)
-      .where(and(
-        eq(documents.id, input.documentId),
-        eq(documents.userId, input.userId),
-      ))
-      .returning()
-      .all()[0] ?? null;
-    if (!removed) return { removed: null, isLastOwner: false };
-
-    const otherOwners = tx
-      .select({ id: documents.id })
-      .from(documents)
-      .where(and(
-        eq(documents.id, input.documentId),
-        ne(documents.userId, input.userId),
-      ))
-      .limit(1)
-      .all();
-    return { removed, isLastOwner: otherOwners.length === 0 };
-  }, { behavior: 'immediate' });
+  const otherOwners = await conn
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(
+      eq(documents.id, input.documentId),
+      ne(documents.userId, input.userId),
+    ))
+    .limit(1);
+  return { removed, isLastOwner: otherOwners.length === 0 };
 }
 
 export async function deleteOwnedDocument(input: {
@@ -81,8 +45,8 @@ export async function deleteOwnedDocument(input: {
   documentId: string;
   namespace: string | null;
 }): Promise<boolean> {
-  return withDocumentMutationLock(input.documentId, async () => {
-    const { removed, isLastOwner } = await removeOwnershipAndCheckLastOwner(input);
+  return withDocumentLock(input.documentId, async (conn) => {
+    const { removed, isLastOwner } = await removeOwnershipAndCheckLastOwner(conn, input);
     if (!removed) return false;
 
     try {
@@ -92,7 +56,7 @@ export async function deleteOwnedDocument(input: {
         await cleanupDocumentPreviewArtifacts(input.documentId, input.namespace);
         await deleteDocumentPreviewRows(input.documentId, input.namespace);
 
-        const [newOwner] = await db
+        const [newOwner] = await conn
           .select({ id: documents.id })
           .from(documents)
           .where(eq(documents.id, input.documentId))
@@ -102,7 +66,7 @@ export async function deleteOwnedDocument(input: {
         }
       }
     } catch (error) {
-      await restoreDocumentOwnership(removed);
+      await restoreDocumentOwnership(conn, removed);
       throw error;
     }
 

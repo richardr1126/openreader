@@ -21,7 +21,7 @@ import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks/
 import { deleteTtsSegmentPrefix } from '@/lib/server/tts/segments-blobstore';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
-import { withDocumentMutationLock } from '@/lib/server/documents/mutation-lock';
+import { withDocumentLock } from '@/lib/server/documents/document-lock';
 
 type DocumentRow = typeof documents.$inferSelect;
 type AudiobookRow = { id: string };
@@ -55,10 +55,11 @@ export async function deleteUserStorageData(
 
   let docsDeleted = 0;
   const removedDocs: DocumentRow[] = [];
-  const restoreRemovedDocs = async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const restoreRemovedDocs = async (conn: any = database) => {
     if (removedDocs.length === 0) return;
     const docsToRestore = [...removedDocs];
-    await database.insert(documents).values(docsToRestore).onConflictDoNothing();
+    await conn.insert(documents).values(docsToRestore).onConflictDoNothing();
     removedDocs.length = 0;
   };
   // Restore before throwing the diagnostic AggregateError, but never let a
@@ -76,62 +77,33 @@ export async function deleteUserStorageData(
       });
     }
   };
-  const removeOwnershipAndCheckLastOwner = async (doc: DocumentRow) => {
-    const run = async (tx: typeof database) => {
-      // Lock every ownership row for this document so concurrent account
-      // deletions cannot both observe the other owner's uncommitted row.
-      await tx
-        .select({ id: documents.id })
-        .from(documents)
-        .where(eq(documents.id, doc.id))
-        .for('update');
+  // The mutation lock already serializes all mutations for this document, so a
+  // plain read-modify-write is safe without an inner transaction or FOR UPDATE.
+  const removeOwnershipAndCheckLastOwner = async (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    conn: any,
+    doc: DocumentRow,
+  ) => {
+    const [removedDoc] = await conn
+      .delete(documents)
+      .where(and(eq(documents.id, doc.id), eq(documents.userId, userId)))
+      .returning();
+    if (!removedDoc) return { removedDoc: null, isLastOwner: false };
 
-      const [removedDoc] = await tx
-        .delete(documents)
-        .where(and(eq(documents.id, doc.id), eq(documents.userId, userId)))
-        .returning();
-      if (!removedDoc) return { removedDoc: null, isLastOwner: false };
-
-      const otherOwners = await tx
-        .select({ id: documents.id })
-        .from(documents)
-        .where(and(
-          eq(documents.id, doc.id),
-          ne(documents.userId, userId),
-        ))
-        .limit(1);
-      return { removedDoc, isLastOwner: otherOwners.length === 0 };
-    };
-
-    if (process.env.POSTGRES_URL) {
-      return database.transaction(run);
-    }
-
-    return database.transaction((tx: typeof database) => {
-      const removedRows = tx
-        .delete(documents)
-        .where(and(eq(documents.id, doc.id), eq(documents.userId, userId)))
-        .returning()
-        .all();
-      const removedDoc = removedRows[0] ?? null;
-      if (!removedDoc) return { removedDoc: null, isLastOwner: false };
-
-      const otherOwners = tx
-        .select({ id: documents.id })
-        .from(documents)
-        .where(and(
-          eq(documents.id, doc.id),
-          ne(documents.userId, userId),
-        ))
-        .limit(1)
-        .all();
-      return { removedDoc, isLastOwner: otherOwners.length === 0 };
-    }, { behavior: 'immediate' });
+    const otherOwners = await conn
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(
+        eq(documents.id, doc.id),
+        ne(documents.userId, userId),
+      ))
+      .limit(1);
+    return { removedDoc, isLastOwner: otherOwners.length === 0 };
   };
 
   for (const doc of userDocs) {
-    await withDocumentMutationLock(doc.id, async () => {
-      const { removedDoc, isLastOwner } = await removeOwnershipAndCheckLastOwner(doc);
+    await withDocumentLock(doc.id, async (conn) => {
+      const { removedDoc, isLastOwner } = await removeOwnershipAndCheckLastOwner(conn, doc);
       if (!removedDoc) return;
       removedDocs.push(removedDoc);
 
@@ -193,7 +165,7 @@ export async function deleteUserStorageData(
       }
 
       if (namespace !== null) {
-        await restoreRemovedDocs();
+        await restoreRemovedDocs(conn);
       }
     });
   }
