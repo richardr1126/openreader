@@ -75,7 +75,7 @@ function formatDuration(ms: number | null): string {
 
 export function AdminTasksPanel() {
   const queryClient = useQueryClient();
-  const { data, error } = useQuery({
+  const { data, error, isPending: isLoading } = useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: fetchTasks,
     refetchInterval: 5000,
@@ -122,25 +122,57 @@ export function AdminTasksPanel() {
           Vercel Hobby invokes scheduled tasks once daily. Shorter intervals are unavailable on this deployment.
         </p>
       )}
-      <div className="space-y-2">
-        {(data?.tasks ?? []).map((task) => (
-          <TaskRow
-            key={task.key}
-            task={task}
-            schedulerMode={data?.scheduler.mode ?? 'self-hosted'}
-            minimumIntervalMs={data?.scheduler.minimumIntervalMs ?? 60_000}
-            busy={patchTask.isPending || runTask.isPending}
-            runPending={runTask.isPending && runTask.variables === task.key}
-            onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
-            onSaveInterval={(intervalMs) => patchTask.mutate({ key: task.key, patch: { intervalMs } })}
-            onRun={() => runTask.mutate(task.key)}
-          />
-        ))}
-        {data && data.tasks.length === 0 && (
-          <p className="text-sm text-soft">No tasks registered.</p>
-        )}
-      </div>
+      {isLoading ? (
+        <TasksSkeleton />
+      ) : (
+        <div className="space-y-2">
+          {(data?.tasks ?? []).map((task) => (
+            <TaskRow
+              key={task.key}
+              task={task}
+              schedulerMode={data?.scheduler.mode ?? 'self-hosted'}
+              minimumIntervalMs={data?.scheduler.minimumIntervalMs ?? 60_000}
+              busy={patchTask.isPending || runTask.isPending}
+              runPending={runTask.isPending && runTask.variables === task.key}
+              onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
+              onSaveInterval={(intervalMs) => patchTask.mutate({ key: task.key, patch: { intervalMs } })}
+              onRun={() => runTask.mutate(task.key)}
+            />
+          ))}
+          {data && data.tasks.length === 0 && (
+            <p className="text-sm text-soft">No tasks registered.</p>
+          )}
+        </div>
+      )}
     </Section>
+  );
+}
+
+function TasksSkeleton() {
+  const rows = Array.from({ length: 2 });
+  return (
+    <div className="space-y-2 animate-pulse" aria-label="Loading scheduled tasks" aria-busy="true">
+      {rows.map((_, index) => (
+        <Card key={index}>
+          <div className="space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1.5">
+                <div className="h-4 w-48 rounded bg-offbase" />
+                <div className="h-3 w-64 rounded bg-offbase" />
+              </div>
+              <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                <div className="h-5 w-9 rounded-pill bg-offbase" />
+                <div className="h-8 w-20 rounded-md bg-offbase" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-3 w-24 rounded bg-offbase" />
+              <div className="h-7 w-28 rounded-md bg-offbase" />
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 }
 
