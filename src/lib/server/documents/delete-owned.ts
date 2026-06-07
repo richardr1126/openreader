@@ -7,6 +7,8 @@ import {
 } from '@/lib/server/documents/previews';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import { withDocumentLock } from '@/lib/server/documents/document-lock';
+import { hashForLog, serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 type DocumentRow = typeof documents.$inferSelect;
 
@@ -66,7 +68,21 @@ export async function deleteOwnedDocument(input: {
         }
       }
     } catch (error) {
-      await restoreDocumentOwnership(conn, removed);
+      // Best-effort rollback; never let a restore failure mask the original error.
+      try {
+        await restoreDocumentOwnership(conn, removed);
+      } catch (restoreError) {
+        logDegraded(serverLogger, {
+          event: 'documents.delete_owned.restore_ownership.failed',
+          msg: 'Failed to restore document ownership after deletion failure',
+          step: 'restore_document_ownership',
+          context: {
+            documentId: input.documentId,
+            userIdHash: hashForLog(input.userId),
+          },
+          error: restoreError,
+        });
+      }
       throw error;
     }
 
