@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, primaryKey, index, foreignKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index, foreignKey, check } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { user } from './schema_auth_sqlite';
 
@@ -223,7 +223,9 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   runRequested: integer('run_requested', { mode: 'boolean' }).notNull().default(false),
   runningSince: integer('running_since'),
   updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
-});
+}, (table) => [
+  check('scheduled_tasks_interval_ms_positive', sql`${table.intervalMs} > 0`),
+]);
 
 export const ttsSegmentVariants = sqliteTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),

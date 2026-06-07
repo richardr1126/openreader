@@ -10,5 +10,6 @@ CREATE TABLE `scheduled_tasks` (
 	`next_run_at` integer,
 	`run_requested` integer DEFAULT false NOT NULL,
 	`running_since` integer,
-	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	CONSTRAINT "scheduled_tasks_interval_ms_positive" CHECK("scheduled_tasks"."interval_ms" > 0)
 );

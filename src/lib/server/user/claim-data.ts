@@ -499,15 +499,28 @@ export async function transferUserDocumentSettings(
     .select()
     .from(documentSettings)
     .where(eq(documentSettings.userId, fromUserId));
-  for (const row of rows) {
-    const [existing] = await database
-      .select({ clientUpdatedAtMs: documentSettings.clientUpdatedAtMs })
+  const documentIds = rows.map((row: { documentId: string }) => row.documentId);
+  const existingRows = documentIds.length > 0
+    ? await database
+      .select({
+        documentId: documentSettings.documentId,
+        clientUpdatedAtMs: documentSettings.clientUpdatedAtMs,
+      })
       .from(documentSettings)
       .where(and(
         eq(documentSettings.userId, toUserId),
-        eq(documentSettings.documentId, row.documentId),
+        inArray(documentSettings.documentId, documentIds),
       ))
-      .limit(1);
+    : [];
+  const existingByDocumentId = new Map<string, { clientUpdatedAtMs: number | null }>(
+    existingRows.map((row: { documentId: string; clientUpdatedAtMs: number | null }) => [
+      row.documentId,
+      row,
+    ] as const),
+  );
+
+  for (const row of rows) {
+    const existing = existingByDocumentId.get(row.documentId);
     if (existing && Number(existing.clientUpdatedAtMs ?? 0) >= Number(row.clientUpdatedAtMs ?? 0)) {
       continue;
     }

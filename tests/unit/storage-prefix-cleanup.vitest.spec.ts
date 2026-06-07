@@ -11,7 +11,11 @@ vi.mock('@/lib/server/storage/s3', () => ({
 }));
 
 import { deleteAudiobookPrefix } from '../../src/lib/server/audiobooks/blobstore';
-import { deleteDocumentBlob, deleteDocumentPrefix } from '../../src/lib/server/documents/blobstore';
+import {
+  deleteAllExpiredTempDocumentUploads,
+  deleteDocumentBlob,
+  deleteDocumentPrefix,
+} from '../../src/lib/server/documents/blobstore';
 
 describe('storage prefix cleanup', () => {
   beforeEach(() => {
@@ -84,5 +88,45 @@ describe('storage prefix cleanup', () => {
       .find((command) => command.constructor.name === 'DeleteObjectCommand'
         && command.input.Key === `openreader-test/documents_v1/${documentId}`);
     expect(sourceDelete).toBeUndefined();
+  });
+
+  test('deletes expired temporary uploads page by page', async () => {
+    const old = new Date(Date.now() - 60_000);
+    mocks.send
+      .mockResolvedValueOnce({
+        Contents: [{ Key: 'temp/a', LastModified: old }],
+        IsTruncated: true,
+        NextContinuationToken: 'next',
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Contents: [{ Key: 'temp/b', LastModified: old }],
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({});
+
+    await expect(deleteAllExpiredTempDocumentUploads(null, Date.now())).resolves.toBe(2);
+
+    expect(mocks.send.mock.calls.map(([command]) => command.constructor.name)).toEqual([
+      'ListObjectsV2Command',
+      'DeleteObjectsCommand',
+      'ListObjectsV2Command',
+      'DeleteObjectsCommand',
+    ]);
+  });
+
+  test('temporary upload cleanup fails on per-object storage errors', async () => {
+    const old = new Date(Date.now() - 60_000);
+    mocks.send
+      .mockResolvedValueOnce({
+        Contents: [{ Key: 'temp/a', LastModified: old }],
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({
+        Errors: [{ Key: 'temp/a', Code: 'AccessDenied' }],
+      });
+
+    await expect(deleteAllExpiredTempDocumentUploads(null, Date.now()))
+      .rejects.toThrow('test-bucket');
   });
 });

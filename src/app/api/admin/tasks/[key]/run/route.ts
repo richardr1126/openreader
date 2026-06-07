@@ -13,7 +13,7 @@ export async function POST(
   if (ctx instanceof Response) return ctx;
 
   const { key } = await params;
-  if (!(key in TASK_REGISTRY)) {
+  if (!Object.hasOwn(TASK_REGISTRY, key)) {
     return NextResponse.json({ error: 'Unknown task' }, { status: 404 });
   }
 

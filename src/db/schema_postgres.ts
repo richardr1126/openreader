@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, text, integer, real, date, bigint, boolean, primaryKey, index, jsonb, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, date, bigint, boolean, primaryKey, index, jsonb, foreignKey, check } from 'drizzle-orm/pg-core';
 import { user } from './schema_auth_postgres';
 
 const PG_NOW_MS = sql`(extract(epoch from now()) * 1000)::bigint`;
@@ -223,7 +223,9 @@ export const scheduledTasks = pgTable('scheduled_tasks', {
   runRequested: boolean('run_requested').notNull().default(false),
   runningSince: bigint('running_since', { mode: 'number' }),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
-});
+}, (table) => [
+  check('scheduled_tasks_interval_ms_positive', sql`${table.intervalMs} > 0`),
+]);
 
 export const ttsSegmentVariants = pgTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),

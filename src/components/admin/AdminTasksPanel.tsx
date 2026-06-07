@@ -141,15 +141,16 @@ function TaskRow({
   onSaveInterval: (intervalMs: number) => void;
   onRun: () => void;
 }) {
-  const [minutes, setMinutes] = useState(String(Math.round(task.intervalMs / 60000)));
+  const [minutes, setMinutes] = useState(String(task.intervalMs / 60000));
 
   useEffect(() => {
-    setMinutes(String(Math.round(task.intervalMs / 60000)));
+    setMinutes(String(task.intervalMs / 60000));
   }, [task.intervalMs]);
 
-  const parsedMinutes = Number(minutes);
+  const parsedMinutes = parseFloat(minutes);
+  const newIntervalMs = parsedMinutes * 60000;
   const intervalDirty =
-    Number.isFinite(parsedMinutes) && parsedMinutes > 0 && parsedMinutes * 60000 !== task.intervalMs;
+    Number.isFinite(parsedMinutes) && parsedMinutes > 0 && newIntervalMs !== task.intervalMs;
 
   return (
     <div className="rounded-lg border border-line bg-surface px-3 py-2 space-y-2">
@@ -177,7 +178,8 @@ function TaskRow({
           Every
           <Input
             type="number"
-            min={1}
+            min={0.001}
+            step="any"
             controlSize="sm"
             className="w-16"
             value={minutes}
@@ -189,7 +191,7 @@ function TaskRow({
             <Button
               variant="primary"
               size="xs"
-              onClick={() => onSaveInterval(Math.floor(parsedMinutes) * 60000)}
+              onClick={() => onSaveInterval(newIntervalMs)}
               disabled={busy}
             >
               Save

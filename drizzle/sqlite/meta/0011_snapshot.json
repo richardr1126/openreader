@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "504118c7-02f7-4fc5-806d-4a369e415173",
+  "id": "4c4a203e-9b2b-4eb2-b31c-2613a7c1d377",
   "prevId": "a32ae7d4-c074-44f0-9e90-2473949376ef",
   "tables": {
     "admin_providers": {
@@ -791,7 +791,12 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "scheduled_tasks_interval_ms_positive": {
+          "name": "scheduled_tasks_interval_ms_positive",
+          "value": "\"scheduled_tasks\".\"interval_ms\" > 0"
+        }
+      }
     },
     "tts_segment_entries": {
       "name": "tts_segment_entries",

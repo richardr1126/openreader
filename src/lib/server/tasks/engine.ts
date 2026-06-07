@@ -69,7 +69,6 @@ async function finishTask(
       // Schedule the next run off the row's (possibly user-edited) interval.
       nextRunAt: sql`${now} + ${scheduledTasks.intervalMs}`,
       runningSince: null,
-      runRequested: false,
       updatedAt: now,
     })
     .where(eq(scheduledTasks.key, key));
@@ -136,12 +135,29 @@ export async function updateTask(
   key: string,
   patch: { enabled?: boolean; intervalMs?: number },
 ): Promise<void> {
-  const set: Record<string, unknown> = { updatedAt: Date.now() };
+  const def = Object.hasOwn(TASK_REGISTRY, key) ? TASK_REGISTRY[key] : undefined;
+  if (!def) return;
+
+  const now = Date.now();
+  const set: Record<string, unknown> = { updatedAt: now };
   if (typeof patch.enabled === 'boolean') set.enabled = patch.enabled;
   if (typeof patch.intervalMs === 'number' && Number.isFinite(patch.intervalMs) && patch.intervalMs > 0) {
-    set.intervalMs = Math.floor(patch.intervalMs);
+    set.intervalMs = Math.max(1, Math.floor(patch.intervalMs));
   }
-  await db.update(scheduledTasks).set(set).where(eq(scheduledTasks.key, key));
+  await db
+    .insert(scheduledTasks)
+    .values({
+      key,
+      enabled: typeof set.enabled === 'boolean' ? set.enabled : true,
+      intervalMs: typeof set.intervalMs === 'number' ? set.intervalMs : def.defaultIntervalMs,
+      lastStatus: 'idle',
+      nextRunAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: scheduledTasks.key,
+      set,
+    });
 }
 
 export type TaskView = {

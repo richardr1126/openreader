@@ -10,5 +10,6 @@ CREATE TABLE "scheduled_tasks" (
 	"next_run_at" bigint,
 	"run_requested" boolean DEFAULT false NOT NULL,
 	"running_since" bigint,
-	"updated_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint NOT NULL
+	"updated_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint NOT NULL,
+	CONSTRAINT "scheduled_tasks_interval_ms_positive" CHECK ("scheduled_tasks"."interval_ms" > 0)
 );

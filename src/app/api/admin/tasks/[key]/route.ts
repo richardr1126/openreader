@@ -13,7 +13,7 @@ export async function PATCH(
   if (ctx instanceof Response) return ctx;
 
   const { key } = await params;
-  if (!(key in TASK_REGISTRY)) {
+  if (!Object.hasOwn(TASK_REGISTRY, key)) {
     return NextResponse.json({ error: 'Unknown task' }, { status: 404 });
   }
 
@@ -27,11 +27,26 @@ export async function PATCH(
     return NextResponse.json({ error: 'Expected JSON object' }, { status: 400 });
   }
 
-  const { enabled, intervalMs } = body as { enabled?: unknown; intervalMs?: unknown };
+  const payload = body as { enabled?: unknown; intervalMs?: unknown };
   const patch: { enabled?: boolean; intervalMs?: number } = {};
-  if (typeof enabled === 'boolean') patch.enabled = enabled;
-  if (typeof intervalMs === 'number' && Number.isFinite(intervalMs) && intervalMs > 0) {
-    patch.intervalMs = Math.floor(intervalMs);
+  if (Object.hasOwn(payload, 'enabled')) {
+    if (typeof payload.enabled !== 'boolean') {
+      return NextResponse.json({ error: 'enabled must be a boolean' }, { status: 400 });
+    }
+    patch.enabled = payload.enabled;
+  }
+  if (Object.hasOwn(payload, 'intervalMs')) {
+    if (
+      typeof payload.intervalMs !== 'number'
+      || !Number.isFinite(payload.intervalMs)
+      || payload.intervalMs <= 0
+    ) {
+      return NextResponse.json({ error: 'intervalMs must be a finite positive number' }, { status: 400 });
+    }
+    patch.intervalMs = Math.max(1, Math.floor(payload.intervalMs));
+  }
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: 'Expected enabled or intervalMs' }, { status: 400 });
   }
 
   await updateTask(key, patch);

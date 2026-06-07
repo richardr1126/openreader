@@ -1,5 +1,5 @@
 {
-  "id": "195ce074-f013-420d-9238-30c32f38365e",
+  "id": "afe1d934-9b20-4d50-82fc-aeebd49fe43f",
   "prevId": "1099cbe6-0c2e-4ea8-ae3c-6883c931169d",
   "version": "7",
   "dialect": "postgresql",
@@ -780,7 +780,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "scheduled_tasks_interval_ms_positive": {
+          "name": "scheduled_tasks_interval_ms_positive",
+          "value": "\"scheduled_tasks\".\"interval_ms\" > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.tts_segment_entries": {

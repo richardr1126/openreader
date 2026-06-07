@@ -16,7 +16,7 @@ vi.mock('@/db', () => ({
 // Keep the error-path test from printing the expected failure to the console.
 vi.mock('@/lib/server/errors/logging', () => ({ logDegraded: vi.fn() }));
 
-import { runDueTasks } from '../../src/lib/server/tasks/engine';
+import { runDueTasks, updateTask } from '../../src/lib/server/tasks/engine';
 import type { TaskRegistry } from '../../src/lib/server/tasks/types';
 
 const tasks = sqliteSchema.scheduledTasks;
@@ -33,7 +33,8 @@ const CREATE_TABLE = `CREATE TABLE scheduled_tasks (
   next_run_at integer,
   run_requested integer DEFAULT false NOT NULL,
   running_since integer,
-  updated_at integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
+  updated_at integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+  CONSTRAINT scheduled_tasks_interval_ms_positive CHECK(interval_ms > 0)
 );`;
 
 const KEY = 'test-task';
@@ -133,5 +134,38 @@ describe('scheduled task engine', () => {
     await runDueTasks({ registry: registryWith(handler) });
 
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  test('preserves a manual rerun requested while a task is running', async () => {
+    const handler = vi.fn(async () => {
+      await holder.db
+        .update(tasks)
+        .set({ runRequested: true })
+        .where(eq(tasks.key, KEY));
+    });
+    await seedRow({ nextRunAt: Date.now() - 1 });
+
+    await runDueTasks({ registry: registryWith(handler) });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect((await readRow()).runRequested).toBe(true);
+  });
+
+  test('rejects non-positive intervals at the database boundary', async () => {
+    await expect(seedRow({ intervalMs: 0 })).rejects.toThrow();
+  });
+
+  test('updates a registered task even when its row has not been seeded', async () => {
+    await updateTask('prune-job-events', { enabled: false, intervalMs: 12_345 });
+
+    const [row] = await holder.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.key, 'prune-job-events'));
+    expect(row).toEqual(expect.objectContaining({
+      enabled: false,
+      intervalMs: 12_345,
+      lastStatus: 'idle',
+    }));
   });
 });

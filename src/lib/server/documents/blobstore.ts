@@ -654,7 +654,7 @@ export async function deleteAllExpiredTempDocumentUploads(
   const nsSegment = ns ? `ns/${ns}/` : '';
   const prefix = `${cfg.prefix}/document_uploads_temp_v1/${nsSegment}`;
   let continuationToken: string | undefined;
-  const keys: string[] = [];
+  let deleted = 0;
 
   do {
     const listRes = await client.send(
@@ -665,33 +665,35 @@ export async function deleteAllExpiredTempDocumentUploads(
       }),
     );
 
+    const batch: string[] = [];
     for (const item of listRes.Contents ?? []) {
       const key = item.Key;
       const lastModified = item.LastModified?.getTime() ?? 0;
       if (!key || lastModified <= 0 || lastModified >= olderThanMs) continue;
-      keys.push(key);
+      batch.push(key);
+    }
+
+    if (batch.length > 0) {
+      const deleteRes = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: cfg.bucket,
+          Delete: {
+            Objects: batch.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        }),
+      );
+      if (deleteRes.Errors?.length) {
+        throw new Error(
+          `Failed to delete temporary uploads from bucket "${cfg.bucket}" `
+          + `(keys: ${JSON.stringify(batch)}, errors: ${JSON.stringify(deleteRes.Errors)})`,
+        );
+      }
+      deleted += batch.length;
     }
 
     continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
   } while (continuationToken);
 
-  if (keys.length === 0) return 0;
-
-  let deleted = 0;
-  for (let i = 0; i < keys.length; i += 1000) {
-    const batch = keys.slice(i, i + 1000);
-    const deleteRes = await client.send(
-      new DeleteObjectsCommand({
-        Bucket: cfg.bucket,
-        Delete: {
-          Objects: batch.map((Key) => ({ Key })),
-          Quiet: true,
-        },
-      }),
-    );
-    deleted += deleteRes.Deleted?.length ?? batch.length - (deleteRes.Errors?.length ?? 0);
-  }
-
   return deleted;
 }
-
