@@ -234,6 +234,7 @@ describe('transferUserDocuments', () => {
     await transferUserDocuments('anon', 'user', {
       db: transferDb,
       transferTts: true,
+      skipStorage: true,
     });
 
     expect(await transferDb.select().from(ttsSegmentEntries)).toEqual([

@@ -21,9 +21,8 @@ import {
 import { isS3Configured } from '../storage/s3';
 import { logDegraded } from '../errors/logging';
 import { hashForLog, serverLogger } from '../logger';
-import { deleteOwnedDocument } from '../documents/delete-owned';
 import { getS3Config } from '../storage/s3';
-import { copyTtsSegmentPrefix } from '../tts/segments-blobstore';
+import { copyTtsSegmentPrefix, deleteTtsSegmentPrefix } from '../tts/segments-blobstore';
 import { buildTtsSegmentDocumentPrefix } from '../tts/segments';
 
 type AudiobookRow = {
@@ -185,57 +184,40 @@ export async function transferUserDocuments(
   fromUserId: string,
   toUserId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { db?: any; namespace?: string | null; transferTts?: boolean },
+  options?: { db?: any; namespace?: string | null; transferTts?: boolean; skipStorage?: boolean },
 ): Promise<number> {
   if (!fromUserId || !toUserId) return 0;
   if (fromUserId === toUserId) return 0;
 
   const database = options?.db ?? db;
-  const storageEnabled = !options?.db && isS3Configured();
+  // Object storage is always present in a real deployment; `skipStorage` lets
+  // tests transfer metadata only. The shared, content-addressed document blob is
+  // never touched here — it stays as long as any owner (the new user) remains.
+  const copyStorage = !options?.skipStorage && isS3Configured();
 
   const rows = await database.select().from(documents).where(eq(documents.userId, fromUserId));
   if (rows.length === 0) return 0;
 
-  if (storageEnabled || options?.transferTts) {
-    for (const row of rows) {
-      await database
-        .insert(documents)
-        .values({ ...row, userId: toUserId })
-        .onConflictDoNothing();
-      if (options?.transferTts) {
-        await transferDocumentTtsSegments({
-          documentId: row.id,
-          fromUserId,
-          toUserId,
-          namespace: options.namespace ?? null,
-          database,
-          copyStorage: storageEnabled,
-          deleteSourceMetadata: !storageEnabled,
-        });
-      }
-      if (storageEnabled) {
-        await deleteOwnedDocument({
-          userId: fromUserId,
-          documentId: row.id,
-          namespace: options?.namespace ?? null,
-        });
-      } else {
-        await database.delete(documents).where(and(
-          eq(documents.userId, fromUserId),
-          eq(documents.id, row.id),
-        ));
-      }
+  for (const row of rows) {
+    await database
+      .insert(documents)
+      .values({ ...row, userId: toUserId })
+      .onConflictDoNothing();
+    if (options?.transferTts) {
+      await transferDocumentTtsSegments({
+        documentId: row.id,
+        fromUserId,
+        toUserId,
+        namespace: options.namespace ?? null,
+        database,
+        copyStorage,
+      });
     }
-    return rows.length;
+    await database.delete(documents).where(and(
+      eq(documents.userId, fromUserId),
+      eq(documents.id, row.id),
+    ));
   }
-
-  await database
-    .insert(documents)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .values(rows.map((row: any) => ({ ...row, userId: toUserId })))
-    .onConflictDoNothing();
-
-  await database.delete(documents).where(eq(documents.userId, fromUserId));
   return rows.length;
 }
 
@@ -247,27 +229,29 @@ async function transferDocumentTtsSegments(input: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   database: any;
   copyStorage: boolean;
-  deleteSourceMetadata: boolean;
 }): Promise<void> {
+  // Built only when storage is in play — getS3Config() throws if storage is
+  // unconfigured, which is exactly the metadata-only path tests exercise.
+  const sourceTtsPrefixes = () => (['v1', 'v2'] as const).map((storageVersion) => ({
+    from: buildTtsSegmentDocumentPrefix({
+      storagePrefix: getS3Config().prefix,
+      namespace: input.namespace,
+      userId: input.fromUserId,
+      documentId: input.documentId,
+      storageVersion,
+    }),
+    to: buildTtsSegmentDocumentPrefix({
+      storagePrefix: getS3Config().prefix,
+      namespace: input.namespace,
+      userId: input.toUserId,
+      documentId: input.documentId,
+      storageVersion,
+    }),
+  }));
+
   if (input.copyStorage) {
-    const storagePrefix = getS3Config().prefix;
-    for (const storageVersion of ['v1', 'v2'] as const) {
-      await copyTtsSegmentPrefix(
-        buildTtsSegmentDocumentPrefix({
-          storagePrefix,
-          namespace: input.namespace,
-          userId: input.fromUserId,
-          documentId: input.documentId,
-          storageVersion,
-        }),
-        buildTtsSegmentDocumentPrefix({
-          storagePrefix,
-          namespace: input.namespace,
-          userId: input.toUserId,
-          documentId: input.documentId,
-          storageVersion,
-        }),
-      );
+    for (const { from, to } of sourceTtsPrefixes()) {
+      await copyTtsSegmentPrefix(from, to);
     }
   }
 
@@ -337,19 +321,26 @@ async function transferDocumentTtsSegments(input: {
       .onConflictDoNothing();
   }
 
-  if (input.deleteSourceMetadata) {
-    if (variants.length > 0) {
-      await input.database.delete(ttsSegmentVariants).where(and(
-        eq(ttsSegmentVariants.userId, input.fromUserId),
-        inArray(ttsSegmentVariants.segmentId, variants.map(
-          (variant: typeof ttsSegmentVariants.$inferSelect) => variant.segmentId,
-        )),
-      ));
-    }
-    await input.database.delete(ttsSegmentEntries).where(and(
-      eq(ttsSegmentEntries.userId, input.fromUserId),
-      eq(ttsSegmentEntries.documentId, input.documentId),
+  // Always remove the source metadata: the source account (e.g. the persistent
+  // 'unclaimed' user) is not deleted, so nothing would cascade it away.
+  if (variants.length > 0) {
+    await input.database.delete(ttsSegmentVariants).where(and(
+      eq(ttsSegmentVariants.userId, input.fromUserId),
+      inArray(ttsSegmentVariants.segmentId, variants.map(
+        (variant: typeof ttsSegmentVariants.$inferSelect) => variant.segmentId,
+      )),
     ));
+  }
+  await input.database.delete(ttsSegmentEntries).where(and(
+    eq(ttsSegmentEntries.userId, input.fromUserId),
+    eq(ttsSegmentEntries.documentId, input.documentId),
+  ));
+
+  // Remove the now-copied source audio objects too (only when storage is in play).
+  if (input.copyStorage) {
+    for (const { from } of sourceTtsPrefixes()) {
+      await deleteTtsSegmentPrefix(from);
+    }
   }
 }
 
