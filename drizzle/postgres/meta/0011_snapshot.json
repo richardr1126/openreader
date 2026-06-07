@@ -1,5 +1,5 @@
 {
-  "id": "afe1d934-9b20-4d50-82fc-aeebd49fe43f",
+  "id": "6fa9be62-3d2b-43d2-8c49-11d9c6411a33",
   "prevId": "1099cbe6-0c2e-4ea8-ae3c-6883c931169d",
   "version": "7",
   "dialect": "postgresql",
@@ -324,6 +324,37 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.document_blob_leases": {
+      "name": "document_blob_leases",
+      "schema": "",
+      "columns": {
+        "document_id": {
+          "name": "document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lease_until_ms": {
+          "name": "lease_until_ms",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -723,6 +754,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'idle'"
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "last_run_at": {
           "name": "last_run_at",

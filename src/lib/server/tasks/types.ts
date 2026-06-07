@@ -6,7 +6,12 @@ export type TaskResult = {
   [key: string]: unknown;
 };
 
-export type TaskHandler = () => Promise<TaskResult | void>;
+export type TaskContext = {
+  signal: AbortSignal;
+  deadlineAt: number;
+};
+
+export type TaskHandler = (context: TaskContext) => Promise<TaskResult | void>;
 
 /** Static definition of a task, kept in code (the registry). */
 export type TaskDef = {
@@ -16,6 +21,8 @@ export type TaskDef = {
   description?: string;
   /** Default run interval in ms; the per-task row may override it. */
   defaultIntervalMs: number;
+  /** Maximum wall-clock time before the run is marked failed and aborted. */
+  maxRunMs?: number;
   /** The work to perform. Must be idempotent and safe to re-run. */
   run: TaskHandler;
 };

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4c4a203e-9b2b-4eb2-b31c-2613a7c1d377",
+  "id": "d063930a-ae25-4ca0-8b38-7092a16e3503",
   "prevId": "a32ae7d4-c074-44f0-9e90-2473949376ef",
   "tables": {
     "admin_providers": {
@@ -347,6 +347,37 @@
           "name": "audiobooks_id_user_id_pk"
         }
       },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "document_blob_leases": {
+      "name": "document_blob_leases",
+      "columns": {
+        "document_id": {
+          "name": "document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lease_until_ms": {
+          "name": "lease_until_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -727,6 +758,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'idle'"
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "last_run_at": {
           "name": "last_run_at",

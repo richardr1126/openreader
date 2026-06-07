@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminContext } from '@/lib/server/auth/admin';
 import { updateTask } from '@/lib/server/tasks/engine';
 import { TASK_REGISTRY } from '@/lib/server/tasks/registry';
+import { getTaskSchedulerInfo } from '@/lib/server/tasks/scheduler';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'intervalMs must be a finite positive number' }, { status: 400 });
     }
     patch.intervalMs = Math.max(1, Math.floor(payload.intervalMs));
+    const minimumIntervalMs = getTaskSchedulerInfo().minimumIntervalMs;
+    if (patch.intervalMs < minimumIntervalMs) {
+      return NextResponse.json(
+        { error: `intervalMs must be at least ${minimumIntervalMs} for this deployment` },
+        { status: 400 },
+      );
+    }
   }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Expected enabled or intervalMs' }, { status: 400 });

@@ -37,6 +37,6 @@ If a request exceeds the active limit, the TTS API returns `429` with reset meta
 ## Related docs
 
 - TTS/rate-limit environment variables: [Environment Variables](../reference/environment-variables#tts-provider-and-request-behavior)
-- PDF parsing rate limiting (separate, compute-side throttle): [Admin Panel → Site features](./admin-panel#site-features) and [Environment Variables](../reference/environment-variables#compute-pdf-parsing-rate-limiting-runtime-settings)
+- PDF parsing rate limiting (separate, compute-side throttle): [Admin Panel → Rate limiting](./admin-panel#rate-limiting)
 - Auth configuration: [Auth](./auth)
 - Provider setup: [TTS Providers](./tts-providers)

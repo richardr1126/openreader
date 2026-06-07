@@ -1,14 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq, lt, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { scheduledTasks } from '@/db/schema';
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { TASK_REGISTRY } from './registry';
-import type { TaskDef, TaskRegistry, TaskRunStatus } from './types';
+import type { TaskContext, TaskDef, TaskRegistry, TaskRunStatus } from './types';
 
 // A task still marked 'running' after this long is assumed abandoned (process
 // crashed mid-run) and may be reclaimed by the next tick.
 const STALE_RUNNING_MS = 60 * 60 * 1000;
+const DEFAULT_TASK_MAX_RUN_MS = 4 * 60 * 1000;
 
 /**
  * Seed a `scheduled_tasks` row for every registered task. Idempotent: existing
@@ -32,14 +34,21 @@ async function ensureTaskRows(registry: TaskRegistry = TASK_REGISTRY): Promise<v
 
 /**
  * Atomically claim a task for execution. Returns true only if this caller won
- * the claim, so the same task never runs concurrently (across instances too):
- * the single UPDATE flips status to 'running' iff it is not already running
- * (or its running marker is stale).
+ * the claim. The single UPDATE flips status to 'running' iff it is not already
+ * running (or its running marker is stale). A unique owner token fences final
+ * state updates if a stale runner later completes after being replaced.
  */
-async function claimTask(key: string, now: number): Promise<boolean> {
+async function claimTask(key: string, now: number): Promise<string | null> {
+  const leaseOwner = randomUUID();
   const claimed = await db
     .update(scheduledTasks)
-    .set({ lastStatus: 'running', runningSince: now, runRequested: false, updatedAt: now })
+    .set({
+      lastStatus: 'running',
+      leaseOwner,
+      runningSince: now,
+      runRequested: false,
+      updatedAt: now,
+    })
     .where(and(
       eq(scheduledTasks.key, key),
       or(
@@ -47,12 +56,13 @@ async function claimTask(key: string, now: number): Promise<boolean> {
         lt(scheduledTasks.runningSince, now - STALE_RUNNING_MS),
       ),
     ))
-    .returning({ key: scheduledTasks.key });
-  return claimed.length > 0;
+    .returning({ leaseOwner: scheduledTasks.leaseOwner });
+  return claimed[0]?.leaseOwner === leaseOwner ? leaseOwner : null;
 }
 
 async function finishTask(
   key: string,
+  leaseOwner: string,
   outcome:
     | { status: 'ok'; startedAt: number; summary: string | null }
     | { status: 'error'; startedAt: number; error: unknown },
@@ -68,18 +78,42 @@ async function finishTask(
       lastResultJson: outcome.status === 'ok' && outcome.summary ? outcome.summary : null,
       // Schedule the next run off the row's (possibly user-edited) interval.
       nextRunAt: sql`${now} + ${scheduledTasks.intervalMs}`,
+      leaseOwner: null,
       runningSince: null,
       updatedAt: now,
     })
-    .where(eq(scheduledTasks.key, key));
+    .where(and(
+      eq(scheduledTasks.key, key),
+      eq(scheduledTasks.leaseOwner, leaseOwner),
+    ));
 }
 
-async function executeTask(key: string, def: TaskDef): Promise<void> {
+function taskTimeoutError(key: string, maxRunMs: number): Error {
+  return new Error(`Scheduled task "${key}" exceeded its ${maxRunMs}ms runtime limit`);
+}
+
+async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promise<void> {
   const startedAt = Date.now();
+  const maxRunMs = def.maxRunMs ?? DEFAULT_TASK_MAX_RUN_MS;
+  const controller = new AbortController();
+  const context: TaskContext = {
+    signal: controller.signal,
+    deadlineAt: startedAt + maxRunMs,
+  };
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
   try {
-    const result = await def.run();
+    const result = await Promise.race([
+      def.run(context),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(taskTimeoutError(key, maxRunMs));
+        }, maxRunMs);
+      }),
+    ]);
     const summary = result && typeof result.summary === 'string' ? result.summary : null;
-    await finishTask(key, { status: 'ok', startedAt, summary });
+    await finishTask(key, leaseOwner, { status: 'ok', startedAt, summary });
   } catch (error) {
     logDegraded(serverLogger, {
       event: 'tasks.run.failed',
@@ -87,7 +121,9 @@ async function executeTask(key: string, def: TaskDef): Promise<void> {
       step: key,
       error,
     });
-    await finishTask(key, { status: 'error', startedAt, error });
+    await finishTask(key, leaseOwner, { status: 'error', startedAt, error });
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 
@@ -103,6 +139,7 @@ export async function runDueTasks(options?: { registry?: TaskRegistry }): Promis
   const now = Date.now();
   const rows = await db.select().from(scheduledTasks);
 
+  const executions: Promise<void>[] = [];
   for (const row of rows) {
     const def = registry[row.key];
     if (!def) continue; // orphaned row for a task no longer in the registry
@@ -112,9 +149,11 @@ export async function runDueTasks(options?: { registry?: TaskRegistry }): Promis
       (row.enabled && row.nextRunAt != null && now >= Number(row.nextRunAt));
     if (!due) continue;
 
-    if (!(await claimTask(row.key, now))) continue;
-    await executeTask(row.key, def);
+    const leaseOwner = await claimTask(row.key, now);
+    if (!leaseOwner) continue;
+    executions.push(executeTask(row.key, def, leaseOwner));
   }
+  await Promise.all(executions);
 }
 
 /**
@@ -125,8 +164,9 @@ export async function runTaskNow(key: string, registry: TaskRegistry = TASK_REGI
   const def = registry[key];
   if (!def) return false;
   await ensureTaskRows(registry);
-  if (!(await claimTask(key, Date.now()))) return false;
-  await executeTask(key, def);
+  const leaseOwner = await claimTask(key, Date.now());
+  if (!leaseOwner) return false;
+  await executeTask(key, def, leaseOwner);
   return true;
 }
 

@@ -36,6 +36,7 @@ S3_PREFIX=openreader
 BASE_URL=https://your-app.vercel.app
 AUTH_SECRET=...
 ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in-app
+CRON_SECRET=...               # generate with: openssl rand -hex 32
 
 # Heavy compute (required on Vercel in current releases)
 COMPUTE_WORKER_URL=https://<railway-worker-domain>
@@ -110,7 +111,15 @@ Vercel deployments do not run `scripts/openreader-entrypoint.mjs`, so automatic 
 - Run `pnpm migrate` in a controlled environment to apply Drizzle schema migrations to your Postgres DB.
 - Run `pnpm migrate-fs` only when migrating legacy local filesystem data (`docstore/documents_v1`, `docstore/audiobooks_v1`) into object storage + DB rows. Fresh Vercel deployments usually do not need this.
 
-## 5. FFmpeg packaging in Vercel functions
+## 5. Scheduled maintenance tasks
+
+The repository configures `/api/admin/tasks/tick` as a Vercel Cron route. Set `CRON_SECRET`; requests without the matching bearer token are rejected.
+
+The checked-in Hobby-compatible schedule invokes the route once daily. The admin task panel therefore prevents selecting intervals shorter than one day on Vercel, even though self-hosted deployments can run tasks more frequently.
+
+Each due task is claimed with a database-backed lease, due tasks start independently, and individual runs are aborted and marked failed after four minutes. Review failures and run tasks manually from **Settings → Admin → Scheduled tasks**.
+
+## 6. FFmpeg packaging in Vercel functions
 
 `ffmpeg-static` binaries must be included in function traces. This repo already does that in `next.config.ts` via `outputFileTracingIncludes` for:
 
@@ -124,7 +133,7 @@ Vercel deployments do not run `scripts/openreader-entrypoint.mjs`, so automatic 
 
 If you change route paths or split handlers, update `outputFileTracingIncludes` accordingly.
 
-## 6. Function memory sizing
+## 7. Function memory sizing
 
 FFmpeg workloads benefit from more memory/CPU. This repo includes:
 
@@ -140,14 +149,15 @@ FFmpeg workloads benefit from more memory/CPU. This repo includes:
 
 Adjust memory per route if your files are larger or your plan differs.
 
-## 7. Runtime expectations and caveats
+## 8. Runtime expectations and caveats
 
 - Audiobook APIs require S3 configuration; otherwise they return `503`.
 - For production Vercel deploys, use `POSTGRES_URL` instead of SQLite.
 
-## 8. Smoke test after deploy
+## 9. Smoke test after deploy
 
 1. Upload and read a PDF/EPUB document.
 2. Confirm sync/blob fetch works across refreshes/devices.
 3. Generate at least one audiobook chapter and play/download it.
 4. Verify worker-backed word highlighting and PDF parsing.
+5. Open **Settings → Admin → Scheduled tasks**, run one task manually, and confirm the next daily cron invocation succeeds.

@@ -23,12 +23,18 @@ interface TaskView {
   running: boolean;
 }
 
+interface TaskSchedulerInfo {
+  mode: 'self-hosted' | 'vercel-cron';
+  tickIntervalMs: number;
+  minimumIntervalMs: number;
+}
+
 const TASKS_QUERY_KEY = ['admin-tasks'] as const;
 
-async function fetchTasks(): Promise<TaskView[]> {
+async function fetchTasks(): Promise<{ tasks: TaskView[]; scheduler: TaskSchedulerInfo }> {
   const res = await fetch('/api/admin/tasks');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return ((await res.json()) as { tasks: TaskView[] }).tasks;
+  return (await res.json()) as { tasks: TaskView[]; scheduler: TaskSchedulerInfo };
 }
 
 function RunningDot() {
@@ -111,11 +117,18 @@ export function AdminTasksPanel() {
 
   return (
     <Section title="Scheduled tasks" subtitle="Background maintenance jobs. Run them on demand or adjust their schedule.">
+      {data?.scheduler.mode === 'vercel-cron' && (
+        <p className="mb-2 text-xs text-soft">
+          Vercel Hobby invokes scheduled tasks once daily. Shorter intervals are unavailable on this deployment.
+        </p>
+      )}
       <div className="space-y-2">
-        {(data ?? []).map((task) => (
+        {(data?.tasks ?? []).map((task) => (
           <TaskRow
             key={task.key}
             task={task}
+            schedulerMode={data?.scheduler.mode ?? 'self-hosted'}
+            minimumIntervalMs={data?.scheduler.minimumIntervalMs ?? 60_000}
             busy={patchTask.isPending || runTask.isPending}
             runPending={runTask.isPending && runTask.variables === task.key}
             onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
@@ -123,7 +136,7 @@ export function AdminTasksPanel() {
             onRun={() => runTask.mutate(task.key)}
           />
         ))}
-        {data && data.length === 0 && (
+        {data && data.tasks.length === 0 && (
           <p className="text-sm text-soft">No tasks registered.</p>
         )}
       </div>
@@ -133,6 +146,8 @@ export function AdminTasksPanel() {
 
 function TaskRow({
   task,
+  schedulerMode,
+  minimumIntervalMs,
   busy,
   runPending,
   onToggle,
@@ -140,6 +155,8 @@ function TaskRow({
   onRun,
 }: {
   task: TaskView;
+  schedulerMode: TaskSchedulerInfo['mode'];
+  minimumIntervalMs: number;
   busy: boolean;
   runPending: boolean;
   onToggle: (enabled: boolean) => void;
@@ -155,7 +172,9 @@ function TaskRow({
   const parsedMinutes = parseFloat(minutes);
   const newIntervalMs = parsedMinutes * 60000;
   const intervalDirty =
-    Number.isFinite(parsedMinutes) && parsedMinutes > 0 && newIntervalMs !== task.intervalMs;
+    Number.isFinite(parsedMinutes)
+    && newIntervalMs >= minimumIntervalMs
+    && newIntervalMs !== task.intervalMs;
 
   const running = task.running || runPending;
 
@@ -187,7 +206,13 @@ function TaskRow({
               <ClockIcon className="size-3 text-faint" />
               {formatRelative(task.lastRunAt)}
             </span>
-            {task.enabled && task.nextRunAt != null && (
+            {task.enabled && schedulerMode === 'vercel-cron' && (
+              <span className="inline-flex items-center gap-1 text-faint">
+                <RefreshIcon className="size-3" />
+                next daily cron
+              </span>
+            )}
+            {task.enabled && schedulerMode !== 'vercel-cron' && task.nextRunAt != null && (
               <span className="inline-flex items-center gap-1 text-faint">
                 <RefreshIcon className="size-3" />
                 next {formatRelative(task.nextRunAt)}
@@ -199,7 +224,7 @@ function TaskRow({
             <span>Every</span>
             <Input
               type="number"
-              min={0.001}
+              min={minimumIntervalMs / 60000}
               step="any"
               controlSize="sm"
               className="w-14 text-center"

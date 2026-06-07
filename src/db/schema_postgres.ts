@@ -215,6 +215,7 @@ export const scheduledTasks = pgTable('scheduled_tasks', {
   enabled: boolean('enabled').notNull().default(true),
   intervalMs: bigint('interval_ms', { mode: 'number' }).notNull(),
   lastStatus: text('last_status').notNull().default('idle'),
+  leaseOwner: text('lease_owner'),
   lastRunAt: bigint('last_run_at', { mode: 'number' }),
   lastDurationMs: bigint('last_duration_ms', { mode: 'number' }),
   lastError: text('last_error'),
@@ -226,6 +227,12 @@ export const scheduledTasks = pgTable('scheduled_tasks', {
 }, (table) => [
   check('scheduled_tasks_interval_ms_positive', sql`${table.intervalMs} > 0`),
 ]);
+
+export const documentBlobLeases = pgTable('document_blob_leases', {
+  documentId: text('document_id').primaryKey(),
+  leaseOwner: text('lease_owner').notNull(),
+  leaseUntilMs: bigint('lease_until_ms', { mode: 'number' }).notNull(),
+});
 
 export const ttsSegmentVariants = pgTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),

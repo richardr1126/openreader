@@ -215,6 +215,7 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   intervalMs: integer('interval_ms').notNull(),
   lastStatus: text('last_status').notNull().default('idle'),
+  leaseOwner: text('lease_owner'),
   lastRunAt: integer('last_run_at'),
   lastDurationMs: integer('last_duration_ms'),
   lastError: text('last_error'),
@@ -226,6 +227,12 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
 }, (table) => [
   check('scheduled_tasks_interval_ms_positive', sql`${table.intervalMs} > 0`),
 ]);
+
+export const documentBlobLeases = sqliteTable('document_blob_leases', {
+  documentId: text('document_id').primaryKey(),
+  leaseOwner: text('lease_owner').notNull(),
+  leaseUntilMs: integer('lease_until_ms').notNull(),
+});
 
 export const ttsSegmentVariants = sqliteTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),

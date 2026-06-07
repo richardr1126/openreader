@@ -117,6 +117,17 @@ At the end of the **Site features** tab, a dedicated **TTS upstream** group cont
 
 In v4 these settings are admin-only and are no longer configurable through environment variables.
 
+## Scheduled tasks
+
+The **Scheduled tasks** section controls background maintenance jobs such as expired-upload cleanup, orphaned-blob reaping, and rate-limit ledger pruning.
+
+- Enable or disable each task, adjust its interval, or run it immediately.
+- Runs use database-backed leases so multiple app instances do not normally execute the same task concurrently.
+- A task that exceeds four minutes is aborted and recorded as failed. A crashed run can be reclaimed after its stale lease expires.
+- Failures and the latest successful summary appear on the task card and in server logs.
+
+Self-hosted Node.js deployments tick the scheduler in-process once per minute. Vercel uses the authenticated `/api/admin/tasks/tick` cron route; the checked-in Vercel Hobby schedule runs once daily, so intervals shorter than one day are unavailable there. See [Vercel Deployment](../deploy/vercel-deployment#5-scheduled-maintenance-tasks).
+
 ## Migrating off env vars
 
 In v4, runtime site features are managed by admin settings and optional JSON seed. To minimize env surface area:

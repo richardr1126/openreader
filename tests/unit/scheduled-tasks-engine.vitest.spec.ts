@@ -26,6 +26,7 @@ const CREATE_TABLE = `CREATE TABLE scheduled_tasks (
   enabled integer DEFAULT true NOT NULL,
   interval_ms integer NOT NULL,
   last_status text DEFAULT 'idle' NOT NULL,
+  lease_owner text,
   last_run_at integer,
   last_duration_ms integer,
   last_error text,
@@ -149,6 +150,77 @@ describe('scheduled task engine', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect((await readRow()).runRequested).toBe(true);
+  });
+
+  test('does not let a stale runner overwrite its replacement run', async () => {
+    let resolveFirst!: (value: { summary: string }) => void;
+    const firstResult = new Promise<{ summary: string }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const handler = vi.fn()
+      .mockImplementationOnce(() => firstResult)
+      .mockResolvedValueOnce({ summary: 'replacement' });
+    await seedRow({ nextRunAt: Date.now() - 1 });
+
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const firstRun = runDueTasks({ registry: registryWith(handler) });
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+
+    now += 2 * 60 * 60 * 1000;
+    await runDueTasks({ registry: registryWith(handler) });
+    expect((await readRow()).lastResultJson).toBe('replacement');
+
+    resolveFirst({ summary: 'stale original' });
+    await firstRun;
+    expect((await readRow()).lastResultJson).toBe('replacement');
+    nowSpy.mockRestore();
+  });
+
+  test('starts independent due tasks concurrently', async () => {
+    const started: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const registry: TaskRegistry = {
+      first: {
+        name: 'First',
+        defaultIntervalMs: 1000,
+        run: async () => {
+          started.push('first');
+          await gate;
+        },
+      },
+      second: {
+        name: 'Second',
+        defaultIntervalMs: 1000,
+        run: async () => {
+          started.push('second');
+          await gate;
+        },
+      },
+    };
+
+    const running = runDueTasks({ registry });
+    await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
+    release();
+    await running;
+  });
+
+  test('aborts and records an error when a task exceeds its runtime limit', async () => {
+    const handler = vi.fn(async ({ signal }: { signal: AbortSignal }) => {
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    await seedRow({ nextRunAt: Date.now() - 1 });
+    const registry: TaskRegistry = {
+      [KEY]: { name: 'Timed task', defaultIntervalMs: 1000, maxRunMs: 5, run: handler },
+    };
+
+    await runDueTasks({ registry });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect((await readRow()).lastError).toContain('runtime limit');
   });
 
   test('rejects non-positive intervals at the database boundary', async () => {

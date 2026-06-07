@@ -26,6 +26,7 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `ADMIN_EMAILS` | Admin | empty | Comma-separated emails auto-promoted to admin |
+| `CRON_SECRET` | Scheduled tasks | unset | Required for Vercel cron invocations |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
 | `WEED_MINI_DIR` | Storage | `docstore/seaweedfs` | Override embedded SeaweedFS data directory |
@@ -143,6 +144,15 @@ Comma-separated list of email addresses auto-promoted to admin.
 
 - Requires auth to be enabled
 - Admins can manage shared providers and runtime site features in-app
+
+### CRON_SECRET
+
+Bearer-token secret for `GET /api/admin/tasks/tick`.
+
+- Required on Vercel so scheduled maintenance tasks can run from the configured Vercel Cron.
+- Vercel automatically sends `Authorization: Bearer <CRON_SECRET>` on cron invocations.
+- Generate a strong random value, for example with `openssl rand -hex 32`.
+- Self-hosted Node.js deployments run the scheduler in-process and do not require this variable.
 
 ## Database and Object Blob Storage
 

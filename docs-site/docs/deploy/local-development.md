@@ -325,6 +325,10 @@ Storage configuration details are in [Object / Blob Storage](../configure/object
 Refer to [Database](../configure/database) for database modes.
 Learn about migration behavior and commands in [Migrations](../configure/migrations).
 
+:::info Scheduled maintenance tasks
+Local and self-hosted Node.js deployments start the scheduled-task loop in-process and check for due work once per minute. No `CRON_SECRET` is required unless you intentionally invoke the cron HTTP route yourself. Manage task intervals and inspect failures from **Settings → Admin → Scheduled tasks**.
+:::
+
 4. Start the app.
 
 <Tabs groupId="local-run-mode">

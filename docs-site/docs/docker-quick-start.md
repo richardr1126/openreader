@@ -122,6 +122,7 @@ What this command enables:
 - `restrictUserApiKeys` controls shared-provider-only mode. For per-user BYOK, toggle it off in **Settings → Admin → Site features** or seed `runtimeConfig.restrictUserApiKeys=false` via runtime seed JSON.
 - Use a `/app/docstore` mount if you want data to survive container/image replacement.
 - Startup automatically runs DB/storage migrations via the shared entrypoint.
+- Scheduled maintenance tasks run in-process and can be managed from **Settings → Admin → Scheduled tasks**; Docker/self-hosted deployments do not need `CRON_SECRET`.
 :::
 
 :::warning Port `8333` Exposure

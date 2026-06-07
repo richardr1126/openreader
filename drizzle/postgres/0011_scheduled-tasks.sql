@@ -1,8 +1,15 @@
+CREATE TABLE "document_blob_leases" (
+	"document_id" text PRIMARY KEY NOT NULL,
+	"lease_owner" text NOT NULL,
+	"lease_until_ms" bigint NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "scheduled_tasks" (
 	"key" text PRIMARY KEY NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"interval_ms" bigint NOT NULL,
 	"last_status" text DEFAULT 'idle' NOT NULL,
+	"lease_owner" text,
 	"last_run_at" bigint,
 	"last_duration_ms" bigint,
 	"last_error" text,

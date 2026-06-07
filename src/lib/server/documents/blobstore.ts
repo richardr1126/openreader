@@ -607,6 +607,7 @@ export async function deleteDocumentPrefix(prefix: string): Promise<number> {
  */
 export async function listDocumentSourceBlobs(
   namespace: string | null,
+  options?: { signal?: AbortSignal },
 ): Promise<Array<{ id: string; lastModifiedMs: number }>> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();
@@ -617,6 +618,7 @@ export async function listDocumentSourceBlobs(
   let continuationToken: string | undefined;
 
   do {
+    options?.signal?.throwIfAborted();
     const listRes = await client.send(
       new ListObjectsV2Command({
         Bucket: cfg.bucket,
@@ -624,6 +626,7 @@ export async function listDocumentSourceBlobs(
         Delimiter: '/',
         ContinuationToken: continuationToken,
       }),
+      { abortSignal: options?.signal },
     );
 
     for (const item of listRes.Contents ?? []) {
@@ -647,6 +650,7 @@ export async function listDocumentSourceBlobs(
 export async function deleteAllExpiredTempDocumentUploads(
   namespace: string | null,
   olderThanMs: number,
+  options?: { signal?: AbortSignal },
 ): Promise<number> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();
@@ -657,12 +661,14 @@ export async function deleteAllExpiredTempDocumentUploads(
   let deleted = 0;
 
   do {
+    options?.signal?.throwIfAborted();
     const listRes = await client.send(
       new ListObjectsV2Command({
         Bucket: cfg.bucket,
         Prefix: prefix,
         ContinuationToken: continuationToken,
       }),
+      { abortSignal: options?.signal },
     );
 
     const batch: string[] = [];
@@ -682,6 +688,7 @@ export async function deleteAllExpiredTempDocumentUploads(
             Quiet: true,
           },
         }),
+        { abortSignal: options?.signal },
       );
       if (deleteRes.Errors?.length) {
         throw new Error(

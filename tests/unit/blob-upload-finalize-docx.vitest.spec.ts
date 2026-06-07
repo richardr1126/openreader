@@ -24,6 +24,10 @@ vi.mock('@/lib/server/documents/register-upload', () => ({
   registerUploadedDocument: hoisted.registerUploadedDocument,
 }));
 
+vi.mock('@/lib/server/documents/blob-lease', () => ({
+  withDocumentBlobLease: vi.fn(async (_documentId: string, fn: () => Promise<unknown>) => fn()),
+}));
+
 vi.mock('@/lib/server/documents/docx-convert', () => ({
   convertDocxBufferToPdfBuffer: hoisted.convertDocxBufferToPdfBuffer,
 }));
