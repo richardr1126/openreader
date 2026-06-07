@@ -111,7 +111,7 @@ Required external base URL for this OpenReader instance.
 Required secret key used by auth/session handling.
 
 - Required at startup
-- Generate with `openssl rand -hex 32`
+- Generate with `openssl rand -base64 32`
 
 ### AUTH_TRUSTED_ORIGINS
 
@@ -151,7 +151,7 @@ Bearer-token secret for `GET /api/admin/tasks/tick`.
 
 - Required on Vercel so scheduled maintenance tasks can run from the configured Vercel Cron.
 - Vercel automatically sends `Authorization: Bearer <CRON_SECRET>` on cron invocations.
-- Generate a strong random value, for example with `openssl rand -hex 32`.
+- Generate a strong random value, for example with `openssl rand -base64 32`.
 - Self-hosted Node.js deployments run the scheduler in-process and do not require this variable.
 
 ## Database and Object Blob Storage

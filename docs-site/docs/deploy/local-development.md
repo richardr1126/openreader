@@ -250,7 +250,7 @@ Use one of these `.env` mode templates:
 ```env
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-hex-32>
+AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 # Optional when you need multiple local origins:
 # AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
 ```
@@ -263,7 +263,7 @@ AUTH_SECRET=<generate-with-openssl-rand-hex-32>
 # on first boot, then no longer read. Manage them in Settings → Admin afterwards.
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-hex-32>
+AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 # Comma-separated emails to auto-promote to admin on signin.
 ADMIN_EMAILS=you@example.com
 ```
@@ -275,7 +275,7 @@ ADMIN_EMAILS=you@example.com
 API_BASE=http://host.docker.internal:8880/v1
 USE_EMBEDDED_WEED_MINI=false
 BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-hex-32>
+AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
@@ -291,7 +291,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 ```env
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-hex-32>
+AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 COMPUTE_WORKER_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
 USE_EMBEDDED_WEED_MINI=false

@@ -332,7 +332,7 @@ export default async function LandingPage() {
                   {'    '}-e BASE_URL=
                   <span className="public-term-accent">http://localhost:3003</span> \{'\n'}
                   {'    '}-e AUTH_SECRET=
-                  <span className="public-term-accent">$(openssl rand -hex 32)</span> \{'\n'}
+                  <span className="public-term-accent">$(openssl rand -base64 32)</span> \{'\n'}
                   {'    '}-e ADMIN_EMAILS=
                   <span className="public-term-accent">you@example.com</span> \{'\n'}
                   {'    '}ghcr.io/richardr1126/openreader:latest{'\n'}

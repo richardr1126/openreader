@@ -36,7 +36,7 @@ S3_PREFIX=openreader
 BASE_URL=https://your-app.vercel.app
 AUTH_SECRET=...
 ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in-app
-CRON_SECRET=...               # generate with: openssl rand -hex 32
+CRON_SECRET=...               # generate with: openssl rand -base64 32
 
 # Heavy compute (required on Vercel in current releases)
 COMPUTE_WORKER_URL=https://<railway-worker-domain>

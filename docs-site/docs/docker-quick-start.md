@@ -43,7 +43,7 @@ docker run --name openreader \
   -v openreader_docstore:/app/docstore \
   -e API_BASE=http://host.docker.internal:8880/v1 \
   -e BASE_URL=http://localhost:3003 \
-  -e AUTH_SECRET=$(openssl rand -hex 32) \
+  -e AUTH_SECRET=$(openssl rand -base64 32) \
   -e ADMIN_EMAILS=you@example.com \
   ghcr.io/richardr1126/openreader:latest
 ```
@@ -70,7 +70,7 @@ docker run --name openreader \
   -v openreader_docstore:/app/docstore \
   -e API_BASE=http://host.docker.internal:8880/v1 \
   -e BASE_URL=http://<YOUR_LAN_IP>:3003 \
-  -e AUTH_SECRET=$(openssl rand -hex 32) \
+  -e AUTH_SECRET=$(openssl rand -base64 32) \
   -e AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003 \
   -e USE_ANONYMOUS_AUTH_SESSIONS=true \
   -e ADMIN_EMAILS=you@example.com \
@@ -101,7 +101,7 @@ docker run --name openreader \
   -p 3003:3003 \
   -p 8333:8333 \
   -e BASE_URL=http://localhost:3003 \
-  -e AUTH_SECRET=$(openssl rand -hex 32) \
+  -e AUTH_SECRET=$(openssl rand -base64 32) \
   ghcr.io/richardr1126/openreader:latest
 ```
 
