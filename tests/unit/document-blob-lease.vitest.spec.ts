@@ -35,10 +35,12 @@ describe('document blob lease', () => {
   });
 
   test('allows an expired lease to be reclaimed', async () => {
-    const first = await tryAcquireDocumentBlobLease('doc-1', { leaseMs: 1 });
+    const first = await tryAcquireDocumentBlobLease('doc-1');
     expect(first).not.toBeNull();
 
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    await holder.db
+      .update(sqliteSchema.documentBlobLeases)
+      .set({ leaseUntilMs: Date.now() - 1 });
     const replacement = await tryAcquireDocumentBlobLease('doc-1');
 
     expect(replacement).not.toBeNull();
