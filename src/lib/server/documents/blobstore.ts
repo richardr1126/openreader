@@ -10,6 +10,8 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PDF_PARSER_VERSION, encodeParserVersion } from '@openreader/compute-core/api-contracts';
 import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
+import { serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -513,7 +515,20 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   // Delete the source after the initial derived-artifact cleanup, then sweep
   // parsed output once more to catch a worker that finished during deletion.
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
-  await deleteDocumentPrefix(parsedPrefix);
+  // The source blob is already gone at this point. Treat the final sweep as a
+  // best-effort cleanup: if it throws, rethrowing would make callers roll back
+  // the document row even though the source is deleted, so log and swallow.
+  try {
+    await deleteDocumentPrefix(parsedPrefix);
+  } catch (error) {
+    logDegraded(serverLogger, {
+      event: 'documents.blob_delete.final_parsed_sweep.failed',
+      msg: 'Failed final parsed-output sweep after document deletion',
+      step: 'delete_document_parsed_prefix_final',
+      context: { parsedPrefix },
+      error,
+    });
+  }
 }
 
 export async function deleteTempDocumentUpload(token: string, userId: string, namespace: string | null): Promise<void> {
@@ -569,7 +584,12 @@ export async function deleteDocumentPrefix(prefix: string): Promise<number> {
       );
       const errors = deleteRes.Errors ?? [];
       if (errors.length > 0) {
-        throw new Error(`Failed deleting ${errors.length} document storage objects`);
+        const details = errors
+          .map((e) => `${e.Key ?? '?'} (${e.Code ?? 'Unknown'}: ${e.Message ?? 'no message'})`)
+          .join('; ');
+        throw new Error(
+          `Failed deleting ${errors.length} document storage object(s) under prefix "${cleanedPrefix}": ${details}`,
+        );
       }
       deleted += keys.length;
     }

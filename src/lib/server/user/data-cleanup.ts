@@ -61,6 +61,21 @@ export async function deleteUserStorageData(
     await database.insert(documents).values(docsToRestore).onConflictDoNothing();
     removedDocs.length = 0;
   };
+  // Restore before throwing the diagnostic AggregateError, but never let a
+  // restore failure replace the original cleanup failures we want to surface.
+  const tryRestoreRemovedDocs = async () => {
+    try {
+      await restoreRemovedDocs();
+    } catch (error) {
+      logDegraded(serverLogger, {
+        event: 'user.data_cleanup.restore_removed_docs.failed',
+        msg: 'Failed to restore document rows after cleanup failure',
+        step: 'restore_removed_docs',
+        context: { userIdHash: hashForLog(userId) },
+        error,
+      });
+    }
+  };
   const removeOwnershipAndCheckLastOwner = async (doc: DocumentRow) => {
     const run = async (tx: typeof database) => {
       // Lock every ownership row for this document so concurrent account
@@ -248,7 +263,7 @@ export async function deleteUserStorageData(
   }
 
   if (failures.length > 0) {
-    await restoreRemovedDocs();
+    await tryRestoreRemovedDocs();
     throw new AggregateError(failures, `User storage cleanup failed in ${failures.length} operation(s)`);
   }
 
@@ -289,7 +304,7 @@ export async function deleteUserStorageData(
   }
 
   if (failures.length > 0) {
-    await restoreRemovedDocs();
+    await tryRestoreRemovedDocs();
     throw new AggregateError(failures, `User database cleanup failed in ${failures.length} operation(s)`);
   }
 }

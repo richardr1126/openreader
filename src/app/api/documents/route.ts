@@ -111,10 +111,6 @@ export async function DELETE(req: NextRequest) {
 
     const targetUserIds = [storageUserId];
 
-    if (targetUserIds.length === 0) {
-      return NextResponse.json({ success: true, deleted: 0 });
-    }
-
     let targetIds: string[] = [];
     if (idsParam) {
       targetIds = idsParam

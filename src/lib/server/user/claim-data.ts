@@ -301,16 +301,39 @@ async function transferDocumentTtsSegments(input: {
 
   const encodedFrom = encodeURIComponent(input.fromUserId);
   const encodedTo = encodeURIComponent(input.toUserId);
+  const sourceAudioKeyPrefix = `/users/${encodedFrom}/docs/${input.documentId}/`;
+  const destAudioKeyPrefix = `/users/${encodedTo}/docs/${input.documentId}/`;
   if (variants.length > 0) {
     await input.database.insert(ttsSegmentVariants)
-      .values(variants.map((variant: typeof ttsSegmentVariants.$inferSelect) => ({
-        ...variant,
-        userId: input.toUserId,
-        audioKey: variant.audioKey?.replace(
-          `/users/${encodedFrom}/docs/${input.documentId}/`,
-          `/users/${encodedTo}/docs/${input.documentId}/`,
-        ) ?? null,
-      })))
+      .values(variants.map((variant: typeof ttsSegmentVariants.$inferSelect) => {
+        const audioKey = variant.audioKey ?? null;
+        if (!audioKey || audioKey.includes(sourceAudioKeyPrefix)) {
+          return {
+            ...variant,
+            userId: input.toUserId,
+            audioKey: audioKey?.replace(sourceAudioKeyPrefix, destAudioKeyPrefix) ?? null,
+          };
+        }
+        // The key did not contain the expected source path, so it cannot be
+        // safely remapped. Leaving it would point the new owner at the source
+        // user's (soon-deleted) audio, so null it out and log for investigation.
+        logDegraded(serverLogger, {
+          event: 'user.claim.tts_variant_audio_key.unmapped',
+          msg: 'TTS segment variant audioKey did not match expected source path during claim',
+          step: 'remap_tts_variant_audio_key',
+          context: {
+            originalAudioKey: audioKey,
+            fromUserIdHash: hashForLog(input.fromUserId),
+            toUserIdHash: hashForLog(input.toUserId),
+            documentId: input.documentId,
+          },
+        });
+        return {
+          ...variant,
+          userId: input.toUserId,
+          audioKey: null,
+        };
+      }))
       .onConflictDoNothing();
   }
 

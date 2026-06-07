@@ -268,28 +268,41 @@ export async function copyTtsSegmentPrefix(sourcePrefix: string, destinationPref
 
   let copied = 0;
   let continuationToken: string | undefined;
-  do {
-    const listRes = await client.send(new ListObjectsV2Command({
-      Bucket: cfg.bucket,
-      Prefix: source,
-      ContinuationToken: continuationToken,
-    }));
-    const keys = (listRes.Contents ?? [])
-      .map((item) => item.Key)
-      .filter((value): value is string => typeof value === 'string' && value.startsWith(source));
-
-    for (const key of keys) {
-      await client.send(new CopyObjectCommand({
+  // Track destination keys we have written so a mid-copy failure can be rolled
+  // back, leaving no orphaned objects behind at the destination prefix.
+  const copiedKeys: string[] = [];
+  try {
+    do {
+      const listRes = await client.send(new ListObjectsV2Command({
         Bucket: cfg.bucket,
-        Key: `${destination}${key.slice(source.length)}`,
-        CopySource: `${cfg.bucket}/${key}`,
-        ServerSideEncryption: 'AES256',
+        Prefix: source,
+        ContinuationToken: continuationToken,
       }));
-      copied += 1;
-    }
+      const keys = (listRes.Contents ?? [])
+        .map((item) => item.Key)
+        .filter((value): value is string => typeof value === 'string' && value.startsWith(source));
 
-    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
-  } while (continuationToken);
+      for (const key of keys) {
+        const destinationKey = `${destination}${key.slice(source.length)}`;
+        await client.send(new CopyObjectCommand({
+          Bucket: cfg.bucket,
+          Key: destinationKey,
+          CopySource: `${cfg.bucket}/${key}`,
+          ServerSideEncryption: 'AES256',
+        }));
+        copiedKeys.push(destinationKey);
+        copied += 1;
+      }
+
+      continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
+    } while (continuationToken);
+  } catch (error) {
+    // Best-effort rollback of the partial copy; surface the original error.
+    if (copiedKeys.length > 0) {
+      await deleteTtsSegmentAudioObjects(copiedKeys).catch(() => {});
+    }
+    throw error;
+  }
 
   return copied;
 }

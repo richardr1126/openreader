@@ -52,8 +52,8 @@ export default function ClaimDataModal({
         toast.success(
           `Successfully claimed ${claimed.documents} documents, `
           + `${claimed.audiobooks} audiobooks, `
-          + `${claimed.preferences} preference set(s), and `
-          + `${claimed.progress} reading progress record(s) and `
+          + `${claimed.preferences} preference set(s), `
+          + `${claimed.progress} reading progress record(s), and `
           + `${claimed.documentSettings} document setting(s)!`,
         );
         onClaimed();
