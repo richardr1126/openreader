@@ -78,6 +78,13 @@
       "when": 1780794520924,
       "tag": "0010_user-data-cleanup-cascades",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780825886154,
+      "tag": "0011_scheduled-tasks",
+      "breakpoints": true
     }
   ]
 }

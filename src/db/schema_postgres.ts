@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, text, integer, real, date, bigint, primaryKey, index, jsonb, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, date, bigint, boolean, primaryKey, index, jsonb, foreignKey } from 'drizzle-orm/pg-core';
 import { user } from './schema_auth_postgres';
 
 const PG_NOW_MS = sql`(extract(epoch from now()) * 1000)::bigint`;
@@ -207,6 +207,21 @@ export const adminSettings = pgTable('admin_settings', {
   key: text('key').primaryKey(),
   valueJson: jsonb('value_json').notNull(),
   source: text('source').notNull().default('admin'),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+});
+
+export const scheduledTasks = pgTable('scheduled_tasks', {
+  key: text('key').primaryKey(),
+  enabled: boolean('enabled').notNull().default(true),
+  intervalMs: bigint('interval_ms', { mode: 'number' }).notNull(),
+  lastStatus: text('last_status').notNull().default('idle'),
+  lastRunAt: bigint('last_run_at', { mode: 'number' }),
+  lastDurationMs: bigint('last_duration_ms', { mode: 'number' }),
+  lastError: text('last_error'),
+  lastResultJson: text('last_result_json'),
+  nextRunAt: bigint('next_run_at', { mode: 'number' }),
+  runRequested: boolean('run_requested').notNull().default(false),
+  runningSince: bigint('running_since', { mode: 'number' }),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
 });
 

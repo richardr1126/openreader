@@ -36,6 +36,7 @@ import {
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
+import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
 import { flushUserPreferencesSync } from '@/lib/client/api/user-state';
 import toast from 'react-hot-toast';
@@ -169,7 +170,7 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { id: 'admin', label: 'Admin', icon: SettingsIcon, authOnly: true, adminOnly: true },
 ];
 
-type AdminSubTab = 'providers' | 'features';
+type AdminSubTab = 'providers' | 'features' | 'tasks';
 
 export function SettingsTrigger({
   className = '',
@@ -1054,13 +1055,15 @@ export function SettingsModal({
                             options={[
                               { value: 'providers', label: 'Shared providers' },
                               { value: 'features', label: 'Site features' },
+                              { value: 'tasks', label: 'Tasks' },
                             ]}
                             onChange={setAdminSubTab}
                             ariaLabel="Admin tab"
-                            className="grid-cols-2"
+                            className="grid-cols-3"
                           />
                           {adminSubTab === 'providers' && <AdminProvidersPanel />}
                           {adminSubTab === 'features' && <AdminFeaturesPanel />}
+                          {adminSubTab === 'tasks' && <AdminTasksPanel />}
                         </div>
                       )}
 

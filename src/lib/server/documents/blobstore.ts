@@ -600,14 +600,59 @@ export async function deleteDocumentPrefix(prefix: string): Promise<number> {
   return deleted;
 }
 
-export async function deleteExpiredTempDocumentUploads(
-  userId: string,
+/**
+ * List the source document blobs under a namespace (content-addressed objects
+ * directly beneath `documents_v1/`, excluding the `parsed_v2/` and `ns/`
+ * subtrees via the `/` delimiter). Used by the orphaned-blob reaper.
+ */
+export async function listDocumentSourceBlobs(
+  namespace: string | null,
+): Promise<Array<{ id: string; lastModifiedMs: number }>> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const ns = sanitizeNamespace(namespace);
+  const nsSegment = ns ? `ns/${ns}/` : '';
+  const prefix = `${cfg.prefix}/documents_v1/${nsSegment}`;
+  const out: Array<{ id: string; lastModifiedMs: number }> = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const listRes = await client.send(
+      new ListObjectsV2Command({
+        Bucket: cfg.bucket,
+        Prefix: prefix,
+        Delimiter: '/',
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    for (const item of listRes.Contents ?? []) {
+      const key = item.Key;
+      if (!key) continue;
+      const id = key.slice(prefix.length);
+      if (!isValidDocumentId(id)) continue;
+      out.push({ id, lastModifiedMs: item.LastModified?.getTime() ?? 0 });
+    }
+
+    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return out;
+}
+
+/**
+ * Delete every temporary upload object (across all users) older than the given
+ * cutoff. Used by the cleanup-temp-uploads scheduled task.
+ */
+export async function deleteAllExpiredTempDocumentUploads(
   namespace: string | null,
   olderThanMs: number,
 ): Promise<number> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();
-  const prefix = tempDocumentUploadPrefix(userId, namespace);
+  const ns = sanitizeNamespace(namespace);
+  const nsSegment = ns ? `ns/${ns}/` : '';
+  const prefix = `${cfg.prefix}/document_uploads_temp_v1/${nsSegment}`;
   let continuationToken: string | undefined;
   const keys: string[] = [];
 
@@ -644,8 +689,9 @@ export async function deleteExpiredTempDocumentUploads(
         },
       }),
     );
-    deleted += deleteRes.Deleted?.length ?? 0;
+    deleted += deleteRes.Deleted?.length ?? batch.length - (deleteRes.Errors?.length ?? 0);
   }
 
   return deleted;
 }
+

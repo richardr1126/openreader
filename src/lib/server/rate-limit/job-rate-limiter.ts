@@ -1,4 +1,4 @@
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { userJobEvents } from '@/db/schema';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
@@ -143,24 +143,5 @@ export async function recordJobEvent(
   } catch {
     // Recording is best-effort; never block op creation on ledger writes.
   }
-
-  // Opportunistic prune of rows older than the largest configured window so
-  // the ledger stays small without a separate cron, but never deletes events
-  // that could still affect an in-window count.
-  if (Math.random() < 0.05) {
-    const largestWindowMs = config.windows.reduce(
-      (max, w) => (Number.isFinite(w.windowMs) && w.windowMs > max ? w.windowMs : max),
-      24 * 60 * 60 * 1000,
-    );
-    try {
-      await safeDb()
-        .delete(userJobEvents)
-        .where(and(
-          eq(userJobEvents.action, action),
-          lt(userJobEvents.createdAt, now - largestWindowMs),
-        ));
-    } catch {
-      // ignore prune failures
-    }
-  }
+  // Old rows are removed by the prune-job-events scheduled task.
 }

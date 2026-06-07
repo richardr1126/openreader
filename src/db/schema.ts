@@ -19,3 +19,4 @@ export const ttsSegmentEntries = usePostgres ? postgresSchema.ttsSegmentEntries 
 export const ttsSegmentVariants = usePostgres ? postgresSchema.ttsSegmentVariants : sqliteSchema.ttsSegmentVariants;
 export const adminProviders = usePostgres ? postgresSchema.adminProviders : sqliteSchema.adminProviders;
 export const adminSettings = usePostgres ? postgresSchema.adminSettings : sqliteSchema.adminSettings;
+export const scheduledTasks = usePostgres ? postgresSchema.scheduledTasks : sqliteSchema.scheduledTasks;

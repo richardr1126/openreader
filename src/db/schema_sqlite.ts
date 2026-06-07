@@ -210,6 +210,21 @@ export const adminSettings = sqliteTable('admin_settings', {
   updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
 });
 
+export const scheduledTasks = sqliteTable('scheduled_tasks', {
+  key: text('key').primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  intervalMs: integer('interval_ms').notNull(),
+  lastStatus: text('last_status').notNull().default('idle'),
+  lastRunAt: integer('last_run_at'),
+  lastDurationMs: integer('last_duration_ms'),
+  lastError: text('last_error'),
+  lastResultJson: text('last_result_json'),
+  nextRunAt: integer('next_run_at'),
+  runRequested: integer('run_requested', { mode: 'boolean' }).notNull().default(false),
+  runningSince: integer('running_since'),
+  updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
+});
+
 export const ttsSegmentVariants = sqliteTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

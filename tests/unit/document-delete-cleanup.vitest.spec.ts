@@ -1,24 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  selectResults: [] as unknown[][],
   deleteResults: [] as unknown[][],
-  insertValues: vi.fn(() => ({ onConflictDoNothing: vi.fn(async () => undefined) })),
-  deleteDocumentBlob: vi.fn(async () => undefined),
-  cleanupDocumentPreviewArtifacts: vi.fn(async () => undefined),
-  deleteDocumentPreviewRows: vi.fn(async () => undefined),
   deleteDocumentTtsSegmentCache: vi.fn(async () => undefined),
 }));
 
 function resultBuilder(result: unknown[]) {
-  const limited = {
-    all: () => result,
-    then: (resolve: (value: unknown[]) => unknown, reject: (error: unknown) => unknown) =>
-      Promise.resolve(result).then(resolve, reject),
-  };
   return {
-    all: () => result,
-    limit: () => limited,
     then: (resolve: (value: unknown[]) => unknown, reject: (error: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),
   };
@@ -26,58 +14,37 @@ function resultBuilder(result: unknown[]) {
 
 vi.mock('@/db', () => {
   const database = {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => resultBuilder(mocks.selectResults.shift() ?? [])),
-      })),
-    })),
     delete: vi.fn(() => ({
       where: vi.fn(() => ({
         returning: () => resultBuilder(mocks.deleteResults.shift() ?? []),
       })),
     })),
-    insert: vi.fn(() => ({
-      values: mocks.insertValues,
-    })),
-    transaction: vi.fn((callback: (tx: unknown) => unknown) => callback(database)),
   };
   return { db: database };
 });
-
-vi.mock('@/lib/server/documents/blobstore', () => ({
-  deleteDocumentBlob: mocks.deleteDocumentBlob,
-}));
-
-vi.mock('@/lib/server/documents/previews', () => ({
-  cleanupDocumentPreviewArtifacts: mocks.cleanupDocumentPreviewArtifacts,
-  deleteDocumentPreviewRows: mocks.deleteDocumentPreviewRows,
-}));
 
 vi.mock('@/lib/server/tts/segments-cache', () => ({
   deleteDocumentTtsSegmentCache: mocks.deleteDocumentTtsSegmentCache,
 }));
 
+vi.mock('@/lib/server/logger', () => ({
+  hashForLog: () => 'hash',
+  serverLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('@/lib/server/errors/logging', () => ({ logDegraded: vi.fn() }));
+
 import { deleteOwnedDocument } from '../../src/lib/server/documents/delete-owned';
 
 describe('owned document cleanup', () => {
   beforeEach(() => {
-    mocks.selectResults = [];
     mocks.deleteResults = [];
-    mocks.insertValues.mockReset();
-    mocks.insertValues.mockReturnValue({ onConflictDoNothing: vi.fn(async () => undefined) });
-    mocks.deleteDocumentBlob.mockReset();
-    mocks.deleteDocumentBlob.mockResolvedValue(undefined);
-    mocks.cleanupDocumentPreviewArtifacts.mockReset();
-    mocks.cleanupDocumentPreviewArtifacts.mockResolvedValue(undefined);
-    mocks.deleteDocumentPreviewRows.mockReset();
-    mocks.deleteDocumentPreviewRows.mockResolvedValue(undefined);
     mocks.deleteDocumentTtsSegmentCache.mockReset();
     mocks.deleteDocumentTtsSegmentCache.mockResolvedValue(undefined);
   });
 
-  test('deletes only user-scoped TTS when another owner remains', async () => {
+  test('removes the ownership row and cleans the per-user TTS cache', async () => {
     mocks.deleteResults = [[{ id: 'doc-1', userId: 'user-1' }]];
-    mocks.selectResults = [[{ id: 'doc-1' }]];
 
     await expect(deleteOwnedDocument({
       userId: 'user-1',
@@ -86,50 +53,28 @@ describe('owned document cleanup', () => {
     })).resolves.toBe(true);
 
     expect(mocks.deleteDocumentTtsSegmentCache).toHaveBeenCalledOnce();
-    expect(mocks.deleteDocumentBlob).not.toHaveBeenCalled();
-    expect(mocks.cleanupDocumentPreviewArtifacts).not.toHaveBeenCalled();
   });
 
-  test('deletes shared artifacts only for the final owner', async () => {
-    mocks.deleteResults = [[{ id: 'doc-1', userId: 'user-1' }]];
-    mocks.selectResults = [[], []];
-
-    await deleteOwnedDocument({
-      userId: 'user-1',
-      documentId: 'doc-1',
-      namespace: null,
-    });
-
-    expect(mocks.cleanupDocumentPreviewArtifacts).toHaveBeenCalledWith('doc-1', null);
-    expect(mocks.deleteDocumentPreviewRows).toHaveBeenCalledWith('doc-1', null);
-    expect(mocks.deleteDocumentBlob).toHaveBeenCalledWith('doc-1', null);
-  });
-
-  test('restores ownership when cleanup fails', async () => {
-    const removed = { id: 'doc-1', userId: 'user-1' };
-    mocks.deleteResults = [[removed]];
-    mocks.selectResults = [[], []];
-    mocks.deleteDocumentBlob.mockRejectedValueOnce(new Error('storage unavailable'));
+  test('returns false and skips cleanup when no row was owned', async () => {
+    mocks.deleteResults = [[]];
 
     await expect(deleteOwnedDocument({
       userId: 'user-1',
       documentId: 'doc-1',
       namespace: null,
-    })).rejects.toThrow('storage unavailable');
+    })).resolves.toBe(false);
 
-    expect(mocks.insertValues).toHaveBeenCalledWith(removed);
+    expect(mocks.deleteDocumentTtsSegmentCache).not.toHaveBeenCalled();
   });
 
-  test('keeps shared artifacts when a new owner appears before deletion', async () => {
+  test('still succeeds if TTS cache cleanup fails (best effort)', async () => {
     mocks.deleteResults = [[{ id: 'doc-1', userId: 'user-1' }]];
-    mocks.selectResults = [[], [{ id: 'doc-1' }]];
+    mocks.deleteDocumentTtsSegmentCache.mockRejectedValueOnce(new Error('storage unavailable'));
 
-    await deleteOwnedDocument({
+    await expect(deleteOwnedDocument({
       userId: 'user-1',
       documentId: 'doc-1',
       namespace: null,
-    });
-
-    expect(mocks.deleteDocumentBlob).not.toHaveBeenCalled();
+    })).resolves.toBe(true);
   });
 });

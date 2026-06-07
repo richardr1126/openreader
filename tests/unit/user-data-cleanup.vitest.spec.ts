@@ -1,11 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   selectResults: [] as unknown[][],
-  documentDeleteResults: [] as unknown[][],
   deleteWhere: vi.fn(async () => undefined),
-  insertValues: vi.fn(() => ({ onConflictDoNothing: vi.fn(async () => undefined) })),
-  execute: vi.fn(async () => undefined),
   deleteDocumentBlob: vi.fn(async () => undefined),
   deleteDocumentPrefix: vi.fn(async () => 0),
   deleteDocumentPreviewArtifacts: vi.fn(async () => 0),
@@ -15,14 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 function resultBuilder(result: unknown[]) {
-  const limitedResult = {
-    all: () => result,
-    then: (resolve: (value: unknown[]) => unknown, reject: (error: unknown) => unknown) =>
-      Promise.resolve(result).then(resolve, reject),
-  };
   return {
-    all: () => result,
-    limit: () => limitedResult,
     then: (resolve: (value: unknown[]) => unknown, reject: (error: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),
   };
@@ -41,15 +31,9 @@ vi.mock('@/db', () => {
         return {
           then: promise.then.bind(promise),
           catch: promise.catch.bind(promise),
-          returning: () => resultBuilder(mocks.documentDeleteResults.shift() ?? []),
         };
       }),
     })),
-    insert: vi.fn(() => ({
-      values: mocks.insertValues,
-    })),
-    execute: mocks.execute,
-    transaction: vi.fn((callback: (tx: unknown) => unknown) => callback(database)),
   };
   return { db: database };
 });
@@ -94,21 +78,14 @@ vi.mock('@/lib/server/errors/logging', () => ({
 import { deleteUserStorageData } from '../../src/lib/server/user/data-cleanup';
 
 describe('user data cleanup', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   beforeEach(() => {
     mocks.selectResults = [];
-    mocks.documentDeleteResults = [];
     for (const mock of Object.values(mocks)) {
       if (typeof mock === 'function' && 'mockReset' in mock) {
         mock.mockReset();
       }
     }
     mocks.deleteWhere.mockResolvedValue(undefined);
-    mocks.insertValues.mockReturnValue({ onConflictDoNothing: vi.fn(async () => undefined) });
-    mocks.execute.mockResolvedValue(undefined);
     mocks.deleteDocumentBlob.mockResolvedValue(undefined);
     mocks.deleteDocumentPrefix.mockResolvedValue(0);
     mocks.deleteDocumentPreviewArtifacts.mockResolvedValue(0);
@@ -117,24 +94,21 @@ describe('user data cleanup', () => {
     mocks.deleteTtsSegmentPrefix.mockResolvedValue(0);
   });
 
-  test('keeps shared document blobs and previews', async () => {
-    mocks.selectResults = [
-      [{ id: 'shared-doc' }],
-      [{ id: 'shared-doc' }],
-      [],
-    ];
-    mocks.documentDeleteResults = [[{ id: 'shared-doc' }]];
+  test('defers document blobs/previews to the reaper on the canonical pass', async () => {
+    mocks.selectResults = [[]]; // no audiobooks
 
     await deleteUserStorageData('user-1', null);
 
+    // Shared document storage is reclaimed by the reap-orphaned-blobs task, not here.
     expect(mocks.deleteDocumentBlob).not.toHaveBeenCalled();
     expect(mocks.deleteDocumentPreviewArtifacts).not.toHaveBeenCalled();
     expect(mocks.deleteDocumentPreviewRows).not.toHaveBeenCalled();
-    expect(mocks.deleteWhere).toHaveBeenCalledTimes(4);
+    // Only the three non-cascading DB row deletes (tts usage, job events, verification).
+    expect(mocks.deleteWhere).toHaveBeenCalledTimes(3);
   });
 
   test('blocks database cleanup when storage cleanup fails', async () => {
-    mocks.selectResults = [[], []];
+    mocks.selectResults = [[]]; // no audiobooks
     mocks.deleteDocumentPrefix.mockRejectedValueOnce(new Error('storage unavailable'));
 
     await expect(deleteUserStorageData('user-1', null)).rejects.toThrow(
@@ -143,50 +117,18 @@ describe('user data cleanup', () => {
     expect(mocks.deleteWhere).not.toHaveBeenCalled();
   });
 
-  test('restores document ownership when document storage cleanup fails', async () => {
+  test('deletes namespaced document storage inline and skips global DB rows', async () => {
     mocks.selectResults = [
-      [{ id: 'doc-1' }],
-      [],
-      [],
+      [{ id: 'doc-1' }], // userDocs (namespaced pass)
+      [], // audiobooks
     ];
-    mocks.documentDeleteResults = [[{ id: 'doc-1' }]];
-    mocks.deleteDocumentBlob.mockRejectedValueOnce(new Error('storage unavailable'));
-
-    await expect(deleteUserStorageData('user-1', null)).rejects.toThrow(
-      'User storage cleanup failed',
-    );
-
-    expect(mocks.insertValues).toHaveBeenCalledWith([{ id: 'doc-1' }]);
-  });
-
-  test('does not delete global preview rows during namespaced cleanup', async () => {
-    mocks.selectResults = [
-      [{ id: 'doc-1' }],
-      [],
-      [],
-    ];
-    mocks.documentDeleteResults = [[{ id: 'doc-1' }]];
 
     await deleteUserStorageData('user-1', 'test-ns');
 
-    expect(mocks.deleteDocumentPreviewRows).not.toHaveBeenCalled();
-    expect(mocks.insertValues).toHaveBeenCalledWith([{ id: 'doc-1' }]);
-  });
-
-  test('acquires a Postgres advisory lock before the ownership decision', async () => {
-    vi.stubEnv('POSTGRES_URL', 'postgres://test');
-    mocks.selectResults = [
-      [{ id: 'doc-1' }],
-      [{ id: 'doc-1' }],
-      [],
-      [],
-    ];
-    mocks.documentDeleteResults = [[{ id: 'doc-1' }]];
-
-    await deleteUserStorageData('user-1', null);
-
-    // The mutation lock serializes the read-modify-write via a transaction-scoped
-    // advisory lock instead of SELECT ... FOR UPDATE.
-    expect(mocks.execute).toHaveBeenCalled();
+    expect(mocks.deleteDocumentBlob).toHaveBeenCalledWith('doc-1', 'test-ns');
+    expect(mocks.deleteDocumentPreviewArtifacts).toHaveBeenCalledWith('doc-1', 'test-ns');
+    expect(mocks.deleteDocumentPreviewRows).toHaveBeenCalledWith('doc-1', 'test-ns');
+    // Global DB rows are only removed on the canonical pass.
+    expect(mocks.deleteWhere).not.toHaveBeenCalled();
   });
 });

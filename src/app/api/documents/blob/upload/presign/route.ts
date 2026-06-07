@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import {
-  TEMP_DOCUMENT_UPLOAD_TTL_MS,
-  deleteExpiredTempDocumentUploads,
   presignTempPut,
 } from '@/lib/server/documents/blobstore';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
@@ -72,8 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     const namespace = getOpenReaderTestNamespace(req.headers);
-    await deleteExpiredTempDocumentUploads(userId, namespace, Date.now() - TEMP_DOCUMENT_UPLOAD_TTL_MS)
-      .catch(() => undefined);
+    // Expired temp uploads are swept by the cleanup-temp-uploads scheduled task.
     const signed = await Promise.all(
       uploads.map(async (upload) => {
         const token = randomUUID();

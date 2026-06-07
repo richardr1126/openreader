@@ -8,7 +8,6 @@ import {
   DOCUMENT_PREVIEW_CONTENT_TYPE,
   DOCUMENT_PREVIEW_VARIANT,
   DOCUMENT_PREVIEW_WIDTH,
-  deleteDocumentPreviewArtifacts,
   documentPreviewKey,
   headDocumentPreview,
   isMissingBlobError,
@@ -418,8 +417,4 @@ export async function deleteDocumentPreviewRows(documentId: string, namespace: s
   await safeDb()
     .delete(documentPreviews)
     .where(and(eq(documentPreviews.documentId, documentId), eq(documentPreviews.namespace, namespaceKey)));
-}
-
-export async function cleanupDocumentPreviewArtifacts(documentId: string, namespace: string | null): Promise<void> {
-  await deleteDocumentPreviewArtifacts(documentId, namespace);
 }

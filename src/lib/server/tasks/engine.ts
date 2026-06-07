@@ -1,0 +1,186 @@
+import { and, eq, lt, ne, or, sql } from 'drizzle-orm';
+import { db } from '@/db';
+import { scheduledTasks } from '@/db/schema';
+import { serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
+import { TASK_REGISTRY } from './registry';
+import type { TaskDef, TaskRegistry, TaskRunStatus } from './types';
+
+// A task still marked 'running' after this long is assumed abandoned (process
+// crashed mid-run) and may be reclaimed by the next tick.
+const STALE_RUNNING_MS = 60 * 60 * 1000;
+
+/**
+ * Seed a `scheduled_tasks` row for every registered task. Idempotent: existing
+ * rows (including user-edited interval/enabled) are left untouched.
+ */
+async function ensureTaskRows(registry: TaskRegistry = TASK_REGISTRY): Promise<void> {
+  const now = Date.now();
+  for (const [key, def] of Object.entries(registry)) {
+    await db
+      .insert(scheduledTasks)
+      .values({
+        key,
+        enabled: true,
+        intervalMs: def.defaultIntervalMs,
+        lastStatus: 'idle',
+        nextRunAt: now,
+      })
+      .onConflictDoNothing();
+  }
+}
+
+/**
+ * Atomically claim a task for execution. Returns true only if this caller won
+ * the claim, so the same task never runs concurrently (across instances too):
+ * the single UPDATE flips status to 'running' iff it is not already running
+ * (or its running marker is stale).
+ */
+async function claimTask(key: string, now: number): Promise<boolean> {
+  const claimed = await db
+    .update(scheduledTasks)
+    .set({ lastStatus: 'running', runningSince: now, runRequested: false, updatedAt: now })
+    .where(and(
+      eq(scheduledTasks.key, key),
+      or(
+        ne(scheduledTasks.lastStatus, 'running'),
+        lt(scheduledTasks.runningSince, now - STALE_RUNNING_MS),
+      ),
+    ))
+    .returning({ key: scheduledTasks.key });
+  return claimed.length > 0;
+}
+
+async function finishTask(
+  key: string,
+  outcome:
+    | { status: 'ok'; startedAt: number; summary: string | null }
+    | { status: 'error'; startedAt: number; error: unknown },
+): Promise<void> {
+  const now = Date.now();
+  await db
+    .update(scheduledTasks)
+    .set({
+      lastStatus: outcome.status,
+      lastRunAt: now,
+      lastDurationMs: now - outcome.startedAt,
+      lastError: outcome.status === 'error' ? String(outcome.error) : null,
+      lastResultJson: outcome.status === 'ok' && outcome.summary ? outcome.summary : null,
+      // Schedule the next run off the row's (possibly user-edited) interval.
+      nextRunAt: sql`${now} + ${scheduledTasks.intervalMs}`,
+      runningSince: null,
+      runRequested: false,
+      updatedAt: now,
+    })
+    .where(eq(scheduledTasks.key, key));
+}
+
+async function executeTask(key: string, def: TaskDef): Promise<void> {
+  const startedAt = Date.now();
+  try {
+    const result = await def.run();
+    const summary = result && typeof result.summary === 'string' ? result.summary : null;
+    await finishTask(key, { status: 'ok', startedAt, summary });
+  } catch (error) {
+    logDegraded(serverLogger, {
+      event: 'tasks.run.failed',
+      msg: `Scheduled task "${key}" failed`,
+      step: key,
+      error,
+    });
+    await finishTask(key, { status: 'error', startedAt, error });
+  }
+}
+
+/**
+ * Run every task that is due (interval elapsed or a manual run was requested),
+ * claiming each first so concurrent ticks don't double-run. Safe to call from
+ * any trigger: the self-host interval, a Vercel cron route, or a manual run.
+ */
+export async function runDueTasks(options?: { registry?: TaskRegistry }): Promise<void> {
+  const registry = options?.registry ?? TASK_REGISTRY;
+  await ensureTaskRows(registry);
+
+  const now = Date.now();
+  const rows = await db.select().from(scheduledTasks);
+
+  for (const row of rows) {
+    const def = registry[row.key];
+    if (!def) continue; // orphaned row for a task no longer in the registry
+
+    const due =
+      row.runRequested ||
+      (row.enabled && row.nextRunAt != null && now >= Number(row.nextRunAt));
+    if (!due) continue;
+
+    if (!(await claimTask(row.key, now))) continue;
+    await executeTask(row.key, def);
+  }
+}
+
+/**
+ * Run a single task immediately, regardless of schedule. Returns false if the
+ * key is unknown or the task is already running.
+ */
+export async function runTaskNow(key: string, registry: TaskRegistry = TASK_REGISTRY): Promise<boolean> {
+  const def = registry[key];
+  if (!def) return false;
+  await ensureTaskRows(registry);
+  if (!(await claimTask(key, Date.now()))) return false;
+  await executeTask(key, def);
+  return true;
+}
+
+/** Update a task's user-editable fields (enable/disable, run interval). */
+export async function updateTask(
+  key: string,
+  patch: { enabled?: boolean; intervalMs?: number },
+): Promise<void> {
+  const set: Record<string, unknown> = { updatedAt: Date.now() };
+  if (typeof patch.enabled === 'boolean') set.enabled = patch.enabled;
+  if (typeof patch.intervalMs === 'number' && Number.isFinite(patch.intervalMs) && patch.intervalMs > 0) {
+    set.intervalMs = Math.floor(patch.intervalMs);
+  }
+  await db.update(scheduledTasks).set(set).where(eq(scheduledTasks.key, key));
+}
+
+export type TaskView = {
+  key: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  intervalMs: number;
+  lastStatus: TaskRunStatus;
+  lastRunAt: number | null;
+  lastDurationMs: number | null;
+  lastError: string | null;
+  lastResult: string | null;
+  nextRunAt: number | null;
+  running: boolean;
+};
+
+/** Combined registry + stored-state view for the admin tasks UI. */
+export async function listTasks(registry: TaskRegistry = TASK_REGISTRY): Promise<TaskView[]> {
+  await ensureTaskRows(registry);
+  const rows = await db.select().from(scheduledTasks);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byKey = new Map<string, any>(rows.map((row: any) => [row.key, row]));
+
+  return Object.entries(registry).map(([key, def]) => {
+    const row = byKey.get(key);
+    return {
+      key,
+      name: def.name,
+      description: def.description,
+      enabled: !!row?.enabled,
+      intervalMs: Number(row?.intervalMs ?? def.defaultIntervalMs),
+      lastStatus: (row?.lastStatus ?? 'idle') as TaskRunStatus,
+      lastRunAt: row?.lastRunAt != null ? Number(row.lastRunAt) : null,
+      lastDurationMs: row?.lastDurationMs != null ? Number(row.lastDurationMs) : null,
+      lastError: row?.lastError ?? null,
+      lastResult: row?.lastResultJson ?? null,
+      nextRunAt: row?.nextRunAt != null ? Number(row.nextRunAt) : null,
+      running: row?.lastStatus === 'running',
+    };
+  });
+}
