@@ -11,6 +11,7 @@ import {
   resolveReplicateVoiceInputKey,
 } from '@/lib/server/tts/voice-resolution';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
+import { normalizeToMp3 } from '@/lib/server/tts/audio-format';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import { access, readFile } from 'fs/promises';
@@ -67,6 +68,12 @@ const replicateBlockedUntilByScope = new LRUCache<string, number>({
   max: REPLICATE_COOLDOWN_SCOPE_CACHE_MAX_ENTRIES,
 });
 const openAiCompatibleLanguageUnsupported = new LRUCache<string, true>({ max: 256 });
+// Tracks OpenAI-compatible servers that reject an explicit `response_format` (e.g.
+// wav-only servers that 400 on `response_format: mp3`). After the first rejection
+// we omit the field and let the server emit its default, which `normalizeToMp3`
+// then converts. In-memory + per-process: on serverless this may re-probe once per
+// cold instance, which is harmless; on long-running self-hosted it persists.
+const openAiCompatibleResponseFormatUnsupported = new LRUCache<string, true>({ max: 256 });
 
 const DEFAULT_TTS_CACHE_MAX_SIZE_BYTES = 256 * 1024 * 1024;
 const DEFAULT_TTS_CACHE_TTL_MS = 1000 * 60 * 30;
@@ -634,10 +641,20 @@ async function runProviderRequest(
   const mockBuffer = await getTestMockTtsBuffer(request.testNamespace);
   if (mockBuffer) return mockBuffer;
 
-  if (request.provider === 'replicate') {
-    return runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries);
-  }
+  const raw = request.provider === 'replicate'
+    ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
+    : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
 
+  // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;
+  // normalize to mp3 so the cache, storage, and audiobook pipeline stay mp3-only.
+  return normalizeToMp3(raw, signal);
+}
+
+async function runOpenAiCompatibleRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
+): Promise<Buffer> {
   const openai = new OpenAI({
     apiKey: request.apiKey,
     baseURL: request.baseUrl,
@@ -646,44 +663,68 @@ async function runProviderRequest(
     timeout: upstreamSettings.ttsUpstreamTimeoutMs,
   });
 
+  const formatKey = `${request.provider}|${request.baseUrl || ''}|${request.model as string}`;
+  const skipResponseFormat = openAiCompatibleResponseFormatUnsupported.has(formatKey);
+
   const createParams: ExtendedSpeechParams = {
     model: request.model,
     voice: request.voice as SpeechCreateParams['voice'],
     input: request.text,
     speed: request.speed,
-    response_format: request.format as SpeechCreateParams['response_format'],
   };
-
+  if (!skipResponseFormat) {
+    createParams.response_format = request.format as SpeechCreateParams['response_format'];
+  }
   if (request.instructions) {
     createParams.instructions = request.instructions;
   }
 
-  if (request.provider !== 'openai' && request.language) {
-    const supportKey = `${request.provider}|${request.baseUrl || ''}|${request.model as string}|${request.language}`;
-    if (!openAiCompatibleLanguageUnsupported.has(supportKey)) {
-      try {
-        return await fetchTTSBufferWithRetry(
-          openai,
-          { ...createParams, language: request.language },
-          signal,
-          upstreamSettings.ttsUpstreamMaxRetries,
-        );
-      } catch (error) {
-        const status = getUpstreamStatus(error);
-        if (status !== 400 && status !== 422) throw error;
-        const fallback = await fetchTTSBufferWithRetry(
-          openai,
-          createParams,
-          signal,
-          upstreamSettings.ttsUpstreamMaxRetries,
-        );
-        openAiCompatibleLanguageUnsupported.set(supportKey, true);
-        return fallback;
+  // Inner attempt with the existing language-unsupported fallback.
+  const fetchWithLanguageFallback = async (params: ExtendedSpeechParams): Promise<Buffer> => {
+    if (request.provider !== 'openai' && request.language) {
+      const supportKey = `${request.provider}|${request.baseUrl || ''}|${request.model as string}|${request.language}`;
+      if (!openAiCompatibleLanguageUnsupported.has(supportKey)) {
+        try {
+          return await fetchTTSBufferWithRetry(
+            openai,
+            { ...params, language: request.language },
+            signal,
+            upstreamSettings.ttsUpstreamMaxRetries,
+          );
+        } catch (error) {
+          const status = getUpstreamStatus(error);
+          if (status !== 400 && status !== 422) throw error;
+          const fallback = await fetchTTSBufferWithRetry(
+            openai,
+            params,
+            signal,
+            upstreamSettings.ttsUpstreamMaxRetries,
+          );
+          openAiCompatibleLanguageUnsupported.set(supportKey, true);
+          return fallback;
+        }
       }
     }
-  }
+    return fetchTTSBufferWithRetry(openai, params, signal, upstreamSettings.ttsUpstreamMaxRetries);
+  };
 
-  return fetchTTSBufferWithRetry(openai, createParams, signal, upstreamSettings.ttsUpstreamMaxRetries);
+  try {
+    return await fetchWithLanguageFallback(createParams);
+  } catch (error) {
+    const status = getUpstreamStatus(error);
+    // A wav-only server rejects the explicit mp3 `response_format`. Retry once
+    // without it, cache the decision, and let `normalizeToMp3` convert the result.
+    const canRetryWithoutFormat = request.provider !== 'openai'
+      && (status === 400 || status === 422)
+      && !skipResponseFormat
+      && createParams.response_format !== undefined;
+    if (!canRetryWithoutFormat) throw error;
+
+    openAiCompatibleResponseFormatUnsupported.set(formatKey, true);
+    const { response_format: _omitted, ...withoutFormat } = createParams;
+    void _omitted;
+    return fetchWithLanguageFallback(withoutFormat as ExtendedSpeechParams);
+  }
 }
 
 export async function generateTTSBuffer(
