@@ -35,16 +35,25 @@ export function sniffAudioFormat(buffer: Buffer): SniffedAudioFormat {
     return 'flac';
   }
 
-  // ID3-tagged mp3
-  if (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
+  // ID3-tagged mp3 (the ID3v2 header is 10 bytes: "ID3" + version + flags + size).
+  if (buffer.length >= 10 && buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
     return 'mp3';
   }
 
-  // MPEG/AAC frame sync: 11 bits set (0xFFE_). Disambiguate mp3 vs ADTS-AAC via
-  // the 2 layer bits — mp3 never uses layer `00`, ADTS always does.
+  // MPEG/AAC frame sync: 11 bits set (0xFFE_). Validate the rest of the 4-byte
+  // header so we only claim mp3 on a plausibly-valid frame; ambiguous bytes fall
+  // through to ffmpeg normalization. Disambiguate mp3 vs ADTS-AAC via the layer
+  // bits — mp3 never uses layer `00`, ADTS always does.
   if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) {
-    const layerBits = buffer[1] & 0x06;
-    return layerBits === 0 ? 'aac' : 'mp3';
+    const layerBits = (buffer[1] >> 1) & 0x03;
+    if (layerBits === 0) return 'aac';
+    const versionBits = (buffer[1] >> 3) & 0x03;    // 0b01 is reserved/invalid
+    const bitrateBits = (buffer[2] >> 4) & 0x0f;     // 0b1111 is the "bad" index
+    const sampleRateBits = (buffer[2] >> 2) & 0x03;  // 0b11 is reserved
+    if (versionBits === 1 || bitrateBits === 0x0f || sampleRateBits === 3) {
+      return 'unknown';
+    }
+    return 'mp3';
   }
 
   return 'unknown';
@@ -52,39 +61,43 @@ export function sniffAudioFormat(buffer: Buffer): SniffedAudioFormat {
 
 function spawnFfmpegToBuffer(args: string[], signal?: AbortSignal): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('ABORTED'));
+      return;
+    }
+
+    let ffmpeg: ReturnType<typeof spawn> | null = null;
+    let finished = false;
+
+    // Register abort handling before the async import so a cancel fired during the
+    // lazy module load is honored and we never spawn ffmpeg after an abort.
+    const onAbort = () => {
+      if (finished) return;
+      finished = true;
+      try {
+        ffmpeg?.kill('SIGKILL');
+      } catch {}
+      reject(new Error('ABORTED'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
     // Resolve lazily so ffmpeg-static is only loaded in server runtimes that need it.
     import('@/lib/server/audiobooks/ffmpeg-bin')
       .then(({ getFFmpegPath }) => {
-        const ffmpeg = spawn(getFFmpegPath(), args);
+        if (finished) return; // aborted during the import
+        const child = spawn(getFFmpegPath(), args);
+        ffmpeg = child;
         const stdoutChunks: Buffer[] = [];
         let stderr = '';
-        let finished = false;
 
-        const onAbort = () => {
-          if (finished) return;
-          finished = true;
-          try {
-            ffmpeg.kill('SIGKILL');
-          } catch {}
-          reject(new Error('ABORTED'));
-        };
-
-        if (signal) {
-          if (signal.aborted) {
-            onAbort();
-            return;
-          }
-          signal.addEventListener('abort', onAbort, { once: true });
-        }
-
-        ffmpeg.stdout.on('data', (chunk: Buffer) => {
+        child.stdout.on('data', (chunk: Buffer) => {
           stdoutChunks.push(chunk);
         });
-        ffmpeg.stderr.on('data', (chunk) => {
+        child.stderr.on('data', (chunk) => {
           stderr += String(chunk);
         });
 
-        ffmpeg.on('close', (code) => {
+        child.on('close', (code) => {
           if (finished) return;
           finished = true;
           signal?.removeEventListener('abort', onAbort);
@@ -95,14 +108,19 @@ function spawnFfmpegToBuffer(args: string[], signal?: AbortSignal): Promise<Buff
           }
         });
 
-        ffmpeg.on('error', (err) => {
+        child.on('error', (err) => {
           if (finished) return;
           finished = true;
           signal?.removeEventListener('abort', onAbort);
           reject(err);
         });
       })
-      .catch(reject);
+      .catch((err) => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener('abort', onAbort);
+        reject(err);
+      });
   });
 }
 

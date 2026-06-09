@@ -23,8 +23,19 @@ describe('sniffAudioFormat', () => {
     expect(sniffAudioFormat(Buffer.from('fLaC....'))).toBe('flac');
   });
 
-  it('detects ID3-tagged mp3', () => {
-    expect(sniffAudioFormat(Buffer.concat([Buffer.from('ID3'), bytes(0x03, 0x00)]))).toBe('mp3');
+  it('detects ID3-tagged mp3 with a full 10-byte header', () => {
+    // "ID3" + version(2) + flags(1) + size(4) = 10 bytes
+    const id3 = Buffer.concat([Buffer.from('ID3'), bytes(0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21)]);
+    expect(sniffAudioFormat(id3)).toBe('mp3');
+  });
+
+  it('does not claim mp3 on a truncated ID3 header', () => {
+    expect(sniffAudioFormat(Buffer.concat([Buffer.from('ID3'), bytes(0x03, 0x00)]))).toBe('unknown');
+  });
+
+  it('does not claim mp3 on a frame sync with an invalid header', () => {
+    // valid 11-bit sync + nonzero layer, but bitrate index 0b1111 ("bad")
+    expect(sniffAudioFormat(bytes(0xff, 0xfb, 0xf0, 0x00))).toBe('unknown');
   });
 
   it('detects mp3 frame sync (MPEG-1 Layer III)', () => {
