@@ -34,7 +34,7 @@ For `OpenAI`, `DeepInfra`, and `Replicate` you only need to supply an API key. F
 Self-hosted or custom providers only need an OpenAI-compatible speech endpoint:
 
 - `POST /v1/audio/speech` — **required**.
-- Voice listing is **optional** and auto-discovered: OpenReader probes `/v1/audio/voices`, `/v1/voices`, then `/v1/styles`, and falls back to sensible default voices if none respond.
+- Voice listing is **optional** and auto-discovered: OpenReader probes `/v1/audio/voices`, `/v1/voices`, then `/v1/styles`. If none respond, it falls back to default voices — the Kokoro set for Kokoro models, otherwise the standard OpenAI voices (`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`).
 
 The speech endpoint may return any common audio format — `mp3`, `wav`, `ogg`, or `flac`. OpenReader detects the format and transcodes non-mp3 audio to mp3 automatically, so your server does not need to honor `response_format: mp3`. An API key is optional; keyless servers work.
 

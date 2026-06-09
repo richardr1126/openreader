@@ -9,7 +9,7 @@ Use any OpenAI-compatible TTS service with OpenReader, including self-hosted ser
 Your service only needs an OpenAI-compatible speech endpoint:
 
 - `POST /v1/audio/speech` — **required**.
-- Voice listing is **optional** and auto-discovered from `/v1/audio/voices`, `/v1/voices`, or `/v1/styles`; OpenReader falls back to default voices if none are available.
+- Voice listing is **optional** and auto-discovered from `/v1/audio/voices`, `/v1/voices`, or `/v1/styles`. If none respond, OpenReader falls back to default voices — the Kokoro voice set for Kokoro models, otherwise the standard OpenAI voices (`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`).
 
 The endpoint may return `mp3`, `wav`, `ogg`, or `flac` — OpenReader normalizes non-mp3 audio to mp3 automatically. An API key is optional.
 
