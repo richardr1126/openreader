@@ -1,11 +1,17 @@
 import { CmpStr } from 'cmpstr';
 
-import { normalizeUnicodeToken } from '@/lib/shared/language';
+import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
 import type { TTSSentenceAlignment } from '@/types/tts';
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');
 
 export interface HighlightTokenRange {
+  start: number;
+  end: number;
+}
+
+/** A spoken word's resolved span as half-open `[start, end)` char offsets into a region of text. */
+export interface AlignmentCharSpan {
   start: number;
   end: number;
 }
@@ -252,4 +258,37 @@ export function buildAlignmentTokenRanges(
   }
 
   return ranges;
+}
+
+/**
+ * Map each spoken (Whisper-aligned) word onto a char span of an already-resolved
+ * region of rendered text. This is the single word→DOM mapping primitive shared
+ * by every viewer (EPUB, HTML/MD/TXT, PDF-style): the caller resolves the region
+ * (a sentence wrap, a visible segment range) and supplies its text; we return,
+ * for each word, the `[start, end)` char offsets to highlight within that text.
+ *
+ * The region text is tokenized into words and the spoken words are globally
+ * aligned against those tokens via {@link buildAlignmentTokenRanges}. Working in
+ * token space (not raw char offsets) means the result is robust to divergent
+ * transcription, punctuation, casing, and whitespace; `fillGaps` guarantees
+ * every word resolves to a neighboring token rather than dropping out.
+ */
+export function locateAlignmentWordSpans(
+  words: TTSSentenceAlignment['words'],
+  regionText: string,
+  language?: string | null,
+): Array<AlignmentCharSpan | null> {
+  const tokens = segmentWords(regionText, language);
+  if (!words.length) return [];
+  if (!tokens.length) return words.map(() => null);
+
+  const tokenRanges = buildAlignmentTokenRanges(
+    words,
+    tokens.map((token) => token.text),
+    { fillGaps: true },
+  );
+
+  return tokenRanges.map((range) =>
+    range ? { start: tokens[range.start].start, end: tokens[range.end].end } : null,
+  );
 }

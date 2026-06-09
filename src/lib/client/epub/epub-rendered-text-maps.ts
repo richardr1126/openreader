@@ -14,6 +14,9 @@ type EpubMappedChar = MappedChar<EpubMappedPosition>;
 export type EpubRenderedTextMap = {
   sourceKey: string;
   chars: EpubMappedPosition[];
+  // Normalized rendered text; `text[i]` is the character at `chars[i]`. Used to
+  // locate spoken words by content within a resolved segment region.
+  text: string;
   content: {
     cfiFromRange: (range: Range) => string;
   };
@@ -94,6 +97,7 @@ export const buildRenderedTextMaps = (
       maps.push({
         sourceKey,
         chars: normalized.map((token) => token.pos),
+        text: normalized.map((token) => token.char).join(''),
         content,
       });
     } catch {

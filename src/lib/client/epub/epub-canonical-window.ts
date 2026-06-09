@@ -247,9 +247,8 @@ export function materializeWindowSegments(
       next.startAnchor = { sourceKey: viewport.sourceKey, offset: clampToViewport(seg.startAnchor.offset) };
       next.endAnchor = { sourceKey: viewport.sourceKey, offset: clampToViewport(seg.endAnchor.offset) };
       // Keep ownerSourceKey in lock-step with the rewritten anchors: the word
-      // highlighter (resolveAlignmentWordSourceRange) requires
-      // startAnchor.sourceKey === ownerSourceKey to treat the segment as
-      // anchored in the rendered page.
+      // highlighter requires startAnchor.sourceKey === ownerSourceKey to treat
+      // the segment as anchored in the rendered page.
       next.ownerSourceKey = viewport.sourceKey;
     }
     out.push(next);

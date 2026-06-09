@@ -11,19 +11,27 @@
  *    sentence
  *  - `WORD` — saturated background on the currently-spoken word
  *
- * Word-to-DOM alignment is native: the Whisper alignment gives authoritative
- * `charStart`/`charEnd` offsets into the sentence text, and we map those offsets
- * directly onto a normalized char→DOM map of the located sentence wrap. No fuzzy
- * token matching for words — that path used to jump the highlight to a later
- * word in the sentence.
+ * Word-to-DOM alignment uses token-sequence alignment — the same primitive the
+ * PDF viewer uses. The located sentence wrap is reduced to a normalized char→DOM
+ * map; we tokenize that wrap text into words and globally align the Whisper
+ * words against those tokens (`buildAlignmentTokenRanges`). Each word then maps
+ * to a `[start, end)` char span in the wrap, which `wrapCharRange` turns into a
+ * DOM span. This tolerates divergent transcription, punctuation, whitespace, and
+ * markdown inline-element concatenation, and `fillGaps` guarantees every word
+ * resolves to a neighboring token rather than vanishing.
  */
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { segmentWords } from '@/lib/shared/language';
 import {
   findBestHighlightTokenMatch,
+  locateAlignmentWordSpans,
   normalizeHighlightToken,
+  type AlignmentCharSpan,
 } from '@/lib/client/highlight-token-alignment';
-import { normalizeMappedChars, type MappedChar } from '@/lib/client/highlight-char-map';
+import {
+  normalizeMappedChars,
+  type MappedChar,
+} from '@/lib/client/highlight-char-map';
 
 export const HTML_SENTENCE_CLASS = 'openreader-html-highlight-sentence';
 export const HTML_WORD_CLASS = 'openreader-html-highlight-word';
@@ -55,13 +63,16 @@ interface SentenceState {
   // stable across word wrap/unwrap cycles because clear() calls
   // `parent.normalize()` which restores the original text-node structure.
   chars: CharPosition[];
-  // Normalized text of the wrap (chars joined), used to locate the sentence so
-  // alignment char offsets can be rebased onto the wrap.
+  // Normalized text of the wrap (chars joined), tokenized to align each spoken
+  // word against the rendered words.
   text: string;
-  // For an alignment we've already seen: the offset of `sentence` inside `text`
-  // (the wrap window may be slightly wider than the sentence). null = not found.
+  // Locale captured when the sentence was highlighted, reused for locale-aware
+  // word segmentation when mapping the alignment (matters for CJK/Thai, etc.).
+  language?: string;
+  // For an alignment we've already seen: each word's [start, end) char span
+  // within `text`/`chars` (null entries = words that aligned to no token).
   alignment: TTSSentenceAlignment | null;
-  base: number | null;
+  wordRanges: Array<AlignmentCharSpan | null> | null;
 }
 
 let sentenceState: SentenceState | null = null;
@@ -157,9 +168,18 @@ function collectDomTokens(
 /**
  * Walk inside the current sentence wrap spans and build a normalized char→DOM
  * map. Every surviving character of the normalized text remembers the exact
- * Text node + offset it came from, so alignment char offsets map straight to a
- * DOM range. Normalization matches `preprocessSentenceForAudio` (the canonical
- * space the alignment offsets live in).
+ * Text node + offset it came from, so an aligned word's char span maps straight
+ * to a DOM range. Normalization matches `preprocessSentenceForAudio` (the
+ * canonical space the alignment lives in).
+ *
+ * Crucially, a synthetic space is inserted between adjacent text nodes when the
+ * boundary isn't already whitespace. ReactMarkdown renders inline formatting as
+ * sibling nodes ("The <strong>quick</strong> brown" → "The"|"quick"|" brown")
+ * and the inter-word space lives at a node edge that the wrap drops — without
+ * this, the words would concatenate into "Thequick", collapsing distinct words
+ * into one token and destroying per-word highlight granularity. The synthetic
+ * space sits on a word boundary, so it is never inside an aligned word's span
+ * and never becomes a highlight target.
  */
 function collectWrapCharMap(wraps: HTMLSpanElement[]): { chars: CharPosition[]; text: string } {
   const raw: MappedChar<CharPosition>[] = [];
@@ -169,6 +189,10 @@ function collectWrapCharMap(wraps: HTMLSpanElement[]): { chars: CharPosition[]; 
     while (current) {
       const t = current as Text;
       const value = t.nodeValue || '';
+      const lastChar = raw.length ? raw[raw.length - 1].char : '';
+      if (lastChar && !/\s/.test(lastChar) && value.length && !/\s/.test(value[0])) {
+        raw.push({ char: ' ', pos: { node: t, offset: 0 } });
+      }
       for (let offset = 0; offset < value.length; offset += 1) {
         raw.push({ char: value[offset], pos: { node: t, offset } });
       }
@@ -297,8 +321,9 @@ export function highlightHtmlSentence(
     sentence,
     chars,
     text,
+    language,
     alignment: null,
-    base: null,
+    wordRanges: null,
   };
   return true;
 }
@@ -321,32 +346,21 @@ export function highlightHtmlWord(
   const words = alignment.words || [];
   if (!words.length || wordIndex >= words.length) return false;
 
-  // Locate the sentence inside the wrap's normalized text once per alignment.
-  // The sentence wrap is found by fuzzy token windowing so it may be slightly
-  // wider than the spoken sentence; rebasing keeps the alignment char offsets
-  // accurate regardless.
-  if (sentenceState.alignment !== alignment || sentenceState.base === null) {
-    const found = sentenceState.text.indexOf(alignment.sentence);
-    if (found < 0) {
-      // Sentence not located in the wrap — fail closed (leave only the sentence
-      // highlight) rather than snapping the word highlight to offset 0. Don't
-      // commit the alignment so the next tick retries the lookup.
-      sentenceState.base = null;
-      return false;
-    }
+  // Map each spoken word to a char span of the wrap's normalized text with the
+  // shared token-sequence aligner (same primitive as the EPUB and PDF viewers).
+  // The sentence wrap is located by fuzzy token windowing, so absolute char
+  // offsets can't be trusted; token alignment re-syncs every word against the
+  // rendered words and won't jump to a later/duplicate word.
+  if (sentenceState.alignment !== alignment || !sentenceState.wordRanges) {
     sentenceState.alignment = alignment;
-    sentenceState.base = found;
+    sentenceState.wordRanges = locateAlignmentWordSpans(words, sentenceState.text, sentenceState.language);
   }
 
-  const base = sentenceState.base;
-  if (base === null) return false;
+  const range = sentenceState.wordRanges[wordIndex];
+  if (!range) return false;
 
-  const word = words[wordIndex];
-  const { charStart, charEnd } = word;
-  if (!Number.isInteger(charStart) || !Number.isInteger(charEnd) || charEnd <= charStart) return false;
-
-  const start = Math.max(0, base + charStart);
-  const end = Math.min(sentenceState.chars.length, base + charEnd);
+  const start = Math.max(0, range.start);
+  const end = Math.min(sentenceState.chars.length, range.end);
   if (end <= start) return false;
 
   wordWraps = wrapCharRange(sentenceState.chars, start, end, HTML_WORD_CLASS);
