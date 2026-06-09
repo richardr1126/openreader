@@ -44,8 +44,14 @@ const replaceMappedUrls = <TPos>(tokens: MappedChar<TPos>[]): MappedChar<TPos>[]
     const anchor = tokens[start] ?? tokens[Math.max(0, end - 1)];
     if (anchor) {
       const replacement = `- (link to ${match[1]}) -`;
-      for (const char of replacement) {
-        replaced.push(cloneMappedChar(char, anchor));
+      // Spread the replacement characters across the original URL span so the
+      // mapped positions keep their positional spread instead of collapsing the
+      // whole URL onto a single DOM anchor.
+      const originalLength = Math.max(1, end - start);
+      for (let i = 0; i < replacement.length; i += 1) {
+        const sourceIndex = Math.min(end - 1, start + Math.floor((i * originalLength) / replacement.length));
+        const source = tokens[sourceIndex] ?? anchor;
+        replaced.push(cloneMappedChar(replacement[i], source));
       }
     }
     cursor = end;

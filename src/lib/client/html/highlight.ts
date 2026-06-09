@@ -326,17 +326,27 @@ export function highlightHtmlWord(
   // wider than the spoken sentence; rebasing keeps the alignment char offsets
   // accurate regardless.
   if (sentenceState.alignment !== alignment || sentenceState.base === null) {
-    sentenceState.alignment = alignment;
     const found = sentenceState.text.indexOf(alignment.sentence);
-    sentenceState.base = found >= 0 ? found : 0;
+    if (found < 0) {
+      // Sentence not located in the wrap — fail closed (leave only the sentence
+      // highlight) rather than snapping the word highlight to offset 0. Don't
+      // commit the alignment so the next tick retries the lookup.
+      sentenceState.base = null;
+      return false;
+    }
+    sentenceState.alignment = alignment;
+    sentenceState.base = found;
   }
+
+  const base = sentenceState.base;
+  if (base === null) return false;
 
   const word = words[wordIndex];
   const { charStart, charEnd } = word;
   if (!Number.isInteger(charStart) || !Number.isInteger(charEnd) || charEnd <= charStart) return false;
 
-  const start = Math.max(0, sentenceState.base + charStart);
-  const end = Math.min(sentenceState.chars.length, sentenceState.base + charEnd);
+  const start = Math.max(0, base + charStart);
+  const end = Math.min(sentenceState.chars.length, base + charEnd);
   if (end <= start) return false;
 
   wordWraps = wrapCharRange(sentenceState.chars, start, end, HTML_WORD_CLASS);
