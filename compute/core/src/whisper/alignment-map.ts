@@ -1,9 +1,14 @@
 import type { TTSSentenceAlignment, TTSSentenceWord } from '../types/tts';
 
+// Keep byte-for-byte in lock-step with `preprocessSentenceForAudio` in
+// `src/lib/shared/nlp.ts` (and the position-preserving copy in
+// `src/lib/client/highlight-char-map.ts`). The word `charStart`/`charEnd`
+// offsets this module emits are consumed against text normalized by those
+// client functions, so any divergence shifts viewer highlights off-word.
 function preprocessSentenceForAudio(text: string): string {
   return text
     .replace(/\S*(?:https?:\/\/|www\.)([^\/\s]+)(?:\/\S*)?/gi, '- (link to $1) -')
-    .replace(/(\w+)-\s+(\w+)/g, '$1$2')
+    .replace(/([\p{L}\p{N}\p{M}]+)-\s+([\p{L}\p{N}\p{M}]+)/gu, '$1$2')
     .replace(/\*/g, '')
     .replace(/\s+/g, ' ')
     .trim();

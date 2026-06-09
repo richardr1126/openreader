@@ -129,8 +129,13 @@ const normalizeSentenceBoundariesForNlp = (text: string): string => {
 };
 
 /**
- * Preprocesses text for audio generation by cleaning up various text artifacts
- * 
+ * Preprocesses text for audio generation by cleaning up various text artifacts.
+ *
+ * Source of truth for the canonical "audio" text form. Keep byte-for-byte in
+ * lock-step with the copy in `compute/core/src/whisper/alignment-map.ts` (which
+ * computes word char offsets) and the position-preserving variant in
+ * `src/lib/client/highlight-char-map.ts` (which maps those offsets to the DOM).
+ *
  * @param {string} text - The text to preprocess
  * @returns {string} The cleaned text
  */

@@ -36,7 +36,6 @@ import {
 } from '@/lib/client/epub/epub-rendered-text-maps';
 import {
   useEPUBHighlighting,
-  type EpubWordHighlightMapCache,
 } from '@/hooks/epub/useEPUBHighlighting';
 import { useEPUBLocationController } from '@/hooks/epub/useEPUBLocationController';
 import { useEPUBAudiobook } from '@/hooks/epub/useEPUBAudiobook';
@@ -148,7 +147,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   const currentHighlightCfi = useRef<string | null>(null);
   const currentWordHighlightCfi = useRef<string | null>(null);
   const renderedTextMapsRef = useRef<EpubRenderedTextMap[]>([]);
-  const wordHighlightMapCacheRef = useRef<EpubWordHighlightMapCache | null>(null);
   const renderedLocationCloneManagerRef = useRef<EpubRenderedLocationCloneManager>(
     new EpubRenderedLocationCloneManager(),
   );
@@ -165,8 +163,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     currentHighlightCfiRef: currentHighlightCfi,
     currentWordHighlightCfiRef: currentWordHighlightCfi,
     renderedTextMapsRef,
-    wordHighlightMapCacheRef,
-    language: resolvedLanguage,
   });
 
   useEffect(() => () => {

@@ -1,17 +1,12 @@
 import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
-import type { TTSSentenceAlignment, TTSSentenceWord } from '@/types/tts';
-import { segmentWords } from '@/lib/shared/language';
-import { normalizeHighlightToken } from '@/lib/client/highlight-token-alignment';
+import type { TTSSentenceWord } from '@/types/tts';
 
-export type EpubCanonicalWordToken = {
-  norm: string;
-  sourceStart: number;
-  sourceEnd: number;
-};
-
-export const normalizeWordForHighlight = (text: string): string =>
-  normalizeHighlightToken(text);
-
+/**
+ * Resolve a spoken word's char offsets (from the Whisper alignment) into the
+ * canonical source-offset space the rendered text map is keyed by. The
+ * alignment's `charStart`/`charEnd` are offsets into the segment text, which is
+ * in the same normalized space as `segment.startAnchor.offset`.
+ */
 export const resolveAlignmentWordSourceRange = (
   segment: CanonicalTtsSegment,
   word: TTSSentenceWord,
@@ -25,28 +20,3 @@ export const resolveAlignmentWordSourceRange = (
     sourceEnd: segment.startAnchor.offset + charEnd,
   };
 };
-
-export const tokenizeCanonicalSegment = (
-  segment: CanonicalTtsSegment,
-  language?: string,
-): EpubCanonicalWordToken[] =>
-  segmentWords(segment.text, language)
-    .map((token) => ({
-      norm: normalizeWordForHighlight(token.text),
-      sourceStart: segment.startAnchor.offset + token.start,
-      sourceEnd: segment.startAnchor.offset + token.end,
-    }))
-    .filter((token) => Boolean(token.norm));
-
-export const buildWordHighlightCacheKey = (
-  segment: CanonicalTtsSegment,
-  alignment: TTSSentenceAlignment,
-  language?: string,
-): string =>
-  [
-    segment.key,
-    segment.text.length,
-    language || '',
-    alignment.words.length,
-    alignment.words.map((word) => normalizeWordForHighlight(word.text)).join('|'),
-  ].join('::');

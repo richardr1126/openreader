@@ -2485,12 +2485,19 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         const pos = activeHowl.seek() as number;
         if (typeof pos === 'number' && Number.isFinite(pos)) {
           const words = currentSentenceAlignment.words;
+          // Find the word whose timing window contains `pos`. When `pos` falls
+          // in a gap between words (or past the last word), snap to the last
+          // word that has already started instead of freezing on a stale index
+          // — monotonic, so it never jumps to a later word that hasn't started.
           let idx = -1;
           for (let i = 0; i < words.length; i++) {
             const w = words[i];
             if (pos >= w.startSec && pos < w.endSec) {
               idx = i;
               break;
+            }
+            if (pos >= w.startSec) {
+              idx = i;
             }
           }
           if (idx !== -1) {
