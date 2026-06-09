@@ -220,26 +220,33 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     }
     let cancelled = false;
     void (async () => {
-      const spine = resolveSpineFromCfi(book, currDocPage);
-      if (!spine) {
+      try {
+        const spine = resolveSpineFromCfi(book, currDocPage);
+        if (!spine) {
+          if (!cancelled) setSynthRowCanonical([]);
+          return;
+        }
+        const spineText = await getSpineItemPlainText(book, spine.href);
+        if (cancelled) return;
+        const offsets = resolveMonotonicSentenceOffsets(spineText, sentences);
+        const next = canonicalizeEpubSegmentsAgainstSpineText({
+          segmentTexts: sentences,
+          hintCharOffsets: offsets,
+          spineText,
+          spineHref: spine.href,
+          spineIndex: spine.index,
+          cfi: currDocPage,
+          keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
+          maxBlockLength: ttsSegmentMaxBlockLength,
+          language: resolvedLanguage,
+        });
+        if (!cancelled) setSynthRowCanonical(next);
+      } catch (error) {
+        // Don't leave a previous page's canonical mapping in place if this
+        // resolution fails — clear it so we fall back to non-canonical rows.
+        console.warn('Failed to canonicalize EPUB sidebar segments:', error);
         if (!cancelled) setSynthRowCanonical([]);
-        return;
       }
-      const spineText = await getSpineItemPlainText(book, spine.href);
-      if (cancelled) return;
-      const offsets = resolveMonotonicSentenceOffsets(spineText, sentences);
-      const next = canonicalizeEpubSegmentsAgainstSpineText({
-        segmentTexts: sentences,
-        hintCharOffsets: offsets,
-        spineText,
-        spineHref: spine.href,
-        spineIndex: spine.index,
-        cfi: currDocPage,
-        keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
-        maxBlockLength: ttsSegmentMaxBlockLength,
-        language: resolvedLanguage,
-      });
-      if (!cancelled) setSynthRowCanonical(next);
     })();
     return () => { cancelled = true; };
   }, [epubBookRef, currDocPage, sentences, documentId, activeReaderType, ttsSegmentMaxBlockLength, resolvedLanguage]);

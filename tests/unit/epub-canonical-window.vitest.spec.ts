@@ -213,6 +213,19 @@ describe('buildSpineCanonicalPlan (cached)', () => {
     expect(second).toBe(first); // cache hit → identical reference
     expect(first.map((s) => s.key)).toEqual(plan().map((s) => s.key));
   });
+
+  test('cache is language-aware: a different language is a cache miss', async () => {
+    const book = makeFakeBook(SPINE_TEXT); // fresh Book → empty plan cache
+    const base = {
+      spineHref: SPINE_HREF, spineIndex: SPINE_INDEX, keyPrefix: KEY_PREFIX, maxBlockLength: MAX_BLOCK,
+    };
+    const en = await buildSpineCanonicalPlan(book, { ...base, language: 'en' });
+    const ja = await buildSpineCanonicalPlan(book, { ...base, language: 'ja' });
+    // Distinct language → distinct cache key → distinct reference (no stale
+    // reuse across languages). Same language returns the cached reference.
+    expect(ja).not.toBe(en);
+    expect(await buildSpineCanonicalPlan(book, { ...base, language: 'en' })).toBe(en);
+  });
 });
 
 describe('buildEpubCanonicalWindowFromChunk', () => {

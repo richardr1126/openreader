@@ -22,14 +22,17 @@ import type { TTSSegmentLocator } from '@/types/client';
  * into that one canonical sequence — selected by character offset, identified
  * by stable ordinal + content key.
  *
- * This is what lets a block that straddles a page break (starts on page A,
- * ends on page B) be the *same* canonical segment (same key, same ordinal) on
- * both pages, instead of two differently-grouped viewport blocks. Page A and
- * page B windows deliberately **overlap** by the straddling segments; the
- * playback layer (TTSContext) uses ordinal continuity to assign each straddler
- * to exactly the page where it is first heard. See
- * `tts-segment-plan.ts` for the planner and `spine-coordinates.ts` for the
- * offset helpers this builds on.
+ * Viewport pages are **contiguous, non-overlapping** windows into that one
+ * canonical sequence: each segment is owned exclusively by the page where its
+ * start offset falls (see `selectCanonicalWindow`), exactly like PDF blocks. A
+ * block that straddles a page break (starts on page A, ends on page B) is the
+ * *same* canonical segment (same key, same ordinal) wherever it is referenced,
+ * but it belongs only to page A — page B's window begins at the next segment.
+ * This clean partition is what makes the sidebar list and manual skip
+ * deterministic and keeps playback from repeating a straddler on the page turn.
+ * The playback layer (TTSContext) additionally uses ordinal continuity to hand
+ * off to ordinal + 1 across the seam. See `tts-segment-plan.ts` for the planner
+ * and `spine-coordinates.ts` for the offset helpers this builds on.
  */
 
 export interface SpinePlanParams {
