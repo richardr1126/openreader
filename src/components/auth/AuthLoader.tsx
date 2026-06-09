@@ -148,6 +148,17 @@ export function AuthLoader({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Don't bootstrap a throwaway anonymous session while the user is on the
+      // sign-in / sign-up pages. An anonymous user created here would be linked
+      // into their account on login (onLinkAccount), clobbering account-scoped
+      // preferences such as the changelog "last seen version" and re-showing the
+      // changelog on every fresh login.
+      if (isAuthPage) {
+        setIsAutoLoggingIn(false);
+        setBootstrapError(null);
+        return;
+      }
+
       // Avoid double-calling anonymous sign-in (e.g. React strict mode).
       if (attemptedForNullSessionRef.current) return;
       attemptedForNullSessionRef.current = true;
@@ -244,7 +255,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
   const shouldBlockForDisallowedAnonymous =
     !allowAnonymousAuthSessions && Boolean(session?.user?.isAnonymous);
   const isLoading = (
-    (allowAnonymousAuthSessions && (isPending || isAutoLoggingIn || !session)) ||
+    (allowAnonymousAuthSessions && !isAuthPage && (isPending || isAutoLoggingIn || !session)) ||
     (!allowAnonymousAuthSessions && !isAuthPage && (
       isPending || isRedirecting || shouldBlockForProtectedNoSession || shouldBlockForDisallowedAnonymous
     ))
