@@ -171,6 +171,16 @@ interface SetTextOptions {
   nextSourceUnits?: CanonicalTtsSourceUnit[];
   previousText?: string;
   upcomingLocations?: Array<{ location: TTSLocation; text: string; sourceUnits?: CanonicalTtsSourceUnit[] }>;
+  /**
+   * EPUB canonical path: pre-windowed segments for the current page, sliced
+   * from the chapter's single canonical plan (stable key + global `ordinal`).
+   * When present, setText uses them verbatim and skips preview-based planning.
+   */
+  canonicalSegments?: CanonicalTtsSegment[];
+  /** Spine identity of `canonicalSegments`, for the ordinal-continuity gate. */
+  canonicalSpine?: { spineHref: string; spineIndex: number };
+  /** Canonical segments for the next page, staged for the hidden-tab fast path. */
+  canonicalNextSegments?: CanonicalTtsSegment[];
 }
 
 type TTSSegmentPlaybackSource = {
@@ -351,6 +361,33 @@ const resolveJumpIndex = (input: JumpResolutionInput): JumpResolution => {
   }
 
   return { kind: 'fresh' };
+};
+
+/**
+ * Resolve the local start index for an EPUB canonical-window page using ordinal
+ * continuity. The window's segments carry chapter-global `ordinal`s; we begin at
+ * the first one past the highest ordinal already spoken in this same spine item.
+ *
+ * Only trims on a *forward, contiguous* turn — when the window overlaps or sits
+ * just after what we've played. A backward turn or a non-contiguous jump returns
+ * 0 (play the whole window from the top); a different spine item returns 0.
+ */
+const resolveCanonicalStartIndex = (
+  segments: CanonicalTtsSegment[],
+  spine: { spineHref: string; spineIndex: number } | null,
+  lastPlayed: { spineHref: string; spineIndex: number; ordinal: number } | null,
+): number => {
+  if (segments.length === 0) return 0;
+  if (!spine || !lastPlayed) return 0;
+  if (lastPlayed.spineHref !== spine.spineHref || lastPlayed.spineIndex !== spine.spineIndex) return 0;
+
+  const windowStart = segments[0].ordinal;
+  const windowEnd = segments[segments.length - 1].ordinal;
+  if (windowStart > lastPlayed.ordinal + 1) return 0; // jumped ahead → play whole window
+  if (windowEnd < lastPlayed.ordinal) return 0;        // moved backward → play whole window
+
+  const idx = segments.findIndex((segment) => segment.ordinal > lastPlayed.ordinal);
+  return idx < 0 ? segments.length : idx;
 };
 
 const sourceKeyForLocation = (location: TTSLocation | undefined, fallback: TTSLocation): string =>
@@ -618,7 +655,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   // values, so the strict locationKey match in pendingJumpTargetRef misses on
   // cross-spine jumps. We instead bump an epoch on each playFromSegment call
   // and let the next setText with a matching epoch consume the jump.
-  const pendingEpubJumpRef = useRef<{ index: number; epoch: number } | null>(null);
+  const pendingEpubJumpRef = useRef<{ index: number; epoch: number; charOffset?: number } | null>(null);
   const epubJumpEpochRef = useRef<number>(0);
   const epubPreloadGenerationRef = useRef<number>(0);
   const epubWalkInFlightRef = useRef<Set<string>>(new Set());
@@ -644,6 +681,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const currentSourceUnitRef = useRef<CanonicalTtsSourceUnit | null>(null);
   const currentSourceContextUnitsRef = useRef<CanonicalTtsSourceUnit[]>([]);
   const completedEpubBoundarySegmentRef = useRef<CompletedEpubBoundarySegment | null>(null);
+  // Highest canonical segment ordinal already spoken in the current spine item.
+  // Drives exact, viewport-independent page-turn handoff: the next page begins
+  // at the first window segment whose ordinal exceeds this. Replaces fuzzy
+  // fingerprint matching for within-chapter turns (the spine→spine handoff in
+  // tts-epub-handoff.ts remains the fallback path's safety net).
+  const lastPlayedCanonicalRef = useRef<{ spineHref: string; spineIndex: number; ordinal: number } | null>(null);
   const pendingNextLocationRef = useRef<TTSLocation | undefined>(undefined);
 
   const audioUnlockAttemptRef = useRef(0);
@@ -1060,7 +1103,28 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
         }
       }
-      locationChangeHandlerRef.current(nextIndex >= sentences.length ? 'next' : 'prev');
+      const direction = nextIndex >= sentences.length ? 'next' : 'prev';
+      // EPUB navigation is asynchronous (rendition.next/prev → relocated →
+      // skipToLocation → setText), unlike PDF which resets synchronously via
+      // skipToLocation right here. Without clearing the just-finished page now,
+      // an unrelated re-render during the async gap — e.g. setActiveHowl(null)
+      // in onend changing playAudio's identity — re-fires the playback effect
+      // against the *stale* last index and replays the final segment before the
+      // next page loads. Reset synchronously to get PDF's deterministic handoff.
+      if (isPlayingRef.current) {
+        resumeAfterLocationChangeRef.current = true;
+      }
+      if (backwards) {
+        // Backward navigation breaks forward ordinal continuity.
+        lastPlayedCanonicalRef.current = null;
+      }
+      invalidatePlaybackRun();
+      setCurrentIndex(0);
+      setSentences([]);
+      setPlaybackSegments([]);
+      setCurrentSentenceAlignment(undefined);
+      setCurrentWordIndex(null);
+      locationChangeHandlerRef.current(direction);
       return;
     }
 
@@ -1111,7 +1175,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         setIsPlaying(false);
       }
     }
-  }, [currentIndex, sentences, currDocPageNumber, currDocPages, isEPUB, skipToLocation]);
+  }, [currentIndex, sentences, currDocPageNumber, currDocPages, isEPUB, skipToLocation, invalidatePlaybackRun]);
 
   /**
    * Handles blank text sections based on document type
@@ -1178,87 +1242,121 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const effectiveCurrentUnits = currentUnits && currentUnits.length > 0 ? currentUnits : [currentSource];
     const currentSourceKeySet = new Set(effectiveCurrentUnits.map((unit) => unit.sourceKey));
 
-    const contextSourceUnits: CanonicalTtsSourceUnit[] = [];
-    if (normalizedOptions.previousText?.trim()) {
-      const previousLocation = normalizedOptions.previousLocation;
-      contextSourceUnits.push({
-        sourceKey: previousLocation !== undefined
-          ? sourceKeyForLocation(previousLocation, currDocPage)
-          : `previous:${currentSourceKey}`,
-        text: normalizedOptions.previousText,
-        locator: previousLocation !== undefined
-          ? locatorForLocation(previousLocation, activeReaderType)
-          : null,
-      });
-    }
-    contextSourceUnits.push(...effectiveCurrentUnits);
-    const sourceUnits: CanonicalTtsSourceUnit[] = [...contextSourceUnits];
+    // EPUB canonical path: the caller already windowed this page out of the
+    // chapter's single canonical plan, so we use those segments verbatim and
+    // skip preview-based planning entirely. This is what makes a page-straddling
+    // block identical (same key + global ordinal) on both pages.
+    const useCanonicalEpub = isEPUB
+      && Array.isArray(normalizedOptions.canonicalSegments)
+      && normalizedOptions.canonicalSegments.length > 0;
 
-    plannedSegmentsByLocationRef.current.clear();
-    pendingNextLocationRef.current = normalizedOptions.nextLocation;
-    const pendingPrefetches: Array<{
-      location: TTSLocation;
-      sourceUnits: CanonicalTtsSourceUnit[];
-    }> = [];
-    if (normalizedOptions.nextLocation !== undefined && normalizedOptions.nextText?.trim()) {
-      const provided = normalizedOptions.nextSourceUnits?.filter((unit) => unit.text.trim().length > 0) ?? [];
-      pendingPrefetches.push(provided.length > 0
-        ? {
-            location: normalizedOptions.nextLocation,
-            sourceUnits: provided,
-          }
-        : {
-            location: normalizedOptions.nextLocation,
-            sourceUnits: [{
-              sourceKey: sourceKeyForLocation(normalizedOptions.nextLocation, currDocPage),
-              text: normalizedOptions.nextText,
-              locator: locatorForLocation(normalizedOptions.nextLocation, activeReaderType),
-            }],
-          });
-    }
-    if (Array.isArray(normalizedOptions.upcomingLocations)) {
-      for (const item of normalizedOptions.upcomingLocations) {
-        if (item.location === undefined || !item.text?.trim()) continue;
-        const provided = item.sourceUnits?.filter((unit) => unit.text.trim().length > 0) ?? [];
+    let currentSegments: CanonicalTtsSegment[];
+    let newSentences: string[];
+
+    if (useCanonicalEpub) {
+      currentSegments = normalizedOptions.canonicalSegments!;
+      newSentences = currentSegments.map((segment) => segment.text);
+
+      plannedSegmentsByLocationRef.current.clear();
+      pendingNextLocationRef.current = normalizedOptions.nextLocation;
+      // Stage the next page's canonical segments for the hidden-tab fast path.
+      if (
+        normalizedOptions.nextLocation !== undefined
+        && normalizedOptions.canonicalNextSegments
+        && normalizedOptions.canonicalNextSegments.length > 0
+      ) {
+        plannedSegmentsByLocationRef.current.set(
+          normalizeLocationKey(normalizedOptions.nextLocation),
+          normalizedOptions.canonicalNextSegments,
+        );
+      }
+      // The walker reads these for preview fallback only; the canonical path
+      // attaches its own per-chunk segments, so clear them.
+      currentSourceUnitRef.current = null;
+      currentSourceContextUnitsRef.current = [];
+    } else {
+      const contextSourceUnits: CanonicalTtsSourceUnit[] = [];
+      if (normalizedOptions.previousText?.trim()) {
+        const previousLocation = normalizedOptions.previousLocation;
+        contextSourceUnits.push({
+          sourceKey: previousLocation !== undefined
+            ? sourceKeyForLocation(previousLocation, currDocPage)
+            : `previous:${currentSourceKey}`,
+          text: normalizedOptions.previousText,
+          locator: previousLocation !== undefined
+            ? locatorForLocation(previousLocation, activeReaderType)
+            : null,
+        });
+      }
+      contextSourceUnits.push(...effectiveCurrentUnits);
+      const sourceUnits: CanonicalTtsSourceUnit[] = [...contextSourceUnits];
+
+      plannedSegmentsByLocationRef.current.clear();
+      pendingNextLocationRef.current = normalizedOptions.nextLocation;
+      const pendingPrefetches: Array<{
+        location: TTSLocation;
+        sourceUnits: CanonicalTtsSourceUnit[];
+      }> = [];
+      if (normalizedOptions.nextLocation !== undefined && normalizedOptions.nextText?.trim()) {
+        const provided = normalizedOptions.nextSourceUnits?.filter((unit) => unit.text.trim().length > 0) ?? [];
         pendingPrefetches.push(provided.length > 0
           ? {
-              location: item.location,
+              location: normalizedOptions.nextLocation,
               sourceUnits: provided,
             }
           : {
-              location: item.location,
+              location: normalizedOptions.nextLocation,
               sourceUnits: [{
-                sourceKey: sourceKeyForLocation(item.location, currDocPage),
-                text: item.text,
-                locator: locatorForLocation(item.location, activeReaderType),
+                sourceKey: sourceKeyForLocation(normalizedOptions.nextLocation, currDocPage),
+                text: normalizedOptions.nextText,
+                locator: locatorForLocation(normalizedOptions.nextLocation, activeReaderType),
               }],
             });
       }
-    }
-    for (const item of pendingPrefetches) {
-      sourceUnits.push(...item.sourceUnits);
-    }
-
-    const plan = planCanonicalTtsSegments(sourceUnits, {
-      readerType: activeReaderType,
-      maxBlockLength: ttsSegmentMaxBlockLength,
-      keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
-      enforceSourceBoundaries: activeReaderType === 'pdf' && currentUnits !== null && currentUnits.length > 0,
-      language: resolvedLanguage,
-    });
-    const currentSegments = plan.segments.filter((segment) => currentSourceKeySet.has(segment.ownerSourceKey));
-    const newSentences = currentSegments.map((segment) => segment.text);
-
-    for (const item of pendingPrefetches) {
-      const sourceKeys = new Set(item.sourceUnits.map((unit) => unit.sourceKey));
-      const planned = plan.segments.filter((segment) => sourceKeys.has(segment.ownerSourceKey));
-      if (planned.length > 0) {
-        plannedSegmentsByLocationRef.current.set(normalizeLocationKey(item.location), planned);
+      if (Array.isArray(normalizedOptions.upcomingLocations)) {
+        for (const item of normalizedOptions.upcomingLocations) {
+          if (item.location === undefined || !item.text?.trim()) continue;
+          const provided = item.sourceUnits?.filter((unit) => unit.text.trim().length > 0) ?? [];
+          pendingPrefetches.push(provided.length > 0
+            ? {
+                location: item.location,
+                sourceUnits: provided,
+              }
+            : {
+                location: item.location,
+                sourceUnits: [{
+                  sourceKey: sourceKeyForLocation(item.location, currDocPage),
+                  text: item.text,
+                  locator: locatorForLocation(item.location, activeReaderType),
+                }],
+              });
+        }
       }
-    }
+      for (const item of pendingPrefetches) {
+        sourceUnits.push(...item.sourceUnits);
+      }
 
-    currentSourceUnitRef.current = effectiveCurrentUnits[0] ?? null;
-    currentSourceContextUnitsRef.current = contextSourceUnits;
+      const plan = planCanonicalTtsSegments(sourceUnits, {
+        readerType: activeReaderType,
+        maxBlockLength: ttsSegmentMaxBlockLength,
+        keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
+        enforceSourceBoundaries: activeReaderType === 'pdf' && currentUnits !== null && currentUnits.length > 0,
+        language: resolvedLanguage,
+      });
+      currentSegments = plan.segments.filter((segment) => currentSourceKeySet.has(segment.ownerSourceKey));
+      newSentences = currentSegments.map((segment) => segment.text);
+
+      for (const item of pendingPrefetches) {
+        const sourceKeys = new Set(item.sourceUnits.map((unit) => unit.sourceKey));
+        const planned = plan.segments.filter((segment) => sourceKeys.has(segment.ownerSourceKey));
+        if (planned.length > 0) {
+          plannedSegmentsByLocationRef.current.set(normalizeLocationKey(item.location), planned);
+        }
+      }
+
+      currentSourceUnitRef.current = effectiveCurrentUnits[0] ?? null;
+      currentSourceContextUnitsRef.current = contextSourceUnits;
+    }
 
     if (handleBlankSection(newSentences.join(' '))) return;
 
@@ -1318,6 +1416,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       let startIndex = 0;
       if (resolution.kind === 'epub-resolved') {
         startIndex = resolution.index;
+        // Cross-page jump hardening: the raw index was computed against the
+        // sidebar's view. On the canonical path, re-anchor to the segment whose
+        // per-segment charOffset matches the jump target so chapters with
+        // repeated text land exactly.
+        const jump = pendingEpubJumpRef.current;
+        if (useCanonicalEpub && jump && typeof jump.charOffset === 'number') {
+          const mapped = currentSegments.findIndex(
+            (segment) => segment.ownerLocator?.charOffset === jump.charOffset,
+          );
+          if (mapped >= 0) startIndex = mapped;
+        }
         setCurrentIndex(startIndex);
         pendingEpubJumpRef.current = null;
         pendingJumpTargetRef.current = null;
@@ -1329,11 +1438,21 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         if (isEPUB) {
           clearPendingEpubJump();
         }
-        startIndex = isEPUB && shouldResumePlayback
-          ? resolveEpubBoundaryHandoffStartIndex(currentSegments, completedEpubBoundarySegmentRef.current)
-          : 0;
-        if (startIndex > 0) {
-          completedEpubBoundarySegmentRef.current = null;
+        if (useCanonicalEpub && shouldResumePlayback) {
+          // Exact ordinal handoff: start at the first window segment past the
+          // highest ordinal already spoken in this chapter.
+          startIndex = resolveCanonicalStartIndex(
+            currentSegments,
+            normalizedOptions.canonicalSpine ?? null,
+            lastPlayedCanonicalRef.current,
+          );
+        } else if (isEPUB && shouldResumePlayback) {
+          startIndex = resolveEpubBoundaryHandoffStartIndex(currentSegments, completedEpubBoundarySegmentRef.current);
+          if (startIndex > 0) {
+            completedEpubBoundarySegmentRef.current = null;
+          }
+        } else {
+          startIndex = 0;
         }
         setCurrentIndex(startIndex);
       }
@@ -1524,6 +1643,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     preloadGenerationSignatureRef.current = signature;
     clearPendingEpubJump();
     bumpEpubPreloadGeneration();
+    // maxBlockLength/language changes re-shape the canonical plan (new ordinals),
+    // so the previous handoff anchor is no longer comparable.
+    lastPlayedCanonicalRef.current = null;
   }, [
     documentId,
     configProviderRef,
@@ -2163,6 +2285,27 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           }
           if (isEPUB) {
             completedEpubBoundarySegmentRef.current = completedEpubBoundarySegment(playbackSegment);
+            // Track the highest canonical ordinal spoken in this spine item so
+            // the next page's window can hand off at exactly ordinal + 1.
+            const ownerLocator = playbackSegment?.ownerLocator;
+            if (
+              ownerLocator
+              && typeof ownerLocator.spineHref === 'string'
+              && typeof ownerLocator.spineIndex === 'number'
+              && typeof playbackSegment?.ordinal === 'number'
+            ) {
+              const prev = lastPlayedCanonicalRef.current;
+              const sameSpine = prev
+                && prev.spineHref === ownerLocator.spineHref
+                && prev.spineIndex === ownerLocator.spineIndex;
+              lastPlayedCanonicalRef.current = {
+                spineHref: ownerLocator.spineHref,
+                spineIndex: ownerLocator.spineIndex,
+                ordinal: sameSpine
+                  ? Math.max(prev!.ordinal, playbackSegment.ordinal)
+                  : playbackSegment.ordinal,
+              };
+            }
           }
           if (isPlaying) {
             advance();
@@ -2504,32 +2647,42 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
             cfi: item.cfi,
           });
 
-          const upcomingUnits: CanonicalTtsSourceUnit[] = upcomingLocationItems.map((item) => ({
-            sourceKey: sourceKeyForLocation(item.cfi, currDocPage),
-            text: item.text,
-            locator: locatorForWalkerItem(item),
-          }));
-          const liveContextUnits = currentSourceContextUnitsRef.current.length > 0
-            ? currentSourceContextUnitsRef.current
-            : (currentSourceUnitRef.current ? [currentSourceUnitRef.current] : []);
-          const sourceUnits: CanonicalTtsSourceUnit[] = buildWalkerPlanningSourceUnits(
-            liveContextUnits,
-            upcomingUnits,
-          );
+          // Prefer canonical per-chunk segments attached by the walker — these
+          // are viewport-independent and mint identical keys/locators to what
+          // playback will request, so warmed audio actually hits the cache.
+          // Only chunks the walker couldn't canonicalize fall back to the
+          // legacy preview-based plan.
+          const fallbackItems = upcomingLocationItems.filter((item) => !item.segments?.length);
+          let fallbackSegments: CanonicalTtsSegment[] = [];
+          if (fallbackItems.length > 0) {
+            const upcomingUnits: CanonicalTtsSourceUnit[] = fallbackItems.map((item) => ({
+              sourceKey: sourceKeyForLocation(item.cfi, currDocPage),
+              text: item.text,
+              locator: locatorForWalkerItem(item),
+            }));
+            const liveContextUnits = currentSourceContextUnitsRef.current.length > 0
+              ? currentSourceContextUnitsRef.current
+              : (currentSourceUnitRef.current ? [currentSourceUnitRef.current] : []);
+            const sourceUnits: CanonicalTtsSourceUnit[] = buildWalkerPlanningSourceUnits(
+              liveContextUnits,
+              upcomingUnits,
+            );
+            fallbackSegments = planCanonicalTtsSegments(sourceUnits, {
+              readerType: 'epub',
+              maxBlockLength: ttsSegmentMaxBlockLength,
+              keyPrefix: buildSegmentKeyPrefix(documentId, 'epub'),
+              language: resolvedLanguage,
+            }).segments;
+          }
 
-          const plan = planCanonicalTtsSegments(sourceUnits, {
-            readerType: 'epub',
-            maxBlockLength: ttsSegmentMaxBlockLength,
-            keyPrefix: buildSegmentKeyPrefix(documentId, 'epub'),
-            language: resolvedLanguage,
-          });
           const uniqueCandidates: Array<EpubLocationPreloadCandidate & { locator: TTSSegmentLocator }> = [];
           const seenCandidates = new Set<string>();
           for (const item of upcomingLocationItems) {
             const sourceKey = sourceKeyForLocation(item.cfi, currDocPage);
-            const planned = plan.segments
-              .filter((segment) => segment.ownerSourceKey === sourceKey)
-              .slice(0, sentenceLookahead);
+            const planned = (item.segments?.length
+              ? item.segments
+              : fallbackSegments.filter((segment) => segment.ownerSourceKey === sourceKey)
+            ).slice(0, sentenceLookahead);
             for (let index = 0; index < planned.length; index += 1) {
               const segment = planned[index];
               const locator = segment.ownerLocator ?? locatorForWalkerItem(item);
@@ -2940,6 +3093,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSourceUnitRef.current = null;
     currentSourceContextUnitsRef.current = [];
     completedEpubBoundarySegmentRef.current = null;
+    lastPlayedCanonicalRef.current = null;
     pageFirstBlockFingerprintRef.current.clear();
     setIsPlaying(false);
     setCurrentIndex(0);
@@ -3016,11 +3170,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     unlockPlaybackOnUserGesture();
     if (isEPUB) {
       // CFI snapping makes locationKey unreliable; resolve via epoch on next setText.
+      // Carry the target's per-segment charOffset so the canonical window can
+      // re-anchor exactly (raw index is viewport-relative to the sidebar).
       pendingEpubJumpRef.current = {
         index: Math.max(0, index),
         epoch: epubJumpEpochRef.current,
+        charOffset: typeof locator?.charOffset === 'number' ? locator.charOffset : undefined,
       };
       pendingJumpTargetRef.current = null;
+      // A jump breaks ordinal continuity — drop the handoff anchor so the new
+      // page plays from its resolved index rather than being trimmed.
+      lastPlayedCanonicalRef.current = null;
     } else {
       pendingJumpTargetRef.current = {
         locationKey: normalizeLocationKey(resolvedLocation),

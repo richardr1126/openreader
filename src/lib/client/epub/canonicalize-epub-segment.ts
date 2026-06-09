@@ -1,7 +1,6 @@
+import { planSpineSegments } from '@/lib/client/epub/epub-canonical-window';
 import {
-  buildSegmentKeyPrefix,
   normalizeSegmentIdentityText,
-  planCanonicalTtsSegments,
   type CanonicalTtsSegment,
 } from '@/lib/shared/tts-segment-plan';
 import type { TTSSegmentLocator } from '@/types/client';
@@ -15,6 +14,7 @@ export interface CanonicalizeEpubSegmentInput {
   cfi?: string;
   keyPrefix?: string;
   maxBlockLength?: number;
+  language?: string;
 }
 
 export interface CanonicalizedEpubSegment {
@@ -74,30 +74,14 @@ function chooseByHintWindow(
 }
 
 function buildCanonicalPlan(input: Omit<CanonicalizeEpubSegmentInput, 'segmentText' | 'hintCharOffset'>): CanonicalTtsSegment[] {
-  if (!input.spineText.trim() || !input.spineHref.trim()) {
-    return [];
-  }
-
-  const sourceKey = `spine:${input.spineIndex}:${input.spineHref}`;
-  const keyPrefix = input.keyPrefix ?? buildSegmentKeyPrefix('document', 'epub');
-  const plan = planCanonicalTtsSegments(
-    [{
-      sourceKey,
-      text: input.spineText,
-      locator: {
-        readerType: 'epub',
-        spineHref: input.spineHref,
-        spineIndex: input.spineIndex,
-        charOffset: 0,
-      },
-    }],
-    {
-      readerType: 'epub',
-      maxBlockLength: input.maxBlockLength,
-      keyPrefix,
-    },
-  );
-  return plan.segments;
+  return planSpineSegments({
+    spineText: input.spineText,
+    spineHref: input.spineHref,
+    spineIndex: input.spineIndex,
+    keyPrefix: input.keyPrefix,
+    maxBlockLength: input.maxBlockLength,
+    language: input.language,
+  });
 }
 
 function toCanonicalized(

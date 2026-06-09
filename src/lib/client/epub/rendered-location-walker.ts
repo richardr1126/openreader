@@ -6,6 +6,7 @@ import {
   invalidateSpinePlainTextCache,
 } from '@/lib/client/epub/spine-coordinates';
 import { buildWalkerThemeRules, type WalkerThemeSnapshot } from '@/lib/client/epub/walker-theme';
+import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 
 export interface RenderedLocationWalkItem {
   /** Page-start CFI from the rendition. Retained as a soft jump hint only. */
@@ -22,6 +23,13 @@ export interface RenderedLocationWalkItem {
    * viewports, so segments can be anchored to this base.
    */
   chunkOffset: number;
+  /**
+   * Canonical segments for this chunk, windowed from the chapter's canonical
+   * plan. Attached after the raw walk by `walkUpcomingRenderedLocations` (which
+   * holds the live Book). Present means prefetch can use viewport-independent
+   * segments that mint identical keys to playback; absent → preview fallback.
+   */
+  segments?: CanonicalTtsSegment[];
 }
 
 export interface RenderedLocationWalkRequest {

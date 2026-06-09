@@ -41,6 +41,13 @@ interface EpubRenderedLocationWalkItem {
    * spine item's plain text. Stable across viewports.
    */
   chunkOffset: number;
+  /**
+   * Canonical segments for this chunk, windowed from the chapter's canonical
+   * plan and attached after the raw walk. Present → prefetch uses
+   * viewport-independent segments with identical keys to playback; absent →
+   * preview-based fallback planning.
+   */
+  segments?: CanonicalTtsSegment[];
 }
 
 export type EpubRenderedLocationWalker = (

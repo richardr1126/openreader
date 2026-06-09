@@ -237,11 +237,12 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         cfi: currDocPage,
         keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
         maxBlockLength: ttsSegmentMaxBlockLength,
+        language: resolvedLanguage,
       });
       if (!cancelled) setSynthRowCanonical(next);
     })();
     return () => { cancelled = true; };
-  }, [epubBookRef, currDocPage, sentences, documentId, activeReaderType, ttsSegmentMaxBlockLength]);
+  }, [epubBookRef, currDocPage, sentences, documentId, activeReaderType, ttsSegmentMaxBlockLength, resolvedLanguage]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const didAutoScrollOnOpenRef = useRef(false);
