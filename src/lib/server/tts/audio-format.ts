@@ -109,7 +109,12 @@ function spawnFfmpegToBuffer(args: string[], signal?: AbortSignal): Promise<Buff
 /**
  * Transcode an arbitrary audio buffer to mp3 using the bundled ffmpeg. The input
  * is written to a temp file (ffmpeg needs seekable input for some containers) and
- * the mp3 is captured from stdout. The 64k bitrate matches the audiobook pipeline.
+ * the mp3 is captured from stdout.
+ *
+ * Uses VBR quality 2 (~170-210 kbps) rather than a low CBR bitrate: this audio is
+ * what the user listens to live, and aggressive low-bitrate encoding of pristine
+ * high-fidelity TTS (e.g. 44.1 kHz wav) introduces high-frequency artifacts that
+ * cause listening fatigue. The audiobook export still re-encodes to 64k for size.
  */
 export async function transcodeToMp3(buffer: Buffer, signal?: AbortSignal): Promise<Buffer> {
   let workDir: string | null = null;
@@ -125,7 +130,7 @@ export async function transcodeToMp3(buffer: Buffer, signal?: AbortSignal): Prom
         '-i', inputPath,
         '-vn',
         '-c:a', 'libmp3lame',
-        '-b:a', '64k',
+        '-q:a', '2',
         '-f', 'mp3',
         'pipe:1',
       ],
