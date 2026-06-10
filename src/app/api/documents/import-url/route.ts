@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { fetchAndParseUrl } from '@/lib/server/documents/web-loader';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
-import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
 

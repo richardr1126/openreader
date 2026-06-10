@@ -23,3 +23,4 @@ export * from './switch';
 export * from './tokens';
 export * from './toolbar';
 export * from './variants';
+export * from './sidebar-dialog';

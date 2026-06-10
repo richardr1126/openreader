@@ -12,6 +12,7 @@ interface DocumentUploaderProps {
   variant?: 'default' | 'compact' | 'overlay';
   children?: ReactNode;
   onUploadBatchChange?: (state: UploadBatchState) => void;
+  onClick?: () => void;
 }
 
 export interface UploadBatchState {
@@ -28,6 +29,7 @@ export function DocumentUploader({
   variant = 'default',
   children,
   onUploadBatchChange,
+  onClick,
 }: DocumentUploaderProps) {
   const uploaderId = useId();
   const enableDocx = useFeatureFlag('enableDocxConversion');
@@ -88,8 +90,8 @@ export function DocumentUploader({
     },
     multiple: true,
     disabled: isUploading,
-    noClick: variant === 'overlay',
-    noKeyboard: variant === 'overlay'
+    noClick: variant === 'overlay' || !!onClick,
+    noKeyboard: variant === 'overlay' || !!onClick
   });
 
   const isDisabled = isUploading;
@@ -132,6 +134,12 @@ export function DocumentUploader({
   return (
     <div
       {...getRootProps()}
+      onClick={(e) => {
+        if (onClick) {
+          e.stopPropagation();
+          onClick();
+        }
+      }}
       className={dropzoneSurfaceClass({
         variant: variant === 'compact' ? 'compact' : 'default',
         active: isDragActive,

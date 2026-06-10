@@ -22,8 +22,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { DocumentUploader, type UploadBatchState } from '@/components/documents/DocumentUploader';
-import { IconButton, SidebarNavItem } from '@/components/ui';
-import { UploadIcon } from '@/components/icons/Icons';
+import { IconButton } from '@/components/ui';
 import { UploadMenuDialog } from '@/components/documents/UploadMenuDialog';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import {
@@ -623,11 +622,10 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
           topSlot={(
-            <SidebarNavItem
-              compact
+            <DocumentUploader
+              variant="compact"
+              onUploadBatchChange={handleUploadBatchChange}
               onClick={() => setIsUploadDialogOpen(true)}
-              icon={<UploadIcon className="w-3.5 h-3.5" />}
-              label="Upload documents"
             />
           )}
           bottomSlot={(

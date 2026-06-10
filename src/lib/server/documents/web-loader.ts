@@ -15,7 +15,7 @@ function isPrivateIp(ip: string): boolean {
 
   const ipv4Match = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4Match) {
-    const [, o1, o2, o3, o4] = ipv4Match.map(Number);
+    const [, o1, o2] = ipv4Match.map(Number);
     if (o1 === 10) return true; // 10.0.0.0/8
     if (o1 === 172 && o2 >= 16 && o2 <= 31) return true; // 172.16.0.0/12
     if (o1 === 192 && o2 === 168) return true; // 192.168.0.0/16
@@ -211,7 +211,7 @@ export async function fetchAndParseUrl(
   const turndownService = new TurndownService({
     headingStyle: 'atx',
     hr: '---',
-    bullet: '-',
+    bulletListMarker: '-',
     codeBlockStyle: 'fenced',
   });
 
