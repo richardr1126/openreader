@@ -1388,7 +1388,7 @@ function SettingsChangelogPanel({
               {isExpanded && (
                 <div className="pl-6 pr-1 pb-3 pt-1 space-y-2">
                   {body ? (
-                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto">
+                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto [&_a]:text-accent [&_a]:hover:underline [&_a]:transition-colors">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {body.body || '_No release notes provided._'}
                       </ReactMarkdown>
