@@ -23,4 +23,14 @@ describe('sse codec', () => {
     expect(parseSseEventId(frame)).toBe(5);
     expect(parseSsePayload(frame)).toBe('line1\nline2');
   });
+
+  test('emits a retry directive when provided', () => {
+    const frame = encodeSseFrame({ retry: 120_000 });
+    expect(frame).toContain('retry: 120000');
+  });
+
+  test('omits retry when not finite and floors fractional values', () => {
+    expect(encodeSseFrame({ retry: Number.NaN })).not.toContain('retry:');
+    expect(encodeSseFrame({ retry: 1500.9 })).toContain('retry: 1500');
+  });
 });
