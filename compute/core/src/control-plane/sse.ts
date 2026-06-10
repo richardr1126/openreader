@@ -3,12 +3,17 @@ export interface SseFrameInput<T = unknown> {
   id?: string | number;
   data?: T;
   comment?: string;
+  /** Reconnection delay (ms) sent to the client EventSource as a `retry:` line. */
+  retry?: number;
 }
 
 export function encodeSseFrame<T = unknown>(input: SseFrameInput<T>): string {
   const lines: string[] = [];
   if (typeof input.comment === 'string') {
     lines.push(`: ${input.comment}`);
+  }
+  if (typeof input.retry === 'number' && Number.isFinite(input.retry)) {
+    lines.push(`retry: ${Math.max(0, Math.floor(input.retry))}`);
   }
   if (typeof input.id !== 'undefined') {
     lines.push(`id: ${String(input.id)}`);
