@@ -587,3 +587,23 @@ export async function getDocumentPreviewStatus(
 
   throw new Error(`Failed to load preview status (status ${res.status})`);
 }
+
+export async function importUrl(
+  url: string,
+  options?: { signal?: AbortSignal }
+): Promise<{ title: string; content: string }> {
+  const res = await fetch('/api/documents/import-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+    signal: options?.signal,
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to import URL');
+  }
+
+  return (await res.json()) as { title: string; content: string };
+}
+

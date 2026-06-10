@@ -286,9 +286,20 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       ) : textPreview ? (
         <>
           <div className="absolute inset-0 bg-gradient-to-br from-surface-solid to-surface-sunken" />
-          <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,1)_1px,transparent_0)] [background-size:12px_12px]" />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                'radial-gradient(color-mix(in srgb, var(--foreground) 14%, transparent) 1px, transparent 1px)',
+              backgroundSize: '12px 12px',
+              opacity: 0.35,
+              WebkitMaskImage: 'radial-gradient(120% 100% at 50% 40%, #000 55%, transparent 100%)',
+              maskImage: 'radial-gradient(120% 100% at 50% 40%, #000 55%, transparent 100%)',
+            }}
+          />
           <div className="relative z-10 h-full w-full p-2 flex flex-col">
-            <div className="mt-auto rounded-md bg-surface-solid backdrop-blur-[1px] shadow-elev-1 ring-1 ring-line-soft p-2.5 max-h-[70%] overflow-hidden">
+            <div className="mb-auto rounded-md bg-surface-solid backdrop-blur-[1px] shadow-elev-1 ring-1 ring-line-soft p-2.5 max-h-[85%] overflow-hidden">
               {isTxtFile ? (
                 <pre className="text-[10px] sm:text-[11px] leading-snug text-foreground whitespace-pre-wrap font-mono">
                   {textPreview}

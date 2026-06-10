@@ -42,7 +42,7 @@ import { flushUserPreferencesSync } from '@/lib/client/api/user-state';
 import toast from 'react-hot-toast';
 import { useLibraryDocumentsQuery } from '@/hooks/useLibraryDocumentsQuery';
 import {
-  SidebarNav,
+  SidebarDialog,
   SidebarNavItem,
   SegmentedControl,
   Button,
@@ -50,8 +50,6 @@ import {
   IconButton,
   Input,
   Textarea,
-  ModalFrame,
-  ModalTitle,
   Select,
 } from '@/components/ui';
 import ReactMarkdown from 'react-markdown';
@@ -562,90 +560,55 @@ export function SettingsModal({
 
   return (
     <>
-      <ModalFrame
+      <SidebarDialog
         open={isOpen}
         onClose={resetToCurrent}
         size="xl"
         panelTestId="settings-modal"
-        className={isChangelogOpen ? 'z-[90]' : 'z-50'}
+        modalClassName={isChangelogOpen ? 'z-[90]' : 'z-50'}
+        headerTitle={
+          <div className="flex items-baseline gap-4">
+            <span>Settings</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsChangelogOpen(true)}
+              className="text-sm font-medium leading-6 text-soft hover:text-accent transition-colors"
+            >
+              {displayVersion ? `v${displayVersion} · Changelog` : 'Changelog'}
+            </Button>
+          </div>
+        }
+        headerRight={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => showPrivacyModal()}
+            className="text-sm font-medium text-soft hover:text-accent transition-colors"
+          >
+            Privacy
+          </Button>
+        }
+        showCloseButton={false}
+        sections={visibleSections}
+        activeSectionId={activeSection}
+        onSectionChange={setActiveSection}
+        className="h-[490px]"
+        contentClassName={
+          activeSection === 'admin'
+            ? 'bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]'
+            : ''
+        }
+        customContent={
+          isChangelogOpen ? (
+            <SettingsChangelogPanel
+              appVersion={runtimeConfig.appVersion}
+              manifestUrl={runtimeConfig.changelogFeedUrl}
+              onClose={() => setIsChangelogOpen(false)}
+            />
+          ) : undefined
+        }
       >
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-line-soft">
-                    <div className="flex items-baseline gap-4">
-                      <ModalTitle>Settings</ModalTitle>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsChangelogOpen(true)}
-                        className="text-sm font-medium leading-6 text-soft hover:text-accent transition-colors"
-                      >
-                        {displayVersion ? `v${displayVersion} · Changelog` : 'Changelog'}
-                      </Button>
-                    </div>
-                    <div className="flex items-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => showPrivacyModal()}
-                        className="text-sm font-medium text-soft hover:text-accent transition-colors"
-                      >
-                        Privacy
-                      </Button>
-                    </div>
-                  </div>
-
-                  {isChangelogOpen ? (
-                    <SettingsChangelogPanel
-                      appVersion={runtimeConfig.appVersion}
-                      manifestUrl={runtimeConfig.changelogFeedUrl}
-                      onClose={() => setIsChangelogOpen(false)}
-                    />
-                  ) : (
-                    <>
-                      {/* Mobile nav */}
-                      <SidebarNav layout="grid" className="sm:hidden border-b border-line-soft bg-background p-2">
-                        {visibleSections.map((section) => {
-                          const Icon = section.icon;
-                          return (
-                            <SidebarNavItem
-                              compact
-                              key={section.id}
-                              onClick={() => setActiveSection(section.id)}
-                              active={activeSection === section.id}
-                              icon={<Icon className="w-3.5 h-3.5" />}
-                              label={section.label}
-                            />
-                          );
-                        })}
-                      </SidebarNav>
-
-                      <div className="flex flex-row h-[490px]">
-                    {/* Desktop: vertical sidebar */}
-                    <nav className="hidden sm:block w-44 shrink-0 border-r border-line-soft bg-background p-2">
-                      <SidebarNav>
-                        {visibleSections.map((section) => {
-                          const Icon = section.icon;
-                          const active = activeSection === section.id;
-                          return (
-                            <SidebarNavItem
-                              key={section.id}
-                              onClick={() => setActiveSection(section.id)}
-                              active={active}
-                              icon={<Icon className="w-4 h-4" />}
-                              label={section.label}
-                              className="whitespace-nowrap"
-                            />
-                          );
-                        })}
-                      </SidebarNav>
-                    </nav>
-
-                    {/* Content */}
-                    <div className={`flex-1 min-w-0 p-3 overflow-y-auto ${
-                      activeSection === 'admin'
-                        ? 'bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]'
-                        : ''
-                    }`}>
                       {/* API Section */}
                       {activeSection === 'api' && (
                         <div className="space-y-4">
@@ -1174,11 +1137,7 @@ export function SettingsModal({
                           </div>
                         </div>
                       )}
-                    </div>
-                      </div>
-                    </>
-                  )}
-      </ModalFrame>
+    </SidebarDialog>
 
       <ConfirmDialog
         isOpen={showDeleteAccountConfirm}
@@ -1388,7 +1347,7 @@ function SettingsChangelogPanel({
               {isExpanded && (
                 <div className="pl-6 pr-1 pb-3 pt-1 space-y-2">
                   {body ? (
-                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto">
+                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto [&_a]:text-accent [&_a]:hover:underline [&_a]:transition-colors">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {body.body || '_No release notes provided._'}
                       </ReactMarkdown>
