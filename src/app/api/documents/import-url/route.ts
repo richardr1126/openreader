@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
     // Check if it's a validation error or network error to set suitable status codes
     const isValidationError =
       errorMessage.includes('forbidden') ||
+      errorMessage.includes('disallowed by policy') ||
       errorMessage.includes('Invalid URL') ||
       errorMessage.includes('Only HTTP') ||
       errorMessage.includes('exceeds the maximum') ||

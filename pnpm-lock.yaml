@@ -23,6 +23,9 @@ importers:
       '@huggingface/tokenizers':
         specifier: ^0.1.3
         version: 0.1.3
+      '@microsoft/antissrf':
+        specifier: ^1.0.0
+        version: 1.0.0
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
@@ -1254,6 +1257,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@microsoft/antissrf@1.0.0':
+    resolution: {integrity: sha512-AmO1ykSha52Ef/7UXvHgu8ElsGdgcLkF5nTl7YZGyR1AkbmlQYtiVeWp+CsjkFaJzKAH5ofXLZveMmOHwX/7Jw==}
 
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
@@ -5755,6 +5761,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@microsoft/antissrf@1.0.0': {}
 
   '@mixmark-io/domino@2.2.0': {}
 
