@@ -6,6 +6,11 @@
  */
 
 import { normalizeLanguageTag, segmentSentences, toBaseLanguageCode } from '@/lib/shared/language';
+import { preprocessSentenceForAudio } from '@/lib/shared/audio-text';
+
+// Re-exported so existing `@/lib/shared/nlp` importers keep working; the rules
+// themselves live in `@/lib/shared/audio-text`.
+export { preprocessSentenceForAudio };
 
 export const MAX_BLOCK_LENGTH = 450;
 const MIN_BLOCK_LENGTH = 50;
@@ -126,27 +131,6 @@ const normalizeSentenceBoundariesForNlp = (text: string): string => {
   return text
     .replace(/([\p{Ll}\p{N}])([.!?])(?=\p{Lu})/gu, '$1$2 ')
     .replace(/([\p{Ll}\p{N}][.!?]["”’)\]])(?=\p{Lu})/gu, '$1 ');
-};
-
-/**
- * Preprocesses text for audio generation by cleaning up various text artifacts.
- *
- * Source of truth for the canonical "audio" text form. Keep byte-for-byte in
- * lock-step with the copy in `compute/core/src/whisper/alignment-map.ts` (which
- * computes word char offsets) and the position-preserving variant in
- * `src/lib/client/highlight-char-map.ts` (which maps those offsets to the DOM).
- *
- * @param {string} text - The text to preprocess
- * @returns {string} The cleaned text
- */
-export const preprocessSentenceForAudio = (text: string): string => {
-  return text
-    .replace(/\S*(?:https?:\/\/|www\.)([^\/\s]+)(?:\/\S*)?/gi, '- (link to $1) -')
-    .replace(/([\p{L}\p{N}\p{M}]+)-\s+([\p{L}\p{N}\p{M}]+)/gu, '$1$2') // Remove hyphenation
-    // Remove special character *
-    .replace(/\*/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
 };
 
 /**

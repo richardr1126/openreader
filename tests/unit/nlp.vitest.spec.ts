@@ -34,6 +34,14 @@ describe('preprocessSentenceForAudio', () => {
         expected: 'This is bold text',
       },
       {
+        input: '▪ First item\n▪ Second item',
+        expected: 'First item Second item',
+      },
+      {
+        input: '• Bullet ‣ marker ◦ list',
+        expected: 'Bullet marker list',
+      },
+      {
         input: 'Multiple    spaces',
         expected: 'Multiple spaces',
       },
