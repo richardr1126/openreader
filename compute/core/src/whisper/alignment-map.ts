@@ -1,15 +1,18 @@
 import type { TTSSentenceAlignment, TTSSentenceWord } from '../types/tts';
 
-// Keep byte-for-byte in lock-step with `preprocessSentenceForAudio` in
-// `src/lib/shared/nlp.ts` (and the position-preserving copy in
-// `src/lib/client/highlight-char-map.ts`). The word `charStart`/`charEnd`
-// offsets this module emits are consumed against text normalized by those
-// client functions, so any divergence shifts viewer highlights off-word.
+// Worker-side mirror of the app's canonical audio-text cleaning rules in
+// `src/lib/shared/audio-text.ts`. This is a separate build target and cannot
+// import from `@/lib`, so the rules are duplicated here on purpose. The word
+// `charStart`/`charEnd` offsets this module emits are consumed against text
+// normalized by that shared module, so any divergence shifts viewer highlights
+// off-word — keep this byte-for-byte in sync with `audio-text.ts`.
+const STRIPPED_GLYPHS = /[*•◦‣⁃∙▪▫■□●○◆◇★☆▶▸►▹➤➢❖]/g;
+
 function preprocessSentenceForAudio(text: string): string {
   return text
     .replace(/\S*(?:https?:\/\/|www\.)([^\/\s]+)(?:\/\S*)?/gi, '- (link to $1) -')
     .replace(/([\p{L}\p{N}\p{M}]+)-\s+([\p{L}\p{N}\p{M}]+)/gu, '$1$2')
-    .replace(/\*/g, '')
+    .replace(STRIPPED_GLYPHS, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

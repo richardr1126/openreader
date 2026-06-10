@@ -3,26 +3,32 @@
  *
  * TTS word offsets (`charStart`/`charEnd`) are computed against the canonical
  * "audio" form of a sentence — URLs rewritten, line-break hyphenation joined,
- * `*` stripped, whitespace collapsed. To map those offsets back onto the
- * rendered DOM we have to normalize the DOM text the SAME way while remembering
- * which DOM position each surviving character came from.
+ * decorative glyphs stripped, whitespace collapsed. To map those offsets back
+ * onto the rendered DOM we have to normalize the DOM text the SAME way while
+ * remembering which DOM position each surviving character came from.
+ *
+ * The cleaning rules (patterns + glyph set) are imported from
+ * `@/lib/shared/audio-text` so this position-preserving variant and the plain
+ * string `preprocessSentenceForAudio` can never drift apart. This module only
+ * owns the position-tracking mechanics.
  *
  * This module operates on an opaque position type so both the EPUB renderer
  * (position = `{ node, offset }` in an iframe) and the HTML/TXT renderer
  * (position = a `Text` node + offset in the main document) share one identical
- * normalization. Keep the transforms here in lock-step with
- * `preprocessSentenceForAudio` in `src/lib/shared/nlp.ts` and the copy in
- * `compute/core/src/whisper/alignment-map.ts`.
+ * normalization.
  */
+
+import {
+  HYPHENATION_PATTERN,
+  URL_PATTERN,
+  isStrippedGlyph,
+  linkReplacement,
+} from '@/lib/shared/audio-text';
 
 export interface MappedChar<TPos> {
   char: string;
   pos: TPos;
 }
-
-const URL_PATTERN = /\S*(?:https?:\/\/|www\.)([^\/\s]+)(?:\/\S*)?/gi;
-// Unicode-aware to match preprocessSentenceForAudio (nlp.ts / alignment-map.ts).
-const HYPHENATION_PATTERN = /([\p{L}\p{N}\p{M}]+)-\s+([\p{L}\p{N}\p{M}]+)/gu;
 
 const cloneMappedChar = <TPos>(char: string, source: MappedChar<TPos>): MappedChar<TPos> => ({
   char,
@@ -43,7 +49,7 @@ const replaceMappedUrls = <TPos>(tokens: MappedChar<TPos>[]): MappedChar<TPos>[]
 
     const anchor = tokens[start] ?? tokens[Math.max(0, end - 1)];
     if (anchor) {
-      const replacement = `- (link to ${match[1]}) -`;
+      const replacement = linkReplacement(match[1]);
       // Spread the replacement characters across the original URL span so the
       // mapped positions keep their positional spread instead of collapsing the
       // whole URL onto a single DOM anchor.
@@ -106,7 +112,7 @@ export const normalizeMappedChars = <TPos>(tokens: MappedChar<TPos>[]): MappedCh
   };
 
   for (const token of withoutHyphenation) {
-    if (token.char === '*') continue;
+    if (isStrippedGlyph(token.char)) continue;
     if (/\s/.test(token.char)) {
       pendingWhitespace ??= token;
       continue;

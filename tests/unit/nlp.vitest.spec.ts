@@ -34,6 +34,20 @@ describe('preprocessSentenceForAudio', () => {
         expected: 'This is bold text',
       },
       {
+        input: '▪ First item\n▪ Second item',
+        expected: 'First item Second item',
+      },
+      {
+        input: '• Bullet ‣ marker ◦ list',
+        expected: 'Bullet marker list',
+      },
+      {
+        // U+00B7 middle dot is a real letter in Catalan ("col·legi") and must
+        // NOT be stripped like decorative bullets, since OpenReader is multilingual.
+        input: 'Col·legi de l·l',
+        expected: 'Col·legi de l·l',
+      },
+      {
         input: 'Multiple    spaces',
         expected: 'Multiple spaces',
       },
