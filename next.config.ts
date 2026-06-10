@@ -80,6 +80,14 @@ const nextConfig: NextConfig = {
     ],
   },
   webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = [
+        ...(config.externals || []),
+        {
+          canvas: 'commonjs @napi-rs/canvas',
+        },
+      ];
+    }
     if (isServer && bundleWorkerCompute) {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
