@@ -121,15 +121,13 @@ export function UploadMenuDialog({
       const scrapeResult = await importUrl(cleanUrl);
       
       setImportStep('converting');
-      // Simulated processing time for micro-interaction polish
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
       setImportStep('uploading');
-      
+
       // Create virtual file from markdown content
       const displayTitle = webTitle.trim() || scrapeResult.title || 'Imported Web Page';
       const safeTitle = displayTitle
-        .replace(/[/\\?%*:|"<>\s]/g, '_')
+        .replace(/[/\\?%*:|"<>\s]+/g, '_') // collapse runs of disallowed chars
+        .replace(/^_+|_+$/g, '') // trim leading/trailing underscores
         .substring(0, 80);
       const filename = `${safeTitle}.md`;
       const file = new File([scrapeResult.content], filename, {

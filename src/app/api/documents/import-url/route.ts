@@ -10,9 +10,6 @@ export async function POST(req: NextRequest) {
     // 1. Authenticate user request
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
-    if (!ctxOrRes.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     // 2. Validate URL body parameter
     let body;
