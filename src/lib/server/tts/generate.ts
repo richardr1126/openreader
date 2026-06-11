@@ -1,9 +1,29 @@
 import OpenAI from 'openai';
 import Replicate from 'replicate';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
+import { generateSpeech } from '@speech-sdk/core';
+import type { ResolvedModel } from '@speech-sdk/core/types';
+import {
+  createCartesia,
+  createDeepgram,
+  createElevenLabs,
+  createFal,
+  createFishAudio,
+  createGoogle,
+  createHume,
+  createInworld,
+  createMiniMax,
+  createMistral,
+  createMurf,
+  createOpenAI,
+  createResemble,
+  createSmallestAI,
+  createXai,
+} from '@speech-sdk/core/providers';
 import {
   isBuiltInTtsProviderId,
   REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+  speechSdkProviderPrefix,
 } from '@/lib/shared/tts-provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 import {
@@ -333,6 +353,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
     : provider === 'replicate' && !input.model ? REPLICATE_KOKORO_82M_VERSIONED_MODEL
+    : provider === 'speech-sdk' && !input.model ? 'openai/gpt-4o-mini-tts'
     : input.model;
   const model = (rawModel ?? 'gpt-4o-mini-tts') as SpeechCreateParams['model'];
   const providerModelPolicy = resolveTtsProviderModelPolicy({
@@ -342,7 +363,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   });
 
   const normalizedVoice = (
-    (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
+    (providerType === 'replicate' || providerType === 'speech-sdk' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
       ? input.voice.split('+')[0].trim()
       : input.voice
   ) as string;
@@ -652,6 +673,55 @@ async function runReplicateRequest(
   });
 }
 
+type SpeechSdkModelFactory = (config: { apiKey?: string }) => (modelId?: string) => ResolvedModel;
+
+const SPEECH_SDK_PROVIDER_FACTORIES: Record<string, SpeechSdkModelFactory> = {
+  openai: createOpenAI,
+  elevenlabs: createElevenLabs,
+  cartesia: createCartesia,
+  hume: createHume,
+  deepgram: createDeepgram,
+  google: createGoogle,
+  inworld: createInworld,
+  minimax: createMiniMax,
+  'fish-audio': createFishAudio,
+  murf: createMurf,
+  resemble: createResemble,
+  'fal-ai': createFal,
+  mistral: createMistral,
+  xai: createXai,
+  'smallest-ai': createSmallestAI,
+};
+
+async function runSpeechSdkRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  maxRetries: number,
+): Promise<Buffer> {
+  const model = request.model as string;
+  const prefix = speechSdkProviderPrefix(model);
+  const factory = SPEECH_SDK_PROVIDER_FACTORIES[prefix];
+  if (!factory) {
+    throw new Error(
+      `Unknown Speech SDK provider prefix "${prefix}". Use "provider/model" with one of: ${Object.keys(SPEECH_SDK_PROVIDER_FACTORIES).join(', ')}.`
+    );
+  }
+
+  const modelId = model.slice(prefix.length + 1);
+  // 'default' is the placeholder voice for providers without a static voice
+  // list; omit it so the provider's own default applies.
+  const voice = request.voice === 'default' ? undefined : request.voice;
+  const result = await generateSpeech({
+    model: factory({ apiKey: request.apiKey || undefined })(modelId || undefined),
+    text: request.text,
+    voice: voice as string,
+    output: { format: 'mp3' },
+    maxRetries,
+    abortSignal: signal,
+  });
+  return Buffer.from(result.audio.uint8Array);
+}
+
 async function runProviderRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -662,7 +732,9 @@ async function runProviderRequest(
 
   const raw = request.provider === 'replicate'
     ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
-    : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
+    : request.provider === 'speech-sdk'
+      ? await runSpeechSdkRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
+      : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;
   // normalize to mp3 so the cache, storage, and audiobook pipeline stay mp3-only.

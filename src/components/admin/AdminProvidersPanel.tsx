@@ -44,6 +44,7 @@ const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'deepinfra', label: 'Deepinfra' },
   { value: 'replicate', label: 'Replicate' },
+  { value: 'speech-sdk', label: 'Speech SDK' },
 ];
 
 interface FormState {

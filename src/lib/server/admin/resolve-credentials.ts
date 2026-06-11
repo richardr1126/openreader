@@ -89,7 +89,7 @@ export async function resolveTtsCredentials(opts: {
   };
 }
 
-const BUILT_IN_IDS = new Set(['custom-openai', 'replicate', 'deepinfra', 'openai']);
+const BUILT_IN_IDS = new Set(['custom-openai', 'replicate', 'deepinfra', 'openai', 'speech-sdk']);
 
 function isBuiltInProviderId(value: string): boolean {
   return BUILT_IN_IDS.has(value);

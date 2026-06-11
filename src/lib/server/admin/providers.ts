@@ -13,6 +13,7 @@ export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'replicate',
   'deepinfra',
   'openai',
+  'speech-sdk',
 ];
 
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$/;

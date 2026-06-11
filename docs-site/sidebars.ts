@@ -27,6 +27,7 @@ const sidebars: SidebarsConfig = {
             'configure/tts-provider-guides/replicate',
             'configure/tts-provider-guides/deepinfra',
             'configure/tts-provider-guides/openai',
+            'configure/tts-provider-guides/speech-sdk',
             'configure/tts-provider-guides/other',
           ],
         },
