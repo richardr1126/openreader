@@ -1,6 +1,6 @@
 import { isKokoroModel } from '@/lib/shared/kokoro';
 
-export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai';
+export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'speech-sdk';
 export type TtsProviderType = TtsProviderId | 'unknown';
 export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
@@ -72,6 +72,16 @@ const REPLICATE_MODELS: TtsModelDefinition[] = [
   { id: 'inworld/tts-1.5-mini', name: 'inworld/tts-1.5-mini' },
   { id: 'custom', name: 'Other' },
 ];
+
+const SPEECH_SDK_MODELS: TtsModelDefinition[] = [
+  { id: 'openai/gpt-4o-mini-tts', name: 'openai/gpt-4o-mini-tts' },
+  { id: 'elevenlabs/eleven_multilingual_v2', name: 'elevenlabs/eleven_multilingual_v2' },
+  { id: 'cartesia/sonic-3.5', name: 'cartesia/sonic-3.5' },
+  { id: 'deepgram/aura-2', name: 'deepgram/aura-2' },
+  { id: 'google/gemini-2.5-flash-preview-tts', name: 'google/gemini-2.5-flash-preview-tts' },
+  { id: 'inworld/inworld-tts-1.5-max', name: 'inworld/inworld-tts-1.5-max' },
+  { id: 'custom', name: 'Other' },
+];
 const DEEPINFRA_API_VOICE_MODELS = new Set([
   'ResembleAI/chatterbox',
   'Zyphra/Zonos-v0.1-hybrid',
@@ -110,6 +120,40 @@ export const MINIMAX_SPEECH_VOICES = [
 ] as const;
 export const QWEN3_TTS_VOICES = ['Aiden', 'Dylan'] as const;
 export const INWORLD_TTS_VOICES = ['Ashley', 'Dennis', 'Alex', 'Darlene'] as const;
+
+// Speech SDK direct-provider voices. ElevenLabs and Cartesia identify voices by
+// opaque IDs; the listed ones are stable, publicly shared library voices.
+export const ELEVENLABS_DEFAULT_VOICES = [
+  'JBFqnCBsd6RMkjVDRZzb', 'IKne3meq5aSn9XLyUdCD', 'XB0fDUnXU5powFXDhCwa',
+  'Xb7hH8MSUJpSbSDYk0k2', 'iP95p4xoKVk53GoZ742B', 'nPczCjzI2devNBz1zQrb',
+  'onwK4e9ZLuTAKqWW03F9', 'pFZP5JQG7iQjIQuC4Bku', 'pqHfZKP75CvOlQylNhV4',
+] as const;
+export const CARTESIA_DEFAULT_VOICES = [
+  'a0e99841-438c-4a64-b679-ae501e7d6091', '156fb8d2-335b-4950-9cb3-a2d33f0c0c2a',
+  '694f9389-aac1-45b6-b726-9d9369183238', '87748186-23bb-4571-8b8b-a73da9bf9c4f',
+  'ee7ea9f8-c0c1-498c-9f62-dc2da49a6f98', '248be419-c632-4f23-adf1-5324ed7dbf1d',
+] as const;
+export const HUME_DEFAULT_VOICES = ['KORA', 'STELLA', 'DACHER'] as const;
+export const DEEPGRAM_AURA2_DEFAULT_VOICES = [
+  'thalia-en', 'andromeda-en', 'helena-en', 'apollo-en', 'arcas-en',
+  'aries-en', 'asteria-en', 'athena-en', 'atlas-en', 'aurora-en',
+] as const;
+export const INWORLD_DIRECT_DEFAULT_VOICES = ['Ashley', 'Dominus', 'Edward', 'Hades', 'Priya'] as const;
+const SPEECH_SDK_DEFAULT_VOICES_BY_PREFIX: Record<string, readonly string[]> = {
+  openai: GPT4O_MINI_DEFAULT_VOICES,
+  elevenlabs: ELEVENLABS_DEFAULT_VOICES,
+  cartesia: CARTESIA_DEFAULT_VOICES,
+  hume: HUME_DEFAULT_VOICES,
+  deepgram: DEEPGRAM_AURA2_DEFAULT_VOICES,
+  google: GEMINI_FLASH_TTS_VOICES,
+  inworld: INWORLD_DIRECT_DEFAULT_VOICES,
+  minimax: MINIMAX_SPEECH_VOICES,
+};
+
+export function speechSdkProviderPrefix(model: string): string {
+  const slashIndex = model.indexOf('/');
+  return slashIndex === -1 ? model : model.slice(0, slashIndex);
+}
 const REPLICATE_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
   [REPLICATE_KOKORO_82M_VERSIONED_MODEL]: KOKORO_DEFAULT_VOICES,
   'google/gemini-3.1-flash-tts': GEMINI_FLASH_TTS_VOICES,
@@ -150,6 +194,12 @@ export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
     name: 'OpenAI',
     supportsCustomModel: false,
     models: () => OPENAI_MODELS,
+  },
+  {
+    id: 'speech-sdk',
+    name: 'Speech SDK',
+    supportsCustomModel: true,
+    models: () => SPEECH_SDK_MODELS,
   },
 ];
 
@@ -209,6 +259,12 @@ export function supportsNativeModelSpeed(provider: TtsProviderId, model: string 
     return !REPLICATE_MODELS_WITHOUT_NATIVE_SPEED.has(model);
   }
 
+  // Speed support varies per underlying provider; play back at the requested
+  // rate client-side so cached audio stays reusable across speed changes.
+  if (provider === 'speech-sdk') {
+    return false;
+  }
+
   return true;
 }
 
@@ -245,6 +301,11 @@ export function getDefaultVoices(provider: TtsProviderId, model: string): string
     return DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]
       ? [...DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]]
       : [...CUSTOM_OPENAI_DEFAULT_VOICES];
+  }
+
+  if (provider === 'speech-sdk') {
+    const prefixVoices = SPEECH_SDK_DEFAULT_VOICES_BY_PREFIX[speechSdkProviderPrefix(model)];
+    return prefixVoices ? [...prefixVoices] : ['default'];
   }
 
   return [...OPENAI_DEFAULT_VOICES];

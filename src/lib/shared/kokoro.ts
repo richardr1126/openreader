@@ -59,6 +59,7 @@ export const getMaxVoicesForProvider = (provider: TtsProviderId, model: string):
   // Replicate must always stay single-voice, even for Kokoro models.
   if (provider === 'replicate') return 1;
   if (provider === 'deepinfra') return 1;
+  if (provider === 'speech-sdk') return 1;
   
   // Other providers with Kokoro support unlimited voices
   return Infinity;

@@ -19,6 +19,7 @@ If you're running a private/self-hosted instance and want per-user BYOK behavior
 - **OpenAI**: Cloud. Base URL pre-filled (`https://api.openai.com/v1`). API key required.
 - **Replicate**: Cloud. Base URL managed internally by OpenReader. API key required.
 - **DeepInfra**: Cloud. Base URL pre-filled (`https://api.deepinfra.com/v1/openai`). API key required.
+- **Speech SDK**: Cloud. Reaches additional providers (ElevenLabs, Cartesia, Hume, Deepgram, Google, Inworld, and more) directly with your own provider API keys via [speech-sdk](./tts-provider-guides/speech-sdk). No base URL. API key required (the key for the model's provider).
 - **Custom OpenAI-Like**: Self-hosted or any custom endpoint. `API_BASE` must be set manually (typically ending in `/v1`). API key optional.
 
 For `OpenAI`, `DeepInfra`, and `Replicate` you only need to supply an API key. For `Custom OpenAI-Like` you must also set `API_BASE`.
@@ -28,6 +29,7 @@ For `OpenAI`, `DeepInfra`, and `Replicate` you only need to supply an API key. F
 - **Replicate** models: `alphanumericuser/kokoro-82m`, `google/gemini-3.1-flash-tts`, `minimax/speech-2.8-turbo`, `qwen/qwen3-tts`, `inworld/tts-1.5-mini` (or choose `Other` and enter any Replicate model ID, such as `owner/model` or `owner/model:version`)
 - **OpenAI** models: `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`
 - **DeepInfra** models: includes `hexgrad/Kokoro-82M` and additional hosted models (depending on API key / feature flags)
+- **Speech SDK** models: `openai/gpt-4o-mini-tts`, `elevenlabs/eleven_multilingual_v2`, `cartesia/sonic-3.5`, `deepgram/aura-2`, `google/gemini-2.5-flash-preview-tts`, `inworld/inworld-tts-1.5-max` (or choose `Other` and enter any `provider/model` the SDK supports)
 
 ## Custom provider requirements
 
@@ -51,6 +53,7 @@ TTS requests originate from the **Next.js server**, not the browser. `API_BASE` 
 - [Replicate](./tts-provider-guides/replicate)
 - [DeepInfra](./tts-provider-guides/deepinfra)
 - [OpenAI](./tts-provider-guides/openai)
+- [Speech SDK](./tts-provider-guides/speech-sdk)
 - [Other](./tts-provider-guides/other)
 
 ## Related

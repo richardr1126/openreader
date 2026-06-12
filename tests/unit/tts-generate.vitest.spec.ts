@@ -4,6 +4,7 @@ import {
   buildReplicateInput,
   buildTTSCacheKey,
   extractReplicateAudioUrl,
+  generateTTSBuffer,
   resolveReplicateLanguageValue,
 } from '../../src/lib/server/tts/generate';
 import { REPLICATE_KOKORO_82M_VERSIONED_MODEL } from '../../src/lib/shared/tts-provider-catalog';
@@ -134,5 +135,31 @@ describe('Replicate language schema values', () => {
       voice: 'af_sarah',
       language_code: 'a',
     });
+  });
+});
+
+describe('speech-sdk request resolution', () => {
+  test('rejects unknown provider prefixes before any network call', async () => {
+    await expect(generateTTSBuffer({
+      text: 'hello',
+      voice: 'alloy',
+      speed: 1,
+      model: 'doesnotexist/some-model',
+      provider: 'speech-sdk',
+      apiKey: 'unused',
+    })).rejects.toThrow('Unknown Speech SDK provider prefix');
+  });
+
+  test('rejects models missing the provider/model form', async () => {
+    for (const model of ['openai', 'openai/', '/gpt-4o-mini-tts']) {
+      await expect(generateTTSBuffer({
+        text: 'hello',
+        voice: 'alloy',
+        speed: 1,
+        model,
+        provider: 'speech-sdk',
+        apiKey: 'unused',
+      })).rejects.toThrow('Expected "provider/model"');
+    }
   });
 });

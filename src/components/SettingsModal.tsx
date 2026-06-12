@@ -550,6 +550,7 @@ export function SettingsModal({
     && !isSharedSelected
     && providerModelPolicy.isResolvedProviderType
     && providerModelPolicy.providerType !== 'replicate'
+    && providerModelPolicy.providerType !== 'speech-sdk'
     && (providerModelPolicy.providerType === 'custom-openai' || !localBaseUrl || localBaseUrl === '');
   const shouldShowApiKey = !restrictUserApiKeys && !isSharedSelected;
   const selectedModel = ttsModels.find(m => m.id === selectedModelId) || ttsModels[0];

@@ -5,6 +5,7 @@ import {
   getDefaultVoices,
   providerSupportsCustomModel,
   resolveProviderModels,
+  speechSdkProviderPrefix,
   supportsNativeModelSpeed,
   supportsTtsInstructions,
 } from '../../src/lib/shared/tts-provider-catalog';
@@ -49,6 +50,23 @@ describe('tts provider catalog', () => {
     expect(supportsTtsInstructions('tts-1')).toBe(false);
     expect(providerSupportsCustomModel('openai')).toBe(false);
     expect(providerSupportsCustomModel('deepinfra')).toBe(true);
+  });
+
+  test('resolves speech-sdk models, voices, and prefix parsing', () => {
+    expect(resolveProviderModels('speech-sdk').map((model) => model.id)).toContain('openai/gpt-4o-mini-tts');
+    expect(providerSupportsCustomModel('speech-sdk')).toBe(true);
+
+    expect(speechSdkProviderPrefix('elevenlabs/eleven_multilingual_v2')).toBe('elevenlabs');
+    // fal model ids are path-style, so only the first slash delimits the provider.
+    expect(speechSdkProviderPrefix('fal-ai/kokoro/american-english')).toBe('fal-ai');
+
+    expect(getDefaultVoices('speech-sdk', 'openai/gpt-4o-mini-tts')).toContain('sage');
+    expect(getDefaultVoices('speech-sdk', 'deepgram/aura-2')).toContain('thalia-en');
+    // Providers without a static voice list fall back to the provider default.
+    expect(getDefaultVoices('speech-sdk', 'mistral/voxtral-mini-tts-2603')).toEqual(['default']);
+
+    // Speed is applied client-side for speech-sdk so cached audio is speed-independent.
+    expect(supportsNativeModelSpeed('speech-sdk', 'openai/gpt-4o-mini-tts')).toBe(false);
   });
 
   test('uses blocklist semantics for Replicate native speed support', () => {
