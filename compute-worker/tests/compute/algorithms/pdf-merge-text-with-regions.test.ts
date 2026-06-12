@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { mergeTextWithRegions } from '../../../src/inference';
+import { mergeTextWithRegions } from '../../../src/inference/pdf/document-layout';
 
 describe('mergeTextWithRegions', () => {
   test('assigns text items to containing regions by centroid and joins in reading order', () => {

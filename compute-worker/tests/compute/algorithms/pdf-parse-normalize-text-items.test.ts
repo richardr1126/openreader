@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { normalizeTextItemsForLayout } from '../../../src/inference';
+import { normalizeTextItemsForLayout } from '../../../src/inference/pdf/normalize-text';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 function makeTextItem(

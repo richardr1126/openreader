@@ -76,7 +76,7 @@ vi.mock('../../../src/inference/pdf/model', () => ({
   MODEL_PREPROCESSOR_PATH: '/tmp/model-preprocessor.json',
 }));
 
-vi.mock('../../../src/inference/config/cpu-budget', () => ({
+vi.mock('../../../src/infrastructure/config', () => ({
   getOnnxThreadsPerJob: vi.fn(() => 1),
 }));
 
@@ -107,7 +107,7 @@ describe('runLayoutModel', () => {
       },
     };
 
-    const { runLayoutModel } = await import('../../../src/inference/pdf/runLayoutModel');
+    const { runLayoutModel } = await import('../../../src/inference/pdf/layout-model');
     const regions = await runLayoutModel({
       pageWidth: 100,
       pageHeight: 100,
@@ -154,7 +154,7 @@ describe('runLayoutModel', () => {
       },
     };
 
-    const { runLayoutModel } = await import('../../../src/inference/pdf/runLayoutModel');
+    const { runLayoutModel } = await import('../../../src/inference/pdf/layout-model');
     const regions = await runLayoutModel({
       pageWidth: 100,
       pageHeight: 100,

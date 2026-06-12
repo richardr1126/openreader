@@ -1,10 +1,10 @@
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import type { ParsedPdfDocument, ParsedPdfPage } from '../types/parsed-pdf';
+import type { ParsedPdfDocument, ParsedPdfPage } from '../../api/types';
 import { ensureModel } from './model';
-import { runLayoutModel } from './runLayoutModel';
-import { mergeTextWithRegions } from './merge';
-import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
-import { PDF_PARSER_VERSION } from './parser-version';
+import { runLayoutModel } from './layout-model';
+import { mergeTextWithRegions } from './document-layout';
+import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs';
+import { PDF_PARSER_VERSION } from '../../api/contracts';
 import { stitchCrossPageBlocks } from './stitch';
 import { renderPage } from './render';
 import { normalizeTextItemsForLayout } from './normalize-text';

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
-} from '../inference/local-runtime';
-import { withIdleTimeoutAndHardCap, withTimeout } from '../inference';
+} from '../inference/runtime';
+import { withIdleTimeoutAndHardCap, withTimeout } from '../infrastructure/config';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,

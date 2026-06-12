@@ -1,8 +1,8 @@
 import * as ort from 'onnxruntime-node';
 import { readFile } from 'fs/promises';
-import type { LayoutRegion, PdfTextItem } from './types';
+import type { LayoutRegion, PdfTextItem } from './document-layout';
 import { ensureModel, MODEL_CONFIG_PATH, MODEL_PREPROCESSOR_PATH } from './model';
-import { getOnnxThreadsPerJob } from '../config/cpu-budget';
+import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 
 interface RunLayoutInput {
   pageWidth: number;

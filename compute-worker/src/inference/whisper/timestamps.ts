@@ -1,5 +1,6 @@
 import type { Tokenizer } from '@huggingface/tokenizers';
 import type * as ort from 'onnxruntime-node';
+import type { TTSSentenceAlignment, TTSSentenceWord } from '../../api/types';
 
 const PUNCTUATION_REGEX = '\\p{P}\\u0021-\\u002F\\u003A-\\u0040\\u005B-\\u0060\\u007B-\\u007E';
 const PUNCTUATION_ONLY_REGEX = new RegExp(`^[${PUNCTUATION_REGEX}]+$`, 'gu');
@@ -10,6 +11,29 @@ export interface WhisperWordTiming {
   word: string;
   startSec: number;
   endSec: number;
+}
+
+export interface WhisperWord {
+  start: number;
+  end: number;
+  word: string;
+}
+
+export function mapWordsToSentenceOffsets(sentence: string, words: WhisperWord[]): TTSSentenceAlignment {
+  const lowerSentence = sentence.toLowerCase();
+  let cursor = 0;
+  const alignedWords: TTSSentenceWord[] = words.map((word) => {
+    const token = word.word.trim();
+    if (!token) {
+      return { text: '', startSec: word.start, endSec: word.end, charStart: cursor, charEnd: cursor };
+    }
+    const index = lowerSentence.indexOf(token.toLowerCase(), cursor);
+    const start = index >= 0 ? index : cursor;
+    const end = Math.min(sentence.length, start + token.length);
+    cursor = Math.max(cursor, end);
+    return { text: token, startSec: word.start, endSec: word.end, charStart: start, charEnd: end };
+  }).filter((word) => word.text.length > 0);
+  return { sentence, sentenceIndex: 0, words: alignedWords };
 }
 
 function medianFilter(data: Float32Array, windowSize: number): Float32Array {

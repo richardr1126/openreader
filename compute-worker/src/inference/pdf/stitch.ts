@@ -1,4 +1,4 @@
-import type { ParsedPdfDocument, ParsedPdfBlock } from '../types/parsed-pdf';
+import type { ParsedPdfDocument, ParsedPdfBlock } from '../../api/types';
 
 const STITCHABLE_KINDS = new Set<ParsedPdfBlock['kind']>([
   'text',

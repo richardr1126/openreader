@@ -1,5 +1,5 @@
-import { PDF_PARSER_VERSION } from '../inference/pdf/parser-version';
-import { encodeParserVersion } from '../inference/pdf/parser-version-key';
+import { PDF_PARSER_VERSION } from '../api/contracts';
+import { encodeParserVersion } from '../api/contracts';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;

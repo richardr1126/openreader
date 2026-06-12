@@ -1,4 +1,18 @@
-import type { LayoutRegion, PdfTextItem } from './types';
+import type { ParsedPdfBlockKind } from '../../api/types';
+
+export interface PdfTextItem {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LayoutRegion {
+  bbox: [number, number, number, number];
+  label: ParsedPdfBlockKind;
+  confidence?: number;
+}
 
 const NON_TEXT_REGION_LABELS = new Set<LayoutRegion['label']>(['chart', 'image', 'table', 'seal']);
 const TEXT_ASSIGNABLE_LABELS = new Set<LayoutRegion['label']>([

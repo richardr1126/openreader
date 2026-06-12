@@ -7,19 +7,18 @@ import { fileURLToPath } from 'url';
 import * as ort from 'onnxruntime-node';
 import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
-import type { TTSAudioBuffer, TTSAudioBytes, TTSSentenceAlignment } from '../types/tts';
-import { getFFmpegPath } from '../platform/ffmpeg';
-import { getOnnxThreadsPerJob } from '../config/cpu-budget';
-import { getComputeTimeoutConfig } from '../config/timeout';
+import type { TTSAudioBuffer, TTSAudioBytes, TTSSentenceAlignment } from '../../api/types';
+import { getFFmpegPath } from '../../infrastructure/platform';
+import { getOnnxThreadsPerJob } from '../../infrastructure/config';
+import { getComputeTimeoutConfig } from '../../infrastructure/config';
 import {
   mapWordsToSentenceOffsets,
   type WhisperWord,
-} from './alignment-map';
-import { buildGoertzelCoefficients, goertzelPower } from './spectral';
+} from './timestamps';
 import {
   buildWordsFromTimestampedTokens,
   extractTokenStartTimestamps,
-} from './token-timestamps';
+} from './timestamps';
 import {
   ensureWhisperModel,
   WHISPER_CONFIG_PATH,
@@ -30,6 +29,26 @@ import {
   WHISPER_DECODER_MERGED_MODEL_PATH,
   WHISPER_DECODER_WITH_PAST_MODEL_PATH,
 } from './model';
+
+export function buildGoertzelCoefficients(freqBins: number, fftSize: number): Float64Array {
+  const coeffs = new Float64Array(freqBins);
+  for (let k = 0; k < freqBins; k += 1) {
+    coeffs[k] = 2 * Math.cos((2 * Math.PI * k) / fftSize);
+  }
+  return coeffs;
+}
+
+export function goertzelPower(samples: Float32Array, coeff: number): number {
+  let s1 = 0;
+  let s2 = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const s0 = samples[i] + (coeff * s1) - s2;
+    s2 = s1;
+    s1 = s0;
+  }
+  const power = (s1 * s1) + (s2 * s2) - (coeff * s1 * s2);
+  return !Number.isFinite(power) || power < 0 ? 0 : power;
+}
 
 interface WhisperAlignmentOptions {
   lang?: string;

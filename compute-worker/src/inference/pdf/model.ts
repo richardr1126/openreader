@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { access, mkdir, rename, writeFile, readFile, unlink, copyFile } from 'fs/promises';
-import { DOCSTORE_DIR } from '../platform/docstore';
+import { DOCSTORE_DIR } from '../../infrastructure/platform';
 
 const DEFAULT_MODEL_BASE_URL = 'https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main';
 const PDF_LAYOUT_MODEL_BASE_URL_ENV = 'PDF_LAYOUT_MODEL_BASE_URL';

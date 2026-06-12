@@ -1,5 +1,5 @@
 import type { Canvas } from '@napi-rs/canvas';
-import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs-runtime';
+import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs';
 
 type CanvasRuntime = {
   DOMMatrixCtor: unknown;

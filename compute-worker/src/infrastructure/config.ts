@@ -117,3 +117,23 @@ export async function withIdleTimeoutAndHardCap<T>(input: IdleTimeoutAndHardCapI
     throw error;
   }
 }
+
+export function getComputeJobConcurrency(): number {
+  return readPositiveIntEnv('COMPUTE_JOB_CONCURRENCY', 1);
+}
+
+export function getAvailableCpuCores(): number {
+  if (typeof os.availableParallelism === 'function') {
+    const value = os.availableParallelism();
+    if (Number.isFinite(value) && value >= 1) return Math.floor(value);
+  }
+  const fallback = os.cpus().length;
+  return Number.isFinite(fallback) && fallback >= 1 ? Math.floor(fallback) : 1;
+}
+
+export function getOnnxThreadsPerJob(): number {
+  const concurrency = getComputeJobConcurrency();
+  const usableCores = Math.max(1, getAvailableCpuCores() - 1);
+  return Math.max(1, Math.floor(usableCores / concurrency));
+}
+import os from 'node:os';

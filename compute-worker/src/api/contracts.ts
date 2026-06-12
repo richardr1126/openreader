@@ -1,24 +1,26 @@
-import type { TTSSentenceAlignment } from '../inference/types/tts';
-import type { ParsedPdfDocument } from '../inference/types/parsed-pdf';
+import type { TTSSentenceAlignment, ParsedPdfDocument } from './types';
 
 export type {
   TTSAudioBuffer,
   TTSAudioBytes,
   TTSSentenceAlignment,
   TTSSentenceWord,
-} from '../inference/types/tts';
+} from './types';
 export type {
   ParsedPdfBlockKind,
   ParsedPdfBlockFragment,
   ParsedPdfBlock,
   ParsedPdfPage,
   ParsedPdfDocument,
-} from '../inference/types/parsed-pdf';
+} from './types';
 
 export const ALIGN_QUEUE_NAME = 'whisper-align';
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
-export { PDF_PARSER_VERSION } from '../inference/pdf/parser-version';
-export { encodeParserVersion } from '../inference/pdf/parser-version-key';
+export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
+
+export function encodeParserVersion(parserVersion: string, defaultVersion = PDF_PARSER_VERSION): string {
+  return encodeURIComponent(parserVersion.trim() || defaultVersion);
+}
 
 export interface WhisperAlignJobBase {
   text: string;

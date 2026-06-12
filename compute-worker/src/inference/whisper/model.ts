@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { access, copyFile, mkdir, readFile, rename, unlink, writeFile } from 'fs/promises';
-import { DOCSTORE_DIR } from '../platform/docstore';
+import { DOCSTORE_DIR } from '../../infrastructure/platform';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const MODEL_DIR = path.join(DOCSTORE_DIR, 'model', 'whisper-base_timestamped');

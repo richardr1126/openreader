@@ -15,13 +15,13 @@ import {
 import { Kvm } from '@nats-io/kv';
 import {
   ensureComputeModels,
-} from '../inference/local-runtime';
+} from '../inference/runtime';
 import {
   getComputeTimeoutConfig,
   getComputeOpStaleMs,
   getAvailableCpuCores,
   getOnnxThreadsPerJob,
-} from '../inference';
+} from '../infrastructure/config';
 import { encodeSseFrame, OperationOrchestrator } from '../operations';
 import type {
   PdfLayoutJobRequest,

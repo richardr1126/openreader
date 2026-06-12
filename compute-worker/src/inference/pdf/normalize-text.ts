@@ -1,5 +1,5 @@
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import type { PdfTextItem } from './types';
+import type { PdfTextItem } from './document-layout';
 
 interface ViewportLike {
   height: number;
