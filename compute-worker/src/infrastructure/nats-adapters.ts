@@ -8,12 +8,12 @@ import type {
   OperationState,
   OperationStateStore,
   QueuedOperation,
-} from '../compute/control-plane';
+} from '../operations';
 import type {
   PdfLayoutJobRequest,
   WhisperAlignJobRequest,
   WorkerOperationKind,
-} from '../compute/api-contracts';
+} from '../api/contracts';
 import { createJsonCodec } from './json-codec';
 
 export interface KvEntryLike {

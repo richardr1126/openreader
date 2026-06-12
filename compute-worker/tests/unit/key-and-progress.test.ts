@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { hashOpKey, opIndexKvKey, opStateKvKey } from '../../src/control-plane/jetstream';
+import { hashOpKey, opIndexKvKey, opStateKvKey } from '../../src/infrastructure/nats-adapters';
 import {
   buildInferProgressForPageParsed,
   buildInferProgressForPageStart,
-} from '../../src/pdf-progress';
+} from '../../src/jobs/pdf-progress';
 import { buildPdfOperationKey } from '../../src/api/operation-keys';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 

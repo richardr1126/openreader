@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { stitchCrossPageBlocks } from '../../../src/compute';
-import type { ParsedPdfBlock, ParsedPdfDocument, ParsedPdfBlockKind } from '../../../src/compute/types';
+import { stitchCrossPageBlocks } from '../../../src/inference';
+import type { ParsedPdfBlock, ParsedPdfDocument, ParsedPdfBlockKind } from '../../../src/inference/types';
 import { makeParsedPdfDocument, makeParsedPdfPage } from './support/document-fixtures';
 
 function makeBlock(

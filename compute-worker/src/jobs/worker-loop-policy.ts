@@ -1,4 +1,4 @@
-import type { WorkerOperationKind } from './compute/api-contracts';
+import type { WorkerOperationKind } from '../api/contracts';
 
 export type RetryAction = 'nak_retry' | 'term_fail';
 

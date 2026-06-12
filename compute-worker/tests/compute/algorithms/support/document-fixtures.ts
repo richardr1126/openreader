@@ -1,5 +1,5 @@
-import type { BaseDocument } from '../../../src/types/documents';
-import type { ParsedPdfBlock, ParsedPdfBlockKind, ParsedPdfDocument, ParsedPdfPage } from '../../../../src/compute/types';
+import type { BaseDocument } from '../../../../../src/types/documents';
+import type { ParsedPdfBlock, ParsedPdfBlockKind, ParsedPdfDocument, ParsedPdfPage } from '../../../../src/inference/types';
 
 export function makeBaseDocument(overrides: Partial<BaseDocument> = {}): BaseDocument {
   return {

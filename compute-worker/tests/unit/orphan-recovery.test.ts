@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { recoverOrphanedOperations } from '../../src/orphan-recovery';
+import { recoverOrphanedOperations } from '../../src/operations/recovery';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
 
 describe('orphan recovery', () => {

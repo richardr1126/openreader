@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { encodeSseFrame, parseSseEventId, parseSsePayload } from '../../../src/compute/control-plane/sse';
+import { encodeSseFrame, parseSseEventId, parseSsePayload } from '../../../src/operations/sse';
 
 describe('sse codec', () => {
   test('encodes event id and payload and decodes both reliably', () => {

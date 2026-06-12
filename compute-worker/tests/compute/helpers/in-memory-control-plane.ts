@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { WorkerOperationKind } from '../../../src/compute/api-contracts';
+import type { WorkerOperationKind } from '../../../src/api/contracts';
 import type {
   OperationEvent,
   OperationEventStream,
@@ -8,7 +8,7 @@ import type {
   OperationState,
   OperationStateStore,
   QueuedOperation,
-} from '../../../src/compute/control-plane/types';
+} from '../../../src/operations/types';
 
 function topicFor(opId: string): string {
   return `op.${opId}`;

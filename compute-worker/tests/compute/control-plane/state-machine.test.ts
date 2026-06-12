@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import type { WorkerOperationState } from '../../../src/compute/api-contracts';
+import type { WorkerOperationState } from '../../../src/api/contracts';
 import {
   explainReplacementReason,
   isInflightStatus,
   isTerminalStatus,
   shouldReuseExistingOperation,
-} from '../../../src/compute/control-plane/state-machine';
+} from '../../../src/operations/state-machine';
 
 function runningState(overrides: Partial<WorkerOperationState> = {}): WorkerOperationState {
   return {

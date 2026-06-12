@@ -1,4 +1,4 @@
-import type { PdfLayoutProgress } from './compute/api-contracts';
+import type { PdfLayoutProgress } from '../api/contracts';
 
 export function buildInferProgressForPageStart(input: {
   pageNumber: number;

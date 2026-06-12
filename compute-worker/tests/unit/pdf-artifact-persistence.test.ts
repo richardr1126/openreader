@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { persistParsedPdfWhileSourceExists } from '../../src/pdf-artifact-persistence';
+import { persistParsedPdfWhileSourceExists } from '../../src/jobs/pdf-artifact-persistence';
 
 describe('PDF artifact persistence', () => {
   test('does not write parsed output after the source was deleted', async () => {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { PDF_PARSER_VERSION } from '../compute/pdf/parser-version';
+import { PDF_PARSER_VERSION } from '../inference/pdf/parser-version';
 
 function sha256Hex(input: string): string {
   return createHash('sha256').update(input).digest('hex');

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildQueueWaitTiming, decideRetryAction } from '../../src/worker-loop-policy';
+import { buildQueueWaitTiming, decideRetryAction } from '../../src/jobs/worker-loop-policy';
 
 describe('worker loop policy', () => {
   test('returns queue wait timing with non-negative clamped duration', () => {

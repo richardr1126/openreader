@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import type { WorkerOperationRequest } from '../../../src/compute/api-contracts';
-import { OperationOrchestrator } from '../../../src/compute/control-plane';
+import type { WorkerOperationRequest } from '../../../src/api/contracts';
+import { OperationOrchestrator } from '../../../src/operations';
 import {
   InMemoryOperationEventStream,
   InMemoryOperationQueue,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildGoertzelCoefficients, goertzelPower } from '../../../src/compute';
+import { buildGoertzelCoefficients, goertzelPower } from '../../../src/inference';
 
 function dftPower(samples: Float32Array, k: number): number {
   const n = samples.length;

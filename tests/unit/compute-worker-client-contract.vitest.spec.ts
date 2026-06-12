@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { createComputeWorkerApp, type ComputeWorkerApp } from '../../compute-worker/src/runtime';
+import { createComputeWorkerApp, type ComputeWorkerApp } from '../../compute-worker/src/api/app';
 import { FakeControlPlane } from '../../compute-worker/tests/fixtures/fake-control-plane';
 import { ComputeWorkerClient } from '../../src/lib/server/compute-worker/client';
 

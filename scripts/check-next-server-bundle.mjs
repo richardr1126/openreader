@@ -13,7 +13,7 @@ const forbidden = [
   'onnxruntime-node',
   '@huggingface/tokenizers',
   '@openreader/compute-worker',
-  '/compute-worker/src/compute/',
+  '/compute-worker/src/inference/',
 ];
 
 const includeExt = new Set(['.js', '.mjs', '.cjs']);

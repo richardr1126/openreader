@@ -1,4 +1,4 @@
-import { startComputeWorkerFromEnv } from './runtime';
+import { startComputeWorkerFromEnv } from './api/app';
 
 void startComputeWorkerFromEnv().catch((error) => {
   console.error('[compute-worker] fatal startup error', error);

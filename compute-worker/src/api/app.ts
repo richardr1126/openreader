@@ -1,78 +1,72 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
-import { z } from 'zod';
 import {
   connect,
-  nanos,
   credsAuthenticator,
   type NatsConnection,
 } from '@nats-io/transport-node';
 import {
-  AckPolicy,
-  DeliverPolicy,
-  ReplayPolicy,
-  RetentionPolicy,
-  StorageType,
   jetstream,
   jetstreamManager,
   type Consumer,
   type JetStreamClient,
   type JetStreamManager,
-  type JsMsg,
 } from '@nats-io/jetstream';
 import { Kvm } from '@nats-io/kv';
 import {
   ensureComputeModels,
-  runPdfLayoutFromPdfBuffer,
-  runWhisperAlignmentFromAudioBuffer,
-} from './compute/local-runtime';
+} from '../inference/local-runtime';
 import {
   getComputeTimeoutConfig,
   getComputeOpStaleMs,
   getAvailableCpuCores,
   getOnnxThreadsPerJob,
-  withIdleTimeoutAndHardCap,
-  withTimeout,
-} from './compute';
-import { encodeSseFrame, OperationOrchestrator } from './compute/control-plane';
+} from '../inference';
+import { encodeSseFrame, OperationOrchestrator } from '../operations';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   WorkerOperationEvent,
   WhisperAlignJobRequest,
   WhisperAlignJobResult,
-  WorkerJobState,
   WorkerJobTiming,
-  WorkerOperationKind,
   WorkerOperationRequest,
   WorkerOperationState,
-  PdfLayoutProgress,
-} from './compute/api-contracts';
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+} from '../api/contracts';
 import {
   JetStreamOperationEventStream,
-  OP_EVENTS_SUBJECT_WILDCARD,
   JetStreamOperationQueue,
   JetStreamOperationStateStore,
   hashOpKey,
-} from './control-plane/jetstream';
-import { type JsonCodec, createJsonCodec } from './control-plane/json-codec';
+} from '../infrastructure/nats-adapters';
+import { createJsonCodec } from '../infrastructure/json-codec';
 import {
   recoverOrphanedOperations,
   type StreamedOperationState,
-} from './orphan-recovery';
-import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
-import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
-import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
-import { parsedPdfArtifactKey } from './storage/artifact-addressing';
-import { buildPdfOperationKey, buildWhisperOperationKey } from './api/operation-keys';
-import { toPublicOperation, type PublicOperationEvent } from './api/public-operation';
+} from '../operations/recovery';
+import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
+import {
+  createArtifactStorage,
+  createS3ClientFromEnv,
+  normalizeS3Prefix,
+  type ArtifactStorage,
+} from '../infrastructure/storage';
+import { createJobHandlers } from '../jobs/handlers';
+import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop';
+import {
+  COMPUTE_STATE_BUCKET,
+  COMPUTE_STATE_TTL_MS,
+  EVENTS_STREAM_NAME,
+  JOBS_STREAM_NAME,
+  LAYOUT_CONSUMER_NAME,
+  LAYOUT_JOBS_SUBJECT,
+  NATS_API_TIMEOUT_MS,
+  WHISPER_CONSUMER_NAME,
+  WHISPER_JOBS_SUBJECT,
+  ensureJetStreamResources,
+} from '../infrastructure/nats';
+import { buildPdfOperationKey, buildWhisperOperationKey } from './operation-keys';
+import { toPublicOperation, type PublicOperationEvent } from './public-operation';
 import {
   apiErrorResponseSchema,
   artifactReferenceSchema,
@@ -89,26 +83,14 @@ import {
   publicOperationSchema,
   ttsSentenceAlignmentSchema,
   whisperOperationCreateSchema,
-} from './api/schemas';
+} from './schemas';
 
-const JOBS_STREAM_NAME = 'compute_jobs';
-const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
-const LAYOUT_JOBS_SUBJECT = 'jobs.layout';
-const WHISPER_CONSUMER_NAME = 'compute_whisper';
-const LAYOUT_CONSUMER_NAME = 'compute_layout';
-const EVENTS_STREAM_NAME = 'compute_events';
-const COMPUTE_STATE_BUCKET = 'compute_state';
-const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
-const LOOP_ERROR_BACKOFF_MS = 500;
-const RUNNING_HEARTBEAT_MS = 5000;
 const OP_EVENTS_KEEPALIVE_MS = 15_000;
 // Reconnection delay handed to the browser EventSource via the SSE `retry:`
 // directive. When a silent stream is torn down for idle sleep, this keeps the
 // client from immediately reconnecting and re-waking the worker; instead it
 // reconnects on a slow cadence so the container stays asleep most of the time.
 const OP_EVENTS_RECONNECT_HINT_MS = 120_000;
-const WHISPER_MAX_DELIVER = 1;
-const NATS_API_TIMEOUT_MS = 60_000;
 // Disconnect from NATS after this much continuous idle so the worker stops
 // generating outbound traffic (pull polling + keepalive PINGs) and Railway can
 // put it to sleep. Reconnect happens lazily on the next inbound request.
@@ -118,22 +100,9 @@ const IDLE_STATUS_LOG_INTERVAL_MS = 60_000;
 const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
 // Bounded pull window so consumer loops yield periodically and can be stopped
 // cleanly when going idle, instead of blocking on a long-lived pull.
-const PULL_EXPIRES_MS = 5_000;
 const REQUEST_STARTED_AT_MS_KEY = Symbol('request-started-at-ms');
 const REQUEST_COUNTED_KEY = Symbol('request-activity-counted');
-const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
-  whisper_align: 15_000,
-  pdf_layout: 120_000,
-};
-
-interface QueuedJob<TPayload> {
-  jobId: string;
-  opId: string;
-  opKey: string;
-  kind: WorkerOperationKind;
-  queuedAt: number;
-  payload: TPayload;
-}
+const WHISPER_MAX_DELIVER = 1;
 
 interface NatsSession {
   nc: NatsConnection;
@@ -267,74 +236,11 @@ function buildLoggerConfig(): boolean | Record<string, unknown> {
   };
 }
 
-function normalizeS3Prefix(prefix: string | undefined): string {
-  const value = (prefix || 'openreader').trim();
-  return value ? value.replace(/^\/+|\/+$/g, '') : 'openreader';
-}
-
-function buildS3Client(): S3Client {
-  const bucket = requireEnv('S3_BUCKET');
-  const region = requireEnv('S3_REGION');
-  const accessKeyId = requireEnv('S3_ACCESS_KEY_ID');
-  const secretAccessKey = requireEnv('S3_SECRET_ACCESS_KEY');
-  const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
-  const forcePathStyle = parseBoolEnv('S3_FORCE_PATH_STYLE', false);
-
-  void bucket;
-
-  return new S3Client({
-    region,
-    endpoint,
-    forcePathStyle,
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-    responseChecksumValidation: 'WHEN_REQUIRED',
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  });
-}
-
-async function bodyToBuffer(body: unknown): Promise<Buffer> {
-  if (!body) return Buffer.alloc(0);
-  if (body instanceof Uint8Array) return Buffer.from(body);
-  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
-  if (body instanceof ArrayBuffer) return Buffer.from(body);
-  if (typeof body === 'object' && body !== null && 'transformToByteArray' in body) {
-    const maybe = body as { transformToByteArray?: () => Promise<Uint8Array> };
-    if (typeof maybe.transformToByteArray === 'function') {
-      return Buffer.from(await maybe.transformToByteArray());
-    }
-  }
-  if (typeof body === 'object' && body !== null && 'on' in body) {
-    const stream = body as NodeJS.ReadableStream;
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) {
-      if (Buffer.isBuffer(chunk)) chunks.push(chunk);
-      else if (typeof chunk === 'string') chunks.push(Buffer.from(chunk));
-      else chunks.push(Buffer.from(chunk as Uint8Array));
-    }
-    return Buffer.concat(chunks);
-  }
-  throw new Error('Unsupported S3 response body type');
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
-}
-
 function isAuthed(request: FastifyRequest, expectedToken: string): boolean {
   const auth = request.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return false;
   const token = auth.slice('Bearer '.length).trim();
   return token === expectedToken;
-}
-
-function safeDurationMs(start: number | undefined, end: number | undefined): number | undefined {
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
-  return Math.max(0, Math.floor((end as number) - (start as number)));
 }
 
 function toErrorMessage(error: unknown): string {
@@ -370,154 +276,11 @@ function extractOpId(request: FastifyRequest, path: string): string | null {
   }
 }
 
-function isAlreadyExistsError(error: unknown): boolean {
-  const message = toErrorMessage(error).toLowerCase();
-  return message.includes('already in use') || message.includes('already exists');
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-class ConcurrencyGate {
-  private readonly maxInFlight: number;
-  private inFlight = 0;
-  private readonly queue: Array<() => void> = [];
-
-  constructor(limit: number) {
-    this.maxInFlight = Number.isFinite(limit) && limit >= 1 ? Math.floor(limit) : 1;
-  }
-
-  async acquire(): Promise<void> {
-    if (this.inFlight < this.maxInFlight) {
-      this.inFlight += 1;
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      this.queue.push(() => {
-        this.inFlight += 1;
-        resolve();
-      });
-    });
-  }
-
-  release(): void {
-    this.inFlight = Math.max(0, this.inFlight - 1);
-    const next = this.queue.shift();
-    if (next) next();
-  }
-}
-
-function isTerminalStatus(status: WorkerJobState): boolean {
+function isTerminalStatus(status: import('../api/contracts').WorkerJobState): boolean {
   return status === 'succeeded' || status === 'failed';
 }
 
-function extractResultRef(kind: WorkerOperationKind, result: unknown): string | undefined {
-  if (kind !== 'pdf_layout' || !result || typeof result !== 'object') return undefined;
-  const maybe = result as { parsedObjectKey?: unknown };
-  return typeof maybe.parsedObjectKey === 'string' ? maybe.parsedObjectKey : undefined;
-}
-
-const alignSchema = z.object({
-  text: z.string().trim().min(1),
-  lang: z.string().trim().min(1).max(16).optional(),
-  cacheKey: z.string().trim().min(1).max(256).optional(),
-  audioObjectKey: z.string().trim().min(1).max(2048),
-});
-
-const layoutSchema = z.object({
-  documentId: z.string().trim().min(1),
-  namespace: z.string().trim().min(1).max(128).nullable(),
-  documentObjectKey: z.string().trim().min(1).max(2048),
-});
-
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
-
-async function ensureJetStreamResources(
-  jsm: JetStreamManager,
-  whisperTimeoutMs: number,
-  pdfTimeoutMs: number,
-  pdfAttempts: number,
-  jobsMaxBytes: number,
-  eventsMaxBytes: number,
-  natsReplicas: number,
-): Promise<void> {
-  const streamConfig = {
-    name: JOBS_STREAM_NAME,
-    subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
-    retention: RetentionPolicy.Workqueue,
-    storage: StorageType.File,
-    max_bytes: jobsMaxBytes,
-    num_replicas: natsReplicas,
-  };
-
-  try {
-    await jsm.streams.add(streamConfig);
-  } catch (error) {
-    if (!isAlreadyExistsError(error)) throw error;
-    await jsm.streams.update(JOBS_STREAM_NAME, {
-      subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
-      max_bytes: jobsMaxBytes,
-      num_replicas: natsReplicas,
-    });
-  }
-
-  const eventsStreamConfig = {
-    name: EVENTS_STREAM_NAME,
-    subjects: [OP_EVENTS_SUBJECT_WILDCARD],
-    retention: RetentionPolicy.Limits,
-    storage: StorageType.File,
-    max_bytes: eventsMaxBytes,
-    max_age: nanos(COMPUTE_STATE_TTL_MS),
-    num_replicas: natsReplicas,
-  };
-
-  try {
-    await jsm.streams.add(eventsStreamConfig);
-  } catch (error) {
-    if (!isAlreadyExistsError(error)) throw error;
-    await jsm.streams.update(EVENTS_STREAM_NAME, {
-      subjects: [OP_EVENTS_SUBJECT_WILDCARD],
-      max_bytes: eventsMaxBytes,
-      max_age: nanos(COMPUTE_STATE_TTL_MS),
-      num_replicas: natsReplicas,
-    });
-  }
-
-  const ensureConsumer = async (
-    name: string,
-    subject: string,
-    ackWaitMs: number,
-    maxDeliver: number,
-  ): Promise<void> => {
-    const config = {
-      durable_name: name,
-      ack_policy: AckPolicy.Explicit,
-      deliver_policy: DeliverPolicy.All,
-      replay_policy: ReplayPolicy.Instant,
-      filter_subject: subject,
-      ack_wait: nanos(Math.max(ackWaitMs, 1_000)),
-      max_deliver: maxDeliver,
-    };
-
-    try {
-      await jsm.consumers.add(JOBS_STREAM_NAME, config);
-    } catch (error) {
-      if (!isAlreadyExistsError(error)) throw error;
-      await jsm.consumers.update(JOBS_STREAM_NAME, name, {
-        filter_subject: subject,
-        ack_wait: nanos(Math.max(ackWaitMs, 1_000)),
-        max_deliver: maxDeliver,
-      });
-    }
-  };
-
-  await Promise.all([
-    ensureConsumer(WHISPER_CONSUMER_NAME, WHISPER_JOBS_SUBJECT, whisperTimeoutMs + 15_000, WHISPER_MAX_DELIVER),
-    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, pdfTimeoutMs + 15_000, pdfAttempts),
-  ]);
-}
 
 export async function createComputeWorkerApp(options: CreateComputeWorkerAppOptions = {}): Promise<ComputeWorkerApp> {
   const port = options.port ?? readIntEnv('PORT', 8081);
@@ -560,11 +323,9 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   // the session via ensureConnected().
   let session: NatsSession | null = null;
   let connecting: Promise<NatsSession> | null = null;
-  let workerLoops: Promise<void>[] = [];
   let idleTimer: NodeJS.Timeout | null = null;
   let orphanSweepTimer: NodeJS.Timeout | null = null;
   let stopping = false;
-  let loopStopRequested = false;
 
   // Activity accounting feeding the idle detector. The worker is considered idle
   // only when no HTTP request is in flight, no SSE stream is open, no job is
@@ -575,7 +336,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   let lastActivityAt = Date.now();
   let lastActivityReason = 'startup';
   let lastIdleStatusLogAt = 0;
-  const jobGate = new ConcurrencyGate(jobConcurrency);
 
   const markActivity = (reason: string): void => {
     lastActivityAt = Date.now();
@@ -641,7 +401,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     // Clear synchronously (before any await) so concurrent requests reconnect a
     // fresh session instead of using the connection we're about to close.
     session = null;
-    loopStopRequested = true;
     if (idleTimer) {
       clearInterval(idleTimer);
       idleTimer = null;
@@ -655,9 +414,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     } catch {
       // ignore close errors
     }
-    await Promise.allSettled(workerLoops);
-    workerLoops = [];
-    loopStopRequested = false;
+    await workerLoops.stop();
     app.log.info({ reason }, 'nats disconnected');
   }
 
@@ -668,15 +425,15 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       const nc: NatsConnection = await connect(connectOpts);
       const js: JetStreamClient = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
       const jsm: JetStreamManager = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
-      await ensureJetStreamResources(
+      await ensureJetStreamResources({
         jsm,
         whisperTimeoutMs,
         pdfTimeoutMs,
         pdfAttempts,
-        jobsStreamMaxBytes,
-        eventsStreamMaxBytes,
+        jobsMaxBytes: jobsStreamMaxBytes,
+        eventsMaxBytes: eventsStreamMaxBytes,
         natsReplicas,
-      );
+      });
       const kv = await new Kvm(js).create(COMPUTE_STATE_BUCKET, {
         replicas: natsReplicas,
         history: 1,
@@ -690,7 +447,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       sessionGeneration += 1;
       orphanRecoveryDoneForGeneration = -1;
       markActivity('nats_connected');
-      startWorkerLoops(next);
+      if (!disableWorkers) {
+        workerLoops.start(next, {
+          whisper: next.whisperConsumer,
+          pdfLayout: next.layoutConsumer,
+        });
+      }
       startIdleTimer();
       startOrphanSweepTimer();
       // Safety net: if the connection closes for any reason (network drop after
@@ -709,82 +471,22 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     }
   }
 
-  const s3 = disableWorkers ? null : buildS3Client();
-  const s3Bucket = disableWorkers ? '' : requireEnv('S3_BUCKET');
   const s3Prefix = normalizeS3Prefix(process.env.S3_PREFIX);
-
-  const ensureSafeKey = (key: string): string => {
-    const trimmed = key.trim();
-    if (!trimmed.startsWith(`${s3Prefix}/`)) {
-      throw new Error('Object key prefix mismatch');
-    }
-    return trimmed;
+  const storageDisabled = async (): Promise<never> => {
+    throw new Error('S3 access is disabled for this worker app instance');
   };
-
-  const readObjectByKey = async (key: string): Promise<ArrayBuffer> => {
-    if (!s3) {
-      throw new Error('S3 access is disabled for this worker app instance');
+  const storage: ArtifactStorage = disableWorkers
+    ? {
+      readObject: storageDisabled,
+      objectExists: storageDisabled,
+      deleteObject: storageDisabled,
+      putParsedPdf: storageDisabled,
     }
-    const safeKey = ensureSafeKey(key);
-    const response = await s3.send(new GetObjectCommand({
-      Bucket: s3Bucket,
-      Key: safeKey,
-    }));
-    const bytes = await bodyToBuffer(response.Body);
-    return toArrayBuffer(new Uint8Array(bytes));
-  };
-
-  const objectExists = async (key: string): Promise<boolean> => {
-    if (!s3) {
-      throw new Error('S3 access is disabled for this worker app instance');
-    }
-    const safeKey = ensureSafeKey(key);
-    try {
-      await s3.send(new HeadObjectCommand({
-        Bucket: s3Bucket,
-        Key: safeKey,
-      }));
-      return true;
-    } catch (error) {
-      const maybe = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
-      if (
-        maybe.$metadata?.httpStatusCode === 404
-        || maybe.name === 'NotFound'
-        || maybe.name === 'NoSuchKey'
-        || maybe.Code === 'NotFound'
-        || maybe.Code === 'NoSuchKey'
-      ) {
-        return false;
-      }
-      throw error;
-    }
-  };
-
-  const deleteObjectByKey = async (key: string): Promise<void> => {
-    if (!s3) {
-      throw new Error('S3 access is disabled for this worker app instance');
-    }
-    await s3.send(new DeleteObjectCommand({
-      Bucket: s3Bucket,
-      Key: ensureSafeKey(key),
-    }));
-  };
-
-  const putParsedObject = async (documentId: string, namespace: string | null, parsed: unknown): Promise<string> => {
-    if (!s3) {
-      throw new Error('S3 access is disabled for this worker app instance');
-    }
-    const key = parsedPdfArtifactKey({ documentId, namespace, prefix: s3Prefix });
-    const body = Buffer.from(JSON.stringify(parsed));
-    await s3.send(new PutObjectCommand({
-      Bucket: s3Bucket,
-      Key: key,
-      Body: body,
-      ContentType: 'application/json',
-      ServerSideEncryption: 'AES256',
-    }));
-    return key;
-  };
+    : createArtifactStorage({
+      bucket: requireEnv('S3_BUCKET'),
+      prefix: s3Prefix,
+      client: createS3ClientFromEnv(requireEnv),
+    });
 
   if (prewarmModels && !disableWorkers) {
     await ensureComputeModels();
@@ -1081,7 +783,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       namespace: parsed.data.namespace,
       prefix: s3Prefix,
     });
-    const hasArtifact = await (options.routeDeps?.artifactExists ?? objectExists)(artifactKey);
+    const hasArtifact = await (options.routeDeps?.artifactExists ?? storage.objectExists)(artifactKey);
     const opKey = buildPdfOperationKey(parsed.data);
     const index = await operationStateStore.getOpIndex?.(opKey);
     const operation = index?.opId ? await operationStateStore.getOpState(index.opId) : null;
@@ -1257,451 +959,28 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     return reply;
   });
 
-  const runWhisper = async (
-    payload: WhisperAlignJobRequest,
-    queueWaitMs: number,
-  ): Promise<WhisperAlignJobResult> => {
-    const parsed = alignSchema.parse(payload);
+  const jobHandlers = createJobHandlers({
+    storage,
+    whisperTimeoutMs,
+    pdfTimeoutMs,
+    pdfHardCapMs,
+  });
 
-    const s3FetchStartedAt = Date.now();
-    const audioBuffer = await withTimeout(
-      readObjectByKey(parsed.audioObjectKey),
-      whisperTimeoutMs,
-      'whisper s3 fetch',
-    );
-    const s3FetchMs = Date.now() - s3FetchStartedAt;
-
-    const computeStartedAt = Date.now();
-    const result = await withTimeout(
-      runWhisperAlignmentFromAudioBuffer({
-        audioBuffer,
-        text: parsed.text,
-        cacheKey: parsed.cacheKey,
-        lang: parsed.lang,
-      }),
-      whisperTimeoutMs,
-      'whisper alignment job',
-    );
-
-    const computeMs = Date.now() - computeStartedAt;
-    return {
-      ...result,
-      timing: {
-        queueWaitMs,
-        s3FetchMs,
-        computeMs,
-      },
-    };
-  };
-
-  const runLayout = async (
-    payload: PdfLayoutJobRequest,
-    queueWaitMs: number,
-    hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
-  ): Promise<PdfLayoutJobResult> => {
-    const parsed = layoutSchema.parse(payload);
-
-    const s3FetchStartedAt = Date.now();
-    const pdfBytes = await withTimeout(
-      readObjectByKey(parsed.documentObjectKey),
-      Math.max(pdfTimeoutMs, 1_000),
-      'pdf s3 fetch',
-    );
-    const s3FetchMs = Date.now() - s3FetchStartedAt;
-
-    let lastTotalPages = 0;
-    let lastPagesParsed = 0;
-    const computeStartedAt = Date.now();
-    const result = await withIdleTimeoutAndHardCap({
-      idleTimeoutMs: Math.max(pdfTimeoutMs, 1_000),
-      hardCapMs: pdfHardCapMs,
-      label: 'pdf layout job',
-      run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
-        documentId: parsed.documentId,
-        pdfBytes,
-        onPageStarted: async ({ pageNumber, totalPages }) => {
-          touchProgress();
-          lastTotalPages = totalPages;
-          if (!hooks?.onProgress) return;
-          await hooks.onProgress(buildInferProgressForPageStart({
-            pageNumber,
-            totalPages,
-          }));
-        },
-        onPageParsed: async ({ pageNumber, totalPages }) => {
-          touchProgress();
-          lastTotalPages = totalPages;
-          lastPagesParsed = pageNumber;
-          if (!hooks?.onProgress) return;
-          await hooks.onProgress(buildInferProgressForPageParsed({
-            pageNumber,
-            totalPages,
-          }));
-        },
-      }),
-    });
-
-    const computeMs = Date.now() - computeStartedAt;
-    if (hooks?.onProgress && lastTotalPages > 0) {
-      await hooks.onProgress({
-        totalPages: lastTotalPages,
-        pagesParsed: lastPagesParsed,
-        currentPage: lastPagesParsed || undefined,
-        phase: 'merge',
-      });
-    }
-    const parsedObjectKey = await persistParsedPdfWhileSourceExists({
-      sourceObjectKey: parsed.documentObjectKey,
-      sourceExists: objectExists,
-      putParsedObject: () => putParsedObject(parsed.documentId, parsed.namespace, result.parsed),
-      deleteParsedObject: deleteObjectByKey,
-    });
-    return {
-      parsedObjectKey,
-      timing: {
-        queueWaitMs,
-        s3FetchMs,
-        computeMs,
-      },
-    };
-  };
-
-  type ProcessMessageInput<TPayload, TResult> = {
-    msg: JsMsg;
-    codec: JsonCodec<QueuedJob<TPayload>>;
-    run: (
-      payload: TPayload,
-      queueWaitMs: number,
-      hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
-    ) => Promise<TResult>;
-    workerLabel: string;
-  };
-
-  type ProcessMessageContext<TPayload> = {
-    decoded: QueuedJob<TPayload>;
-    workerLabel: string;
-    startedAt: number;
-    queueWaitTiming?: { queueWaitMs: number };
-    latestProgress?: PdfLayoutProgress;
-  };
-
-  function extractTiming(result: unknown): WorkerJobTiming | undefined {
-    if (!result || typeof result !== 'object' || !('timing' in result)) return undefined;
-    return (result as { timing?: WorkerJobTiming }).timing;
-  }
-
-  async function markRunning<TPayload>(
-    context: ProcessMessageContext<TPayload>,
-    updatedAt: number,
-    options?: { includeStartedAt?: boolean },
-  ): Promise<void> {
-    if (context.latestProgress) {
-      await orchestrator.markProgress({
-        opId: context.decoded.opId,
-        progress: context.latestProgress,
-        updatedAt,
-        ...(context.queueWaitTiming ? { timing: context.queueWaitTiming } : {}),
-      });
-      return;
-    }
-
-    await orchestrator.markRunning({
-      opId: context.decoded.opId,
-      ...(options?.includeStartedAt === false ? {} : { startedAt: context.startedAt }),
-      updatedAt,
-      ...(context.queueWaitTiming ? { timing: context.queueWaitTiming } : {}),
-    });
-  }
-
-  async function markProgress<TPayload>(
-    context: ProcessMessageContext<TPayload>,
-    progress: PdfLayoutProgress,
-    updatedAt: number,
-  ): Promise<void> {
-    context.latestProgress = progress;
-    await markRunning(context, updatedAt);
-  }
-
-  async function markTerminal<TPayload, TResult>(input: {
-    context: ProcessMessageContext<TPayload>;
-    status: 'succeeded' | 'failed';
-    result?: TResult;
-    errorMessage?: string;
-    timing?: WorkerJobTiming;
-    updatedAt: number;
-  }): Promise<void> {
-    if (input.status === 'succeeded') {
-      await orchestrator.markSucceeded({
-        opId: input.context.decoded.opId,
-        result: input.result as WhisperAlignJobResult | PdfLayoutJobResult,
-        updatedAt: input.updatedAt,
-        ...(input.timing ? { timing: input.timing } : {}),
-      });
-      return;
-    }
-
-    await orchestrator.markFailed({
-      opId: input.context.decoded.opId,
-      error: { message: input.errorMessage ?? 'unknown worker failure' },
-      updatedAt: input.updatedAt,
-      ...(input.timing ? { timing: input.timing } : {}),
-    });
-  }
-
-  async function handleRetry<TPayload>(input: {
-    context: ProcessMessageContext<TPayload> | null;
-    msg: JsMsg;
-    errorMessage: string;
-  }): Promise<void> {
-    const deliveryCount = input.msg.info.deliveryCount;
-    const kind = input.context?.decoded.kind ?? 'pdf_layout';
-    const retryAction = decideRetryAction({
-      kind,
-      deliveryCount,
-      pdfAttempts,
-      whisperMaxDeliver: WHISPER_MAX_DELIVER,
-    });
-    const hasRetriesLeft = retryAction === 'nak_retry';
-    const maxAttempts = kind === 'whisper_align' ? WHISPER_MAX_DELIVER : pdfAttempts;
-
-    if (input.context) {
-      const now = Date.now();
-      const retryTiming = buildQueueWaitTiming(input.context.decoded.queuedAt, now);
-      const persistOpUpdate = hasRetriesLeft
-        ? (input.context.latestProgress
-          ? orchestrator.markProgress({
-            opId: input.context.decoded.opId,
-            progress: input.context.latestProgress,
-            updatedAt: now,
-            ...(retryTiming ? { timing: retryTiming } : {}),
-          })
-          : orchestrator.markRunning({
-            opId: input.context.decoded.opId,
-            updatedAt: now,
-            ...(retryTiming ? { timing: retryTiming } : {}),
-          }))
-        : markTerminal({
-          context: input.context,
-          status: 'failed',
-          errorMessage: input.errorMessage,
-          updatedAt: now,
-          ...(retryTiming ? { timing: retryTiming } : {}),
-        });
-
-      await persistOpUpdate.catch((stateError) => {
-        app.log.error({
-          worker: input.context?.workerLabel,
-          opId: input.context?.decoded.opId,
-          jobId: input.context?.decoded.jobId,
-          error: toErrorMessage(stateError),
-        }, 'failed to persist operation state');
-      });
-    }
-
-    if (hasRetriesLeft) {
-      input.msg.nak();
-      app.log.error({
-        worker: input.context?.workerLabel,
-        kind: input.context?.decoded.kind,
-        opId: input.context?.decoded.opId,
-        jobId: input.context?.decoded.jobId,
-        status: 'running',
-        error: input.errorMessage,
-        deliveryCount,
-        maxAttempts,
-        retryAction: 'nack_retry',
-      }, 'job.terminal');
-      return;
-    }
-
-    input.msg.term(input.errorMessage);
-    app.log.error({
-      worker: input.context?.workerLabel,
-      kind: input.context?.decoded.kind,
-      opId: input.context?.decoded.opId,
-      jobId: input.context?.decoded.jobId,
-      status: 'failed',
-      error: input.errorMessage,
-      deliveryCount,
-      maxAttempts,
-      retrySuppressed: kind === 'whisper_align' ? 'whisper_align' : undefined,
-      retryAction: 'term',
-    }, 'job.terminal');
-  }
-
-  async function processMessage<TPayload, TResult>(input: ProcessMessageInput<TPayload, TResult>): Promise<void> {
-    let context: ProcessMessageContext<TPayload> | null = null;
-    let heartbeat: NodeJS.Timeout | null = null;
-    try {
-      const decoded = input.codec.decode(input.msg.data);
-      const startedAt = Date.now();
-      context = {
-        decoded,
-        workerLabel: input.workerLabel,
-        startedAt,
-        queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
-      };
-
-      await markRunning(context, startedAt);
-      app.log.info({
-        worker: input.workerLabel,
-        kind: decoded.kind,
-        opId: decoded.opId,
-        jobId: decoded.jobId,
-        queueWaitMs: context.queueWaitTiming?.queueWaitMs ?? null,
-        deliveryCount: input.msg.info.deliveryCount,
-      }, 'job.started');
-
-      heartbeat = setInterval(() => {
-        const now = Date.now();
-        void markRunning(context!, now).catch((stateError) => {
-          app.log.error({
-            worker: input.workerLabel,
-            opId: context?.decoded.opId,
-            jobId: context?.decoded.jobId,
-            error: toErrorMessage(stateError),
-          }, 'failed to persist operation heartbeat state');
-        });
-      }, RUNNING_HEARTBEAT_MS);
-
-      const result = await input.run(decoded.payload, context.queueWaitTiming?.queueWaitMs ?? 0, {
-        onProgress: async (progress) => {
-          try {
-            input.msg.working();
-          } catch (ackError) {
-            app.log.warn({
-              worker: input.workerLabel,
-              kind: context?.decoded.kind,
-              opId: context?.decoded.opId,
-              jobId: context?.decoded.jobId,
-              error: toErrorMessage(ackError),
-            }, 'failed to extend JetStream ack wait on progress');
-          }
-          await markProgress(context!, progress, Date.now());
-        },
-      });
-      const resultTiming = extractTiming(result);
-      const now = Date.now();
-
-      await markTerminal({
-        context,
-        status: 'succeeded',
-        result,
-        timing: resultTiming,
-        updatedAt: now,
-      });
-
-      input.msg.ack();
-      const terminalDurationMs = safeDurationMs(context.startedAt, now);
-      const slowJobLogThresholdMs = SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND[decoded.kind];
-      if ((terminalDurationMs ?? 0) >= slowJobLogThresholdMs) {
-        app.log.info({
-          worker: input.workerLabel,
-          kind: decoded.kind,
-          opId: decoded.opId,
-          jobId: decoded.jobId,
-          durationMs: terminalDurationMs ?? null,
-          timing: resultTiming ?? null,
-        }, 'job.stage');
-      }
-      app.log.info({
-        worker: input.workerLabel,
-        kind: decoded.kind,
-        opId: decoded.opId,
-        jobId: decoded.jobId,
-        status: 'succeeded',
-        durationMs: terminalDurationMs ?? null,
-        resultRef: extractResultRef(decoded.kind, result),
-        timing: resultTiming ?? null,
-      }, 'job.terminal');
-    } catch (error) {
-      await handleRetry({
-        context,
-        msg: input.msg,
-        errorMessage: toErrorMessage(error),
-      });
-    } finally {
-      if (heartbeat) clearInterval(heartbeat);
-    }
-  }
-
-  async function createWorkerLoop<TPayload, TResult>(input: {
-    owner: NatsSession;
-    consumer: Consumer;
-    codec: JsonCodec<QueuedJob<TPayload>>;
-    run: (
-      payload: TPayload,
-      queueWaitMs: number,
-      hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
-    ) => Promise<TResult>;
-    workerLabel: string;
-  }): Promise<void> {
-    // Exit when the loop's connection is no longer the active session (idle
-    // disconnect, unexpected close, or replaced by a reconnect).
-    const detached = (): boolean => stopping || loopStopRequested || session !== input.owner;
-    while (!detached()) {
-      let msg: JsMsg | null = null;
-      try {
-        try {
-          // Bounded pull so the loop yields periodically and exits promptly when
-          // the session is torn down for idle (nc.close() rejects the pending pull).
-          msg = await input.consumer.next({ expires: PULL_EXPIRES_MS });
-        } catch (error) {
-          if (detached()) return;
-          app.log.error({ error: toErrorMessage(error), worker: input.workerLabel }, 'worker pull failed');
-          await sleep(LOOP_ERROR_BACKOFF_MS);
-          continue;
-        }
-
-        // An empty pull is not activity; let the idle window advance.
-        if (!msg) continue;
-        markActivity(`job_received:${input.workerLabel}`);
-        inFlightJobs += 1;
-        await jobGate.acquire();
-        if (detached()) {
-          return;
-        }
-        await processMessage({
-          msg,
-          codec: input.codec,
-          run: input.run,
-          workerLabel: input.workerLabel,
-        });
-      } finally {
-        if (msg) {
-          jobGate.release();
-          inFlightJobs = Math.max(0, inFlightJobs - 1);
-          markActivity(`job_completed:${input.workerLabel}`);
-        }
-      }
-    }
-  }
-
-  function startWorkerLoops(active: NatsSession): void {
-    if (disableWorkers) return;
-    // Always starts a fresh set bound to the new session. Any loops from a prior
-    // session self-terminate once they observe session !== their owner.
-    workerLoops = [];
-    loopStopRequested = false;
-    for (let i = 0; i < jobConcurrency; i += 1) {
-      workerLoops.push(createWorkerLoop({
-        owner: active,
-        consumer: active.whisperConsumer,
-        codec: whisperJobCodec,
-        run: runWhisper,
-        workerLabel: `whisper-${i + 1}`,
-      }));
-    }
-    for (let i = 0; i < jobConcurrency; i += 1) {
-      workerLoops.push(createWorkerLoop({
-        owner: active,
-        consumer: active.layoutConsumer,
-        codec: layoutJobCodec,
-        run: runLayout,
-        workerLabel: `layout-${i + 1}`,
-      }));
-    }
-  }
+  const workerLoops = createWorkerLoopController({
+    orchestrator,
+    handlers: jobHandlers,
+    logger: app.log,
+    jobConcurrency,
+    pdfAttempts,
+    whisperCodec: whisperJobCodec,
+    pdfCodec: layoutJobCodec,
+    isOwnerActive: (owner) => session === owner,
+    isStopping: () => stopping,
+    markActivity,
+    onInFlightJobsChanged: (delta) => {
+      inFlightJobs = Math.max(0, inFlightJobs + delta);
+    },
+  });
 
   const close = async (): Promise<void> => {
     if (stopping) return;
@@ -1715,7 +994,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       orphanSweepTimer = null;
     }
     await app.close();
-    await Promise.allSettled(workerLoops);
+    await workerLoops.stop();
     const current = session;
     session = null;
     if (current) {

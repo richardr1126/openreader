@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { OperationOrchestrator } from '../../src/compute/control-plane';
-import type { WorkerOperationRequest } from '../../src/compute/api-contracts';
+import { OperationOrchestrator } from '../../src/operations';
+import type { WorkerOperationRequest } from '../../src/api/contracts';
 import {
   JetStreamOperationEventStream,
   JetStreamOperationQueue,
@@ -11,7 +11,7 @@ import {
   opStateKvKey,
   type KvEntryLike,
   type KvStoreLike,
-} from '../../src/control-plane/jetstream';
+} from '../../src/infrastructure/nats-adapters';
 
 class FakeKvStore implements KvStoreLike {
   private readonly data = new Map<string, KvEntryLike>();

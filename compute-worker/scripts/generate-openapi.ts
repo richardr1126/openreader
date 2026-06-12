@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { createComputeWorkerApp } from '../src/runtime';
+import { createComputeWorkerApp } from '../src/api/app';
 
 process.env.COMPUTE_WORKER_TOKEN ||= 'openapi-generation-token';
 process.env.NATS_URL ||= 'nats://127.0.0.1:4222';

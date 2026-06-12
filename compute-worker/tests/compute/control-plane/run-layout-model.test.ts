@@ -70,13 +70,13 @@ vi.mock('@napi-rs/canvas', () => {
   };
 });
 
-vi.mock('../../../src/compute/pdf/model', () => ({
+vi.mock('../../../src/inference/pdf/model', () => ({
   ensureModel: vi.fn(async () => '/tmp/model.onnx'),
   MODEL_CONFIG_PATH: '/tmp/model-config.json',
   MODEL_PREPROCESSOR_PATH: '/tmp/model-preprocessor.json',
 }));
 
-vi.mock('../../../src/compute/config/cpu-budget', () => ({
+vi.mock('../../../src/inference/config/cpu-budget', () => ({
   getOnnxThreadsPerJob: vi.fn(() => 1),
 }));
 
@@ -107,7 +107,7 @@ describe('runLayoutModel', () => {
       },
     };
 
-    const { runLayoutModel } = await import('../../../src/compute/pdf/runLayoutModel');
+    const { runLayoutModel } = await import('../../../src/inference/pdf/runLayoutModel');
     const regions = await runLayoutModel({
       pageWidth: 100,
       pageHeight: 100,
@@ -154,7 +154,7 @@ describe('runLayoutModel', () => {
       },
     };
 
-    const { runLayoutModel } = await import('../../../src/compute/pdf/runLayoutModel');
+    const { runLayoutModel } = await import('../../../src/inference/pdf/runLayoutModel');
     const regions = await runLayoutModel({
       pageWidth: 100,
       pageHeight: 100,

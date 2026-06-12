@@ -4,8 +4,8 @@ import type {
   WorkerOperationEvent,
   WorkerOperationRequest,
   WorkerOperationState,
-} from '../../src/compute/api-contracts';
-import type { ComputeWorkerRouteDeps } from '../../src/runtime';
+} from '../../src/api/contracts';
+import type { ComputeWorkerRouteDeps } from '../../src/api/app';
 
 type ComputeResult = WhisperAlignJobResult | PdfLayoutJobResult;
 type ComputeState = WorkerOperationState<ComputeResult>;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createComputeWorkerApp } from '../../src/runtime';
+import { createComputeWorkerApp } from '../../src/api/app';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
 
 const AUTH = { authorization: 'Bearer test-token' };

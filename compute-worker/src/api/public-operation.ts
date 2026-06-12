@@ -1,4 +1,4 @@
-import type { WorkerOperationState } from '../compute/api-contracts';
+import type { WorkerOperationState } from '../api/contracts';
 import { pdfSubjectFromOperationKey } from './operation-keys';
 
 export type PublicOperationSubject =

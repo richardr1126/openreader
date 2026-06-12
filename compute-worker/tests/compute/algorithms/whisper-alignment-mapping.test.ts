@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   mapWordsToSentenceOffsets,
-} from '../../../src/compute';
+} from '../../../src/inference';
 
 describe('whisper alignment mapping', () => {
   test('maps words to sentence offsets with punctuation and repeated spaces', () => {
