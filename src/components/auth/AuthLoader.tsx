@@ -102,6 +102,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
   const [retryNonce, setRetryNonce] = useState(0);
   const attemptedForNullSessionRef = useRef(false);
   const clearingDisallowedAnonymousRef = useRef(false);
+  const hadSessionRef = useRef(false);
   const isAuthPage = pathname === '/signin' || pathname === '/signup';
 
   // If the auth base URL changes, re-run the bootstrap logic.
@@ -116,6 +117,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
       if (isPending) return;
 
       if (session) {
+        hadSessionRef.current = true;
         if (!allowAnonymousAuthSessions && session.user.isAnonymous) {
           if (clearingDisallowedAnonymousRef.current) return;
           clearingDisallowedAnonymousRef.current = true;
@@ -154,8 +156,24 @@ export function AuthLoader({ children }: { children: ReactNode }) {
       // preferences such as the changelog "last seen version" and re-showing the
       // changelog on every fresh login.
       if (isAuthPage) {
+        hadSessionRef.current = false;
         setIsAutoLoggingIn(false);
         setBootstrapError(null);
+        return;
+      }
+
+      // A session just ended in this tab (sign-out or expiry) and we're still
+      // on an app page while the redirect to /signin is in flight. The session
+      // hook delivers `null` before `router.push('/signin')` finishes its
+      // server roundtrip, so `isAuthPage` is still false here — bootstrapping
+      // now would mint a replacement anonymous user that onLinkAccount links
+      // into the next login, clobbering account-scoped preferences. Redirect
+      // instead of bootstrapping; the ref resets once an auth page mounts.
+      if (hadSessionRef.current) {
+        setIsAutoLoggingIn(false);
+        setBootstrapError(null);
+        setIsRedirecting(true);
+        router.replace('/signin');
         return;
       }
 
