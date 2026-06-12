@@ -222,7 +222,7 @@ function spawnMainCommand(command, env) {
 function resolveEmbeddedWorkerLaunch() {
   const candidateDirs = [
     path.join(process.cwd(), 'embedded-compute-worker'),
-    path.join(process.cwd(), 'compute', 'worker'),
+    path.join(process.cwd(), 'compute-worker'),
   ];
 
   for (const workerDir of candidateDirs) {
@@ -237,7 +237,7 @@ function resolveEmbeddedWorkerLaunch() {
 
   throw new Error(
     'Could not find an embedded compute worker runtime. '
-    + 'Include embedded-compute-worker/src/server.ts in the runtime image or keep compute/worker available locally.',
+    + 'Include embedded-compute-worker/src/server.ts in the runtime image or keep compute-worker available locally.',
   );
 }
 

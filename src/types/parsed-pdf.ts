@@ -1,12 +1,12 @@
-import type { ParsedPdfBlockKind } from '@openreader/compute-core/types';
-
 export {
   type ParsedPdfBlock,
   type ParsedPdfBlockFragment,
   type ParsedPdfBlockKind,
   type ParsedPdfDocument,
   type ParsedPdfPage,
-} from '@openreader/compute-core/types';
+} from '@/lib/server/compute-worker/protocol';
+
+import type { ParsedPdfBlockKind } from '@/lib/server/compute-worker/protocol';
 
 export const PARSED_PDF_BLOCK_KINDS: ParsedPdfBlockKind[] = [
   'abstract',
@@ -32,8 +32,11 @@ export const PARSED_PDF_BLOCK_KINDS: ParsedPdfBlockKind[] = [
   'vision_footnote',
 ];
 
-export type {
-  PdfParsePhase,
-  PdfParseProgress,
-  PdfParseStatus,
-} from '@openreader/compute-core/types';
+export type PdfParseStatus = 'pending' | 'running' | 'ready' | 'failed';
+export type PdfParsePhase = 'infer' | 'merge';
+export interface PdfParseProgress {
+  totalPages: number;
+  pagesParsed: number;
+  currentPage?: number;
+  phase: PdfParsePhase;
+}

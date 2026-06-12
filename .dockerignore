@@ -1,5 +1,6 @@
 .env
 .env.*
+**/*.creds
 README.md
 .next
 node_modules

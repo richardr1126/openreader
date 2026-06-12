@@ -1,0 +1,57 @@
+import type { components, paths } from './generated';
+
+export type ParsedPdfDocument = components['schemas']['ParsedPdfDocument'];
+export type ParsedPdfPage = ParsedPdfDocument['pages'][number];
+export type ParsedPdfBlock = ParsedPdfPage['blocks'][number];
+export type ParsedPdfBlockKind = ParsedPdfBlock['kind'];
+export type ParsedPdfBlockFragment = ParsedPdfBlock['fragments'][number];
+
+export type TTSSentenceAlignment = components['schemas']['TTSSentenceAlignment'];
+export type TTSSentenceWord = TTSSentenceAlignment['words'][number];
+
+export type PdfLayoutProgress = NonNullable<components['schemas']['PublicOperation']['progress']>;
+export type WorkerOperationStatus = components['schemas']['PublicOperation']['status'];
+export type WorkerOperationSubject = components['schemas']['PublicOperation']['subject'];
+
+export type WorkerOperation<Result = unknown> =
+  Omit<components['schemas']['PublicOperation'], 'result'>
+  & { result?: Result };
+
+export type WorkerOperationEvent<Result = unknown> = {
+  eventId: number;
+  snapshot: WorkerOperation<Result>;
+};
+
+export type WhisperAlignRequest =
+  paths['/v1/whisper-align/operations']['post']['requestBody']['content']['application/json'];
+export type PdfLayoutRequest =
+  paths['/v1/pdf-layout/operations']['post']['requestBody']['content']['application/json'];
+export type PdfLayoutResolveRequest =
+  paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
+
+export type WhisperAlignResult = {
+  alignments: TTSSentenceAlignment[];
+  timing?: components['schemas']['PublicOperation']['timing'];
+};
+
+export type PdfLayoutResult = {
+  parsedObjectKey: string;
+  timing?: components['schemas']['PublicOperation']['timing'];
+};
+
+export type PdfLayoutResolution = {
+  artifact: { objectKey: string } | null;
+  operation: WorkerOperation<PdfLayoutResult> | null;
+};
+
+export function isWorkerOperation(value: unknown): value is WorkerOperation {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.opId === 'string'
+    && !!record.subject
+    && typeof record.subject === 'object'
+    && typeof (record.subject as Record<string, unknown>).kind === 'string'
+    && typeof record.status === 'string'
+    && typeof record.queuedAt === 'number'
+    && typeof record.updatedAt === 'number';
+}

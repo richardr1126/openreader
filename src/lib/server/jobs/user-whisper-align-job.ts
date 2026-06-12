@@ -1,14 +1,13 @@
-import { getCompute } from '@/lib/server/compute';
-import type { WhisperAlignJobRequest } from '@openreader/compute-core/api-contracts';
+import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
+import type { WhisperAlignRequest } from '@/lib/server/compute-worker/protocol';
 import type { TTSSentenceAlignment } from '@/types/tts';
 
-export type UserWhisperAlignJobRequest = WhisperAlignJobRequest & {
+export type UserWhisperAlignJobRequest = WhisperAlignRequest & {
   sentenceIndex?: number;
 };
 
 export async function userWhisperAlignJob(input: UserWhisperAlignJobRequest): Promise<TTSSentenceAlignment | null> {
-  const compute = await getCompute();
-  const { alignments } = await compute.alignWords({
+  const { alignments } = await getComputeWorkerClient().alignWords({
     audioObjectKey: input.audioObjectKey,
     text: input.text,
     cacheKey: input.cacheKey,

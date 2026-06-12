@@ -163,17 +163,17 @@ If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` i
 <summary><strong>External compute worker dev stack (optional)</strong></summary>
 
 Use this only when you intentionally run compute-worker as a separate service.
-Default local flow does not need `compute/worker/.env`; embedded worker startup reads root `.env`.
+Default local flow does not need `compute-worker/.env`; embedded worker startup reads root `.env`.
 Full worker deployment details are in [Compute Worker (NATS JetStream)](./compute-worker).
 
 Start only NATS + compute-worker via compose watch:
 
 ```bash
-docker compose --env-file compute/worker/.env -f compute/worker/docker-compose.yml up --watch
-# or: pnpm compute:dev:watch
+docker compose --env-file compute-worker/.env -f compute-worker/docker-compose.yml up --watch
+# or: pnpm compute:dev:compose
 ```
 
-`compute/worker/.env.example` contains a starter config for standalone worker service deployments.
+`compute-worker/.env.example` contains a starter config for standalone worker service deployments.
 
 Run the main app separately on the host:
 
@@ -190,9 +190,9 @@ COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
 
 Ownership in external worker mode:
 - root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale/retry overrides such as `COMPUTE_PDF_JOB_ATTEMPTS`
-- `compute/worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
+- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
 
-For embedded worker startup (`COMPUTE_WORKER_URL` unset), worker tuning values such as `COMPUTE_PDF_JOB_ATTEMPTS` must be set in the root `.env` because `compute/worker/.env*` is ignored in that mode.
+For embedded worker startup (`COMPUTE_WORKER_URL` unset), worker tuning values such as `COMPUTE_PDF_JOB_ATTEMPTS` must be set in the root `.env` because `compute-worker/.env*` is ignored in that mode.
 
 Worker mode requires worker-reachable shared object storage (S3-compatible endpoint).
 For external worker mode, object storage must be shared/reachable by both app and worker services.
@@ -240,7 +240,7 @@ COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
 
 Use the same ownership split:
 - root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale overrides
-- `compute/worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
+- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
 
 Use one of these `.env` mode templates:
 

@@ -1,10 +1,11 @@
 import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 export type {
-  TTSAudioBuffer,
-  TTSAudioBytes,
   TTSSentenceAlignment,
   TTSSentenceWord,
-} from '@openreader/compute-core/types';
+} from '@/lib/server/compute-worker/protocol';
+
+export type TTSAudioBuffer = ArrayBuffer;
+export type TTSAudioBytes = number[];
 
 export type TTSLocation = string | number;
 

@@ -34,16 +34,14 @@ const UI_ARCHITECTURE_FILES = [
   "src/components/player/**/*.{ts,tsx}",
   "src/components/reader/**/*.{ts,tsx}",
 ];
-const COMPUTE_CORE_IMPORT_PATTERNS = [
+const COMPUTE_WORKER_IMPORT_PATTERNS = [
   {
     group: [
-      "@openreader/compute-core/*",
-      "!@openreader/compute-core/local-runtime",
-      "!@openreader/compute-core/types",
-      "!@openreader/compute-core/api-contracts",
+      "@openreader/compute-worker",
+      "@openreader/compute-worker/*",
     ],
     message:
-      "Use '@openreader/compute-core' root imports for light APIs. Allowed subpaths are '@openreader/compute-core/local-runtime', '@openreader/compute-core/types', and '@openreader/compute-core/api-contracts'.",
+      "The app must communicate with compute-worker through the app-owned HTTP client and generated protocol types.",
   },
 ];
 const UI_ARCHITECTURE_IMPORT_PATHS = [
@@ -124,7 +122,7 @@ const eslintConfig = [
       "no-restricted-imports": [
         "error",
         {
-          patterns: COMPUTE_CORE_IMPORT_PATTERNS,
+          patterns: COMPUTE_WORKER_IMPORT_PATTERNS,
         },
       ],
     },
@@ -142,7 +140,7 @@ const eslintConfig = [
         "error",
         {
           paths: UI_ARCHITECTURE_IMPORT_PATHS,
-          patterns: COMPUTE_CORE_IMPORT_PATTERNS,
+          patterns: COMPUTE_WORKER_IMPORT_PATTERNS,
         },
       ],
     },

@@ -1,0 +1,44 @@
+services:
+  nats:
+    image: nats:2.14-alpine
+    container_name: openreader-compute-nats
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+
+  compute-worker:
+    build:
+      context: ..
+      dockerfile: compute-worker/Dockerfile
+    container_name: openreader-compute-worker
+    depends_on:
+      - nats
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      COMPUTE_WORKER_HOST: ${COMPUTE_WORKER_HOST:-0.0.0.0}
+      PORT: ${PORT:-8081}
+      COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      S3_PREFIX: ${S3_PREFIX:-openreader}
+      COMPUTE_PREWARM_MODELS: ${COMPUTE_PREWARM_MODELS:-false}
+    ports:
+      - "8081:8081"
+    develop:
+      watch:
+        - action: sync+restart
+          path: .
+          target: /workspace
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ../pnpm-lock.yaml
+        - action: rebuild
+          path: ../pnpm-workspace.yaml
+
+volumes:
+  nats-data:

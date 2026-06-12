@@ -12,7 +12,7 @@ const hoisted = vi.hoisted(() => ({
   requireAuthContext: vi.fn(),
   fetchPdfParseOperation: vi.fn(),
   isPdfParseOperationForDocument: vi.fn(),
-  getWorkerClientConfigFromEnv: vi.fn(),
+  openOperationEvents: vi.fn(),
 }));
 
 vi.mock('@/db', () => ({
@@ -30,8 +30,10 @@ vi.mock('@/lib/server/pdf-parse/operation', () => ({
   isPdfParseOperationForDocument: hoisted.isPdfParseOperationForDocument,
 }));
 
-vi.mock('@/lib/server/compute/worker', () => ({
-  getWorkerClientConfigFromEnv: hoisted.getWorkerClientConfigFromEnv,
+vi.mock('@/lib/server/compute-worker/client', () => ({
+  getComputeWorkerClient: () => ({
+    openOperationEvents: hoisted.openOperationEvents,
+  }),
 }));
 
 vi.mock('@/lib/server/documents/blobstore', () => ({
@@ -84,12 +86,8 @@ describe('GET /api/documents/[id]/parsed/events worker event proxy', () => {
     });
     hoisted.isPdfParseOperationForDocument.mockReset();
     hoisted.isPdfParseOperationForDocument.mockReturnValue(true);
-    hoisted.getWorkerClientConfigFromEnv.mockReset();
-    hoisted.getWorkerClientConfigFromEnv.mockReturnValue({
-      baseUrl: 'http://worker.local',
-      token: 'worker-token',
-    });
-    global.fetch = vi.fn(async () => new Response(
+    hoisted.openOperationEvents.mockReset();
+    hoisted.openOperationEvents.mockResolvedValue(new Response(
       'event: snapshot\ndata: {"eventId":1,"snapshot":{"opId":"op-1","status":"running"}}\n\n',
       {
         status: 200,
@@ -97,7 +95,7 @@ describe('GET /api/documents/[id]/parsed/events worker event proxy', () => {
           'Content-Type': 'text/event-stream; charset=utf-8',
         },
       },
-    )) as typeof fetch;
+    ));
   });
 
   test('requires an opId', async () => {
@@ -123,10 +121,9 @@ describe('GET /api/documents/[id]/parsed/events worker event proxy', () => {
     expect(text).toContain('"opId":"op-1"');
     expect(hoisted.fetchPdfParseOperation).toHaveBeenCalledWith('op-1');
     expect(hoisted.isPdfParseOperationForDocument).toHaveBeenCalled();
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://worker.local/ops/op-1/events',
-      expect.anything(),
-    );
+    expect(hoisted.openOperationEvents).toHaveBeenCalledWith('op-1', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }));
   });
 
   test('denies proxying when the op does not belong to the document', async () => {
@@ -140,7 +137,7 @@ describe('GET /api/documents/[id]/parsed/events worker event proxy', () => {
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({ error: 'Operation not found' });
     expect(hoisted.fetchPdfParseOperation).toHaveBeenCalledWith('op-1');
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(hoisted.openOperationEvents).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

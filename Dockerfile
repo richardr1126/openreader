@@ -20,8 +20,7 @@ WORKDIR /app
 
 # Copy workspace manifests needed for dependency installation
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY compute/core/package.json ./compute/core/package.json
-COPY compute/worker/package.json ./compute/worker/package.json
+COPY compute-worker/package.json ./compute-worker/package.json
 COPY docker/entrypoint-migration-tools/package.json ./docker/entrypoint-migration-tools/package.json
 
 # Install dependencies
@@ -88,7 +87,7 @@ COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
 # Include static model notices for runtime-downloaded assets.
-COPY --from=app-builder /app/compute/core/src/pdf/assets/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
+COPY --from=app-builder /app/compute-worker/src/compute/pdf/assets/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
 
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
@@ -98,7 +97,7 @@ COPY --from=nats-builder /tmp/nats-server /usr/local/bin/nats-server
 RUN chmod +x /usr/local/bin/nats-server
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
-COPY --from=app-builder /app/compute/core/src/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+COPY --from=app-builder /app/compute-worker/src/compute/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
 
 # Match the app's historical container port now that standalone server.js
 # is started directly instead of `next start -p 3003`.

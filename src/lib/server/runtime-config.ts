@@ -6,7 +6,7 @@ import {
   type RuntimeConfigKey,
   type RuntimeConfigSource,
 } from '@/lib/server/admin/settings';
-import { isComputeAvailable } from '@/lib/server/compute';
+import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 
 export type ResolvedRuntimeConfig = RuntimeConfig & {
   computeAvailable: boolean;
@@ -29,7 +29,7 @@ export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig>
   const values = await getRuntimeConfig();
   return {
     ...values,
-    computeAvailable: isComputeAvailable(),
+    computeAvailable: isComputeWorkerAvailable(),
   };
 }
 

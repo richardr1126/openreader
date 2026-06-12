@@ -1,65 +1,66 @@
-import { buildPdfOpKey } from '@/lib/server/compute/worker';
-import { createOrReusePdfWorkerOperation } from '@/lib/server/compute/worker-op-create';
-import {
-  fetchWorkerOperationState,
-  fetchWorkerOperationStateByKey,
-} from '@/lib/server/compute/worker-op-state';
+import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import { documentKey } from '@/lib/server/documents/blobstore';
-import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
+import type {
+  PdfLayoutResolution,
+  PdfLayoutResult,
+  WorkerOperation,
+} from '@/lib/server/compute-worker/protocol';
 
 function currentPdfOperationInput(documentId: string, namespace: string | null, forceToken?: string): {
   documentId: string;
   namespace: string | null;
   documentObjectKey: string;
-  forceToken?: string;
+  replaceToken?: string;
 } {
   return {
     documentId,
     namespace,
     documentObjectKey: documentKey(documentId, namespace),
-    ...(forceToken ? { forceToken } : {}),
+    ...(forceToken ? { replaceToken: forceToken } : {}),
   };
 }
 
-export function buildCurrentPdfParseOpKeyPrefix(input: {
+export async function resolveCurrentPdfParse(input: {
   documentId: string;
   namespace: string | null;
-}): string {
-  return buildPdfOpKey(currentPdfOperationInput(input.documentId, input.namespace));
+}): Promise<PdfLayoutResolution> {
+  return getComputeWorkerClient().resolvePdfLayout(currentPdfOperationInput(
+    input.documentId,
+    input.namespace,
+  ));
 }
 
 export async function lookupCurrentPdfParseOperation(input: {
   documentId: string;
   namespace: string | null;
-}): Promise<WorkerOperationState<PdfLayoutJobResult> | null> {
-  return fetchWorkerOperationStateByKey<PdfLayoutJobResult>(
-    buildCurrentPdfParseOpKeyPrefix(input),
-  );
+}): Promise<WorkerOperation<PdfLayoutResult> | null> {
+  return (await resolveCurrentPdfParse(input)).operation;
 }
 
 export async function createOrReuseCurrentPdfParseOperation(input: {
   documentId: string;
   namespace: string | null;
   forceToken?: string;
-}): Promise<WorkerOperationState<PdfLayoutJobResult>> {
-  return createOrReusePdfWorkerOperation(currentPdfOperationInput(
+}): Promise<WorkerOperation<PdfLayoutResult>> {
+  return getComputeWorkerClient().createPdfLayoutOperation(currentPdfOperationInput(
     input.documentId,
     input.namespace,
     input.forceToken,
   ));
 }
 
-export async function fetchPdfParseOperation(opId: string): Promise<WorkerOperationState<PdfLayoutJobResult> | null> {
-  return fetchWorkerOperationState<PdfLayoutJobResult>(opId);
+export async function fetchPdfParseOperation(opId: string): Promise<WorkerOperation<PdfLayoutResult> | null> {
+  return getComputeWorkerClient().getOperation<PdfLayoutResult>(opId);
 }
 
 export function isPdfParseOperationForDocument(
-  state: WorkerOperationState<PdfLayoutJobResult>,
+  state: WorkerOperation<PdfLayoutResult>,
   input: {
     documentId: string;
     namespace: string | null;
   },
 ): boolean {
-  if (state.kind !== 'pdf_layout') return false;
-  return state.opKey.startsWith(buildCurrentPdfParseOpKeyPrefix(input));
+  return state.subject.kind === 'pdf_layout'
+    && state.subject.documentId === input.documentId
+    && state.subject.namespace === input.namespace;
 }

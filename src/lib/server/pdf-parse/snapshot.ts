@@ -1,8 +1,8 @@
-import type { PdfLayoutJobResult, WorkerOperationState } from '@openreader/compute-core/api-contracts';
+import type { PdfLayoutResult, WorkerOperation } from '@/lib/server/compute-worker/protocol';
 import type { PdfParseStatus } from '@/types/parsed-pdf';
 import type { PdfParseSnapshot } from '@/lib/server/pdf-parse/types';
 
-function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']): PdfParseStatus {
+function mapWorkerStatusToParseStatus(status: WorkerOperation['status']): PdfParseStatus {
   switch (status) {
     case 'queued':
       return 'pending';
@@ -19,7 +19,7 @@ function mapWorkerStatusToParseStatus(status: WorkerOperationState['status']): P
 }
 
 export function parsedObjectKeyFromWorkerState(
-  state: WorkerOperationState<PdfLayoutJobResult>,
+  state: WorkerOperation<PdfLayoutResult>,
 ): string | null {
   const result = state.result;
   if (!result || typeof result !== 'object' || !('parsedObjectKey' in result)) return null;
@@ -30,7 +30,7 @@ export function parsedObjectKeyFromWorkerState(
 }
 
 export function pdfParseSnapshotFromWorkerState(
-  state: WorkerOperationState<PdfLayoutJobResult>,
+  state: WorkerOperation<PdfLayoutResult>,
 ): PdfParseSnapshot {
   const parseStatus = mapWorkerStatusToParseStatus(state.status);
   return {

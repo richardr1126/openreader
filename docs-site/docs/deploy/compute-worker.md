@@ -11,7 +11,8 @@ Use this guide when OpenReader runs compute as a separate service. For the defau
 - Runs PDF layout parsing jobs
 - Stores durable job state in NATS JetStream and NATS KV
 
-The app server submits work to `POST /ops` and listens for updates on `GET /ops/:opId/events`.
+The app server submits resource-specific operations under `/v1` and listens for updates on
+`GET /v1/operations/:opId/events`.
 
 ## When to use it
 
@@ -37,7 +38,7 @@ S3_SECRET_ACCESS_KEY=...
 ```
 
 :::important
-`compute/worker/.env*` is only for standalone worker deployments.
+`compute-worker/.env*` is only for standalone worker deployments.
 
 - Embedded/local mode: configure the root `.env` only.
 - External worker mode: set `COMPUTE_WORKER_URL` and `COMPUTE_WORKER_TOKEN` on the app, and worker runtime values on the worker service.

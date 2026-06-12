@@ -8,7 +8,6 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { PDF_PARSER_VERSION, encodeParserVersion } from '@openreader/compute-core/api-contracts';
 import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
@@ -102,24 +101,6 @@ export function documentKey(id: string, namespace: string | null): string {
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
   return `${cfg.prefix}/documents_v1/${nsSegment}${id}`;
-}
-
-export function documentParsedKey(id: string, namespace: string | null): string {
-  return documentParsedKeyForVersion(id, namespace, PDF_PARSER_VERSION);
-}
-
-export function documentParsedKeyForVersion(
-  id: string,
-  namespace: string | null,
-  parserVersion: string,
-): string {
-  if (!isValidDocumentId(id)) {
-    throw new Error(`Invalid document id: ${id}`);
-  }
-  const cfg = getS3Config();
-  const ns = sanitizeNamespace(namespace);
-  const nsSegment = ns ? `ns/${ns}/` : '';
-  return `${cfg.prefix}/documents_v1/parsed_v2/${nsSegment}${id}/${encodeParserVersion(parserVersion)}.json`;
 }
 
 export function tempDocumentUploadPrefix(userId: string, namespace: string | null): string {
@@ -342,19 +323,6 @@ export async function getTempDocumentFinalizeReceipt<T>(
   }
 }
 
-export async function getParsedDocumentBlob(id: string, namespace: string | null): Promise<Buffer> {
-  const cfg = getS3Config();
-  const client = getS3ProxyClient();
-  const key = documentParsedKey(id, namespace);
-  const res = await client.send(
-    new GetObjectCommand({
-      Bucket: cfg.bucket,
-      Key: key,
-    }),
-  );
-  return bodyToBuffer(res.Body);
-}
-
 export async function getParsedDocumentBlobByKey(key: string): Promise<Buffer> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();
@@ -367,31 +335,6 @@ export async function getParsedDocumentBlobByKey(key: string): Promise<Buffer> {
     }),
   );
   return bodyToBuffer(res.Body);
-}
-
-export async function putParsedDocumentBlob(id: string, body: Buffer, namespace: string | null): Promise<string> {
-  return putParsedDocumentBlobForVersion(id, body, namespace, PDF_PARSER_VERSION);
-}
-
-export async function putParsedDocumentBlobForVersion(
-  id: string,
-  body: Buffer,
-  namespace: string | null,
-  parserVersion: string,
-): Promise<string> {
-  const cfg = getS3Config();
-  const client = getS3ProxyClient();
-  const key = documentParsedKeyForVersion(id, namespace, parserVersion);
-  await client.send(
-    new PutObjectCommand({
-      Bucket: cfg.bucket,
-      Key: key,
-      Body: body,
-      ContentType: 'application/json',
-      ServerSideEncryption: 'AES256',
-    }),
-  );
-  return key;
 }
 
 export async function putTempDocumentFinalizeReceipt(
@@ -502,7 +445,6 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   const cfg = getS3Config();
   const client = getS3ProxyClient();
   const key = documentKey(id, namespace);
-  const parsedKey = documentParsedKey(id, namespace);
   const legacyParsedKey = legacyDocumentParsedKey(id, namespace);
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
@@ -510,7 +452,6 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
 
   await deleteDocumentPrefix(parsedPrefix);
   await deleteDocumentPrefix(`${key}/`);
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: parsedKey }));
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey }));
   // Delete the source after the initial derived-artifact cleanup, then sweep
   // parsed output once more to catch a worker that finished during deletion.

@@ -1,6 +1,6 @@
 packages:
   - .
-  - compute/*
+  - compute-worker
   - docker/*
 
 allowBuilds:
