@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
-import { db } from '@/db';
-import { userDocumentProgress } from '@/db/schema';
+import { db } from '@openreader/database';
+import { userDocumentProgress } from '@openreader/database/schema';
 import type { ReaderType } from '@/types/user-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';

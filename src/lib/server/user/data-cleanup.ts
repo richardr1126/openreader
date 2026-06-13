@@ -10,10 +10,10 @@
  * and failures block the deletion.
  */
 
-import { db } from '@/db';
-import { documents, audiobooks, userJobEvents, userTtsChars } from '@/db/schema';
-import * as authSchemaSqlite from '@/db/schema_auth_sqlite';
-import * as authSchemaPostgres from '@/db/schema_auth_postgres';
+import { db } from '@openreader/database';
+import { documents, audiobooks, userJobEvents, userTtsChars } from '@openreader/database/schema';
+import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
+import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 import { eq } from 'drizzle-orm';
 import { getS3Config, isS3Configured } from '@/lib/server/storage/s3';
 import {

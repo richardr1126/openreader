@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
+import { db } from '@openreader/database';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
 
 export type ResolvedSegmentAudio = {
   documentId: string;

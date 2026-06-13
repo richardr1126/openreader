@@ -1,5 +1,5 @@
-import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents } from '@openreader/database/schema';
 import { and, eq } from 'drizzle-orm';
 import {
   enqueueDocumentPreview,

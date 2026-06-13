@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
+import { db } from '@openreader/database';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
 import {
   deleteTtsSegmentAudioObjects,
   deleteTtsSegmentPrefix,

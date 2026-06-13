@@ -7,6 +7,18 @@ import TabItem from '@theme/TabItem';
 
 This page covers migration behavior for both database schema and storage data in OpenReader.
 
+## Runtime ownership
+
+- `@openreader/database` owns database clients, schemas, SQL migration files, and programmatic
+  migration execution for SQLite and PostgreSQL.
+- `@openreader/bootstrap` owns startup orchestration, storage migration, and optional embedded
+  SeaweedFS, NATS, and compute-worker processes.
+- The Next.js app imports `@openreader/database` directly, but does not orchestrate migrations or
+  child processes.
+
+Docker deploys bootstrap as an isolated runtime bundle under `/opt/openreader/bootstrap`; it does
+not merge migration dependencies into the standalone Next.js app under `/app`.
+
 ## Startup migration behavior
 
 By default, the shared entrypoint runs migrations automatically before app startup in:
@@ -53,11 +65,6 @@ In most cases, you do not need manual migration commands because startup runs mi
 - Postgres when `POSTGRES_URL` is set
 - SQLite when `POSTGRES_URL` is unset
 
-You can always override the target explicitly with `--config`.
-
-<Tabs groupId="apply-migration-commands">
-  <TabItem value="project-scripts" label="Project Scripts" default>
-
 ```bash
 # Run pending migrations for one target:
 # - Postgres if POSTGRES_URL is set
@@ -71,26 +78,15 @@ pnpm migrate-fs
 pnpm migrate-fs:dry-run
 ```
 
-  </TabItem>
-  <TabItem value="drizzle-direct" label="Manual Drizzle Cmd">
-
-```bash
-# Migrate SQLite
-pnpm exec drizzle-kit migrate --config drizzle.config.sqlite.ts
-
-# Migrate Postgres
-pnpm exec drizzle-kit migrate --config drizzle.config.pg.ts
-```
-
-  </TabItem>
-</Tabs>
+`pnpm migrate` uses the programmatic Drizzle migrator from `@openreader/database`. Drizzle Kit is
+not a production or startup dependency; it is used only to generate new migration files.
 
 ## Generate migrations
 
 `pnpm generate` is a two-phase script for contributors and schema changes:
 
 1. **Better Auth schema generation** — runs the Better Auth CLI twice (once for SQLite, once for Postgres) to produce auto-generated Drizzle schema files for auth tables (`user`, `session`, `account`, `verification`).
-2. **Drizzle migration generation** — runs `drizzle-kit generate` for both `drizzle.config.sqlite.ts` and `drizzle.config.pg.ts`, producing SQL migration files from all schema files (app + auth).
+2. **Drizzle migration generation** — runs `drizzle-kit generate` for both configs in `packages/database`, producing SQL migration files from all schema files (app + auth).
 
 :::note
 Most users do not need to run `pnpm generate`. Use it when contributing or when you have changed Drizzle schema files and need new migration files.
@@ -100,22 +96,23 @@ Most users do not need to run `pnpm generate`. Use it when contributing or when 
 
 Auth tables are owned by Better Auth. Their Drizzle schema definitions are auto-generated and should **not** be hand-edited:
 
-- `src/db/schema_auth_sqlite.ts`
-- `src/db/schema_auth_postgres.ts`
+- `packages/database/src/schema_auth_sqlite.ts`
+- `packages/database/src/schema_auth_postgres.ts`
 
 App-specific tables are manually maintained in the standard Drizzle schema files:
 
-- `src/db/schema_sqlite.ts`
-- `src/db/schema_postgres.ts`
+- `packages/database/src/schema_sqlite.ts`
+- `packages/database/src/schema_postgres.ts`
 
-Both sets of schema files are included in the Drizzle configs, so `drizzle-kit generate` and `drizzle-kit migrate` handle all tables together.
+Both sets of schema files are included in the Drizzle generation configs. Runtime migration
+execution is owned by `@openreader/database`.
 
 When app schema changes (for example `tts_segments`), keep these in sync:
 
-- `src/db/schema_sqlite.ts`
-- `src/db/schema_postgres.ts`
-- `drizzle/sqlite/*.sql` + `drizzle/sqlite/meta/_journal.json`
-- `drizzle/postgres/*.sql` + `drizzle/postgres/meta/_journal.json`
+- `packages/database/src/schema_sqlite.ts`
+- `packages/database/src/schema_postgres.ts`
+- `packages/database/migrations/sqlite/*.sql` + `packages/database/migrations/sqlite/meta/_journal.json`
+- `packages/database/migrations/postgres/*.sql` + `packages/database/migrations/postgres/meta/_journal.json`
 
 <Tabs groupId="generate-migration-commands">
   <TabItem value="project-script" label="Project Script" default>
@@ -130,10 +127,10 @@ pnpm generate
 
 ```bash
 # Generate SQLite migrations only (skips Better Auth CLI)
-pnpm exec drizzle-kit generate --config drizzle.config.sqlite.ts
+pnpm exec drizzle-kit generate --config packages/database/drizzle.config.sqlite.ts
 
 # Generate Postgres migrations only (skips Better Auth CLI)
-pnpm exec drizzle-kit generate --config drizzle.config.pg.ts
+pnpm exec drizzle-kit generate --config packages/database/drizzle.config.pg.ts
 ```
 
 :::warning

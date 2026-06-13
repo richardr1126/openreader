@@ -1,6 +1,6 @@
 import { asc, desc, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { adminProviders, adminSettings } from '@/db/schema';
+import { db } from '@openreader/database';
+import { adminProviders, adminSettings } from '@openreader/database/schema';
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 

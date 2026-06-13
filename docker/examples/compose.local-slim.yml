@@ -1,0 +1,52 @@
+name: openreader-local-slim-build
+
+services:
+  openreader:
+    image: openreader:local
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    depends_on:
+      kokoro-tts:
+        condition: service_started
+    environment:
+      BASE_URL: ${BASE_URL:-http://localhost:3003}
+      AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      RUNTIME_SEED_JSON: |-
+        {
+          "version": 1,
+          "runtimeConfig": {
+            "defaultTtsProvider": "kokoro"
+          },
+          "providers": [
+            {
+              "slug": "kokoro",
+              "displayName": "Kokoro",
+              "providerType": "custom-openai",
+              "baseUrl": "http://kokoro-tts:8880/v1",
+              "defaultModel": "kokoro",
+              "enabled": true
+            }
+          ]
+        }
+    ports:
+      - "3003:3003"
+      - "8333:8333"
+    volumes:
+      - openreader-docstore:/app/docstore
+
+  kokoro-tts:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.4
+    environment:
+      ONNX_NUM_THREADS: 8
+      ONNX_INTER_OP_THREADS: 4
+      ONNX_EXECUTION_MODE: parallel
+      ONNX_OPTIMIZATION_LEVEL: all
+      ONNX_MEMORY_PATTERN: "true"
+      ONNX_ARENA_EXTEND_STRATEGY: kNextPowerOfTwo
+      API_LOG_LEVEL: DEBUG
+    ports:
+      - "8880:8880"
+
+volumes:
+  openreader-docstore:

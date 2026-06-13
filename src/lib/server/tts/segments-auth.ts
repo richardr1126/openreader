@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
-import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import type { ReaderType } from '@/types/user-state';

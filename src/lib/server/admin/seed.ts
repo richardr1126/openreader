@@ -1,5 +1,5 @@
-import { db } from '@/db';
-import { adminProviders, adminSettings } from '@/db/schema';
+import { db } from '@openreader/database';
+import { adminProviders, adminSettings } from '@openreader/database/schema';
 import { encryptSecret, apiKeyLast4 } from '@/lib/server/crypto/secrets';
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';

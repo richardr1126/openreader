@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { audiobooks, audiobookChapters } from '@/db/schema';
+import { db } from '@openreader/database';
+import { audiobooks, audiobookChapters } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { getAudiobookObjectBuffer, isMissingBlobError, listAudiobookObjects } from '@/lib/server/audiobooks/blobstore';
 import { decodeChapterFileName } from '@/lib/server/audiobooks/chapters';

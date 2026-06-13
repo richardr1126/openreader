@@ -1,4 +1,4 @@
-import { db } from '@/db';
+import { db } from '@openreader/database';
 import {
   documents,
   audiobooks,
@@ -8,7 +8,7 @@ import {
   ttsSegmentVariants,
   userPreferences,
   userDocumentProgress,
-} from '@/db/schema';
+} from '@openreader/database/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { UNCLAIMED_USER_ID } from '../storage/docstore-legacy';
 import { cleanupClaimedLegacyFsSources } from './legacy-fs-claim-cleanup';

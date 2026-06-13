@@ -1,6 +1,6 @@
 import { inArray } from 'drizzle-orm';
-import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents } from '@openreader/database/schema';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { deleteDocumentBlob, listDocumentSourceBlobs } from '@/lib/server/documents/blobstore';
 import { deleteDocumentPreviewArtifacts } from '@/lib/server/documents/previews-blobstore';

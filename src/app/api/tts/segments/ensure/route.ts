@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
-import { db } from '@/db';
-import { documents, ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents, ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
 import { isS3Configured, getS3Config } from '@/lib/server/storage/s3';
 import { generateTTSBuffer } from '@/lib/server/tts/generate';
 import {

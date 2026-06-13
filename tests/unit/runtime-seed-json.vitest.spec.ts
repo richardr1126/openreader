@@ -1,8 +1,8 @@
 import { and, eq, inArray, not } from 'drizzle-orm';
 import { describe, expect, test } from 'vitest';
 
-import { db } from '../../src/db';
-import { adminProviders, adminSettings } from '../../src/db/schema';
+import { db } from '@openreader/database';
+import { adminProviders, adminSettings } from '@openreader/database/schema';
 import { RUNTIME_KEYS, seedRuntimeConfigFromValues } from '../../src/lib/server/admin/settings';
 import { __seedInternals } from '../../src/lib/server/admin/seed';
 

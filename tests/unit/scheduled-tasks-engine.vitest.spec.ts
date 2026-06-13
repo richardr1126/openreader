@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
-import * as sqliteSchema from '../../src/db/schema_sqlite';
+import * as sqliteSchema from '@openreader/database/schema-sqlite';
 
 // Back the engine with a real in-memory SQLite so the CAS claim, due-detection,
 // and nextRunAt arithmetic are exercised against real SQL rather than mocks.
 const holder = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle> }));
-vi.mock('@/db', () => ({
+vi.mock('@openreader/database', () => ({
   get db() {
     return holder.db;
   },

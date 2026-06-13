@@ -1,6 +1,6 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { db } from '@/db';
-import { userJobEvents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { userJobEvents } from '@openreader/database/schema';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import type { RuntimeConfig } from '@/lib/server/admin/settings';
 

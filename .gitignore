@@ -56,5 +56,7 @@ node_modules/
 # vscode
 .vscode
 
-# .agents
+# Agents
 .agents
+.codex
+.claude

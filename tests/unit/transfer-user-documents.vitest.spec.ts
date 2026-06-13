@@ -7,7 +7,7 @@ import {
   documents,
   ttsSegmentEntries,
   ttsSegmentVariants,
-} from '../../src/db/schema_sqlite';
+} from '@openreader/database/schema-sqlite';
 import { transferUserDocumentSettings, transferUserDocuments } from '../../src/lib/server/user/claim-data';
 
 describe('transferUserDocuments', () => {

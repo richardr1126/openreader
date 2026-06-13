@@ -1,6 +1,6 @@
 import path from 'path';
 import { UNCLAIMED_USER_ID } from '@/lib/server/storage/docstore-legacy';
-import { ensureSystemUserExists } from '@/db';
+import { ensureSystemUserExists } from '@openreader/database';
 
 const TEST_NAMESPACE_HEADER = 'x-openreader-test-namespace';
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;

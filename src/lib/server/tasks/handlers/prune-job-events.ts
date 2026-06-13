@@ -1,6 +1,6 @@
 import { lt } from 'drizzle-orm';
-import { db } from '@/db';
-import { userJobEvents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { userJobEvents } from '@openreader/database/schema';
 import type { TaskResult } from '../types';
 
 // Retention far exceeds the largest rate-limit window, so pruning never removes

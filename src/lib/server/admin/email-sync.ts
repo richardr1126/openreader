@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db } from '@/db';
+import { db } from '@openreader/database';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 
@@ -7,9 +7,9 @@ import { logDegraded } from '@/lib/server/errors/logging';
 // we import them lazily to avoid coupling this module to a single dialect.
 function getUserTable() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const sqlite = require('@/db/schema_auth_sqlite');
+  const sqlite = require('@openreader/database/schema-auth-sqlite');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pg = require('@/db/schema_auth_postgres');
+  const pg = require('@openreader/database/schema-auth-postgres');
   return process.env.POSTGRES_URL ? pg.user : sqlite.user;
 }
 

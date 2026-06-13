@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { documentSettings, documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documentSettings, documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';

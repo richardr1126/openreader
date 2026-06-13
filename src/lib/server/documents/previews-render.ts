@@ -2,7 +2,7 @@ import path from 'path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
-import { renderPage } from '@openreader/compute-core';
+import { renderPage } from '@/lib/server/documents/pdf-preview-renderer';
 
 export type RenderedDocumentPreview = {
   bytes: Buffer;

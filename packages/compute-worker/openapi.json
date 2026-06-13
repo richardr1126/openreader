@@ -1,0 +1,1766 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "OpenReader Compute Worker API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "ParsedPdfDocument": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "parserVersion": {
+            "type": "string"
+          },
+          "parsedAt": {
+            "type": "number"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pageNumber": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "blocks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "abstract",
+                          "algorithm",
+                          "aside_text",
+                          "chart",
+                          "content",
+                          "formula",
+                          "doc_title",
+                          "figure_title",
+                          "footer",
+                          "footnote",
+                          "formula_number",
+                          "header",
+                          "image",
+                          "number",
+                          "paragraph_title",
+                          "reference",
+                          "reference_content",
+                          "seal",
+                          "table",
+                          "text",
+                          "vision_footnote"
+                        ]
+                      },
+                      "fragments": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "number"
+                            },
+                            "bbox": {
+                              "type": "array",
+                              "items": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            },
+                            "text": {
+                              "type": "string"
+                            },
+                            "readingOrder": {
+                              "type": "number"
+                            },
+                            "modelConfidence": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "page",
+                            "bbox",
+                            "text",
+                            "readingOrder"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "parentSectionId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "fragments",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "pageNumber",
+                "width",
+                "height",
+                "blocks"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "documentId",
+          "parserVersion",
+          "parsedAt",
+          "pages"
+        ],
+        "additionalProperties": false
+      },
+      "TTSSentenceAlignment": {
+        "type": "object",
+        "properties": {
+          "sentence": {
+            "type": "string"
+          },
+          "sentenceIndex": {
+            "type": "number"
+          },
+          "words": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "startSec": {
+                  "type": "number"
+                },
+                "endSec": {
+                  "type": "number"
+                },
+                "charStart": {
+                  "type": "number"
+                },
+                "charEnd": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "text",
+                "startSec",
+                "endSec",
+                "charStart",
+                "charEnd"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "sentence",
+          "sentenceIndex",
+          "words"
+        ],
+        "additionalProperties": false
+      },
+      "ArtifactReference": {
+        "type": "object",
+        "properties": {
+          "objectKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "objectKey"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": {}
+      },
+      "OperationError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "PdfLayoutProgress": {
+        "type": "object",
+        "properties": {
+          "totalPages": {
+            "type": "number"
+          },
+          "pagesParsed": {
+            "type": "number"
+          },
+          "currentPage": {
+            "type": "number"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "infer",
+              "merge"
+            ]
+          }
+        },
+        "required": [
+          "totalPages",
+          "pagesParsed",
+          "phase"
+        ],
+        "additionalProperties": false
+      },
+      "ComputeOperation": {
+        "type": "object",
+        "properties": {
+          "opId": {
+            "type": "string"
+          },
+          "subject": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "whisper_align"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "pdf_layout"
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "documentId",
+                  "namespace"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "queuedAt": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "result": {},
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "timing": {
+            "type": "object",
+            "properties": {
+              "queueWaitMs": {
+                "type": "number"
+              },
+              "s3FetchMs": {
+                "type": "number"
+              },
+              "computeMs": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "totalPages": {
+                "type": "number"
+              },
+              "pagesParsed": {
+                "type": "number"
+              },
+              "currentPage": {
+                "type": "number"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "infer",
+                  "merge"
+                ]
+              }
+            },
+            "required": [
+              "totalPages",
+              "pagesParsed",
+              "phase"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "opId",
+          "subject",
+          "status",
+          "queuedAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ComputeOperationEvent": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "number"
+          },
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "opId": {
+                "type": "string"
+              },
+              "subject": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "whisper_align"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "pdf_layout"
+                        ]
+                      },
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "documentId",
+                      "namespace"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "succeeded",
+                  "failed"
+                ]
+              },
+              "queuedAt": {
+                "type": "number"
+              },
+              "updatedAt": {
+                "type": "number"
+              },
+              "startedAt": {
+                "type": "number"
+              },
+              "result": {},
+              "error": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message"
+                ],
+                "additionalProperties": false
+              },
+              "timing": {
+                "type": "object",
+                "properties": {
+                  "queueWaitMs": {
+                    "type": "number"
+                  },
+                  "s3FetchMs": {
+                    "type": "number"
+                  },
+                  "computeMs": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "progress": {
+                "type": "object",
+                "properties": {
+                  "totalPages": {
+                    "type": "number"
+                  },
+                  "pagesParsed": {
+                    "type": "number"
+                  },
+                  "currentPage": {
+                    "type": "number"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "infer",
+                      "merge"
+                    ]
+                  }
+                },
+                "required": [
+                  "totalPages",
+                  "pagesParsed",
+                  "phase"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "opId",
+              "subject",
+              "status",
+              "queuedAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "eventId",
+          "snapshot"
+        ],
+        "additionalProperties": false
+      },
+      "PdfLayoutResolution": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "objectKey": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "objectKey"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "opId": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "whisper_align"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pdf_layout"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "queuedAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "startedAt": {
+                    "type": "number"
+                  },
+                  "result": {},
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "message"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "timing": {
+                    "type": "object",
+                    "properties": {
+                      "queueWaitMs": {
+                        "type": "number"
+                      },
+                      "s3FetchMs": {
+                        "type": "number"
+                      },
+                      "computeMs": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "progress": {
+                    "type": "object",
+                    "properties": {
+                      "totalPages": {
+                        "type": "number"
+                      },
+                      "pagesParsed": {
+                        "type": "number"
+                      },
+                      "currentPage": {
+                        "type": "number"
+                      },
+                      "phase": {
+                        "type": "string",
+                        "enum": [
+                          "infer",
+                          "merge"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "totalPages",
+                      "pagesParsed",
+                      "phase"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "opId",
+                  "subject",
+                  "status",
+                  "queuedAt",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifact",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "natsConnected": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "natsConnected"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/whisper-align/operations": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "lang": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16
+                  },
+                  "cacheKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "audioObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "text",
+                  "audioObjectKey"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "whisper_align"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "type": "object",
+                      "properties": {
+                        "totalPages": {
+                          "type": "number"
+                        },
+                        "pagesParsed": {
+                          "type": "number"
+                        },
+                        "currentPage": {
+                          "type": "number"
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "infer",
+                            "merge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "totalPages",
+                        "pagesParsed",
+                        "phase"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pdf-layout/operations": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "documentObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "replaceToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "namespace",
+                  "documentObjectKey"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "whisper_align"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "type": "object",
+                      "properties": {
+                        "totalPages": {
+                          "type": "number"
+                        },
+                        "pagesParsed": {
+                          "type": "number"
+                        },
+                        "currentPage": {
+                          "type": "number"
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "infer",
+                            "merge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "totalPages",
+                        "pagesParsed",
+                        "phase"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pdf-layout/resolve": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "documentObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "namespace",
+                  "documentObjectKey"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "artifact": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "objectKey": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "objectKey"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "operation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "opId": {
+                              "type": "string"
+                            },
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "whisper_align"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf_layout"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "failed"
+                              ]
+                            },
+                            "queuedAt": {
+                              "type": "number"
+                            },
+                            "updatedAt": {
+                              "type": "number"
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            },
+                            "result": {},
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "message": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "message"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "timing": {
+                              "type": "object",
+                              "properties": {
+                                "queueWaitMs": {
+                                  "type": "number"
+                                },
+                                "s3FetchMs": {
+                                  "type": "number"
+                                },
+                                "computeMs": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "progress": {
+                              "type": "object",
+                              "properties": {
+                                "totalPages": {
+                                  "type": "number"
+                                },
+                                "pagesParsed": {
+                                  "type": "number"
+                                },
+                                "currentPage": {
+                                  "type": "number"
+                                },
+                                "phase": {
+                                  "type": "string",
+                                  "enum": [
+                                    "infer",
+                                    "merge"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "totalPages",
+                                "pagesParsed",
+                                "phase"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "opId",
+                            "subject",
+                            "status",
+                            "queuedAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "artifact",
+                    "operation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/operations/{opId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "opId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "whisper_align"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "type": "object",
+                      "properties": {
+                        "totalPages": {
+                          "type": "number"
+                        },
+                        "pagesParsed": {
+                          "type": "number"
+                        },
+                        "currentPage": {
+                          "type": "number"
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "infer",
+                            "merge"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "totalPages",
+                        "pagesParsed",
+                        "phase"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/operations/{opId}/events": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "sinceEventId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "opId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent ComputeOperationEvent stream",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-sent ComputeOperationEvent stream"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}

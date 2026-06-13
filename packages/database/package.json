@@ -1,0 +1,33 @@
+{
+  "name": "@openreader/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "bin",
+    "migrations",
+    "src"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./migrate": "./src/migrate.mjs",
+    "./schema": "./src/schema.ts",
+    "./schema-postgres": "./src/schema_postgres.ts",
+    "./schema-sqlite": "./src/schema_sqlite.ts",
+    "./schema-auth-postgres": "./src/schema_auth_postgres.ts",
+    "./schema-auth-sqlite": "./src/schema_auth_sqlite.ts",
+    "./run-in-transaction": "./src/run-in-transaction.ts"
+  },
+  "bin": {
+    "openreader-migrate": "./bin/migrate.mjs"
+  },
+  "scripts": {
+    "migrate": "node bin/migrate.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.21.0"
+  }
+}

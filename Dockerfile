@@ -20,9 +20,9 @@ WORKDIR /app
 
 # Copy workspace manifests needed for dependency installation
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY compute/core/package.json ./compute/core/package.json
-COPY compute/worker/package.json ./compute/worker/package.json
-COPY docker/entrypoint-migration-tools/package.json ./docker/entrypoint-migration-tools/package.json
+COPY packages/bootstrap/package.json ./packages/bootstrap/package.json
+COPY packages/compute-worker/package.json ./packages/compute-worker/package.json
+COPY packages/database/package.json ./packages/database/package.json
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -33,8 +33,9 @@ COPY . .
 # Build the Next.js application
 RUN pnpm exec next telemetry disable
 RUN AUTH_SECRET=build-placeholder-secret-value-32chars!! BASE_URL=http://localhost:3003 pnpm build
-RUN pnpm --config.inject-workspace-packages=true --filter @openreader/entrypoint-migration-tools deploy /opt/entrypoint-migration-tools
-RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy /opt/embedded-compute-worker
+RUN pnpm --config.inject-workspace-packages=true --filter @openreader/bootstrap deploy /opt/openreader/bootstrap
+RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3 ffmpeg-static
+RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy /opt/openreader/embedded-compute-worker
 # Generate third-party dependency license report plus copied license files.
 RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
     pnpm dlx license-checker-rseidelsohn@4.3.0 \
@@ -63,32 +64,15 @@ COPY --from=app-builder /app/.next/standalone ./
 COPY --from=app-builder /app/.next/static ./.next/static
 COPY --from=app-builder /app/public ./public
 
-# Copy the entrypoint and migration/runtime helper files it invokes directly.
-COPY --from=app-builder /app/scripts/openreader-entrypoint.mjs ./scripts/openreader-entrypoint.mjs
-COPY --from=app-builder /app/scripts/migrate-fs-v2.mjs ./scripts/migrate-fs-v2.mjs
-COPY --from=app-builder /app/drizzle ./drizzle
-COPY --from=app-builder /app/drizzle.config.pg.ts ./drizzle.config.pg.ts
-COPY --from=app-builder /app/drizzle.config.sqlite.ts ./drizzle.config.sqlite.ts
-COPY --from=app-builder /app/src/db ./src/db
-
-# Merge in the dependency subset needed by the entrypoint migration scripts.
-COPY --from=app-builder /opt/entrypoint-migration-tools/node_modules /tmp/runtime-tools-node_modules
-RUN mkdir -p /app/node_modules && \
-    rm -rf /tmp/runtime-tools-node_modules/@aws-sdk \
-           /tmp/runtime-tools-node_modules/better-sqlite3 \
-           /tmp/runtime-tools-node_modules/ffmpeg-static \
-           /tmp/runtime-tools-node_modules/pg && \
-    cp -an /tmp/runtime-tools-node_modules/. /app/node_modules/ && \
-    rm -rf /tmp/runtime-tools-node_modules
-
-# Ship the embedded compute worker as a separate deployed bundle.
-COPY --from=app-builder /opt/embedded-compute-worker ./embedded-compute-worker
+# Ship startup orchestration and the embedded worker as independent deployed bundles.
+COPY --from=app-builder /opt/openreader/bootstrap /opt/openreader/bootstrap
+COPY --from=app-builder /opt/openreader/embedded-compute-worker /opt/openreader/embedded-compute-worker
 # Include third-party license report and copied license texts at a stable path in the image.
 COPY --from=app-builder /app/THIRD_PARTY_LICENSES /licenses
 # Include SeaweedFS license text for the copied weed binary.
 COPY --from=seaweedfs-builder /tmp/SeaweedFS-LICENSE.txt /licenses/SeaweedFS-LICENSE.txt
 # Include static model notices for runtime-downloaded assets.
-COPY --from=app-builder /app/compute/core/src/pdf/assets/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
+COPY --from=app-builder /app/packages/compute-worker/src/inference/pdf/assets/LICENSE.txt /licenses/pp-doclayoutv3-LICENSE.txt
 
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
@@ -98,7 +82,7 @@ COPY --from=nats-builder /tmp/nats-server /usr/local/bin/nats-server
 RUN chmod +x /usr/local/bin/nats-server
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
-COPY --from=app-builder /app/compute/core/src/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+COPY --from=app-builder /app/packages/compute-worker/src/inference/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
 
 # Match the app's historical container port now that standalone server.js
 # is started directly instead of `next start -p 3003`.
@@ -108,5 +92,5 @@ ENV PORT=3003
 EXPOSE 3003
 
 # Start the application
-ENTRYPOINT ["node", "scripts/openreader-entrypoint.mjs", "--"]
+ENTRYPOINT ["node", "/opt/openreader/bootstrap/src/cli.mjs", "--"]
 CMD ["node", "server.js"]

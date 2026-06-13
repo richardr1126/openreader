@@ -1,7 +1,7 @@
 import { and, eq, notInArray } from 'drizzle-orm';
 
-import { db } from '@/db';
-import { audiobooks, audiobookChapters } from '@/db/schema';
+import { db } from '@openreader/database';
+import { audiobooks, audiobookChapters } from '@openreader/database/schema';
 
 export async function pruneAudiobookIfMissingDir(bookId: string, userId: string, intermediateDirExists: boolean): Promise<void> {
   if (intermediateDirExists) return;

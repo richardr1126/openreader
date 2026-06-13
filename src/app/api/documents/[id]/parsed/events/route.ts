@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
-import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { getWorkerClientConfigFromEnv } from '@/lib/server/compute/worker';
+import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import {
   fetchPdfParseOperation,
@@ -45,14 +45,6 @@ async function loadOwnedDocumentRow(input: {
   return rows[0] ?? null;
 }
 
-function workerEventsUrl(baseUrl: string, opId: string, sinceEventId: string | null): string {
-  const url = new URL(`${baseUrl}/ops/${encodeURIComponent(opId)}/events`);
-  if (sinceEventId) {
-    url.searchParams.set('sinceEventId', sinceEventId);
-  }
-  return url.toString();
-}
-
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { logger } = createRequestLogger({
     route: '/api/documents/[id]/parsed/events',
@@ -92,17 +84,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Operation not found' }, { status: 404 });
     }
 
-    const cfg = getWorkerClientConfigFromEnv();
     const lastEventId = req.headers.get('last-event-id');
     const sinceEventId = req.nextUrl.searchParams.get('sinceEventId') || lastEventId;
-    const upstream = await fetch(workerEventsUrl(cfg.baseUrl, opId, sinceEventId), {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${cfg.token}`,
-        Accept: 'text/event-stream',
-        ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}),
-      },
-      cache: 'no-store',
+    const upstream = await getComputeWorkerClient().openOperationEvents(opId, {
+      sinceEventId,
+      lastEventId,
       signal: req.signal,
     });
 

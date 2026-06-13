@@ -12,7 +12,8 @@ if (!fs.existsSync(serverDir)) {
 const forbidden = [
   'onnxruntime-node',
   '@huggingface/tokenizers',
-  '@openreader/compute-core/local-runtime',
+  '@openreader/compute-worker',
+  '/packages/compute-worker/src/inference/',
 ];
 
 const includeExt = new Set(['.js', '.mjs', '.cjs']);

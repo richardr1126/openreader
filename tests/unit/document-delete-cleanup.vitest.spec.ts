@@ -12,7 +12,7 @@ function resultBuilder(result: unknown[]) {
   };
 }
 
-vi.mock('@/db', () => {
+vi.mock('@openreader/database', () => {
   const database = {
     delete: vi.fn(() => ({
       where: vi.fn(() => ({

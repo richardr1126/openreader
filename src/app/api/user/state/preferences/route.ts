@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { userPreferences } from '@/db/schema';
+import { db } from '@openreader/database';
+import { userPreferences } from '@openreader/database/schema';
 import { type SyncedPreferencesPatch } from '@/types/user-state';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';

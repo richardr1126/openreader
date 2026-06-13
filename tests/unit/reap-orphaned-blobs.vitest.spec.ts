@@ -26,7 +26,7 @@ vi.mock('@/lib/server/documents/blob-lease', () => ({
   })),
 }));
 vi.mock('@/lib/server/errors/logging', () => ({ logDegraded: vi.fn() }));
-vi.mock('@/db', () => ({
+vi.mock('@openreader/database', () => ({
   db: {
     select: () => ({
       from: () => ({

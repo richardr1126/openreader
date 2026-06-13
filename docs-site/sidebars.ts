@@ -55,7 +55,12 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: '🚀 Deploy',
-      items: ['deploy/local-development', 'deploy/compute-worker', 'deploy/vercel-deployment'],
+      items: [
+        'deploy/local-development',
+        'deploy/docker-compose',
+        'deploy/compute-worker',
+        'deploy/vercel-deployment',
+      ],
     },
     {
       type: 'category',

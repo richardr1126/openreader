@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { adminProviders } from '@/db/schema';
+import { db } from '@openreader/database';
+import { adminProviders } from '@openreader/database/schema';
 import { apiKeyLast4, decryptSecret, encryptSecret } from '@/lib/server/crypto/secrets';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';

@@ -9,9 +9,8 @@
  *    position-preserving variant that reuses the same patterns/glyph set so
  *    viewer highlight offsets line up with the audio text.
  *
- * The compute/worker package keeps its own mirror in
- * `compute/core/src/whisper/alignment-map.ts` (a separate build target that
- * cannot import from `@/lib`). Keep that copy in lock-step with these rules.
+ * Compute alignment receives this already-canonical text over the worker API,
+ * so its returned character offsets are measured against exactly this value.
  */
 
 /** Matches a bare or explicit URL token (http(s):// or www.). Capture 1 = domain. */

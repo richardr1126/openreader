@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, lt } from 'drizzle-orm';
-import { db } from '@/db';
-import { documentBlobLeases } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documentBlobLeases } from '@openreader/database/schema';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 
 const DEFAULT_LEASE_MS = 15 * 60 * 1000;

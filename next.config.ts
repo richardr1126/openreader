@@ -15,7 +15,6 @@ const securityHeaders = [
   },
 ];
 
-const bundleWorkerCompute = true;
 const pdfjsTraceFiles = [
   './node_modules/pdfjs-dist/package.json',
   './node_modules/pdfjs-dist/legacy/build/pdf.mjs',
@@ -29,7 +28,6 @@ const serverExternalPackages = [
   // Keep pdfjs-dist as a real package in node_modules. Server-side preview
   // rendering resolves pdf.js runtime assets from the filesystem at runtime.
   'pdfjs-dist',
-  ...(!bundleWorkerCompute ? ['onnxruntime-node', '@huggingface/tokenizers'] : []),
 ];
 
 const nextConfig: NextConfig = {
@@ -48,7 +46,7 @@ const nextConfig: NextConfig = {
       canvas: '@napi-rs/canvas',
     },
   },
-  transpilePackages: [],
+  transpilePackages: ['@openreader/database'],
   serverExternalPackages,
   outputFileTracingIncludes: {
     '/api/audiobook': [
@@ -87,14 +85,6 @@ const nextConfig: NextConfig = {
           canvas: 'commonjs @napi-rs/canvas',
         },
       ];
-    }
-    if (isServer && bundleWorkerCompute) {
-      config.resolve.alias = {
-        ...(config.resolve.alias || {}),
-        '@openreader/compute-core/local-runtime$': false,
-        'onnxruntime-node$': false,
-        '@huggingface/tokenizers$': false,
-      };
     }
     return config;
   },

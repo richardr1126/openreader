@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { claimAnonymousData } from '@/lib/server/user/claim-data';
 import { auth } from '@/lib/server/auth/auth';
-import { db } from '@/db';
-import { audiobooks, documentSettings, documents, userDocumentProgress, userPreferences } from '@/db/schema';
+import { db } from '@openreader/database';
+import { audiobooks, documentSettings, documents, userDocumentProgress, userPreferences } from '@openreader/database/schema';
 import { count, eq, ne } from 'drizzle-orm';
 import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
 import { errorToLog, serverLogger } from '@/lib/server/logger';

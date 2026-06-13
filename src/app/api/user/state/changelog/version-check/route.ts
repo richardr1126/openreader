@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { userPreferences } from '@/db/schema';
+import { db } from '@openreader/database';
+import { userPreferences } from '@openreader/database/schema';
 import { normalizeVersion, shouldOpenChangelogForVersionChange } from '@/lib/shared/changelog';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';

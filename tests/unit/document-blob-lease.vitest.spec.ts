@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import * as sqliteSchema from '../../src/db/schema_sqlite';
+import * as sqliteSchema from '@openreader/database/schema-sqlite';
 
 const holder = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle> }));
-vi.mock('@/db', () => ({
+vi.mock('@openreader/database', () => ({
   get db() {
     return holder.db;
   },
