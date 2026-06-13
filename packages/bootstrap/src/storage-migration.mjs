@@ -17,7 +17,23 @@ const { Pool } = require('pg');
 const BetterSqlite3 = require('better-sqlite3');
 const ffmpegStatic = require('ffmpeg-static');
 
-const DOCSTORE_DIR = path.join(process.cwd(), 'docstore');
+function findWorkspaceRoot(startDir = process.cwd()) {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return startDir;
+}
+
+const workspaceRoot = findWorkspaceRoot(process.cwd());
+const DOCSTORE_DIR = path.join(workspaceRoot, 'docstore');
 const DOCUMENTS_V1_DIR = path.join(DOCSTORE_DIR, 'documents_v1');
 const AUDIOBOOKS_V1_DIR = path.join(DOCSTORE_DIR, 'audiobooks_v1');
 const UNCLAIMED_USER_ID = 'unclaimed';
@@ -27,10 +43,15 @@ const SAFE_AUDIOBOOK_ID_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 
 function loadEnvFiles() {
-  const envPath = path.join(process.cwd(), '.env');
-  const envLocalPath = path.join(process.cwd(), '.env.local');
-  if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
-  if (fs.existsSync(envLocalPath)) dotenv.config({ path: envLocalPath, override: true });
+  const envPath = path.join(workspaceRoot, '.env');
+  const envLocalPath = path.join(workspaceRoot, '.env.local');
+
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+  }
+  if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath, override: true });
+  }
 }
 
 function parseBool(value, fallback = false) {
@@ -688,7 +709,7 @@ function openDatabase() {
     };
   }
 
-  const dbPath = path.join(process.cwd(), 'docstore', 'sqlite3.db');
+  const dbPath = path.join(DOCSTORE_DIR, 'sqlite3.db');
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const sqlite = new BetterSqlite3(dbPath);
   return {

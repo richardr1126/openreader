@@ -13,8 +13,24 @@ function loadEnvFiles(cwd) {
   if (fs.existsSync(envLocalPath)) dotenv.config({ path: envLocalPath, override: true });
 }
 
+function findWorkspaceRoot(startDir = process.cwd()) {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return startDir;
+}
+
 export async function runMigrations({ cwd = process.cwd(), env = process.env } = {}) {
-  loadEnvFiles(cwd);
+  const workspaceRoot = findWorkspaceRoot(cwd);
+  loadEnvFiles(workspaceRoot);
 
   if (env.POSTGRES_URL?.trim()) {
     const [{ drizzle }, { migrate }, { Pool }] = await Promise.all([
@@ -33,7 +49,7 @@ export async function runMigrations({ cwd = process.cwd(), env = process.env } =
     return;
   }
 
-  const dbPath = path.join(cwd, 'docstore', 'sqlite3.db');
+  const dbPath = path.join(workspaceRoot, 'docstore', 'sqlite3.db');
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const [{ drizzle }, { migrate }, { default: BetterSqlite3 }] = await Promise.all([
     import('drizzle-orm/better-sqlite3'),
@@ -49,3 +65,4 @@ export async function runMigrations({ cwd = process.cwd(), env = process.env } =
     sqlite.close();
   }
 }
+

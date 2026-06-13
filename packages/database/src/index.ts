@@ -59,6 +59,21 @@ export function ensureSystemUserExists(userId: string) {
   }
 }
 
+function findWorkspaceRoot(startDir: string = process.cwd()): string {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return startDir;
+}
+
 function getDrizzleDB() {
   if (dbInstance) return dbInstance;
 
@@ -79,7 +94,8 @@ function getDrizzleDB() {
     const { drizzle: drizzleSqlite } = require('drizzle-orm/better-sqlite3');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require('better-sqlite3');
-    const dbPath = path.join(process.cwd(), 'docstore', 'sqlite3.db');
+    const workspaceRoot = findWorkspaceRoot(process.cwd());
+    const dbPath = path.join(workspaceRoot, 'docstore', 'sqlite3.db');
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

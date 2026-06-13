@@ -21,10 +21,26 @@ import {
 } from './embedded-seaweedfs.mjs';
 import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
 
+function findWorkspaceRoot(startDir = process.cwd()) {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return startDir;
+}
+
+const workspaceRoot = findWorkspaceRoot(process.cwd());
+
 function loadEnvFiles() {
-  const cwd = process.cwd();
-  const envPath = path.join(cwd, '.env');
-  const envLocalPath = path.join(cwd, '.env.local');
+  const envPath = path.join(workspaceRoot, '.env');
+  const envLocalPath = path.join(workspaceRoot, '.env.local');
 
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
@@ -111,7 +127,7 @@ function spawnMainCommand(command, env) {
 
 async function runDbMigrations(env) {
   console.log('Running database migrations...');
-  await runMigrations({ cwd: process.cwd(), env });
+  await runMigrations({ cwd: workspaceRoot, env });
 }
 
 function runStorageMigrations(env) {
@@ -278,7 +294,7 @@ async function main() {
     }
 
     if (useEmbeddedWeed) {
-      runtimeEnv.WEED_MINI_DIR = withDefault(runtimeEnv.WEED_MINI_DIR, 'docstore/seaweedfs');
+      runtimeEnv.WEED_MINI_DIR = withDefault(runtimeEnv.WEED_MINI_DIR, path.join(workspaceRoot, 'docstore/seaweedfs'));
       runtimeEnv.WEED_MINI_WAIT_SEC = withDefault(runtimeEnv.WEED_MINI_WAIT_SEC, '20');
       runtimeEnv.S3_BUCKET = withDefault(runtimeEnv.S3_BUCKET, 'openreader-documents');
       runtimeEnv.S3_REGION = withDefault(runtimeEnv.S3_REGION, 'us-east-1');
@@ -371,7 +387,7 @@ async function main() {
       runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
       runtimeEnv.COMPUTE_NATS_REPLICAS = withDefault(runtimeEnv.COMPUTE_NATS_REPLICAS, '1');
 
-      const natsStoreDir = withDefault(runtimeEnv.EMBEDDED_NATS_STORE_DIR, 'docstore/nats/jetstream');
+      const natsStoreDir = withDefault(runtimeEnv.EMBEDDED_NATS_STORE_DIR, path.join(workspaceRoot, 'docstore/nats/jetstream'));
       fs.mkdirSync(natsStoreDir, { recursive: true });
 
       console.log(`Starting embedded nats-server on 127.0.0.1:${embeddedNatsPort}...`);
