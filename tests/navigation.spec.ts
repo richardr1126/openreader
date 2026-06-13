@@ -65,6 +65,23 @@ test.describe('PDF view modes and Navigator', () => {
     await setupTest(page, testInfo);
   });
 
+  test('restores the active PDF text highlight after narrowing the viewport', async ({ page }) => {
+    test.setTimeout(120_000);
+    await playTTSAndWaitForASecond(page, 'sample.pdf');
+
+    const textLayer = page.locator('.react-pdf__Page__textContent');
+    const textHighlight = page.locator('.pdf-text-highlight-overlay');
+    await expect(textLayer).toHaveCount(1);
+    await expect(textLayer.locator('span')).not.toHaveCount(0);
+    await expect(textHighlight).not.toHaveCount(0);
+
+    await triggerViewportResize(page, 615, 796);
+
+    await expect(textLayer).toHaveCount(1);
+    await expect(textLayer.locator('span')).not.toHaveCount(0);
+    await expect(textHighlight).not.toHaveCount(0);
+  });
+
   test('switches Single/Dual/Scroll modes and uses Navigator to change page', async ({ page }) => {
     test.setTimeout(120_000);
     // Open PDF viewer
