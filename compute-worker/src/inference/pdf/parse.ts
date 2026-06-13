@@ -4,7 +4,7 @@ import { ensureModel } from './model';
 import { runLayoutModel } from './layout-model';
 import { mergeTextWithRegions } from './document-layout';
 import { configurePdfjsNodeRuntime, resolvePdfjsStandardFontDataUrl } from './pdfjs';
-import { PDF_PARSER_VERSION } from '../../api/contracts';
+import { PDF_PARSER_VERSION } from '../../operations/contracts';
 import { stitchCrossPageBlocks } from './stitch';
 import { renderPage } from './render';
 import { normalizeTextItemsForLayout } from './normalize-text';

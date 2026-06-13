@@ -1,13 +1,13 @@
-import type { WorkerOperationState } from '../api/contracts';
-import { pdfSubjectFromOperationKey } from './operation-keys';
+import type { WorkerOperationState } from '../operations/contracts';
+import { pdfSubjectFromOperationKey } from '../operations/keys';
 
-export type PublicOperationSubject =
+export type ComputeOperationSubject =
   | { kind: 'whisper_align' }
   | { kind: 'pdf_layout'; documentId: string; namespace: string | null };
 
-export interface PublicOperation<Result = unknown> {
+export interface ComputeOperation<Result = unknown> {
   opId: string;
-  subject: PublicOperationSubject;
+  subject: ComputeOperationSubject;
   status: WorkerOperationState['status'];
   queuedAt: number;
   updatedAt: number;
@@ -18,14 +18,14 @@ export interface PublicOperation<Result = unknown> {
   progress?: WorkerOperationState['progress'];
 }
 
-export interface PublicOperationEvent<Result = unknown> {
+export interface ComputeOperationEvent<Result = unknown> {
   eventId: number;
-  snapshot: PublicOperation<Result>;
+  snapshot: ComputeOperation<Result>;
 }
 
-export function toPublicOperation<Result>(
+export function toComputeOperation<Result>(
   state: WorkerOperationState<Result>,
-): PublicOperation<Result> {
+): ComputeOperation<Result> {
   const subject = state.kind === 'pdf_layout'
     ? (pdfSubjectFromOperationKey(state.opKey) ?? { kind: 'pdf_layout', documentId: '', namespace: null })
     : { kind: 'whisper_align' as const };

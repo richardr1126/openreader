@@ -2,7 +2,7 @@ import type {
   WorkerOperationEvent,
   WorkerOperationKind,
   WorkerOperationState,
-} from '../api/contracts';
+} from '../operations/contracts';
 
 export type OperationState<Result = unknown> = WorkerOperationState<Result>;
 export type OperationEvent<Result = unknown> = WorkerOperationEvent<Result>;

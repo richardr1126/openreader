@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { WorkerOperationRequest } from '../../../src/api/contracts';
+import type { WorkerOperationRequest } from '../../../src/operations/contracts';
 import { OperationOrchestrator } from '../../../src/operations';
 import {
   InMemoryOperationEventStream,

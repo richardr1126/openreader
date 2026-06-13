@@ -272,7 +272,7 @@
         ],
         "additionalProperties": false
       },
-      "PublicOperation": {
+      "ComputeOperation": {
         "type": "object",
         "properties": {
           "opId": {
@@ -413,7 +413,7 @@
         ],
         "additionalProperties": false
       },
-      "PublicOperationEvent": {
+      "ComputeOperationEvent": {
         "type": "object",
         "properties": {
           "eventId": {
@@ -1706,12 +1706,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Server-sent PublicOperationEvent stream",
+            "description": "Server-sent ComputeOperationEvent stream",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "string",
-                  "description": "Server-sent PublicOperationEvent stream"
+                  "description": "Server-sent ComputeOperationEvent stream"
                 }
               }
             }

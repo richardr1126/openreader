@@ -95,7 +95,7 @@ export const pdfLayoutProgressSchema = z.object({
   phase: z.enum(['infer', 'merge']),
 });
 
-export const publicOperationSchema = z.object({
+export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('whisper_align') }),
@@ -119,14 +119,14 @@ export const publicOperationSchema = z.object({
   progress: pdfLayoutProgressSchema.optional(),
 });
 
-export const publicOperationEventSchema = z.object({
+export const computeOperationEventSchema = z.object({
   eventId: z.number(),
-  snapshot: publicOperationSchema,
+  snapshot: computeOperationSchema,
 });
 
 export const pdfLayoutResolutionSchema = z.object({
   artifact: artifactReferenceSchema.nullable(),
-  operation: publicOperationSchema.nullable(),
+  operation: computeOperationSchema.nullable(),
 });
 
 export function jsonSchema(schema: z.ZodType): Record<string, unknown> {

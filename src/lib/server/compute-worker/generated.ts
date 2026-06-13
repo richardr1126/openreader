@@ -469,7 +469,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Server-sent PublicOperationEvent stream */
+                /** @description Server-sent ComputeOperationEvent stream */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -579,7 +579,7 @@ export interface components {
             /** @enum {string} */
             phase: "infer" | "merge";
         };
-        PublicOperation: {
+        ComputeOperation: {
             opId: string;
             subject: {
                 /** @enum {string} */
@@ -613,7 +613,7 @@ export interface components {
                 phase: "infer" | "merge";
             };
         };
-        PublicOperationEvent: {
+        ComputeOperationEvent: {
             eventId: number;
             snapshot: {
                 opId: string;

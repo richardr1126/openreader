@@ -5,7 +5,7 @@ import type {
   WorkerOperationKind,
   WorkerOperationRequest,
   WorkerOperationState,
-} from '../api/contracts';
+} from '../operations/contracts';
 import {
   buildQueuedState,
   createErrorShape,

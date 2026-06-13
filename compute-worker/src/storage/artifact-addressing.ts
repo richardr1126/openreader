@@ -1,5 +1,5 @@
-import { PDF_PARSER_VERSION } from '../api/contracts';
-import { encodeParserVersion } from '../api/contracts';
+import { PDF_PARSER_VERSION } from '../operations/contracts';
+import { encodeParserVersion } from '../operations/contracts';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;

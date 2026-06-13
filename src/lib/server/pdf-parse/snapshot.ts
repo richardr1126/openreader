@@ -1,8 +1,8 @@
-import type { PdfLayoutResult, WorkerOperation } from '@/lib/server/compute-worker/protocol';
+import type { PdfLayoutResult, ComputeOperation } from '@/lib/server/compute-worker/protocol';
 import type { PdfParseStatus } from '@/types/parsed-pdf';
 import type { PdfParseSnapshot } from '@/lib/server/pdf-parse/types';
 
-function mapWorkerStatusToParseStatus(status: WorkerOperation['status']): PdfParseStatus {
+function mapWorkerStatusToParseStatus(status: ComputeOperation['status']): PdfParseStatus {
   switch (status) {
     case 'queued':
       return 'pending';
@@ -19,7 +19,7 @@ function mapWorkerStatusToParseStatus(status: WorkerOperation['status']): PdfPar
 }
 
 export function parsedObjectKeyFromWorkerState(
-  state: WorkerOperation<PdfLayoutResult>,
+  state: ComputeOperation<PdfLayoutResult>,
 ): string | null {
   const result = state.result;
   if (!result || typeof result !== 'object' || !('parsedObjectKey' in result)) return null;
@@ -30,7 +30,7 @@ export function parsedObjectKeyFromWorkerState(
 }
 
 export function pdfParseSnapshotFromWorkerState(
-  state: WorkerOperation<PdfLayoutResult>,
+  state: ComputeOperation<PdfLayoutResult>,
 ): PdfParseSnapshot {
   const parseStatus = mapWorkerStatusToParseStatus(state.status);
   return {

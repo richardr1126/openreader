@@ -19,12 +19,46 @@ export type IdleTimeoutAndHardCapInput<T> = {
   label: string;
 };
 
-function readPositiveIntEnv(name: string, fallback: number): number {
+export function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+export function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.floor(parsed);
+}
+
+export function readBoolEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(raw.toLowerCase());
+}
+
+export function normalizeNatsReplicas(value: number): number {
+  return value === 3 || value === 5 ? value : 1;
+}
+
+export function buildLoggerConfig(): boolean | Record<string, unknown> {
+  const format = process.env.LOG_FORMAT?.trim().toLowerCase() || 'pretty';
+  const level = process.env.COMPUTE_LOG_LEVEL?.trim() || 'info';
+  if (format === 'json') return { level, base: null };
+  return {
+    level,
+    base: null,
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
+      },
+    },
+  };
 }
 
 let timeoutConfigCache: ComputeTimeoutConfig | null = null;

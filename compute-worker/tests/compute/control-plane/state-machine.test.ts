@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { WorkerOperationState } from '../../../src/api/contracts';
+import type { WorkerOperationState } from '../../../src/operations/contracts';
 import {
   explainReplacementReason,
   isInflightStatus,

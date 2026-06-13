@@ -4,7 +4,7 @@ import type {
   WorkerJobTiming,
   WorkerJobState,
   WorkerOperationState,
-} from '../api/contracts';
+} from '../operations/contracts';
 
 export type StreamedOperationState = WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>;
 

@@ -7,7 +7,7 @@ import type {
   WhisperAlignJobResult,
   WorkerJobTiming,
   WorkerOperationKind,
-} from '../api/contracts';
+} from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
@@ -30,7 +30,7 @@ export interface QueuedJob<TPayload> {
   payload: TPayload;
 }
 
-interface WorkerLoopOrchestrator {
+export interface WorkerLoopOrchestrator {
   markRunning(input: { opId: string; startedAt?: number; updatedAt?: number; timing?: WorkerJobTiming }): Promise<unknown>;
   markProgress(input: {
     opId: string;
@@ -47,7 +47,7 @@ interface WorkerLoopOrchestrator {
   }): Promise<unknown>;
 }
 
-interface WorkerLogger {
+export interface WorkerLogger {
   info(data: unknown, message?: string): void;
   warn(data: unknown, message?: string): void;
   error(data: unknown, message?: string): void;
@@ -126,6 +126,17 @@ export function createWorkerLoopController(input: {
     latestProgress?: PdfLayoutProgress;
   };
 
+  type JobRunner<TPayload, TResult> = (
+    payload: TPayload,
+    queueWaitMs: number,
+    hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
+  ) => Promise<TResult>;
+
+  type WorkDefinition<TPayload, TResult> = {
+    codec: JsonCodec<QueuedJob<TPayload>>;
+    run: JobRunner<TPayload, TResult>;
+  };
+
   const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
     if (context.latestProgress) {
       await input.orchestrator.markProgress({
@@ -144,10 +155,8 @@ export function createWorkerLoopController(input: {
     });
   };
 
-  const processMessage = async <TPayload, TResult>(work: {
+  const processMessage = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
     msg: JsMsg;
-    codec: JsonCodec<QueuedJob<TPayload>>;
-    run: JobHandlers['runWhisper'] | JobHandlers['runPdfLayout'];
     workerLabel: string;
   }): Promise<void> => {
     let context: Context<TPayload> | null = null;
@@ -180,7 +189,7 @@ export function createWorkerLoopController(input: {
           }, 'failed to persist operation heartbeat state');
         });
       }, RUNNING_HEARTBEAT_MS);
-      const result = await work.run(decoded.payload as never, context.queueWaitTiming?.queueWaitMs ?? 0, {
+      const result = await work.run(decoded.payload, context.queueWaitTiming?.queueWaitMs ?? 0, {
         onProgress: async (progress) => {
           try {
             work.msg.working();
@@ -259,11 +268,9 @@ export function createWorkerLoopController(input: {
     }
   };
 
-  const runLoop = async <TPayload>(work: {
+  const runLoop = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
     owner: object;
     consumer: Consumer;
-    codec: JsonCodec<QueuedJob<TPayload>>;
-    run: JobHandlers['runWhisper'] | JobHandlers['runPdfLayout'];
     workerLabel: string;
   }): Promise<void> => {
     const detached = () => input.isStopping() || stopRequested || !input.isOwnerActive(work.owner);
@@ -298,9 +305,17 @@ export function createWorkerLoopController(input: {
     start(owner: object, consumers: { whisper: Consumer; pdfLayout: Consumer }): void {
       stopRequested = false;
       loops = [];
+      const whisperWork: WorkDefinition<WhisperAlignJobRequest, WhisperAlignJobResult> = {
+        codec: input.whisperCodec,
+        run: input.handlers.runWhisper,
+      };
+      const pdfWork: WorkDefinition<PdfLayoutJobRequest, PdfLayoutJobResult> = {
+        codec: input.pdfCodec,
+        run: input.handlers.runPdfLayout,
+      };
       for (let i = 0; i < input.jobConcurrency; i += 1) {
-        loops.push(runLoop({ owner, consumer: consumers.whisper, codec: input.whisperCodec, run: input.handlers.runWhisper, workerLabel: `whisper-${i + 1}` }));
-        loops.push(runLoop({ owner, consumer: consumers.pdfLayout, codec: input.pdfCodec, run: input.handlers.runPdfLayout, workerLabel: `layout-${i + 1}` }));
+        loops.push(runLoop({ owner, consumer: consumers.whisper, ...whisperWork, workerLabel: `whisper-${i + 1}` }));
+        loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
       }
     },
     async stop(): Promise<void> {

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { WorkerOperationKind } from '../../../src/api/contracts';
+import type { WorkerOperationKind } from '../../../src/operations/contracts';
 import type {
   OperationEvent,
   OperationEventStream,

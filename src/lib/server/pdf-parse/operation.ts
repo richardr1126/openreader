@@ -3,7 +3,7 @@ import { documentKey } from '@/lib/server/documents/blobstore';
 import type {
   PdfLayoutResolution,
   PdfLayoutResult,
-  WorkerOperation,
+  ComputeOperation,
 } from '@/lib/server/compute-worker/protocol';
 
 function currentPdfOperationInput(documentId: string, namespace: string | null, forceToken?: string): {
@@ -33,7 +33,7 @@ export async function resolveCurrentPdfParse(input: {
 export async function lookupCurrentPdfParseOperation(input: {
   documentId: string;
   namespace: string | null;
-}): Promise<WorkerOperation<PdfLayoutResult> | null> {
+}): Promise<ComputeOperation<PdfLayoutResult> | null> {
   return (await resolveCurrentPdfParse(input)).operation;
 }
 
@@ -41,7 +41,7 @@ export async function createOrReuseCurrentPdfParseOperation(input: {
   documentId: string;
   namespace: string | null;
   forceToken?: string;
-}): Promise<WorkerOperation<PdfLayoutResult>> {
+}): Promise<ComputeOperation<PdfLayoutResult>> {
   return getComputeWorkerClient().createPdfLayoutOperation(currentPdfOperationInput(
     input.documentId,
     input.namespace,
@@ -49,12 +49,12 @@ export async function createOrReuseCurrentPdfParseOperation(input: {
   ));
 }
 
-export async function fetchPdfParseOperation(opId: string): Promise<WorkerOperation<PdfLayoutResult> | null> {
+export async function fetchPdfParseOperation(opId: string): Promise<ComputeOperation<PdfLayoutResult> | null> {
   return getComputeWorkerClient().getOperation<PdfLayoutResult>(opId);
 }
 
 export function isPdfParseOperationForDocument(
-  state: WorkerOperation<PdfLayoutResult>,
+  state: ComputeOperation<PdfLayoutResult>,
   input: {
     documentId: string;
     namespace: string | null;

@@ -4,7 +4,7 @@ import {
   buildInferProgressForPageParsed,
   buildInferProgressForPageStart,
 } from '../../src/jobs/pdf-progress';
-import { buildPdfOperationKey } from '../../src/api/operation-keys';
+import { buildPdfOperationKey } from '../../src/operations/keys';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 
 describe('compute worker helpers', () => {

@@ -4,7 +4,7 @@ import type {
   WorkerOperationKind,
   WorkerOperationRequest,
   WorkerOperationState,
-} from '../api/contracts';
+} from '../operations/contracts';
 
 export function isTerminalStatus(status: WorkerJobState): boolean {
   return status === 'succeeded' || status === 'failed';

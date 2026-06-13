@@ -1,18 +1,18 @@
-import type { TTSSentenceAlignment, ParsedPdfDocument } from './types';
+import type { TTSSentenceAlignment, ParsedPdfDocument } from '../api/types';
 
 export type {
   TTSAudioBuffer,
   TTSAudioBytes,
   TTSSentenceAlignment,
   TTSSentenceWord,
-} from './types';
+} from '../api/types';
 export type {
   ParsedPdfBlockKind,
   ParsedPdfBlockFragment,
   ParsedPdfBlock,
   ParsedPdfPage,
   ParsedPdfDocument,
-} from './types';
+} from '../api/types';
 
 export const ALIGN_QUEUE_NAME = 'whisper-align';
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';

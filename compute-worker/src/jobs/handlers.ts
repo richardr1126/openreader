@@ -10,7 +10,7 @@ import type {
   PdfLayoutProgress,
   WhisperAlignJobRequest,
   WhisperAlignJobResult,
-} from '../api/contracts';
+} from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';

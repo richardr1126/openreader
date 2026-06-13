@@ -13,7 +13,7 @@ import type {
   PdfLayoutJobRequest,
   WhisperAlignJobRequest,
   WorkerOperationKind,
-} from '../api/contracts';
+} from '../operations/contracts';
 import { createJsonCodec } from './json-codec';
 
 export interface KvEntryLike {

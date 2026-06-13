@@ -9,17 +9,17 @@ export type ParsedPdfBlockFragment = ParsedPdfBlock['fragments'][number];
 export type TTSSentenceAlignment = components['schemas']['TTSSentenceAlignment'];
 export type TTSSentenceWord = TTSSentenceAlignment['words'][number];
 
-export type PdfLayoutProgress = NonNullable<components['schemas']['PublicOperation']['progress']>;
-export type WorkerOperationStatus = components['schemas']['PublicOperation']['status'];
-export type WorkerOperationSubject = components['schemas']['PublicOperation']['subject'];
+export type PdfLayoutProgress = NonNullable<components['schemas']['ComputeOperation']['progress']>;
+export type ComputeOperationStatus = components['schemas']['ComputeOperation']['status'];
+export type ComputeOperationSubject = components['schemas']['ComputeOperation']['subject'];
 
-export type WorkerOperation<Result = unknown> =
-  Omit<components['schemas']['PublicOperation'], 'result'>
+export type ComputeOperation<Result = unknown> =
+  Omit<components['schemas']['ComputeOperation'], 'result'>
   & { result?: Result };
 
-export type WorkerOperationEvent<Result = unknown> = {
+export type ComputeOperationEvent<Result = unknown> = {
   eventId: number;
-  snapshot: WorkerOperation<Result>;
+  snapshot: ComputeOperation<Result>;
 };
 
 export type WhisperAlignRequest =
@@ -31,20 +31,20 @@ export type PdfLayoutResolveRequest =
 
 export type WhisperAlignResult = {
   alignments: TTSSentenceAlignment[];
-  timing?: components['schemas']['PublicOperation']['timing'];
+  timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;
-  timing?: components['schemas']['PublicOperation']['timing'];
+  timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
 export type PdfLayoutResolution = {
   artifact: { objectKey: string } | null;
-  operation: WorkerOperation<PdfLayoutResult> | null;
+  operation: ComputeOperation<PdfLayoutResult> | null;
 };
 
-export function isWorkerOperation(value: unknown): value is WorkerOperation {
+export function isComputeOperation(value: unknown): value is ComputeOperation {
   if (!value || typeof value !== 'object') return false;
   const record = value as Record<string, unknown>;
   return typeof record.opId === 'string'

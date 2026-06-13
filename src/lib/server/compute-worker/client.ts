@@ -4,10 +4,10 @@ import type {
   PdfLayoutResult,
   WhisperAlignRequest,
   WhisperAlignResult,
-  WorkerOperation,
-  WorkerOperationEvent,
+  ComputeOperation,
+  ComputeOperationEvent,
 } from './protocol';
-import { isWorkerOperation } from './protocol';
+import { isComputeOperation } from './protocol';
 
 class WorkerHttpError extends Error {
   constructor(
@@ -88,7 +88,7 @@ function parseSseFrame(frame: string): { id: number | null; data: string | null 
   return { id, data: data.length > 0 ? data.join('\n') : null };
 }
 
-function isTerminal(operation: WorkerOperation): boolean {
+function isTerminal(operation: ComputeOperation): boolean {
   return operation.status === 'succeeded' || operation.status === 'failed';
 }
 
@@ -105,7 +105,7 @@ export class ComputeWorkerClient {
     let lastError: unknown;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
-        const operation = await this.requestJson<WorkerOperation<WhisperAlignResult>>(
+        const operation = await this.requestJson<ComputeOperation<WhisperAlignResult>>(
           'POST',
           '/v1/whisper-align/operations',
           input,
@@ -129,7 +129,7 @@ export class ComputeWorkerClient {
     throw lastError instanceof Error ? lastError : new Error('Unknown compute worker failure');
   }
 
-  createPdfLayoutOperation(input: PdfLayoutRequest): Promise<WorkerOperation<PdfLayoutResult>> {
+  createPdfLayoutOperation(input: PdfLayoutRequest): Promise<ComputeOperation<PdfLayoutResult>> {
     return this.requestJson('POST', '/v1/pdf-layout/operations', input);
   }
 
@@ -141,7 +141,7 @@ export class ComputeWorkerClient {
     });
   }
 
-  async getOperation<Result>(opId: string): Promise<WorkerOperation<Result> | null> {
+  async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {
     try {
       return await this.requestJson('GET', `/v1/operations/${encodeURIComponent(opId)}`);
     } catch (error) {
@@ -199,7 +199,7 @@ export class ComputeWorkerClient {
     return error instanceof Error && /network|timeout|fetch failed/i.test(error.message);
   }
 
-  private async waitForOperation<Result>(opId: string, timeoutMs: number): Promise<WorkerOperation<Result>> {
+  private async waitForOperation<Result>(opId: string, timeoutMs: number): Promise<ComputeOperation<Result>> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let lastEventId: number | null = null;
@@ -227,8 +227,8 @@ export class ComputeWorkerClient {
             buffer = buffer.slice(end + 2);
             if (frame.id !== null) lastEventId = frame.id;
             if (!frame.data) continue;
-            const event = JSON.parse(frame.data) as WorkerOperationEvent<Result>;
-            if (!event?.snapshot || !isWorkerOperation(event.snapshot) || event.snapshot.opId !== opId) continue;
+            const event = JSON.parse(frame.data) as ComputeOperationEvent<Result>;
+            if (!event?.snapshot || !isComputeOperation(event.snapshot) || event.snapshot.opId !== opId) continue;
             if (isTerminal(event.snapshot)) return event.snapshot;
           }
         }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { OperationOrchestrator } from '../../src/operations';
-import type { WorkerOperationRequest } from '../../src/api/contracts';
+import type { WorkerOperationRequest } from '../../src/operations/contracts';
 import {
   JetStreamOperationEventStream,
   JetStreamOperationQueue,
