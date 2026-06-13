@@ -55,8 +55,8 @@ export function createOperationReconciler(input: {
     recoveryPromise = (async () => {
       const recoveredStates = await recoverOrphanedOperations({
         operationStateStore: {
-          getOpStateRecord: input.stateStore.getOpStateRecord!,
-          listOpStates: input.stateStore.listOpStates!,
+          getOpStateRecord: (opId) => input.stateStore.getOpStateRecord!(opId),
+          listOpStates: () => input.stateStore.listOpStates!(),
         },
         orchestrator: {
           markFailedIfUnchanged: async (request) => {
