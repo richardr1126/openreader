@@ -97,6 +97,7 @@ function forwardChildStream(stream, target) {
 function spawnMainCommand(command, env) {
   const [cmd, ...args] = command;
   const child = spawn(cmd, args, {
+    cwd: workspaceRoot,
     env,
     stdio: 'inherit',
     shell: process.platform === 'win32',
