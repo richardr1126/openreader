@@ -1,4 +1,4 @@
-name: openreader-example
+name: openreader-full
 
 services:
   openreader:

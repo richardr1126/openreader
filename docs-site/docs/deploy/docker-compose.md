@@ -1,6 +1,6 @@
 ---
 title: Docker Compose
-description: Run OpenReader with the slim, full, or local-build Docker Compose examples.
+description: Run OpenReader with the slim, full, local-slim, or local-full Docker Compose examples.
 ---
 
 import Tabs from '@theme/Tabs';
@@ -8,7 +8,8 @@ import TabItem from '@theme/TabItem';
 
 Use these examples to run OpenReader with Kokoro-FastAPI and persistent storage. Choose the slim
 stack for the simplest deployment, or the full stack when you want PostgreSQL, SeaweedFS, NATS,
-and the compute worker as separate containers.
+and the compute worker as separate containers. Local build variants are also available for both slim
+and full stacks to build the application from your current checkout.
 
 ## Prerequisites
 
@@ -54,31 +55,42 @@ For details about running the worker separately, see
 [Compute Worker](./compute-worker).
 
 </TabItem>
-<TabItem value="local" label="Local Build">
+<TabItem value="local-slim" label="Local Slim">
 
-The local-build example uses the full multi-container layout, but builds the OpenReader app and
-compute-worker images from the current checkout.
+The local-slim example runs a slim setup (OpenReader and Kokoro-FastAPI), but builds the OpenReader app image from the current checkout.
 
 ```bash
-docker compose -f docker/examples/compose.local.yml up --build
+docker compose -f docker/examples/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
 ```
 
-Compose file: [`docker/examples/compose.local.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.local.yml)
+Compose file: [`docker/examples/compose.local-slim.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.local-slim.yml)
+
+</TabItem>
+<TabItem value="local-full" label="Local Full">
+
+The local-full example uses the full multi-container layout, but builds the OpenReader app and compute-worker images from the current checkout.
+
+```bash
+docker compose -f docker/examples/compose.local-full.yml up --build
+# Repository convenience command: pnpm compose:local:full
+```
+
+Compose file: [`docker/examples/compose.local-full.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.local-full.yml)
 
 </TabItem>
 </Tabs>
 
 ## Included services
 
-| Service | Slim | Full | Local Build |
-| --- | --- | --- | --- |
-| OpenReader | Published image | Published image | Local build |
-| Kokoro-FastAPI | Container | Container | Container |
-| Database | Embedded SQLite | PostgreSQL container | PostgreSQL container |
-| SeaweedFS | Embedded | Container | Container |
-| NATS | Embedded | Container | Container |
-| Compute worker | Embedded | Published image | Local build |
+| Service | Slim | Full | Local Slim | Local Full |
+| --- | --- | --- | --- | --- |
+| OpenReader | Published image | Published image | Local build | Local build |
+| Kokoro-FastAPI | Container | Container | Container | Container |
+| Database | Embedded SQLite | PostgreSQL container | Embedded SQLite | PostgreSQL container |
+| SeaweedFS | Embedded | Container | Embedded | Container |
+| NATS | Embedded | Container | Embedded | Container |
+| Compute worker | Embedded | Published image | Embedded | Local build |
 
 On first boot, `RUNTIME_SEED_JSON` creates an enabled Kokoro shared provider and selects it as the
 default TTS provider.
@@ -118,13 +130,23 @@ docker compose -f docker/examples/compose.full.yml up
 ```
 
 </TabItem>
-<TabItem value="local" label="Local Build">
+<TabItem value="local-slim" label="Local Slim">
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 S3_ENDPOINT=http://192.168.0.XXX:8333 \
-docker compose -f docker/examples/compose.local.yml up --build
+docker compose -f docker/examples/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
+```
+
+</TabItem>
+<TabItem value="local-full" label="Local Full">
+
+```bash
+BASE_URL=http://192.168.0.XXX:3003 \
+S3_ENDPOINT=http://192.168.0.XXX:8333 \
+docker compose -f docker/examples/compose.local-full.yml up --build
+# Repository convenience command: pnpm compose:local:full
 ```
 
 </TabItem>
@@ -134,7 +156,7 @@ Replace `192.168.0.XXX` with your Docker host's LAN IP and allow inbound TCP por
 `8333` through its firewall.
 
 :::info Internal full-stack endpoint
-The full and local-build compute workers continue using `http://seaweedfs:8333` internally.
+The full and local-full compute workers continue using `http://seaweedfs:8333` internally.
 `S3_ENDPOINT` configures the app endpoint and browser-facing presigned URLs.
 :::
 

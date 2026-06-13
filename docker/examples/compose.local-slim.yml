@@ -1,8 +1,11 @@
-name: openreader-slim
+name: openreader-local-slim-build
 
 services:
   openreader:
-    image: ghcr.io/richardr1126/openreader:latest
+    image: openreader:local
+    build:
+      context: ../..
+      dockerfile: Dockerfile
     depends_on:
       kokoro-tts:
         condition: service_started

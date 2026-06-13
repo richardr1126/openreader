@@ -1,4 +1,4 @@
-name: openreader-local-build
+name: openreader-local-full-build
 
 services:
   openreader:
