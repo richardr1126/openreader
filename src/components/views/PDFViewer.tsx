@@ -39,6 +39,7 @@ interface PDFOnLinkClickArgs {
 export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
+  const [textLayerRenderRevision, setTextLayerRenderRevision] = useState(0);
   const hasSignaledReadyRef = useRef(false);
   const scaleRef = useRef<number>(1);
   const { containerWidth, containerHeight } = usePDFResize(containerRef);
@@ -106,6 +107,10 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     hasSignaledReadyRef.current = true;
     onDocumentReady?.();
   }, [onDocumentReady]);
+
+  const handleTextLayerRenderSuccess = useCallback(() => {
+    setTextLayerRenderRevision((revision) => revision + 1);
+  }, []);
 
   useEffect(() => {
     hasSignaledReadyRef.current = false;
@@ -228,6 +233,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     parsedDocument,
     resolvedLanguage,
     layoutKey,
+    textLayerRenderRevision,
     isPageRendering,
     clearSentenceHighlightTimeouts,
     scheduleSentenceTimeout
@@ -309,6 +315,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     clearWordHighlights,
     highlightWordIndex,
     layoutKey,
+    textLayerRenderRevision,
     clearWordHighlightTimeouts,
     scheduleWordTimeout,
     isPageRendering
@@ -546,6 +553,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                       setIsPageRendering(false);
                       markViewerReady();
                     }}
+                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
@@ -572,6 +580,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                       setIsPageRendering(false);
                       markViewerReady();
                     }}
+                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
@@ -594,6 +603,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                       setIsPageRendering(false);
                       markViewerReady();
                     }}
+                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
