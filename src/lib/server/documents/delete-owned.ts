@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents } from '@openreader/database/schema';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';

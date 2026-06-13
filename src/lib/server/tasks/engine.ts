@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, lt, ne, or, sql } from 'drizzle-orm';
-import { db } from '@/db';
-import { scheduledTasks } from '@/db/schema';
+import { db } from '@openreader/database';
+import { scheduledTasks } from '@openreader/database/schema';
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { TASK_REGISTRY } from './registry';

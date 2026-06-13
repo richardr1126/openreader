@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { inArray } from 'drizzle-orm';
-import { db } from '../../src/db';
-import { adminProviders } from '../../src/db/schema';
+import { db } from '@openreader/database';
+import { adminProviders } from '@openreader/database/schema';
 
 import {
   AdminProviderError,

@@ -1,4 +1,4 @@
-import { db } from '@/db';
+import { db } from './index';
 
 /**
  * Run `fn` with a database connection, wrapped in a transaction on Postgres.

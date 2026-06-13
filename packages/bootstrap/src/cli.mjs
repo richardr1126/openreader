@@ -3,11 +3,23 @@ import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
+import { runMigrations } from '@openreader/database/migrate';
+import { hasNatsBinary } from './embedded-nats.mjs';
+import {
+  detectHostForDefaultEndpoint,
+  hasWeedBinary,
+  isRunningInDocker,
+  loopbackS3Endpoint,
+  parseS3Endpoint,
+  parseUrlHost,
+  waitForEndpoint,
+} from './embedded-seaweedfs.mjs';
+import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
 
 function loadEnvFiles() {
   const cwd = process.cwd();
@@ -49,83 +61,6 @@ function requireAuthEnv(env) {
   }
 }
 
-function isPrivateIPv4(address) {
-  if (!address) return false;
-  if (address.startsWith('10.')) return true;
-  if (address.startsWith('192.168.')) return true;
-  const m = /^172\.(\d+)\./.exec(address);
-  if (m) {
-    const second = Number.parseInt(m[1], 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  return false;
-}
-
-function detectHostForDefaultEndpoint() {
-  const interfaces = os.networkInterfaces();
-  const ipv4 = [];
-
-  for (const entries of Object.values(interfaces)) {
-    for (const entry of entries || []) {
-      if (!entry) continue;
-      const family = typeof entry.family === 'string' ? entry.family : String(entry.family);
-      if (family !== 'IPv4') continue;
-      if (entry.internal) continue;
-      ipv4.push(entry.address);
-    }
-  }
-
-  const privateAddr = ipv4.find(isPrivateIPv4);
-  if (privateAddr) return privateAddr;
-  if (ipv4[0]) return ipv4[0];
-  return '127.0.0.1';
-}
-
-function parseS3Endpoint(endpoint) {
-  let url;
-  try {
-    url = new URL(endpoint);
-  } catch {
-    throw new Error(`Invalid S3_ENDPOINT: ${endpoint}`);
-  }
-
-  if (!url.hostname) {
-    throw new Error(`Invalid S3_ENDPOINT host: ${endpoint}`);
-  }
-
-  const port = Number.parseInt(url.port || '8333', 10);
-  if (!Number.isFinite(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid S3_ENDPOINT port: ${endpoint}`);
-  }
-
-  return {
-    hostname: url.hostname,
-    port,
-    normalized: `${url.protocol}//${url.hostname}:${port}`,
-  };
-}
-
-function loopbackS3Endpoint(endpoint) {
-  const parsed = parseS3Endpoint(endpoint);
-  const url = new URL(parsed.normalized);
-  return `${url.protocol}//127.0.0.1:${parsed.port}`;
-}
-
-function parseUrlHost(urlValue, fieldName) {
-  let url;
-  try {
-    url = new URL(urlValue);
-  } catch {
-    throw new Error(`Invalid ${fieldName}: ${urlValue}`);
-  }
-
-  if (!url.hostname) {
-    throw new Error(`Invalid ${fieldName} host: ${urlValue}`);
-  }
-
-  return url.hostname;
-}
-
 function parseCommandFromArgs(argv) {
   const marker = argv.indexOf('--');
   if (marker >= 0) return argv.slice(marker + 1);
@@ -141,51 +76,6 @@ function forwardChildStream(stream, target) {
   return () => {
     stream.off('data', onData);
   };
-}
-
-function hasWeedBinary() {
-  const probe = spawnSync('weed', ['version'], { stdio: 'ignore' });
-  if (probe.error) return false;
-  return true;
-}
-
-function hasNatsBinary() {
-  const probe = spawnSync('nats-server', ['-v'], { stdio: 'ignore' });
-  if (probe.error) return false;
-  return true;
-}
-
-async function waitForEndpoint(url, timeoutSeconds) {
-  const waitMs = Math.max(1, timeoutSeconds) * 1000;
-  const deadline = Date.now() + waitMs;
-
-  while (Date.now() < deadline) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-    try {
-      const res = await fetch(url, { method: 'GET', signal: controller.signal });
-      if (res) return;
-    } catch {
-      // retry
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    await delay(1000);
-  }
-
-  throw new Error(`Embedded weed mini did not become ready at ${url} within ${timeoutSeconds}s.`);
-}
-
-function isRunningInDocker() {
-  if (process.platform !== 'linux') return false;
-  if (fs.existsSync('/.dockerenv')) return true;
-  try {
-    const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
-    return /(docker|containerd|kubepods|podman)/i.test(cgroup);
-  } catch {
-    return false;
-  }
 }
 
 function spawnMainCommand(command, env) {
@@ -219,53 +109,13 @@ function spawnMainCommand(command, env) {
   return { child, exitPromise };
 }
 
-function resolveEmbeddedWorkerLaunch() {
-  const candidateDirs = [
-    path.join(process.cwd(), 'embedded-compute-worker'),
-    path.join(process.cwd(), 'compute-worker'),
-  ];
-
-  for (const workerDir of candidateDirs) {
-    const serverEntry = path.join(workerDir, 'src', 'server.ts');
-    if (!fs.existsSync(serverEntry)) continue;
-    return {
-      cmd: process.execPath,
-      args: ['--import', 'tsx', 'src/server.ts'],
-      cwd: workerDir,
-    };
-  }
-
-  throw new Error(
-    'Could not find an embedded compute worker runtime. '
-    + 'Include embedded-compute-worker/src/server.ts in the runtime image or keep compute-worker available locally.',
-  );
-}
-
-function runDbMigrations(env) {
-  const migrateScript = path.join(process.cwd(), 'drizzle', 'scripts', 'migrate.mjs');
-  if (!fs.existsSync(migrateScript)) {
-    throw new Error(`Could not find migration script at ${migrateScript}`);
-  }
-
+async function runDbMigrations(env) {
   console.log('Running database migrations...');
-  const migration = spawnSync(process.execPath, [migrateScript], {
-    env,
-    stdio: 'inherit',
-  });
-
-  if (migration.error) {
-    throw migration.error;
-  }
-  if (typeof migration.status === 'number' && migration.status !== 0) {
-    throw new Error(`Database migrations failed with exit code ${migration.status}.`);
-  }
+  await runMigrations({ cwd: process.cwd(), env });
 }
 
 function runStorageMigrations(env) {
-  const migrateScript = path.join(process.cwd(), 'scripts', 'migrate-fs-v2.mjs');
-  if (!fs.existsSync(migrateScript)) {
-    throw new Error(`Could not find storage migration script at ${migrateScript}`);
-  }
+  const migrateScript = fileURLToPath(new URL('./storage-migration.mjs', import.meta.url));
 
   console.log('Running storage migrations (v2)...');
   const migration = spawnSync(process.execPath, [migrateScript, '--dry-run', 'false', '--delete-local', 'false'], {
@@ -335,7 +185,7 @@ async function main() {
 
   const command = parseCommandFromArgs(process.argv.slice(2));
   if (command.length === 0) {
-    console.error('Usage: node scripts/openreader-entrypoint.mjs -- <command> [args]');
+    console.error('Usage: openreader -- <command> [args]');
     process.exit(2);
   }
 
@@ -424,7 +274,7 @@ async function main() {
   try {
     const shouldRunDbMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_DRIZZLE_MIGRATIONS', true);
     if (shouldRunDbMigrations) {
-      runDbMigrations(runtimeEnv);
+      await runDbMigrations(runtimeEnv);
     }
 
     if (useEmbeddedWeed) {
@@ -482,7 +332,7 @@ async function main() {
       console.log('Starting embedded SeaweedFS weed mini...');
       launchWeed(runtimeEnv.S3_ENDPOINT);
       const startupEndpoint = parseS3Endpoint(runtimeEnv.S3_ENDPOINT);
-      await waitForEndpoint(`http://127.0.0.1:${startupEndpoint.port}`, waitTimeout);
+      await waitForEndpoint(`http://127.0.0.1:${startupEndpoint.port}`, waitTimeout, 'Embedded SeaweedFS');
       console.log(`Embedded SeaweedFS is ready at ${runtimeEnv.S3_ENDPOINT}`);
     }
 
@@ -555,7 +405,7 @@ async function main() {
         console.error(`Embedded nats-server failed to start: ${error instanceof Error ? error.message : String(error)}`);
         scheduleFatalShutdown('nats-server', null, null, 'failed to start');
       });
-      await waitForEndpoint(`http://127.0.0.1:${embeddedNatsMonitorPort}/healthz`, 20);
+      await waitForEndpoint(`http://127.0.0.1:${embeddedNatsMonitorPort}/healthz`, 20, 'Embedded nats-server');
       console.log(`Embedded nats-server is ready at nats://127.0.0.1:${embeddedNatsPort}`);
 
       console.log(`Starting embedded compute-worker on 127.0.0.1:${embeddedWorkerPort}...`);
@@ -589,7 +439,7 @@ async function main() {
         console.error(`Embedded compute-worker failed to start: ${error instanceof Error ? error.message : String(error)}`);
         scheduleFatalShutdown('compute-worker', null, null, 'failed to start');
       });
-      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30);
+      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30, 'Embedded compute-worker');
       console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
     } else if (!runtimeEnv.COMPUTE_WORKER_URL?.trim() || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()) {
       throw new Error('COMPUTE_WORKER_URL and COMPUTE_WORKER_TOKEN are required when embedded compute worker startup is disabled.');

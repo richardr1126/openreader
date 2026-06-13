@@ -38,8 +38,8 @@ export default defineConfig({
         test: {
           name: 'compute-worker',
           environment: 'node',
-          include: ['compute-worker/tests/{unit,api,compute}/**/*.test.ts'],
-          setupFiles: ['compute-worker/tests/setup-env.ts'],
+          include: ['packages/compute-worker/tests/{unit,api,compute}/**/*.test.ts'],
+          setupFiles: ['packages/compute-worker/tests/setup-env.ts'],
         },
       },
     ],

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { and, eq, inArray, lt, or, sql } from 'drizzle-orm';
-import { db } from '@/db';
-import { documentPreviews } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documentPreviews } from '@openreader/database/schema';
 import { serverLogger } from '@/lib/server/logger';
 import { logServerError } from '@/lib/server/errors/logging';
 import {

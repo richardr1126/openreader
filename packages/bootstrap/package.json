@@ -1,0 +1,25 @@
+{
+  "name": "@openreader/bootstrap",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "bin": {
+    "openreader": "./src/cli.mjs",
+    "openreader-migrate-storage": "./src/storage-migration.mjs"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs --",
+    "migrate-storage": "node src/storage-migration.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1061.0",
+    "@openreader/database": "workspace:*",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "ffmpeg-static": "^5.3.0",
+    "pg": "^8.21.0"
+  }
+}

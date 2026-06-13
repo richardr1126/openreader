@@ -29,6 +29,9 @@ importers:
       '@napi-rs/canvas':
         specifier: ^0.1.100
         version: 0.1.100
+      '@openreader/database':
+        specifier: workspace:*
+        version: link:packages/database
       '@speech-sdk/core':
         specifier: ^0.15.0
         version: 0.15.0
@@ -47,9 +50,6 @@ importers:
       better-auth:
         specifier: ^1.6.14
         version: 1.6.14(better-sqlite3@12.10.0)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.0)(kysely@0.28.17)(pg@8.21.0))(next@15.5.19(@playwright/test@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(pg@8.21.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.8(@types/node@20.19.41)(vite@8.0.14(@types/node@20.19.41)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.4)(yaml@2.9.0)))
-      better-sqlite3:
-        specifier: ^12.10.0
-        version: 12.10.0
       cmpstr:
         specifier: ^3.3.0
         version: 3.3.0
@@ -68,9 +68,6 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
-      drizzle-kit:
-        specifier: ^0.31.10
-        version: 0.31.10
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.0)(kysely@0.28.17)(pg@8.21.0)
@@ -104,9 +101,6 @@ importers:
       pdfjs-dist:
         specifier: 4.8.69
         version: 4.8.69
-      pg:
-        specifier: ^8.21.0
-        version: 8.21.0
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -192,6 +186,12 @@ importers:
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
+      better-sqlite3:
+        specifier: ^12.10.0
+        version: 12.10.0
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@1.21.7)
@@ -214,7 +214,28 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@20.19.41)(vite@8.0.14(@types/node@20.19.41)(esbuild@0.28.0)(jiti@1.21.7)(tsx@4.22.4)(yaml@2.9.0))
 
-  compute-worker:
+  packages/bootstrap:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1061.0
+        version: 3.1061.0
+      '@openreader/database':
+        specifier: workspace:*
+        version: link:../database
+      better-sqlite3:
+        specifier: ^12.10.0
+        version: 12.10.0
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      ffmpeg-static:
+        specifier: ^5.3.0
+        version: 5.3.0
+      pg:
+        specifier: ^8.21.0
+        version: 8.21.0
+
+  packages/compute-worker:
     dependencies:
       '@aws-sdk/client-s3':
         specifier: ^3.1061.0
@@ -265,26 +286,17 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
-  docker/entrypoint-migration-tools:
+  packages/database:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1061.0
-        version: 3.1061.0
       better-sqlite3:
         specifier: ^12.10.0
         version: 12.10.0
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
-      drizzle-kit:
-        specifier: ^0.31.10
-        version: 0.31.10
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.0)(kysely@0.28.17)(pg@8.21.0)
-      ffmpeg-static:
-        specifier: ^5.3.0
-        version: 5.3.0
       pg:
         specifier: ^8.21.0
         version: 8.21.0

@@ -1,13 +1,13 @@
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { and, eq, inArray, like, ne } from 'drizzle-orm';
-import { db } from '../src/db';
-import { audiobooks, audiobookChapters, documentPreviews, documents } from '../src/db/schema';
+import { db } from '@openreader/database';
+import { audiobooks, audiobookChapters, documentPreviews, documents } from '@openreader/database/schema';
 import { deleteDocumentPrefix } from '../src/lib/server/documents/blobstore';
 import { deleteAudiobookPrefix } from '../src/lib/server/audiobooks/blobstore';
 import { deleteTtsSegmentPrefix } from '../src/lib/server/tts/segments-blobstore';
 import { getS3Client, getS3Config, isS3Configured } from '../src/lib/server/storage/s3';
-import * as authSchemaSqlite from '../src/db/schema_auth_sqlite';
-import * as authSchemaPostgres from '../src/db/schema_auth_postgres';
+import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
+import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 
 function chunk<T>(items: T[], size: number): T[][] {
   if (items.length === 0) return [];

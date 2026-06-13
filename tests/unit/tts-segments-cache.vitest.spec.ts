@@ -15,7 +15,7 @@ function resultBuilder(result: unknown[]) {
   };
 }
 
-vi.mock('@/db', () => ({
+vi.mock('@openreader/database', () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => resultBuilder(mocks.selectResults.shift() ?? [])),

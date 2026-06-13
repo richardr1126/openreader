@@ -43,7 +43,7 @@ console.log('\n--- Generating Better Auth schema (SQLite) ---');
   delete envSqlite.POSTGRES_URL; // force SQLite adapter
   const result = spawnSync('npx', [
     '@better-auth/cli', 'generate',
-    '--output', 'src/db/schema_auth_sqlite.ts',
+    '--output', 'packages/database/src/schema_auth_sqlite.ts',
     '--yes',
   ], { stdio: 'inherit', env: envSqlite });
   if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
@@ -58,7 +58,7 @@ console.log('\n--- Generating Better Auth schema (Postgres) ---');
   }
   const result = spawnSync('npx', [
     '@better-auth/cli', 'generate',
-    '--output', 'src/db/schema_auth_postgres.ts',
+    '--output', 'packages/database/src/schema_auth_postgres.ts',
     '--yes',
   ], { stdio: 'inherit', env: envPg });
   if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
@@ -67,7 +67,10 @@ console.log('\n--- Generating Better Auth schema (Postgres) ---');
 // ---------------------------------------------------------------------------
 // Step 2: Generate Drizzle migrations for both dialects.
 // ---------------------------------------------------------------------------
-for (const configFile of ['drizzle.config.sqlite.ts', 'drizzle.config.pg.ts']) {
+for (const configFile of [
+  'packages/database/drizzle.config.sqlite.ts',
+  'packages/database/drizzle.config.pg.ts',
+]) {
   console.log(`\n--- Drizzle generate (${configFile}) ---`);
   const result = spawnSync('drizzle-kit', ['generate', '--config', configFile, ...extraArgs], {
     stdio: 'inherit',

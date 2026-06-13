@@ -62,13 +62,13 @@ jobs:
             platform: linux/amd64
             runner: ubuntu-24.04
             context: .
-            dockerfile: ./compute-worker/Dockerfile
+            dockerfile: ./packages/compute-worker/Dockerfile
           - image_target: compute-worker
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
             context: .
-            dockerfile: ./compute-worker/Dockerfile
+            dockerfile: ./packages/compute-worker/Dockerfile
 
     steps:
       - name: Checkout repository

@@ -1,6 +1,6 @@
-import { db } from '@/db';
-import { runInDbTransaction } from '@/db/run-in-transaction';
-import { userTtsChars } from '@/db/schema';
+import { db } from '@openreader/database';
+import { runInDbTransaction } from '@openreader/database/run-in-transaction';
+import { userTtsChars } from '@openreader/database/schema';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 

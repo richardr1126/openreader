@@ -20,7 +20,7 @@ const hoisted = vi.hoisted(() => ({
   buildComputeRateLimitedResponse: vi.fn(),
 }));
 
-vi.mock('@/db', () => ({
+vi.mock('@openreader/database', () => ({
   get db() {
     return hoisted.db;
   },

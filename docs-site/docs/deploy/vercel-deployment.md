@@ -106,7 +106,7 @@ For all variables and defaults, see [Environment Variables](../reference/environ
 
 ## 4. Database and data migrations
 
-Vercel deployments do not run `scripts/openreader-entrypoint.mjs`, so automatic startup migrations do not run there.
+Vercel deployments do not run the `@openreader/bootstrap` process, so automatic startup migrations do not run there.
 
 - Run `pnpm migrate` in a controlled environment to apply Drizzle schema migrations to your Postgres DB.
 - Run `pnpm migrate-fs` only when migrating legacy local filesystem data (`docstore/documents_v1`, `docstore/audiobooks_v1`) into object storage + DB rows. Fresh Vercel deployments usually do not need this.

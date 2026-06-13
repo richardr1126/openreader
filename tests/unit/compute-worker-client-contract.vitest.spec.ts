@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { createComputeWorkerApp, type ComputeWorkerApp } from '../../compute-worker/src/api/app';
-import { FakeControlPlane } from '../../compute-worker/tests/fixtures/fake-control-plane';
+import { createComputeWorkerApp, type ComputeWorkerApp } from '../../packages/compute-worker/src/api/app';
+import { FakeControlPlane } from '../../packages/compute-worker/tests/fixtures/fake-control-plane';
 import { ComputeWorkerClient } from '../../src/lib/server/compute-worker/client';
 
 describe('ComputeWorkerClient contract', () => {

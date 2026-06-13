@@ -10,8 +10,8 @@ if (!url) {
 }
 
 export default {
-  schema: ['./src/db/schema_postgres.ts', './src/db/schema_auth_postgres.ts'],
-  out: './drizzle/postgres',
+  schema: ['./packages/database/src/schema_postgres.ts', './packages/database/src/schema_auth_postgres.ts'],
+  out: './packages/database/migrations/postgres',
   dialect: 'postgresql',
   dbCredentials: {
     url,

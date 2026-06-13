@@ -46,7 +46,7 @@ const nextConfig: NextConfig = {
       canvas: '@napi-rs/canvas',
     },
   },
-  transpilePackages: [],
+  transpilePackages: ['@openreader/database'],
   serverExternalPackages,
   outputFileTracingIncludes: {
     '/api/audiobook': [

@@ -7,7 +7,7 @@ const forbidden = [
   '@openreader/compute-worker',
   'compute/core',
   'compute/worker',
-  'compute-worker/src',
+  'packages/compute-worker/src',
 ];
 const failures = [];
 

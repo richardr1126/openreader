@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, eq, gt, inArray, or } from 'drizzle-orm';
-import { db } from '@/db';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@/db/schema';
+import { db } from '@openreader/database';
+import { ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import {
   decodeManifestCursor,

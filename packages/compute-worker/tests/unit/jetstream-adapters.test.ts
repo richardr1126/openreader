@@ -45,6 +45,17 @@ class FakeKvStore implements KvStoreLike {
     this.revision += 1;
     this.data.set(key, { operation: 'PUT', value: data.slice(), revision: this.revision });
   }
+
+  async keys(filter?: string | string[]): Promise<AsyncIterable<string>> {
+    const keys = Array.from(this.data.keys());
+    return {
+      async *[Symbol.asyncIterator]() {
+        for (const key of keys) {
+          yield key;
+        }
+      }
+    };
+  }
 }
 
 class FakeJetStream {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PassThrough, Readable } from 'stream';
 import { auth } from '@/lib/server/auth/auth';
-import { db } from '@/db';
+import { db } from '@openreader/database';
 import {
   documents,
   audiobooks,
@@ -13,9 +13,9 @@ import {
   userJobEvents,
   userPreferences,
   userTtsChars,
-} from '@/db/schema';
-import * as authSchemaSqlite from '@/db/schema_auth_sqlite';
-import * as authSchemaPostgres from '@/db/schema_auth_postgres';
+} from '@openreader/database/schema';
+import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
+import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import archiver from 'archiver';
 import { appendUserExportArchive } from '@/lib/server/user/data-export';

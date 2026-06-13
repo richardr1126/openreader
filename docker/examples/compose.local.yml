@@ -103,7 +103,7 @@ services:
     image: openreader-compute-worker:local
     build:
       context: ../..
-      dockerfile: compute-worker/Dockerfile
+      dockerfile: packages/compute-worker/Dockerfile
     depends_on:
       nats:
         condition: service_started

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, inArray } from 'drizzle-orm';
-import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { db } from '@openreader/database';
+import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { toDocumentTypeFromName } from '@/lib/server/documents/utils';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
