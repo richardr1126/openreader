@@ -1,0 +1,124 @@
+name: openreader-example
+
+services:
+  openreader:
+    image: ghcr.io/richardr1126/openreader:latest
+    # Keep localhost:8333 valid for both app requests and browser-facing presigned URLs.
+    network_mode: service:seaweedfs
+    depends_on:
+      kokoro-tts:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      BASE_URL: ${BASE_URL:-http://localhost:3003}
+      AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      POSTGRES_URL: postgres://openreader:openreader@postgres:5432/openreader
+      COMPUTE_WORKER_URL: http://compute-worker:8081
+      COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      USE_EMBEDDED_WEED_MINI: "false"
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:8333} # Used for internal endpoint and public facing presigned URLs.
+      S3_BUCKET: ${S3_BUCKET:-openreader-documents}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-devkey}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-devsecret}
+      S3_FORCE_PATH_STYLE: "true"
+      S3_PREFIX: ${S3_PREFIX:-openreader}
+      RUNTIME_SEED_JSON: |-
+        {
+          "version": 1,
+          "runtimeConfig": {
+            "defaultTtsProvider": "kokoro"
+          },
+          "providers": [
+            {
+              "slug": "kokoro",
+              "displayName": "Kokoro",
+              "providerType": "custom-openai",
+              "baseUrl": "http://kokoro-tts:8880/v1",
+              "defaultModel": "kokoro",
+              "enabled": true
+            }
+          ]
+        }
+    volumes:
+      - openreader-docstore:/app/docstore
+
+  kokoro-tts:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.4
+    environment:
+      ONNX_NUM_THREADS: 8
+      ONNX_INTER_OP_THREADS: 4
+      ONNX_EXECUTION_MODE: parallel
+      ONNX_OPTIMIZATION_LEVEL: all
+      ONNX_MEMORY_PATTERN: "true"
+      ONNX_ARENA_EXTEND_STRATEGY: kNextPowerOfTwo
+      API_LOG_LEVEL: DEBUG
+    ports:
+      - "8880:8880"
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.18
+    command: ["mini", "-dir=/data"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-devkey}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-devsecret}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/status >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "3003:3003"
+      - "8333:8333"
+    volumes:
+      - seaweedfs-data:/data
+
+  nats:
+    image: nats:2.14-alpine
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - nats-data:/data
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: openreader
+      POSTGRES_PASSWORD: openreader
+      POSTGRES_DB: openreader
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openreader -d openreader"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  compute-worker:
+    image: ghcr.io/richardr1126/openreader-compute-worker:latest
+    depends_on:
+      nats:
+        condition: service_started
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      COMPUTE_WORKER_HOST: 0.0.0.0
+      PORT: 8081
+      COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: ${S3_BUCKET:-openreader-documents}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-devkey}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-devsecret}
+      S3_FORCE_PATH_STYLE: "true"
+      S3_PREFIX: ${S3_PREFIX:-openreader}
+      COMPUTE_PREWARM_MODELS: ${COMPUTE_PREWARM_MODELS:-false}
+
+volumes:
+  openreader-docstore:
+  seaweedfs-data:
+  nats-data:
+  postgres-data:

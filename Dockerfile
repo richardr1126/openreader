@@ -73,12 +73,14 @@ COPY --from=app-builder /app/src/db ./src/db
 # Merge in the dependency subset needed by the entrypoint migration scripts.
 COPY --from=app-builder /opt/entrypoint-migration-tools/node_modules /tmp/runtime-tools-node_modules
 RUN mkdir -p /app/node_modules && \
+    rm -rf /app/node_modules/pg && \
     rm -rf /tmp/runtime-tools-node_modules/@aws-sdk \
            /tmp/runtime-tools-node_modules/better-sqlite3 \
-           /tmp/runtime-tools-node_modules/ffmpeg-static \
-           /tmp/runtime-tools-node_modules/pg && \
+           /tmp/runtime-tools-node_modules/ffmpeg-static && \
     cp -an /tmp/runtime-tools-node_modules/. /app/node_modules/ && \
     rm -rf /tmp/runtime-tools-node_modules
+# Drizzle Kit discovers the Postgres driver through ESM import during startup migrations.
+RUN node --input-type=module -e "await import('pg')"
 
 # Ship the embedded compute worker as a separate deployed bundle.
 COPY --from=app-builder /opt/embedded-compute-worker ./embedded-compute-worker
