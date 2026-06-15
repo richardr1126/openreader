@@ -1,25 +1,14 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@openreader/database';
-import { userPreferences } from '@openreader/database/schema';
+import { userOnboarding } from '@openreader/database/schema';
 import { normalizeVersion, shouldOpenChangelogForVersionChange } from '@/lib/shared/changelog';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import {
-  deserializeUserPreferencesPayload,
-  extractUserPreferencesMeta,
-  withUserPreferencesMeta,
-  USER_PREFERENCES_LAST_SEEN_APP_VERSION_KEY,
-} from '@/lib/server/user/preferences-payload';
 
 export const dynamic = 'force-dynamic';
-
-function serializePreferencesForDb(payload: Record<string, unknown>): Record<string, unknown> | string {
-  if (process.env.POSTGRES_URL) return payload;
-  return JSON.stringify(payload);
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,40 +27,28 @@ export async function POST(req: NextRequest) {
 
     const rows = await db
       .select({
-        dataJson: userPreferences.dataJson,
-        clientUpdatedAtMs: userPreferences.clientUpdatedAtMs,
+        lastSeenAppVersion: userOnboarding.lastSeenAppVersion,
       })
-      .from(userPreferences)
-      .where(eq(userPreferences.userId, scope.ownerUserId))
+      .from(userOnboarding)
+      .where(eq(userOnboarding.userId, scope.ownerUserId))
       .limit(1);
 
     const row = rows[0];
-    const existingPayload = deserializeUserPreferencesPayload(row?.dataJson);
-    const existingMeta = extractUserPreferencesMeta(existingPayload);
-    const lastSeenVersion = typeof existingMeta.lastSeenAppVersion === 'string'
-      ? existingMeta.lastSeenAppVersion
-      : null;
+    const lastSeenVersion = row?.lastSeenAppVersion ?? null;
     const shouldOpen = shouldOpenChangelogForVersionChange(lastSeenVersion, currentVersion);
-    const nextMeta = {
-      ...existingMeta,
-      [USER_PREFERENCES_LAST_SEEN_APP_VERSION_KEY]: currentVersion,
-    };
-    const dataJson = serializePreferencesForDb(withUserPreferencesMeta(existingPayload, nextMeta));
     const updatedAt = nowTimestampMs();
-    const clientUpdatedAtMs = Number(row?.clientUpdatedAtMs ?? 0);
 
     await db
-      .insert(userPreferences)
+      .insert(userOnboarding)
       .values({
         userId: scope.ownerUserId,
-        dataJson,
-        clientUpdatedAtMs: clientUpdatedAtMs > 0 ? clientUpdatedAtMs : updatedAt,
+        lastSeenAppVersion: currentVersion,
         updatedAt,
       })
       .onConflictDoUpdate({
-        target: [userPreferences.userId],
+        target: [userOnboarding.userId],
         set: {
-          dataJson,
+          lastSeenAppVersion: currentVersion,
           updatedAt,
         },
       });

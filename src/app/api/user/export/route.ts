@@ -12,6 +12,8 @@ import {
   userDocumentProgress,
   userJobEvents,
   userPreferences,
+  userFolders,
+  userOnboarding,
   userTtsChars,
 } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
@@ -65,6 +67,8 @@ export async function GET(req: NextRequest) {
     segmentVariants,
     userDocs,
     userAudiobooks,
+    folders,
+    onboarding,
   ] = await Promise.all([
     db.select().from(userPreferences).where(eq(userPreferences.userId, userId)).limit(1),
     db
@@ -107,6 +111,8 @@ export async function GET(req: NextRequest) {
       .from(audiobooks)
       .where(eq(audiobooks.userId, userId))
       .orderBy(desc(audiobooks.createdAt)),
+    db.select().from(userFolders).where(eq(userFolders.userId, userId)).orderBy(userFolders.position),
+    db.select().from(userOnboarding).where(eq(userOnboarding.userId, userId)).limit(1),
   ]);
 
   const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
@@ -190,6 +196,8 @@ export async function GET(req: NextRequest) {
         exportedAtMs,
         profileData,
         preferences: prefs[0] ?? null,
+        folders,
+        onboarding: onboarding[0] ?? null,
         readingHistory: progress,
         ttsUsage,
         jobEvents,

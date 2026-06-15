@@ -4,7 +4,7 @@ import {
   isDirectionalEpubLocation,
   shouldNavigateToDifferentCfi,
   shouldPersistEpubLocation,
-} from '../../src/hooks/epub/useEPUBLocationController';
+} from '../../src/lib/client/epub/location-controller';
 
 describe('EPUB location controller helpers', () => {
   test('detects directional locations', () => {

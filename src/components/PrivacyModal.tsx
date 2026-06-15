@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { updateAppConfig } from '@/lib/client/dexie';
+import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface PrivacyModalProps {
@@ -47,6 +47,7 @@ function PrivacyModalBody({ origin }: { origin: string }) {
 }
 
 export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps) {
+  const { mutation } = useOnboardingState();
   const [origin, setOrigin] = useState('');
   const [agreed, setAgreed] = useState(false);
 
@@ -62,7 +63,7 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
   }, [isOpen]);
 
   const handleAccept = async () => {
-    await updateAppConfig({ privacyAccepted: true });
+    await mutation.mutateAsync({ privacyAccepted: true });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('openreader:privacyAccepted'));
     }

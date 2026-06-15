@@ -11,6 +11,8 @@ export type ClaimableCounts = {
   preferences: number;
   progress: number;
   documentSettings: number;
+  folders: number;
+  onboarding: number;
 };
 
 function toClaimableCounts(value: unknown): ClaimableCounts {
@@ -21,6 +23,8 @@ function toClaimableCounts(value: unknown): ClaimableCounts {
     preferences: Number(rec.preferences ?? 0),
     progress: Number(rec.progress ?? 0),
     documentSettings: Number(rec.documentSettings ?? 0),
+    folders: Number(rec.folders ?? 0),
+    onboarding: Number(rec.onboarding ?? 0),
   };
 }
 
@@ -86,6 +90,8 @@ export default function ClaimDataModal({
           <li>{claimableCounts.preferences} preference set(s)</li>
           <li>{claimableCounts.progress} reading progress record(s)</li>
           <li>{claimableCounts.documentSettings} document setting(s)</li>
+          <li>{claimableCounts.folders} folder(s)</li>
+          <li>{claimableCounts.onboarding} onboarding state record(s)</li>
         </ul>
       </div>
 

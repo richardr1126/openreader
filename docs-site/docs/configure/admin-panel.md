@@ -41,7 +41,7 @@ When a non-admin user picks a shared provider in **Settings → TTS Provider**:
 
 - The API key / base URL fields are hidden — those credentials never leave the server.
 - The TTS request still goes through the user's browser, but the server replaces the slug with the matching admin row's decrypted key and base URL before calling the upstream provider.
-- The user's per-request `x-openai-key` / `x-openai-base-url` headers are ignored for shared slugs.
+- TTS credentials are resolved only from admin-managed shared providers and are never accepted from client request headers.
 
 Whether users can supply their own personal built-in provider keys is controlled by the site feature `restrictUserApiKeys`:
 

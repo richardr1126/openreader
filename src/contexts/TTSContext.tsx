@@ -33,8 +33,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
-import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/client/dexie';
-import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
+import { useDocumentProgress } from '@/hooks/useDocumentProgress';
 import { withRetry, ensureTtsSegments } from '@/lib/client/api/audiobooks';
 import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
 import {
@@ -82,6 +81,7 @@ import type {
   TTSSegmentManifestItem,
 } from '@/types/client';
 import { isStableEpubLocator } from '@/types/client';
+import { clearCachedAudioObjectUrls, getCachedAudioUrl } from '@/lib/client/cache/audio';
 
 /**
  * Resolves an EPUB segment's draft locator (typically `{ readerType: 'epub',
@@ -420,8 +420,6 @@ const TTSContext = createContext<TTSContextType | undefined>(undefined);
 export function TTSProvider({ children }: { children: ReactNode }): ReactElement {
   // Configuration context consumption
   const {
-    apiKey: openApiKey,
-    baseUrl: openApiBaseUrl,
     isLoading: configIsLoading,
     voiceSpeed,
     audioPlayerSpeed,
@@ -444,8 +442,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   // Audio and voice management hooks
   const audioContext = useAudioContext();
   const { availableVoices, fetchVoices } = useVoiceManagement(
-    openApiKey,
-    openApiBaseUrl,
     configProviderRef,
     configProviderType,
     configTTSModel,
@@ -466,6 +462,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (Array.isArray(id)) return id[0];
     return '';
   }, [id]);
+  const { query: progressQuery, schedule: scheduleProgress } = useDocumentProgress(documentId || undefined);
 
   const currentReaderType: ReaderType = useMemo(() => {
     if (pathname.startsWith('/epub/')) return 'epub';
@@ -729,6 +726,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   useEffect(() => () => {
     clearWarmAudioCache();
+    clearCachedAudioObjectUrls();
   }, [clearWarmAudioCache]);
 
   const applyPlaybackRateToHowl = useCallback((howl: Howl | null) => {
@@ -1619,7 +1617,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setTTSModel(configTTSModel);
       setTTSInstructions(configTTSInstructions);
     }
-  }, [configIsLoading, openApiKey, openApiBaseUrl, updateVoiceAndSpeed, fetchVoices, configTTSModel, configTTSInstructions]);
+  }, [configIsLoading, updateVoiceAndSpeed, fetchVoices, configTTSModel, configTTSInstructions]);
 
   const preloadGenerationSignatureRef = useRef<string>('');
   useEffect(() => {
@@ -1766,12 +1764,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     const reqHeaders: TTSRequestHeaders = {
       'Content-Type': 'application/json',
-      'x-openai-key': openApiKey || '',
       'x-tts-provider': configProviderRef,
     };
-    if (openApiBaseUrl) {
-      reqHeaders['x-openai-base-url'] = openApiBaseUrl;
-    }
 
     const retryOptions: TTSRetryOptions = {
       maxRetries: 2,
@@ -1914,8 +1908,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsModel,
     ttsInstructions,
     resolvedLanguage,
-    openApiKey,
-    openApiBaseUrl,
     configProviderRef,
     configProviderType,
     providerModelPolicy.supportsInstructions,
@@ -2044,7 +2036,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         setCurrentSentenceAlignment(playbackSource.manifest.alignment);
         setCurrentWordIndex(null);
       }
-      const audioUrl = useFallbackSource ? playbackSource.fallbackUrl : playbackSource.presignUrl;
+      const sourceUrl = useFallbackSource ? playbackSource.fallbackUrl : playbackSource.presignUrl;
+      const audioUrl = await getCachedAudioUrl({
+        audioKey: playbackSource.manifest.segmentId,
+        version: playbackSource.manifest.durationMs,
+        primaryUrl: sourceUrl,
+        fallbackUrl: playbackSource.fallbackUrl,
+      }).catch(() => sourceUrl);
 
       // Force unload any previous Howl instance to free up resources
       if (activeHowl) {
@@ -2610,12 +2608,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       activeAbortControllers.current.add(controller);
       const reqHeaders: TTSRequestHeaders = {
         'Content-Type': 'application/json',
-        'x-openai-key': openApiKey || '',
         'x-tts-provider': configProviderRef,
       };
-      if (openApiBaseUrl) {
-        reqHeaders['x-openai-base-url'] = openApiBaseUrl;
-      }
       const retryOptions: TTSRetryOptions = {
         maxRetries: 2,
         initialDelay: 300,
@@ -2903,12 +2897,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     activeAbortControllers.current.add(controller);
     const reqHeaders: TTSRequestHeaders = {
       'Content-Type': 'application/json',
-      'x-openai-key': openApiKey || '',
       'x-tts-provider': configProviderRef,
     };
-    if (openApiBaseUrl) {
-      reqHeaders['x-openai-base-url'] = openApiBaseUrl;
-    }
 
     const retryOptions: TTSRetryOptions = {
       maxRetries: 2,
@@ -3026,8 +3016,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     configProviderRef,
     configProviderType,
     ttsModel,
-    openApiKey,
-    openApiBaseUrl,
     providerModelPolicy.supportsInstructions,
     ttsInstructions,
     resolvedLanguage,
@@ -3397,13 +3385,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipBackward,
   });
 
-  // Load last location on mount for EPUB/PDF/HTML.
-  // Prefer server-backed progress when available, then fall back to local Dexie.
+  // Load the server-backed last location for EPUB/PDF/HTML.
   useEffect(() => {
-    if (!id) return;
-
-    let cancelled = false;
-    const docId = id as string;
+    if (!id || !progressQuery.data?.location) return;
 
     const applyLocation = (lastLocation: string) => {
       if (isEPUB && locationChangeHandlerRef.current) {
@@ -3454,35 +3438,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       }
     };
 
-    const load = async () => {
-      try {
-        const local = await getLastDocumentLocation(docId);
-        if (!cancelled && local) {
-          applyLocation(local);
-        }
-      } catch (error) {
-        console.warn('Error loading local last location:', error);
-      }
-
-      try {
-        const remote = await getDocumentProgress(docId);
-        if (!cancelled && remote?.location) {
-          await setLastDocumentLocation(docId, remote.location).catch((error) => {
-            console.warn('Error caching remote location locally:', error);
-          });
-          applyLocation(remote.location);
-        }
-      } catch (error) {
-        console.warn('Error loading remote progress:', error);
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id, isEPUB, currentReaderType]);
+    applyLocation(progressQuery.data.location);
+  }, [id, isEPUB, currentReaderType, progressQuery.data?.location]);
 
   // Save current position periodically for non-EPUB readers.
   useEffect(() => {
@@ -3491,10 +3448,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         ? `html:${encodeURIComponent(String(currDocPage || 1))}:${currentIndex}`
         : `${currDocPageNumber}:${currentIndex}`;
       const timeoutId = setTimeout(() => {
-        setLastDocumentLocation(id as string, location).catch(error => {
-          console.warn('Error saving non-EPUB location:', error);
-        });
-        scheduleDocumentProgressSync({
+        scheduleProgress({
           documentId: id as string,
           readerType: currentReaderType,
           location,
@@ -3503,7 +3457,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
       return () => clearTimeout(timeoutId);
     }
-  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType]);
+  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType, scheduleProgress]);
 
   /**
    * Renders the TTS context provider with its children

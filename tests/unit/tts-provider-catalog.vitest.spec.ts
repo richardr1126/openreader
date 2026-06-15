@@ -533,7 +533,6 @@ describe('config helpers', () => {
   test('builds synced preference patches and honors non-default filtering', () => {
     expect(buildSyncedPreferencePatch({
       voiceSpeed: 1.2,
-      baseUrl: 'http://localhost',
       ttsModel: 'kokoro',
     })).toEqual({
       voiceSpeed: 1.2,

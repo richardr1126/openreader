@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
@@ -9,7 +9,6 @@ import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
-import { resolveDocumentId } from '@/lib/client/dexie';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
@@ -26,7 +25,6 @@ import { useHtmlDocument } from './useHtmlDocument';
 export default function HTMLPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
-  const router = useRouter();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
   const htmlState = useHtmlDocument();
   const {
@@ -63,19 +61,13 @@ export default function HTMLPage() {
   const loadDocument = useCallback(async () => {
     if (!isLoading) return;
     console.log('Loading new HTML document (from page.tsx)');
-    let didRedirect = false;
     let startedLoad = false;
     try {
       if (!id) {
         setError('Document not found');
         return;
       }
-      const resolved = await resolveDocumentId(id as string);
-      if (resolved !== (id as string)) {
-        didRedirect = true;
-        router.replace(`/html/${resolved}`);
-        return;
-      }
+      const resolved = id as string;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -96,11 +88,11 @@ export default function HTMLPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad) {
+      if (startedLoad) {
         setIsLoading(false);
       }
     }
-  }, [isLoading, id, router, setCurrentDocument, stop]);
+  }, [isLoading, id, setCurrentDocument, stop]);
 
   useEffect(() => {
     if (!isLoading) return;

@@ -29,8 +29,6 @@ export interface AudiobookSourceAdapter {
 
 interface RunAudiobookGenerationOptions {
   adapter: AudiobookSourceAdapter;
-  apiKey: string;
-  baseUrl: string;
   defaultProvider: string;
   onProgress: (progress: number) => void;
   signal?: AbortSignal;
@@ -47,8 +45,6 @@ interface RegenerateAudiobookChapterOptions {
   bookId: string;
   format: TTSAudiobookFormat;
   signal: AbortSignal;
-  apiKey: string;
-  baseUrl: string;
   defaultProvider: string;
   settings?: AudiobookGenerationSettings;
   retryOptions?: TTSRetryOptions;
@@ -71,14 +67,10 @@ function resolveAudiobookRequestSettings(
 }
 
 function buildAudiobookRequestHeaders(
-  apiKey: string,
-  baseUrl: string,
   effectiveProvider: string,
 ): TTSRequestHeaders {
   return {
     'Content-Type': 'application/json',
-    'x-openai-key': apiKey,
-    'x-openai-base-url': baseUrl,
     'x-tts-provider': effectiveProvider,
   };
 }
@@ -95,8 +87,6 @@ function createAudiobookAbortError(): Error {
 
 export async function runAudiobookGeneration({
   adapter,
-  apiKey,
-  baseUrl,
   defaultProvider,
   onProgress,
   signal,
@@ -120,7 +110,7 @@ export async function runAudiobookGeneration({
   }
 
   const { effectiveProviderRef, effectiveFormat } = resolveAudiobookRequestSettings(settings, defaultProvider, format);
-  const reqHeaders = buildAudiobookRequestHeaders(apiKey, baseUrl, effectiveProviderRef);
+  const reqHeaders = buildAudiobookRequestHeaders(effectiveProviderRef);
   let processedLength = 0;
   let bookId = providedBookId;
 
@@ -221,8 +211,6 @@ export async function regenerateAudiobookChapter({
   bookId,
   format,
   signal,
-  apiKey,
-  baseUrl,
   defaultProvider,
   settings,
   retryOptions = {
@@ -238,7 +226,7 @@ export async function regenerateAudiobookChapter({
   }
 
   const { effectiveProviderRef, effectiveFormat } = resolveAudiobookRequestSettings(settings, defaultProvider, format);
-  const reqHeaders = buildAudiobookRequestHeaders(apiKey, baseUrl, effectiveProviderRef);
+  const reqHeaders = buildAudiobookRequestHeaders(effectiveProviderRef);
 
   return withRetry(
     async () => {

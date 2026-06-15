@@ -1,11 +1,10 @@
-export type OnboardingStep = 'privacy' | 'claim' | 'migration' | 'changelog' | 'done';
+export type OnboardingStep = 'privacy' | 'claim' | 'changelog' | 'done';
 
 export type OnboardingStepSnapshot = {
   privacyRequired: boolean;
   privacyAccepted: boolean;
   claimEligible: boolean;
   claimHasData: boolean;
-  migrationRequired: boolean;
   changelogPending: boolean;
 };
 
@@ -16,10 +15,6 @@ export function resolveNextOnboardingStep(snapshot: OnboardingStepSnapshot): Onb
 
   if (snapshot.claimEligible && snapshot.claimHasData) {
     return 'claim';
-  }
-
-  if (snapshot.migrationRequired) {
-    return 'migration';
   }
 
   if (snapshot.changelogPending) {

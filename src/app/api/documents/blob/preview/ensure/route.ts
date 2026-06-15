@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         status: 'ready',
         presignUrl,
         fallbackUrl,
+        previewVersion: preview.eTag || String(doc.lastModified),
         ...(directUrl ? { directUrl } : {}),
       },
       {

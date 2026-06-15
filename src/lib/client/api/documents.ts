@@ -85,7 +85,11 @@ export async function listDocuments(options?: { ids?: string[]; signal?: AbortSi
 
 export async function getDocumentMetadata(id: string, options?: { signal?: AbortSignal }): Promise<BaseDocument | null> {
   const docs = await listDocuments({ ids: [id], signal: options?.signal });
-  return docs[0] ?? null;
+  const document = docs[0] ?? null;
+  if (document) {
+    void fetch(`/api/documents/${encodeURIComponent(id)}/opened`, { method: 'PUT' }).catch(() => {});
+  }
+  return document;
 }
 
 export class ParsedPdfNotReadyError extends Error {
@@ -439,9 +443,13 @@ export async function deleteDocuments(options?: { ids?: string[]; signal?: Abort
 }
 
 export async function downloadDocumentContent(id: string, options?: { signal?: AbortSignal }): Promise<ArrayBuffer> {
+  return (await fetchDocumentContentResponse(id, options)).arrayBuffer();
+}
+
+export async function fetchDocumentContentResponse(id: string, options?: { signal?: AbortSignal }): Promise<Response> {
   const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(id)}`;
 
-  const fetchFallback = async (): Promise<ArrayBuffer> => {
+  const fetchFallback = async (): Promise<Response> => {
     const res = await fetch(fallbackUrl, { signal: options?.signal });
     if (!res.ok) {
       const contentType = res.headers.get('content-type') || '';
@@ -451,7 +459,7 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
       }
       throw new Error(`Failed to download document (status ${res.status})`);
     }
-    return res.arrayBuffer();
+    return res;
   };
 
   try {
@@ -467,7 +475,7 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
       }
       throw new Error(`Failed to download document (status ${directRes.status})`);
     }
-    return directRes.arrayBuffer();
+    return directRes;
   } catch (error) {
     if (options?.signal?.aborted) throw error;
     return fetchFallback();
@@ -508,6 +516,7 @@ export type DocumentPreviewReady = {
   fallbackUrl: string;
   presignUrl: string;
   directUrl?: string;
+  previewVersion: string;
 };
 
 export type DocumentPreviewStatus = DocumentPreviewPending | DocumentPreviewReady;
@@ -556,12 +565,14 @@ export async function getDocumentPreviewStatus(
       fallbackUrl?: string;
       presignUrl?: string;
       directUrl?: string;
+      previewVersion?: string;
     } | null;
     return {
       kind: 'ready',
       fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
+      previewVersion: data?.previewVersion || '',
     };
   }
 
@@ -606,4 +617,3 @@ export async function importUrl(
 
   return (await res.json()) as { title: string; content: string };
 }
-

@@ -66,8 +66,6 @@ function buildFullDocumentText(blocks: HtmlBlock[]): string {
 export function useHtmlDocument(): HtmlDocumentState {
   const { setText: setTTSText, stop, setIsEPUB } = useTTS();
   const {
-    apiKey,
-    baseUrl,
     providerRef,
     ttsSegmentMaxBlockLength,
   } = useConfig();
@@ -173,8 +171,6 @@ export function useHtmlDocument(): HtmlDocumentState {
       try {
         return await runAudiobookGeneration({
           adapter: audiobookAdapter,
-          apiKey,
-          baseUrl,
           defaultProvider: providerRef,
           onProgress,
           signal,
@@ -189,7 +185,7 @@ export function useHtmlDocument(): HtmlDocumentState {
         throw error;
       }
     },
-    [audiobookAdapter, apiKey, baseUrl, providerRef],
+    [audiobookAdapter, providerRef],
   );
 
   const regenerateChapter = useCallback(
@@ -208,8 +204,6 @@ export function useHtmlDocument(): HtmlDocumentState {
           bookId,
           format,
           signal,
-          apiKey,
-          baseUrl,
           defaultProvider: providerRef,
           settings,
           retryOptions,
@@ -222,7 +216,7 @@ export function useHtmlDocument(): HtmlDocumentState {
         throw error;
       }
     },
-    [audiobookAdapter, apiKey, baseUrl, providerRef],
+    [audiobookAdapter, providerRef],
   );
 
   return useMemo(

@@ -1,0 +1,15 @@
+export const queryKeys = {
+  documents: (sessionId: string) => ['documents', sessionId] as const,
+  document: (sessionId: string, documentId: string) => ['documents', sessionId, documentId] as const,
+  preferences: (sessionId: string) => ['preferences', sessionId] as const,
+  progress: (sessionId: string, documentId: string) => ['progress', sessionId, documentId] as const,
+  documentSettings: (sessionId: string, documentId: string) => ['document-settings', sessionId, documentId] as const,
+  onboarding: (sessionId: string) => ['onboarding', sessionId] as const,
+  folders: (sessionId: string) => ['folders', sessionId] as const,
+  audiobook: (sessionId: string, bookId: string) => ['audiobook', sessionId, bookId] as const,
+  ttsManifest: (sessionId: string, documentId: string) => ['tts-manifest', sessionId, documentId] as const,
+  parsedDocument: (sessionId: string, documentId: string) => ['parsed-document', sessionId, documentId] as const,
+  claimCounts: (sessionId: string) => ['claim-counts', sessionId] as const,
+  rateLimit: (sessionId: string) => ['rate-limit', sessionId] as const,
+  admin: (scope: string) => ['admin', scope] as const,
+};

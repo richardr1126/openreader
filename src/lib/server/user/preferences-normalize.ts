@@ -125,6 +125,11 @@ export function sanitizePreferencesPatch(
       case 'savedVoices':
         out[key] = sanitizeSavedVoices(value);
         break;
+      case 'documentListState':
+        if (isRecord(value)) {
+          out[key] = { ...value, folders: [] } as unknown as SyncedPreferencesPatch[typeof key];
+        }
+        break;
       default:
         break;
     }

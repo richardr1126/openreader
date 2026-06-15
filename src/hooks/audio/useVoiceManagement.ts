@@ -7,16 +7,12 @@ import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy'
 
 /**
  * Custom hook for managing TTS voices
- * @param apiKey OpenAI API key
- * @param baseUrl OpenAI API base URL
  * @param providerRef TTS provider routing reference (built-in id or shared slug)
  * @param providerType Resolved provider type for capability/default logic
  * @param ttsModel TTS model name
  * @returns Object containing available voices and fetch function
  */
 export function useVoiceManagement(
-  apiKey: string | undefined,
-  baseUrl: string | undefined,
   providerRef: string | undefined,
   providerType: TtsProviderType | undefined,
   ttsModel: string | undefined
@@ -29,8 +25,6 @@ export function useVoiceManagement(
     try {
       console.log('Fetching voices...');
       const data = await getVoices({
-        'x-openai-key': apiKey || '',
-        'x-openai-base-url': baseUrl || '',
         'x-tts-provider': providerRef || 'openai',
         'x-tts-model': ttsModel || 'tts-1',
         'Content-Type': 'application/json',
@@ -56,7 +50,7 @@ export function useVoiceManagement(
         model: ttsModel || 'tts-1',
       }).defaultVoices);
     }
-  }, [apiKey, baseUrl, providerRef, providerType, ttsModel]);
+  }, [providerRef, providerType, ttsModel]);
 
   return { availableVoices, fetchVoices };
 }

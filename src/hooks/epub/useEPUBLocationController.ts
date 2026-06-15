@@ -3,33 +3,14 @@
 import { useCallback, type MutableRefObject, type RefObject } from 'react';
 import type { Book, Rendition } from 'epubjs';
 
-import { setLastDocumentLocation } from '@/lib/client/dexie';
-import { scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
+import { useDocumentProgress } from '@/hooks/useDocumentProgress';
 
-type EpubLocation = string | number;
-
-export function isDirectionalEpubLocation(location: EpubLocation): location is 'next' | 'prev' {
-  return location === 'next' || location === 'prev';
-}
-
-export function shouldNavigateToDifferentCfi(
-  location: EpubLocation,
-  currentStartCfi: string | undefined,
-): location is string {
-  return (
-    typeof location === 'string'
-    && !isDirectionalEpubLocation(location)
-    && !!currentStartCfi
-    && location !== currentStartCfi
-  );
-}
-
-export function shouldPersistEpubLocation(
-  documentId: string | undefined,
-  previousLocation: EpubLocation,
-): documentId is string {
-  return typeof documentId === 'string' && documentId.length > 0 && previousLocation !== 1;
-}
+import {
+  isDirectionalEpubLocation,
+  shouldNavigateToDifferentCfi,
+  shouldPersistEpubLocation,
+  type EpubLocation,
+} from '@/lib/client/epub/location-controller';
 
 type UseEpubLocationControllerParams = {
   documentId?: string;
@@ -54,6 +35,7 @@ export function useEPUBLocationController({
   renditionRef,
   locationRef,
 }: UseEpubLocationControllerParams): (location: EpubLocation) => void {
+  const { schedule: scheduleProgress } = useDocumentProgress(documentId);
   const safeRenditionNavigate = useCallback((navigation: 'next' | 'prev' | 'display', location?: string) => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
@@ -133,10 +115,9 @@ export function useEPUBLocationController({
       return;
     }
 
-    // Save the location to IndexedDB if not initial
+    // Save the server-backed location after the first real rendition update.
     if (shouldPersistEpubLocation(documentId, locationRef.current)) {
-      setLastDocumentLocation(documentId, location.toString());
-      scheduleDocumentProgressSync({
+      scheduleProgress({
         documentId,
         readerType: 'epub',
         location: location.toString(),
@@ -160,8 +141,11 @@ export function useEPUBLocationController({
     safeRenditionNavigate,
     setIsEpub,
     shouldPauseRef,
+    scheduleProgress,
     skipToLocation,
   ]);
 
   return handleLocationChanged;
 }
+
+export { isDirectionalEpubLocation, shouldNavigateToDifferentCfi, shouldPersistEpubLocation };

@@ -19,7 +19,7 @@ export class FakeControlPlane {
   private readonly artifactKeys = new Set<string>();
   private nextOpId = 1;
 
-  readonly deps: ComputeWorkerRouteDeps = {
+  readonly deps = {
     orchestrator: {
       enqueueOrReuse: async (request) => this.enqueueOrReuse(request),
       markRunning: async (input) => this.updateState(input.opId, {
@@ -75,7 +75,7 @@ export class FakeControlPlane {
       },
     },
     artifactExists: async (key) => this.artifactKeys.has(key),
-  };
+  } satisfies ComputeWorkerRouteDeps;
 
   seedState(state: ComputeState): void {
     this.stateByOpId.set(state.opId, state);

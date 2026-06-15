@@ -132,7 +132,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             if (status.kind === 'ready') {
               const primedUrl = await primeDocumentPreviewCache(
                 doc.id,
-                Number(doc.lastModified),
+                status.previewVersion || Number(doc.lastModified),
                 previewKey,
                 { signal: controller.signal },
               ).catch(() => null);

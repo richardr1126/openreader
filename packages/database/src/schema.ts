@@ -7,11 +7,13 @@ const usePostgres = !!process.env.POSTGRES_URL;
 // and are NOT part of the Drizzle schema. Only app-specific tables are exported here.
 
 export const documents = usePostgres ? postgresSchema.documents : sqliteSchema.documents;
+export const userFolders = usePostgres ? postgresSchema.userFolders : sqliteSchema.userFolders;
 export const audiobooks = usePostgres ? postgresSchema.audiobooks : sqliteSchema.audiobooks;
 export const audiobookChapters = usePostgres ? postgresSchema.audiobookChapters : sqliteSchema.audiobookChapters;
 export const userTtsChars = usePostgres ? postgresSchema.userTtsChars : sqliteSchema.userTtsChars;
 export const userJobEvents = usePostgres ? postgresSchema.userJobEvents : sqliteSchema.userJobEvents;
 export const userPreferences = usePostgres ? postgresSchema.userPreferences : sqliteSchema.userPreferences;
+export const userOnboarding = usePostgres ? postgresSchema.userOnboarding : sqliteSchema.userOnboarding;
 export const documentSettings = usePostgres ? postgresSchema.documentSettings : sqliteSchema.documentSettings;
 export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentProgress : sqliteSchema.userDocumentProgress;
 export const documentPreviews = usePostgres ? postgresSchema.documentPreviews : sqliteSchema.documentPreviews;

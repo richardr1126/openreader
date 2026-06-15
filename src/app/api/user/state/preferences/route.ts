@@ -13,18 +13,28 @@ import {
   sanitizePreferencesPatch,
   type PreferenceNormalizationContext,
 } from '@/lib/server/user/preferences-normalize';
-import {
-  deserializeUserPreferencesPayload,
-  extractUserPreferencesMeta,
-  withUserPreferencesMeta,
-  type UserPreferencesMeta,
-} from '@/lib/server/user/preferences-payload';
 
 export const dynamic = 'force-dynamic';
 
 function serializePreferencesForDb(payload: Record<string, unknown>): Record<string, unknown> | string {
   if (process.env.POSTGRES_URL) return payload;
   return JSON.stringify(payload);
+}
+
+function deserializePreferences(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 async function loadPreferenceNormalizationContext(): Promise<PreferenceNormalizationContext> {
@@ -49,11 +59,10 @@ async function loadPreferenceNormalizationContext(): Promise<PreferenceNormaliza
 function parseStoredPreferences(
   value: unknown,
   context: PreferenceNormalizationContext,
-): { patch: SyncedPreferencesPatch; migrated: boolean; meta: UserPreferencesMeta } {
-  const payload = deserializeUserPreferencesPayload(value);
-  const meta = extractUserPreferencesMeta(payload);
+): { patch: SyncedPreferencesPatch; migrated: boolean } {
+  const payload = deserializePreferences(value);
   const sanitized = sanitizePreferencesPatch(payload, context, { fillMissingProvider: true });
-  return { ...sanitized, meta };
+  return { ...sanitized, migrated: sanitized.migrated || '_meta' in payload };
 }
 
 function normalizeClientUpdatedAtMs(value: unknown): number {
@@ -80,7 +89,6 @@ export async function GET(req: NextRequest) {
     const row = rows[0];
     const stored = parseStoredPreferences(row?.dataJson, normalizationContext);
     const storedPatch = stored.patch;
-    const storedPayload = withUserPreferencesMeta(storedPatch, stored.meta);
     const clientUpdatedAtMs = Number(row?.clientUpdatedAtMs ?? 0);
 
     if (row && stored.migrated) {
@@ -89,14 +97,14 @@ export async function GET(req: NextRequest) {
         .insert(userPreferences)
         .values({
           userId: scope.ownerUserId,
-          dataJson: serializePreferencesForDb(storedPayload),
+          dataJson: serializePreferencesForDb(storedPatch),
           clientUpdatedAtMs: clientUpdatedAtMs > 0 ? clientUpdatedAtMs : updatedAt,
           updatedAt,
         })
         .onConflictDoUpdate({
           target: [userPreferences.userId],
           set: {
-            dataJson: serializePreferencesForDb(storedPayload),
+            dataJson: serializePreferencesForDb(storedPatch),
             updatedAt,
           },
         });
@@ -161,8 +169,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const mergedPatch = { ...existingPatch, ...patch };
-    const payloadWithMeta = withUserPreferencesMeta(mergedPatch, existingStored.meta);
-    const dataJson = serializePreferencesForDb(payloadWithMeta);
+    const dataJson = serializePreferencesForDb(mergedPatch);
     const updatedAt = nowTimestampMs();
 
     await db

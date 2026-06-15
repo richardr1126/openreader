@@ -4,6 +4,18 @@ import { user } from './schema_auth_sqlite';
 
 const SQLITE_NOW_MS = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 
+export const userFolders = sqliteTable('user_folders', {
+  id: text('id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull().default(0),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  index('idx_user_folders_user_position').on(table.userId, table.position),
+]);
+
 export const documents = sqliteTable('documents', {
   id: text('id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
@@ -12,11 +24,19 @@ export const documents = sqliteTable('documents', {
   size: integer('size').notNull(),
   lastModified: integer('last_modified').notNull(),
   filePath: text('file_path').notNull(),
+  folderId: text('folder_id'),
+  recentlyOpenedAt: integer('recently_opened_at'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
+  foreignKey({
+    columns: [table.folderId, table.userId],
+    foreignColumns: [userFolders.id, userFolders.userId],
+  }),
   index('idx_documents_user_id').on(table.userId),
   index('idx_documents_user_id_last_modified').on(table.userId, table.lastModified),
+  index('idx_documents_user_id_folder').on(table.userId, table.folderId),
+  index('idx_documents_user_id_recently_opened').on(table.userId, table.recentlyOpenedAt),
 ]);
 
 export const audiobooks = sqliteTable('audiobooks', {
@@ -85,6 +105,14 @@ export const userPreferences = sqliteTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   dataJson: text('data_json').notNull().default('{}'),
   clientUpdatedAtMs: integer('client_updated_at_ms').notNull().default(0),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
+});
+
+export const userOnboarding = sqliteTable('user_onboarding', {
+  userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
+  privacyAcceptedAtMs: integer('privacy_accepted_at_ms'),
+  lastSeenAppVersion: text('last_seen_app_version'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });

@@ -477,10 +477,7 @@ export async function POST(request: NextRequest) {
     providerForError = requestedProvider;
     const credResolved = await resolveTtsCredentials({
       providerHeader: requestedProvider,
-      apiKeyHeader: request.headers.get('x-openai-key'),
-      baseUrlHeader: request.headers.get('x-openai-base-url'),
       fallbackProvider: runtimeConfig.defaultTtsProvider,
-      restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
     });
     if ('error' in credResolved) {
       if (credResolved.error === 'no_shared_provider_configured') {

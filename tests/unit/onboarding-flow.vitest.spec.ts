@@ -9,7 +9,6 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: false,
       claimEligible: true,
       claimHasData: true,
-      migrationRequired: true,
       changelogPending: true,
     });
 
@@ -22,24 +21,10 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: true,
-      migrationRequired: true,
       changelogPending: true,
     });
 
     expect(step).toBe('claim');
-  });
-
-  test('resolves migration when no claim is needed', () => {
-    const step = resolveNextOnboardingStep({
-      privacyRequired: true,
-      privacyAccepted: true,
-      claimEligible: true,
-      claimHasData: false,
-      migrationRequired: true,
-      changelogPending: true,
-    });
-
-    expect(step).toBe('migration');
   });
 
   test('resolves changelog when prior steps are clear', () => {
@@ -48,7 +33,6 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
-      migrationRequired: false,
       changelogPending: true,
     });
 
@@ -61,7 +45,6 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
-      migrationRequired: false,
       changelogPending: false,
     });
     const minimalStep = resolveNextOnboardingStep({
@@ -69,7 +52,6 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: false,
       claimEligible: false,
       claimHasData: false,
-      migrationRequired: false,
       changelogPending: false,
     });
 

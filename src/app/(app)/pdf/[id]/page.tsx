@@ -14,7 +14,6 @@ import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
-import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -99,7 +98,6 @@ export default function PDFViewerPage() {
   const loadDocument = useCallback(async () => {
     if (!isLoading) return; // Prevent calls when not loading new doc
     console.log('Loading new document (from page.tsx)');
-    let didRedirect = false;
     let startedLoad = false;
     let loadSucceeded = false;
     try {
@@ -107,12 +105,7 @@ export default function PDFViewerPage() {
         setError('Document not found');
         return;
       }
-      const resolved = await resolveDocumentId(id as string);
-      if (resolved !== (id as string)) {
-        didRedirect = true;
-        router.replace(`/pdf/${resolved}`);
-        return;
-      }
+      const resolved = id as string;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -125,11 +118,17 @@ export default function PDFViewerPage() {
       inFlightDocIdRef.current = resolved;
       stop(); // Reset TTS when loading new document
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const loaded = await setCurrentDocument(resolved);
-        if (loaded) {
+        const result = await setCurrentDocument(resolved);
+        if (result === 'loaded') {
           loadSucceeded = true;
           loadedDocIdRef.current = resolved;
           break;
+        }
+        if (result === 'superseded') {
+          // A newer load (or unmount) is now authoritative; it owns the loading
+          // lifecycle. Bail without surfacing an error to avoid the spurious
+          // "Failed to load" screen on first launch.
+          return;
         }
         if (attempt === 0) {
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -145,11 +144,11 @@ export default function PDFViewerPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad && loadSucceeded) {
+      if (startedLoad && loadSucceeded) {
         setIsLoading(false);
       }
     }
-  }, [isLoading, id, router, setCurrentDocument, stop]);
+  }, [isLoading, id, setCurrentDocument, stop]);
 
   useEffect(() => {
     loadDocument();

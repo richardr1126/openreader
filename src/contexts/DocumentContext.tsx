@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BaseDocument } from '@/types/documents';
 import {
   deleteDocuments as deleteServerDocuments,
@@ -102,10 +102,31 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     return { pdfDocs, epubDocs, htmlDocs };
   }, [docs]);
 
+  const uploadMutation = useMutation({
+    mutationFn: (files: File[]) => uploadServerDocuments(files),
+    onSuccess: (stored) => {
+      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
+        mergeStoredDocuments(previous, stored),
+      );
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteServerDocuments({ ids: [id] }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: documentsQueryKey });
+      const previous = queryClient.getQueryData<SupportedDocument[]>(documentsQueryKey);
+      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (rows = []) => rows.filter((doc) => doc.id !== id));
+      return { previous };
+    },
+    onError: (_error, _id, context) => queryClient.setQueryData(documentsQueryKey, context?.previous),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
+  });
+
   const uploadDocuments = useCallback(async (files: File[]): Promise<BaseDocument[]> => {
     if (files.length === 0) return [];
 
-    const stored = await uploadServerDocuments(files);
+    const stored = await uploadMutation.mutateAsync(files);
     await Promise.allSettled(
       stored.map(async (document, index) => {
         const file = files[index];
@@ -134,20 +155,13 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       }),
     );
 
-    queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
-      mergeStoredDocuments(previous, stored),
-    );
-
     return stored;
-  }, [documentsQueryKey, queryClient]);
+  }, [uploadMutation]);
 
   const deleteDocument = useCallback(async (id: string) => {
-    await deleteServerDocuments({ ids: [id] });
+    await deleteMutation.mutateAsync(id);
     await evictCachedDocument(id);
-    queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous = []) =>
-      previous.filter((document) => document.id !== id),
-    );
-  }, [documentsQueryKey, queryClient]);
+  }, [deleteMutation]);
 
   return (
     <DocumentContext.Provider value={{

@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { ThemeProvider } from '@/contexts/ThemeContext';
@@ -24,6 +24,15 @@ export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, g
       },
     },
   }));
+
+  useEffect(() => {
+    if (typeof indexedDB === 'undefined') return;
+    try {
+      indexedDB.deleteDatabase('openreader-db');
+    } catch {
+      // Legacy IndexedDB cleanup is best effort and never blocks startup.
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

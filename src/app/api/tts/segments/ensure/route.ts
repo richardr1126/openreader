@@ -183,10 +183,7 @@ export async function POST(request: NextRequest) {
     });
     const requestCreds = await resolveTtsCredentials({
       providerHeader: parsed.settings.providerRef,
-      apiKeyHeader: request.headers.get('x-openai-key'),
-      baseUrlHeader: request.headers.get('x-openai-base-url'),
       fallbackProvider: runtimeConfig.defaultTtsProvider,
-      restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
     });
     if ('error' in requestCreds) {
       const status = requestCreds.error === 'no_shared_provider_configured' ? 503 : 404;

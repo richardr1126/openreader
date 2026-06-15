@@ -8,6 +8,8 @@ import {
   ttsSegmentVariants,
   userPreferences,
   userDocumentProgress,
+  userFolders,
+  userOnboarding,
 } from '@openreader/database/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { UNCLAIMED_USER_ID } from '../storage/docstore-legacy';
@@ -115,7 +117,7 @@ export async function claimAnonymousData(
   options?: { cleanupLegacySources?: boolean },
 ) {
   if (!userId) {
-    return { documents: 0, audiobooks: 0, preferences: 0, progress: 0, documentSettings: 0 };
+    return { documents: 0, audiobooks: 0, preferences: 0, progress: 0, documentSettings: 0, folders: 0, onboarding: 0 };
   }
 
   const [claimableDocumentRows, claimableAudiobookRows] = await Promise.all([
@@ -129,13 +131,16 @@ export async function claimAnonymousData(
       .where(eq(audiobooks.userId, unclaimedUserId)) as Promise<Array<{ id: string }>>,
   ]);
 
-  const [documentsClaimed, audiobooksClaimed, preferencesClaimed, progressClaimed, documentSettingsClaimed] = await Promise.all([
+  const foldersClaimed = await transferUserFolders(unclaimedUserId, userId);
+  const [documentsClaimed, audiobooksClaimed, preferencesClaimed, progressClaimed, documentSettingsClaimed, onboardingClaimed] = await Promise.all([
     transferUserDocuments(unclaimedUserId, userId, { namespace, transferTts: true }),
     transferUserAudiobooks(unclaimedUserId, userId, namespace),
     transferUserPreferences(unclaimedUserId, userId),
     transferUserProgress(unclaimedUserId, userId),
     transferUserDocumentSettings(unclaimedUserId, userId),
+    transferUserOnboarding(unclaimedUserId, userId),
   ]);
+  await db.delete(userFolders).where(eq(userFolders.userId, unclaimedUserId));
 
   if (
     options?.cleanupLegacySources !== false
@@ -168,7 +173,28 @@ export async function claimAnonymousData(
     preferences: preferencesClaimed,
     progress: progressClaimed,
     documentSettings: documentSettingsClaimed,
+    folders: foldersClaimed,
+    onboarding: onboardingClaimed,
   };
+}
+
+export async function transferUserFolders(fromUserId: string, toUserId: string): Promise<number> {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return 0;
+  const rows = await db.select().from(userFolders).where(eq(userFolders.userId, fromUserId));
+  for (const row of rows) {
+    await db.insert(userFolders).values({ ...row, userId: toUserId }).onConflictDoNothing();
+  }
+  return rows.length;
+}
+
+export async function transferUserOnboarding(fromUserId: string, toUserId: string): Promise<number> {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return 0;
+  const rows = await db.select().from(userOnboarding).where(eq(userOnboarding.userId, fromUserId));
+  const row = rows[0];
+  if (!row) return 0;
+  await db.insert(userOnboarding).values({ ...row, userId: toUserId }).onConflictDoNothing();
+  await db.delete(userOnboarding).where(eq(userOnboarding.userId, fromUserId));
+  return 1;
 }
 
 /**

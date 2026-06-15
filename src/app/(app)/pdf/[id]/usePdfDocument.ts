@@ -22,10 +22,8 @@ import {
   ensureParsedPdfDocumentOperation,
   forceReparsePdfDocument,
   getDocumentMetadata,
-  getDocumentSettings,
   getParsedPdfDocument,
   ParsedPdfNotReadyError,
-  putDocumentSettings,
   subscribeParsedPdfDocumentEvents,
 } from '@/lib/client/api/documents';
 import { createPdfAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/pdf';
@@ -56,6 +54,16 @@ import type {
 } from '@/types/tts';
 import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
 import { clampSegmentPreloadDepth } from '@/types/config';
+import { useDocumentSettings } from '@/hooks/useDocumentSettings';
+
+/**
+ * Outcome of a `setCurrentDocument` call.
+ * - `loaded`: the document was fetched and is now the active document.
+ * - `superseded`: the load was aborted/replaced by a newer load (or unmount).
+ *    A newer load is authoritative; callers must NOT treat this as an error.
+ * - `failed`: a genuine failure (not found, wrong type, network error).
+ */
+export type SetCurrentDocumentResult = 'loaded' | 'superseded' | 'failed';
 
 /**
  * Interface defining all available methods and properties for the PDF route.
@@ -78,7 +86,7 @@ export interface PdfDocumentState {
   parsedOverlayEnabled: boolean;
   setParsedOverlayEnabled: (enabled: boolean) => void;
   forceReparseParsedPdf: () => Promise<void>;
-  setCurrentDocument: (id: string) => Promise<boolean>;
+  setCurrentDocument: (id: string) => Promise<SetCurrentDocumentResult>;
   clearCurrDoc: () => void;
 
   // PDF functionality
@@ -139,8 +147,6 @@ export function usePdfDocument(): PdfDocumentState {
     registerVisualPageChangeHandler,
   } = useTTS();
   const {
-    apiKey,
-    baseUrl,
     providerRef,
     segmentPreloadDepthPages,
     ttsSegmentMaxBlockLength,
@@ -158,6 +164,11 @@ export function usePdfDocument(): PdfDocumentState {
   const [parseProgress, setParseProgress] = useState<PdfParseProgress | null>(null);
   const [, setActiveParseOpId] = useState<string | null>(null);
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
+  const serverDocumentSettings = useDocumentSettings(currDocId);
+  useEffect(() => {
+    if (!serverDocumentSettings.query.data?.settings) return;
+    setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings.query.data.settings));
+  }, [serverDocumentSettings.query.data?.settings]);
   useEffect(() => {
     setDocumentLanguage(documentSettings.language ?? 'auto');
     lastPreparedPlaybackPageRef.current = null;
@@ -204,17 +215,6 @@ export function usePdfDocument(): PdfDocumentState {
     setIsPlaybackReady(false);
     lastPreparedPlaybackPageRef.current = null;
     pageTextCacheRef.current.clear();
-  }, []);
-
-  const fetchDocumentSettings = useCallback(async (documentId: string, signal: AbortSignal): Promise<void> => {
-    try {
-      const response = await getDocumentSettings(documentId, { signal });
-      setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, response.settings));
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      console.warn('Failed to load document settings, using defaults:', error);
-      setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
-    }
   }, []);
 
   const startParsedEventStream = useCallback((documentId: string, initialOpId: string) => {
@@ -516,12 +516,12 @@ export function usePdfDocument(): PdfDocumentState {
 
   /**
    * Sets the current document based on its ID
-   * Retrieves document from IndexedDB
+   * Retrieves document from server metadata and the browser blob cache.
    * 
    * @param {string} id - The unique identifier of the document to set
    * @returns {Promise<void>}
    */
-  const setCurrentDocument = useCallback(async (id: string): Promise<boolean> => {
+  const setCurrentDocument = useCallback(async (id: string): Promise<SetCurrentDocumentResult> => {
     // --- race-condition guard ---
     const seq = ++docLoadSeqRef.current;
     docLoadAbortRef.current?.abort();
@@ -554,13 +554,12 @@ export function usePdfDocument(): PdfDocumentState {
       setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
 
       const meta = await getDocumentMetadata(id, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return false; // stale
+      if (seq !== docLoadSeqRef.current) return 'superseded'; // a newer load took over
       if (!meta) {
         console.error('Document not found on server');
-        return false;
+        return 'failed';
       }
       if (meta.type === 'pdf') {
-        void fetchDocumentSettings(id, controller.signal);
         void resolveParsedDocumentState(id, controller.signal).catch((error) => {
           if (controller.signal.aborted) return;
           console.error('Failed to resolve parsed PDF state:', error);
@@ -568,28 +567,29 @@ export function usePdfDocument(): PdfDocumentState {
       }
 
       const doc = await ensureCachedDocument(meta, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return false; // stale
+      if (seq !== docLoadSeqRef.current) return 'superseded'; // a newer load took over
       if (doc.type !== 'pdf') {
         console.error('Document is not a PDF');
-        return false;
+        return 'failed';
       }
 
       setCurrDocName(doc.name);
       // IMPORTANT: keep an immutable copy. pdf.js may transfer/detach the
       // buffer passed into the worker; we always pass clones to react-pdf.
       setCurrDocData(doc.data.slice(0));
-      return true;
+      return 'loaded';
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return false;
+      // An aborted load means a newer selection (or unmount) took over; not a failure.
+      if (error instanceof DOMException && error.name === 'AbortError') return 'superseded';
+      if (controller.signal.aborted) return 'superseded';
       console.error('Failed to get document:', error);
-      return false;
+      return 'failed';
     } finally {
       // Clean up the controller only if it's still ours (a newer call hasn't replaced it).
       if (docLoadAbortRef.current === controller) {
         docLoadAbortRef.current = null;
       }
     }
-    return false;
   }, [
     setCurrDocId,
     setCurrDocName,
@@ -597,7 +597,6 @@ export function usePdfDocument(): PdfDocumentState {
     setCurrDocPages,
     setCurrDocText,
     setPdfDocument,
-    fetchDocumentSettings,
     resolveParsedDocumentState,
   ]);
 
@@ -605,12 +604,11 @@ export function usePdfDocument(): PdfDocumentState {
     if (!currDocId) return;
     setDocumentSettings(settings);
     try {
-      const updated = await putDocumentSettings(currDocId, settings);
-      setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, updated.settings));
+      await serverDocumentSettings.mutation.mutateAsync(settings);
     } catch (error) {
       console.warn('Failed to persist document settings:', error);
     }
-  }, [currDocId]);
+  }, [currDocId, serverDocumentSettings.mutation]);
 
   const forceReparseParsedPdf = useCallback(async (): Promise<void> => {
     if (!currDocId) return;
@@ -684,8 +682,6 @@ export function usePdfDocument(): PdfDocumentState {
     try {
       return await runAudiobookGeneration({
         adapter: audiobookAdapter,
-        apiKey,
-        baseUrl,
         defaultProvider: providerRef,
         onProgress,
         signal,
@@ -698,7 +694,7 @@ export function usePdfDocument(): PdfDocumentState {
       console.error('Error creating audiobook:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
+  }, [audiobookAdapter, providerRef]);
 
   /**
    * Regenerates a specific chapter (page) of the PDF audiobook
@@ -717,8 +713,6 @@ export function usePdfDocument(): PdfDocumentState {
         bookId,
         format,
         signal,
-        apiKey,
-        baseUrl,
         defaultProvider: providerRef,
         settings,
       });
@@ -729,7 +723,7 @@ export function usePdfDocument(): PdfDocumentState {
       console.error('Error regenerating page:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
+  }, [audiobookAdapter, providerRef]);
 
   /**
    * Effect hook to initialize TTS as non-EPUB mode

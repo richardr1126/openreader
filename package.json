@@ -54,8 +54,6 @@
     "cmpstr": "^3.3.0",
     "compromise": "^14.15.1",
     "core-js": "^3.49.0",
-    "dexie": "^4.4.3",
-    "dexie-react-hooks": "^4.4.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "epubjs": "^0.3.93",
@@ -102,8 +100,8 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^15.5.19",
-    "postcss": "^8.5.15",
     "openapi-typescript": "^7.10.1",
+    "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"

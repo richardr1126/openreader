@@ -115,8 +115,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   } = useTTS();
   // Configuration context to get TTS settings
   const {
-    apiKey,
-    baseUrl,
     providerRef,
     ttsSegmentMaxBlockLength,
     epubTheme,
@@ -195,7 +193,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   }, [resetHighlightState, setCurrDocPages, stop]);
 
   /**
-   * Sets the current document based on its ID by fetching from IndexedDB
+   * Sets the current document based on its ID using server metadata and the browser blob cache.
    * @param {string} id - The unique identifier of the document
    * @throws {Error} When document data is empty or retrieval fails
    */
@@ -478,8 +476,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   const { createFullAudioBook, regenerateChapter } = useEPUBAudiobook({
     bookRef,
     tocRef,
-    apiKey,
-    baseUrl,
     providerRef,
   });
 

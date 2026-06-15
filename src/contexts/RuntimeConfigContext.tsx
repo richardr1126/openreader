@@ -94,7 +94,7 @@ export function useFeatureFlag<K extends keyof RuntimeConfig>(key: K): RuntimeCo
 
 /**
  * Synchronous accessor for modules that are loaded before the React tree
- * mounts (e.g. Dexie initialization, config defaults). Falls back to the
+ * mounts (for example config defaults). Falls back to the
  * built-in defaults during SSR.
  */
 export function readRuntimeConfigSync(): RuntimeConfig {
