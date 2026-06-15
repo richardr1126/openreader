@@ -36,7 +36,14 @@ export function useReaderBootstrap(documentId: string | undefined, expectedType:
   useEffect(() => {
     if (phase !== 'ready' || !documentId || markedOpenedDocumentRef.current === documentId) return;
     markedOpenedDocumentRef.current = documentId;
-    markOpened();
+    markOpened(undefined, {
+      onError: () => {
+        // Release the guard on a transient failure so a later effect run can retry.
+        if (markedOpenedDocumentRef.current === documentId) {
+          markedOpenedDocumentRef.current = null;
+        }
+      },
+    });
   }, [documentId, markOpened, phase]);
 
   const error = useMemo(() => {

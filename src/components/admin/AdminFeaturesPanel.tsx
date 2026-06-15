@@ -51,6 +51,7 @@ export function AdminFeaturesPanel() {
   const { data, error } = useQuery({
     queryKey: adminSettingsQueryKey,
     queryFn: fetchAdminSettings,
+    enabled: Boolean(session?.user?.id),
   });
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());

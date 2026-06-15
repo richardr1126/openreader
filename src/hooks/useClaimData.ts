@@ -15,16 +15,21 @@ export const EMPTY_CLAIM_COUNTS: ClaimableCounts = {
   onboarding: 0,
 };
 
+function toCount(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function toClaimableCounts(value: unknown): ClaimableCounts {
   const rec = (value && typeof value === 'object') ? (value as Record<string, unknown>) : {};
   return {
-    documents: Number(rec.documents ?? 0),
-    audiobooks: Number(rec.audiobooks ?? 0),
-    preferences: Number(rec.preferences ?? 0),
-    progress: Number(rec.progress ?? 0),
-    documentSettings: Number(rec.documentSettings ?? 0),
-    folders: Number(rec.folders ?? 0),
-    onboarding: Number(rec.onboarding ?? 0),
+    documents: toCount(rec.documents),
+    audiobooks: toCount(rec.audiobooks),
+    preferences: toCount(rec.preferences),
+    progress: toCount(rec.progress),
+    documentSettings: toCount(rec.documentSettings),
+    folders: toCount(rec.folders),
+    onboarding: toCount(rec.onboarding),
   };
 }
 

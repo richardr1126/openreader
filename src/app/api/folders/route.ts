@@ -70,8 +70,10 @@ export async function DELETE(req: NextRequest) {
   try {
     const scope = await resolveUserStateScope(req);
     if (scope instanceof Response) return scope;
-    await db.update(documents).set({ folderId: null }).where(eq(documents.userId, scope.ownerUserId));
-    await db.delete(userFolders).where(eq(userFolders.userId, scope.ownerUserId));
+    await runInDbTransaction(async (tx) => {
+      await tx.update(documents).set({ folderId: null }).where(eq(documents.userId, scope.ownerUserId));
+      await tx.delete(userFolders).where(eq(userFolders.userId, scope.ownerUserId));
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, {

@@ -18,7 +18,7 @@ OpenReader routes all TTS requests through the Next.js server. Provider credenti
 - **Speech SDK**: Cloud. Reaches additional providers (ElevenLabs, Cartesia, Hume, Deepgram, Google, Inworld, and more) directly with your own provider API keys via [speech-sdk](./tts-provider-guides/speech-sdk). No base URL. API key required (the key for the model's provider).
 - **Custom OpenAI-Like**: Self-hosted or any custom endpoint. `API_BASE` must be set manually (typically ending in `/v1`). API key optional.
 
-Admins configure the required API key and base URL on each shared-provider row.
+Admins configure the required fields for each provider type on its shared-provider row (e.g. API key and, where applicable, base URL).
 
 ## Built-in model catalogs
 

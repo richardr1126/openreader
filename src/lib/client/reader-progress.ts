@@ -67,7 +67,7 @@ export function serializeReaderPosition(
 ): string {
   const safeIndex = Math.max(0, Math.floor(sentenceIndex));
   if (readerType === 'html') {
-    return `html:${encodeURIComponent(String(location || 1))}:${safeIndex}`;
+    return `html:${encodeURIComponent(String(location ?? 1))}:${safeIndex}`;
   }
   return `${Math.max(1, Number(location) || 1)}:${safeIndex}`;
 }

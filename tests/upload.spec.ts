@@ -54,9 +54,8 @@ test.describe('Document Upload Tests', () => {
 
     const result = await page.evaluate<HashCheckResult>(async () => {
       const listRes = await fetch('/api/documents', { cache: 'no-store' });
-      const docs = listRes.ok
-        ? ((await listRes.json()) as { documents?: Array<{ id: string; name: string }> }).documents ?? []
-        : [];
+      if (!listRes.ok) return { ok: false, reason: 'Content fetch failed' as const };
+      const docs = ((await listRes.json()) as { documents?: Array<{ id: string; name: string }> }).documents ?? [];
       const doc = docs.find((item) => item.name === 'sample.txt');
       if (!doc?.id) return { ok: false, reason: 'Missing stored html document' as const };
 

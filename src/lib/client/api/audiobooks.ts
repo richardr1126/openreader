@@ -107,7 +107,7 @@ export const withRetry = async <T>(
 
 
 export const getAudiobookStatus = async (bookId: string, signal?: AbortSignal): Promise<AudiobookStatusResponse> => {
-  const response = await fetch(`/api/audiobook/status?bookId=${bookId}`, { signal });
+  const response = await fetch(`/api/audiobook/status?bookId=${encodeURIComponent(bookId)}`, { signal });
   if (!response.ok) {
     throw new Error('Failed to fetch audiobook status');
   }

@@ -1,5 +1,5 @@
 import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/client/api/documents';
-import { clearBlobCache, getCachedBlob, previewBlobCacheKey } from '@/lib/client/cache/blob-cache';
+import { evictCachedBlobPrefix, getCachedBlob, previewBlobCacheKey } from '@/lib/client/cache/blob-cache';
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
 const inFlightPreviewPrime = new Map<string, Promise<string | null>>();
@@ -71,5 +71,5 @@ export async function primeDocumentPreviewCache(
 
 export async function clearAllDocumentPreviewCaches(): Promise<void> {
   clearInMemoryDocumentPreviewCache();
-  await clearBlobCache();
+  await evictCachedBlobPrefix('/openreader-cache/previews/');
 }

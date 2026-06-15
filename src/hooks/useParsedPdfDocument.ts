@@ -53,13 +53,20 @@ async function resolveParsedPdfState(documentId: string, signal?: AbortSignal): 
   }
 }
 
+const MAX_READY_ARTIFACT_ATTEMPTS = 8;
+
 async function loadReadyArtifact(documentId: string, signal: AbortSignal): Promise<ParsedPdfDocument> {
   let retryMs = 500;
+  let attempts = 0;
   while (!signal.aborted) {
     try {
       return await getParsedPdfDocument(documentId, { signal });
     } catch (error) {
       if (signal.aborted) throw error;
+      attempts += 1;
+      // Bound retries so a persistent server error after the ready event cannot
+      // turn into an endless polling loop; let the hook state settle instead.
+      if (attempts >= MAX_READY_ARTIFACT_ATTEMPTS) throw error;
       await new Promise((resolve) => setTimeout(resolve, retryMs));
       retryMs = Math.min(retryMs * 2, 2_000);
     }

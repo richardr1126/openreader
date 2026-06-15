@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@openreader/database';
 import { documents, userFolders } from '@openreader/database/schema';
+import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -37,11 +38,13 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     const scope = await resolveUserStateScope(req);
     if (scope instanceof Response) return scope;
     const { id } = await ctx.params;
-    await db.update(documents).set({ folderId: null }).where(and(
-      eq(documents.userId, scope.ownerUserId),
-      eq(documents.folderId, id),
-    ));
-    await db.delete(userFolders).where(and(eq(userFolders.id, id), eq(userFolders.userId, scope.ownerUserId)));
+    await runInDbTransaction(async (tx) => {
+      await tx.update(documents).set({ folderId: null }).where(and(
+        eq(documents.userId, scope.ownerUserId),
+        eq(documents.folderId, id),
+      ));
+      await tx.delete(userFolders).where(and(eq(userFolders.id, id), eq(userFolders.userId, scope.ownerUserId)));
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, {

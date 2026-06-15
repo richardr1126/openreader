@@ -314,9 +314,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   useEffect(
     () => () => {
-      if (preferenceWriteTimer.current) clearTimeout(preferenceWriteTimer.current);
+      // Flush a queued debounced write on unmount so the latest toolbar/layout
+      // change is persisted instead of being dropped during the debounce window.
+      if (preferenceWriteTimer.current) {
+        clearTimeout(preferenceWriteTimer.current);
+        preferenceWriteTimer.current = null;
+        persistLatestListState();
+      }
     },
-    [],
+    [persistLatestListState],
   );
 
   // Mobile drawer should never auto-open from persisted desktop state.

@@ -5,6 +5,8 @@ import { documents, userFolders } from '@openreader/database/schema';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
+export const dynamic = 'force-dynamic';
+
 export async function PATCH(req: NextRequest) {
   try {
     const scope = await resolveUserStateScope(req);

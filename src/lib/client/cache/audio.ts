@@ -1,5 +1,8 @@
 import { audioBlobCacheKey, getCachedBlob } from '@/lib/client/cache/blob-cache';
 
+// Cap the number of retained blob object URLs so long sessions cannot grow
+// memory without bound. Oldest entries are evicted (and revoked) first.
+const MAX_AUDIO_OBJECT_URLS = 200;
 const objectUrls = new Map<string, { stableKey: string; url: string }>();
 
 export async function getCachedAudioUrl(input: {
@@ -19,6 +22,14 @@ export async function getCachedAudioUrl(input: {
   });
   const url = URL.createObjectURL(await response.blob());
   if (existing) URL.revokeObjectURL(existing.url);
+  if (!objectUrls.has(input.audioKey) && objectUrls.size >= MAX_AUDIO_OBJECT_URLS) {
+    const oldestKey = objectUrls.keys().next().value;
+    if (oldestKey !== undefined) {
+      const evicted = objectUrls.get(oldestKey);
+      if (evicted) URL.revokeObjectURL(evicted.url);
+      objectUrls.delete(oldestKey);
+    }
+  }
   objectUrls.set(input.audioKey, { stableKey: key, url });
   return url;
 }

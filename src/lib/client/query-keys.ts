@@ -1,6 +1,6 @@
 export const queryKeys = {
   documents: (sessionId: string) => ['documents', sessionId] as const,
-  document: (sessionId: string, documentId: string) => ['documents', sessionId, documentId] as const,
+  document: (sessionId: string, documentId: string) => ['documents', sessionId, 'detail', documentId] as const,
   libraryDocuments: (sessionId: string) => ['documents', sessionId, 'library'] as const,
   preferences: (sessionId: string) => ['preferences', sessionId] as const,
   progress: (sessionId: string, documentId: string) => ['progress', sessionId, documentId] as const,

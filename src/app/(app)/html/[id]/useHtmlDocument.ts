@@ -130,8 +130,9 @@ export function useHtmlDocument(): HtmlDocumentState {
       setTTSText('');
       const doc = await ensureCachedDocument(meta);
       if (doc.type !== 'html') {
-        console.error('Document is not an HTML/TXT/MD document');
-        return;
+        // Throw so the catch handler clears stale reader state instead of
+        // leaving the previous document visible after a mismatched navigation.
+        throw new Error('Document is not an HTML/TXT/MD document');
       }
 
       setCurrDocName(doc.name);

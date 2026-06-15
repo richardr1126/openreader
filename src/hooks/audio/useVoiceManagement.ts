@@ -32,7 +32,7 @@ export function useVoiceManagement(
   const query = useQuery({
     queryKey: queryKeys.ttsVoices(session?.user?.id ?? 'no-session', effectiveProviderRef, effectiveModel),
     queryFn: ({ signal }) => getVoices({
-      'x-tts-provider': providerRef || 'openai',
+      'x-tts-provider': effectiveProviderRef,
       'x-tts-model': effectiveModel,
       'Content-Type': 'application/json',
     }, signal),

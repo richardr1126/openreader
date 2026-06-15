@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
@@ -63,7 +64,13 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
   }, [isOpen]);
 
   const handleAccept = async () => {
-    await mutation.mutateAsync({ privacyAccepted: true });
+    try {
+      await mutation.mutateAsync({ privacyAccepted: true });
+    } catch (error) {
+      console.error('Failed to record privacy acceptance:', error);
+      toast.error('Could not save your consent. Please try again.');
+      return;
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('openreader:privacyAccepted'));
     }

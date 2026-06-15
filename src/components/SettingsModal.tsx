@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -710,13 +711,19 @@ export function SettingsModal({
                                   providerType: selectedProviderType,
                                   sharedProviders,
                                 });
-                                await updateConfigKey('providerRef', selectedProviderRef);
-                                await updateConfigKey('providerType', selectedProviderType);
-                                const finalModel = showAllProviderModels
-                                  ? (selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
-                                  : defaults.defaultModel;
-                                await updateConfigKey('ttsModel', finalModel);
-                                await updateConfigKey('ttsInstructions', localTTSInstructions);
+                                try {
+                                  await updateConfigKey('providerRef', selectedProviderRef);
+                                  await updateConfigKey('providerType', selectedProviderType);
+                                  const finalModel = showAllProviderModels
+                                    ? (selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
+                                    : defaults.defaultModel;
+                                  await updateConfigKey('ttsModel', finalModel);
+                                  await updateConfigKey('ttsInstructions', localTTSInstructions);
+                                } catch (error) {
+                                  console.error('Failed to save TTS settings:', error);
+                                  toast.error('Could not save TTS settings. Please try again.');
+                                  return;
+                                }
                                 setIsOpen(false);
                               }}
                             >
