@@ -64,7 +64,6 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     enabled: !isSessionPending,
   });
   const docs = useMemo(() => documentsQuery.data ?? [], [documentsQuery.data]);
-  const refetchDocuments = documentsQuery.refetch;
   const queryState = deriveQueryState({
     hasData: !isSessionPending && documentsQuery.data !== undefined,
     isFetching: isSessionPending || documentsQuery.isFetching,
@@ -75,8 +74,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   const refreshDocuments = useCallback(async () => {
     if (isSessionPending) return;
     await queryClient.invalidateQueries({ queryKey: documentsQueryKey });
-    await refetchDocuments();
-  }, [isSessionPending, queryClient, documentsQueryKey, refetchDocuments]);
+  }, [isSessionPending, queryClient, documentsQueryKey]);
 
   useEffect(() => {
     const handler = () => {

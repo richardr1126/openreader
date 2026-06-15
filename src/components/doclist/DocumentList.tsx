@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useQueryClient } from '@tanstack/react-query';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { queryKeys } from '@/lib/client/query-keys';
-import { combineQueryStates } from '@/lib/client/query/query-state';
 import type { PreferencesResponse } from '@/lib/client/api/user-state';
 import type {
   DocumentListDocument,
@@ -225,16 +224,6 @@ function SidebarUploadLoader({
   );
 }
 
-function DocumentListStateLoader() {
-  return (
-    <div
-      className="h-full w-full min-h-0 bg-surface-sunken animate-pulse"
-      aria-label="Loading documents"
-      aria-busy="true"
-    />
-  );
-}
-
 function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -268,7 +257,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const sessionId = session?.user?.id ?? 'no-session';
   const {
     query: preferencesQuery,
-    queryState: preferencesQueryState,
     mutation: preferencesMutation,
   } = useUserPreferences(sessionId, !isSessionPending);
   const persistPreferences = preferencesMutation.mutate;
@@ -284,7 +272,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     () => normalizeListState(preferencesQuery.data?.preferences.documentListState),
     [preferencesQuery.data?.preferences.documentListState],
   );
-  const preferencesReady = !preferencesQueryState.initialLoading;
   const { sortBy, sortDirection, viewMode, iconSize, showHint, sidebarWidth, sidebarFilter } = listState;
   const sidebarOpen = !listState.sidebarCollapsed;
 
@@ -566,12 +553,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     [sortedVisible, selection],
   );
 
-  const libraryQueryState = combineQueryStates([
-    documentsQueryState,
-    folderState.queryState,
-    preferencesQueryState,
-  ]);
-  const { initialLoading, error: queryError } = libraryQueryState;
+  // The content area reflects the documents query alone. Folders feed the
+  // sidebar and preferences feed the toolbar — both have safe defaults, so a
+  // slow or failed folders/preferences fetch must not blank out or block the
+  // document list. Their refresh/error feedback is surfaced in their own UI.
+  const { initialLoading, error: queryError } = documentsQueryState;
   const refetchFolders = folderState.query.refetch;
   const refetchPreferences = preferencesQuery.refetch;
   const retryQueries = useCallback(() => {
@@ -713,11 +699,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         />
       ) : initialLoading ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          {preferencesReady ? (
-            <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
-          ) : (
-            <DocumentListStateLoader />
-          )}
+          <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
         </div>
       ) : allDocuments.length === 0 ? (
         <div className="flex-1 min-h-0 flex items-center justify-center p-6">
