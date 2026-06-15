@@ -26,11 +26,20 @@ export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, g
   }));
 
   useEffect(() => {
+    // Legacy cleanup: all user state now lives in server-backed storage (see
+    // the data-storage refactor). This best-effort delete removes the old
+    // Dexie/RxDB `openreader-db` database left on clients that used a build
+    // prior to the migration. It never blocks startup and the app is fully
+    // correct without it.
+    //
+    // Safe to remove once we can assume no active client still carries the
+    // legacy database — i.e. one full release cycle after the data-storage
+    // migration ships (target: the release following v4.3.0).
     if (typeof indexedDB === 'undefined') return;
     try {
       indexedDB.deleteDatabase('openreader-db');
     } catch {
-      // Legacy IndexedDB cleanup is best effort and never blocks startup.
+      // Best effort only; quota/private-mode failures are non-fatal.
     }
   }, []);
 

@@ -92,7 +92,6 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
 async function dismissOnboardingModals(page: Page): Promise<void> {
   const privacyDialog = page.getByTestId('privacy-modal');
   const claimDialog = page.getByTestId('claim-modal');
-  const migrationDialog = page.getByTestId('migration-modal');
   const settingsDialog = page.getByTestId('settings-modal');
 
   const maxSteps = 12;
@@ -145,16 +144,6 @@ async function dismissOnboardingModals(page: Page): Promise<void> {
         await page.waitForTimeout(100);
       }
       await settingsDialog.waitFor({ state: 'hidden', timeout: 15000 });
-      await page.waitForTimeout(100);
-      settledWithoutDialog = 0;
-      continue;
-    }
-
-    if (await migrationDialog.isVisible().catch(() => false)) {
-      const skipBtn = page.getByTestId('migration-skip-button');
-      await expect(skipBtn).toBeEnabled({ timeout: 10000 });
-      await skipBtn.click();
-      await migrationDialog.waitFor({ state: 'hidden', timeout: 15000 });
       await page.waitForTimeout(100);
       settledWithoutDialog = 0;
       continue;
