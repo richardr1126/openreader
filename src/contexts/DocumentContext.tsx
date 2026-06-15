@@ -10,6 +10,7 @@ import {
 } from '@/lib/client/api/documents';
 import { cacheStoredDocumentFromBytes, evictCachedDocument } from '@/lib/client/cache/documents';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { queryKeys } from '@/lib/client/query-keys';
 
 interface DocumentContextType {
   pdfDocs: Array<BaseDocument & { type: 'pdf' }>;
@@ -27,8 +28,6 @@ interface DocumentContextType {
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
-const DOCUMENTS_QUERY_KEY = 'documents';
-
 type SupportedDocument = BaseDocument & { type: 'pdf' | 'epub' | 'html' };
 
 function mergeStoredDocuments(
@@ -54,18 +53,13 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const { data: sessionData, isPending: isSessionPending } = useAuthSession();
   const sessionKey = sessionData?.user?.id ?? 'no-session';
-  const documentsQueryKey = useMemo(() => [DOCUMENTS_QUERY_KEY, sessionKey] as const, [sessionKey]);
+  const documentsQueryKey = useMemo(() => queryKeys.documents(sessionKey), [sessionKey]);
 
   const loadDocuments = useCallback(async () => {
-    try {
-      const serverDocs = await listDocuments();
-      return serverDocs.filter((d): d is BaseDocument & { type: 'pdf' | 'epub' | 'html' } =>
-        d.type === 'pdf' || d.type === 'epub' || d.type === 'html',
-      );
-    } catch (err) {
-      console.error('Failed to load documents from server:', err);
-      return [];
-    }
+    const serverDocs = await listDocuments();
+    return serverDocs.filter((d): d is BaseDocument & { type: 'pdf' | 'epub' | 'html' } =>
+      d.type === 'pdf' || d.type === 'epub' || d.type === 'html',
+    );
   }, []);
 
   const { data: docs = [], isPending, refetch } = useQuery({

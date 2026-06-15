@@ -49,7 +49,7 @@ export function AudiobookExportModal({
   onGenerateAudiobook,
   onRegenerateChapter
 }: AudiobookExportModalProps) {
-  const { isLoading, isDBReady, providerRef, providerType, ttsModel, ttsInstructions, voice: configVoice, voiceSpeed, audioPlayerSpeed } = useConfig();
+  const { isLoading, providerRef, providerType, ttsModel, ttsInstructions, voice: configVoice, voiceSpeed, audioPlayerSpeed } = useConfig();
   const { availableVoices, documentLanguage } = useTTS();
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -454,7 +454,7 @@ export function AudiobookExportModal({
   const canGenerate = effectiveSettings !== null;
 
   // Do not render until storage/config is initialized
-  if (isLoading || !isDBReady) {
+  if (isLoading) {
     return null;
   }
 

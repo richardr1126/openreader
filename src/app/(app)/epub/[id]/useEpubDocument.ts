@@ -12,7 +12,6 @@ import {
 import type { NavItem } from 'epubjs';
 import type { Book, Rendition } from 'epubjs';
 
-import { getDocumentMetadata } from '@/lib/client/api/documents';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { EpubRenderedLocationCloneManager } from '@/lib/client/epub/rendered-location-walker';
 import { canonicalizeEpubSegmentAgainstSpineText } from '@/lib/client/epub/canonicalize-epub-segment';
@@ -49,6 +48,7 @@ import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/cli
 import { isStableEpubLocator } from '@/types/client';
 import { buildSegmentKeyPrefix, type CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 import { normalizeOptionalLanguageTag } from '@/lib/shared/language';
+import type { BaseDocument } from '@/types/documents';
 
 // How many canonical segments to pre-stage for the next page so a
 // background-tab page turn can keep speaking without waiting on the rendition.
@@ -62,7 +62,7 @@ export interface EpubDocumentState {
   currDocText: string | undefined;
   metadataLanguage: string | null;
   isPlaybackReady: boolean;
-  setCurrentDocument: (id: string) => Promise<void>;
+  setCurrentDocument: (metadata: BaseDocument) => Promise<void>;
   clearCurrDoc: () => void;
   extractPageText: (book: Book, rendition: Rendition, shouldPause?: boolean) => Promise<string>;
   walkUpcomingRenderedLocations: EpubRenderedLocationWalker;
@@ -197,19 +197,12 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
    * @param {string} id - The unique identifier of the document
    * @throws {Error} When document data is empty or retrieval fails
    */
-  const setCurrentDocument = useCallback(async (id: string): Promise<void> => {
+  const setCurrentDocument = useCallback(async (meta: BaseDocument): Promise<void> => {
     try {
       setIsPlaybackReady(false);
       setMetadataLanguage(null);
       bookRef.current = null;
       renditionRef.current = undefined;
-      const meta = await getDocumentMetadata(id);
-      if (!meta) {
-        clearCurrDoc();
-        console.error('Document not found on server');
-        return;
-      }
-
       const doc = await ensureCachedDocument(meta);
       if (doc.type !== 'epub') {
         clearCurrDoc();
@@ -227,6 +220,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     } catch (error) {
       console.error('Failed to get EPUB document:', error);
       clearCurrDoc(); // Clean up on error
+      throw error;
     }
   }, [clearCurrDoc]);
 

@@ -85,11 +85,22 @@ export async function listDocuments(options?: { ids?: string[]; signal?: AbortSi
 
 export async function getDocumentMetadata(id: string, options?: { signal?: AbortSignal }): Promise<BaseDocument | null> {
   const docs = await listDocuments({ ids: [id], signal: options?.signal });
-  const document = docs[0] ?? null;
-  if (document) {
-    void fetch(`/api/documents/${encodeURIComponent(id)}/opened`, { method: 'PUT' }).catch(() => {});
+  return docs[0] ?? null;
+}
+
+export async function markDocumentOpened(
+  id: string,
+  options?: { signal?: AbortSignal },
+): Promise<{ documentId: string; recentlyOpenedAt: number }> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/opened`, {
+    method: 'PUT',
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to update recently opened state');
   }
-  return document;
+  return (await res.json()) as { documentId: string; recentlyOpenedAt: number };
 }
 
 export class ParsedPdfNotReadyError extends Error {

@@ -19,6 +19,7 @@ import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useDocumentLanguage } from '@/hooks/useDocumentLanguage';
+import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
 import { useEpubDocument } from './useEpubDocument';
 
@@ -26,6 +27,7 @@ export default function EPUBPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
+  const bootstrap = useReaderBootstrap(routeDocumentId, 'epub');
   const epubState = useEpubDocument(routeDocumentId);
   const {
     setCurrentDocument,
@@ -51,6 +53,7 @@ export default function EPUBPage() {
   const didInitPadPctRef = useRef(false);
 
   useEffect(() => {
+    stop();
     setIsLoading(true);
     setError(null);
     setActiveSidebar(null);
@@ -58,15 +61,18 @@ export default function EPUBPage() {
     loadedDocIdRef.current = null;
   }, [routeDocumentId]);
 
+  useEffect(() => {
+    if (bootstrap.phase !== 'error') return;
+    setError(bootstrap.error?.message || 'Failed to load document');
+    setIsLoading(false);
+  }, [bootstrap.error, bootstrap.phase]);
+
   const loadDocument = useCallback(async () => {
     console.log('Loading new epub (from page.tsx)');
     let startedLoad = false;
     try {
-      if (!routeDocumentId) {
-        setError('Document not found');
-        return;
-      }
-      const resolved = routeDocumentId;
+      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
+      const resolved = bootstrap.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -77,8 +83,7 @@ export default function EPUBPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      stop(); // Reset TTS when loading new document
-      await setCurrentDocument(resolved);
+      await setCurrentDocument(bootstrap.document);
       loadedDocIdRef.current = resolved;
     } catch (err) {
       console.error('Error loading document:', err);
@@ -91,7 +96,7 @@ export default function EPUBPage() {
         setIsLoading(false);
       }
     }
-  }, [routeDocumentId, setCurrentDocument, stop]);
+  }, [bootstrap.document, bootstrap.phase, setCurrentDocument]);
 
   useEffect(() => {
     if (!isLoading) return;

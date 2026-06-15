@@ -17,6 +17,7 @@ import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useDocumentLanguage } from '@/hooks/useDocumentLanguage';
+import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
@@ -26,6 +27,7 @@ export default function HTMLPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
+  const bootstrap = useReaderBootstrap(routeDocumentId, 'html');
   const htmlState = useHtmlDocument();
   const {
     setCurrentDocument,
@@ -51,6 +53,7 @@ export default function HTMLPage() {
   const loadedDocIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    stop();
     setIsLoading(true);
     setError(null);
     setActiveSidebar(null);
@@ -58,16 +61,19 @@ export default function HTMLPage() {
     loadedDocIdRef.current = null;
   }, [id]);
 
+  useEffect(() => {
+    if (bootstrap.phase !== 'error') return;
+    setError(bootstrap.error?.message || 'Failed to load document');
+    setIsLoading(false);
+  }, [bootstrap.error, bootstrap.phase]);
+
   const loadDocument = useCallback(async () => {
     if (!isLoading) return;
     console.log('Loading new HTML document (from page.tsx)');
     let startedLoad = false;
     try {
-      if (!id) {
-        setError('Document not found');
-        return;
-      }
-      const resolved = id as string;
+      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
+      const resolved = bootstrap.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -78,8 +84,7 @@ export default function HTMLPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      stop();
-      await setCurrentDocument(resolved);
+      await setCurrentDocument(bootstrap.document);
       loadedDocIdRef.current = resolved;
     } catch (err) {
       console.error('Error loading document:', err);
@@ -92,7 +97,7 @@ export default function HTMLPage() {
         setIsLoading(false);
       }
     }
-  }, [isLoading, id, setCurrentDocument, stop]);
+  }, [bootstrap.document, bootstrap.phase, isLoading, setCurrentDocument]);
 
   useEffect(() => {
     if (!isLoading) return;

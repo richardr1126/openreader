@@ -21,7 +21,6 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
   ensureParsedPdfDocumentOperation,
   forceReparsePdfDocument,
-  getDocumentMetadata,
   getParsedPdfDocument,
   ParsedPdfNotReadyError,
   subscribeParsedPdfDocumentEvents,
@@ -55,6 +54,7 @@ import type {
 import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
 import { clampSegmentPreloadDepth } from '@/types/config';
 import { useDocumentSettings } from '@/hooks/useDocumentSettings';
+import type { BaseDocument } from '@/types/documents';
 
 /**
  * Outcome of a `setCurrentDocument` call.
@@ -86,7 +86,7 @@ export interface PdfDocumentState {
   parsedOverlayEnabled: boolean;
   setParsedOverlayEnabled: (enabled: boolean) => void;
   forceReparseParsedPdf: () => Promise<void>;
-  setCurrentDocument: (id: string) => Promise<SetCurrentDocumentResult>;
+  setCurrentDocument: (metadata: BaseDocument) => Promise<SetCurrentDocumentResult>;
   clearCurrDoc: () => void;
 
   // PDF functionality
@@ -135,7 +135,7 @@ function delay(ms: number): Promise<void> {
 /**
  * Main PDF route hook.
  */
-export function usePdfDocument(): PdfDocumentState {
+export function usePdfDocument(documentId?: string): PdfDocumentState {
   const {
     setText: setTTSText,
     stop,
@@ -164,7 +164,7 @@ export function usePdfDocument(): PdfDocumentState {
   const [parseProgress, setParseProgress] = useState<PdfParseProgress | null>(null);
   const [, setActiveParseOpId] = useState<string | null>(null);
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
-  const serverDocumentSettings = useDocumentSettings(currDocId);
+  const serverDocumentSettings = useDocumentSettings(documentId);
   useEffect(() => {
     if (!serverDocumentSettings.query.data?.settings) return;
     setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings.query.data.settings));
@@ -518,10 +518,11 @@ export function usePdfDocument(): PdfDocumentState {
    * Sets the current document based on its ID
    * Retrieves document from server metadata and the browser blob cache.
    * 
-   * @param {string} id - The unique identifier of the document to set
+   * @param {BaseDocument} meta - Resolved server metadata for the document
    * @returns {Promise<void>}
    */
-  const setCurrentDocument = useCallback(async (id: string): Promise<SetCurrentDocumentResult> => {
+  const setCurrentDocument = useCallback(async (meta: BaseDocument): Promise<SetCurrentDocumentResult> => {
+    const id = meta.id;
     // --- race-condition guard ---
     const seq = ++docLoadSeqRef.current;
     docLoadAbortRef.current?.abort();
@@ -551,20 +552,19 @@ export function usePdfDocument(): PdfDocumentState {
       setParseStatus(null);
       setParseProgress(null);
       setActiveParseOpId(null);
-      setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
+      setDocumentSettings(mergeDocumentSettings(
+        DEFAULT_DOCUMENT_SETTINGS,
+        serverDocumentSettings.query.data?.settings,
+      ));
 
-      const meta = await getDocumentMetadata(id, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return 'superseded'; // a newer load took over
-      if (!meta) {
-        console.error('Document not found on server');
+      if (meta.type !== 'pdf') {
+        console.error('Document is not a PDF');
         return 'failed';
       }
-      if (meta.type === 'pdf') {
-        void resolveParsedDocumentState(id, controller.signal).catch((error) => {
-          if (controller.signal.aborted) return;
-          console.error('Failed to resolve parsed PDF state:', error);
-        });
-      }
+      void resolveParsedDocumentState(id, controller.signal).catch((error) => {
+        if (controller.signal.aborted) return;
+        console.error('Failed to resolve parsed PDF state:', error);
+      });
 
       const doc = await ensureCachedDocument(meta, { signal: controller.signal });
       if (seq !== docLoadSeqRef.current) return 'superseded'; // a newer load took over
@@ -598,6 +598,7 @@ export function usePdfDocument(): PdfDocumentState {
     setCurrDocText,
     setPdfDocument,
     resolveParsedDocumentState,
+    serverDocumentSettings.query.data?.settings,
   ]);
 
   const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {

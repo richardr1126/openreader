@@ -33,7 +33,8 @@ interface ConfigContextType {
   savedVoices: SavedVoices;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
   isLoading: boolean;
-  isDBReady: boolean;
+  preferencesReady: boolean;
+  preferencesError: Error | null;
   pdfHighlightEnabled: boolean;
   pdfWordHighlightEnabled: boolean;
   epubHighlightEnabled: boolean;
@@ -81,7 +82,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     await updatePatch(syncPatch);
   };
 
-  const isLoading = isSessionPending || query.isPending || mutation.isPending || sharedProvidersLoading;
+  const isLoading = isSessionPending || query.isPending || sharedProvidersLoading;
 
   return (
     <ConfigContext.Provider value={{
@@ -105,7 +106,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       savedVoices: config.savedVoices,
       updateConfigKey,
       isLoading,
-      isDBReady: !isSessionPending && !query.isPending,
+      preferencesReady: !isSessionPending && query.isSuccess,
+      preferencesError: query.error,
       pdfHighlightEnabled: config.pdfHighlightEnabled,
       pdfWordHighlightEnabled: config.pdfWordHighlightEnabled,
       epubHighlightEnabled: config.epubHighlightEnabled,

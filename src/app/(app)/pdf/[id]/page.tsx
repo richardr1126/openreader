@@ -27,6 +27,7 @@ import {
   isForceReparseDisabled,
 } from '@/lib/client/pdf/force-reparse';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
+import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -43,8 +44,10 @@ const PARSE_LOADER_EXPAND_DELAY_MS = 320;
 export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
+  const routeDocumentId = typeof id === 'string' ? id : undefined;
   const router = useRouter();
-  const pdfState = usePdfDocument();
+  const bootstrap = useReaderBootstrap(routeDocumentId, 'pdf');
+  const pdfState = usePdfDocument(routeDocumentId);
   const {
     setCurrentDocument,
     currDocName,
@@ -62,7 +65,7 @@ export default function PDFViewerPage() {
     createFullAudioBook: createPDFAudioBook,
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
-  const { stop } = useTTS();
+  const { pause, stop } = useTTS();
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,6 +90,7 @@ export default function PDFViewerPage() {
     && (parseUiState === 'pending' || parseUiState === 'running' || parseUiState === 'failed' || hasRealParseProgress);
 
   useEffect(() => {
+    stop();
     setIsLoading(true);
     setIsPdfViewerReady(false);
     setError(null);
@@ -95,17 +99,20 @@ export default function PDFViewerPage() {
     loadedDocIdRef.current = null;
   }, [id]);
 
+  useEffect(() => {
+    if (bootstrap.phase !== 'error') return;
+    setError(bootstrap.error?.message || 'Failed to load document');
+    setIsLoading(false);
+  }, [bootstrap.error, bootstrap.phase]);
+
   const loadDocument = useCallback(async () => {
     if (!isLoading) return; // Prevent calls when not loading new doc
     console.log('Loading new document (from page.tsx)');
     let startedLoad = false;
     let loadSucceeded = false;
     try {
-      if (!id) {
-        setError('Document not found');
-        return;
-      }
-      const resolved = id as string;
+      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
+      const resolved = bootstrap.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -116,9 +123,8 @@ export default function PDFViewerPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      stop(); // Reset TTS when loading new document
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const result = await setCurrentDocument(resolved);
+        const result = await setCurrentDocument(bootstrap.document);
         if (result === 'loaded') {
           loadSucceeded = true;
           loadedDocIdRef.current = resolved;
@@ -148,7 +154,7 @@ export default function PDFViewerPage() {
         setIsLoading(false);
       }
     }
-  }, [isLoading, id, setCurrentDocument, stop]);
+  }, [bootstrap.document, bootstrap.phase, isLoading, setCurrentDocument]);
 
   useEffect(() => {
     loadDocument();
@@ -159,8 +165,8 @@ export default function PDFViewerPage() {
   useEffect(() => {
     if (isLoading) return;
     if (isParseReady) return;
-    stop();
-  }, [isLoading, isParseReady, stop]);
+    pause();
+  }, [isLoading, isParseReady, pause]);
 
   useEffect(() => {
     if (!shouldShowExpandedParseLoader) {
