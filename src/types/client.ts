@@ -36,6 +36,16 @@ export interface AudiobookStatusResponse {
   settings?: AudiobookGenerationSettings | null;
 }
 
+export type ClaimableCounts = {
+  documents: number;
+  audiobooks: number;
+  preferences: number;
+  progress: number;
+  documentSettings: number;
+  folders: number;
+  onboarding: number;
+};
+
 export interface AudiobookGenerationSettings {
   providerRef: string;
   providerType: TtsProviderType;

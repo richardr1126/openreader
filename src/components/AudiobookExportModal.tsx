@@ -15,12 +15,10 @@ import { getTtsLanguageCompatibilityWarnings, resolveTtsLanguage } from '@/lib/s
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
 import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, RangeInput, Select } from '@/components/ui';
 import { 
-  getAudiobookStatus, 
-  deleteAudiobookChapter, 
-  deleteAudiobook, 
   downloadAudiobookChapter, 
   downloadAudiobook 
 } from '@/lib/client/api/audiobooks';
+import { useAudiobookStatus } from '@/hooks/useAudiobookStatus';
 import type { AudiobookGenerationSettings } from '@/types/client';
 interface AudiobookExportModalProps {
   isOpen: boolean;
@@ -53,23 +51,38 @@ export function AudiobookExportModal({
   const { availableVoices, documentLanguage } = useTTS();
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [chapters, setChapters] = useState<TTSAudiobookChapter[]>([]);
-  const [bookId, setBookId] = useState<string | null>(null);
   const [isCombining, setIsCombining] = useState(false);
-  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
-  const [isRefreshingChapters, setIsRefreshingChapters] = useState(false);
   const [currentChapter, setCurrentChapter] = useState<string>('');
   const [format, setFormat] = useState<TTSAudiobookFormat>('m4b');
   const [audiobookVoice, setAudiobookVoice] = useState<string>(configVoice || '');
   const [nativeSpeed, setNativeSpeed] = useState<number>(voiceSpeed);
   const [postSpeed, setPostSpeed] = useState<number>(audioPlayerSpeed);
-  const [savedSettings, setSavedSettings] = useState<AudiobookGenerationSettings | null>(null);
   const [regeneratingChapter, setRegeneratingChapter] = useState<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [pendingDeleteChapter, setPendingDeleteChapter] = useState<TTSAudiobookChapter | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showRegenerateHint, setShowRegenerateHint] = useState(false);
+  const {
+    query: audiobookQuery,
+    setChapter,
+    deleteChapterMutation,
+    resetMutation,
+    invalidate: invalidateAudiobook,
+  } = useAudiobookStatus(documentId, isOpen || isGenerating);
+  const audiobookStatus = audiobookQuery.data;
+  const chapters = audiobookStatus?.chapters ?? [];
+  const bookId = audiobookStatus?.bookId ?? null;
+  const savedSettings = audiobookStatus?.settings ?? null;
+  const isLoadingExisting = audiobookQuery.isPending;
+  const isRefreshingChapters = audiobookQuery.isFetching && !audiobookQuery.isPending;
+  useEffect(() => {
+    if (isOpen && audiobookQuery.error) {
+      setErrorMessage(audiobookQuery.error instanceof Error
+        ? audiobookQuery.error.message
+        : 'Failed to load audiobook status.');
+    }
+  }, [audiobookQuery.error, isOpen]);
 
   const formatSpeed = useCallback((speed: number) => {
     return Number.isInteger(speed) ? speed.toString() : speed.toFixed(1);
@@ -83,6 +96,22 @@ export function AudiobookExportModal({
 
   const hasExistingAudiobook = Boolean(bookId) || chapters.length > 0;
   const isLegacyAudiobookMissingSettings = hasExistingAudiobook && savedSettings === null;
+
+  useEffect(() => {
+    if (!audiobookStatus) return;
+    if (audiobookStatus.chapters[0]?.format) {
+      setFormat(audiobookStatus.chapters[0].format as TTSAudiobookFormat);
+    }
+    if (audiobookStatus.settings) {
+      setAudiobookVoice(audiobookStatus.settings.voice);
+      setNativeSpeed(audiobookStatus.settings.nativeSpeed);
+      setPostSpeed(audiobookStatus.settings.postSpeed);
+      setFormat(audiobookStatus.settings.format);
+    }
+    if (audiobookStatus.hasComplete) {
+      setProgress(100);
+    }
+  }, [audiobookStatus, setProgress]);
 
   useEffect(() => {
     // For new audiobooks (no saved settings/chapters), keep generation defaults aligned
@@ -137,67 +166,10 @@ export function AudiobookExportModal({
     documentLanguage: effectiveSettings?.language,
   }), [effectiveSettings]);
 
-  const fetchExistingChapters = useCallback(async (soft: boolean = false) => {
-    if (soft) {
-      setIsRefreshingChapters(true);
-    } else {
-      setIsLoadingExisting(true);
-    }
-    try {
-      const data = await getAudiobookStatus(documentId);
-      if (data.exists) {
-        setChapters(data.chapters || []);
-        setBookId(data.bookId);
-        if (data.chapters[0]?.format) {
-          const detectedFormat = data.chapters[0].format as TTSAudiobookFormat;
-          setFormat(detectedFormat);
-        }
-        if (data.settings) {
-          setSavedSettings(data.settings);
-          setAudiobookVoice(data.settings.voice);
-          setNativeSpeed(data.settings.nativeSpeed);
-          setPostSpeed(data.settings.postSpeed);
-          setFormat(data.settings.format);
-        } else {
-          setSavedSettings(null);
-        }
-        if (data.hasComplete) {
-          setProgress(100);
-        }
-      } else {
-        // If nothing exists, clear chapters/bookId to reflect current state
-        setChapters([]);
-        setBookId(null);
-        setSavedSettings(null);
-      }
-    } catch (error) {
-      console.error('Error fetching existing chapters:', error);
-    } finally {
-      if (soft) {
-        setIsRefreshingChapters(false);
-      } else {
-        setIsLoadingExisting(false);
-      }
-    }
-  }, [documentId, setProgress]);
-
-  // Fetch existing chapters when modal opens
-  useEffect(() => {
-    if (isOpen && documentId && !isGenerating) {
-      fetchExistingChapters();
-    }
-  }, [isOpen, documentId, isGenerating, fetchExistingChapters]);
-
   const handleChapterComplete = useCallback((chapter: TTSAudiobookChapter) => {
-    setChapters(prev => {
-      const existing = prev.find(c => c.index === chapter.index);
-      if (existing) {
-        return prev.map(c => c.index === chapter.index ? chapter : c);
-      }
-      return [...prev, chapter].sort((a, b) => a.index - b.index);
-    });
+    setChapter(chapter);
     setCurrentChapter(chapter.title);
-  }, []);
+  }, [setChapter]);
 
   const handleStartGeneration = useCallback(async () => {
     if (!effectiveSettings) {
@@ -207,21 +179,15 @@ export function AudiobookExportModal({
     setIsGenerating(true);
     setProgress(0);
     setCurrentChapter('');
-    // Don't clear chapters if resuming
-    if (!bookId) {
-      setChapters([]);
-      setBookId(null);
-    }
     abortControllerRef.current = new AbortController();
 
     try {
-      const generatedBookId = await onGenerateAudiobook(
+      await onGenerateAudiobook(
         (progress) => setProgress(progress),
         abortControllerRef.current.signal,
         handleChapterComplete,
         effectiveSettings
       );
-      setBookId(generatedBookId);
     } catch (error) {
       console.error('Error generating audiobook:', error);
       if (error instanceof Error && error.message.includes('cancelled')) {
@@ -235,12 +201,9 @@ export function AudiobookExportModal({
       setIsGenerating(false);
       setProgress(0);
       abortControllerRef.current = null;
-      // Refresh chapters to show what was completed (soft refresh list only)
-      if (bookId || documentId) {
-        await fetchExistingChapters(true);
-      }
+      await invalidateAudiobook();
     }
-  }, [onGenerateAudiobook, handleChapterComplete, setProgress, bookId, documentId, fetchExistingChapters, effectiveSettings]);
+  }, [onGenerateAudiobook, handleChapterComplete, setProgress, effectiveSettings, invalidateAudiobook]);
 
   const handleCancel = useCallback(() => {
     if (abortControllerRef.current) {
@@ -283,19 +246,7 @@ export function AudiobookExportModal({
     abortControllerRef.current = new AbortController();
 
     try {
-      // Update chapter status to generating
-      setChapters(prev => {
-        const exists = prev.some(c => c.index === chapter.index);
-        if (exists) {
-          return prev.map(c =>
-            c.index === chapter.index
-              ? { ...c, status: 'generating' as const }
-              : c
-          );
-        }
-        // If it's a missing placeholder, add it as generating
-        return [...prev, { ...chapter, status: 'generating' as const }].sort((a, b) => a.index - b.index);
-      });
+      setChapter({ ...chapter, status: 'generating' });
 
       const regeneratedChapter = await onRegenerateChapter(
         chapter.index,
@@ -304,12 +255,7 @@ export function AudiobookExportModal({
         abortControllerRef.current.signal
       );
 
-      // Update chapter with new data
-      setChapters(prev => prev.map(c =>
-        c.index === chapter.index
-          ? regeneratedChapter
-          : c
-      ));
+      setChapter(regeneratedChapter);
 
     } catch (error) {
       console.error('Error regenerating chapter:', error);
@@ -317,53 +263,45 @@ export function AudiobookExportModal({
         console.log('Chapter regeneration cancelled');
       } else {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to regenerate chapter. Please try again.');
-        // Mark as error
-        setChapters(prev => prev.map(c =>
-          c.index === chapter.index
-            ? { ...c, status: 'error' as const }
-            : c
-        ));
+        setChapter({ ...chapter, status: 'error' });
       }
     } finally {
       setRegeneratingChapter(null);
       setCurrentChapter('');
       setProgress(0);
       abortControllerRef.current = null;
-      // Refresh chapters to get updated data (soft refresh list only)
-      await fetchExistingChapters(true);
+      await invalidateAudiobook();
     }
-  }, [onRegenerateChapter, bookId, setProgress, fetchExistingChapters, showRegenerateHint, effectiveSettings]);
+  }, [onRegenerateChapter, bookId, setProgress, showRegenerateHint, effectiveSettings, invalidateAudiobook, setChapter]);
 
   const performDeleteChapter = useCallback(async () => {
     if (!bookId || !pendingDeleteChapter) return;
     try {
-      await deleteAudiobookChapter(bookId, pendingDeleteChapter.index);
-      setChapters(prev => prev.filter(c => c.index !== pendingDeleteChapter.index));
-      await fetchExistingChapters(true);
+      await deleteChapterMutation.mutateAsync({
+        bookId,
+        chapterIndex: pendingDeleteChapter.index,
+      });
     } catch (error) {
       console.error('Error deleting chapter:', error);
       setErrorMessage('Failed to delete chapter. Please try again.');
     } finally {
       setPendingDeleteChapter(null);
     }
-  }, [bookId, pendingDeleteChapter, fetchExistingChapters]);
+  }, [bookId, deleteChapterMutation, pendingDeleteChapter]);
 
   const performResetAll = useCallback(async () => {
     const targetBookId = bookId || documentId;
     if (!targetBookId) return;
     try {
-      await deleteAudiobook(targetBookId);
-      setChapters([]);
-      setBookId(null);
+      await resetMutation.mutateAsync(targetBookId);
       setProgress(0);
     } catch (error) {
       console.error('Error resetting audiobook chapters:', error);
       setErrorMessage('Failed to reset chapters. Please try again.');
     } finally {
       setShowResetConfirm(false);
-      await fetchExistingChapters(true);
     }
-  }, [bookId, documentId, setProgress, fetchExistingChapters]);
+  }, [bookId, documentId, resetMutation, setProgress]);
 
   const handleDownloadChapter = useCallback(async (chapter: TTSAudiobookChapter) => {
     if (!chapter.bookId) return;

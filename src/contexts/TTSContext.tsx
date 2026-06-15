@@ -441,10 +441,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Audio and voice management hooks
   const audioContext = useAudioContext();
-  const { availableVoices, fetchVoices } = useVoiceManagement(
+  const { availableVoices } = useVoiceManagement(
     configProviderRef,
     configProviderType,
     configTTSModel,
+    !configIsLoading,
   );
   const {
     onTTSStart,
@@ -1618,12 +1619,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   useEffect(() => {
     if (!configIsLoading) {
-      fetchVoices();
       updateVoiceAndSpeed();
       setTTSModel(configTTSModel);
       setTTSInstructions(configTTSInstructions);
     }
-  }, [configIsLoading, updateVoiceAndSpeed, fetchVoices, configTTSModel, configTTSInstructions]);
+  }, [configIsLoading, updateVoiceAndSpeed, configTTSModel, configTTSInstructions]);
 
   const preloadGenerationSignatureRef = useRef<string>('');
   useEffect(() => {

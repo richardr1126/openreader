@@ -106,8 +106,8 @@ export const withRetry = async <T>(
 
 
 
-export const getAudiobookStatus = async (bookId: string): Promise<AudiobookStatusResponse> => {
-  const response = await fetch(`/api/audiobook/status?bookId=${bookId}`);
+export const getAudiobookStatus = async (bookId: string, signal?: AbortSignal): Promise<AudiobookStatusResponse> => {
+  const response = await fetch(`/api/audiobook/status?bookId=${bookId}`, { signal });
   if (!response.ok) {
     throw new Error('Failed to fetch audiobook status');
   }
@@ -197,9 +197,10 @@ export const downloadAudiobookChapter = async (bookId: string, chapterIndex: num
 
 
 
-export const getVoices = async (headers: HeadersInit): Promise<VoicesResponse> => {
+export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
   const response = await fetch('/api/tts/voices', {
     headers,
+    signal,
   });
 
   if (!response.ok) throw new Error('Failed to fetch voices');

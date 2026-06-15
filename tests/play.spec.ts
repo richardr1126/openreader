@@ -138,6 +138,10 @@ test.describe('Play/Pause Tests', () => {
 
     // Select first voice (e.g., bf_emma) and assert processing -> playing
     await openVoicesMenu(page);
+    test.skip(
+      await page.getByRole('option', { name: 'bf_emma' }).count() === 0,
+      'Requires an active Kokoro provider.',
+    );
     await selectVoiceAndAssertPlayback(page, 'bf_emma');
 
     // Select second voice (e.g., af_heart) to create a multi-voice mix and assert again

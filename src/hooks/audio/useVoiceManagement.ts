@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getVoices } from '@/lib/client/api/audiobooks';
+import { queryKeys } from '@/lib/client/query-keys';
+import { useAuthSession } from '@/hooks/useAuthSession';
 import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
 
@@ -15,42 +18,34 @@ import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy'
 export function useVoiceManagement(
   providerRef: string | undefined,
   providerType: TtsProviderType | undefined,
-  ttsModel: string | undefined
+  ttsModel: string | undefined,
+  enabled = true,
 ) {
-  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
-  const fetchSeqRef = useRef(0);
+  const { data: session, isPending: isSessionPending } = useAuthSession();
+  const effectiveProviderRef = providerRef || 'openai';
+  const effectiveModel = ttsModel || 'tts-1';
+  const fallbackVoices = useMemo(() => resolveTtsProviderModelPolicy({
+    providerRef: providerRef || '',
+    providerType,
+    model: effectiveModel,
+  }).defaultVoices, [effectiveModel, providerRef, providerType]);
+  const query = useQuery({
+    queryKey: queryKeys.ttsVoices(session?.user?.id ?? 'no-session', effectiveProviderRef, effectiveModel),
+    queryFn: ({ signal }) => getVoices({
+      'x-tts-provider': providerRef || 'openai',
+      'x-tts-model': effectiveModel,
+      'Content-Type': 'application/json',
+    }, signal),
+    enabled: enabled && !isSessionPending,
+  });
+  const availableVoices = query.isPending
+    ? []
+    : query.data?.voices?.length
+      ? query.data.voices
+      : fallbackVoices;
+  useEffect(() => {
+    if (query.error) console.error('Error fetching voices:', query.error);
+  }, [query.error]);
 
-  const fetchVoices = useCallback(async () => {
-    const fetchSeq = ++fetchSeqRef.current;
-    try {
-      console.log('Fetching voices...');
-      const data = await getVoices({
-        'x-tts-provider': providerRef || 'openai',
-        'x-tts-model': ttsModel || 'tts-1',
-        'Content-Type': 'application/json',
-      });
-
-      // Ignore stale responses from older provider/model fetches.
-      if (fetchSeq !== fetchSeqRef.current) return;
-      if (data.voices && data.voices.length > 0) {
-        setAvailableVoices(data.voices);
-        return;
-      }
-      setAvailableVoices(resolveTtsProviderModelPolicy({
-        providerRef: providerRef || '',
-        providerType,
-        model: ttsModel || 'tts-1',
-      }).defaultVoices);
-    } catch (error) {
-      console.error('Error fetching voices:', error);
-      if (fetchSeq !== fetchSeqRef.current) return;
-      setAvailableVoices(resolveTtsProviderModelPolicy({
-        providerRef: providerRef || '',
-        providerType,
-        model: ttsModel || 'tts-1',
-      }).defaultVoices);
-    }
-  }, [providerRef, providerType, ttsModel]);
-
-  return { availableVoices, fetchVoices };
+  return { availableVoices, query };
 }

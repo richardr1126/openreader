@@ -19,11 +19,13 @@ const USER_SCOPED_DOMAINS = new Set([
   'onboarding',
   'folders',
   'audiobook',
+  'tts-shared-providers',
   'tts-manifest',
   'tts-voices',
   'parsed-document',
   'claim-counts',
   'rate-limit',
+  'admin',
 ]);
 
 /**

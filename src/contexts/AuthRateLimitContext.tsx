@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { coerceTimestampMs, nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
+import { queryKeys } from '@/lib/client/query-keys';
 
 export interface RateLimitStatus {
   allowed: boolean;
@@ -107,7 +108,7 @@ interface AuthRateLimitProviderProps {
   githubAuthEnabled: boolean;
 }
 
-const RATE_LIMIT_QUERY_KEY = ['rate-limit-status'] as const;
+const RATE_LIMIT_QUERY_KEY = queryKeys.rateLimit('active-auth-context');
 
 export function AuthRateLimitProvider({
   children,
