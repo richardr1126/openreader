@@ -571,7 +571,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     folderState.queryState,
     preferencesQueryState,
   ]);
-  const { initialLoading, refreshing, error: queryError, backgroundError } = libraryQueryState;
+  const { initialLoading, error: queryError } = libraryQueryState;
   const refetchFolders = folderState.query.refetch;
   const refetchPreferences = preferencesQuery.refetch;
   const retryQueries = useCallback(() => {
@@ -685,14 +685,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         if (isNarrow) setMobileSidebarOpen(false);
       }}
     >
-      {!queryError && (
-        <RefreshIndicator
-          refreshing={refreshing}
-          warn={Boolean(backgroundError)}
-          className="shrink-0 border-b border-line-soft bg-surface-sunken px-3 py-1"
-        />
-      )}
-
       {!initialLoading && !queryError && showHint && allDocuments.length > 1 && (
         <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
           <div className="flex items-center justify-between bg-surface border border-line rounded-md px-3 py-1 text-[12px]">
@@ -740,6 +732,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           className="flex-1 min-h-0 flex flex-col"
           onUploadBatchChange={handleUploadBatchChange}
         >
+          <RefreshIndicator
+            refreshing={documentsQueryState.refreshing}
+            warn={Boolean(documentsQueryState.backgroundError)}
+            className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 rounded-full border border-line bg-surface-solid px-3 py-1 shadow-elev-1"
+          />
           {fallbackViewMode === 'icons' && (
             <IconsView
               documents={sortedVisible}
