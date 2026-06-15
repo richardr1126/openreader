@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useQueryClient } from '@tanstack/react-query';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { queryKeys } from '@/lib/client/query-keys';
+import { combineQueryStates } from '@/lib/client/query/query-state';
 import type { PreferencesResponse } from '@/lib/client/api/user-state';
 import type {
   DocumentListDocument,
@@ -23,6 +24,7 @@ import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { DocumentUploader, type UploadBatchState } from '@/components/documents/DocumentUploader';
 import { IconButton } from '@/components/ui';
+import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { UploadMenuDialog } from '@/components/documents/UploadMenuDialog';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import {
@@ -256,16 +258,19 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   const {
     pdfDocs,
-    isPDFLoading,
     epubDocs,
-    isEPUBLoading,
     htmlDocs,
+    queryState: documentsQueryState,
     deleteDocument,
-    isHTMLLoading,
+    refreshDocuments,
   } = useDocuments();
   const { data: session, isPending: isSessionPending } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
-  const { query: preferencesQuery, mutation: preferencesMutation } = useUserPreferences(sessionId, !isSessionPending);
+  const {
+    query: preferencesQuery,
+    queryState: preferencesQueryState,
+    mutation: preferencesMutation,
+  } = useUserPreferences(sessionId, !isSessionPending);
   const persistPreferences = preferencesMutation.mutate;
   const folderState = useFolders();
 
@@ -279,7 +284,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     () => normalizeListState(preferencesQuery.data?.preferences.documentListState),
     [preferencesQuery.data?.preferences.documentListState],
   );
-  const preferencesReady = !preferencesQuery.isPending;
+  const preferencesReady = !preferencesQueryState.initialLoading;
   const { sortBy, sortDirection, viewMode, iconSize, showHint, sidebarWidth, sidebarFilter } = listState;
   const sidebarOpen = !listState.sidebarCollapsed;
 
@@ -552,7 +557,21 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     [sortedVisible, selection],
   );
 
-  const isLoading = isPDFLoading || isEPUBLoading || isHTMLLoading;
+  const libraryQueryState = combineQueryStates([
+    documentsQueryState,
+    folderState.queryState,
+    preferencesQueryState,
+  ]);
+  const { initialLoading, refreshing, error: queryError, backgroundError } = libraryQueryState;
+  const refetchFolders = folderState.query.refetch;
+  const refetchPreferences = preferencesQuery.refetch;
+  const retryQueries = useCallback(() => {
+    void Promise.allSettled([
+      refreshDocuments(),
+      refetchFolders(),
+      refetchPreferences(),
+    ]);
+  }, [refetchFolders, refetchPreferences, refreshDocuments]);
 
   const handleUploadBatchChange = useCallback((state: UploadBatchState) => {
     setActiveUploadBatches((prev) => {
@@ -657,7 +676,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         if (isNarrow) setMobileSidebarOpen(false);
       }}
     >
-      {!isLoading && showHint && allDocuments.length > 1 && (
+      {!queryError && (
+        <RefreshIndicator
+          refreshing={refreshing}
+          warn={Boolean(backgroundError)}
+          className="shrink-0 border-b border-line-soft bg-surface-sunken px-3 py-1"
+        />
+      )}
+
+      {!initialLoading && !queryError && showHint && allDocuments.length > 1 && (
         <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
           <div className="flex items-center justify-between bg-surface border border-line rounded-md px-3 py-1 text-[12px]">
             <p className="text-foreground">
@@ -677,7 +704,13 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         </div>
       )}
 
-      {isLoading ? (
+      {queryError ? (
+        <QueryError
+          error={queryError}
+          onRetry={retryQueries}
+          className="flex-1 min-h-0 px-6"
+        />
+      ) : initialLoading ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           {preferencesReady ? (
             <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { deriveQueryState } from '../../src/lib/client/query/query-state';
+import { combineQueryStates, deriveQueryState } from '../../src/lib/client/query/query-state';
 import { ApiError, parseApiError } from '../../src/lib/client/api/http';
 
 describe('deriveQueryState', () => {
@@ -31,6 +31,37 @@ describe('deriveQueryState', () => {
     const s = deriveQueryState({ hasData: true, isFetching: false, isError: true, error: err });
     expect(s.error).toBeNull();
     expect(s.backgroundError).toBe(err);
+  });
+});
+
+describe('combineQueryStates', () => {
+  test('blocks while any required query is initially loading', () => {
+    const state = combineQueryStates([
+      deriveQueryState({ hasData: true, isFetching: false, isError: false, error: null }),
+      deriveQueryState({ hasData: false, isFetching: true, isError: false, error: null }),
+    ]);
+    expect(state.initialLoading).toBe(true);
+    expect(state.error).toBeNull();
+  });
+
+  test('surfaces a hard dependency error and preserves background warnings', () => {
+    const hardError = new Error('folders failed');
+    const backgroundError = new Error('preferences refresh failed');
+    const state = combineQueryStates([
+      deriveQueryState({ hasData: false, isFetching: false, isError: true, error: hardError }),
+      deriveQueryState({ hasData: true, isFetching: false, isError: true, error: backgroundError }),
+    ]);
+    expect(state.error).toBe(hardError);
+    expect(state.backgroundError).toBe(backgroundError);
+  });
+
+  test('marks the view refreshing while any populated query refetches', () => {
+    const state = combineQueryStates([
+      deriveQueryState({ hasData: true, isFetching: true, isError: false, error: null }),
+      deriveQueryState({ hasData: true, isFetching: false, isError: false, error: null }),
+    ]);
+    expect(state.initialLoading).toBe(false);
+    expect(state.refreshing).toBe(true);
   });
 });
 

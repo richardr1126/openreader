@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { requestJson } from '@/lib/client/api/http';
+import { deriveQueryState } from '@/lib/client/query/query-state';
 import type { BaseDocument } from '@/types/documents';
 
 export type ServerFolder = { id: string; name: string; position: number; createdAt?: number; updatedAt?: number };
@@ -22,6 +23,12 @@ export function useFolders() {
     queryKey: foldersKey,
     queryFn: async ({ signal }) => (await jsonRequest<{ folders: ServerFolder[] }>('/api/folders', { signal })).folders,
     enabled: !isPending,
+  });
+  const queryState = deriveQueryState({
+    hasData: !isPending && query.data !== undefined,
+    isFetching: isPending || query.isFetching,
+    isError: query.isError,
+    error: query.error,
   });
   const create = useMutation({
     mutationFn: (input: { id?: string; name: string; documentIds?: string[] }) => jsonRequest<{ folder: ServerFolder }>('/api/folders', {
@@ -95,5 +102,5 @@ export function useFolders() {
       queryClient.invalidateQueries({ queryKey: documentsKey }),
     ]),
   });
-  return { query, create, move, remove, clear };
+  return { query, queryState, create, move, remove, clear };
 }

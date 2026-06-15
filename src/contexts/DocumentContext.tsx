@@ -11,17 +11,13 @@ import {
 import { cacheStoredDocumentFromBytes, evictCachedDocument } from '@/lib/client/cache/documents';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { queryKeys } from '@/lib/client/query-keys';
+import { deriveQueryState, type DerivedQueryState } from '@/lib/client/query/query-state';
 
 interface DocumentContextType {
   pdfDocs: Array<BaseDocument & { type: 'pdf' }>;
-  isPDFLoading: boolean;
-
   epubDocs: Array<BaseDocument & { type: 'epub' }>;
-  isEPUBLoading: boolean;
-
   htmlDocs: Array<BaseDocument & { type: 'html' }>;
-  isHTMLLoading: boolean;
-
+  queryState: DerivedQueryState;
   uploadDocuments: (files: File[]) => Promise<BaseDocument[]>;
   deleteDocument: (id: string) => Promise<void>;
   refreshDocuments: () => Promise<void>;
@@ -62,19 +58,25 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const { data: docs = [], isPending, refetch } = useQuery({
+  const documentsQuery = useQuery({
     queryKey: documentsQueryKey,
     queryFn: loadDocuments,
     enabled: !isSessionPending,
   });
-
-  const isLoading = isSessionPending || (isPending && docs.length === 0);
+  const docs = useMemo(() => documentsQuery.data ?? [], [documentsQuery.data]);
+  const refetchDocuments = documentsQuery.refetch;
+  const queryState = deriveQueryState({
+    hasData: !isSessionPending && documentsQuery.data !== undefined,
+    isFetching: isSessionPending || documentsQuery.isFetching,
+    isError: documentsQuery.isError,
+    error: documentsQuery.error,
+  });
 
   const refreshDocuments = useCallback(async () => {
     if (isSessionPending) return;
     await queryClient.invalidateQueries({ queryKey: documentsQueryKey });
-    await refetch();
-  }, [isSessionPending, queryClient, documentsQueryKey, refetch]);
+    await refetchDocuments();
+  }, [isSessionPending, queryClient, documentsQueryKey, refetchDocuments]);
 
   useEffect(() => {
     const handler = () => {
@@ -160,11 +162,9 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   return (
     <DocumentContext.Provider value={{
       pdfDocs: docsByType.pdfDocs,
-      isPDFLoading: isLoading,
       epubDocs: docsByType.epubDocs,
-      isEPUBLoading: isLoading,
       htmlDocs: docsByType.htmlDocs,
-      isHTMLLoading: isLoading,
+      queryState,
       uploadDocuments,
       deleteDocument,
       refreshDocuments,

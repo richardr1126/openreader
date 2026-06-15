@@ -38,3 +38,13 @@ export function deriveQueryState({ hasData, isFetching, isError, error }: QueryS
     backgroundError: isError && hasData ? error : null,
   };
 }
+
+/** Combine several required queries into one view-level query state. */
+export function combineQueryStates(states: readonly DerivedQueryState[]): DerivedQueryState {
+  return {
+    initialLoading: states.some((state) => state.initialLoading),
+    refreshing: states.some((state) => state.refreshing),
+    error: states.find((state) => state.error)?.error ?? null,
+    backgroundError: states.find((state) => state.backgroundError)?.backgroundError ?? null,
+  };
+}
