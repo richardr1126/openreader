@@ -1,5 +1,5 @@
 {
-  "id": "a79acd69-9095-4bf3-87e7-6acda32c7283",
+  "id": "540fb771-f169-4166-a0b7-cfeec4dcc9c7",
   "prevId": "6fa9be62-3d2b-43d2-8c49-11d9c6411a33",
   "version": "7",
   "dialect": "postgresql",
@@ -1528,7 +1528,7 @@
         },
         "position": {
           "name": "position",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": true,
           "default": 0

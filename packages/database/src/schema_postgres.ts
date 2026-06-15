@@ -8,7 +8,9 @@ export const userFolders = pgTable('user_folders', {
   id: text('id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  position: integer('position').notNull().default(0),
+  // bigint (not int4): folder `position` is written as a millisecond epoch
+  // timestamp, which overflows a 32-bit integer. Matches created_at/updated_at.
+  position: bigint('position', { mode: 'number' }).notNull().default(0),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [

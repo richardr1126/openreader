@@ -2,7 +2,7 @@ CREATE TABLE "user_folders" (
 	"id" text NOT NULL,
 	"user_id" text NOT NULL,
 	"name" text NOT NULL,
-	"position" integer DEFAULT 0 NOT NULL,
+	"position" bigint DEFAULT 0 NOT NULL,
 	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
 	"updated_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint,
 	CONSTRAINT "user_folders_id_user_id_pk" PRIMARY KEY("id","user_id")
