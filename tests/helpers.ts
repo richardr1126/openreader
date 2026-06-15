@@ -524,17 +524,20 @@ export async function triggerViewportResize(page: Page, width: number, height: n
 
 // Wait for DocumentListState.showHint to persist in server preferences.
 export async function waitForDocumentListHintPersist(page: Page, expected: boolean) {
-  await page.waitForFunction(async (exp) => {
-    try {
-      const response = await fetch('/api/user/state/preferences', { cache: 'no-store' });
-      if (!response.ok) return false;
-      const item = await response.json() as { preferences?: { documentListState?: unknown } };
-      const state = item.preferences?.documentListState;
-      if (!state || typeof state !== 'object') return false;
-      const showHint = (state as { showHint?: unknown }).showHint;
-      return typeof showHint === 'boolean' && showHint === exp;
-    } catch {
-      return false;
-    }
-  }, expected, { timeout: 5000 });
+  await expect.poll(
+    () => page.evaluate(async (exp) => {
+      try {
+        const response = await fetch('/api/user/state/preferences', { cache: 'no-store' });
+        if (!response.ok) return false;
+        const item = await response.json() as { preferences?: { documentListState?: unknown } };
+        const state = item.preferences?.documentListState;
+        if (!state || typeof state !== 'object') return false;
+        const showHint = (state as { showHint?: unknown }).showHint;
+        return typeof showHint === 'boolean' && showHint === exp;
+      } catch {
+        return false;
+      }
+    }, expected),
+    { timeout: 5000 },
+  ).toBe(true);
 }

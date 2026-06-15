@@ -33,7 +33,6 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
-import { useDocumentProgress } from '@/hooks/useDocumentProgress';
 import { withRetry, ensureTtsSegments } from '@/lib/client/api/audiobooks';
 import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
 import {
@@ -152,6 +151,7 @@ interface TTSContextType extends TTSPlaybackState {
   setDocumentLanguage: (language: string) => void;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
+  prepareInitialPosition: (location: TTSLocation, sentenceIndex: number) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   registerEpubLocationWalker: (walker: EpubRenderedLocationWalker | null) => void;
   registerEpubLocatorResolver: (resolver: EpubLocatorResolver | null) => void;  // EPUB-only: resolves CFI drafts to stable spine coords before persist
@@ -462,8 +462,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (Array.isArray(id)) return id[0];
     return '';
   }, [id]);
-  const { query: progressQuery, schedule: scheduleProgress } = useDocumentProgress(documentId || undefined);
-
   const currentReaderType: ReaderType = useMemo(() => {
     if (pathname.startsWith('/epub/')) return 'epub';
     if (pathname.startsWith('/html/')) return 'html';
@@ -1035,6 +1033,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrDocPage(location);
 
   }, [abortAudio, invalidatePlaybackRun]);
+
+  const prepareInitialPosition = useCallback((location: TTSLocation, sentenceIndex: number) => {
+    skipToLocation(location, true);
+    pendingJumpTargetRef.current = {
+      locationKey: normalizeLocationKey(location),
+      index: Math.max(0, Math.floor(sentenceIndex)),
+    };
+  }, [skipToLocation]);
 
   /**
    * Moves to the next or previous sentence
@@ -3335,6 +3341,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentLanguage,
     clearSegmentCaches,
     skipToLocation,
+    prepareInitialPosition,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
     registerEpubLocatorResolver,
@@ -3368,6 +3375,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
+    prepareInitialPosition,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
     registerEpubLocatorResolver,
@@ -3384,80 +3392,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipForward,
     skipBackward,
   });
-
-  // Load the server-backed last location for EPUB/PDF/HTML.
-  useEffect(() => {
-    if (!id || !progressQuery.data?.location) return;
-
-    const applyLocation = (lastLocation: string) => {
-      if (isEPUB && locationChangeHandlerRef.current) {
-        // For EPUB documents, use the location change handler
-        locationChangeHandlerRef.current(lastLocation);
-        return;
-      }
-
-      if (!isEPUB) {
-        // HTML stores "html:<location>:<sentenceIndex>".
-        // PDF stores "<page>:<sentenceIndex>".
-        try {
-          if (currentReaderType === 'html') {
-            const htmlMatch = /^html:([^:]+):(\d+)$/.exec(lastLocation);
-            if (htmlMatch) {
-              const [, rawLocation, sentenceIndexStr] = htmlMatch;
-              const decodedLocation = decodeURIComponent(rawLocation);
-              const parsedNumber = Number(decodedLocation);
-              const location: TTSLocation = Number.isFinite(parsedNumber) && decodedLocation.trim() !== ''
-                ? parsedNumber
-                : decodedLocation || 1;
-              const sentenceIndex = parseInt(sentenceIndexStr, 10);
-              if (!isNaN(sentenceIndex)) {
-                setCurrDocPage(location);
-                pendingJumpTargetRef.current = {
-                  locationKey: normalizeLocationKey(location),
-                  index: Math.max(0, sentenceIndex),
-                };
-                return;
-              }
-            }
-          }
-
-          // Backward-compatible parser for legacy non-EPUB progress format.
-          const [pageStr, sentenceIndexStr] = lastLocation.split(':');
-          const page = parseInt(pageStr, 10);
-          const sentenceIndex = parseInt(sentenceIndexStr, 10);
-          if (!isNaN(page) && !isNaN(sentenceIndex)) {
-            setCurrDocPage(page);
-            pendingJumpTargetRef.current = {
-              locationKey: normalizeLocationKey(page),
-              index: Math.max(0, sentenceIndex),
-            };
-          }
-        } catch (error) {
-          console.warn('Error parsing non-EPUB location:', error);
-        }
-      }
-    };
-
-    applyLocation(progressQuery.data.location);
-  }, [id, isEPUB, currentReaderType, progressQuery.data?.location]);
-
-  // Save current position periodically for non-EPUB readers.
-  useEffect(() => {
-    if (id && !isEPUB && sentences.length > 0) {
-      const location = currentReaderType === 'html'
-        ? `html:${encodeURIComponent(String(currDocPage || 1))}:${currentIndex}`
-        : `${currDocPageNumber}:${currentIndex}`;
-      const timeoutId = setTimeout(() => {
-        scheduleProgress({
-          documentId: id as string,
-          readerType: currentReaderType,
-          location,
-        });
-      }, 1000); // Debounce saves by 1 second
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType, scheduleProgress]);
 
   /**
    * Renders the TTS context provider with its children

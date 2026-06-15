@@ -26,8 +26,10 @@ import {
   FORCE_REPARSE_CONFIRM_TITLE,
   isForceReparseDisabled,
 } from '@/lib/client/pdf/force-reparse';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
+import { serializeReaderPosition } from '@/lib/client/reader-progress';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -47,7 +49,12 @@ export default function PDFViewerPage() {
   const routeDocumentId = typeof id === 'string' ? id : undefined;
   const router = useRouter();
   const bootstrap = useReaderBootstrap(routeDocumentId, 'pdf');
-  const pdfState = usePdfDocument(routeDocumentId);
+  const {
+    disableProgressPersistence,
+    enableProgressPersistence,
+    scheduleProgress,
+  } = bootstrap;
+  const pdfState = usePdfDocument(routeDocumentId, bootstrap.settings, bootstrap.updateSettings);
   const {
     setCurrentDocument,
     currDocName,
@@ -65,7 +72,9 @@ export default function PDFViewerPage() {
     createFullAudioBook: createPDFAudioBook,
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
-  const { pause, stop } = useTTS();
+  const { currentSentenceIndex, pause, prepareInitialPosition, sentences, stop } = useTTS();
+  const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
+  const stopRef = useLatestRef(stop);
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -90,14 +99,15 @@ export default function PDFViewerPage() {
     && (parseUiState === 'pending' || parseUiState === 'running' || parseUiState === 'failed' || hasRealParseProgress);
 
   useEffect(() => {
-    stop();
+    disableProgressPersistenceRef.current();
+    stopRef.current();
     setIsLoading(true);
     setIsPdfViewerReady(false);
     setError(null);
     setActiveSidebar(null);
     inFlightDocIdRef.current = null;
     loadedDocIdRef.current = null;
-  }, [id]);
+  }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
 
   useEffect(() => {
     if (bootstrap.phase !== 'error') return;
@@ -123,6 +133,12 @@ export default function PDFViewerPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
+      if (bootstrap.initialPosition?.readerType === 'pdf') {
+        prepareInitialPosition(
+          bootstrap.initialPosition.location,
+          bootstrap.initialPosition.sentenceIndex,
+        );
+      }
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const result = await setCurrentDocument(bootstrap.document);
         if (result === 'loaded') {
@@ -151,16 +167,38 @@ export default function PDFViewerPage() {
         inFlightDocIdRef.current = null;
       }
       if (startedLoad && loadSucceeded) {
+        enableProgressPersistence();
         setIsLoading(false);
       }
     }
-  }, [bootstrap.document, bootstrap.phase, isLoading, setCurrentDocument]);
+  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, enableProgressPersistence, isLoading, prepareInitialPosition, setCurrentDocument]);
 
   useEffect(() => {
     loadDocument();
   }, [loadDocument]);
 
-  useUnmountCleanupRef(clearCurrDoc);
+  const clearReaderSession = useCallback(() => {
+    disableProgressPersistence();
+    clearCurrDoc();
+  }, [clearCurrDoc, disableProgressPersistence]);
+  useUnmountCleanupRef(clearReaderSession);
+
+  useEffect(() => {
+    if (!routeDocumentId || isLoading || !isPlaybackReady || sentences.length === 0) return;
+    scheduleProgress({
+      documentId: routeDocumentId,
+      readerType: 'pdf',
+      location: serializeReaderPosition('pdf', currDocPage, currentSentenceIndex),
+    });
+  }, [
+    currDocPage,
+    currentSentenceIndex,
+    isLoading,
+    isPlaybackReady,
+    routeDocumentId,
+    scheduleProgress,
+    sentences.length,
+  ]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -216,10 +254,11 @@ export default function PDFViewerPage() {
     event?.preventDefault();
     if (isNavigatingBack) return;
     setIsNavigatingBack(true);
+    disableProgressPersistence();
     stop();
     setActiveSidebar(null);
     router.push('/app');
-  }, [isNavigatingBack, stop, router]);
+  }, [disableProgressPersistence, isNavigatingBack, stop, router]);
 
   const requestForceReparse = useCallback(() => {
     if (forceReparseDisabled) return;

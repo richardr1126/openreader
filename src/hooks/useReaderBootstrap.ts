@@ -1,19 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDocumentMetadata } from '@/hooks/useDocumentMetadata';
 import { useDocumentProgress } from '@/hooks/useDocumentProgress';
 import { useDocumentSettings } from '@/hooks/useDocumentSettings';
 import { resolveReaderBootstrapPhase } from '@/lib/client/reader-bootstrap';
+import { parseReaderInitialPosition } from '@/lib/client/reader-progress';
 import type { DocumentType } from '@/types/documents';
+import type { DocumentSettings } from '@/types/document-settings';
+import type { DocumentProgressPayload } from '@/types/user-state';
 import { useConfig } from '@/contexts/ConfigContext';
 
 export function useReaderBootstrap(documentId: string | undefined, expectedType: DocumentType) {
   const metadata = useDocumentMetadata(documentId);
   const settings = useDocumentSettings(documentId);
   const progress = useDocumentProgress(documentId);
+  const scheduleDocumentProgress = progress.schedule;
+  const flushDocumentProgress = progress.flush;
   const { preferencesError, preferencesReady } = useConfig();
   const markedOpenedDocumentRef = useRef<string | null>(null);
+  const progressPersistenceEnabledRef = useRef(false);
   const markOpened = metadata.openedMutation.mutate;
 
   const phase = resolveReaderBootstrapPhase({
@@ -54,6 +60,33 @@ export function useReaderBootstrap(documentId: string | undefined, expectedType:
     preferencesError,
     settings.query.error,
   ]);
+  const initialPosition = useMemo(
+    () => parseReaderInitialPosition(expectedType, progress.query.data?.location),
+    [expectedType, progress.query.data?.location],
+  );
+  const mutateSettings = settings.mutation.mutateAsync;
+  const updateSettings = useCallback(
+    (nextSettings: DocumentSettings) => mutateSettings(nextSettings),
+    [mutateSettings],
+  );
+  const scheduleProgress = useCallback((
+    payload: DocumentProgressPayload,
+    debounceMs?: number,
+  ) => {
+    if (!progressPersistenceEnabledRef.current) return;
+    scheduleDocumentProgress(payload, debounceMs);
+  }, [scheduleDocumentProgress]);
+  const enableProgressPersistence = useCallback(() => {
+    progressPersistenceEnabledRef.current = true;
+  }, []);
+  const disableProgressPersistence = useCallback(() => {
+    progressPersistenceEnabledRef.current = false;
+    flushDocumentProgress();
+  }, [flushDocumentProgress]);
+
+  useEffect(() => {
+    progressPersistenceEnabledRef.current = false;
+  }, [documentId]);
 
   return {
     phase,
@@ -61,6 +94,11 @@ export function useReaderBootstrap(documentId: string | undefined, expectedType:
     document: metadata.query.data ?? null,
     settings: settings.query.data?.settings ?? null,
     progress: progress.query.data ?? null,
+    initialPosition,
+    scheduleProgress,
+    enableProgressPersistence,
+    disableProgressPersistence,
+    updateSettings,
     preferencesReady,
     queries: {
       metadata: metadata.query,

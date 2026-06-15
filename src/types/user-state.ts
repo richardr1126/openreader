@@ -42,3 +42,16 @@ export interface DocumentProgressRecord {
   clientUpdatedAtMs: number;
   updatedAtMs: number;
 }
+
+export interface DocumentProgressPayload {
+  documentId: string;
+  readerType: ReaderType;
+  location: string;
+  progress?: number | null;
+  clientUpdatedAtMs?: number;
+}
+
+export type ScheduleDocumentProgress = (
+  payload: DocumentProgressPayload,
+  debounceMs?: number,
+) => void;

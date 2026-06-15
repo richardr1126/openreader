@@ -53,7 +53,6 @@ import type {
 } from '@/types/tts';
 import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
 import { clampSegmentPreloadDepth } from '@/types/config';
-import { useDocumentSettings } from '@/hooks/useDocumentSettings';
 import type { BaseDocument } from '@/types/documents';
 
 /**
@@ -135,7 +134,11 @@ function delay(ms: number): Promise<void> {
 /**
  * Main PDF route hook.
  */
-export function usePdfDocument(documentId?: string): PdfDocumentState {
+export function usePdfDocument(
+  documentId: string | undefined,
+  serverDocumentSettings: DocumentSettings | null,
+  persistDocumentSettings: (settings: DocumentSettings) => Promise<unknown>,
+): PdfDocumentState {
   const {
     setText: setTTSText,
     stop,
@@ -164,11 +167,10 @@ export function usePdfDocument(documentId?: string): PdfDocumentState {
   const [parseProgress, setParseProgress] = useState<PdfParseProgress | null>(null);
   const [, setActiveParseOpId] = useState<string | null>(null);
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
-  const serverDocumentSettings = useDocumentSettings(documentId);
   useEffect(() => {
-    if (!serverDocumentSettings.query.data?.settings) return;
-    setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings.query.data.settings));
-  }, [serverDocumentSettings.query.data?.settings]);
+    if (!serverDocumentSettings) return;
+    setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings));
+  }, [serverDocumentSettings]);
   useEffect(() => {
     setDocumentLanguage(documentSettings.language ?? 'auto');
     lastPreparedPlaybackPageRef.current = null;
@@ -554,7 +556,7 @@ export function usePdfDocument(documentId?: string): PdfDocumentState {
       setActiveParseOpId(null);
       setDocumentSettings(mergeDocumentSettings(
         DEFAULT_DOCUMENT_SETTINGS,
-        serverDocumentSettings.query.data?.settings,
+        serverDocumentSettings,
       ));
 
       if (meta.type !== 'pdf') {
@@ -598,18 +600,18 @@ export function usePdfDocument(documentId?: string): PdfDocumentState {
     setCurrDocText,
     setPdfDocument,
     resolveParsedDocumentState,
-    serverDocumentSettings.query.data?.settings,
+    serverDocumentSettings,
   ]);
 
   const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {
     if (!currDocId) return;
     setDocumentSettings(settings);
     try {
-      await serverDocumentSettings.mutation.mutateAsync(settings);
+      await persistDocumentSettings(settings);
     } catch (error) {
       console.warn('Failed to persist document settings:', error);
     }
-  }, [currDocId, serverDocumentSettings.mutation]);
+  }, [currDocId, persistDocumentSettings]);
 
   const forceReparseParsedPdf = useCallback(async (): Promise<void> => {
     if (!currDocId) return;

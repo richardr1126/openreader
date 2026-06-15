@@ -288,8 +288,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const { sortBy, sortDirection, viewMode, iconSize, showHint, sidebarWidth, sidebarFilter } = listState;
   const sidebarOpen = !listState.sidebarCollapsed;
 
+  const persistLatestListState = useCallback(() => {
+    const latest = queryClient.getQueryData<PreferencesResponse>(preferencesKey);
+    persistPreferences({
+      documentListState: toStoredListState(normalizeListState(latest?.preferences?.documentListState)),
+    });
+  }, [persistPreferences, preferencesKey, queryClient]);
+
   const updateListState = useCallback(
-    (patch: Partial<NormalizedListState>) => {
+    (patch: Partial<NormalizedListState>, persistImmediately = false) => {
       // 1) Update the preferences cache immediately so the UI is responsive.
       queryClient.setQueryData<PreferencesResponse>(preferencesKey, (prev) => ({
         preferences: {
@@ -305,15 +312,17 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       // 2) Debounce the write-through to the server, coalescing rapid changes
       //    (sort toggles, sidebar drag) into a single mutation.
       if (preferenceWriteTimer.current) clearTimeout(preferenceWriteTimer.current);
+      if (persistImmediately) {
+        preferenceWriteTimer.current = null;
+        persistLatestListState();
+        return;
+      }
       preferenceWriteTimer.current = setTimeout(() => {
         preferenceWriteTimer.current = null;
-        const latest = queryClient.getQueryData<PreferencesResponse>(preferencesKey);
-        persistPreferences({
-          documentListState: toStoredListState(normalizeListState(latest?.preferences?.documentListState)),
-        });
+        persistLatestListState();
       }, 250);
     },
-    [persistPreferences, preferencesKey, queryClient],
+    [persistLatestListState, preferencesKey, queryClient],
   );
 
   useEffect(
@@ -516,7 +525,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   }, [folderState.create, pendingMerge, newFolderName, selection, updateListState]);
 
   const handleDismissHint = useCallback(() => {
-    updateListState({ showHint: false });
+    updateListState({ showHint: false }, true);
   }, [updateListState]);
 
   const createManualFolder = useCallback(() => {

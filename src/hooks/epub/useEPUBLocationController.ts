@@ -3,7 +3,7 @@
 import { useCallback, type MutableRefObject, type RefObject } from 'react';
 import type { Book, Rendition } from 'epubjs';
 
-import { useDocumentProgress } from '@/hooks/useDocumentProgress';
+import type { ScheduleDocumentProgress } from '@/types/user-state';
 
 import {
   isDirectionalEpubLocation,
@@ -22,6 +22,7 @@ type UseEpubLocationControllerParams = {
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
   locationRef: RefObject<EpubLocation>;
+  scheduleProgress: ScheduleDocumentProgress;
 };
 
 export function useEPUBLocationController({
@@ -34,8 +35,8 @@ export function useEPUBLocationController({
   bookRef,
   renditionRef,
   locationRef,
+  scheduleProgress,
 }: UseEpubLocationControllerParams): (location: EpubLocation) => void {
-  const { schedule: scheduleProgress } = useDocumentProgress(documentId);
   const safeRenditionNavigate = useCallback((navigation: 'next' | 'prev' | 'display', location?: string) => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
@@ -79,16 +80,15 @@ export function useEPUBLocationController({
       return;
     }
 
-    // Set the EPUB flag once the location changes
-    if (!isEpubSetOnceRef.current) {
+    const isInitialRenderedLocation = !isEpubSetOnceRef.current;
+    if (isInitialRenderedLocation) {
       setIsEpub(true);
-      isEpubSetOnceRef.current = true;
-
-      safeRenditionNavigate('display', location.toString());
-      return;
     }
 
     if (!bookRef.current?.isOpen || !renditionRef.current) return;
+    if (isInitialRenderedLocation) {
+      isEpubSetOnceRef.current = true;
+    }
 
     // If the location is a CFI string that doesn't match the current rendered position,
     // navigate there and let the subsequent locationChanged callback handle text extraction.
@@ -116,7 +116,7 @@ export function useEPUBLocationController({
     }
 
     // Save the server-backed location after the first real rendition update.
-    if (shouldPersistEpubLocation(documentId, locationRef.current)) {
+    if (!isInitialRenderedLocation && shouldPersistEpubLocation(documentId, locationRef.current)) {
       scheduleProgress({
         documentId,
         readerType: 'epub',

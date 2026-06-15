@@ -90,9 +90,11 @@ test.describe('Play/Pause Tests', () => {
     // Open voices list and assert options render
     await openVoicesMenu(page);
     const options = page.getByRole('option');
-    expect(await options.count()).toBeGreaterThan(0);
+    expect(await options.count()).toBeGreaterThan(1);
 
-    await selectVoiceAndAssertPlayback(page, 'af_bella');
+    const alternativeVoice = (await options.nth(1).innerText()).trim();
+    expect(alternativeVoice).not.toBe('');
+    await selectVoiceAndAssertPlayback(page, alternativeVoice);
 
     // Final state should be playing
     await expectMediaState(page, 'playing');
