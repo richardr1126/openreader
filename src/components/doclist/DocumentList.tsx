@@ -494,12 +494,20 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     setNewFolderName('');
     updateListState({ showHint: false, sidebarFilter: `folder:${folderId}` });
     selection.clear();
-    const { folder } = await folderState.create.mutateAsync({
-      id: folderId,
-      name,
-      documentIds,
-    });
-    updateListState({ sidebarFilter: `folder:${folder.id}` });
+    try {
+      const { folder } = await folderState.create.mutateAsync({
+        id: folderId,
+        name,
+        documentIds,
+      });
+      updateListState({ sidebarFilter: `folder:${folder.id}` });
+    } catch (error) {
+      // The mutation surfaces the failure via its error state; fall back to the
+      // full library so we don't strand the user on a folder that was never
+      // created.
+      console.error('Failed to create folder:', error);
+      updateListState({ sidebarFilter: 'all' });
+    }
   }, [folderState.create, pendingMerge, newFolderName, selection, updateListState]);
 
   const handleDismissHint = useCallback(() => {

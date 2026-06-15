@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@openreader/database';
 import { documents, userFolders } from '@openreader/database/schema';
+import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
       ? body.id
       : crypto.randomUUID();
     const now = nowTimestampMs();
-    await db.transaction(async (tx: typeof db) => {
+    await runInDbTransaction(async (tx) => {
       await tx.insert(userFolders).values({ id, userId: scope.ownerUserId, name, position: now, createdAt: now, updatedAt: now });
       if (documentIds.length > 0) {
         await tx.update(documents).set({ folderId: id }).where(and(
