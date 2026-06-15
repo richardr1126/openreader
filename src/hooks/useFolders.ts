@@ -3,17 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { requestJson } from '@/lib/client/api/http';
 import type { BaseDocument } from '@/types/documents';
 
 export type ServerFolder = { id: string; name: string; position: number; createdAt?: number; updatedAt?: number };
 
-async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const data = await res.json().catch(() => null) as { error?: string } | null;
-    throw new Error(data?.error || 'Folder request failed');
-  }
-  return res.json() as Promise<T>;
+function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  return requestJson<T>(url, init, 'Folder request failed');
 }
 
 export function useFolders() {

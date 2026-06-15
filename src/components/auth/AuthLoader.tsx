@@ -5,6 +5,7 @@ import type { BetterFetchError } from 'better-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useSessionQueryReset } from '@/hooks/useSessionQueryReset';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button } from '@/components/ui';
@@ -94,6 +95,8 @@ export function AuthLoader({ children }: { children: ReactNode }) {
   const { baseUrl, allowAnonymousAuthSessions } = useAuthConfig();
   const { refresh: refreshRateLimit } = useAuthRateLimit();
   const { data: session, isPending, error: sessionError, refetch: refetchSession } = useAuthSession();
+  // Evict a previous session's user-scoped query cache when the active user changes.
+  useSessionQueryReset();
   const router = useRouter();
   const pathname = usePathname();
   const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(false);
