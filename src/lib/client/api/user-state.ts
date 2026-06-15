@@ -1,6 +1,6 @@
 import { SYNCED_PREFERENCE_KEYS, type DocumentProgressRecord, type ReaderType, type SyncedPreferencesPatch } from '@/types/user-state';
 
-type PreferencesResponse = {
+export type PreferencesResponse = {
   preferences: SyncedPreferencesPatch;
   clientUpdatedAtMs: number;
   hasStoredPreferences?: boolean;
