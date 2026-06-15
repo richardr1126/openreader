@@ -5,7 +5,7 @@ const success: ReaderBootstrapQueryState = { isPending: false, isError: false, i
 const pending: ReaderBootstrapQueryState = { isPending: true, isError: false, isSuccess: false };
 const failed: ReaderBootstrapQueryState = { isPending: false, isError: true, isSuccess: false };
 
-describe('reader bootstrap phase', () => {
+describe('reader bootstrap', () => {
   test('waits for every required server-state query', () => {
     expect(resolveReaderBootstrapPhase({
       documentId: 'doc',

@@ -128,7 +128,7 @@ What this command enables:
 :::warning Port `8333` Exposure
 Expose `8333` for direct browser presigned upload/download with embedded SeaweedFS.
 
-If `8333` is not reachable from the browser, direct presigned access is unavailable. Uploads can still fall back to `/api/documents/blob/upload/fallback`, and document reads/downloads continue through `/api/documents/blob`.
+If `8333` is not reachable from the browser, direct presigned access is unavailable. Uploads fall back to `/api/documents/blob/upload/fallback`, and document reads fall back to `/api/documents/blob/get/fallback`.
 :::
 
 ## 2. Configure settings in the app UI

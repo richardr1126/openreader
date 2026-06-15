@@ -169,6 +169,7 @@ export function AdminProvidersPanel() {
   const adminProvidersQueryKey = queryKeys.admin(sessionId, 'providers');
   const adminSettingsQueryKey = queryKeys.admin(sessionId, 'settings');
   const adminDefaultProviderQueryKey = queryKeys.admin(sessionId, 'default-provider');
+  const sharedProvidersQueryKey = queryKeys.sharedProviders(sessionId);
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => createEmptyForm());
@@ -206,7 +207,7 @@ export function AdminProvidersPanel() {
         queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
         queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
         queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
-        queryClient.invalidateQueries({ queryKey: ['tts-shared-providers'] }),
+        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
       ]);
     },
     onError: (mutationError) => {
@@ -223,7 +224,7 @@ export function AdminProvidersPanel() {
         queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
         queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
         queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
-        queryClient.invalidateQueries({ queryKey: ['tts-shared-providers'] }),
+        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
       ]);
     },
     onError: (mutationError) => {
@@ -239,7 +240,7 @@ export function AdminProvidersPanel() {
         queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
         queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
         queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
-        queryClient.invalidateQueries({ queryKey: ['tts-shared-providers'] }),
+        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
       ]);
     },
     onError: (mutationError) => {

@@ -107,7 +107,7 @@ App-specific tables are manually maintained in the standard Drizzle schema files
 Both sets of schema files are included in the Drizzle generation configs. Runtime migration
 execution is owned by `@openreader/database`.
 
-When app schema changes (for example `tts_segments`), keep these in sync:
+When app schema changes (for example `tts_segment_entries` and `tts_segment_variants`), keep these in sync:
 
 - `packages/database/src/schema_sqlite.ts`
 - `packages/database/src/schema_postgres.ts`
