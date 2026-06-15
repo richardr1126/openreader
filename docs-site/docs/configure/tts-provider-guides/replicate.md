@@ -21,13 +21,7 @@ API_KEY=r8_...
 
 Then update the shared provider's **Default model** in **Settings → Admin → Shared providers**.
 
-**Per-user Settings → TTS Provider (only when `restrictUserApiKeys=false`):**
-
-1. Set provider to `Replicate`.
-2. Enter your `API_KEY`.
-3. Choose a model and voice.
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the enabled shared provider, model, and voice from **Settings → TTS Provider**.
 
 ## Notes
 

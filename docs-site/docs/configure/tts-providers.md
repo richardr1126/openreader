@@ -2,17 +2,13 @@
 title: TTS Providers
 ---
 
-OpenReader routes all TTS requests through the Next.js server to an OpenAI-compatible API. There are three places provider configuration can live:
+OpenReader routes all TTS requests through the Next.js server. Provider credentials are always admin-managed and never accepted from the browser.
 
 **Admin-managed shared providers** (Settings > Admin > Shared providers): DB-backed instances configured by an admin and visible to all users. Keys are encrypted at rest and never exposed to the client. Available only when [auth is enabled](./auth) and your account is in `ADMIN_EMAILS`. See [Admin Panel](./admin-panel).
 
-**Per-user Settings modal** (Settings > TTS Provider): provider + API key stored in the user's browser and sent with every TTS request. This path is available only when the admin/runtime setting `restrictUserApiKeys=false`.
+**Per-user Settings modal** (Settings > TTS Provider): users may select an enabled shared provider, model, instructions, and voice. Credentials remain server-side.
 
 **Environment variables**: `API_KEY` and `API_BASE` exist as a one-shot first-boot seed that auto-creates a `default-openai` admin shared provider. After the first boot they are no longer read by the running app.
-
-:::tip
-If you're running a private/self-hosted instance and want per-user BYOK behavior, turn off **Settings → Admin → Site features → Restrict user API keys**. For first-boot automation, set `runtimeConfig.restrictUserApiKeys=false` in `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`.
-:::
 
 ## Providers
 
@@ -22,7 +18,7 @@ If you're running a private/self-hosted instance and want per-user BYOK behavior
 - **Speech SDK**: Cloud. Reaches additional providers (ElevenLabs, Cartesia, Hume, Deepgram, Google, Inworld, and more) directly with your own provider API keys via [speech-sdk](./tts-provider-guides/speech-sdk). No base URL. API key required (the key for the model's provider).
 - **Custom OpenAI-Like**: Self-hosted or any custom endpoint. `API_BASE` must be set manually (typically ending in `/v1`). API key optional.
 
-For `OpenAI`, `DeepInfra`, and `Replicate` you only need to supply an API key. For `Custom OpenAI-Like` you must also set `API_BASE`.
+Admins configure the required API key and base URL on each shared-provider row.
 
 ## Built-in model catalogs
 

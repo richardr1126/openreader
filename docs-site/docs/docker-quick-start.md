@@ -119,7 +119,7 @@ What this command enables:
 - Set `API_BASE` on first boot to a TTS endpoint the container can reach (`host.docker.internal` works for host-local services). After first boot, manage providers in **Settings → Admin → Shared providers**.
 - `BASE_URL` and `AUTH_SECRET` are required in v4+. The admin panel requires auth.
 - Set `ADMIN_EMAILS` to your email if you want the **Admin** tab in Settings.
-- `restrictUserApiKeys` controls shared-provider-only mode. For per-user BYOK, toggle it off in **Settings → Admin → Site features** or seed `runtimeConfig.restrictUserApiKeys=false` via runtime seed JSON.
+- TTS credentials are configured only through **Settings → Admin → Shared providers**.
 - Use a `/app/docstore` mount if you want data to survive container/image replacement.
 - Startup automatically runs DB/storage migrations via the shared entrypoint.
 - Scheduled maintenance tasks run in-process and can be managed from **Settings → Admin → Scheduled tasks**; Docker/self-hosted deployments do not need `CRON_SECRET`.
@@ -136,7 +136,7 @@ If `8333` is not reachable from the browser, direct presigned access is unavaila
 Visit [http://localhost:3003](http://localhost:3003) after startup.
 
 - If you set `ADMIN_EMAILS`, sign in with that email and open **Settings → Admin** to manage shared TTS providers and site feature flags for all users.
-- Per-user: set TTS provider/model in **Settings → TTS Provider**. API key/base URL inputs are shown only when `restrictUserApiKeys=false`.
+- Per-user: select an enabled shared TTS provider/model in **Settings → TTS Provider**.
 - Select the model voice from the voice dropdown.
 
 ## 3. Update Docker image

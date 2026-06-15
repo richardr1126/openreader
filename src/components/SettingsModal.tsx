@@ -273,7 +273,6 @@ export function SettingsModal({
     customModelInput,
     showAllProviderModels,
     sharedProviders,
-    allowBuiltInProviders: false,
   }), [localProviderRef, localProviderType, modelValue, customModelInput, showAllProviderModels, sharedProviders]);
   const isSharedSelected = Boolean(selectedSharedProvider);
   const selectedProviderOption = ttsProviders.find((p) => p.id === localProviderRef) ?? ttsProviders[0];
@@ -312,15 +311,12 @@ export function SettingsModal({
     setLocalProviderRef(fallback.id);
     setLocalProviderType(fallback.providerType);
 
-    if (fallback.shared) {
-      const shared = sharedProviders.find((p) => p.slug === fallback.id);
-      if (shared?.defaultModel) {
-        setModelValue(shared.defaultModel);
-      }
-      setLocalTTSInstructions(shared?.defaultInstructions ?? '');
-      setCustomModelInput('');
-      return;
+    const shared = sharedProviders.find((p) => p.slug === fallback.id);
+    if (shared?.defaultModel) {
+      setModelValue(shared.defaultModel);
     }
+    setLocalTTSInstructions(shared?.defaultInstructions ?? '');
+    setCustomModelInput('');
   }, [selectedProviderOption, ttsProviders, sharedProviders]);
 
   const handleRefresh = async () => {
@@ -581,7 +577,7 @@ export function SettingsModal({
                               <p className="text-xs text-soft">Loading providers…</p>
                             ) : ttsProviders.length === 0 ? (
                               <p className="text-xs text-accent">
-                                User API keys are restricted and no shared provider is configured. Ask an admin to add one.
+                                No shared provider is configured. Ask an admin to add one.
                               </p>
                             ) : (
                               <Select

@@ -31,14 +31,7 @@ API_BASE=http://kittentts-fastapi:8005/v1
 
 > Use `kittentts-fastapi` if that's the container name, or `host.docker.internal` if not.
 
-**Or in-app via Settings → TTS Provider:**
-
-1. Set provider to `Custom OpenAI-Like`.
-2. Set `API_BASE` to your KittenTTS endpoint (e.g. `http://kittentts-fastapi:8005/v1`).
-3. Leave `API_KEY` blank unless your deployment requires one.
-4. Choose model `kitten-tts` (or the model your deployment exposes).
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
 ## References
 

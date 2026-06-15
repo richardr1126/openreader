@@ -177,6 +177,8 @@ export interface TTSSegmentManifestItem {
   segmentId: string;
   segmentIndex: number;
   segmentKey?: string | null;
+  audioKey: string | null;
+  updatedAt: number | null;
   audioPresignUrl: string | null;
   audioFallbackUrl: string | null;
   durationMs: number;

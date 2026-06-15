@@ -4,6 +4,14 @@ function canUseCacheStorage(): boolean {
   return typeof window !== 'undefined' && typeof caches !== 'undefined';
 }
 
+function isCacheableFullResponse(response: Response): boolean {
+  return response.ok
+    && response.status === 200
+    && response.type !== 'opaque'
+    && response.type !== 'opaqueredirect'
+    && !response.headers.has('Content-Range');
+}
+
 export async function getCachedBlob(
   stableKey: string,
   fetchSource: () => Promise<Response>,
@@ -13,7 +21,8 @@ export async function getCachedBlob(
     try {
       cache = await caches.open(BLOB_CACHE_NAME);
       const cached = await cache.match(stableKey);
-      if (cached) return cached;
+      if (cached && isCacheableFullResponse(cached)) return cached;
+      if (cached) await cache.delete(stableKey).catch(() => {});
     } catch {
       cache = null;
     }
@@ -22,14 +31,14 @@ export async function getCachedBlob(
   const response = await fetchSource();
   if (!response.ok) throw new Error(`Blob fetch failed: ${response.status}`);
 
-  if (cache && response.status === 200 && response.type !== 'opaque' && !response.headers.has('Content-Range')) {
+  if (cache && isCacheableFullResponse(response)) {
     await cache.put(stableKey, response.clone()).catch(() => {});
   }
   return response;
 }
 
 export async function putCachedBlob(stableKey: string, response: Response): Promise<void> {
-  if (!canUseCacheStorage() || !response.ok || response.status !== 200 || response.type === 'opaque') return;
+  if (!canUseCacheStorage() || !isCacheableFullResponse(response)) return;
   const cache = await caches.open(BLOB_CACHE_NAME).catch(() => null);
   await cache?.put(stableKey, response.clone()).catch(() => {});
 }
@@ -57,4 +66,12 @@ export function previewBlobCacheKey(documentId: string, previewVersion: string |
 
 export function audioBlobCacheKey(audioKey: string, version: string | number): string {
   return `/openreader-cache/audio/${encodeURIComponent(audioKey)}/${encodeURIComponent(String(version))}`;
+}
+
+export function audiobookChapterBlobCacheKey(
+  bookId: string,
+  chapterIndex: number,
+  version: string | number,
+): string {
+  return `/openreader-cache/audiobooks/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(String(chapterIndex))}/${encodeURIComponent(String(version))}`;
 }

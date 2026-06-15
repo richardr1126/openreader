@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: requestCreds.error === 'no_shared_provider_configured'
-            ? 'User API keys are restricted and no shared provider is configured.'
+            ? 'No shared TTS provider is configured.'
             : `Unknown or disabled TTS provider: ${requestCreds.slug}`,
         },
         { status },
@@ -398,6 +398,7 @@ export async function POST(request: NextRequest) {
         : null;
 
       if (existing?.status === 'completed' && existing.audioKey) {
+        let variantUpdatedAt = existing.updatedAt;
         await upsertSegmentEntry({
           segmentEntryId,
           segmentIndex: segment.original.segmentIndex,
@@ -419,6 +420,7 @@ export async function POST(request: NextRequest) {
               eq(ttsSegmentVariants.segmentId, segment.segmentId),
               eq(ttsSegmentVariants.userId, scope.storageUserId),
             ));
+          variantUpdatedAt = nowMs;
           await deleteEntryIfUnused(scope.storageUserId, movedFromEntryId);
         }
 
@@ -441,16 +443,18 @@ export async function POST(request: NextRequest) {
             stageTimings.selfHealAlignMs = Date.now() - alignStartedAt;
 
             if (alignment) {
+              const alignmentUpdatedAt = Date.now();
               await db
                 .update(ttsSegmentVariants)
                 .set({
                   alignmentJson: JSON.stringify(alignment),
-                  updatedAt: Date.now(),
+                  updatedAt: alignmentUpdatedAt,
                 })
                 .where(and(
                   eq(ttsSegmentVariants.segmentId, segment.segmentId),
                   eq(ttsSegmentVariants.userId, scope.storageUserId),
                 ));
+              variantUpdatedAt = alignmentUpdatedAt;
             }
           } catch (alignError) {
             const aborted = isAbortLikeError(alignError) || request.signal.aborted;
@@ -479,6 +483,8 @@ export async function POST(request: NextRequest) {
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
           segmentKey: segmentKeyForRow,
+          audioKey: existing.audioKey,
+          updatedAt: variantUpdatedAt,
           ...audioUrls,
           durationMs: existing.durationMs ?? 0,
           alignment,
@@ -593,6 +599,8 @@ export async function POST(request: NextRequest) {
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
           segmentKey: segmentKeyForRow,
+          audioKey: null,
+          updatedAt: null,
           audioPresignUrl: null,
           audioFallbackUrl: null,
           durationMs: 0,
@@ -611,6 +619,8 @@ export async function POST(request: NextRequest) {
             segmentId: segment.segmentId,
             segmentIndex: segment.original.segmentIndex,
             segmentKey: segmentKeyForRow,
+            audioKey: currentVariant.audioKey,
+            updatedAt: currentVariant.updatedAt,
             audioPresignUrl: null,
             audioFallbackUrl: null,
             durationMs: 0,
@@ -646,6 +656,8 @@ export async function POST(request: NextRequest) {
             segmentId: segment.segmentId,
             segmentIndex: segment.original.segmentIndex,
             segmentKey: segmentKeyForRow,
+            audioKey: currentVariant.audioKey,
+            updatedAt: currentVariant.updatedAt,
             audioPresignUrl: null,
             audioFallbackUrl: null,
             durationMs: 0,
@@ -734,6 +746,7 @@ export async function POST(request: NextRequest) {
 
         failedStage = 'db.mark_completed';
         const markCompletedStartedAt = Date.now();
+        const completedUpdatedAt = Date.now();
         await db
           .update(ttsSegmentVariants)
           .set({
@@ -741,7 +754,7 @@ export async function POST(request: NextRequest) {
             alignmentJson: alignment ? JSON.stringify(alignment) : null,
             status: 'completed',
             error: null,
-            updatedAt: Date.now(),
+            updatedAt: completedUpdatedAt,
           })
           .where(and(
             eq(ttsSegmentVariants.segmentId, segment.segmentId),
@@ -762,6 +775,8 @@ export async function POST(request: NextRequest) {
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
           segmentKey: segmentKeyForRow,
+          audioKey,
+          updatedAt: completedUpdatedAt,
           ...audioUrls,
           durationMs,
           alignment,
@@ -809,6 +824,7 @@ export async function POST(request: NextRequest) {
             error: errorToLog(error),
           }, 'TTS segment generation failed');
         }
+        const failedUpdatedAt = Date.now();
         await db
           .update(ttsSegmentVariants)
           .set({
@@ -818,7 +834,7 @@ export async function POST(request: NextRequest) {
                 ? `${failureCode}${retryAfterSeconds ? ` (retry after ${retryAfterSeconds}s)` : ''}: ${errorMessage}`
                 : errorMessage
             ),
-            updatedAt: Date.now(),
+            updatedAt: failedUpdatedAt,
           })
           .where(and(
             eq(ttsSegmentVariants.segmentId, segment.segmentId),
@@ -829,6 +845,8 @@ export async function POST(request: NextRequest) {
           segmentId: segment.segmentId,
           segmentIndex: segment.original.segmentIndex,
           segmentKey: segmentKeyForRow,
+          audioKey,
+          updatedAt: failedUpdatedAt,
           audioPresignUrl: null,
           audioFallbackUrl: null,
           durationMs: 0,

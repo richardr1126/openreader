@@ -37,16 +37,11 @@ Each shared provider is one named instance bound to one of the four built-in pro
 | **Default model** | Optional. Used as the initial model when a user selects this provider. |
 | **Enabled** | Toggle to hide the provider from non-admin users without deleting it. |
 
-When a non-admin user picks a shared provider in **Settings → TTS Provider**:
+When a non-admin user picks a provider in **Settings → TTS Provider**:
 
 - The API key / base URL fields are hidden — those credentials never leave the server.
 - The TTS request still goes through the user's browser, but the server replaces the slug with the matching admin row's decrypted key and base URL before calling the upstream provider.
 - TTS credentials are resolved only from admin-managed shared providers and are never accepted from client request headers.
-
-Whether users can supply their own personal built-in provider keys is controlled by the site feature `restrictUserApiKeys`:
-
-- `true`: users are restricted to shared providers only.
-- `false`: users may also use per-user BYOK credentials for built-in providers.
 
 ### Auto-seeded "default-openai"
 
@@ -71,7 +66,6 @@ Runtime-editable settings, one row per key:
 | `defaultTtsProvider` | Default provider id new users start with (built-in id or shared slug). |
 | `changelogFeedUrl` | Public changelog manifest URL used by the Settings modal changelog panel. |
 | `enableUserSignups` | Controls whether new accounts can be created. Existing accounts can still sign in when this is `false`. |
-| `restrictUserApiKeys` | Restrict user-supplied API keys/base URLs; when `true`, only admin shared providers are allowed. |
 | `enableTtsProvidersTab` | Whether the user-facing TTS Provider tab in Settings is shown. |
 | `showAllProviderModels` | When `false`, users are restricted to each provider's default model (shared provider `defaultModel` or built-in provider default). |
 | `enableAudiobookExport` | Show the audiobook export entry points on PDF/EPUB pages. |
@@ -84,10 +78,6 @@ Each row shows a source badge:
 - **from seed** — the value was seeded on first boot (from `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`).
 - **admin** — explicit admin override. Use **Reset** on the row to clear it back to built-in default behavior.
 - **default** — no seed/admin row exists; built-in default is active.
-
-:::warning Security note for `restrictUserApiKeys`
-Turning `restrictUserApiKeys` off allows user-supplied API keys to flow through this server. Use this only for trusted/self-hosted deployments where that tradeoff is acceptable.
-:::
 
 ## Rate limiting
 
@@ -155,5 +145,5 @@ Because the encryption key for `admin_providers` is derived from `AUTH_SECRET`, 
 ## Related
 
 - [Auth](./auth) — required to use the admin panel.
-- [TTS Providers](./tts-providers) — built-in provider catalog and per-user behavior.
+- [TTS Providers](./tts-providers) — shared-provider configuration and user-selectable behavior.
 - [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed.

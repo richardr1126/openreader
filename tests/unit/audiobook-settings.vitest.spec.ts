@@ -84,7 +84,7 @@ describe('coerceAudiobookGenerationSettings', () => {
     expect(result.settings).toBeNull();
   });
 
-  test('canonicalizes built-in provider settings to shared provider in restricted mode', () => {
+  test('canonicalizes built-in provider settings to a shared provider', () => {
     const settings = canonicalizeAudiobookSettingsForRuntime({
       settings: {
         providerRef: 'custom-openai',
@@ -97,7 +97,6 @@ describe('coerceAudiobookGenerationSettings', () => {
         ttsInstructions: '',
         language: 'en',
       },
-      restrictUserApiKeys: true,
       fallbackProviderRef: 'shared-openai',
       showAllProviderModels: false,
       sharedProviders: [

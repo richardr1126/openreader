@@ -16,7 +16,6 @@ export interface RuntimeConfig {
   changelogFeedUrl: string;
   appVersion: string;
   enableUserSignups: boolean;
-  restrictUserApiKeys: boolean;
   enableTtsProvidersTab: boolean;
   enableAudiobookExport: boolean;
   enableDocxConversion: boolean;
@@ -38,7 +37,6 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   changelogFeedUrl: 'https://docs.openreader.richardr.dev/changelog/manifest.json',
   appVersion: '0.0.0',
   enableUserSignups: true,
-  restrictUserApiKeys: true,
   enableTtsProvidersTab: true,
   enableAudiobookExport: true,
   enableDocxConversion: true,

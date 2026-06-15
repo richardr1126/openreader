@@ -4,7 +4,6 @@ import { resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
 
 export interface PreferenceNormalizationContext {
   showAllProviderModels: boolean;
-  restrictUserApiKeys: boolean;
   sharedProviders: Array<{
     slug: string;
     providerType: TtsProviderId;
@@ -36,8 +35,8 @@ export function sanitizeSavedVoices(value: unknown): Record<string, string> {
  * `providerRef` means the user has made no explicit choice and should follow the
  * instance default. We deliberately preserve empty rather than collapsing it to
  * a concrete provider, so inheriting users track whatever the admin configures.
- * Built-in provider ids under restricted mode (and the legacy `default-openai`
- * sentinel that isn't a real shared provider) are mapped back to inherit.
+ * Built-in provider ids and the legacy `default-openai` sentinel that isn't a
+ * real shared provider are mapped back to inherit.
  */
 export function sanitizePreferencesPatch(
   input: unknown,
@@ -66,9 +65,9 @@ export function sanitizePreferencesPatch(
   if (providerRefIntent === 'default-openai' && !sharedSlugs.has('default-openai')) {
     providerRefIntent = '';
   }
-  // Built-in providers aren't selectable under restricted mode → inherit. This
-  // also migrates the old baked-in 'custom-openai' default off existing rows.
-  if (context.restrictUserApiKeys && isBuiltInTtsProviderId(providerRefIntent)) {
+  // Built-in providers are no longer selectable by users. This also migrates
+  // the old baked-in 'custom-openai' default off existing rows.
+  if (isBuiltInTtsProviderId(providerRefIntent)) {
     providerRefIntent = '';
   }
   const providerRefIsExplicit = providerRefIntent.length > 0;

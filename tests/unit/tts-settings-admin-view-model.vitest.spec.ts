@@ -38,7 +38,6 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
         },
         ...SHARED,
       ],
-      allowBuiltInProviders: false,
     });
 
     expect(vm.selectedProviderRef).toBe('default-openai');
@@ -46,7 +45,7 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
     expect(vm.selectedModelId).toBe('gpt-4o-mini-tts');
   });
 
-  test('restrict mode exposes only shared providers', () => {
+  test('exposes only shared providers', () => {
     const vm = resolveTtsSettingsViewModel({
       providerRef: 'shared-openai',
       providerType: 'unknown',
@@ -54,11 +53,9 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
       customModelInput: '',
       showAllProviderModels: true,
       sharedProviders: SHARED,
-      allowBuiltInProviders: false,
     });
 
     expect(vm.providers.map((p) => p.id)).toEqual(['shared-openai', 'shared-replicate']);
-    expect(vm.providers.every((p) => p.shared)).toBe(true);
   });
 
   test('invalid provider falls back to first available option', () => {
@@ -69,7 +66,6 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
       customModelInput: '',
       showAllProviderModels: true,
       sharedProviders: SHARED,
-      allowBuiltInProviders: false,
     });
 
     expect(vm.selectedSharedProvider?.slug).toBe('shared-openai');
@@ -84,7 +80,6 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
       customModelInput: '',
       showAllProviderModels: true,
       sharedProviders: SHARED,
-      allowBuiltInProviders: false,
     });
 
     expect(vm.supportsCustomModel).toBe(true);
@@ -100,7 +95,6 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
       customModelInput: '',
       showAllProviderModels: true,
       sharedProviders: SHARED,
-      allowBuiltInProviders: false,
     });
 
     expect(vm.supportsCustomModel).toBe(false);
@@ -116,7 +110,6 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
       customModelInput: '',
       showAllProviderModels: true,
       sharedProviders: SHARED,
-      allowBuiltInProviders: false,
     });
 
     expect(vm.selectedProviderRef).toBe('shared-openai');
@@ -131,7 +124,6 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
       customModelInput: 'my-custom-model',
       showAllProviderModels: false,
       sharedProviders: SHARED,
-      allowBuiltInProviders: false,
     });
 
     expect(vm.models).toEqual([{ id: 'owner/model:ver', name: 'owner/model:ver' }]);

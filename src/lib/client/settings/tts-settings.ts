@@ -19,21 +19,17 @@ import type { SharedProviderEntry } from '@/hooks/useSharedProviders';
 export interface ResolveTtsSettingsViewModelOptions {
   providerRef: string;
   providerType: TtsProviderType;
-  apiKey?: string;
   modelValue: string;
   customModelInput: string;
   showAllProviderModels: boolean;
   sharedProviders?: SharedProviderEntry[];
-  allowBuiltInProviders?: boolean;
 }
 
 export interface ProviderPickerOption {
   id: string;
   name: string;
-  /** Underlying built-in provider type. Same as `id` for built-ins; mapped from `providerType` for admin shared instances. */
+  /** Underlying provider type mapped from the admin-managed shared instance. */
   providerType: TtsProviderId;
-  /** True when this picker entry represents an admin-configured shared provider. */
-  shared: boolean;
 }
 
 export interface TtsSettingsViewModel {
@@ -55,28 +51,17 @@ const BUILT_IN_DEFINITION_BY_ID: Map<string, TtsProviderDefinition> = new Map(
 export function resolveTtsSettingsViewModel({
   providerRef,
   providerType,
-  apiKey,
   modelValue,
   customModelInput,
   showAllProviderModels,
   sharedProviders = [],
-  allowBuiltInProviders = true,
 }: ResolveTtsSettingsViewModelOptions): TtsSettingsViewModel {
-  const builtInOptions: ProviderPickerOption[] = allowBuiltInProviders
-    ? TTS_PROVIDER_DEFINITIONS.map((def) => ({
-      id: def.id,
-      name: def.name,
-      providerType: def.id,
-      shared: false,
-    }))
-    : [];
   const sharedOptions: ProviderPickerOption[] = sharedProviders.map((entry) => ({
     id: entry.slug,
     name: `${entry.displayName} (shared)`,
     providerType: entry.providerType,
-    shared: true,
   }));
-  const providers = [...sharedOptions, ...builtInOptions];
+  const providers = sharedOptions;
   const normalizedInputProviderRef = normalizeLegacyProviderRef(providerRef);
   const selectedProviderRef = providers.some((opt) => opt.id === normalizedInputProviderRef)
     ? normalizedInputProviderRef
@@ -94,9 +79,7 @@ export function resolveTtsSettingsViewModel({
     ? effectiveProviderType
     : null;
 
-  const catalogModels = resolveProviderModels(knownProviderType ?? 'custom-openai', {
-    apiKey,
-  });
+  const catalogModels = resolveProviderModels(knownProviderType ?? 'custom-openai');
   const providerDefaults = resolveProviderDefaults({
     providerRef: selectedProviderRef,
     providerType: selectedProviderType,

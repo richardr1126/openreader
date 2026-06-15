@@ -20,14 +20,7 @@ API_BASE=https://api.openai.com/v1
 API_KEY=sk-...
 ```
 
-**Per-user Settings → TTS Provider (only when `restrictUserApiKeys=false`):**
-
-1. Set provider to `OpenAI`.
-2. The base URL is pre-filled, no changes needed.
-3. Enter your `API_KEY`.
-4. Choose a model and voice.
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the enabled shared provider, model, and voice from **Settings → TTS Provider**.
 
 ## Notes
 

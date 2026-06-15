@@ -2044,8 +2044,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       }
       const sourceUrl = useFallbackSource ? playbackSource.fallbackUrl : playbackSource.presignUrl;
       const audioUrl = await getCachedAudioUrl({
-        audioKey: playbackSource.manifest.segmentId,
-        version: playbackSource.manifest.durationMs,
+        audioKey: playbackSource.manifest.audioKey || playbackSource.manifest.segmentId,
+        version: playbackSource.manifest.updatedAt || 0,
         primaryUrl: sourceUrl,
         fallbackUrl: playbackSource.fallbackUrl,
       }).catch(() => sourceUrl);

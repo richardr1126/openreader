@@ -223,22 +223,6 @@ export function AdminFeaturesPanel() {
         </div>
 
         <ToggleRow
-          label="Restrict user API keys (recommended)"
-          description="Only allow admin shared providers."
-          checked={Boolean(draft.restrictUserApiKeys)}
-          onChange={(checked) => {
-            if (!checked) {
-              const ok = confirm(
-                'Turning this off allows user-supplied API keys to flow through this server. Continue?',
-              );
-              if (!ok) return;
-            }
-            updateDraft('restrictUserApiKeys', checked);
-          }}
-          right={renderSource('restrictUserApiKeys')}
-          variant="flat"
-        />
-        <ToggleRow
           label="Show TTS provider settings tab"
           description="Allow per-user provider overrides."
           checked={Boolean(draft.enableTtsProvidersTab)}

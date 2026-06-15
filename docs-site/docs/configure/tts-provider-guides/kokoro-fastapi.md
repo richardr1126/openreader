@@ -59,14 +59,7 @@ API_BASE=http://kokoro-tts:8880/v1
 
 > Use `kokoro-tts` if that's the container name, or `host.docker.internal` if not.
 
-**Or in-app via Settings → TTS Provider:**
-
-1. Set provider to `Custom OpenAI-Like`.
-2. Set `API_BASE` to your Kokoro endpoint (e.g. `http://kokoro-tts:8880/v1`).
-3. Leave `API_KEY` blank unless your deployment requires one.
-4. Choose model `Kokoro`.
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
 ## References
 

@@ -99,7 +99,7 @@ function normalizeNativeSpeedForSettings(settings: AudiobookGenerationSettings):
     : { ...settings, nativeSpeed: 1 };
 }
 
-function resolveRestrictedProviderRef(
+function resolveSharedProviderRef(
   providerRef: string,
   fallbackProviderRef: string,
   sharedProviders: SharedProviderPolicyEntry[],
@@ -114,24 +114,19 @@ function resolveRestrictedProviderRef(
 
 export function canonicalizeAudiobookSettingsForRuntime(input: {
   settings: AudiobookGenerationSettings;
-  restrictUserApiKeys: boolean;
   fallbackProviderRef: string;
   showAllProviderModels: boolean;
   sharedProviders: SharedProviderPolicyEntry[];
 }): AudiobookGenerationSettings {
-  if (!input.restrictUserApiKeys) {
-    return normalizeNativeSpeedForSettings(input.settings);
-  }
-
-  const restrictedProviderRef = resolveRestrictedProviderRef(
+  const sharedProviderRef = resolveSharedProviderRef(
     input.settings.providerRef,
     input.fallbackProviderRef,
     input.sharedProviders,
   );
-  const sharedProvider = input.sharedProviders.find((entry) => entry.slug === restrictedProviderRef);
+  const sharedProvider = input.sharedProviders.find((entry) => entry.slug === sharedProviderRef);
   const providerType = sharedProvider?.providerType || input.settings.providerType;
   const ttsModel = resolveTtsModelForProvider({
-    providerRef: restrictedProviderRef,
+    providerRef: sharedProviderRef,
     providerType,
     model: input.settings.ttsModel,
     sharedProviders: sharedProvider ? [sharedProvider] : [],
@@ -146,7 +141,7 @@ export function canonicalizeAudiobookSettingsForRuntime(input: {
 
   return normalizeNativeSpeedForSettings({
     ...input.settings,
-    providerRef: restrictedProviderRef,
+    providerRef: sharedProviderRef,
     providerType,
     ttsModel,
     ttsInstructions,

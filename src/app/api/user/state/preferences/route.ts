@@ -44,7 +44,6 @@ async function loadPreferenceNormalizationContext(): Promise<PreferenceNormaliza
   ]);
   return {
     showAllProviderModels: runtimeConfig.showAllProviderModels,
-    restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
     sharedProviders: providers
       .filter((entry) => entry.enabled)
       .map((entry) => ({

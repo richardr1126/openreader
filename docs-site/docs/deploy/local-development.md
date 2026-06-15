@@ -276,8 +276,8 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 On first boot, `API_KEY` / `API_BASE` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config + providers. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
 :::
 
-:::note User BYOK restriction default
-If you want each user to enter personal provider credentials, set `restrictUserApiKeys=false` (from **Settings → Admin**, or by seeding `runtimeConfig.restrictUserApiKeys=false` in runtime seed JSON).
+:::note TTS credentials
+Configure TTS credentials in **Settings → Admin → Shared providers**. User browsers never supply provider credentials.
 :::
 
 :::info
