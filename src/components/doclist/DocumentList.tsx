@@ -199,7 +199,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     normalizeViewMode(cachedState?.viewMode ?? DEFAULT_STATE.viewMode),
   );
   const [iconSize, setIconSize] = useState<IconSize>(cachedState?.iconSize ?? DEFAULT_STATE.iconSize);
-  const [folders, setFolders] = useState<Folder[]>([]);
   const [showHint, setShowHint] = useState(cachedState?.showHint ?? true);
   const [sidebarWidth, setSidebarWidth] = useState(cachedState?.sidebarWidth ?? DEFAULT_STATE.sidebarWidth);
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>(cachedState?.sidebarFilter ?? 'all');
@@ -337,10 +336,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     ],
     [pdfDocs, epubDocs, htmlDocs],
   );
-  const rawDocumentIdsKey = useMemo(
-    () => rawDocuments.map((d) => documentIdentityKey(d)).sort().join('|'),
-    [rawDocuments],
-  );
   const allDocuments: DocumentListDocument[] = useMemo(
     () =>
       rawDocuments.map((doc) => ({
@@ -350,16 +345,21 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     [rawDocuments],
   );
 
-  useEffect(() => {
-    const serverFolders = folderState.query.data ?? [];
-    setFolders(serverFolders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      documents: rawDocuments
-        .filter((doc) => doc.folderId === folder.id)
-        .map((doc) => ({ ...doc, folderId: folder.id })),
-    })));
-  }, [folderState.query.data, rawDocumentIdsKey, rawDocuments]);
+  // Folders are derived directly from the authoritative folders query plus each
+  // document's folderId. The folder mutations in useFolders update the documents
+  // and folders query caches optimistically, so there is no local folder mirror
+  // to keep in sync.
+  const folders: Folder[] = useMemo(
+    () =>
+      (folderState.query.data ?? []).map((folder) => ({
+        id: folder.id,
+        name: folder.name,
+        documents: rawDocuments
+          .filter((doc) => doc.folderId === folder.id)
+          .map((doc) => ({ ...doc, folderId: folder.id })),
+      })),
+    [folderState.query.data, rawDocuments],
+  );
 
   const allDocumentsById = useMemo(() => {
     const map = new Map<string, DocumentListDocument>();
@@ -453,14 +453,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     if (!documentToDelete) return;
     try {
       await deleteDocument(documentToDelete.id);
-      setFolders((prev) =>
-        prev.map((f) => ({
-          ...f,
-          documents: f.documents.filter(
-            (d) => !(d.id === documentToDelete.id && d.type === documentToDelete.type),
-          ),
-        })),
-      );
       setDocumentToDelete(null);
     } catch (err) {
       console.error('Failed to remove document:', err);
@@ -473,24 +465,8 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   const handleDropOnFolder = useCallback(
     (folderId: string, item: DocumentDragItem) => {
-      setFolders((prev) =>
-        prev.map((f) => {
-          if (f.id !== folderId) {
-            // Remove the dropped docs from any other folder they were in.
-            return {
-              ...f,
-              documents: f.documents.filter(
-                (d) => !item.items.some((it) => it.id === d.id && it.type === d.type),
-              ),
-            };
-          }
-          const existingIdentities = new Set(f.documents.map((d) => documentIdentityKey(d)));
-          const newDocs = item.docs
-            .filter((d) => !existingIdentities.has(documentIdentityKey(d)))
-            .map((d) => ({ ...d, folderId }));
-          return { ...f, documents: [...f.documents, ...newDocs] };
-        }),
-      );
+      // useFolders.move optimistically reassigns documents[].folderId, which the
+      // derived `folders` memo reflects immediately.
       folderState.move.mutate({ documentIds: item.docs.map((doc) => doc.id), folderId });
       setSidebarFilter(`folder:${folderId}`);
       selection.clear();
@@ -566,13 +542,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   }, [folderState.create, newFolderName]);
 
   const handleDeleteFolder = useCallback((folderId: string) => {
-    setFolders((prev) => prev.filter((f) => f.id !== folderId));
     folderState.remove.mutate(folderId);
     if (sidebarFilter === `folder:${folderId}`) setSidebarFilter('all');
   }, [folderState.remove, sidebarFilter]);
 
   const handleClearFolders = useCallback(() => {
-    setFolders([]);
     folderState.clear.mutate();
     if (sidebarFilter.startsWith('folder:')) setSidebarFilter('all');
     setClearFoldersPrompt(false);
