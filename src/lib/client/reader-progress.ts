@@ -67,7 +67,11 @@ export function serializeReaderPosition(
 ): string {
   const safeIndex = Math.max(0, Math.floor(sentenceIndex));
   if (readerType === 'html') {
-    return `html:${encodeURIComponent(String(location ?? 1))}:${safeIndex}`;
+    // Empty strings must default to a valid token too: `html::${idx}` fails to
+    // round-trip through parseReaderInitialPosition (its location group requires
+    // a non-empty match), so an empty location would silently drop progress.
+    const safeLocation = location == null || location === '' ? 1 : location;
+    return `html:${encodeURIComponent(String(safeLocation))}:${safeIndex}`;
   }
   return `${Math.max(1, Number(location) || 1)}:${safeIndex}`;
 }
