@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useCallback, useMemo, useR
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { coerceTimestampMs, nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 import { queryKeys } from '@/lib/client/query-keys';
-import { useAuthSession } from '@/hooks/useAuthSession';
+import { getAuthClient } from '@/lib/client/auth-client';
 
 export interface RateLimitStatus {
   allowed: boolean;
@@ -116,7 +116,13 @@ export function AuthRateLimitProvider({
   githubAuthEnabled,
 }: AuthRateLimitProviderProps) {
   const queryClient = useQueryClient();
-  const { data: session } = useAuthSession();
+  // Read the session directly from the prop-provided base URL. We can't use
+  // useAuthSession() here: it resolves the base URL via useAuthConfig() ->
+  // useAuthRateLimit(), i.e. this provider's own context, which isn't
+  // established yet during this render — that self-read threw
+  // "useAuthRateLimit must be used within an AuthRateLimitProvider" on every SSR.
+  const authClient = useMemo(() => getAuthClient(authBaseUrl), [authBaseUrl]);
+  const { data: session } = authClient.useSession();
   // Scope the rate-limit cache per session so a previous user's quota cannot be
   // read after an account switch and useSessionQueryReset can evict it cleanly.
   const rateLimitQueryKey = useMemo(
