@@ -22,4 +22,9 @@ describe('query keys', () => {
     expect(queryKeys.rateLimit('user')).toEqual(['rate-limit', 'user']);
     expect(queryKeys.admin('user', 'settings')).toEqual(['admin', 'user', 'settings']);
   });
+
+  test('keys public changelog content by url rather than session', () => {
+    expect(queryKeys.changelogManifest('https://x/manifest.json')).toEqual(['changelog', 'manifest', 'https://x/manifest.json']);
+    expect(queryKeys.changelogReleaseBody('https://x/manifest.json', 'bodies/v1.json')).toEqual(['changelog', 'body', 'https://x/manifest.json', 'bodies/v1.json']);
+  });
 });

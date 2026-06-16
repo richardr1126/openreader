@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -48,12 +48,10 @@ import {
 } from '@/components/ui';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { fetchChangelogManifest, fetchChangelogReleaseBody } from '@/lib/client/changelog';
+import { useChangelogManifest, useChangelogReleaseBodies } from '@/hooks/useChangelog';
 import {
   findCurrentVersionIndex,
   normalizeVersion,
-  type ChangelogManifestEntry,
-  type ChangelogReleaseBody,
 } from '@/lib/shared/changelog';
 import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 
@@ -1100,65 +1098,27 @@ function SettingsChangelogPanel({
   manifestUrl: string;
   onClose: () => void;
 }) {
-  const [manifest, setManifest] = useState<ChangelogManifestEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [bodies, setBodies] = useState<Record<string, ChangelogReleaseBody>>({});
   const normalizedAppVersion = normalizeVersion(appVersion || '');
-  const isAbortError = (err: unknown): boolean => {
-    return err instanceof DOMException
-      ? err.name === 'AbortError'
-      : !!(typeof err === 'object' && err && 'name' in err && (err as { name?: string }).name === 'AbortError');
-  };
 
+  const { data: manifest = [], isLoading: loading, error: manifestError } = useChangelogManifest(manifestUrl);
+  const error = manifestError
+    ? (manifestError instanceof Error ? manifestError.message : 'Failed to load changelog')
+    : null;
+  const bodies = useChangelogReleaseBodies(manifestUrl, manifest, expanded);
+
+  // Auto-expand the current version once the manifest is available. Guarded so a
+  // user who later collapses it isn't forced back open by a background refetch.
+  const didInitExpandRef = useRef(false);
   useEffect(() => {
-    const controller = new AbortController();
-    async function loadManifest() {
-      setLoading(true);
-      setError(null);
-      try {
-        const entries = await fetchChangelogManifest(manifestUrl, controller.signal);
-        setManifest(entries);
-        const initialIndex = findCurrentVersionIndex(entries, normalizedAppVersion);
-        if (initialIndex >= 0) {
-          const entry = entries[initialIndex];
-          setExpanded((prev) => ({ ...prev, [entry.tag_name]: true }));
-        }
-      } catch (err) {
-        if (isAbortError(err)) return;
-        setError(err instanceof Error ? err.message : 'Failed to load changelog');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+    if (didInitExpandRef.current || manifest.length === 0) return;
+    const initialIndex = findCurrentVersionIndex(manifest, normalizedAppVersion);
+    if (initialIndex >= 0) {
+      didInitExpandRef.current = true;
+      const entry = manifest[initialIndex];
+      setExpanded((prev) => ({ ...prev, [entry.tag_name]: true }));
     }
-    void loadManifest();
-    return () => controller.abort();
-  }, [manifestUrl, normalizedAppVersion]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const tagsToLoad = manifest
-      .filter((entry) => expanded[entry.tag_name] && !bodies[entry.tag_name])
-      .map((entry) => entry.tag_name);
-    if (tagsToLoad.length === 0) return () => controller.abort();
-
-    async function loadBodies() {
-      await Promise.all(tagsToLoad.map(async (tag) => {
-        const entry = manifest.find((item) => item.tag_name === tag);
-        if (!entry) return;
-        try {
-          const body = await fetchChangelogReleaseBody(manifestUrl, entry.body_path, controller.signal);
-          setBodies((prev) => ({ ...prev, [tag]: body }));
-        } catch (err) {
-          if (isAbortError(err)) return;
-          // Keep entry expanded; inline fallback appears below.
-        }
-      }));
-    }
-    void loadBodies();
-    return () => controller.abort();
-  }, [expanded, manifest, manifestUrl, bodies]);
+  }, [manifest, normalizedAppVersion]);
 
   return (
     <div className="h-[490px] flex flex-col bg-surface">
