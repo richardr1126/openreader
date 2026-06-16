@@ -85,6 +85,13 @@
       "when": 1780851107819,
       "tag": "0011_scheduled-tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781466220153,
+      "tag": "0012_user_additions",
+      "breakpoints": true
     }
   ]
 }

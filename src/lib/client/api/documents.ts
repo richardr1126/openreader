@@ -1,6 +1,7 @@
 import type { BaseDocument, DocumentType } from '@/types/documents';
 import type { ParsedPdfDocument, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { DocumentSettings } from '@/types/document-settings';
+import { parseApiError } from '@/lib/client/api/http';
 
 export type UploadSource = {
   name: string;
@@ -75,8 +76,7 @@ export async function listDocuments(options?: { ids?: string[]; signal?: AbortSi
 
   const res = await fetch(`/api/documents?${params.toString()}`, { signal: options?.signal });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to list documents');
+    throw await parseApiError(res, 'Failed to list documents');
   }
 
   const data = (await res.json()) as { documents: BaseDocument[] };
@@ -86,6 +86,20 @@ export async function listDocuments(options?: { ids?: string[]; signal?: AbortSi
 export async function getDocumentMetadata(id: string, options?: { signal?: AbortSignal }): Promise<BaseDocument | null> {
   const docs = await listDocuments({ ids: [id], signal: options?.signal });
   return docs[0] ?? null;
+}
+
+export async function markDocumentOpened(
+  id: string,
+  options?: { signal?: AbortSignal },
+): Promise<{ documentId: string; recentlyOpenedAt: number }> {
+  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/opened`, {
+    method: 'PUT',
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to update recently opened state');
+  }
+  return (await res.json()) as { documentId: string; recentlyOpenedAt: number };
 }
 
 export class ParsedPdfNotReadyError extends Error {
@@ -287,8 +301,7 @@ export async function getDocumentSettings(
     cache: 'no-store',
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to load document settings');
+    throw await parseApiError(res, 'Failed to load document settings');
   }
   return (await res.json()) as DocumentSettingsResponse;
 }
@@ -308,8 +321,7 @@ export async function putDocumentSettings(
     signal: options?.signal,
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to update document settings');
+    throw await parseApiError(res, 'Failed to update document settings');
   }
   return (await res.json()) as DocumentSettingsResponse & { applied: boolean };
 }
@@ -433,15 +445,18 @@ export async function deleteDocuments(options?: { ids?: string[]; signal?: Abort
   const url = params.toString() ? `/api/documents?${params.toString()}` : '/api/documents';
   const res = await fetch(url, { method: 'DELETE', signal: options?.signal });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to delete documents');
+    throw await parseApiError(res, 'Failed to delete documents');
   }
 }
 
 export async function downloadDocumentContent(id: string, options?: { signal?: AbortSignal }): Promise<ArrayBuffer> {
+  return (await fetchDocumentContentResponse(id, options)).arrayBuffer();
+}
+
+export async function fetchDocumentContentResponse(id: string, options?: { signal?: AbortSignal }): Promise<Response> {
   const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(id)}`;
 
-  const fetchFallback = async (): Promise<ArrayBuffer> => {
+  const fetchFallback = async (): Promise<Response> => {
     const res = await fetch(fallbackUrl, { signal: options?.signal });
     if (!res.ok) {
       const contentType = res.headers.get('content-type') || '';
@@ -451,7 +466,7 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
       }
       throw new Error(`Failed to download document (status ${res.status})`);
     }
-    return res.arrayBuffer();
+    return res;
   };
 
   try {
@@ -467,7 +482,7 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
       }
       throw new Error(`Failed to download document (status ${directRes.status})`);
     }
-    return directRes.arrayBuffer();
+    return directRes;
   } catch (error) {
     if (options?.signal?.aborted) throw error;
     return fetchFallback();
@@ -508,6 +523,7 @@ export type DocumentPreviewReady = {
   fallbackUrl: string;
   presignUrl: string;
   directUrl?: string;
+  previewVersion: string;
 };
 
 export type DocumentPreviewStatus = DocumentPreviewPending | DocumentPreviewReady;
@@ -556,12 +572,14 @@ export async function getDocumentPreviewStatus(
       fallbackUrl?: string;
       presignUrl?: string;
       directUrl?: string;
+      previewVersion?: string;
     } | null;
     return {
       kind: 'ready',
       fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
+      previewVersion: data?.previewVersion || '',
     };
   }
 
@@ -600,10 +618,8 @@ export async function importUrl(
   });
 
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to import URL');
+    throw await parseApiError(res, 'Failed to import URL');
   }
 
   return (await res.json()) as { title: string; content: string };
 }
-

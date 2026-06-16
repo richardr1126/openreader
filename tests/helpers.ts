@@ -92,7 +92,6 @@ export async function uploadAndDisplay(page: Page, fileName: string) {
 async function dismissOnboardingModals(page: Page): Promise<void> {
   const privacyDialog = page.getByTestId('privacy-modal');
   const claimDialog = page.getByTestId('claim-modal');
-  const migrationDialog = page.getByTestId('migration-modal');
   const settingsDialog = page.getByTestId('settings-modal');
 
   const maxSteps = 12;
@@ -145,16 +144,6 @@ async function dismissOnboardingModals(page: Page): Promise<void> {
         await page.waitForTimeout(100);
       }
       await settingsDialog.waitFor({ state: 'hidden', timeout: 15000 });
-      await page.waitForTimeout(100);
-      settledWithoutDialog = 0;
-      continue;
-    }
-
-    if (await migrationDialog.isVisible().catch(() => false)) {
-      const skipBtn = page.getByTestId('migration-skip-button');
-      await expect(skipBtn).toBeEnabled({ timeout: 10000 });
-      await skipBtn.click();
-      await migrationDialog.waitFor({ state: 'hidden', timeout: 15000 });
       await page.waitForTimeout(100);
       settledWithoutDialog = 0;
       continue;
@@ -533,32 +522,22 @@ export async function triggerViewportResize(page: Page, width: number, height: n
   await page.setViewportSize({ width, height });
 }
 
-// Wait for DocumentListState.showHint to persist in IndexedDB 'app-config' store
+// Wait for DocumentListState.showHint to persist in server preferences.
 export async function waitForDocumentListHintPersist(page: Page, expected: boolean) {
-  await page.waitForFunction(async (exp) => {
-    try {
-      const openDb = () => new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open('openreader-db');
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-      const db = await openDb();
-      const readConfig = () => new Promise<unknown>((resolve, reject) => {
-        const tx = db.transaction(['app-config'], 'readonly');
-        const store = tx.objectStore('app-config');
-        const getReq = store.get('singleton');
-        getReq.onsuccess = () => resolve(getReq.result);
-        getReq.onerror = () => reject(getReq.error);
-      });
-      const item = await readConfig();
-      db.close();
-      if (!item || typeof item !== 'object') return false;
-      const state = (item as { documentListState?: unknown }).documentListState;
-      if (!state || typeof state !== 'object') return false;
-      const showHint = (state as { showHint?: unknown }).showHint;
-      return typeof showHint === 'boolean' && showHint === exp;
-    } catch {
-      return false;
-    }
-  }, expected, { timeout: 5000 });
+  await expect.poll(
+    () => page.evaluate(async (exp) => {
+      try {
+        const response = await fetch('/api/user/state/preferences', { cache: 'no-store' });
+        if (!response.ok) return false;
+        const item = await response.json() as { preferences?: { documentListState?: unknown } };
+        const state = item.preferences?.documentListState;
+        if (!state || typeof state !== 'object') return false;
+        const showHint = (state as { showHint?: unknown }).showHint;
+        return typeof showHint === 'boolean' && showHint === exp;
+      } catch {
+        return false;
+      }
+    }, expected),
+    { timeout: 5000 },
+  ).toBe(true);
 }

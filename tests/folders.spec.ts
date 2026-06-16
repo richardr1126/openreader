@@ -84,7 +84,7 @@ test.describe('Document folders and hint persistence', () => {
     // Hint should disappear
     await expect(hint).toHaveCount(0);
 
-    // Ensure the dismissal has been persisted to IndexedDB before reloading
+    // Ensure the dismissal has been persisted to server preferences before reloading
     await waitForDocumentListHintPersist(page, false);
 
     // Reload and ensure it remains dismissed

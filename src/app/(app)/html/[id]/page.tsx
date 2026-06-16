@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
@@ -9,16 +9,19 @@ import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
-import { resolveDocumentId } from '@/lib/client/dexie';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
-import { useDocumentLanguage } from '@/hooks/useDocumentLanguage';
+import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
+import { serializeReaderPosition } from '@/lib/client/reader-progress';
+import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import { useHtmlDocument } from './useHtmlDocument';
@@ -26,8 +29,13 @@ import { useHtmlDocument } from './useHtmlDocument';
 export default function HTMLPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
-  const router = useRouter();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
+  const bootstrap = useReaderBootstrap(routeDocumentId, 'html');
+  const {
+    disableProgressPersistence,
+    enableProgressPersistence,
+    scheduleProgress,
+  } = bootstrap;
   const htmlState = useHtmlDocument();
   const {
     setCurrentDocument,
@@ -40,8 +48,18 @@ export default function HTMLPage() {
     createFullAudioBook,
     regenerateChapter,
   } = htmlState;
-  const { stop, setDocumentLanguage } = useTTS();
-  const { language, updateLanguage } = useDocumentLanguage(routeDocumentId);
+  const {
+    currDocPage,
+    currentSentenceIndex,
+    prepareInitialPosition,
+    sentences,
+    stop,
+    setDocumentLanguage,
+  } = useTTS();
+  const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
+  const stopRef = useLatestRef(stop);
+  const documentSettings = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, bootstrap.settings);
+  const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,29 +71,29 @@ export default function HTMLPage() {
   const loadedDocIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    disableProgressPersistenceRef.current();
+    stopRef.current();
     setIsLoading(true);
     setError(null);
     setActiveSidebar(null);
     inFlightDocIdRef.current = null;
     loadedDocIdRef.current = null;
-  }, [id]);
+  }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
+
+  useEffect(() => {
+    if (bootstrap.phase !== 'error') return;
+    setError(bootstrap.error?.message || 'Failed to load document');
+    setIsLoading(false);
+  }, [bootstrap.error, bootstrap.phase]);
 
   const loadDocument = useCallback(async () => {
     if (!isLoading) return;
     console.log('Loading new HTML document (from page.tsx)');
-    let didRedirect = false;
     let startedLoad = false;
+    let loadSucceeded = false;
     try {
-      if (!id) {
-        setError('Document not found');
-        return;
-      }
-      const resolved = await resolveDocumentId(id as string);
-      if (resolved !== (id as string)) {
-        didRedirect = true;
-        router.replace(`/html/${resolved}`);
-        return;
-      }
+      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
+      const resolved = bootstrap.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -86,9 +104,15 @@ export default function HTMLPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      stop();
-      await setCurrentDocument(resolved);
+      if (bootstrap.initialPosition?.readerType === 'html') {
+        prepareInitialPosition(
+          bootstrap.initialPosition.location,
+          bootstrap.initialPosition.sentenceIndex,
+        );
+      }
+      await setCurrentDocument(bootstrap.document);
       loadedDocIdRef.current = resolved;
+      loadSucceeded = true;
     } catch (err) {
       console.error('Error loading document:', err);
       setError('Failed to load document');
@@ -96,18 +120,40 @@ export default function HTMLPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad) {
+      if (startedLoad && loadSucceeded) {
+        enableProgressPersistence();
         setIsLoading(false);
       }
     }
-  }, [isLoading, id, router, setCurrentDocument, stop]);
+  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, enableProgressPersistence, isLoading, prepareInitialPosition, setCurrentDocument]);
 
   useEffect(() => {
     if (!isLoading) return;
     loadDocument();
   }, [loadDocument, isLoading]);
 
-  useUnmountCleanupRef(clearCurrDoc);
+  const clearReaderSession = useCallback(() => {
+    disableProgressPersistence();
+    clearCurrDoc();
+  }, [clearCurrDoc, disableProgressPersistence]);
+  useUnmountCleanupRef(clearReaderSession);
+
+  useEffect(() => {
+    if (!routeDocumentId || isLoading || !isPlaybackReady || sentences.length === 0) return;
+    scheduleProgress({
+      documentId: routeDocumentId,
+      readerType: 'html',
+      location: serializeReaderPosition('html', currDocPage, currentSentenceIndex),
+    });
+  }, [
+    currDocPage,
+    currentSentenceIndex,
+    isLoading,
+    isPlaybackReady,
+    routeDocumentId,
+    scheduleProgress,
+    sentences.length,
+  ]);
 
   useEffect(() => {
     setDocumentLanguage(language);
@@ -249,7 +295,11 @@ export default function HTMLPage() {
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         language={language}
         onLanguageChange={(nextLanguage) => {
-          void updateLanguage(nextLanguage);
+          void bootstrap.updateSettings({
+            ...documentSettings,
+            schemaVersion: 1,
+            language: nextLanguage,
+          });
         }}
       />
       <SegmentsSidebar

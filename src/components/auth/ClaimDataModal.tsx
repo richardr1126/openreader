@@ -1,28 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Button, ModalFrame, ModalTitle } from '@/components/ui';
-
-export type ClaimableCounts = {
-  documents: number;
-  audiobooks: number;
-  preferences: number;
-  progress: number;
-  documentSettings: number;
-};
-
-function toClaimableCounts(value: unknown): ClaimableCounts {
-  const rec = (value && typeof value === 'object') ? (value as Record<string, unknown>) : {};
-  return {
-    documents: Number(rec.documents ?? 0),
-    audiobooks: Number(rec.audiobooks ?? 0),
-    preferences: Number(rec.preferences ?? 0),
-    progress: Number(rec.progress ?? 0),
-    documentSettings: Number(rec.documentSettings ?? 0),
-  };
-}
+import { useClaimData } from '@/hooks/useClaimData';
+import type { ClaimableCounts } from '@/types/client';
 
 type ClaimDataModalProps = {
   isOpen: boolean;
@@ -38,34 +20,23 @@ export default function ClaimDataModal({
   onClaimed,
 }: ClaimDataModalProps) {
   const router = useRouter();
-  const [isClaiming, setIsClaiming] = useState(false);
+  const { mutation: claimMutation } = useClaimData(false);
+  const isClaiming = claimMutation.isPending;
 
   const handleClaim = async () => {
-    setIsClaiming(true);
     try {
-      const res = await fetch('/api/user/claim', {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const claimed = toClaimableCounts(data?.claimed);
-        toast.success(
-          `Successfully claimed ${claimed.documents} documents, `
-          + `${claimed.audiobooks} audiobooks, `
-          + `${claimed.preferences} preference set(s), `
-          + `${claimed.progress} reading progress record(s), and `
-          + `${claimed.documentSettings} document setting(s)!`,
-        );
-        onClaimed();
-        router.refresh();
-        return;
-      }
-      const data = await res.json().catch(() => null) as { error?: string } | null;
-      toast.error(data?.error || 'Failed to claim data.');
-    } catch {
-      toast.error('Failed to claim data.');
-    } finally {
-      setIsClaiming(false);
+      const claimed = await claimMutation.mutateAsync();
+      toast.success(
+        `Successfully claimed ${claimed.documents} documents, `
+        + `${claimed.audiobooks} audiobooks, `
+        + `${claimed.preferences} preference set(s), `
+        + `${claimed.progress} reading progress record(s), and `
+        + `${claimed.documentSettings} document setting(s)!`,
+      );
+      onClaimed();
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to claim data.');
     }
   };
 
@@ -86,6 +57,8 @@ export default function ClaimDataModal({
           <li>{claimableCounts.preferences} preference set(s)</li>
           <li>{claimableCounts.progress} reading progress record(s)</li>
           <li>{claimableCounts.documentSettings} document setting(s)</li>
+          <li>{claimableCounts.folders} folder(s)</li>
+          <li>{claimableCounts.onboarding} onboarding state record(s)</li>
         </ul>
       </div>
 

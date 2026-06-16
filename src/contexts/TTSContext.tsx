@@ -33,8 +33,6 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
-import { getLastDocumentLocation, setLastDocumentLocation } from '@/lib/client/dexie';
-import { getDocumentProgress, scheduleDocumentProgressSync } from '@/lib/client/api/user-state';
 import { withRetry, ensureTtsSegments } from '@/lib/client/api/audiobooks';
 import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
 import {
@@ -82,6 +80,7 @@ import type {
   TTSSegmentManifestItem,
 } from '@/types/client';
 import { isStableEpubLocator } from '@/types/client';
+import { clearCachedAudioObjectUrls, getCachedAudioUrl } from '@/lib/client/cache/audio';
 
 /**
  * Resolves an EPUB segment's draft locator (typically `{ readerType: 'epub',
@@ -152,6 +151,7 @@ interface TTSContextType extends TTSPlaybackState {
   setDocumentLanguage: (language: string) => void;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
+  prepareInitialPosition: (location: TTSLocation, sentenceIndex: number) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   registerEpubLocationWalker: (walker: EpubRenderedLocationWalker | null) => void;
   registerEpubLocatorResolver: (resolver: EpubLocatorResolver | null) => void;  // EPUB-only: resolves CFI drafts to stable spine coords before persist
@@ -420,8 +420,6 @@ const TTSContext = createContext<TTSContextType | undefined>(undefined);
 export function TTSProvider({ children }: { children: ReactNode }): ReactElement {
   // Configuration context consumption
   const {
-    apiKey: openApiKey,
-    baseUrl: openApiBaseUrl,
     isLoading: configIsLoading,
     voiceSpeed,
     audioPlayerSpeed,
@@ -443,12 +441,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Audio and voice management hooks
   const audioContext = useAudioContext();
-  const { availableVoices, fetchVoices } = useVoiceManagement(
-    openApiKey,
-    openApiBaseUrl,
+  const { availableVoices } = useVoiceManagement(
     configProviderRef,
     configProviderType,
     configTTSModel,
+    !configIsLoading,
   );
   const {
     onTTSStart,
@@ -466,7 +463,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (Array.isArray(id)) return id[0];
     return '';
   }, [id]);
-
   const currentReaderType: ReaderType = useMemo(() => {
     if (pathname.startsWith('/epub/')) return 'epub';
     if (pathname.startsWith('/html/')) return 'html';
@@ -729,6 +725,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   useEffect(() => () => {
     clearWarmAudioCache();
+    clearCachedAudioObjectUrls();
   }, [clearWarmAudioCache]);
 
   const applyPlaybackRateToHowl = useCallback((howl: Howl | null) => {
@@ -1037,6 +1034,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrDocPage(location);
 
   }, [abortAudio, invalidatePlaybackRun]);
+
+  const prepareInitialPosition = useCallback((location: TTSLocation, sentenceIndex: number) => {
+    skipToLocation(location, true);
+    pendingJumpTargetRef.current = {
+      locationKey: normalizeLocationKey(location),
+      index: Math.max(0, Math.floor(sentenceIndex)),
+    };
+  }, [skipToLocation]);
 
   /**
    * Moves to the next or previous sentence
@@ -1614,12 +1619,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   useEffect(() => {
     if (!configIsLoading) {
-      fetchVoices();
       updateVoiceAndSpeed();
       setTTSModel(configTTSModel);
       setTTSInstructions(configTTSInstructions);
     }
-  }, [configIsLoading, openApiKey, openApiBaseUrl, updateVoiceAndSpeed, fetchVoices, configTTSModel, configTTSInstructions]);
+  }, [configIsLoading, updateVoiceAndSpeed, configTTSModel, configTTSInstructions]);
 
   const preloadGenerationSignatureRef = useRef<string>('');
   useEffect(() => {
@@ -1766,12 +1770,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     const reqHeaders: TTSRequestHeaders = {
       'Content-Type': 'application/json',
-      'x-openai-key': openApiKey || '',
       'x-tts-provider': configProviderRef,
     };
-    if (openApiBaseUrl) {
-      reqHeaders['x-openai-base-url'] = openApiBaseUrl;
-    }
 
     const retryOptions: TTSRetryOptions = {
       maxRetries: 2,
@@ -1914,8 +1914,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsModel,
     ttsInstructions,
     resolvedLanguage,
-    openApiKey,
-    openApiBaseUrl,
     configProviderRef,
     configProviderType,
     providerModelPolicy.supportsInstructions,
@@ -2044,7 +2042,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         setCurrentSentenceAlignment(playbackSource.manifest.alignment);
         setCurrentWordIndex(null);
       }
-      const audioUrl = useFallbackSource ? playbackSource.fallbackUrl : playbackSource.presignUrl;
+      const sourceUrl = useFallbackSource ? playbackSource.fallbackUrl : playbackSource.presignUrl;
+      const audioUrl = await getCachedAudioUrl({
+        audioKey: playbackSource.manifest.audioKey || playbackSource.manifest.segmentId,
+        version: playbackSource.manifest.updatedAt || 0,
+        primaryUrl: sourceUrl,
+        fallbackUrl: playbackSource.fallbackUrl,
+      }).catch(() => sourceUrl);
 
       // Force unload any previous Howl instance to free up resources
       if (activeHowl) {
@@ -2610,12 +2614,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       activeAbortControllers.current.add(controller);
       const reqHeaders: TTSRequestHeaders = {
         'Content-Type': 'application/json',
-        'x-openai-key': openApiKey || '',
         'x-tts-provider': configProviderRef,
       };
-      if (openApiBaseUrl) {
-        reqHeaders['x-openai-base-url'] = openApiBaseUrl;
-      }
       const retryOptions: TTSRetryOptions = {
         maxRetries: 2,
         initialDelay: 300,
@@ -2903,12 +2903,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     activeAbortControllers.current.add(controller);
     const reqHeaders: TTSRequestHeaders = {
       'Content-Type': 'application/json',
-      'x-openai-key': openApiKey || '',
       'x-tts-provider': configProviderRef,
     };
-    if (openApiBaseUrl) {
-      reqHeaders['x-openai-base-url'] = openApiBaseUrl;
-    }
 
     const retryOptions: TTSRetryOptions = {
       maxRetries: 2,
@@ -3026,8 +3022,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     configProviderRef,
     configProviderType,
     ttsModel,
-    openApiKey,
-    openApiBaseUrl,
     providerModelPolicy.supportsInstructions,
     ttsInstructions,
     resolvedLanguage,
@@ -3347,6 +3341,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentLanguage,
     clearSegmentCaches,
     skipToLocation,
+    prepareInitialPosition,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
     registerEpubLocatorResolver,
@@ -3380,6 +3375,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
+    prepareInitialPosition,
     registerLocationChangeHandler,
     registerEpubLocationWalker,
     registerEpubLocatorResolver,
@@ -3396,114 +3392,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipForward,
     skipBackward,
   });
-
-  // Load last location on mount for EPUB/PDF/HTML.
-  // Prefer server-backed progress when available, then fall back to local Dexie.
-  useEffect(() => {
-    if (!id) return;
-
-    let cancelled = false;
-    const docId = id as string;
-
-    const applyLocation = (lastLocation: string) => {
-      if (isEPUB && locationChangeHandlerRef.current) {
-        // For EPUB documents, use the location change handler
-        locationChangeHandlerRef.current(lastLocation);
-        return;
-      }
-
-      if (!isEPUB) {
-        // HTML stores "html:<location>:<sentenceIndex>".
-        // PDF stores "<page>:<sentenceIndex>".
-        try {
-          if (currentReaderType === 'html') {
-            const htmlMatch = /^html:([^:]+):(\d+)$/.exec(lastLocation);
-            if (htmlMatch) {
-              const [, rawLocation, sentenceIndexStr] = htmlMatch;
-              const decodedLocation = decodeURIComponent(rawLocation);
-              const parsedNumber = Number(decodedLocation);
-              const location: TTSLocation = Number.isFinite(parsedNumber) && decodedLocation.trim() !== ''
-                ? parsedNumber
-                : decodedLocation || 1;
-              const sentenceIndex = parseInt(sentenceIndexStr, 10);
-              if (!isNaN(sentenceIndex)) {
-                setCurrDocPage(location);
-                pendingJumpTargetRef.current = {
-                  locationKey: normalizeLocationKey(location),
-                  index: Math.max(0, sentenceIndex),
-                };
-                return;
-              }
-            }
-          }
-
-          // Backward-compatible parser for legacy non-EPUB progress format.
-          const [pageStr, sentenceIndexStr] = lastLocation.split(':');
-          const page = parseInt(pageStr, 10);
-          const sentenceIndex = parseInt(sentenceIndexStr, 10);
-          if (!isNaN(page) && !isNaN(sentenceIndex)) {
-            setCurrDocPage(page);
-            pendingJumpTargetRef.current = {
-              locationKey: normalizeLocationKey(page),
-              index: Math.max(0, sentenceIndex),
-            };
-          }
-        } catch (error) {
-          console.warn('Error parsing non-EPUB location:', error);
-        }
-      }
-    };
-
-    const load = async () => {
-      try {
-        const local = await getLastDocumentLocation(docId);
-        if (!cancelled && local) {
-          applyLocation(local);
-        }
-      } catch (error) {
-        console.warn('Error loading local last location:', error);
-      }
-
-      try {
-        const remote = await getDocumentProgress(docId);
-        if (!cancelled && remote?.location) {
-          await setLastDocumentLocation(docId, remote.location).catch((error) => {
-            console.warn('Error caching remote location locally:', error);
-          });
-          applyLocation(remote.location);
-        }
-      } catch (error) {
-        console.warn('Error loading remote progress:', error);
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id, isEPUB, currentReaderType]);
-
-  // Save current position periodically for non-EPUB readers.
-  useEffect(() => {
-    if (id && !isEPUB && sentences.length > 0) {
-      const location = currentReaderType === 'html'
-        ? `html:${encodeURIComponent(String(currDocPage || 1))}:${currentIndex}`
-        : `${currDocPageNumber}:${currentIndex}`;
-      const timeoutId = setTimeout(() => {
-        setLastDocumentLocation(id as string, location).catch(error => {
-          console.warn('Error saving non-EPUB location:', error);
-        });
-        scheduleDocumentProgressSync({
-          documentId: id as string,
-          readerType: currentReaderType,
-          location,
-        });
-      }, 1000); // Debounce saves by 1 second
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [id, isEPUB, currDocPage, currDocPageNumber, currentIndex, sentences.length, currentReaderType]);
 
   /**
    * Renders the TTS context provider with its children

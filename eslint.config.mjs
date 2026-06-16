@@ -29,7 +29,6 @@ const UI_ARCHITECTURE_FILES = [
   "src/components/doclist/**/*.{ts,tsx}",
   "src/components/documents/DocumentUploader.tsx",
   "src/components/documents/DocumentSelectionModal.tsx",
-  "src/components/documents/DexieMigrationModal.tsx",
   "src/components/documents/ZoomControl.tsx",
   "src/components/player/**/*.{ts,tsx}",
   "src/components/reader/**/*.{ts,tsx}",

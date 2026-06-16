@@ -39,8 +39,27 @@ Storage variables are documented in [Environment Variables](../reference/environ
 
 - Primary path: browser uploads to presigned URL from `/api/documents/blob/upload/presign`.
 - Fallback path: `/api/documents/blob/upload/fallback` when direct upload fails/unreachable.
-- Read/download path: blob/content serving route `/api/documents/blob` (not the upload fallback route).
-- Preview path: `/api/documents/blob/preview` (returns `202` while a preview is generating; serves/redirects when ready).
+- Document read path: direct presigned access from `/api/documents/blob/get/presign`, with `/api/documents/blob/get/fallback` as the app-server fallback.
+- Preview path: `/api/documents/blob/preview/ensure` reports generation status and version; presigned and fallback routes serve the generated artifact.
+
+## Browser Cache Storage
+
+The browser may retain reusable document, preview, and TTS audio responses in the versioned `openreader-blobs-v1` Cache Storage cache. This is strictly an evictable performance optimization:
+
+- The server database and object storage remain authoritative.
+- Clearing or losing Cache Storage must not change application correctness.
+- Cache keys are same-origin synthetic identities and are not fetchable server routes.
+- Successful full `200` responses may be cached; partial, opaque, redirect-error, and failed responses are not.
+- Presigned URLs are network sources only and are never used as persistent cache identities.
+
+Synthetic key layouts:
+
+- `/openreader-cache/documents/{documentId}/{contentVersion}`
+- `/openreader-cache/previews/{documentId}/{previewVersion}`
+- `/openreader-cache/audio/{audioKey}/{version}`
+- `/openreader-cache/audiobooks/{bookId}/chapters/{chapterIndex}/{version}` when reusable chapter playback is enabled
+
+Explicit audiobook downloads and exports are not persistently cached.
 
 ## Document previews
 
@@ -125,7 +144,7 @@ Typical key layout:
 
 Notes:
 
-- For the corresponding SQL metadata model (`tts_segments`), see [Database](./database).
+- For the corresponding normalized SQL metadata model (`tts_segment_entries` and `tts_segment_variants`), see [Database](./database).
 
 ## Account Deletion Cleanup
 

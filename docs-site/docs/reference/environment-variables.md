@@ -393,7 +393,6 @@ Example:
   "version": 1,
   "runtimeConfig": {
     "enableUserSignups": true,
-    "restrictUserApiKeys": true,
     "defaultTtsProvider": "custom-openai",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,

@@ -36,6 +36,16 @@ export interface AudiobookStatusResponse {
   settings?: AudiobookGenerationSettings | null;
 }
 
+export type ClaimableCounts = {
+  documents: number;
+  audiobooks: number;
+  preferences: number;
+  progress: number;
+  documentSettings: number;
+  folders: number;
+  onboarding: number;
+};
+
 export interface AudiobookGenerationSettings {
   providerRef: string;
   providerType: TtsProviderType;
@@ -167,6 +177,8 @@ export interface TTSSegmentManifestItem {
   segmentId: string;
   segmentIndex: number;
   segmentKey?: string | null;
+  audioKey: string | null;
+  updatedAt: number | null;
   audioPresignUrl: string | null;
   audioFallbackUrl: string | null;
   durationMs: number;

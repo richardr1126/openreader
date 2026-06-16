@@ -65,7 +65,6 @@ export const RUNTIME_CONFIG_SCHEMA = {
   defaultTtsProvider: stringValue('custom-openai'),
   changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json'),
   enableUserSignups: booleanFlag(true),
-  restrictUserApiKeys: booleanFlag(true),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
   enableTtsProvidersTab: booleanFlag(true),

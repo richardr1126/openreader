@@ -64,6 +64,8 @@ export async function GET(req: NextRequest) {
       size: number;
       lastModified: number;
       filePath: string;
+      folderId: string | null;
+      recentlyOpenedAt: number | null;
     }>;
 
     const results: BaseDocument[] = rows.map((doc) => {
@@ -75,6 +77,9 @@ export async function GET(req: NextRequest) {
         lastModified: Number(doc.lastModified),
         type,
         scope: 'user',
+        folderId: doc.folderId ?? undefined,
+        recentlyOpenedAt: doc.recentlyOpenedAt == null ? undefined : Number(doc.recentlyOpenedAt),
+        contentVersion: doc.id,
       };
     });
 

@@ -20,7 +20,7 @@ title: Stack
 - Interactions: `react-dnd`, `react-dropzone`
 - Server state: [TanStack Query](https://tanstack.com/query) (React Query v5)
 - Authentication: [Better Auth](https://www.better-auth.com/) client SDK
-- Local storage/cache: [Dexie.js](https://dexie.org/) (IndexedDB)
+- Browser blob performance cache: Cache Storage (evictable; never authoritative)
 - Audio playback: [Howler.js](https://howlerjs.com/)
 - Notifications: `react-hot-toast`
 - Document rendering:

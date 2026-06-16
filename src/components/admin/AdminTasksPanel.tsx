@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Button, Card, Input, Section, Switch } from '@/components/ui';
 import { ClockIcon, RefreshIcon } from '@/components/icons/Icons';
+import { queryKeys } from '@/lib/client/query-keys';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 type TaskRunStatus = 'idle' | 'running' | 'ok' | 'error';
 
@@ -28,8 +30,6 @@ interface TaskSchedulerInfo {
   tickIntervalMs: number;
   minimumIntervalMs: number;
 }
-
-const TASKS_QUERY_KEY = ['admin-tasks'] as const;
 
 async function fetchTasks(): Promise<{ tasks: TaskView[]; scheduler: TaskSchedulerInfo }> {
   const res = await fetch('/api/admin/tasks');
@@ -75,8 +75,10 @@ function formatDuration(ms: number | null): string {
 
 export function AdminTasksPanel() {
   const queryClient = useQueryClient();
+  const { data: session } = useAuthSession();
+  const tasksQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'tasks');
   const { data, error, isPending: isLoading } = useQuery({
-    queryKey: TASKS_QUERY_KEY,
+    queryKey: tasksQueryKey,
     queryFn: fetchTasks,
     refetchInterval: 5000,
   });
@@ -87,7 +89,7 @@ export function AdminTasksPanel() {
     toast.error('Failed to load tasks');
   }, [error]);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: tasksQueryKey });
 
   const patchTask = useMutation({
     mutationFn: async ({ key, patch }: { key: string; patch: { enabled?: boolean; intervalMs?: number } }) => {

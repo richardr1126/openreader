@@ -81,7 +81,6 @@ After the first successful deploy and admin login, open **Settings → Admin** a
   - `enableDocxConversion=false` on Vercel (`soffice` unavailable).
   - `enableTtsProvidersTab=false` if you want shared-provider-only UX.
   - `enableUserSignups=true` unless you explicitly want an invite-only deployment.
-  - `restrictUserApiKeys=true` to block user BYOK through the hosted server.
   - `defaultTtsProvider=replicate` (or your preferred shared slug).
   - `showAllProviderModels=false` if you want users locked to each provider's default model.
   - `enableAudiobookExport=true`.

@@ -358,21 +358,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid audiobook settings payload' }, { status: 400 });
     }
 
-    const sharedProviders: SharedProviderPolicyEntry[] = runtimeConfig.restrictUserApiKeys
-      ? (await listAdminProviders())
-          .filter((entry) => entry.enabled)
-          .map((entry) => ({
-            slug: entry.slug,
-            providerType: entry.providerType,
-            defaultModel: entry.defaultModel,
-            defaultInstructions: entry.defaultInstructions,
-          }))
-      : [];
+    const sharedProviders: SharedProviderPolicyEntry[] = (await listAdminProviders())
+      .filter((entry) => entry.enabled)
+      .map((entry) => ({
+        slug: entry.slug,
+        providerType: entry.providerType,
+        defaultModel: entry.defaultModel,
+        defaultInstructions: entry.defaultInstructions,
+      }));
 
-    if (runtimeConfig.restrictUserApiKeys && normalizedExistingSettings) {
+    if (normalizedExistingSettings) {
       const next = canonicalizeAudiobookSettingsForRuntime({
         settings: normalizedExistingSettings,
-        restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
         fallbackProviderRef: runtimeConfig.defaultTtsProvider,
         showAllProviderModels: runtimeConfig.showAllProviderModels,
         sharedProviders,
@@ -384,10 +381,9 @@ export async function POST(request: NextRequest) {
     }
 
     let normalizedIncomingSettings = incomingSettings;
-    if (runtimeConfig.restrictUserApiKeys && normalizedIncomingSettings) {
+    if (normalizedIncomingSettings) {
       normalizedIncomingSettings = canonicalizeAudiobookSettingsForRuntime({
         settings: normalizedIncomingSettings,
-        restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
         fallbackProviderRef: runtimeConfig.defaultTtsProvider,
         showAllProviderModels: runtimeConfig.showAllProviderModels,
         sharedProviders,
@@ -477,15 +473,12 @@ export async function POST(request: NextRequest) {
     providerForError = requestedProvider;
     const credResolved = await resolveTtsCredentials({
       providerHeader: requestedProvider,
-      apiKeyHeader: request.headers.get('x-openai-key'),
-      baseUrlHeader: request.headers.get('x-openai-base-url'),
       fallbackProvider: runtimeConfig.defaultTtsProvider,
-      restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
     });
     if ('error' in credResolved) {
       if (credResolved.error === 'no_shared_provider_configured') {
         return NextResponse.json(
-          { error: 'User API keys are restricted and no shared provider is configured.' },
+          { error: 'No shared TTS provider is configured.' },
           { status: 503 },
         );
       }

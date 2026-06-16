@@ -35,8 +35,6 @@ export function filterNonEmptySpineTextEntries<T extends { text: string }>(entri
 type UseEpubAudiobookParams = {
   bookRef: RefObject<Book | null>;
   tocRef: RefObject<NavItem[]>;
-  apiKey: string;
-  baseUrl: string;
   providerRef: string;
 };
 
@@ -61,8 +59,6 @@ type UseEpubAudiobookResult = {
 export function useEPUBAudiobook({
   bookRef,
   tocRef,
-  apiKey,
-  baseUrl,
   providerRef,
 }: UseEpubAudiobookParams): UseEpubAudiobookResult {
   const loadSpineSection = useCallback(async (href: string) => {
@@ -131,8 +127,6 @@ export function useEPUBAudiobook({
     try {
       return await runAudiobookGeneration({
         adapter: audiobookAdapter,
-        apiKey,
-        baseUrl,
         defaultProvider: providerRef,
         onProgress,
         signal,
@@ -145,7 +139,7 @@ export function useEPUBAudiobook({
       console.error('Error creating audiobook:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
+  }, [audiobookAdapter, providerRef]);
 
   const regenerateChapter = useCallback(async (
     chapterIndex: number,
@@ -161,8 +155,6 @@ export function useEPUBAudiobook({
         bookId,
         format,
         signal,
-        apiKey,
-        baseUrl,
         defaultProvider: providerRef,
         settings,
       });
@@ -173,7 +165,7 @@ export function useEPUBAudiobook({
       console.error('Error regenerating chapter:', error);
       throw error;
     }
-  }, [audiobookAdapter, apiKey, baseUrl, providerRef]);
+  }, [audiobookAdapter, providerRef]);
 
   return {
     createFullAudioBook,

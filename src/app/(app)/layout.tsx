@@ -34,12 +34,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       allowAnonymousAuthSessions={allowAnonymousAuthSessions}
       githubAuthEnabled={githubAuthEnabled}
     >
-      {/* ConfigProvider lives here, in the shared (app) layout, so it stays
-          mounted across library <-> reader navigation. Mounting it per-route
-          re-ran the Dexie/server hydration race on every navigation, causing
-          the reader to briefly use the admin-default provider until a full
-          page refresh. A single shared instance keeps the user's saved
-          provider hydrated the whole time. */}
+      {/* Keep the preferences query/context mounted across library and reader navigation. */}
       <ConfigProvider>
         <AppShell>
           <AppMain>{children}</AppMain>

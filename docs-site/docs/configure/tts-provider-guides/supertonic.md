@@ -47,14 +47,7 @@ On native Linux Docker, `host.docker.internal` needs `--add-host=host.docker.int
 API_BASE=http://host.docker.internal:7788/v1
 ```
 
-**Or in-app via Settings → TTS Provider:**
-
-1. Set provider to `Custom OpenAI-Like`.
-2. Set `API_BASE` to `http://host.docker.internal:7788/v1`.
-3. Leave `API_KEY` blank.
-4. Choose model `supertonic-3` (or the model your deployment exposes).
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
 ## Running OpenReader directly on the host
 

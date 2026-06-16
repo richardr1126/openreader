@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
-import { getDocumentMetadata } from '@/lib/client/api/documents';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { parseHtmlBlocks, type HtmlBlock } from '@/lib/client/html/blocks';
 import { createHtmlAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/html';
@@ -17,6 +16,7 @@ import type {
   TTSAudiobookChapter,
   TTSAudiobookFormat,
 } from '@/types/tts';
+import type { BaseDocument } from '@/types/documents';
 
 export interface HtmlDocumentState {
   currDocData: string | undefined;
@@ -25,7 +25,7 @@ export interface HtmlDocumentState {
   isPlaybackReady: boolean;
   blocks: HtmlBlock[];
   isTxt: boolean;
-  setCurrentDocument: (id: string) => Promise<void>;
+  setCurrentDocument: (metadata: BaseDocument) => Promise<void>;
   clearCurrDoc: () => void;
   createFullAudioBook: (
     onProgress: (progress: number) => void,
@@ -66,8 +66,6 @@ function buildFullDocumentText(blocks: HtmlBlock[]): string {
 export function useHtmlDocument(): HtmlDocumentState {
   const { setText: setTTSText, stop, setIsEPUB } = useTTS();
   const {
-    apiKey,
-    baseUrl,
     providerRef,
     ttsSegmentMaxBlockLength,
   } = useConfig();
@@ -125,21 +123,16 @@ export function useHtmlDocument(): HtmlDocumentState {
     stop();
   }, [setTTSText, stop]);
 
-  const setCurrentDocument = useCallback(async (id: string): Promise<void> => {
+  const setCurrentDocument = useCallback(async (meta: BaseDocument): Promise<void> => {
     try {
       setIsPlaybackReady(false);
       lastFedDocRef.current = null;
       setTTSText('');
-      const meta = await getDocumentMetadata(id);
-      if (!meta) {
-        console.error('Document not found on server');
-        return;
-      }
-
       const doc = await ensureCachedDocument(meta);
       if (doc.type !== 'html') {
-        console.error('Document is not an HTML/TXT/MD document');
-        return;
+        // Throw so the catch handler clears stale reader state instead of
+        // leaving the previous document visible after a mismatched navigation.
+        throw new Error('Document is not an HTML/TXT/MD document');
       }
 
       setCurrDocName(doc.name);
@@ -147,6 +140,7 @@ export function useHtmlDocument(): HtmlDocumentState {
     } catch (error) {
       console.error('Failed to get HTML document:', error);
       clearCurrDoc();
+      throw error;
     }
   }, [clearCurrDoc, setTTSText]);
 
@@ -173,8 +167,6 @@ export function useHtmlDocument(): HtmlDocumentState {
       try {
         return await runAudiobookGeneration({
           adapter: audiobookAdapter,
-          apiKey,
-          baseUrl,
           defaultProvider: providerRef,
           onProgress,
           signal,
@@ -189,7 +181,7 @@ export function useHtmlDocument(): HtmlDocumentState {
         throw error;
       }
     },
-    [audiobookAdapter, apiKey, baseUrl, providerRef],
+    [audiobookAdapter, providerRef],
   );
 
   const regenerateChapter = useCallback(
@@ -208,8 +200,6 @@ export function useHtmlDocument(): HtmlDocumentState {
           bookId,
           format,
           signal,
-          apiKey,
-          baseUrl,
           defaultProvider: providerRef,
           settings,
           retryOptions,
@@ -222,7 +212,7 @@ export function useHtmlDocument(): HtmlDocumentState {
         throw error;
       }
     },
-    [audiobookAdapter, apiKey, baseUrl, providerRef],
+    [audiobookAdapter, providerRef],
   );
 
   return useMemo(

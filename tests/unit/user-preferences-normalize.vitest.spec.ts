@@ -9,7 +9,6 @@ import {
 function makeContext(overrides: Partial<PreferenceNormalizationContext> = {}): PreferenceNormalizationContext {
   return {
     showAllProviderModels: true,
-    restrictUserApiKeys: true,
     sharedProviders: [
       { slug: 'shared-a', providerType: 'openai', defaultModel: 'gpt-4o-mini-tts', defaultInstructions: 'hi' },
       { slug: 'shared-b', providerType: 'custom-openai', defaultModel: 'kokoro', defaultInstructions: null },
@@ -32,10 +31,10 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     expect(migrated).toBe(false);
   });
 
-  test('migrates a stale built-in (custom-openai) selection to inherit under restricted mode', () => {
+  test('migrates a stale built-in (custom-openai) selection to inherit', () => {
     const { patch, migrated } = sanitizePreferencesPatch(
       { providerRef: 'custom-openai', providerType: 'custom-openai', ttsModel: 'kokoro' },
-      makeContext({ restrictUserApiKeys: true }),
+      makeContext(),
       { fillMissingProvider: true },
     );
     expect(patch.providerRef).toBe('');
@@ -44,15 +43,16 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     expect(migrated).toBe(true);
   });
 
-  test('keeps an explicit built-in selection when API keys are NOT restricted', () => {
-    const { patch } = sanitizePreferencesPatch(
+  test('migrates every explicit built-in selection to inherit', () => {
+    const { patch, migrated } = sanitizePreferencesPatch(
       { providerRef: 'openai', providerType: 'openai', ttsModel: 'tts-1' },
-      makeContext({ restrictUserApiKeys: false }),
+      makeContext(),
       { fillMissingProvider: false },
     );
-    expect(patch.providerRef).toBe('openai');
-    expect(patch.providerType).toBe('openai');
-    expect(patch.ttsModel).toBe('tts-1');
+    expect(patch.providerRef).toBe('');
+    expect(patch.providerType).toBe('unknown');
+    expect(patch.ttsModel).toBe('');
+    expect(migrated).toBe(true);
   });
 
   test('preserves an explicit shared-provider selection and resolves its type', () => {

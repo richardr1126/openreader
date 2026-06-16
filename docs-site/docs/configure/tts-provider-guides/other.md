@@ -31,14 +31,7 @@ API_BASE=http://your-tts-server/v1
 # API_KEY=optional-key-if-required
 ```
 
-**Or in-app via Settings → TTS Provider:**
-
-1. Set provider to `Custom OpenAI-Like`.
-2. Set `API_BASE` to your service's base URL (typically ending in `/v1`).
-3. Set `API_KEY` if your service requires authentication.
-4. Choose a model and voice supported by your backend.
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
 :::warning TTS requests are server-side
 `API_BASE` must be reachable from the **Next.js server**, not just the browser. In Docker, use container names or `host.docker.internal`.

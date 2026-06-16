@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { EPUBViewer } from '@/components/views/EPUBViewer';
@@ -14,21 +14,28 @@ import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
-import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
-import { useDocumentLanguage } from '@/hooks/useDocumentLanguage';
+import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
+import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
 
 export default function EPUBPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
-  const router = useRouter();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
-  const epubState = useEpubDocument(routeDocumentId);
+  const bootstrap = useReaderBootstrap(routeDocumentId, 'epub');
+  const {
+    disableProgressPersistence,
+    enableProgressPersistence,
+    scheduleProgress,
+  } = bootstrap;
+  const epubState = useEpubDocument(routeDocumentId, scheduleProgress);
   const {
     setCurrentDocument,
     currDocName,
@@ -40,7 +47,10 @@ export default function EPUBPage() {
     metadataLanguage,
   } = epubState;
   const { stop, setDocumentLanguage } = useTTS();
-  const { language, updateLanguage } = useDocumentLanguage(routeDocumentId);
+  const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
+  const stopRef = useLatestRef(stop);
+  const documentSettings = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, bootstrap.settings);
+  const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,28 +63,28 @@ export default function EPUBPage() {
   const didInitPadPctRef = useRef(false);
 
   useEffect(() => {
+    disableProgressPersistenceRef.current();
+    stopRef.current();
     setIsLoading(true);
     setError(null);
     setActiveSidebar(null);
     inFlightDocIdRef.current = null;
     loadedDocIdRef.current = null;
-  }, [routeDocumentId]);
+  }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
+
+  useEffect(() => {
+    if (bootstrap.phase !== 'error') return;
+    setError(bootstrap.error?.message || 'Failed to load document');
+    setIsLoading(false);
+  }, [bootstrap.error, bootstrap.phase]);
 
   const loadDocument = useCallback(async () => {
     console.log('Loading new epub (from page.tsx)');
-    let didRedirect = false;
     let startedLoad = false;
+    let loadSucceeded = false;
     try {
-      if (!routeDocumentId) {
-        setError('Document not found');
-        return;
-      }
-      const resolved = await resolveDocumentId(routeDocumentId);
-      if (resolved !== routeDocumentId) {
-        didRedirect = true;
-        router.replace(`/epub/${resolved}`);
-        return;
-      }
+      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
+      const resolved = bootstrap.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -85,9 +95,12 @@ export default function EPUBPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      stop(); // Reset TTS when loading new document
-      await setCurrentDocument(resolved);
+      const initialLocation = bootstrap.initialPosition?.readerType === 'epub'
+        ? bootstrap.initialPosition.location
+        : undefined;
+      await setCurrentDocument(bootstrap.document, initialLocation);
       loadedDocIdRef.current = resolved;
+      loadSucceeded = true;
     } catch (err) {
       console.error('Error loading document:', err);
       setError('Failed to load document');
@@ -95,11 +108,12 @@ export default function EPUBPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad) {
+      if (startedLoad && loadSucceeded) {
+        enableProgressPersistence();
         setIsLoading(false);
       }
     }
-  }, [routeDocumentId, router, setCurrentDocument, stop]);
+  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, enableProgressPersistence, setCurrentDocument]);
 
   useEffect(() => {
     if (!isLoading) return;
@@ -107,7 +121,11 @@ export default function EPUBPage() {
     loadDocument();
   }, [loadDocument, isLoading]);
 
-  useUnmountCleanupRef(clearCurrDoc);
+  const clearReaderSession = useCallback(() => {
+    disableProgressPersistence();
+    clearCurrDoc();
+  }, [clearCurrDoc, disableProgressPersistence]);
+  useUnmountCleanupRef(clearReaderSession);
 
   useEffect(() => {
     setDocumentLanguage(language === 'auto' ? metadataLanguage ?? 'auto' : language);
@@ -259,7 +277,11 @@ export default function EPUBPage() {
         language={language}
         detectedLanguage={metadataLanguage}
         onLanguageChange={(nextLanguage) => {
-          void updateLanguage(nextLanguage);
+          void bootstrap.updateSettings({
+            ...documentSettings,
+            schemaVersion: 1,
+            language: nextLanguage,
+          });
         }}
       />
       <SegmentsSidebar

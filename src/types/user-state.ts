@@ -25,6 +25,7 @@ export const SYNCED_PREFERENCE_KEYS = [
   'epubWordHighlightEnabled',
   'htmlHighlightEnabled',
   'htmlWordHighlightEnabled',
+  'documentListState',
 ] as const;
 
 export type SyncedPreferenceKey = (typeof SYNCED_PREFERENCE_KEYS)[number];
@@ -41,3 +42,16 @@ export interface DocumentProgressRecord {
   clientUpdatedAtMs: number;
   updatedAtMs: number;
 }
+
+export interface DocumentProgressPayload {
+  documentId: string;
+  readerType: ReaderType;
+  location: string;
+  progress?: number | null;
+  clientUpdatedAtMs?: number;
+}
+
+export type ScheduleDocumentProgress = (
+  payload: DocumentProgressPayload,
+  debounceMs?: number,
+) => void;

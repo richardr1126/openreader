@@ -250,7 +250,6 @@ describe('runtime config JSON seeding', () => {
       defaultTtsProvider: 'seed-shared-provider',
       changelogFeedUrl: 'https://example.com/changelog/manifest.json',
       enableUserSignups: false,
-      restrictUserApiKeys: false,
       enableTtsProvidersTab: false,
       enableAudiobookExport: false,
       enableDocxConversion: false,

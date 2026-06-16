@@ -14,7 +14,6 @@ import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
-import { resolveDocumentId } from '@/lib/client/dexie';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -27,7 +26,10 @@ import {
   FORCE_REPARSE_CONFIRM_TITLE,
   isForceReparseDisabled,
 } from '@/lib/client/pdf/force-reparse';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
+import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
+import { serializeReaderPosition } from '@/lib/client/reader-progress';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -44,8 +46,15 @@ const PARSE_LOADER_EXPAND_DELAY_MS = 320;
 export default function PDFViewerPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
+  const routeDocumentId = typeof id === 'string' ? id : undefined;
   const router = useRouter();
-  const pdfState = usePdfDocument();
+  const bootstrap = useReaderBootstrap(routeDocumentId, 'pdf');
+  const {
+    disableProgressPersistence,
+    enableProgressPersistence,
+    scheduleProgress,
+  } = bootstrap;
+  const pdfState = usePdfDocument(routeDocumentId, bootstrap.settings, bootstrap.updateSettings);
   const {
     setCurrentDocument,
     currDocName,
@@ -63,7 +72,9 @@ export default function PDFViewerPage() {
     createFullAudioBook: createPDFAudioBook,
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
-  const { stop } = useTTS();
+  const { currentSentenceIndex, pause, prepareInitialPosition, sentences, stop } = useTTS();
+  const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
+  const stopRef = useLatestRef(stop);
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,31 +99,30 @@ export default function PDFViewerPage() {
     && (parseUiState === 'pending' || parseUiState === 'running' || parseUiState === 'failed' || hasRealParseProgress);
 
   useEffect(() => {
+    disableProgressPersistenceRef.current();
+    stopRef.current();
     setIsLoading(true);
     setIsPdfViewerReady(false);
     setError(null);
     setActiveSidebar(null);
     inFlightDocIdRef.current = null;
     loadedDocIdRef.current = null;
-  }, [id]);
+  }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
+
+  useEffect(() => {
+    if (bootstrap.phase !== 'error') return;
+    setError(bootstrap.error?.message || 'Failed to load document');
+    setIsLoading(false);
+  }, [bootstrap.error, bootstrap.phase]);
 
   const loadDocument = useCallback(async () => {
     if (!isLoading) return; // Prevent calls when not loading new doc
     console.log('Loading new document (from page.tsx)');
-    let didRedirect = false;
     let startedLoad = false;
     let loadSucceeded = false;
     try {
-      if (!id) {
-        setError('Document not found');
-        return;
-      }
-      const resolved = await resolveDocumentId(id as string);
-      if (resolved !== (id as string)) {
-        didRedirect = true;
-        router.replace(`/pdf/${resolved}`);
-        return;
-      }
+      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
+      const resolved = bootstrap.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -123,13 +133,24 @@ export default function PDFViewerPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      stop(); // Reset TTS when loading new document
+      if (bootstrap.initialPosition?.readerType === 'pdf') {
+        prepareInitialPosition(
+          bootstrap.initialPosition.location,
+          bootstrap.initialPosition.sentenceIndex,
+        );
+      }
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const loaded = await setCurrentDocument(resolved);
-        if (loaded) {
+        const result = await setCurrentDocument(bootstrap.document);
+        if (result === 'loaded') {
           loadSucceeded = true;
           loadedDocIdRef.current = resolved;
           break;
+        }
+        if (result === 'superseded') {
+          // A newer load (or unmount) is now authoritative; it owns the loading
+          // lifecycle. Bail without surfacing an error to avoid the spurious
+          // "Failed to load" screen on first launch.
+          return;
         }
         if (attempt === 0) {
           await new Promise((resolve) => setTimeout(resolve, 250));
@@ -145,23 +166,45 @@ export default function PDFViewerPage() {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (!didRedirect && startedLoad && loadSucceeded) {
+      if (startedLoad && loadSucceeded) {
+        enableProgressPersistence();
         setIsLoading(false);
       }
     }
-  }, [isLoading, id, router, setCurrentDocument, stop]);
+  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, enableProgressPersistence, isLoading, prepareInitialPosition, setCurrentDocument]);
 
   useEffect(() => {
     loadDocument();
   }, [loadDocument]);
 
-  useUnmountCleanupRef(clearCurrDoc);
+  const clearReaderSession = useCallback(() => {
+    disableProgressPersistence();
+    clearCurrDoc();
+  }, [clearCurrDoc, disableProgressPersistence]);
+  useUnmountCleanupRef(clearReaderSession);
+
+  useEffect(() => {
+    if (!routeDocumentId || isLoading || !isPlaybackReady || sentences.length === 0) return;
+    scheduleProgress({
+      documentId: routeDocumentId,
+      readerType: 'pdf',
+      location: serializeReaderPosition('pdf', currDocPage, currentSentenceIndex),
+    });
+  }, [
+    currDocPage,
+    currentSentenceIndex,
+    isLoading,
+    isPlaybackReady,
+    routeDocumentId,
+    scheduleProgress,
+    sentences.length,
+  ]);
 
   useEffect(() => {
     if (isLoading) return;
     if (isParseReady) return;
-    stop();
-  }, [isLoading, isParseReady, stop]);
+    pause();
+  }, [isLoading, isParseReady, pause]);
 
   useEffect(() => {
     if (!shouldShowExpandedParseLoader) {
@@ -211,10 +254,11 @@ export default function PDFViewerPage() {
     event?.preventDefault();
     if (isNavigatingBack) return;
     setIsNavigatingBack(true);
+    disableProgressPersistence();
     stop();
     setActiveSidebar(null);
     router.push('/app');
-  }, [isNavigatingBack, stop, router]);
+  }, [disableProgressPersistence, isNavigatingBack, stop, router]);
 
   const requestForceReparse = useCallback(() => {
     if (forceReparseDisabled) return;

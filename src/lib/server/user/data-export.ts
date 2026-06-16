@@ -61,6 +61,8 @@ export type AppendUserExportArchiveInput = {
   exportedAtMs: number;
   profileData: unknown;
   preferences: unknown | null;
+  folders?: unknown[];
+  onboarding?: unknown | null;
   readingHistory: unknown[];
   ttsUsage: unknown[];
   jobEvents: unknown[];
@@ -144,6 +146,8 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     exportedAtMs,
     profileData,
     preferences,
+    folders = [],
+    onboarding = null,
     readingHistory,
     ttsUsage,
     jobEvents,
@@ -171,6 +175,8 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
   if (preferences) {
     appendJson(archive, 'preferences.json', preferences);
   }
+  appendJson(archive, 'folders.json', folders);
+  if (onboarding) appendJson(archive, 'onboarding.json', onboarding);
   appendJson(archive, 'reading_history.json', readingHistory);
   appendJson(archive, 'tts_usage.json', ttsUsage);
   appendJson(archive, 'job_events.json', jobEvents);

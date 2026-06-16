@@ -14,13 +14,7 @@ Models use the `provider/model` format. The API key you enter belongs to the pro
 2. Enter the API key for the provider you want to use.
 3. Set default model to a matching `provider/model` (for example `elevenlabs/eleven_multilingual_v2`).
 
-**Per-user Settings → TTS Provider (only when `restrictUserApiKeys=false`):**
-
-1. Set provider to `Speech SDK`.
-2. Choose a model; enter the API key for that model's provider.
-3. Choose a voice.
-
-See [TTS Providers](../tts-providers) for admin-shared vs per-user behavior.
+Users select the enabled shared provider, model, and voice from **Settings → TTS Provider**.
 
 ## Built-in models
 

@@ -33,6 +33,8 @@ import type {
   TTSSegmentVariant,
   TTSSegmentsManifestResponse,
 } from '@/types/client';
+import { queryKeys } from '@/lib/client/query-keys';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 interface SegmentsSidebarProps {
   isOpen: boolean;
@@ -42,8 +44,6 @@ interface SegmentsSidebarProps {
 }
 
 const MANIFEST_PAGE_SIZE = 150;
-const SEGMENTS_MANIFEST_QUERY_KEY = 'tts-segments-manifest';
-
 type ClearSegmentsPayload = {
   error?: string;
   deletedSegments?: number;
@@ -178,6 +178,7 @@ function isElementFullyVisibleWithinContainer(element: HTMLElement, container: H
 
 export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: SegmentsSidebarProps) {
   const queryClient = useQueryClient();
+  const { data: session, isPending: isSessionPending } = useAuthSession();
   const {
     sentences,
     currentSentenceIndex,
@@ -257,13 +258,13 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
   const programmaticScrollUntilMsRef = useRef(0);
   const lastSegmentRefreshKeyRef = useRef('');
   const segmentsQueryKey = useMemo(
-    () => [SEGMENTS_MANIFEST_QUERY_KEY, documentId] as const,
-    [documentId],
+    () => queryKeys.ttsManifest(session?.user?.id ?? 'no-session', documentId),
+    [documentId, session?.user?.id],
   );
 
   const segmentsQuery = useInfiniteQuery({
     queryKey: segmentsQueryKey,
-    enabled: isOpen && !!documentId,
+    enabled: !isSessionPending && isOpen && !!documentId,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam, signal }) => {
       if (!documentId) {

@@ -1,14 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { uploadFile, uploadAndDisplay, setupTest, expectDocumentListed, uploadFiles, ensureDocumentsListed, clickDocumentLink, expectViewerForFile } from './helpers';
 
-interface HtmlDocumentRow {
-  id?: string;
-  data?: string;
-}
-
 type HashCheckResult =
   | { ok: true; storedId: string; computedId: string }
-  | { ok: false; reason: 'Missing stored html document' | 'Hash mismatch'; storedId?: string; computedId?: string };
+  | { ok: false; reason: 'Missing stored html document' | 'Hash mismatch' | 'Content fetch failed'; storedId?: string; computedId?: string };
 
 test.describe('Document Upload Tests', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -58,38 +53,23 @@ test.describe('Document Upload Tests', () => {
     await expectDocumentListed(page, 'sample.txt');
 
     const result = await page.evaluate<HashCheckResult>(async () => {
-      const idb = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('openreader-db');
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-      });
+      const listRes = await fetch('/api/documents', { cache: 'no-store' });
+      if (!listRes.ok) return { ok: false, reason: 'Content fetch failed' as const };
+      const docs = ((await listRes.json()) as { documents?: Array<{ id: string; name: string }> }).documents ?? [];
+      const doc = docs.find((item) => item.name === 'sample.txt');
+      if (!doc?.id) return { ok: false, reason: 'Missing stored html document' as const };
 
-      try {
-        const docs = await new Promise<HtmlDocumentRow[]>((resolve, reject) => {
-          const tx = idb.transaction('html-documents', 'readonly');
-          const store = tx.objectStore('html-documents');
-          const request = store.getAll();
-          request.onerror = () => reject(request.error);
-          request.onsuccess = () => resolve(request.result as HtmlDocumentRow[]);
-        });
+      const contentRes = await fetch(`/api/documents/blob/get/fallback?id=${encodeURIComponent(doc.id)}`, { cache: 'no-store' });
+      if (!contentRes.ok) return { ok: false, reason: 'Content fetch failed' as const, storedId: doc.id };
+      const digest = await crypto.subtle.digest('SHA-256', await contentRes.arrayBuffer());
+      const computedId = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
 
-        if (!docs[0]?.data || !docs[0]?.id) {
-          return { ok: false, reason: 'Missing stored html document' as const };
-        }
-
-        const bytes = new TextEncoder().encode(String(docs[0].data));
-        const digest = await crypto.subtle.digest('SHA-256', bytes);
-        const computedId = Array.from(new Uint8Array(digest))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('');
-
-        if (computedId === docs[0].id) {
-          return { ok: true as const, storedId: docs[0].id as string, computedId };
-        }
-        return { ok: false as const, reason: 'Hash mismatch', storedId: docs[0].id as string, computedId };
-      } finally {
-        idb.close();
+      if (computedId === doc.id) {
+        return { ok: true as const, storedId: doc.id, computedId };
       }
+      return { ok: false as const, reason: 'Hash mismatch', storedId: doc.id, computedId };
     });
 
     const detail = result.ok

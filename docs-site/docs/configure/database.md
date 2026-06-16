@@ -22,8 +22,9 @@ This page covers database mode selection for OpenReader.
 - User settings preferences (`user_preferences`) when auth is enabled.
 - User reading progress (`user_document_progress`) when auth is enabled.
 - Document preview job/asset metadata (`document_previews`) for server-side PDF/EPUB thumbnails.
-- TTS segment metadata (`tts_segments`) for server-side playback caching:
-  - Segment identity + settings hash
+- TTS segment metadata (`tts_segment_entries` and `tts_segment_variants`) for server-side playback caching:
+  - Stable segment identity and locator metadata
+  - Per-settings variant identity
   - Audio object key and duration
   - Optional alignment payload for word highlighting
   - Status/error state

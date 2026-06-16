@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { updateAppConfig } from '@/lib/client/dexie';
+import toast from 'react-hot-toast';
+import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface PrivacyModalProps {
@@ -47,6 +48,7 @@ function PrivacyModalBody({ origin }: { origin: string }) {
 }
 
 export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps) {
+  const { mutation } = useOnboardingState();
   const [origin, setOrigin] = useState('');
   const [agreed, setAgreed] = useState(false);
 
@@ -62,7 +64,13 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
   }, [isOpen]);
 
   const handleAccept = async () => {
-    await updateAppConfig({ privacyAccepted: true });
+    try {
+      await mutation.mutateAsync({ privacyAccepted: true });
+    } catch (error) {
+      console.error('Failed to record privacy acceptance:', error);
+      toast.error('Could not save your consent. Please try again.');
+      return;
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('openreader:privacyAccepted'));
     }

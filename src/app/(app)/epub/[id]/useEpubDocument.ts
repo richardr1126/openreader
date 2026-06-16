@@ -12,7 +12,6 @@ import {
 import type { NavItem } from 'epubjs';
 import type { Book, Rendition } from 'epubjs';
 
-import { getDocumentMetadata } from '@/lib/client/api/documents';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { EpubRenderedLocationCloneManager } from '@/lib/client/epub/rendered-location-walker';
 import { canonicalizeEpubSegmentAgainstSpineText } from '@/lib/client/epub/canonicalize-epub-segment';
@@ -49,6 +48,8 @@ import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/cli
 import { isStableEpubLocator } from '@/types/client';
 import { buildSegmentKeyPrefix, type CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
 import { normalizeOptionalLanguageTag } from '@/lib/shared/language';
+import type { BaseDocument } from '@/types/documents';
+import type { ScheduleDocumentProgress } from '@/types/user-state';
 
 // How many canonical segments to pre-stage for the next page so a
 // background-tab page turn can keep speaking without waiting on the rendition.
@@ -62,7 +63,7 @@ export interface EpubDocumentState {
   currDocText: string | undefined;
   metadataLanguage: string | null;
   isPlaybackReady: boolean;
-  setCurrentDocument: (id: string) => Promise<void>;
+  setCurrentDocument: (metadata: BaseDocument, initialLocation?: string) => Promise<void>;
   clearCurrDoc: () => void;
   extractPageText: (book: Book, rendition: Rendition, shouldPause?: boolean) => Promise<string>;
   walkUpcomingRenderedLocations: EpubRenderedLocationWalker;
@@ -102,7 +103,10 @@ export interface EpubDocumentState {
 /**
  * Route-local EPUB reader hook.
  */
-export function useEpubDocument(documentId?: string): EpubDocumentState {
+export function useEpubDocument(
+  documentId: string | undefined,
+  scheduleProgress: ScheduleDocumentProgress,
+): EpubDocumentState {
   const {
     setText: setTTSText,
     currDocPage,
@@ -115,8 +119,6 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   } = useTTS();
   // Configuration context to get TTS settings
   const {
-    apiKey,
-    baseUrl,
     providerRef,
     ttsSegmentMaxBlockLength,
     epubTheme,
@@ -141,6 +143,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   const tocRef = useRef<NavItem[]>([]);
   const locationRef = useRef<string | number>(currDocPage);
   const isEPUBSetOnce = useRef(false);
+  const renditionEventsCleanupRef = useRef<(() => void) | null>(null);
   // Should pause ref
   const shouldPauseRef = useRef(true);
   // Track current highlight CFI for removal
@@ -186,6 +189,8 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     isEPUBSetOnce.current = false;
     shouldPauseRef.current = true;
     bookRef.current = null;
+    renditionEventsCleanupRef.current?.();
+    renditionEventsCleanupRef.current = null;
     renditionRef.current = undefined;
     locationRef.current = 1;
     tocRef.current = [];
@@ -195,23 +200,19 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   }, [resetHighlightState, setCurrDocPages, stop]);
 
   /**
-   * Sets the current document based on its ID by fetching from IndexedDB
+   * Sets the current document based on its ID using server metadata and the browser blob cache.
    * @param {string} id - The unique identifier of the document
    * @throws {Error} When document data is empty or retrieval fails
    */
-  const setCurrentDocument = useCallback(async (id: string): Promise<void> => {
+  const setCurrentDocument = useCallback(async (meta: BaseDocument, initialLocation?: string): Promise<void> => {
     try {
       setIsPlaybackReady(false);
       setMetadataLanguage(null);
       bookRef.current = null;
+      renditionEventsCleanupRef.current?.();
+      renditionEventsCleanupRef.current = null;
       renditionRef.current = undefined;
-      const meta = await getDocumentMetadata(id);
-      if (!meta) {
-        clearCurrDoc();
-        console.error('Document not found on server');
-        return;
-      }
-
+      locationRef.current = initialLocation || 1;
       const doc = await ensureCachedDocument(meta);
       if (doc.type !== 'epub') {
         clearCurrDoc();
@@ -229,6 +230,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     } catch (error) {
       console.error('Failed to get EPUB document:', error);
       clearCurrDoc(); // Clean up on error
+      throw error;
     }
   }, [clearCurrDoc]);
 
@@ -478,15 +480,30 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
   const { createFullAudioBook, regenerateChapter } = useEPUBAudiobook({
     bookRef,
     tocRef,
-    apiKey,
-    baseUrl,
     providerRef,
   });
 
   const setRendition = useCallback((rendition: Rendition) => {
+    renditionEventsCleanupRef.current?.();
     const book = rendition.book;
     bookRef.current = book;
     renditionRef.current = rendition;
+    const initializeFromRelocated = () => {
+      if (renditionRef.current !== rendition || isEPUBSetOnce.current || !book.isOpen) return;
+      const location = rendition.location?.start?.cfi;
+      if (!location) return;
+
+      setIsEPUB(true);
+      isEPUBSetOnce.current = true;
+      locationRef.current = location;
+      skipToLocation(location);
+      void extractPageText(book, rendition, shouldPauseRef.current);
+      shouldPauseRef.current = true;
+    };
+    rendition.on('relocated', initializeFromRelocated);
+    renditionEventsCleanupRef.current = () => {
+      rendition.off('relocated', initializeFromRelocated);
+    };
     void book.loaded.metadata
       .then((metadata) => {
         if (bookRef.current !== book) return;
@@ -497,7 +514,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
         setMetadataLanguage(null);
         console.warn('Failed to read EPUB language metadata:', error);
       });
-  }, []);
+  }, [extractPageText, setIsEPUB, skipToLocation]);
 
   const handleLocationChanged = useEPUBLocationController({
     documentId,
@@ -509,6 +526,7 @@ export function useEpubDocument(documentId?: string): EpubDocumentState {
     bookRef,
     renditionRef,
     locationRef,
+    scheduleProgress,
   });
 
 

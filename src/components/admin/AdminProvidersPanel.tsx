@@ -22,6 +22,8 @@ import {
   MenuTrigger,
   MenuTransition,
 } from '@/components/ui';
+import { queryKeys } from '@/lib/client/query-keys';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 type ProviderType = TtsProviderId;
 
@@ -59,10 +61,6 @@ interface FormState {
 }
 
 const providerDefaultModel = defaultModelForProviderType;
-const ADMIN_PROVIDERS_QUERY_KEY = ['admin-providers'] as const;
-const ADMIN_SETTINGS_QUERY_KEY = ['admin-settings'] as const;
-const ADMIN_DEFAULT_PROVIDER_QUERY_KEY = ['admin-settings', 'default-provider-slug'] as const;
-
 async function fetchDefaultProviderSlug(): Promise<string> {
   const res = await fetch('/api/admin/settings');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -166,20 +164,26 @@ async function deleteAdminProvider(id: string): Promise<void> {
 }
 
 export function AdminProvidersPanel() {
+  const { data: session } = useAuthSession();
+  const sessionId = session?.user?.id ?? 'no-session';
+  const adminProvidersQueryKey = queryKeys.admin(sessionId, 'providers');
+  const adminSettingsQueryKey = queryKeys.admin(sessionId, 'settings');
+  const adminDefaultProviderQueryKey = queryKeys.admin(sessionId, 'default-provider');
+  const sharedProvidersQueryKey = queryKeys.sharedProviders(sessionId);
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => createEmptyForm());
   const [customModelInput, setCustomModelInput] = useState('');
 
   const { data: providers = [], isPending: isLoading, error } = useQuery({
-    queryKey: ADMIN_PROVIDERS_QUERY_KEY,
+    queryKey: adminProvidersQueryKey,
     queryFn: fetchAdminProviders,
   });
   const {
     data: defaultProviderSlug = '',
     error: defaultProviderError,
   } = useQuery({
-    queryKey: ADMIN_DEFAULT_PROVIDER_QUERY_KEY,
+    queryKey: adminDefaultProviderQueryKey,
     queryFn: fetchDefaultProviderSlug,
   });
 
@@ -200,9 +204,10 @@ export function AdminProvidersPanel() {
       toast.success(variables.editingId === '__new' ? 'Provider created' : 'Provider updated');
       cancelEdit();
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_DEFAULT_PROVIDER_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
+        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
       ]);
     },
     onError: (mutationError) => {
@@ -216,9 +221,10 @@ export function AdminProvidersPanel() {
     onSuccess: async () => {
       toast.success('Provider deleted');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_DEFAULT_PROVIDER_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
+        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
       ]);
     },
     onError: (mutationError) => {
@@ -231,9 +237,10 @@ export function AdminProvidersPanel() {
     onSuccess: async (_data, vars) => {
       toast.success(vars.enabled ? 'Provider enabled' : 'Provider disabled');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ADMIN_PROVIDERS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_DEFAULT_PROVIDER_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
+        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
       ]);
     },
     onError: (mutationError) => {
@@ -246,8 +253,8 @@ export function AdminProvidersPanel() {
     onSuccess: async () => {
       toast.success('Default provider updated');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ADMIN_DEFAULT_PROVIDER_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
       ]);
     },
     onError: (mutationError) => {

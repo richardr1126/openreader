@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BaseDocument } from '@/types/documents';
 import {
   deleteDocuments as deleteServerDocuments,
@@ -10,25 +10,20 @@ import {
 } from '@/lib/client/api/documents';
 import { cacheStoredDocumentFromBytes, evictCachedDocument } from '@/lib/client/cache/documents';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { queryKeys } from '@/lib/client/query-keys';
+import { deriveQueryState, type DerivedQueryState } from '@/lib/client/query/query-state';
 
 interface DocumentContextType {
   pdfDocs: Array<BaseDocument & { type: 'pdf' }>;
-  isPDFLoading: boolean;
-
   epubDocs: Array<BaseDocument & { type: 'epub' }>;
-  isEPUBLoading: boolean;
-
   htmlDocs: Array<BaseDocument & { type: 'html' }>;
-  isHTMLLoading: boolean;
-
+  queryState: DerivedQueryState;
   uploadDocuments: (files: File[]) => Promise<BaseDocument[]>;
   deleteDocument: (id: string) => Promise<void>;
   refreshDocuments: () => Promise<void>;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
-const DOCUMENTS_QUERY_KEY = 'documents';
-
 type SupportedDocument = BaseDocument & { type: 'pdf' | 'epub' | 'html' };
 
 function mergeStoredDocuments(
@@ -54,33 +49,32 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const { data: sessionData, isPending: isSessionPending } = useAuthSession();
   const sessionKey = sessionData?.user?.id ?? 'no-session';
-  const documentsQueryKey = useMemo(() => [DOCUMENTS_QUERY_KEY, sessionKey] as const, [sessionKey]);
+  const documentsQueryKey = useMemo(() => queryKeys.documents(sessionKey), [sessionKey]);
 
   const loadDocuments = useCallback(async () => {
-    try {
-      const serverDocs = await listDocuments();
-      return serverDocs.filter((d): d is BaseDocument & { type: 'pdf' | 'epub' | 'html' } =>
-        d.type === 'pdf' || d.type === 'epub' || d.type === 'html',
-      );
-    } catch (err) {
-      console.error('Failed to load documents from server:', err);
-      return [];
-    }
+    const serverDocs = await listDocuments();
+    return serverDocs.filter((d): d is BaseDocument & { type: 'pdf' | 'epub' | 'html' } =>
+      d.type === 'pdf' || d.type === 'epub' || d.type === 'html',
+    );
   }, []);
 
-  const { data: docs = [], isPending, refetch } = useQuery({
+  const documentsQuery = useQuery({
     queryKey: documentsQueryKey,
     queryFn: loadDocuments,
     enabled: !isSessionPending,
   });
-
-  const isLoading = isSessionPending || (isPending && docs.length === 0);
+  const docs = useMemo(() => documentsQuery.data ?? [], [documentsQuery.data]);
+  const queryState = deriveQueryState({
+    hasData: !isSessionPending && documentsQuery.data !== undefined,
+    isFetching: isSessionPending || documentsQuery.isFetching,
+    isError: documentsQuery.isError,
+    error: documentsQuery.error,
+  });
 
   const refreshDocuments = useCallback(async () => {
     if (isSessionPending) return;
     await queryClient.invalidateQueries({ queryKey: documentsQueryKey });
-    await refetch();
-  }, [isSessionPending, queryClient, documentsQueryKey, refetch]);
+  }, [isSessionPending, queryClient, documentsQueryKey]);
 
   useEffect(() => {
     const handler = () => {
@@ -102,10 +96,31 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     return { pdfDocs, epubDocs, htmlDocs };
   }, [docs]);
 
+  const uploadMutation = useMutation({
+    mutationFn: (files: File[]) => uploadServerDocuments(files),
+    onSuccess: (stored) => {
+      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
+        mergeStoredDocuments(previous, stored),
+      );
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteServerDocuments({ ids: [id] }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: documentsQueryKey });
+      const previous = queryClient.getQueryData<SupportedDocument[]>(documentsQueryKey);
+      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (rows = []) => rows.filter((doc) => doc.id !== id));
+      return { previous };
+    },
+    onError: (_error, _id, context) => queryClient.setQueryData(documentsQueryKey, context?.previous),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
+  });
+
   const uploadDocuments = useCallback(async (files: File[]): Promise<BaseDocument[]> => {
     if (files.length === 0) return [];
 
-    const stored = await uploadServerDocuments(files);
+    const stored = await uploadMutation.mutateAsync(files);
     await Promise.allSettled(
       stored.map(async (document, index) => {
         const file = files[index];
@@ -134,29 +149,20 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       }),
     );
 
-    queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
-      mergeStoredDocuments(previous, stored),
-    );
-
     return stored;
-  }, [documentsQueryKey, queryClient]);
+  }, [uploadMutation]);
 
   const deleteDocument = useCallback(async (id: string) => {
-    await deleteServerDocuments({ ids: [id] });
+    await deleteMutation.mutateAsync(id);
     await evictCachedDocument(id);
-    queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous = []) =>
-      previous.filter((document) => document.id !== id),
-    );
-  }, [documentsQueryKey, queryClient]);
+  }, [deleteMutation]);
 
   return (
     <DocumentContext.Provider value={{
       pdfDocs: docsByType.pdfDocs,
-      isPDFLoading: isLoading,
       epubDocs: docsByType.epubDocs,
-      isEPUBLoading: isLoading,
       htmlDocs: docsByType.htmlDocs,
-      isHTMLLoading: isLoading,
+      queryState,
       uploadDocuments,
       deleteDocument,
       refreshDocuments,

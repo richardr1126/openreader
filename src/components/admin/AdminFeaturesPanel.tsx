@@ -13,6 +13,8 @@ import {
 } from '@/components/ui';
 import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
+import { queryKeys } from '@/lib/client/query-keys';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 type RuntimeConfigSource = 'json-seed' | 'env-seed' | 'admin' | 'default';
 
@@ -26,8 +28,6 @@ interface ProviderOption {
   name: string;
   providerType: TtsProviderId;
 }
-
-const ADMIN_SETTINGS_QUERY_KEY = ['admin-settings'] as const;
 
 async function fetchAdminSettings(): Promise<SettingsResponse> {
   const res = await fetch('/api/admin/settings');
@@ -46,9 +46,12 @@ async function patchAdminSettings(payload: { updates?: Record<string, unknown>; 
 
 export function AdminFeaturesPanel() {
   const queryClient = useQueryClient();
+  const { data: session } = useAuthSession();
+  const adminSettingsQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
   const { data, error } = useQuery({
-    queryKey: ADMIN_SETTINGS_QUERY_KEY,
+    queryKey: adminSettingsQueryKey,
     queryFn: fetchAdminSettings,
+    enabled: Boolean(session?.user?.id),
   });
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
@@ -72,7 +75,7 @@ export function AdminFeaturesPanel() {
     },
     onSuccess: async () => {
       toast.success('Reset to env default');
-      await queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey });
     },
     onError: (mutationError) => {
       console.error(mutationError);
@@ -86,7 +89,7 @@ export function AdminFeaturesPanel() {
     },
     onSuccess: async () => {
       toast.success('Settings saved');
-      await queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey });
     },
     onError: (mutationError) => {
       console.error(mutationError);
@@ -220,22 +223,6 @@ export function AdminFeaturesPanel() {
           )}
         </div>
 
-        <ToggleRow
-          label="Restrict user API keys (recommended)"
-          description="Only allow admin shared providers."
-          checked={Boolean(draft.restrictUserApiKeys)}
-          onChange={(checked) => {
-            if (!checked) {
-              const ok = confirm(
-                'Turning this off allows user-supplied API keys to flow through this server. Continue?',
-              );
-              if (!ok) return;
-            }
-            updateDraft('restrictUserApiKeys', checked);
-          }}
-          right={renderSource('restrictUserApiKeys')}
-          variant="flat"
-        />
         <ToggleRow
           label="Show TTS provider settings tab"
           description="Allow per-user provider overrides."

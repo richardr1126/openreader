@@ -4,6 +4,20 @@ import { user } from './schema_auth_postgres';
 
 const PG_NOW_MS = sql`(extract(epoch from now()) * 1000)::bigint`;
 
+export const userFolders = pgTable('user_folders', {
+  id: text('id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  // bigint (not int4): folder `position` is written as a millisecond epoch
+  // timestamp, which overflows a 32-bit integer. Matches created_at/updated_at.
+  position: bigint('position', { mode: 'number' }).notNull().default(0),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  index('idx_user_folders_user_position').on(table.userId, table.position),
+]);
+
 export const documents = pgTable('documents', {
   id: text('id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
@@ -12,11 +26,19 @@ export const documents = pgTable('documents', {
   size: bigint('size', { mode: 'number' }).notNull(),
   lastModified: bigint('last_modified', { mode: 'number' }).notNull(),
   filePath: text('file_path').notNull(),
+  folderId: text('folder_id'),
+  recentlyOpenedAt: bigint('recently_opened_at', { mode: 'number' }),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
+  foreignKey({
+    columns: [table.folderId, table.userId],
+    foreignColumns: [userFolders.id, userFolders.userId],
+  }),
   index('idx_documents_user_id').on(table.userId),
   index('idx_documents_user_id_last_modified').on(table.userId, table.lastModified),
+  index('idx_documents_user_id_folder').on(table.userId, table.folderId),
+  index('idx_documents_user_id_recently_opened').on(table.userId, table.recentlyOpenedAt),
 ]);
 
 export const audiobooks = pgTable('audiobooks', {
@@ -85,6 +107,14 @@ export const userPreferences = pgTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   dataJson: jsonb('data_json').notNull().default({}),
   clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
+});
+
+export const userOnboarding = pgTable('user_onboarding', {
+  userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
+  privacyAcceptedAtMs: bigint('privacy_accepted_at_ms', { mode: 'number' }),
+  lastSeenAppVersion: text('last_seen_app_version'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });

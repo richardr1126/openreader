@@ -24,8 +24,8 @@ describe('orphan recovery', () => {
     });
 
     const firstSweep = await recoverOrphanedOperations({
-      operationStateStore: fake.deps.operationStateStore!,
-      orchestrator: fake.deps.orchestrator!,
+      operationStateStore: fake.deps.operationStateStore,
+      orchestrator: fake.deps.orchestrator,
       whisperTimeoutMs: 30_000,
       pdfTimeoutMs: 300_000,
       opStaleMs: 1_800_000,
@@ -38,8 +38,8 @@ describe('orphan recovery', () => {
     vi.advanceTimersByTime(31_000);
 
     const secondSweep = await recoverOrphanedOperations({
-      operationStateStore: fake.deps.operationStateStore!,
-      orchestrator: fake.deps.orchestrator!,
+      operationStateStore: fake.deps.operationStateStore,
+      orchestrator: fake.deps.orchestrator,
       whisperTimeoutMs: 30_000,
       pdfTimeoutMs: 300_000,
       opStaleMs: 1_800_000,

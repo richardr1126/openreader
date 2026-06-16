@@ -6,6 +6,7 @@ export interface BaseDocument {
   size: number;
   lastModified: number;
   recentlyOpenedAt?: number;
+  contentVersion?: string;
   type: DocumentType;
   scope?: 'user';
   folderId?: string;

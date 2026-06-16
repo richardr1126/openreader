@@ -20,10 +20,7 @@ export async function GET(req: NextRequest) {
     const runtimeConfig = await getResolvedRuntimeConfig();
     const resolved = await resolveTtsCredentials({
       providerHeader: req.headers.get('x-tts-provider'),
-      apiKeyHeader: req.headers.get('x-openai-key'),
-      baseUrlHeader: req.headers.get('x-openai-base-url'),
       fallbackProvider: runtimeConfig.defaultTtsProvider,
-      restrictUserApiKeys: runtimeConfig.restrictUserApiKeys,
     });
 
     if ('error' in resolved) {
@@ -35,7 +32,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           error: resolved.error === 'no_shared_provider_configured'
-            ? 'User API keys are restricted and no shared provider is configured.'
+            ? 'No shared TTS provider is configured.'
             : `Unknown or disabled TTS provider: ${resolved.slug}`,
         },
         { status },

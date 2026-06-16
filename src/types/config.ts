@@ -29,8 +29,6 @@ export function clampTtsSegmentMaxBlockLength(value: number | undefined | null):
 }
 
 export interface AppConfigValues {
-  apiKey: string;
-  baseUrl: string;
   viewType: ViewType;
   voiceSpeed: number;
   audioPlayerSpeed: number;
@@ -55,10 +53,7 @@ export interface AppConfigValues {
   epubWordHighlightEnabled: boolean;
   htmlHighlightEnabled: boolean;
   htmlWordHighlightEnabled: boolean;
-  firstVisit: boolean;
   documentListState: DocumentListState;
-  privacyAccepted: boolean;
-  documentsMigrationPrompted: boolean;
 }
 
 /**
@@ -75,8 +70,6 @@ export function getAppConfigDefaults(): AppConfigValues {
   // provider id (the old 'custom-openai') into every user's config, since that
   // value isn't actually selectable in shared-provider mode.
   return {
-    apiKey: '',
-    baseUrl: '',
     viewType: 'single',
     voiceSpeed: 1,
     audioPlayerSpeed: 1,
@@ -101,7 +94,6 @@ export function getAppConfigDefaults(): AppConfigValues {
     epubWordHighlightEnabled: true,
     htmlHighlightEnabled: true,
     htmlWordHighlightEnabled: true,
-    firstVisit: false,
     documentListState: {
       sortBy: 'name',
       sortDirection: 'asc',
@@ -110,8 +102,6 @@ export function getAppConfigDefaults(): AppConfigValues {
       showHint: true,
       viewMode: 'grid',
     },
-    privacyAccepted: false,
-    documentsMigrationPrompted: false,
   };
 }
 

@@ -1,8 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { coerceTimestampMs, nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
+import { queryKeys } from '@/lib/client/query-keys';
+import { getAuthClient } from '@/lib/client/auth-client';
 
 export interface RateLimitStatus {
   allowed: boolean;
@@ -107,8 +109,6 @@ interface AuthRateLimitProviderProps {
   githubAuthEnabled: boolean;
 }
 
-const RATE_LIMIT_QUERY_KEY = ['rate-limit-status'] as const;
-
 export function AuthRateLimitProvider({
   children,
   authBaseUrl,
@@ -116,6 +116,19 @@ export function AuthRateLimitProvider({
   githubAuthEnabled,
 }: AuthRateLimitProviderProps) {
   const queryClient = useQueryClient();
+  // Read the session directly from the prop-provided base URL. We can't use
+  // useAuthSession() here: it resolves the base URL via useAuthConfig() ->
+  // useAuthRateLimit(), i.e. this provider's own context, which isn't
+  // established yet during this render — that self-read threw
+  // "useAuthRateLimit must be used within an AuthRateLimitProvider" on every SSR.
+  const authClient = useMemo(() => getAuthClient(authBaseUrl), [authBaseUrl]);
+  const { data: session } = authClient.useSession();
+  // Scope the rate-limit cache per session so a previous user's quota cannot be
+  // read after an account switch and useSessionQueryReset can evict it cleanly.
+  const rateLimitQueryKey = useMemo(
+    () => queryKeys.rateLimit(session?.user?.id ?? 'no-session'),
+    [session?.user?.id],
+  );
 
   const pendingTTSRef = useRef<number>(0);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -127,7 +140,7 @@ export function AuthRateLimitProvider({
     isFetching,
     refetch,
   } = useQuery({
-    queryKey: RATE_LIMIT_QUERY_KEY,
+    queryKey: rateLimitQueryKey,
     queryFn: async () => {
       const response = await fetch('/api/rate-limit/status');
       if (!response.ok) {
@@ -156,7 +169,7 @@ export function AuthRateLimitProvider({
   const isAtLimit = status ? (status.remainingChars <= 0 || !status.allowed) : false;
 
   const incrementCount = useCallback((charCount: number) => {
-    queryClient.setQueryData<RateLimitStatus | null>(RATE_LIMIT_QUERY_KEY, (prevStatus) => {
+    queryClient.setQueryData<RateLimitStatus | null>(rateLimitQueryKey, (prevStatus) => {
       if (!prevStatus) return prevStatus;
 
       const newCurrentCount = prevStatus.currentCount + charCount;
@@ -169,7 +182,7 @@ export function AuthRateLimitProvider({
         allowed: newRemainingChars > 0
       };
     });
-  }, [queryClient]);
+  }, [queryClient, rateLimitQueryKey]);
 
   const onTTSStart = useCallback(() => {
     pendingTTSRef.current += 1;
@@ -218,7 +231,7 @@ export function AuthRateLimitProvider({
     onTTSStart,
     onTTSComplete,
     triggerRateLimit: () => {
-      queryClient.setQueryData<RateLimitStatus | null>(RATE_LIMIT_QUERY_KEY, (prev) =>
+      queryClient.setQueryData<RateLimitStatus | null>(rateLimitQueryKey, (prev) =>
         prev ? { ...prev, remainingChars: 0, allowed: false } : null,
       );
     },

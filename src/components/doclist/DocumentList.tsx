@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDocuments } from '@/contexts/DocumentContext';
+import { queryKeys } from '@/lib/client/query-keys';
+import type { PreferencesResponse } from '@/lib/client/api/user-state';
 import type {
   DocumentListDocument,
   DocumentListState,
@@ -13,16 +15,15 @@ import type {
   SortDirection,
   ViewMode,
 } from '@/types/documents';
-import {
-  getDocumentListState,
-  getDocumentRecentlyOpenedMap,
-  saveDocumentListState,
-} from '@/lib/client/dexie';
+import { useFolders } from '@/hooks/useFolders';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { useAuthSession } from '@/hooks/useAuthSession';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { DocumentUploader, type UploadBatchState } from '@/components/documents/DocumentUploader';
 import { IconButton } from '@/components/ui';
+import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { UploadMenuDialog } from '@/components/documents/UploadMenuDialog';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import {
@@ -37,8 +38,6 @@ import { FinderStatusBar } from './window/FinderStatusBar';
 import { IconsView } from './views/IconsView';
 import { ListView } from './views/ListView';
 import { GalleryView } from './views/GalleryView';
-
-let cachedDocumentListState: DocumentListState | null = null;
 
 type DocumentToDelete = {
   id: string;
@@ -75,6 +74,49 @@ function normalizeViewMode(stored: DocumentListState['viewMode']): ViewMode {
   if (stored === 'list') return 'list';
   if (stored === 'gallery') return 'gallery';
   return 'icons';
+}
+
+// Fully-resolved toolbar/layout preferences. Server preferences may omit fields
+// (older clients, partial writes); normalize to concrete values for rendering.
+type NormalizedListState = {
+  sortBy: SortBy;
+  sortDirection: SortDirection;
+  showHint: boolean;
+  viewMode: ViewMode;
+  iconSize: IconSize;
+  sidebarWidth: number;
+  sidebarFilter: SidebarFilter;
+  sidebarCollapsed: boolean;
+};
+
+function normalizeListState(stored: DocumentListState | undefined | null): NormalizedListState {
+  return {
+    sortBy: stored?.sortBy ?? DEFAULT_STATE.sortBy,
+    sortDirection: stored?.sortDirection ?? DEFAULT_STATE.sortDirection,
+    showHint: stored?.showHint ?? DEFAULT_STATE.showHint,
+    viewMode: normalizeViewMode(stored?.viewMode ?? DEFAULT_STATE.viewMode),
+    iconSize: stored?.iconSize ?? DEFAULT_STATE.iconSize,
+    sidebarWidth: stored?.sidebarWidth ?? DEFAULT_STATE.sidebarWidth,
+    sidebarFilter: stored?.sidebarFilter ?? DEFAULT_STATE.sidebarFilter,
+    sidebarCollapsed: stored?.sidebarCollapsed ?? DEFAULT_STATE.sidebarCollapsed,
+  };
+}
+
+function toStoredListState(state: NormalizedListState): DocumentListState {
+  return {
+    sortBy: state.sortBy,
+    sortDirection: state.sortDirection,
+    // `folders`/`collapsedFolders` are obsolete membership fields kept only for
+    // the persisted shape; folder membership now lives on documents[].folderId.
+    folders: [],
+    collapsedFolders: [],
+    showHint: state.showHint,
+    viewMode: state.viewMode,
+    iconSize: state.iconSize,
+    sidebarWidth: state.sidebarWidth,
+    sidebarFilter: state.sidebarFilter,
+    sidebarCollapsed: state.sidebarCollapsed,
+  };
 }
 
 function generateDefaultFolderName(
@@ -182,37 +224,13 @@ function SidebarUploadLoader({
   );
 }
 
-function DocumentListStateLoader() {
-  return (
-    <div
-      className="h-full w-full min-h-0 bg-surface-sunken animate-pulse"
-      aria-label="Loading documents"
-      aria-busy="true"
-    />
-  );
-}
-
 function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
-  const cachedState = cachedDocumentListState;
-  const [sortBy, setSortBy] = useState<SortBy>(cachedState?.sortBy ?? DEFAULT_STATE.sortBy);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(
-    cachedState?.sortDirection ?? DEFAULT_STATE.sortDirection,
-  );
-  const [viewMode, setViewMode] = useState<ViewMode>(
-    normalizeViewMode(cachedState?.viewMode ?? DEFAULT_STATE.viewMode),
-  );
-  const [iconSize, setIconSize] = useState<IconSize>(cachedState?.iconSize ?? DEFAULT_STATE.iconSize);
-  const [folders, setFolders] = useState<Folder[]>(cachedState?.folders ?? DEFAULT_STATE.folders);
-  const [showHint, setShowHint] = useState(cachedState?.showHint ?? true);
-  const [sidebarWidth, setSidebarWidth] = useState(cachedState?.sidebarWidth ?? DEFAULT_STATE.sidebarWidth);
-  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>(cachedState?.sidebarFilter ?? 'all');
-  const [sidebarOpen, setSidebarOpen] = useState(!(cachedState?.sidebarCollapsed ?? false));
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeUploadBatches, setActiveUploadBatches] = useState<Record<string, UploadBatchState>>({});
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
 
-  const [isInitialized, setIsInitialized] = useState(cachedState !== null);
+  const preferenceWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [documentToDelete, setDocumentToDelete] = useState<DocumentToDelete | null>(null);
   const [pendingMerge, setPendingMerge] = useState<
@@ -225,82 +243,87 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   const isNarrow = useIsNarrow();
   const selection = useDocumentSelection();
+  const queryClient = useQueryClient();
 
   const {
     pdfDocs,
-    isPDFLoading,
     epubDocs,
-    isEPUBLoading,
     htmlDocs,
+    queryState: documentsQueryState,
     deleteDocument,
-    isHTMLLoading,
+    refreshDocuments,
   } = useDocuments();
+  const { data: session, isPending: isSessionPending } = useAuthSession();
+  const sessionId = session?.user?.id ?? 'no-session';
+  const {
+    query: preferencesQuery,
+    mutation: preferencesMutation,
+  } = useUserPreferences(sessionId, !isSessionPending);
+  const persistPreferences = preferencesMutation.mutate;
+  const folderState = useFolders();
 
-  // Load saved state.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const saved = await getDocumentListState();
-      if (cancelled) return;
-      if (saved) {
-        cachedDocumentListState = saved;
-        setSortBy(saved.sortBy);
-        setSortDirection(saved.sortDirection);
-        setFolders(saved.folders ?? []);
-        setShowHint(saved.showHint ?? true);
-        setViewMode(normalizeViewMode(saved.viewMode));
-        setIconSize(saved.iconSize ?? DEFAULT_STATE.iconSize);
-        setSidebarWidth(saved.sidebarWidth ?? DEFAULT_STATE.sidebarWidth);
-        setSidebarFilter(saved.sidebarFilter ?? 'all');
-        setSidebarOpen(!(saved.sidebarCollapsed ?? false));
-      } else {
-        cachedDocumentListState = null;
-        setSortBy(DEFAULT_STATE.sortBy);
-        setSortDirection(DEFAULT_STATE.sortDirection);
-        setFolders(DEFAULT_STATE.folders);
-        setShowHint(DEFAULT_STATE.showHint);
-        setViewMode(DEFAULT_STATE.viewMode);
-        setIconSize(DEFAULT_STATE.iconSize);
-        setSidebarWidth(DEFAULT_STATE.sidebarWidth);
-        setSidebarFilter(DEFAULT_STATE.sidebarFilter);
-        setSidebarOpen(!DEFAULT_STATE.sidebarCollapsed);
+  const preferencesKey = queryKeys.preferences(sessionId);
+
+  // Toolbar/layout choices are server preferences, not React state. Read them
+  // straight from the preferences query and write changes back through a
+  // debounced optimistic mutation. There is no copy-into-state / sync-back
+  // effect and no module-level cache mirror.
+  const listState = useMemo(
+    () => normalizeListState(preferencesQuery.data?.preferences.documentListState),
+    [preferencesQuery.data?.preferences.documentListState],
+  );
+  const { sortBy, sortDirection, viewMode, iconSize, showHint, sidebarWidth, sidebarFilter } = listState;
+  const sidebarOpen = !listState.sidebarCollapsed;
+
+  const persistLatestListState = useCallback(() => {
+    const latest = queryClient.getQueryData<PreferencesResponse>(preferencesKey);
+    persistPreferences({
+      documentListState: toStoredListState(normalizeListState(latest?.preferences?.documentListState)),
+    });
+  }, [persistPreferences, preferencesKey, queryClient]);
+
+  const updateListState = useCallback(
+    (patch: Partial<NormalizedListState>, persistImmediately = false) => {
+      // 1) Update the preferences cache immediately so the UI is responsive.
+      queryClient.setQueryData<PreferencesResponse>(preferencesKey, (prev) => ({
+        preferences: {
+          ...(prev?.preferences ?? {}),
+          documentListState: toStoredListState({
+            ...normalizeListState(prev?.preferences?.documentListState),
+            ...patch,
+          }),
+        },
+        clientUpdatedAtMs: Date.now(),
+        hasStoredPreferences: true,
+      }));
+      // 2) Debounce the write-through to the server, coalescing rapid changes
+      //    (sort toggles, sidebar drag) into a single mutation.
+      if (preferenceWriteTimer.current) clearTimeout(preferenceWriteTimer.current);
+      if (persistImmediately) {
+        preferenceWriteTimer.current = null;
+        persistLatestListState();
+        return;
       }
-      setIsInitialized(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      preferenceWriteTimer.current = setTimeout(() => {
+        preferenceWriteTimer.current = null;
+        persistLatestListState();
+      }, 250);
+    },
+    [persistLatestListState, preferencesKey, queryClient],
+  );
 
-  // Persist.
-  useEffect(() => {
-    if (!isInitialized) return;
-    const state: DocumentListState = {
-      sortBy,
-      sortDirection,
-      folders,
-      collapsedFolders: [],
-      showHint,
-      viewMode,
-      iconSize,
-      sidebarWidth,
-      sidebarFilter,
-      sidebarCollapsed: !sidebarOpen,
-    };
-    cachedDocumentListState = state;
-    void saveDocumentListState(state);
-  }, [
-    sortBy,
-    sortDirection,
-    folders,
-    showHint,
-    viewMode,
-    iconSize,
-    sidebarWidth,
-    sidebarFilter,
-    sidebarOpen,
-    isInitialized,
-  ]);
+  useEffect(
+    () => () => {
+      // Flush a queued debounced write on unmount so the latest toolbar/layout
+      // change is persisted instead of being dropped during the debounce window.
+      if (preferenceWriteTimer.current) {
+        clearTimeout(preferenceWriteTimer.current);
+        preferenceWriteTimer.current = null;
+        persistLatestListState();
+      }
+    },
+    [persistLatestListState],
+  );
 
   // Mobile drawer should never auto-open from persisted desktop state.
   useEffect(() => {
@@ -317,30 +340,29 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     ],
     [pdfDocs, epubDocs, htmlDocs],
   );
-  const rawDocumentIdsKey = useMemo(
-    () => rawDocuments.map((d) => documentIdentityKey(d)).sort().join('|'),
-    [rawDocuments],
-  );
-  const recentlyOpenedById = useLiveQuery<Record<string, number>, Record<string, number>>(
-    async () => {
-      try {
-        return await getDocumentRecentlyOpenedMap();
-      } catch (err) {
-        console.warn('Failed to load recently opened cache metadata:', err);
-        return {};
-      }
-    },
-    [rawDocumentIdsKey],
-    {},
-  );
-
   const allDocuments: DocumentListDocument[] = useMemo(
     () =>
       rawDocuments.map((doc) => ({
         ...doc,
-        recentlyOpenedAt: recentlyOpenedById[documentIdentityKey(doc)] ?? 0,
+        recentlyOpenedAt: doc.recentlyOpenedAt ?? 0,
       })),
-    [rawDocuments, recentlyOpenedById],
+    [rawDocuments],
+  );
+
+  // Folders are derived directly from the authoritative folders query plus each
+  // document's folderId. The folder mutations in useFolders update the documents
+  // and folders query caches optimistically, so there is no local folder mirror
+  // to keep in sync.
+  const folders: Folder[] = useMemo(
+    () =>
+      (folderState.query.data ?? []).map((folder) => ({
+        id: folder.id,
+        name: folder.name,
+        documents: rawDocuments
+          .filter((doc) => doc.folderId === folder.id)
+          .map((doc) => ({ ...doc, folderId: folder.id })),
+      })),
+    [folderState.query.data, rawDocuments],
   );
 
   const allDocumentsById = useMemo(() => {
@@ -435,14 +457,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     if (!documentToDelete) return;
     try {
       await deleteDocument(documentToDelete.id);
-      setFolders((prev) =>
-        prev.map((f) => ({
-          ...f,
-          documents: f.documents.filter(
-            (d) => !(d.id === documentToDelete.id && d.type === documentToDelete.type),
-          ),
-        })),
-      );
       setDocumentToDelete(null);
     } catch (err) {
       console.error('Failed to remove document:', err);
@@ -455,28 +469,13 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 
   const handleDropOnFolder = useCallback(
     (folderId: string, item: DocumentDragItem) => {
-      setFolders((prev) =>
-        prev.map((f) => {
-          if (f.id !== folderId) {
-            // Remove the dropped docs from any other folder they were in.
-            return {
-              ...f,
-              documents: f.documents.filter(
-                (d) => !item.items.some((it) => it.id === d.id && it.type === d.type),
-              ),
-            };
-          }
-          const existingIdentities = new Set(f.documents.map((d) => documentIdentityKey(d)));
-          const newDocs = item.docs
-            .filter((d) => !existingIdentities.has(documentIdentityKey(d)))
-            .map((d) => ({ ...d, folderId }));
-          return { ...f, documents: [...f.documents, ...newDocs] };
-        }),
-      );
-      setSidebarFilter(`folder:${folderId}`);
+      // useFolders.move optimistically reassigns documents[].folderId, which the
+      // derived `folders` memo reflects immediately.
+      folderState.move.mutate({ documentIds: item.docs.map((doc) => doc.id), folderId });
+      updateListState({ sidebarFilter: `folder:${folderId}` });
       selection.clear();
     },
-    [selection],
+    [folderState.move, selection, updateListState],
   );
 
   const handleMergeIntoFolder = useCallback(
@@ -491,50 +490,56 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     [],
   );
 
-  const createFolderFromPending = useCallback(() => {
+  const createFolderFromPending = useCallback(async () => {
     if (!pendingMerge) return;
     const name =
       newFolderName.trim() ||
       generateDefaultFolderName(pendingMerge.sources[0], pendingMerge.target);
-    const folderId = `folder-${Date.now()}`;
-    setFolders((prev) => [
-      ...prev,
-      {
-        id: folderId,
-        name,
-        documents: [
-          ...pendingMerge.sources.map((d) => ({ ...d, folderId })),
-          { ...pendingMerge.target, folderId },
-        ],
-      },
-    ]);
+    const documentIds = [...pendingMerge.sources, pendingMerge.target].map((doc) => doc.id);
+    const folderId = crypto.randomUUID();
     setPendingMerge(null);
     setNewFolderName('');
-    setShowHint(false);
-    setSidebarFilter(`folder:${folderId}`);
+    updateListState({ showHint: false, sidebarFilter: `folder:${folderId}` });
     selection.clear();
-  }, [pendingMerge, newFolderName, selection]);
+    try {
+      const { folder } = await folderState.create.mutateAsync({
+        id: folderId,
+        name,
+        documentIds,
+      });
+      updateListState({ sidebarFilter: `folder:${folder.id}` });
+    } catch (error) {
+      // The mutation surfaces the failure via its error state; fall back to the
+      // full library so we don't strand the user on a folder that was never
+      // created.
+      console.error('Failed to create folder:', error);
+      updateListState({ sidebarFilter: 'all' });
+    }
+  }, [folderState.create, pendingMerge, newFolderName, selection, updateListState]);
+
+  const handleDismissHint = useCallback(() => {
+    updateListState({ showHint: false }, true);
+  }, [updateListState]);
 
   const createManualFolder = useCallback(() => {
     const name = newFolderName.trim() || `New Folder`;
-    const folderId = `folder-${Date.now()}`;
-    setFolders((prev) => [...prev, { id: folderId, name, documents: [] }]);
+    folderState.create.mutate({ name });
     setNewFolderName('');
     setManualFolderPrompt(false);
-    setSidebarFilter(`folder:${folderId}`);
-  }, [newFolderName]);
+    updateListState({ sidebarFilter: 'all' });
+  }, [folderState.create, newFolderName, updateListState]);
 
   const handleDeleteFolder = useCallback((folderId: string) => {
-    setFolders((prev) => prev.filter((f) => f.id !== folderId));
-    if (sidebarFilter === `folder:${folderId}`) setSidebarFilter('all');
-  }, [sidebarFilter]);
+    folderState.remove.mutate(folderId);
+    if (sidebarFilter === `folder:${folderId}`) updateListState({ sidebarFilter: 'all' });
+  }, [folderState.remove, sidebarFilter, updateListState]);
 
   const handleClearFolders = useCallback(() => {
-    setFolders([]);
-    if (sidebarFilter.startsWith('folder:')) setSidebarFilter('all');
+    folderState.clear.mutate();
+    if (sidebarFilter.startsWith('folder:')) updateListState({ sidebarFilter: 'all' });
     setClearFoldersPrompt(false);
     selection.clear();
-  }, [selection, sidebarFilter]);
+  }, [folderState.clear, selection, sidebarFilter, updateListState]);
 
   // Status bar summary.
   const summary = useMemo(() => {
@@ -554,7 +559,20 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     [sortedVisible, selection],
   );
 
-  const isLoading = isPDFLoading || isEPUBLoading || isHTMLLoading;
+  // The content area reflects the documents query alone. Folders feed the
+  // sidebar and preferences feed the toolbar — both have safe defaults, so a
+  // slow or failed folders/preferences fetch must not blank out or block the
+  // document list. Their refresh/error feedback is surfaced in their own UI.
+  const { initialLoading, error: queryError } = documentsQueryState;
+  const refetchFolders = folderState.query.refetch;
+  const refetchPreferences = preferencesQuery.refetch;
+  const retryQueries = useCallback(() => {
+    void Promise.allSettled([
+      refreshDocuments(),
+      refetchFolders(),
+      refetchPreferences(),
+    ]);
+  }, [refetchFolders, refetchPreferences, refreshDocuments]);
 
   const handleUploadBatchChange = useCallback((state: UploadBatchState) => {
     setActiveUploadBatches((prev) => {
@@ -585,21 +603,21 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       toolbar={
         <FinderToolbar
           viewMode={fallbackViewMode}
-          onViewModeChange={setViewMode}
+          onViewModeChange={(mode) => updateListState({ viewMode: mode })}
           iconSize={iconSize}
-          onIconSizeChange={setIconSize}
+          onIconSizeChange={(size) => updateListState({ iconSize: size })}
           sortBy={sortBy}
           sortDirection={sortDirection}
-          onSortByChange={setSortBy}
+          onSortByChange={(by) => updateListState({ sortBy: by })}
           onSortDirectionToggle={() =>
-            setSortDirection((p) => (p === 'asc' ? 'desc' : 'asc'))
+            updateListState({ sortDirection: sortDirection === 'asc' ? 'desc' : 'asc' })
           }
           query={query}
           onQueryChange={setQuery}
           onToggleSidebar={() =>
             isNarrow
               ? setMobileSidebarOpen((p) => !p)
-              : setSidebarOpen((p) => !p)
+              : updateListState({ sidebarCollapsed: !listState.sidebarCollapsed })
           }
           isSidebarOpen={effectiveSidebarOpen}
           showSortControls={sidebarFilter !== 'recents'}
@@ -609,7 +627,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       sidebar={
         <FinderSidebar
           filter={sidebarFilter}
-          onFilterChange={setSidebarFilter}
+          onFilterChange={(filter) => updateListState({ sidebarFilter: filter })}
           folders={foldersWithLiveDocs}
           counts={counts}
           onDeleteFolder={handleDeleteFolder}
@@ -620,7 +638,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           onClearFolders={() => setClearFoldersPrompt(true)}
           onDropOnFolder={handleDropOnFolder}
           width={sidebarWidth}
-          onWidthChange={setSidebarWidth}
+          onWidthChange={(width) => updateListState({ sidebarWidth: width })}
           topSlot={(
             <DocumentUploader
               variant="compact"
@@ -659,14 +677,14 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         if (isNarrow) setMobileSidebarOpen(false);
       }}
     >
-      {!isLoading && showHint && allDocuments.length > 1 && (
+      {!initialLoading && !queryError && showHint && allDocuments.length > 1 && (
         <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
           <div className="flex items-center justify-between bg-surface border border-line rounded-md px-3 py-1 text-[12px]">
             <p className="text-foreground">
               Drag files onto each other to make folders. Drop into the sidebar to move.
             </p>
             <IconButton
-              onClick={() => setShowHint(false)}
+              onClick={handleDismissHint}
               size="xs"
               className="h-6 w-6"
               aria-label="Dismiss hint"
@@ -679,13 +697,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         </div>
       )}
 
-      {isLoading ? (
+      {queryError ? (
+        <QueryError
+          error={queryError}
+          onRetry={retryQueries}
+          className="flex-1 min-h-0 px-6"
+        />
+      ) : initialLoading ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          {isInitialized ? (
-            <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
-          ) : (
-            <DocumentListStateLoader />
-          )}
+          <DocumentListSkeleton viewMode={fallbackViewMode} iconSize={iconSize} />
         </div>
       ) : allDocuments.length === 0 ? (
         <div className="flex-1 min-h-0 flex items-center justify-center p-6">
@@ -700,6 +720,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           className="flex-1 min-h-0 flex flex-col"
           onUploadBatchChange={handleUploadBatchChange}
         >
+          <RefreshIndicator
+            refreshing={documentsQueryState.refreshing}
+            warn={Boolean(documentsQueryState.backgroundError)}
+            className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 rounded-full border border-line bg-surface-solid px-3 py-1 shadow-elev-1"
+          />
           {fallbackViewMode === 'icons' && (
             <IconsView
               documents={sortedVisible}
@@ -713,10 +738,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
               documents={sortedVisible}
               sortBy={sortBy}
               sortDirection={sortDirection}
-              onSortChange={(b, d) => {
-                setSortBy(b);
-                setSortDirection(d);
-              }}
+              onSortChange={(b, d) => updateListState({ sortBy: b, sortDirection: d })}
               onDeleteDoc={handleDeleteDoc}
               onMergeIntoFolder={handleMergeIntoFolder}
             />
