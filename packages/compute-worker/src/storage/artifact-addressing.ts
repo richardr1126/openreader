@@ -56,3 +56,33 @@ export function ttsPlaybackArtifactKey(input: {
   }
   return `${input.prefix}/tts_playback_v1/${input.sessionId}/${input.kind}.json`;
 }
+
+const SAFE_PLAN_SIGNATURE_REGEX = /^[a-f0-9]{8,64}$/i;
+
+/**
+ * Object key for a document's reusable, position-independent canonical TTS plan.
+ *
+ * Unlike {@link ttsPlaybackArtifactKey} this is NOT keyed by session: the plan
+ * (segment list + ordinals + locators, voice/speed-independent) is identical for
+ * a given document version + reader type + segmentation signature, so every
+ * playback session that jumps/seeks within the same document reuses one cached
+ * plan with stable absolute ordinals instead of re-deriving a position-relative
+ * one. `planSignature` is a hash of the segmentation knobs (maxBlockLength,
+ * language, enforceSourceBoundaries, skipBlockKinds, isPlainText, namespace).
+ */
+export function ttsPlaybackPlanArtifactKey(input: {
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  planSignature: string;
+  prefix: string;
+}): string {
+  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
+    throw new Error(`Invalid document id: ${input.documentId}`);
+  }
+  if (!SAFE_PLAN_SIGNATURE_REGEX.test(input.planSignature)) {
+    throw new Error(`Invalid playback plan signature: ${input.planSignature}`);
+  }
+  const version = Math.max(0, Math.floor(input.documentVersion));
+  return `${input.prefix}/tts_playback_plan_v1/${input.documentId}/${version}/${input.readerType}/${input.planSignature}.json`;
+}

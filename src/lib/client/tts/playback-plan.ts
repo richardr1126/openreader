@@ -51,16 +51,19 @@ export function normalizePlaybackPlan(value: unknown): TtsPlaybackPlan {
 
 /**
  * Project the plan into the `CanonicalTtsSegment[]` shape the reader UI consumes
- * for `playbackSegments`. Ordinal is the plan position; anchors carry the
- * locator's `charOffset` so EPUB highlighting can map back into the spine text.
+ * for `playbackSegments`. Ordinal is the segment's **absolute** canonical position
+ * from the worker (the plan spans the whole document, so this also equals the
+ * array index — but we use the server value so the mapping stays correct even if
+ * the plan is ever delivered as a window). Anchors carry the locator's `charOffset`
+ * so EPUB highlighting can map back into the spine text.
  */
 export function playbackPlanToCanonicalSegments(plan: TtsPlaybackPlan): CanonicalTtsSegment[] {
-  return plan.segments.map((segment, index) => {
+  return plan.segments.map((segment) => {
     const charOffset = segment.locator?.charOffset ?? 0;
-    const sourceKey = segment.segmentKey ?? `plan:${index}`;
+    const sourceKey = segment.segmentKey ?? `plan:${segment.segmentIndex}`;
     return {
-      key: segment.segmentKey ?? `plan:${index}`,
-      ordinal: index,
+      key: segment.segmentKey ?? `plan:${segment.segmentIndex}`,
+      ordinal: segment.segmentIndex,
       text: segment.text,
       ownerSourceKey: sourceKey,
       ownerLocator: segment.locator,

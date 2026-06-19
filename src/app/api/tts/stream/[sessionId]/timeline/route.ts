@@ -54,7 +54,7 @@ export async function GET(
       sessionId: session.sessionId,
       documentId: session.documentId,
       status: session.status,
-      startOrdinal: 0,
+      startOrdinal: Math.max(0, Math.floor(session.startOrdinal)),
       durationMs: cursorMs,
       segments: timeline,
     }, {

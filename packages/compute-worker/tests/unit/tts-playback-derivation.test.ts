@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { planTtsPlaybackSegments, resolvePlaybackSourceUnits } from '../../src/jobs/handlers';
+import {
+  computePlaybackPlanSignature,
+  planTtsPlaybackSegments,
+  resolvePlaybackSourceUnits,
+  resolvePlaybackStartOrdinal,
+} from '../../src/jobs/handlers';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 
 const PREFIX = 'openreader';
@@ -73,7 +78,7 @@ describe('worker-owned TTS playback source derivation', () => {
     expect(units).toEqual([{ sourceKey: 'k', text: 'hi', locator: { readerType: 'pdf', page: 1 } }]);
   });
 
-  test('document extent derives all pages from the parsed artifact, skipping headers', async () => {
+  test('derivation returns the whole document, skipping headers', async () => {
     const storage = fakeStorage();
     const units = await resolvePlaybackSourceUnits(
       baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document', startPage: 1 } }),
@@ -87,24 +92,20 @@ describe('worker-owned TTS playback source derivation', () => {
     ]);
   });
 
-  test('section extent derives only the start page', async () => {
+  test('derivation is position-independent: same whole-document units regardless of start page or extent', async () => {
     const storage = fakeStorage();
-    const units = await resolvePlaybackSourceUnits(
-      baseRequest({ documentSource: { namespace: null, extent: 'section', startPage: 2 } }),
+    const fromTop = await resolvePlaybackSourceUnits(
+      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document', startPage: 1 } }),
       storage,
       PREFIX,
     );
-    expect(units.map((u) => u.sourceKey)).toEqual([`pdf:2:b2`, `pdf:2:b3`]);
-  });
-
-  test('document extent starting mid-document only includes pages at or after start', async () => {
-    const storage = fakeStorage();
-    const units = await resolvePlaybackSourceUnits(
-      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document', startPage: 2 } }),
+    const fromMid = await resolvePlaybackSourceUnits(
+      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'section', startPage: 2 } }),
       storage,
       PREFIX,
     );
-    expect(units.map((u) => u.sourceKey)).toEqual([`pdf:2:b3`, `pdf:3:b4`]);
+    expect(fromMid.map((u) => u.sourceKey)).toEqual(fromTop.map((u) => u.sourceKey));
+    expect(fromMid.map((u) => u.sourceKey)).toEqual([`pdf:1:b1`, `pdf:2:b3`, `pdf:3:b4`]);
   });
 
   test('planned playback segment indexes use canonical global ordinals across source units', () => {
@@ -117,5 +118,58 @@ describe('worker-owned TTS playback source derivation', () => {
       ],
     );
     expect(segments.map((segment) => segment.segmentIndex)).toEqual([0, 1, 2]);
+  });
+
+  function wholeDocPlan() {
+    return planTtsPlaybackSegments(
+      baseRequest({ enforceSourceBoundaries: true }),
+      [
+        { sourceKey: 'pdf:1:b1', text: 'First block.', locator: { readerType: 'pdf', page: 1, blockId: 'b1' } },
+        { sourceKey: 'pdf:2:b2', text: 'Second block.', locator: { readerType: 'pdf', page: 2, blockId: 'b2' } },
+        { sourceKey: 'pdf:3:b3', text: 'Third block.', locator: { readerType: 'pdf', page: 3, blockId: 'b3' } },
+      ],
+    );
+  }
+
+  test('resolvePlaybackStartOrdinal maps start hints to absolute ordinals in the whole-document plan', () => {
+    const segments = wholeDocPlan();
+
+    // By start page: first segment at/after the page.
+    expect(resolvePlaybackStartOrdinal(
+      segments,
+      baseRequest({ documentSource: { namespace: null, extent: 'document', startPage: 2 } }),
+    )).toBe(1);
+    expect(resolvePlaybackStartOrdinal(
+      segments,
+      baseRequest({ documentSource: { namespace: null, extent: 'document', startPage: 3 } }),
+    )).toBe(2);
+
+    // By exact segment key (preferred, position-independent).
+    const thirdKey = segments[2].segmentKey!;
+    expect(resolvePlaybackStartOrdinal(segments, baseRequest({ startSegmentKey: thirdKey }))).toBe(2);
+
+    // No hints → start at the document beginning.
+    expect(resolvePlaybackStartOrdinal(segments, baseRequest({}))).toBe(0);
+  });
+
+  test('plan signature ignores start position and voice/speed but varies with segmentation knobs', () => {
+    const fromTop = computePlaybackPlanSignature(
+      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+    );
+    const fromMid = computePlaybackPlanSignature(
+      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'section', startPage: 9 } }),
+    );
+    expect(fromMid).toBe(fromTop); // start position must not fork the plan
+
+    const differentVoice = {
+      ...baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+      settingsJson: { voice: 'echo', providerRef: 'p', providerType: 'openai', ttsModel: 'm', nativeSpeed: 2 },
+    } as Parameters<typeof computePlaybackPlanSignature>[0];
+    expect(computePlaybackPlanSignature(differentVoice)).toBe(fromTop); // voice/speed don't affect the plan
+
+    const biggerBlocks = computePlaybackPlanSignature(
+      baseRequest({ maxBlockLength: 400, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+    );
+    expect(biggerBlocks).not.toBe(fromTop); // segmentation knobs do
   });
 });

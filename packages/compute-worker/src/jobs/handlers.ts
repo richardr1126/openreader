@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@openreader/database';
@@ -26,7 +27,7 @@ import {
 } from '@openreader/tts/segment-plan';
 import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
 import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
-import { documentSourceKey, parsedPdfArtifactKey, ttsPlaybackArtifactKey } from '../storage/artifact-addressing';
+import { documentSourceKey, parsedPdfArtifactKey, ttsPlaybackPlanArtifactKey } from '../storage/artifact-addressing';
 import { extractEpubSpine } from '../inference/epub/spine-text';
 import type { ParsedPdfDocument } from '../operations/contracts';
 import {
@@ -94,14 +95,27 @@ async function updateTtsPlaybackSession(input: {
   status: 'running' | 'succeeded' | 'failed';
   planObjectKey?: string;
   lastError?: string | null;
+  /**
+   * Absolute canonical ordinal the audio stream should begin at, resolved by the
+   * worker from the start position against the position-independent plan. When
+   * provided we also seed the cursor to it (fresh) so generation paces a window
+   * ahead of the start position rather than from ordinal 0.
+   */
+  startOrdinal?: number;
 }): Promise<void> {
   const now = Date.now();
+  const startOrdinal = input.startOrdinal === undefined
+    ? undefined
+    : Math.max(0, Math.floor(input.startOrdinal));
   await db
     .update(ttsPlaybackSessions)
     .set({
       status: input.status,
       ...(input.planObjectKey === undefined ? {} : { planObjectKey: input.planObjectKey }),
       ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
+      ...(startOrdinal === undefined
+        ? {}
+        : { startOrdinal, cursorOrdinal: startOrdinal, cursorUpdatedAt: now }),
       updatedAt: now,
     })
     .where(eq(ttsPlaybackSessions.sessionId, input.sessionId));
@@ -307,15 +321,15 @@ async function deriveEpubSourceUnits(
   const spine = await extractEpubSpine(bytes);
   if (spine.length === 0) return [];
 
-  const startSpineIndex = Math.max(0, Math.floor(documentSource.startSpineIndex ?? 0));
-  const selected = documentSource.extent === 'section'
-    ? spine.filter((item) => item.index === startSpineIndex)
-    : spine.filter((item) => item.index >= startSpineIndex);
-
+  // Position-independent plan: derive the whole book (all spine items from index
+  // 0) regardless of the session's start position. The start position is resolved
+  // separately into an absolute `startOrdinal`; the background extent setting (not
+  // plan scope) controls how far generation runs on disconnect. This keeps the
+  // plan + ordinals identical no matter where playback begins.
   // One source unit per spine item (the whole chapter text); the segmenter
   // splits it into segments and assigns per-segment charOffsets. Mirrors the
   // client's `planSpineSegments` sourceKey/locator shape so identity matches.
-  return selected
+  return spine
     .filter((item) => item.text.trim().length > 0)
     .map((item) => ({
       sourceKey: `spine:${item.index}:${item.href}`,
@@ -345,14 +359,12 @@ async function derivePdfSourceUnits(
   const pages = [...(parsed.pages ?? [])].sort((a, b) => a.pageNumber - b.pageNumber);
   if (pages.length === 0) return [];
 
-  const startPage = Math.max(1, Math.floor(documentSource.startPage ?? 1));
-  const selected = documentSource.extent === 'section'
-    ? pages.filter((page) => page.pageNumber === startPage)
-    : pages.filter((page) => page.pageNumber >= startPage);
-
+  // Position-independent plan: derive the whole document (all pages) regardless
+  // of the session start page. Start position becomes an absolute `startOrdinal`;
+  // background extent controls generation reach, not plan scope.
   const skipKinds = documentSource.skipBlockKinds ?? [];
   const units: CanonicalTtsSourceUnit[] = [];
-  for (const page of selected) {
+  for (const page of pages) {
     units.push(...buildPdfPageSourceUnits(page, page.pageNumber, skipKinds));
   }
   return units;
@@ -374,19 +386,19 @@ function perSegmentLocator(
   return ownerLocator;
 }
 
+/**
+ * Build the whole-document (whole-book for EPUB) canonical plan with **absolute**
+ * ordinals. The plan is position-independent: it does not slice or re-index from
+ * the start position, so the same sentence always carries the same ordinal/key no
+ * matter where playback begins. The start position is resolved separately into an
+ * absolute `startOrdinal` (see {@link resolvePlaybackStartOrdinal}).
+ */
 export function planTtsPlaybackSegments(
   request: z.infer<typeof ttsPlaybackRequestSchema>,
   sourceUnits: CanonicalTtsSourceUnit[],
 ): TtsPlaybackSegmentInput[] {
   const planning = request.planning;
   if (sourceUnits.length === 0) return [];
-
-  const currentSourceKeys = new Set(
-    (planning.currentSourceKeys?.length
-      ? planning.currentSourceKeys
-      : sourceUnits.map((unit) => unit.sourceKey)
-    ).map((key) => key.trim()).filter(Boolean),
-  );
 
   const plan = planCanonicalTtsSegments(sourceUnits, {
     readerType: request.readerType,
@@ -396,28 +408,97 @@ export function planTtsPlaybackSegments(
     language: planning.language || parseTtsSettings(request.settingsJson).language,
   });
 
-  const eligible = plan.segments.filter((segment) => currentSourceKeys.has(segment.ownerSourceKey));
-  const normalizedStartText = planning.startText ? normalizeSegmentText(planning.startText) : '';
-  let startIndex = 0;
+  return plan.segments.map((segment, index) => ({
+    segmentIndex: index,
+    segmentKey: segment.key,
+    text: segment.text,
+    locator: perSegmentLocator(segment.ownerLocator, segment.startAnchor.offset),
+  }));
+}
+
+function locatorPageNumber(locator: unknown): number | null {
+  if (!locator || typeof locator !== 'object') return null;
+  const rec = locator as { readerType?: unknown; page?: unknown };
+  if (rec.readerType !== 'pdf') return null;
+  const page = Number(rec.page);
+  return Number.isFinite(page) ? page : null;
+}
+
+function locatorSpineIndex(locator: unknown): number | null {
+  if (!locator || typeof locator !== 'object') return null;
+  const rec = locator as { readerType?: unknown; spineIndex?: unknown };
+  if (rec.readerType !== 'epub') return null;
+  const spineIndex = Number(rec.spineIndex);
+  return Number.isFinite(spineIndex) ? spineIndex : null;
+}
+
+/**
+ * Resolve the absolute canonical ordinal where playback should begin, given the
+ * whole-document plan and the session's start hints. Prefers the exact segment
+ * key, then a normalized text match, then the first segment at/after the start
+ * page (PDF) or spine item (EPUB). Falls back to ordinal 0.
+ */
+export function resolvePlaybackStartOrdinal(
+  segments: TtsPlaybackSegmentInput[],
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+): number {
+  if (segments.length === 0) return 0;
+  const planning = request.planning;
+
   if (planning.startSegmentKey) {
-    const match = eligible.findIndex((segment) => segment.key === planning.startSegmentKey);
-    if (match >= 0) startIndex = match;
+    const match = segments.find((segment) => segment.segmentKey === planning.startSegmentKey);
+    if (match) return match.segmentIndex;
   }
-  if (startIndex === 0 && normalizedStartText) {
-    const match = eligible.findIndex((segment) => normalizeSegmentText(segment.text) === normalizedStartText);
-    if (match >= 0) startIndex = match;
+  if (planning.startText) {
+    const normalizedStartText = normalizeSegmentText(planning.startText);
+    if (normalizedStartText) {
+      const match = segments.find((segment) => normalizeSegmentText(segment.text) === normalizedStartText);
+      if (match) return match.segmentIndex;
+    }
   }
 
-  const rows: TtsPlaybackSegmentInput[] = [];
-  for (const [index, segment] of eligible.slice(startIndex).entries()) {
-    rows.push({
-      segmentIndex: index,
-      segmentKey: segment.key,
-      text: segment.text,
-      locator: perSegmentLocator(segment.ownerLocator, segment.startAnchor.offset),
-    });
+  const documentSource = planning.documentSource;
+  if (documentSource) {
+    if (request.readerType === 'pdf' && documentSource.startPage !== undefined) {
+      const startPage = Math.max(1, Math.floor(documentSource.startPage));
+      const match = segments.find((segment) => {
+        const page = locatorPageNumber(segment.locator);
+        return page != null && page >= startPage;
+      });
+      if (match) return match.segmentIndex;
+    }
+    if (request.readerType === 'epub' && documentSource.startSpineIndex !== undefined) {
+      const startSpineIndex = Math.max(0, Math.floor(documentSource.startSpineIndex));
+      const match = segments.find((segment) => {
+        const spineIndex = locatorSpineIndex(segment.locator);
+        return spineIndex != null && spineIndex >= startSpineIndex;
+      });
+      if (match) return match.segmentIndex;
+    }
   }
-  return rows;
+
+  return segments[0].segmentIndex;
+}
+
+/**
+ * Deterministic hash of the segmentation knobs that affect plan shape (but NOT
+ * voice/speed, which only affect audio). Two sessions over the same document
+ * version + reader type with the same knobs share one cached canonical plan.
+ */
+export function computePlaybackPlanSignature(
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+): string {
+  const planning = request.planning;
+  const documentSource = planning.documentSource;
+  const signature = {
+    maxBlockLength: planning.maxBlockLength ?? null,
+    language: planning.language ?? parseTtsSettings(request.settingsJson).language ?? null,
+    enforceSourceBoundaries: Boolean(planning.enforceSourceBoundaries),
+    skipBlockKinds: [...(documentSource?.skipBlockKinds ?? [])].map((kind) => kind.trim()).filter(Boolean).sort(),
+    isPlainText: Boolean(documentSource?.isPlainText),
+    namespace: documentSource?.namespace ?? null,
+  };
+  return createHash('sha256').update(JSON.stringify(signature)).digest('hex').slice(0, 32);
 }
 
 /**
@@ -427,15 +508,11 @@ export function planTtsPlaybackSegments(
  */
 async function persistTtsPlaybackPlan(input: {
   storage: Pick<ArtifactStorage, 'putObject'>;
-  s3Prefix: string;
+  planObjectKey: string;
   request: z.infer<typeof ttsPlaybackRequestSchema>;
   segments: TtsPlaybackSegmentInput[];
 }): Promise<string> {
-  const key = ttsPlaybackArtifactKey({
-    sessionId: input.request.sessionId,
-    kind: 'plan',
-    prefix: input.s3Prefix,
-  });
+  const key = input.planObjectKey;
   const artifact = {
     schemaVersion: 1 as const,
     sessionId: input.request.sessionId,
@@ -833,29 +910,40 @@ export function createJobHandlers(input: {
         lastError: null,
       });
       try {
-        // One generation job per session derives the full forward plan once and
-        // persists it (the key is deterministic from the session id). On a
-        // JetStream redelivery we reuse the persisted plan rather than re-parsing.
-        const planObjectKey = ttsPlaybackArtifactKey({
-          sessionId: parsed.sessionId,
-          kind: 'plan',
+        // The canonical plan is position-independent and reusable: it is keyed by
+        // document version + reader type + segmentation signature (NOT session, NOT
+        // voice/speed), so every session that jumps/seeks within the same document
+        // shares one cached plan with stable absolute ordinals. We derive + persist
+        // it once per (document, signature) and reuse it thereafter.
+        const planObjectKey = ttsPlaybackPlanArtifactKey({
+          documentId: parsed.documentId,
+          documentVersion: parsed.documentVersion,
+          readerType: parsed.readerType,
+          planSignature: computePlaybackPlanSignature(parsed),
           prefix: input.s3Prefix,
         });
         let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
-        if (!plannedSegments) {
+        if (!plannedSegments || plannedSegments.length === 0) {
           const sourceUnits = await resolvePlaybackSourceUnits(parsed, input.storage, input.s3Prefix);
           plannedSegments = planTtsPlaybackSegments(parsed, sourceUnits);
           await persistTtsPlaybackPlan({
             storage: input.storage,
-            s3Prefix: input.s3Prefix,
+            planObjectKey,
             request: parsed,
             segments: plannedSegments,
           });
         }
+
+        // Resolve where THIS session starts (absolute ordinal in the shared plan)
+        // and seed the session cursor there, then begin generation from that
+        // ordinal forward. The audio stream endpoint waits for planObjectKey to be
+        // set before reading startOrdinal, so it never starts at a stale 0.
+        const startOrdinal = resolvePlaybackStartOrdinal(plannedSegments, parsed);
         await updateTtsPlaybackSession({
           sessionId: parsed.sessionId,
           status: 'running',
           planObjectKey,
+          startOrdinal,
           lastError: null,
         });
 
@@ -928,10 +1016,17 @@ export function createJobHandlers(input: {
           await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
         };
 
+        // Generate forward from the session's start ordinal only. Earlier ordinals
+        // belong to the same shared plan but are generated by whichever session
+        // started there (or on a backward seek); generating the whole prefix here
+        // would waste work and delay first audio. The section/background maps above
+        // still use the full plan so extent boundaries resolve correctly.
+        const generationSegments = plannedSegments.filter((segment) => segment.segmentIndex >= startOrdinal);
+
         await generateExplicitTtsPlaybackSegments({
           request: parsed,
           s3Prefix: input.s3Prefix,
-          segments: plannedSegments,
+          segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
           onBeforeSegment,
           onSegmentCompleted,

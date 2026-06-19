@@ -233,6 +233,12 @@ export async function listCompletedTtsPlaybackSegments(
 
   const ordered: Array<TtsPlaybackSegmentRow> = [];
   if (planSegments && planSegments.length > 0) {
+    // The canonical plan spans the whole document with absolute ordinals, but this
+    // session's audio stream begins at its startOrdinal and generation runs forward
+    // from there. Skip the (ungenerated) plan prefix so the contiguous-run match
+    // starts at startOrdinal — otherwise it would break at ordinal 0 and yield an
+    // empty timeline. The first generated segment becomes time 0 for this session.
+    const startFrom = Math.max(0, Math.floor(session.startOrdinal));
     const unused = new Set(completed.map((_, index) => index));
     const take = (predicate: (row: typeof completed[number]) => boolean): typeof completed[number] | null => {
       for (const index of unused) {
@@ -244,6 +250,7 @@ export async function listCompletedTtsPlaybackSegments(
       return null;
     };
     for (const plan of planSegments) {
+      if (plan.segmentIndex < startFrom) continue;
       const planLocatorKey = locatorIdentityKey(plan.locator);
       const match = take((row) =>
         row.segmentKey === plan.segmentKey

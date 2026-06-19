@@ -151,10 +151,11 @@ export async function POST(request: NextRequest) {
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
 
-    // PDF/HTML plan the whole forward document up front so playback is seamless
-    // across page boundaries (one session, audio throttled to a window ahead of
-    // the playback cursor). EPUB keeps its per-section plan + chapter-handoff
-    // machinery; it still benefits from windowed generation within a chapter.
+    // The worker derives one position-independent canonical plan over the whole
+    // document (whole book for EPUB) with absolute ordinals, reused across
+    // sessions; the start position only selects this session's startOrdinal (audio
+    // window). `extent` is retained for the request shape but no longer scopes plan
+    // derivation — `backgroundExtent` (below) controls generation reach instead.
     const planExtent = scope.readerType === 'epub' ? 'section' : 'document';
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
@@ -171,8 +172,10 @@ export async function POST(request: NextRequest) {
     const startSpineIndex = scope.readerType === 'epub'
       ? (parsed.startLocation.spineIndex ?? 0)
       : undefined;
-    // Playback ordinals are session-local media indexes. The document start
-    // position belongs in planning.documentSource below.
+    // Seed startOrdinal to 0; the worker resolves the real absolute ordinal from
+    // the start hints (startSegmentKey / startText / startPage / startSpineIndex)
+    // against the shared canonical plan and writes it back to the session (the
+    // audio stream waits for planObjectKey before reading it).
     const startOrdinal = 0;
 
     const now = Date.now();

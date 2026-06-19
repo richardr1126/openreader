@@ -135,6 +135,7 @@ export function registerComputeWorkerRoutes(input: {
     settingsHash: string;
     startOrdinal: number;
     cursorOrdinal: number;
+    planObjectKey: string | null;
     expiresAt: number;
   };
 
@@ -170,6 +171,7 @@ export function registerComputeWorkerRoutes(input: {
         settingsHash: ttsPlaybackSessions.settingsHash,
         startOrdinal: ttsPlaybackSessions.startOrdinal,
         cursorOrdinal: ttsPlaybackSessions.cursorOrdinal,
+        planObjectKey: ttsPlaybackSessions.planObjectKey,
         expiresAt: ttsPlaybackSessions.expiresAt,
       })
       .from(ttsPlaybackSessions)
@@ -307,7 +309,11 @@ export function registerComputeWorkerRoutes(input: {
 
     const startedAt = Date.now();
     const streamAudio = async function* (): AsyncGenerator<Buffer> {
-      let ordinal = Math.max(0, Math.floor(initialSession.startOrdinal));
+      // Resolved lazily once the worker has set planObjectKey, which it writes
+      // together with the absolute startOrdinal. Reading initialSession.startOrdinal
+      // eagerly could capture a stale 0 before the worker resolves the start
+      // position against the position-independent plan.
+      let ordinal: number | null = null;
       let wroteFirstByte = false;
       for (;;) {
         if (closed) return;
@@ -320,6 +326,15 @@ export function registerComputeWorkerRoutes(input: {
         if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
           app.log.info({ sessionId, ordinal, status: session.status }, 'tts.playback.audio.session_stopped');
           return;
+        }
+
+        if (ordinal === null) {
+          if (!session.planObjectKey) {
+            // Worker has not resolved this session's start ordinal yet.
+            await sleep(250);
+            continue;
+          }
+          ordinal = Math.max(0, Math.floor(session.startOrdinal));
         }
 
         const segment = await readCompletedPlaybackSegment(session, ordinal);
