@@ -194,18 +194,22 @@ Default embedded worker flow (no external worker URL):
 ```env
 # Leave COMPUTE_WORKER_URL unset.
 # Entry point auto-starts embedded worker+NATS when available.
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 ```
 
 External worker flow:
 
 ```env
 COMPUTE_WORKER_URL=http://localhost:8081
+# Only needed when browsers cannot reach COMPUTE_WORKER_URL directly.
+# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 ```
 
 Use the same ownership split:
-- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale overrides
-- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
+- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus optional shared timeout/stale overrides
+- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning) plus the matching `COMPUTE_WORKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`
 
 Use one of these `.env` mode templates:
 
@@ -216,6 +220,7 @@ Use one of these `.env` mode templates:
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 # Optional when you need multiple local origins:
 # AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
 ```
@@ -229,6 +234,7 @@ AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 # Comma-separated emails to auto-promote to admin on signin.
 ADMIN_EMAILS=you@example.com
 ```
@@ -241,6 +247,7 @@ API_BASE=http://host.docker.internal:8880/v1
 USE_EMBEDDED_WEED_MINI=false
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
@@ -258,7 +265,10 @@ API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 COMPUTE_WORKER_URL=http://localhost:8081
+# Optional when browsers need a different public URL:
+# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 USE_EMBEDDED_WEED_MINI=false
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1

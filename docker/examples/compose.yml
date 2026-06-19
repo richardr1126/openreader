@@ -9,6 +9,7 @@ services:
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3003}
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       RUNTIME_SEED_JSON: |-
         {
           "version": 1,

@@ -100,9 +100,11 @@ default TTS provider.
 - OpenReader: `http://localhost:3003`
 - SeaweedFS S3: `http://localhost:8333`
 - Kokoro-FastAPI: `http://localhost:8880`
+- Compute worker playback audio in full stacks: `http://localhost:8081`
 
-In the full examples, PostgreSQL, the compute worker, and NATS remain internal to the Compose
-network.
+In the full examples, PostgreSQL and NATS remain internal to the Compose network. The compute
+worker API still uses the internal `http://compute-worker:8081` URL from the app, but port `8081`
+is also published so browsers can load signed worker-owned TTS playback audio.
 
 ## LAN access
 
@@ -125,6 +127,7 @@ docker compose -f docker/examples/compose.yml up
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 S3_ENDPOINT=http://192.168.0.XXX:8333 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.full.yml up
 # Repository convenience command: pnpm compose:full
 ```
@@ -145,6 +148,7 @@ docker compose -f docker/examples/compose.local-slim.yml up --build
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 S3_ENDPOINT=http://192.168.0.XXX:8333 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.local-full.yml up --build
 # Repository convenience command: pnpm compose:local:full
 ```
@@ -152,12 +156,13 @@ docker compose -f docker/examples/compose.local-full.yml up --build
 </TabItem>
 </Tabs>
 
-Replace `192.168.0.XXX` with your Docker host's LAN IP and allow inbound TCP ports `3003` and
-`8333` through its firewall.
+Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP ports `3003` and
+`8333` for every stack, plus `8081` when using full stacks with the standalone compute worker.
 
 :::info Internal full-stack endpoint
 The full and local-full compute workers continue using `http://seaweedfs:8333` internally.
 `S3_ENDPOINT` configures the app endpoint and browser-facing presigned URLs.
+`COMPUTE_WORKER_PUBLIC_URL` configures the browser-facing worker playback audio URL.
 :::
 
 ## Configuration
@@ -166,8 +171,8 @@ The examples use local-only default credentials. Override existing `${VARIABLE}`
 your shell environment before using them beyond local development.
 
 :::warning Protect public deployments
-Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, and compute-worker
-token before exposing a stack outside your trusted local network.
+Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, compute-worker token,
+and `TTS_PLAYBACK_TOKEN_SECRET` before exposing a stack outside your trusted local network.
 :::
 
 For the complete configuration reference, see

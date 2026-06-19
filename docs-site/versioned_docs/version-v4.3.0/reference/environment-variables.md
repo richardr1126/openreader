@@ -54,7 +54,9 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 | `WHISPER_MODEL_BASE_URL` | Compute model source | onnx-community default | Override Whisper ONNX model base URL |
 | `PDF_LAYOUT_MODEL_BASE_URL` | Compute model source | PP-DocLayoutV3 default | Override PDF layout ONNX model base URL |
 | `COMPUTE_WORKER_URL` | External compute mode | unset | Set only for standalone external worker mode |
+| `COMPUTE_WORKER_PUBLIC_URL` | TTS playback | `COMPUTE_WORKER_URL` | Set when browsers need a different worker URL for audio |
 | `COMPUTE_WORKER_TOKEN` | External compute mode | unset | Required for standalone external worker auth |
+| `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | unset | Required for signed worker-owned playback audio URLs |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
 | `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor `x-openreader-test-namespace` header in production builds |
@@ -323,10 +325,33 @@ Base URL for PDF layout model downloads.
 External compute worker URL.
 
 - Leave unset for embedded worker mode
+- Used by the app server for internal worker API calls.
+- In embedded mode, bootstrap sets this to the local embedded worker URL for the app process.
+
+### COMPUTE_WORKER_PUBLIC_URL
+
+Browser-reachable compute worker URL for worker-owned TTS playback audio.
+
+- Default: `COMPUTE_WORKER_URL`
+- Set this when `COMPUTE_WORKER_URL` points at an internal hostname that browsers cannot reach.
+- The browser loads signed progressive MP3 playback directly from `${COMPUTE_WORKER_PUBLIC_URL}/v1/tts-playback/:sessionId/audio`.
+- Do not include `COMPUTE_WORKER_TOKEN` in this URL. Browser playback uses `TTS_PLAYBACK_TOKEN_SECRET`-signed short-lived URLs instead.
 
 ### COMPUTE_WORKER_TOKEN
 
 Shared token for app-to-external-worker requests.
+
+- Required when `COMPUTE_WORKER_URL` points at a standalone worker.
+- Never expose this token to browsers.
+
+### TTS_PLAYBACK_TOKEN_SECRET
+
+Secret used to sign short-lived browser-facing TTS playback URLs.
+
+- Required for worker-owned TTS playback.
+- Must be set to the same value on the app server and standalone compute worker.
+- Generate with `openssl rand -base64 32`.
+- This is separate from `COMPUTE_WORKER_TOKEN`; it signs public audio URLs and must not be used as the internal worker bearer token.
 
 ## Audio Runtime
 
@@ -393,7 +418,6 @@ Example:
   "version": 1,
   "runtimeConfig": {
     "enableUserSignups": true,
-    "restrictUserApiKeys": true,
     "defaultTtsProvider": "custom-openai",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,
@@ -408,6 +432,7 @@ Example:
     "ttsCacheTtlMs": 1800000,
     "ttsUpstreamMaxRetries": 2,
     "ttsUpstreamTimeoutMs": 285000,
+    "ttsPlaybackBackgroundExtent": "section",
     "disableComputeRateLimit": true,
     "computeParseBurstMax": 8,
     "computeParseBurstWindowSec": 60,

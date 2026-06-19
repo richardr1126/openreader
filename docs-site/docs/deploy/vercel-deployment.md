@@ -40,7 +40,10 @@ CRON_SECRET=...               # generate with: openssl rand -base64 32
 
 # Heavy compute (required on Vercel in current releases)
 COMPUTE_WORKER_URL=https://<railway-worker-domain>
+# Optional when browsers need a different public worker URL for playback audio
+# COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>
 COMPUTE_WORKER_TOKEN=...
+TTS_PLAYBACK_TOKEN_SECRET=... # generate with: openssl rand -base64 32; set the same value on the worker
 
 # Logging (recommended for Vercel log ingestion)
 LOG_FORMAT=json
@@ -68,7 +71,9 @@ If your Vercel app uses an external compute worker on Railway with Synadia Cloud
    - `ghcr.io/richardr1126/openreader-compute-worker:refactor-ppdoclayoutv3-onnx-layout-parsing`
 2. Enable public networking on that Railway service and set:
    - `COMPUTE_WORKER_URL=https://<railway-worker-domain>` (in Vercel)
+   - `COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>` (in Vercel) if browsers cannot reach `COMPUTE_WORKER_URL` directly
 3. Use the same `COMPUTE_WORKER_TOKEN` value in both Vercel and Railway worker env vars.
+4. Use the same `TTS_PLAYBACK_TOKEN_SECRET` value in both Vercel and Railway worker env vars.
 
 For complete Railway worker env vars (`NATS_*`, `S3_*`, health checks, and Synadia `.creds` guidance), see [Compute Worker (NATS JetStream)](./compute-worker).
 

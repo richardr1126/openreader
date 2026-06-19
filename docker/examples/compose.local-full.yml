@@ -20,7 +20,9 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
       POSTGRES_URL: postgres://openreader:openreader@postgres:5432/openreader
       COMPUTE_WORKER_URL: http://compute-worker:8081
+      COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       USE_EMBEDDED_WEED_MINI: "false"
       S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:8333} # Used for internal endpoint and public facing presigned URLs.
       S3_BUCKET: ${S3_BUCKET:-openreader-documents}
@@ -114,6 +116,7 @@ services:
       COMPUTE_WORKER_HOST: 0.0.0.0
       PORT: 8081
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       S3_ENDPOINT: http://seaweedfs:8333
       S3_BUCKET: ${S3_BUCKET:-openreader-documents}
       S3_REGION: ${S3_REGION:-us-east-1}
@@ -122,6 +125,8 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       S3_PREFIX: ${S3_PREFIX:-openreader}
       COMPUTE_PREWARM_MODELS: ${COMPUTE_PREWARM_MODELS:-false}
+    ports:
+      - "8081:8081"
 
 volumes:
   openreader-docstore:
