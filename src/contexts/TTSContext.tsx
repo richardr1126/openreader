@@ -1270,16 +1270,20 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       };
       audio.ontimeupdate = () => {
         if (runId !== playbackRunIdRef.current) return;
+        // Time advancing means audio is genuinely playing from the buffer, so
+        // clear any stale buffering state (e.g. a transient `waiting`).
+        setIsProcessing(false);
         projectPlaybackTime(audio.currentTime);
       };
+      // `waiting` means playback actually halted to rebuffer the progressive
+      // stream — show loading. `stalled` (slow network while playback continues
+      // from the buffer) intentionally does NOT toggle loading: with the single
+      // continuous MP3 it fired constantly and stuck the spinner on mid-playback.
       audio.onwaiting = () => {
         if (runId !== playbackRunIdRef.current) return;
         setIsProcessing(true);
       };
-      audio.onstalled = () => {
-        if (runId !== playbackRunIdRef.current) return;
-        setIsProcessing(true);
-      };
+      audio.onstalled = null;
       audio.onplaying = () => {
         if (runId !== playbackRunIdRef.current) return;
         setIsProcessing(false);
