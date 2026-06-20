@@ -3,6 +3,7 @@ import type {
   PdfLayoutResolution,
   PdfLayoutResult,
   TtsPlaybackRequest,
+  TtsPlaybackPlanRequest,
   ComputeOperation,
 } from './protocol';
 
@@ -88,6 +89,10 @@ export class ComputeWorkerClient {
 
   createTtsPlaybackOperation(input: TtsPlaybackRequest): Promise<ComputeOperation> {
     return this.requestJson('POST', '/v1/tts-playback/operations', input);
+  }
+
+  createTtsPlaybackPlanOperation(input: TtsPlaybackPlanRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/tts-playback-plans/operations', input);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {

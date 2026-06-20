@@ -22,6 +22,8 @@ import { OperationOrchestrator } from '../operations';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
+  TtsPlaybackPlanJobRequest,
+  TtsPlaybackPlanJobResult,
   TtsPlaybackJobRequest,
   TtsPlaybackJobResult,
 } from '../operations/contracts';
@@ -45,6 +47,7 @@ import {
   EVENTS_STREAM_NAME,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
+  TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
   TTS_PLAYBACK_JOBS_SUBJECT,
 } from '../infrastructure/nats';
 import { registerHttpHooks } from './http-hooks';
@@ -209,12 +212,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
   const ttsPlaybackJobCodec = createJsonCodec<QueuedJob<TtsPlaybackJobRequest>>();
+  const ttsPlaybackPlanJobCodec = createJsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -224,6 +228,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getJs: async () => (await ensureConnected()).js,
     layoutSubject: LAYOUT_JOBS_SUBJECT,
     ttsPlaybackSubject: TTS_PLAYBACK_JOBS_SUBJECT,
+    ttsPlaybackPlanSubject: TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -296,6 +301,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     pdfAttempts,
     pdfCodec: layoutJobCodec,
     ttsPlaybackCodec: ttsPlaybackJobCodec,
+    ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -328,6 +334,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       workerLoops.start(session, {
         pdfLayout: session.layoutConsumer,
         ttsPlayback: session.ttsPlaybackConsumer,
+        ttsPlaybackPlan: session.ttsPlaybackPlanConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

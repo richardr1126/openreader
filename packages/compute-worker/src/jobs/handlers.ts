@@ -42,6 +42,8 @@ import type {
   PdfLayoutProgress,
   TtsPlaybackJobRequest,
   TtsPlaybackJobResult,
+  TtsPlaybackPlanJobRequest,
+  TtsPlaybackPlanJobResult,
   TtsPlaybackProgress,
 } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
@@ -66,7 +68,6 @@ const ttsPlaybackRequestSchema = z.object({
   settingsJson: z.unknown(),
   startOrdinal: z.number().int().nonnegative(),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
-  planOnly: z.boolean().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
@@ -86,6 +87,12 @@ const ttsPlaybackRequestSchema = z.object({
     }).optional(),
   }),
 });
+
+const ttsPlaybackPlanRequestSchema = ttsPlaybackRequestSchema
+  .omit({ sessionId: true, planObjectKey: true, aheadWindow: true, backgroundExtent: true })
+  .extend({
+    startOrdinal: z.number().int().nonnegative(),
+  });
 
 async function updateTtsPlaybackSession(input: {
   sessionId: string;
@@ -541,10 +548,12 @@ async function persistTtsPlaybackPlan(input: {
   const artifact = {
     schemaVersion: 1 as const,
     sessionId: input.request.sessionId,
+    storageUserId: input.request.storageUserId,
     documentId: input.request.documentId,
     documentVersion: input.request.documentVersion,
     readerType: input.request.readerType,
     settingsHash: input.request.settingsHash,
+    settingsJson: input.request.settingsJson,
     segments: input.segments.map((segment) => ({
       segmentIndex: segment.segmentIndex,
       segmentKey: segment.segmentKey ?? null,
@@ -588,6 +597,43 @@ async function readPersistedTtsPlaybackPlanSegments(
   } catch {
     return null;
   }
+}
+
+async function resolveAndPersistTtsPlaybackPlan(input: {
+  request: z.infer<typeof ttsPlaybackRequestSchema>;
+  storage: ArtifactStorage;
+  s3Prefix: string;
+}): Promise<{
+  planObjectKey: string;
+  planSignature: string;
+  plannedSegments: TtsPlaybackSegmentInput[];
+  startOrdinal: number;
+}> {
+  const planSignature = computePlaybackPlanSignature(input.request);
+  const planObjectKey = ttsPlaybackPlanArtifactKey({
+    documentId: input.request.documentId,
+    documentVersion: input.request.documentVersion,
+    readerType: input.request.readerType,
+    planSignature,
+    prefix: input.s3Prefix,
+  });
+  let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
+  if (!plannedSegments || plannedSegments.length === 0) {
+    const sourceUnits = await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix);
+    plannedSegments = planTtsPlaybackSegments(input.request, sourceUnits);
+    await persistTtsPlaybackPlan({
+      storage: input.storage,
+      planObjectKey,
+      request: input.request,
+      segments: plannedSegments,
+    });
+  }
+  return {
+    planObjectKey,
+    planSignature,
+    plannedSegments,
+    startOrdinal: resolvePlaybackStartOrdinal(plannedSegments, input.request),
+  };
 }
 
 const SEGMENT_MAX_ATTEMPTS = 2;
@@ -862,6 +908,10 @@ export interface JobHandlers {
     queueWaitMs: number,
     hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> },
   ): Promise<TtsPlaybackJobResult>;
+  runTtsPlaybackPlan(
+    payload: TtsPlaybackPlanJobRequest,
+    queueWaitMs: number,
+  ): Promise<TtsPlaybackPlanJobResult>;
 }
 
 export function createJobHandlers(input: {
@@ -935,35 +985,13 @@ export function createJobHandlers(input: {
         lastError: null,
       });
       try {
-        // The canonical plan is position-independent and reusable: it is keyed by
-        // document version + reader type + segmentation signature (NOT session, NOT
-        // voice/speed), so every session that jumps/seeks within the same document
-        // shares one cached plan with stable absolute ordinals. We derive + persist
-        // it once per (document, signature) and reuse it thereafter.
-        const planObjectKey = ttsPlaybackPlanArtifactKey({
-          documentId: parsed.documentId,
-          documentVersion: parsed.documentVersion,
-          readerType: parsed.readerType,
-          planSignature: computePlaybackPlanSignature(parsed),
-          prefix: input.s3Prefix,
+        const plan = await resolveAndPersistTtsPlaybackPlan({
+          request: parsed,
+          storage: input.storage,
+          s3Prefix: input.s3Prefix,
         });
-        let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
-        if (!plannedSegments || plannedSegments.length === 0) {
-          const sourceUnits = await resolvePlaybackSourceUnits(parsed, input.storage, input.s3Prefix);
-          plannedSegments = planTtsPlaybackSegments(parsed, sourceUnits);
-          await persistTtsPlaybackPlan({
-            storage: input.storage,
-            planObjectKey,
-            request: parsed,
-            segments: plannedSegments,
-          });
-        }
+        const { planObjectKey, plannedSegments, startOrdinal } = plan;
 
-        // Resolve where THIS session starts (absolute ordinal in the shared plan)
-        // and seed the session cursor there, then begin generation from that
-        // ordinal forward. The audio stream endpoint waits for planObjectKey to be
-        // set before reading startOrdinal, so it never starts at a stale 0.
-        const startOrdinal = resolvePlaybackStartOrdinal(plannedSegments, parsed);
         await updateTtsPlaybackSession({
           sessionId: parsed.sessionId,
           status: 'running',
@@ -971,21 +999,6 @@ export function createJobHandlers(input: {
           startOrdinal,
           lastError: null,
         });
-        if (parsed.planOnly) {
-          await updateTtsPlaybackSession({
-            sessionId: parsed.sessionId,
-            status: 'succeeded',
-            planObjectKey,
-            startOrdinal,
-            lastError: null,
-          });
-          return {
-            sessionId: parsed.sessionId,
-            planObjectKey,
-            timing: { queueWaitMs, computeMs: Date.now() - startedAt },
-          };
-        }
-
         const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
         const plannedCount = plannedSegments.length;
         const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
@@ -1095,6 +1108,27 @@ export function createJobHandlers(input: {
         }).catch(() => undefined);
         throw error;
       }
+    },
+
+    async runTtsPlaybackPlan(payload, queueWaitMs) {
+      const parsed = ttsPlaybackPlanRequestSchema.parse(payload);
+      const startedAt = Date.now();
+      const planRequest = {
+        ...parsed,
+        sessionId: `plan:${parsed.documentId}:${parsed.settingsHash}`,
+      } satisfies z.infer<typeof ttsPlaybackRequestSchema>;
+      const plan = await resolveAndPersistTtsPlaybackPlan({
+        request: planRequest,
+        storage: input.storage,
+        s3Prefix: input.s3Prefix,
+      });
+      return {
+        planObjectKey: plan.planObjectKey,
+        planSignature: plan.planSignature,
+        startOrdinal: plan.startOrdinal,
+        plannedCount: plan.plannedSegments.length,
+        timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+      };
     },
   };
 }

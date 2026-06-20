@@ -16,6 +16,7 @@ export type {
 
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
 export const TTS_PLAYBACK_QUEUE_NAME = 'tts-playback';
+export const TTS_PLAYBACK_PLAN_QUEUE_NAME = 'tts-playback-plan';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
 
 export function encodeParserVersion(parserVersion: string, defaultVersion = PDF_PARSER_VERSION): string {
@@ -42,8 +43,6 @@ export interface TtsPlaybackJobRequest {
   settingsJson: unknown;
   startOrdinal: number;
   planObjectKey?: string;
-  /** Persist the canonical plan and resolve startOrdinal, then return before audio generation. */
-  planOnly?: boolean;
   /**
    * How many segments ahead of the client's playback cursor the worker may
    * generate while the client is connected (cursor is fresh). When the cursor
@@ -88,6 +87,26 @@ export interface TtsPlaybackJobRequest {
 export interface TtsPlaybackJobResult {
   sessionId: string;
   planObjectKey?: string;
+  timing?: WorkerJobTiming;
+}
+
+export interface TtsPlaybackPlanJobRequest {
+  userId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  settingsJson: unknown;
+  startOrdinal: number;
+  planning: TtsPlaybackJobRequest['planning'];
+}
+
+export interface TtsPlaybackPlanJobResult {
+  planObjectKey: string;
+  planSignature: string;
+  startOrdinal: number;
+  plannedCount: number;
   timing?: WorkerJobTiming;
 }
 
@@ -145,7 +164,7 @@ export interface WorkerJobStatusResponse<Result> {
   timing?: WorkerJobTiming;
 }
 
-export type WorkerOperationKind = 'pdf_layout' | 'tts_playback';
+export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan';
 
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
@@ -159,9 +178,16 @@ export interface TtsPlaybackOperationRequest {
   payload: TtsPlaybackJobRequest;
 }
 
+export interface TtsPlaybackPlanOperationRequest {
+  kind: 'tts_playback_plan';
+  opKey: string;
+  payload: TtsPlaybackPlanJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
-  | TtsPlaybackOperationRequest;
+  | TtsPlaybackOperationRequest
+  | TtsPlaybackPlanOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useTTS } from '@/contexts/TTSContext';
 import {
   PlayIcon,
@@ -12,6 +13,13 @@ import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
 import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
+
+function formatTime(seconds: number): string {
+  const safe = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = true }: {
   currentPage?: number;
@@ -29,11 +37,30 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
     setVoiceAndRestart,
     availableVoices,
     skipToLocation,
+    currentSentence,
+    playbackSegments,
+    playbackTimeSec,
+    playbackDurationSec,
+    playbackSeekLayout,
+    seekPlaybackTo,
   } = useTTS();
+  const [previewSec, setPreviewSec] = useState<number | null>(null);
+  const shownSec = previewSec ?? playbackTimeSec;
+  const previewSegment = useMemo(() => {
+    if (!playbackSeekLayout) return null;
+    const ms = shownSec * 1000;
+    return playbackSeekLayout.segments.find((segment) => ms >= segment.startMs && ms < segment.endMs)
+      ?? playbackSeekLayout.segments.at(-1)
+      ?? null;
+  }, [playbackSeekLayout, shownSec]);
+  const previewText = previewSegment
+    ? (playbackSegments.find((segment) => segment.ordinal === previewSegment.ordinal)?.text || currentSentence)
+    : currentSentence;
+  const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
 
   return (
     <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
-      <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
+      <div className="px-2 md:px-3 pt-1 flex items-center justify-center gap-1 min-h-10">
         {/* Speed control */}
         <SpeedControl 
           setSpeedAndRestart={setSpeedAndRestart} 
@@ -81,6 +108,39 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
 
         {/* Voice control */}
         <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />
+      </div>
+      <div className="px-3 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex max-w-3xl items-center gap-2 text-[11px] text-soft">
+          <span className="w-10 tabular-nums text-right">{formatTime(shownSec)}</span>
+          <input
+            aria-label="Playback position"
+            type="range"
+            min={0}
+            max={Math.max(0, Math.round(playbackDurationSec))}
+            step={0.25}
+            value={Math.min(Math.max(0, shownSec), Math.max(0, playbackDurationSec))}
+            disabled={!canSeek}
+            onChange={(event) => setPreviewSec(Number(event.currentTarget.value))}
+            onPointerUp={(event) => {
+              const target = Number((event.currentTarget as HTMLInputElement).value);
+              setPreviewSec(null);
+              seekPlaybackTo(target);
+            }}
+            onKeyUp={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              const target = Number((event.currentTarget as HTMLInputElement).value);
+              setPreviewSec(null);
+              seekPlaybackTo(target);
+            }}
+            className="h-2 min-w-0 flex-1 accent-foreground disabled:opacity-40"
+          />
+          <span className="w-10 tabular-nums">{formatTime(playbackDurationSec)}</span>
+        </div>
+        <div className="mx-auto mt-0.5 max-w-3xl truncate text-center text-[11px] text-soft">
+          {previewSegment
+            ? `${previewSegment.estimated ? 'Estimated' : 'Ready'} · ${previewText || `Segment ${previewSegment.ordinal + 1}`}`
+            : (currentSentence || 'Playback position')}
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,8 @@ import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
+  TtsPlaybackPlanJobRequest,
+  TtsPlaybackPlanJobResult,
   TtsPlaybackJobRequest,
   TtsPlaybackJobResult,
   WorkerJobTiming,
@@ -18,6 +20,7 @@ const PULL_EXPIRES_MS = 5_000;
 const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
   pdf_layout: 120_000,
   tts_playback: 30_000,
+  tts_playback_plan: 30_000,
 };
 
 export interface QueuedJob<TPayload> {
@@ -119,12 +122,15 @@ export function createWorkerLoopController(input: {
   pdfAttempts: number;
   pdfCodec: JsonCodec<QueuedJob<PdfLayoutJobRequest>>;
   ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
+  ttsPlaybackPlanCodec?: JsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
   onInFlightJobsChanged: (delta: number) => void;
 }) {
-  const gate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
+  const playbackGate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
+  const planGate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
+  const layoutGate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
   let loops: Promise<void>[] = [];
   let stopRequested = false;
 
@@ -145,6 +151,7 @@ export function createWorkerLoopController(input: {
   type WorkDefinition<TPayload, TResult> = {
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: JobRunner<TPayload, TResult>;
+    gate: ConcurrencyGate;
   };
 
   const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
@@ -301,12 +308,12 @@ export function createWorkerLoopController(input: {
         if (!msg) continue;
         input.markActivity(`job_received:${work.workerLabel}`);
         input.onInFlightJobsChanged(1);
-        await gate.acquire();
+        await work.gate.acquire();
         if (detached()) return;
         await processMessage({ ...work, msg });
       } finally {
         if (msg) {
-          gate.release();
+          work.gate.release();
           input.onInFlightJobsChanged(-1);
           input.markActivity(`job_completed:${work.workerLabel}`);
         }
@@ -315,24 +322,37 @@ export function createWorkerLoopController(input: {
   };
 
   return {
-    start(owner: object, consumers: { pdfLayout: Consumer; ttsPlayback?: Consumer }): void {
+    start(owner: object, consumers: { pdfLayout: Consumer; ttsPlayback?: Consumer; ttsPlaybackPlan?: Consumer }): void {
       stopRequested = false;
       loops = [];
       const pdfWork: WorkDefinition<PdfLayoutJobRequest, PdfLayoutJobResult> = {
         codec: input.pdfCodec,
         run: input.handlers.runPdfLayout,
+        gate: layoutGate,
       };
       const ttsPlaybackWork: WorkDefinition<TtsPlaybackJobRequest, TtsPlaybackJobResult> | null =
         input.ttsPlaybackCodec && consumers.ttsPlayback
           ? {
             codec: input.ttsPlaybackCodec,
             run: input.handlers.runTtsPlayback,
+            gate: playbackGate,
+          }
+          : null;
+      const ttsPlaybackPlanWork: WorkDefinition<TtsPlaybackPlanJobRequest, TtsPlaybackPlanJobResult> | null =
+        input.ttsPlaybackPlanCodec && consumers.ttsPlaybackPlan
+          ? {
+            codec: input.ttsPlaybackPlanCodec,
+            run: input.handlers.runTtsPlaybackPlan,
+            gate: planGate,
           }
           : null;
       for (let i = 0; i < input.jobConcurrency; i += 1) {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
         if (ttsPlaybackWork && consumers.ttsPlayback) {
           loops.push(runLoop({ owner, consumer: consumers.ttsPlayback, ...ttsPlaybackWork, workerLabel: `tts-playback-${i + 1}` }));
+        }
+        if (ttsPlaybackPlanWork && consumers.ttsPlaybackPlan) {
+          loops.push(runLoop({ owner, consumer: consumers.ttsPlaybackPlan, ...ttsPlaybackPlanWork, workerLabel: `tts-playback-plan-${i + 1}` }));
         }
       }
     },

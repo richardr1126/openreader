@@ -33,10 +33,12 @@ import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
 import {
-  createTtsPlaybackPlanSession,
+  createTtsPlaybackPlan,
   createTtsPlaybackSession,
+  getTtsPlaybackSeekLayout,
   postTtsPlaybackCursor,
   subscribeTtsPlaybackEvents,
+  type TtsPlaybackSeekLayout,
   type TtsPlaybackSessionPayload,
 } from '@/lib/client/api/tts';
 import {
@@ -85,6 +87,9 @@ interface TTSContextType extends TTSPlaybackState {
   playbackSegments: CanonicalTtsSegment[];
   playbackPlanSource: 'idle' | 'worker';
   currentSentenceIndex: number;
+  playbackTimeSec: number;
+  playbackDurationSec: number;
+  playbackSeekLayout: TtsPlaybackSeekLayout | null;
 
   // Alignment metadata for the current sentence
   currentSentenceAlignment?: TTSSentenceAlignment;
@@ -98,6 +103,7 @@ interface TTSContextType extends TTSPlaybackState {
   stop: () => void;
   stopAndPlayFromIndex: (index: number) => void;
   playFromSegment: (index: number, locator?: TTSSegmentLocator | null) => void;
+  seekPlaybackTo: (seconds: number) => void;
   setText: (text: string, options?: boolean | SetTextOptions) => void;
   setCurrDocPages: (num: number | undefined) => void;
   setSpeedAndRestart: (speed: number) => void;
@@ -309,6 +315,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [sentences, setSentences] = useState<string[]>([]);
   const [playbackSegments, setPlaybackSegments] = useState<CanonicalTtsSegment[]>([]);
   const [playbackPlanSource, setPlaybackPlanSource] = useState<'idle' | 'worker'>('idle');
+  const [playbackSeekLayout, setPlaybackSeekLayout] = useState<TtsPlaybackSeekLayout | null>(null);
+  const [playbackTimeSec, setPlaybackTimeSec] = useState(0);
   const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [speed, setSpeed] = useState(voiceSpeed);
@@ -376,6 +384,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const audioUnlockAttemptRef = useRef(0);
   const playbackProjectionRafRef = useRef<number | null>(null);
   const playbackRequestHeadersRef = useRef<TTSRequestHeaders | null>(null);
+  const playbackPlanRef = useRef<ReturnType<typeof normalizePlaybackPlan> | null>(null);
   // One persistent <audio> element reused for every playback session. iOS Safari
   // autoplay unlock is per-element: the element that gets play()'d inside a user
   // gesture is the only one allowed to play() later. The playback source is set
@@ -515,6 +524,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         if (!currentSession) return;
         void refreshPlaybackTimeline(currentSession.timelineUrl)
           .catch(() => undefined);
+        if (currentSession.seekLayoutUrl) {
+          void getTtsPlaybackSeekLayout(currentSession.seekLayoutUrl)
+            .then((layout) => {
+              if (runId !== playbackRunIdRef.current) return;
+              setPlaybackSeekLayout(layout);
+            })
+            .catch(() => undefined);
+        }
       },
     });
 
@@ -545,10 +562,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         playbackProjectionRafRef.current = null;
         return;
       }
+      setPlaybackTimeSec(audio.currentTime);
       projectPlaybackTime(audio.currentTime);
       playbackProjectionRafRef.current = requestAnimationFrame(tick);
     };
 
+    setPlaybackTimeSec(audio.currentTime);
     projectPlaybackTime(audio.currentTime);
     playbackProjectionRafRef.current = requestAnimationFrame(tick);
   }, [projectPlaybackTime, stopPlaybackProjectionLoop]);
@@ -561,6 +580,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     stopPlaybackProjectionLoop();
     resetPlaybackRefs();
+    playbackPlanRef.current = null;
+    setPlaybackSeekLayout(null);
+    setPlaybackTimeSec(0);
     playbackRequestHeadersRef.current = null;
     const audio = unlockedAudioRef.current;
     if (audio) {
@@ -1123,6 +1145,43 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     return plan && plan.segments.length > 0 ? plan : null;
   }, []);
 
+  const applyPlaybackPlan = useCallback((plan: ReturnType<typeof normalizePlaybackPlan>, request: {
+    playbackSegment?: CanonicalTtsSegment;
+    sentence: string;
+    startLocation: { page?: number; spineIndex?: number; charOffset?: number };
+  }) => {
+    const canonicalPlan = playbackPlanToCanonicalSegments(plan);
+    playbackPlanRef.current = plan;
+    playbackSegmentsRef.current = canonicalPlan;
+    setPlaybackSegments(canonicalPlan);
+    setPlaybackPlanSource('worker');
+    setSentences(canonicalPlan.map((segment) => segment.text));
+    const startPlanIndex = resolvePlaybackStartIndex({
+      plan: canonicalPlan,
+      desiredSegment: request.playbackSegment,
+      desiredText: request.sentence,
+      startLocation: request.startLocation,
+    });
+    if (currentIndexRef.current !== startPlanIndex) {
+      setCurrentIndex(startPlanIndex);
+    }
+    return { canonicalPlan, startPlanIndex };
+  }, [playbackSegmentsRef]);
+
+  const createAndApplyPlaybackPlan = useCallback(async (
+    request: ReturnType<typeof buildPlaybackSessionRequest>,
+    signal?: AbortSignal,
+  ) => {
+    if (!request) return null;
+    const existing = playbackPlanRef.current;
+    if (existing?.planObjectKey && existing.segments.length > 0) return existing;
+    const planHandle = await createTtsPlaybackPlan(request.payload, request.headers, signal);
+    const plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
+    if (!plan) return null;
+    applyPlaybackPlan(plan, request);
+    return plan;
+  }, [applyPlaybackPlan, fetchPlaybackPlanUntilReady]);
+
   useEffect(() => {
     if (isPlaying || playbackPlanSource === 'worker') return;
     if (!playbackAnchor?.text.trim()) return;
@@ -1134,25 +1193,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     void (async () => {
       try {
-        const session = await createTtsPlaybackPlanSession(request.payload, request.headers, controller.signal);
+        const session = await createTtsPlaybackPlan(request.payload, request.headers, controller.signal);
         if (controller.signal.aborted || runId !== planPreviewRunIdRef.current) return;
         const plan = await fetchPlaybackPlanUntilReady(session.planUrl, controller.signal);
         if (controller.signal.aborted || runId !== planPreviewRunIdRef.current || !plan) return;
 
-        const canonicalPlan = playbackPlanToCanonicalSegments(plan);
-        playbackSegmentsRef.current = canonicalPlan;
-        setPlaybackSegments(canonicalPlan);
-        setPlaybackPlanSource('worker');
-        setSentences(canonicalPlan.map((segment) => segment.text));
-        const startPlanIndex = resolvePlaybackStartIndex({
-          plan: canonicalPlan,
-          desiredSegment: request.playbackSegment,
-          desiredText: request.sentence,
-          startLocation: request.startLocation,
-        });
-        if (currentIndexRef.current !== startPlanIndex) {
-          setCurrentIndex(startPlanIndex);
-        }
+        applyPlaybackPlan(plan, request);
       } catch (error) {
         if (controller.signal.aborted || isAbortLikeError(error)) return;
         console.warn('Failed to prefetch TTS playback plan:', error);
@@ -1164,6 +1210,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     };
   }, [
     buildPlaybackSessionRequest,
+    applyPlaybackPlan,
     fetchPlaybackPlanUntilReady,
     isAbortLikeError,
     isPlaying,
@@ -1194,44 +1241,35 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     try {
-      const session = await createTtsPlaybackSession(payload, headers);
+      const plan = await createAndApplyPlaybackPlan(request);
+      if (runId !== playbackRunIdRef.current) return;
+      if (!plan?.planObjectKey) {
+        throw new Error('TTS playback plan was not ready in time');
+      }
+      const session = await createTtsPlaybackSession({
+        ...payload,
+        ...(plan.planId ? { planId: plan.planId } : {}),
+        planObjectKey: plan.planObjectKey,
+        ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
+        ...(plan.startOrdinal !== undefined ? { startOrdinal: plan.startOrdinal } : {}),
+      }, headers);
       if (runId !== playbackRunIdRef.current) return;
 
       playbackSessionRef.current = {
         sessionId: session.sessionId,
         audioUrl: session.audioUrl,
         timelineUrl: session.timelineUrl,
+        seekLayoutUrl: session.seekLayoutUrl,
       };
       playbackRequestHeadersRef.current = headers;
 
-      // Fetch the worker's canonical plan (full ordered segments + text) and
-      // make it the playback model so currentIndex/sidebar/highlighting are
-      // driven by worker segments, not viewport text extraction.
-      const plan = await fetchPlaybackPlanUntilReady(session.planUrl);
-      if (runId !== playbackRunIdRef.current) return;
-      if (!plan) {
-        throw new Error('TTS playback plan was not ready in time');
-      }
-      const canonicalPlan = playbackPlanToCanonicalSegments(plan);
-      playbackSegmentsRef.current = canonicalPlan;
-      setPlaybackSegments(canonicalPlan);
-      setPlaybackPlanSource('worker');
-      setSentences(canonicalPlan.map((segment) => segment.text));
-
-      // Resolve the starting index within the worker plan. Prefer the exact
-      // segment key, then use normalized visible text at the requested
-      // page/spine so startup does not jump to segment zero when the visible
-      // anchor points inside a worker-planned segment.
-      const startPlanIndex = resolvePlaybackStartIndex({
-        plan: canonicalPlan,
-        desiredSegment: playbackSegment,
-        desiredText: sentence,
-        startLocation,
-      });
-      if (runId !== playbackRunIdRef.current) return;
-      if (currentIndexRef.current !== startPlanIndex) {
-        setCurrentIndex(startPlanIndex);
-      }
+      applyPlaybackPlan(plan, { playbackSegment, sentence, startLocation });
+      void getTtsPlaybackSeekLayout(session.seekLayoutUrl)
+        .then((layout) => {
+          if (runId !== playbackRunIdRef.current) return;
+          setPlaybackSeekLayout(layout);
+        })
+        .catch(() => undefined);
 
       let audio = unlockedAudioRef.current;
       if (!audio) {
@@ -1296,6 +1334,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         // Time advancing means audio is genuinely playing from the buffer, so
         // clear any stale buffering state (e.g. a transient `waiting`).
         setIsProcessing(false);
+        setPlaybackTimeSec(audio.currentTime);
         projectPlaybackTime(audio.currentTime);
       };
       // `waiting` means playback actually halted to rebuffer the progressive
@@ -1342,11 +1381,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     advance,
     audioSpeed,
     buildPlaybackSessionRequest,
+    createAndApplyPlaybackPlan,
     fetchPlaybackPlanUntilReady,
     isAbortLikeError,
     playbackActiveRef,
     playbackSessionRef,
     projectPlaybackTime,
+    applyPlaybackPlan,
     resetPlaybackRefs,
     startPlaybackForegroundSync,
     startPlaybackProjectionLoop,
@@ -1524,6 +1565,44 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearPendingEpubJump,
   ]);
 
+  const seekPlaybackTo = useCallback((seconds: number) => {
+    const layout = playbackSeekLayout;
+    if (!layout || layout.segments.length === 0) return;
+    const durationSec = Math.max(0, layout.durationMs / 1000);
+    const targetSec = Math.max(0, Math.min(seconds, durationSec));
+    const targetMs = targetSec * 1000;
+    const target = layout.segments.find((segment) => targetMs >= segment.startMs && targetMs < segment.endMs)
+      ?? layout.segments[layout.segments.length - 1];
+    if (!target) return;
+
+    const audio = unlockedAudioRef.current;
+    if (audio && playbackActiveRef.current && audio.src) {
+      try {
+        audio.currentTime = targetSec;
+      } catch {
+        // Best-effort; the projection still updates immediately below.
+      }
+    }
+    setPlaybackTimeSec(targetSec);
+    const nextIndex = playbackSegmentsRef.current.findIndex((segment) =>
+      (target.segmentKey && segment.key === target.segmentKey) || segment.ordinal === target.ordinal
+    );
+    if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
+      setCurrentIndex(nextIndex);
+    }
+    projectPlaybackTime(targetSec);
+    const session = playbackSessionRef.current;
+    const headers = playbackRequestHeadersRef.current;
+    if (session && headers) {
+      void postTtsPlaybackCursor(session.sessionId, target.ordinal, headers);
+    }
+  }, [
+    playbackActiveRef,
+    playbackSeekLayout,
+    playbackSessionRef,
+    projectPlaybackTime,
+  ]);
+
   /**
    * Sets the speed and restarts the playback
    * 
@@ -1632,6 +1711,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSegments,
     playbackPlanSource,
     currentSentenceIndex: currentIndex,
+    playbackTimeSec,
+    playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
+    playbackSeekLayout,
     currentSentenceAlignment,
     currentWordIndex,
     currDocPage,
@@ -1646,6 +1728,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     pause,
     stopAndPlayFromIndex,
     playFromSegment,
+    seekPlaybackTo,
     setText,
     setCurrDocPages,
     setSpeedAndRestart,
@@ -1666,6 +1749,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentences,
     playbackSegments,
     playbackPlanSource,
+    playbackSeekLayout,
+    playbackTimeSec,
     currentIndex,
     currDocPage,
     currDocPageNumber,
@@ -1679,6 +1764,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     pause,
     stopAndPlayFromIndex,
     playFromSegment,
+    seekPlaybackTo,
     setText,
     setCurrDocPages,
     setSpeedAndRestart,

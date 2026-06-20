@@ -110,6 +110,7 @@ describe('jetstream adapters', () => {
       getJs: async () => js as never,
       layoutSubject: 'jobs.layout',
       ttsPlaybackSubject: 'jobs.tts_playback',
+      ttsPlaybackPlanSubject: 'jobs.tts_playback_plan',
     });
     const events = new JetStreamOperationEventStream({
       getJs: async () => js as never,
@@ -145,6 +146,37 @@ describe('jetstream adapters', () => {
     expect(appended.eventId).toBe(2);
   });
 
+  test('queue routes playback plan jobs to the isolated subject', async () => {
+    const js = new FakeJetStream();
+    const queue = new JetStreamOperationQueue({
+      getJs: async () => js as never,
+      layoutSubject: 'jobs.layout',
+      ttsPlaybackSubject: 'jobs.tts_playback',
+      ttsPlaybackPlanSubject: 'jobs.tts_playback_plan',
+    });
+
+    await queue.enqueue({
+      jobId: 'job-plan',
+      opId: 'op-plan',
+      opKey: 'k-plan',
+      kind: 'tts_playback_plan',
+      queuedAt: 1000,
+      payload: {
+        userId: 'u1',
+        storageUserId: 'u1',
+        documentId: 'd1',
+        documentVersion: 1,
+        readerType: 'pdf',
+        settingsHash: 'settings',
+        settingsJson: { nativeSpeed: 1 },
+        startOrdinal: 0,
+        planning: {},
+      },
+    });
+
+    expect(js.published.map((entry) => entry.subject)).toEqual(['jobs.tts_playback_plan']);
+  });
+
   test('orchestrator writes expected index/state keys', async () => {
     const kv = new FakeKvStore();
     const js = new FakeJetStream();
@@ -164,6 +196,7 @@ describe('jetstream adapters', () => {
       getJs: async () => js as never,
       layoutSubject: 'jobs.layout',
       ttsPlaybackSubject: 'jobs.tts_playback',
+      ttsPlaybackPlanSubject: 'jobs.tts_playback_plan',
     });
 
     let now = 1_000;

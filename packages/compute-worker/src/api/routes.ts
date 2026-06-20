@@ -12,6 +12,7 @@ import type {
   WorkerOperationRequest,
   WorkerOperationState,
   TtsPlaybackJobResult,
+  TtsPlaybackPlanJobResult,
 } from '../operations/contracts';
 import { hashOpKey } from '../infrastructure/nats-adapters';
 import type { StreamedOperationState } from '../operations/recovery';
@@ -24,7 +25,12 @@ import {
   parseRangeHeader,
   type PlanSlotInput,
 } from './playback-audio-layout';
-import { buildPdfOperationKey, buildTtsPlaybackOperationKey } from '../operations/keys';
+import {
+  buildPdfOperationKey,
+  buildTtsPlaybackOperationKey,
+  buildTtsPlaybackPlanOperationKey,
+} from '../operations/keys';
+import { computePlaybackPlanSignature } from '../jobs/handlers';
 import { requireEnv } from '../infrastructure/config';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
@@ -37,6 +43,7 @@ import {
   pdfOperationCreateSchema,
   pdfResolveSchema,
   computeOperationSchema,
+  ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackOperationCreateSchema,
 } from './schemas';
 
@@ -48,7 +55,7 @@ interface OperationEventStreamLike {
   subscribe(input: {
     opId: string;
     sinceEventId?: number;
-    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult>) => void | Promise<void>;
+    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>) => void | Promise<void>;
     onError?: (error: unknown) => void;
   }): Promise<() => void>;
 }
@@ -632,6 +639,53 @@ export function registerComputeWorkerRoutes(input: {
     return toComputeOperation(op);
   });
 
+  app.post('/v1/tts-playback-plans/operations', {
+    schema: {
+      body: jsonSchema(ttsPlaybackPlanOperationCreateSchema),
+      response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackPlanOperationCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+
+    const planSignature = computePlaybackPlanSignature({
+      ...parsed.data,
+      sessionId: `plan:${parsed.data.documentId}:${parsed.data.settingsHash}`,
+    });
+    const documentSource = parsed.data.planning.documentSource;
+    const requestOp: WorkerOperationRequest = {
+      kind: 'tts_playback_plan',
+      opKey: buildTtsPlaybackPlanOperationKey({
+        documentId: parsed.data.documentId,
+        documentVersion: parsed.data.documentVersion,
+        readerType: parsed.data.readerType,
+        settingsHash: parsed.data.settingsHash,
+        planSignature,
+        startOrdinal: parsed.data.startOrdinal,
+        startSegmentKey: parsed.data.planning.startSegmentKey,
+        startText: parsed.data.planning.startText,
+        startPage: documentSource?.startPage,
+        startSpineIndex: documentSource?.startSpineIndex,
+        startCharOffset: documentSource?.startCharOffset,
+      }),
+      payload: parsed.data,
+    };
+    await ensureOrphanedOpRecovery();
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    app.log.info({
+      kind: requestOp.kind,
+      opId: op.opId,
+      jobId: op.jobId,
+      status: op.status,
+      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
+    }, 'op.accepted');
+    reply.code(202);
+    return toComputeOperation(op);
+  });
+
   app.post('/v1/pdf-layout/resolve', {
     schema: {
       body: jsonSchema(pdfResolveSchema),
@@ -730,7 +784,7 @@ export function registerComputeWorkerRoutes(input: {
 
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
-      const frameEvent: ComputeOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult> = {
+      const frameEvent: ComputeOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult> = {
         eventId,
         snapshot: toComputeOperation(snapshot),
       };

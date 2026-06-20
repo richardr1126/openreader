@@ -1,9 +1,14 @@
 import type { WorkerOperationState } from '../operations/contracts';
-import { pdfSubjectFromOperationKey, ttsPlaybackSubjectFromOperationKey } from '../operations/keys';
+import {
+  pdfSubjectFromOperationKey,
+  ttsPlaybackPlanSubjectFromOperationKey,
+  ttsPlaybackSubjectFromOperationKey,
+} from '../operations/keys';
 
 export type ComputeOperationSubject =
   | { kind: 'pdf_layout'; documentId: string; namespace: string | null }
-  | { kind: 'tts_playback'; documentId: string; sessionId: string };
+  | { kind: 'tts_playback'; documentId: string; sessionId: string }
+  | { kind: 'tts_playback_plan'; documentId: string; settingsHash: string; planSignature: string };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -28,7 +33,14 @@ export function toComputeOperation<Result>(
 ): ComputeOperation<Result> {
   const subject = state.kind === 'pdf_layout'
     ? (pdfSubjectFromOperationKey(state.opKey) ?? { kind: 'pdf_layout', documentId: '', namespace: null })
-    : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
+    : state.kind === 'tts_playback_plan'
+      ? (ttsPlaybackPlanSubjectFromOperationKey(state.opKey) ?? {
+        kind: 'tts_playback_plan',
+        documentId: '',
+        settingsHash: '',
+        planSignature: '',
+      })
+      : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,
     subject,

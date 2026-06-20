@@ -1,12 +1,13 @@
 import type {
   PdfLayoutJobResult,
+  TtsPlaybackPlanJobResult,
   TtsPlaybackJobResult,
   WorkerJobTiming,
   WorkerJobState,
   WorkerOperationState,
 } from '../operations/contracts';
 
-export type StreamedOperationState = WorkerOperationState<PdfLayoutJobResult | TtsPlaybackJobResult>;
+export type StreamedOperationState = WorkerOperationState<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>;
 
 export interface OrphanRecoveryStateStore {
   getOpStateRecord(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;

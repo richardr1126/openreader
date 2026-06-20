@@ -30,7 +30,12 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setCurrentWordIndex,
   } = input;
   const playbackTimelineRef = useRef<TtsPlaybackTimeline | null>(null);
-  const playbackSessionRef = useRef<{ sessionId: string; audioUrl: string; timelineUrl: string } | null>(null);
+  const playbackSessionRef = useRef<{
+    sessionId: string;
+    audioUrl: string;
+    timelineUrl: string;
+    seekLayoutUrl?: string;
+  } | null>(null);
   const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackActiveRef = useRef(false);

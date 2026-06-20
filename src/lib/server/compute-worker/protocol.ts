@@ -26,6 +26,8 @@ export type PdfLayoutRequest =
   paths['/v1/pdf-layout/operations']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackRequest =
   paths['/v1/tts-playback/operations']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackPlanRequest =
+  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'aheadWindow' | 'backgroundExtent'>;
 export type PdfLayoutResolveRequest =
   paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
 
@@ -37,6 +39,14 @@ export type PdfLayoutResult = {
 export type TtsPlaybackResult = {
   sessionId: string;
   planObjectKey?: string;
+  timing?: components['schemas']['ComputeOperation']['timing'];
+};
+
+export type TtsPlaybackPlanResult = {
+  planObjectKey: string;
+  planSignature: string;
+  startOrdinal: number;
+  plannedCount: number;
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 

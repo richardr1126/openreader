@@ -81,7 +81,10 @@ function parseBody(value: unknown): {
   language?: string;
   startSegmentKey?: string;
   startText?: string;
-  planOnly: boolean;
+  planObjectKey?: string;
+  planSignature?: string;
+  planId?: string;
+  startOrdinal?: number;
 } | null {
   if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
@@ -119,7 +122,18 @@ function parseBody(value: unknown): {
   const startText = typeof rec.startText === 'string' && rec.startText.trim()
     ? rec.startText.trim()
     : undefined;
-  const planOnly = rec.planOnly === true;
+  const planObjectKey = typeof rec.planObjectKey === 'string' && rec.planObjectKey.trim()
+    ? rec.planObjectKey.trim()
+    : undefined;
+  const planSignature = typeof rec.planSignature === 'string' && rec.planSignature.trim()
+    ? rec.planSignature.trim()
+    : undefined;
+  const planId = typeof rec.planId === 'string' && rec.planId.trim()
+    ? rec.planId.trim()
+    : undefined;
+  const requestedStartOrdinal = Number.isFinite(Number(rec.startOrdinal))
+    ? Math.max(0, Math.floor(Number(rec.startOrdinal)))
+    : undefined;
 
   return {
     documentId,
@@ -133,7 +147,10 @@ function parseBody(value: unknown): {
     ...(language ? { language } : {}),
     ...(startSegmentKey ? { startSegmentKey } : {}),
     ...(startText ? { startText } : {}),
-    planOnly,
+    ...(planObjectKey ? { planObjectKey } : {}),
+    ...(planSignature ? { planSignature } : {}),
+    ...(planId ? { planId } : {}),
+    ...(requestedStartOrdinal !== undefined ? { startOrdinal: requestedStartOrdinal } : {}),
   };
 }
 
@@ -182,11 +199,10 @@ export async function POST(request: NextRequest) {
     const startCharOffset = scope.readerType === 'epub'
       ? parsed.startLocation.charOffset
       : undefined;
-    // Seed startOrdinal to 0; the worker resolves the real absolute ordinal from
-    // the start hints (startSegmentKey / startText / startPage / startSpineIndex)
-    // against the shared canonical plan and writes it back to the session (the
-    // audio stream waits for planObjectKey before reading it).
-    const startOrdinal = 0;
+    // When the client already has a playback plan, start from its resolved
+    // absolute ordinal; otherwise the worker resolves it from the start hints and
+    // writes it back to the session before audio reads begin.
+    const startOrdinal = parsed.startOrdinal ?? 0;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
@@ -205,27 +221,22 @@ export async function POST(request: NextRequest) {
       settingsHash,
       settingsJson,
       startOrdinal,
+      ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       expiresAt,
       createdAt: now,
       updatedAt: now,
     });
 
-    if (!parsed.planOnly) {
-      // Supersede this user's other active playback sessions so their (now
-      // abandoned) worker jobs stop and release the worker's concurrency slot —
-      // otherwise a refreshed/closed session keeps generating in the background and
-      // starves the new one. The worker's cursor/status poll picks this up within
-      // ~500ms and exits gracefully. Plan-only sessions must not interrupt active
-      // playback because they only persist the canonical segment plan.
-      await db
-        .update(ttsPlaybackSessions)
-        .set({ status: 'canceled', updatedAt: now })
-        .where(and(
-          eq(ttsPlaybackSessions.userId, scope.userId),
-          ne(ttsPlaybackSessions.sessionId, sessionId),
-          inArray(ttsPlaybackSessions.status, ['queued', 'running']),
-        ));
-    }
+    // Supersede this user's other active playback sessions so their (now
+    // abandoned) worker jobs stop and release the worker's playback slot.
+    await db
+      .update(ttsPlaybackSessions)
+      .set({ status: 'canceled', updatedAt: now })
+      .where(and(
+        eq(ttsPlaybackSessions.userId, scope.userId),
+        ne(ttsPlaybackSessions.sessionId, sessionId),
+        inArray(ttsPlaybackSessions.status, ['queued', 'running']),
+      ));
 
     const operation = await new ComputeWorkerClient().createTtsPlaybackOperation({
       sessionId,
@@ -237,10 +248,11 @@ export async function POST(request: NextRequest) {
       settingsHash,
       settingsJson,
       startOrdinal,
-      ...(parsed.planOnly ? { planOnly: true } : {}),
+      ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       // One forward-generation job, throttled to a window ahead of the client's
       // playback cursor; on disconnect it continues to the background extent.
-      ...(parsed.planOnly ? {} : { aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW, backgroundExtent }),
+      aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
+      backgroundExtent,
       planning: {
         ...(parsed.maxBlockLength ? { maxBlockLength: parsed.maxBlockLength } : {}),
         ...(parsed.language ? { language: parsed.language } : {}),
@@ -277,20 +289,21 @@ export async function POST(request: NextRequest) {
       timelineUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/timeline`,
       planUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/plan`,
       eventsUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/events`,
+      seekLayoutUrl: parsed.planId
+        ? `/api/tts/playback/plans/${encodeURIComponent(parsed.planId)}/seek-layout?sessionId=${encodeURIComponent(sessionId)}`
+        : '',
       expiresAt,
     };
-    return NextResponse.json(parsed.planOnly
-      ? responseBase
-      : {
-          ...responseBase,
-          audioUrl: buildWorkerAudioUrl({
-            sessionId,
-            userId: scope.userId,
-            storageUserId: scope.storageUserId,
-            documentId: parsed.documentId,
-            expiresAt,
-          }),
-        }, { status: 202 });
+    return NextResponse.json({
+      ...responseBase,
+      audioUrl: buildWorkerAudioUrl({
+        sessionId,
+        userId: scope.userId,
+        storageUserId: scope.storageUserId,
+        documentId: parsed.documentId,
+        expiresAt,
+      }),
+    }, { status: 202 });
   } catch (error) {
     return errorResponse(error, {
       logger,

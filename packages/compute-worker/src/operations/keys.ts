@@ -52,6 +52,36 @@ export function buildTtsPlaybackOperationKey(input: {
   ].join('|');
 }
 
+export function buildTtsPlaybackPlanOperationKey(input: {
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  planSignature: string;
+  startOrdinal: number;
+  startSegmentKey?: string;
+  startText?: string;
+  startPage?: number;
+  startSpineIndex?: number;
+  startCharOffset?: number;
+}): string {
+  return [
+    'tts_playback_plan',
+    'v1',
+    input.documentId,
+    String(input.documentVersion),
+    input.readerType,
+    input.settingsHash,
+    input.planSignature,
+    String(input.startOrdinal),
+    input.startSegmentKey?.trim() || '',
+    input.startText?.trim() || '',
+    input.startPage === undefined ? '' : String(input.startPage),
+    input.startSpineIndex === undefined ? '' : String(input.startSpineIndex),
+    input.startCharOffset === undefined ? '' : String(input.startCharOffset),
+  ].join('|');
+}
+
 export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   kind: 'tts_playback';
   documentId: string;
@@ -63,4 +93,21 @@ export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   const sessionId = parts[6];
   if (kind !== 'tts_playback' || version !== 'v1' || !documentId || !sessionId) return null;
   return { kind: 'tts_playback', documentId, sessionId };
+}
+
+export function ttsPlaybackPlanSubjectFromOperationKey(opKey: string): {
+  kind: 'tts_playback_plan';
+  documentId: string;
+  settingsHash: string;
+  planSignature: string;
+} | null {
+  // tts_playback_plan | v1 | documentId | version | readerType | settingsHash | planSignature | ...
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  const settingsHash = parts[5];
+  const planSignature = parts[6];
+  if (kind !== 'tts_playback_plan' || version !== 'v1' || !documentId || !settingsHash || !planSignature) {
+    return null;
+  }
+  return { kind: 'tts_playback_plan', documentId, settingsHash, planSignature };
 }

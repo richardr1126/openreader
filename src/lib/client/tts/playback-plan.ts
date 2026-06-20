@@ -15,9 +15,14 @@ export type TtsPlaybackPlanSegment = {
 };
 
 export type TtsPlaybackPlan = {
+  planId?: string;
+  planObjectKey?: string;
+  planSignature?: string;
   sessionId: string;
   documentId: string;
   readerType: string;
+  startOrdinal?: number;
+  plannedCount?: number;
   segments: TtsPlaybackPlanSegment[];
 };
 
@@ -42,9 +47,14 @@ export function normalizePlaybackPlan(value: unknown): TtsPlaybackPlan {
     .filter((item): item is TtsPlaybackPlanSegment => Boolean(item));
 
   return {
+    planId: typeof rec.planId === 'string' ? rec.planId : undefined,
+    planObjectKey: typeof rec.planObjectKey === 'string' ? rec.planObjectKey : undefined,
+    planSignature: typeof rec.planSignature === 'string' ? rec.planSignature : undefined,
     sessionId: typeof rec.sessionId === 'string' ? rec.sessionId : '',
     documentId: typeof rec.documentId === 'string' ? rec.documentId : '',
     readerType: typeof rec.readerType === 'string' ? rec.readerType : '',
+    startOrdinal: Number.isFinite(Number(rec.startOrdinal)) ? Math.max(0, Math.floor(Number(rec.startOrdinal))) : undefined,
+    plannedCount: Number.isFinite(Number(rec.plannedCount)) ? Math.max(0, Math.floor(Number(rec.plannedCount))) : undefined,
     segments,
   };
 }

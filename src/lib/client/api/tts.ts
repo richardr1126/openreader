@@ -26,6 +26,7 @@ export const createTtsPlaybackSession = async (
   timelineUrl: string;
   planUrl: string;
   eventsUrl: string;
+  seekLayoutUrl: string;
   expiresAt: number;
 }> => {
   const response = await fetch('/api/tts/stream/sessions', {
@@ -67,24 +68,27 @@ export type TtsPlaybackSessionPayload = {
   startText?: string;
   /** Segmentation knobs only; reading text is derived server-side. */
   planning?: { maxBlockLength?: number; language?: string };
+  planId?: string;
+  planObjectKey?: string;
+  planSignature?: string;
+  startOrdinal?: number;
 };
 
-export const createTtsPlaybackPlanSession = async (
+export const createTtsPlaybackPlan = async (
   payload: TtsPlaybackSessionPayload,
   headers: TTSRequestHeaders,
   signal?: AbortSignal,
 ): Promise<{
-  sessionId: string;
+  planId: string;
   operation: unknown;
-  timelineUrl: string;
   planUrl: string;
+  seekLayoutUrl: string;
   eventsUrl: string;
-  expiresAt: number;
 }> => {
-  const response = await fetch('/api/tts/stream/sessions', {
+  const response = await fetch('/api/tts/playback/plans', {
     method: 'POST',
     headers: headers as HeadersInit,
-    body: JSON.stringify({ ...payload, planOnly: true }),
+    body: JSON.stringify(payload),
     signal,
   });
 
@@ -107,6 +111,38 @@ export const createTtsPlaybackPlanSession = async (
     throw err;
   }
 
+  return await response.json();
+};
+
+export type TtsPlaybackSeekLayoutSegment = {
+  ordinal: number;
+  startMs: number;
+  endMs: number;
+  generated: boolean;
+  estimated: boolean;
+  locator: unknown;
+  segmentKey: string | null;
+};
+
+export type TtsPlaybackSeekLayout = {
+  planId: string;
+  sessionId?: string;
+  startOrdinal: number;
+  durationMs: number;
+  segments: TtsPlaybackSeekLayoutSegment[];
+};
+
+export const getTtsPlaybackSeekLayout = async (
+  seekLayoutUrl: string,
+  signal?: AbortSignal,
+): Promise<TtsPlaybackSeekLayout> => {
+  const response = await fetch(seekLayoutUrl, {
+    cache: 'no-store',
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`TTS playback seek layout failed with status ${response.status}`);
+  }
   return await response.json();
 };
 

@@ -250,6 +250,12 @@ export interface paths {
                                 kind: "tts_playback";
                                 documentId: string;
                                 sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -328,7 +334,6 @@ export interface paths {
                         /** @default 0 */
                         startOrdinal: number;
                         planObjectKey?: string;
-                        planOnly?: boolean;
                         aheadWindow?: number;
                         /** @enum {string} */
                         backgroundExtent?: "section" | "document";
@@ -371,6 +376,133 @@ export interface paths {
                                 kind: "tts_playback";
                                 documentId: string;
                                 sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
+                            };
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed";
+                            queuedAt: number;
+                            updatedAt: number;
+                            startedAt?: number;
+                            result?: unknown;
+                            error?: {
+                                message: string;
+                                code?: string;
+                            };
+                            timing?: {
+                                queueWaitMs?: number;
+                                s3FetchMs?: number;
+                                computeMs?: number;
+                            };
+                            progress?: {
+                                totalPages: number;
+                                pagesParsed: number;
+                                currentPage?: number;
+                                /** @enum {string} */
+                                phase: "infer" | "merge";
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback-plans/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        userId: string;
+                        storageUserId: string;
+                        documentId: string;
+                        documentVersion: number;
+                        /** @enum {string} */
+                        readerType: "pdf" | "epub" | "html";
+                        settingsHash: string;
+                        settingsJson: unknown;
+                        /** @default 0 */
+                        startOrdinal: number;
+                        planning: {
+                            startSegmentKey?: string;
+                            startText?: string;
+                            maxBlockLength?: number;
+                            enforceSourceBoundaries?: boolean;
+                            language?: string;
+                            documentSource?: {
+                                namespace: string | null;
+                                skipBlockKinds?: string[];
+                                /** @enum {string} */
+                                extent: "section" | "document";
+                                startPage?: number;
+                                startSpineIndex?: number;
+                                startCharOffset?: number;
+                                isPlainText?: boolean;
+                            };
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            opId: string;
+                            subject: {
+                                /** @enum {string} */
+                                kind: "pdf_layout";
+                                documentId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -466,6 +598,12 @@ export interface paths {
                                     kind: "tts_playback";
                                     documentId: string;
                                     sessionId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_plan";
+                                    documentId: string;
+                                    settingsHash: string;
+                                    planSignature: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -550,6 +688,12 @@ export interface paths {
                                 kind: "tts_playback";
                                 documentId: string;
                                 sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -754,6 +898,12 @@ export interface components {
                 kind: "tts_playback";
                 documentId: string;
                 sessionId: string;
+            } | {
+                /** @enum {string} */
+                kind: "tts_playback_plan";
+                documentId: string;
+                settingsHash: string;
+                planSignature: string;
             };
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -792,6 +942,12 @@ export interface components {
                     kind: "tts_playback";
                     documentId: string;
                     sessionId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_plan";
+                    documentId: string;
+                    settingsHash: string;
+                    planSignature: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -833,6 +989,12 @@ export interface components {
                     kind: "tts_playback";
                     documentId: string;
                     sessionId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_plan";
+                    documentId: string;
+                    settingsHash: string;
+                    planSignature: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";

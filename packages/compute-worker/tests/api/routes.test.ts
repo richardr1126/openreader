@@ -130,7 +130,6 @@ describe('compute worker API routes', () => {
         settingsHash: 'settings-hash',
         settingsJson: { voice: 'alloy' },
         startOrdinal: 4,
-        planOnly: true,
         planning: {
           maxBlockLength: 500,
           enforceSourceBoundaries: true,
@@ -153,11 +152,58 @@ describe('compute worker API routes', () => {
     expect(fake.enqueuedRequests.at(-1)).toMatchObject({
       kind: 'tts_playback',
       payload: {
-        planOnly: true,
         planning: {
           documentSource: {
             namespace: null,
             extent: 'section',
+            startPage: 12,
+          },
+        },
+      },
+    });
+  });
+
+  test('creates isolated TTS playback plan operations', async () => {
+    const documentId = 'f'.repeat(64);
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback-plans/operations',
+      headers: AUTH,
+      payload: {
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId,
+        documentVersion: 123,
+        readerType: 'pdf',
+        settingsHash: 'settings-hash',
+        settingsJson: { providerRef: 'p', providerType: 'openai', ttsModel: 'm', voice: 'v', nativeSpeed: 1 },
+        startOrdinal: 0,
+        planning: {
+          maxBlockLength: 500,
+          enforceSourceBoundaries: true,
+          language: 'en',
+          documentSource: {
+            namespace: null,
+            extent: 'document',
+            startPage: 12,
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      subject: { kind: 'tts_playback_plan', documentId, settingsHash: 'settings-hash' },
+      status: 'queued',
+    });
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'tts_playback_plan',
+      payload: {
+        documentId,
+        planning: {
+          documentSource: {
+            namespace: null,
+            extent: 'document',
             startPage: 12,
           },
         },

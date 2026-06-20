@@ -9,6 +9,7 @@ import {
   LAYOUT_CONSUMER_NAME,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_CONSUMER_NAME,
+  TTS_PLAYBACK_PLAN_CONSUMER_NAME,
   ensureJetStreamResources,
 } from './nats';
 
@@ -24,6 +25,7 @@ export interface NatsSession {
   kv: Awaited<ReturnType<Kvm['create']>>;
   layoutConsumer: Consumer;
   ttsPlaybackConsumer: Consumer;
+  ttsPlaybackPlanConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -159,6 +161,7 @@ export function createNatsSessionManager(input: {
         kv,
         layoutConsumer: await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME),
         ttsPlaybackConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_CONSUMER_NAME),
+        ttsPlaybackPlanConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_PLAN_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

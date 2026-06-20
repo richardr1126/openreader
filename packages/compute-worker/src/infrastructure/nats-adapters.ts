@@ -11,6 +11,7 @@ import type {
 } from '../operations';
 import type {
   PdfLayoutJobRequest,
+  TtsPlaybackPlanJobRequest,
   TtsPlaybackJobRequest,
   WorkerOperationKind,
 } from '../operations/contracts';
@@ -307,25 +308,29 @@ export interface JetStreamOperationQueueDeps<TPayload> {
   getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
   layoutSubject: string;
   ttsPlaybackSubject: string;
+  ttsPlaybackPlanSubject?: string;
   onEnqueued?: (job: QueuedOperation<TPayload>) => Promise<void> | void;
 }
 
-export class JetStreamOperationQueue implements OperationQueue<PdfLayoutJobRequest | TtsPlaybackJobRequest> {
+export class JetStreamOperationQueue implements OperationQueue<PdfLayoutJobRequest | TtsPlaybackJobRequest | TtsPlaybackPlanJobRequest> {
   private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
   private readonly layoutSubject: string;
   private readonly ttsPlaybackSubject: string;
-  private readonly onEnqueued?: (job: QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest>) => Promise<void> | void;
+  private readonly ttsPlaybackPlanSubject: string;
+  private readonly onEnqueued?: (job: QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest | TtsPlaybackPlanJobRequest>) => Promise<void> | void;
   private readonly layoutCodec = createJsonCodec<QueuedOperation<PdfLayoutJobRequest>>();
   private readonly ttsPlaybackCodec = createJsonCodec<QueuedOperation<TtsPlaybackJobRequest>>();
+  private readonly ttsPlaybackPlanCodec = createJsonCodec<QueuedOperation<TtsPlaybackPlanJobRequest>>();
 
-  constructor(deps: JetStreamOperationQueueDeps<PdfLayoutJobRequest | TtsPlaybackJobRequest>) {
+  constructor(deps: JetStreamOperationQueueDeps<PdfLayoutJobRequest | TtsPlaybackJobRequest | TtsPlaybackPlanJobRequest>) {
     this.getJs = deps.getJs;
     this.layoutSubject = deps.layoutSubject;
     this.ttsPlaybackSubject = deps.ttsPlaybackSubject;
+    this.ttsPlaybackPlanSubject = deps.ttsPlaybackPlanSubject ?? 'jobs.tts_playback_plan';
     this.onEnqueued = deps.onEnqueued;
   }
 
-  async enqueue(job: QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest>): Promise<void> {
+  async enqueue(job: QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest | TtsPlaybackPlanJobRequest>): Promise<void> {
     const js = await this.getJs();
     if (job.kind === 'pdf_layout') {
       await js.publish(
@@ -337,6 +342,11 @@ export class JetStreamOperationQueue implements OperationQueue<PdfLayoutJobReque
         this.ttsPlaybackSubject,
         this.ttsPlaybackCodec.encode(job as QueuedOperation<TtsPlaybackJobRequest>),
       );
+    } else if (job.kind === 'tts_playback_plan') {
+      await js.publish(
+        this.ttsPlaybackPlanSubject,
+        this.ttsPlaybackPlanCodec.encode(job as QueuedOperation<TtsPlaybackPlanJobRequest>),
+      );
     } else {
       const exhaustive: never = job.kind;
       throw new Error(`Unsupported operation kind: ${String(exhaustive)}`);
@@ -345,7 +355,7 @@ export class JetStreamOperationQueue implements OperationQueue<PdfLayoutJobReque
     await this.onEnqueued?.(job);
   }
 
-  async claimNext(_kind: WorkerOperationKind): Promise<QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest> | null> {
+  async claimNext(_kind: WorkerOperationKind): Promise<QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest | TtsPlaybackPlanJobRequest> | null> {
     throw new Error('JetStreamOperationQueue.claimNext is not used by the worker runtime');
   }
 

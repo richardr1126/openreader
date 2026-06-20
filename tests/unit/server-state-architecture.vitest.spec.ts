@@ -147,8 +147,10 @@ describe('server-state architecture', () => {
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
     expect(context).toContain('createTtsPlaybackSession');
-    expect(context).toContain('createTtsPlaybackPlanSession');
-    expect(clientTts).toContain('body: JSON.stringify({ ...payload, planOnly: true })');
+    expect(context).toContain('createTtsPlaybackPlan');
+    expect(clientTts).toContain("fetch('/api/tts/playback/plans'");
+    expect(clientTts).not.toContain('planOnly');
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('planOnly');
     expect(context).toContain('useTtsPlayback');
     expect(context).toContain('resolvePlaybackStartIndex');
     expect(playbackHook).toContain('normalizePlaybackTimeline');
@@ -162,10 +164,11 @@ describe('server-state architecture', () => {
     expect(context).toContain('playbackPlanSource === \'worker\'');
     expect(context).toContain('setPlaybackPlanSource(\'worker\')');
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
-    expect(streamSessionRoute).toContain('if (!parsed.planOnly)');
-    expect(streamSessionRoute).toContain('planOnly: true');
+    expect(streamSessionRoute).not.toContain('planOnly');
+    expect(streamSessionRoute).toContain('planObjectKey');
     expect(streamSessionRoute).toContain('startSegmentKey');
     expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
+    expect(workerRoutes).toContain("/v1/tts-playback-plans/operations");
     expect(workerRoutes).toContain('Readable.from(streamRange())');
     // The audio stream is seekable (range-capable + finite Content-Length) so the
     // browser honors post-generation playbackRate, including on Safari.
@@ -173,7 +176,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain('parseRangeHeader');
     expect(workerRoutes).toContain('verifyTtsPlaybackToken');
     expect(workerRoutes).toContain('updatePlaybackCursor');
-    expect(streamSessionRoute).toContain('const startOrdinal = 0');
+    expect(streamSessionRoute).toContain('const startOrdinal = parsed.startOrdinal ?? 0');
     expect(streamSessionRoute).toContain('...(startPage !== undefined ? { startPage } : {})');
     expect(streamSessionRoute).toContain('...(startSpineIndex !== undefined ? { startSpineIndex } : {})');
     expect(streamSessionRoute).toContain('...(startCharOffset !== undefined ? { startCharOffset } : {})');
@@ -186,8 +189,11 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('backgroundExtent');
     expect(context).toContain('subscribeTtsPlaybackEvents');
     expect(context).toContain('postTtsPlaybackCursor');
+    expect(context).toContain('seekPlaybackTo');
+    expect(context).toContain('audio.currentTime = targetSec');
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('openOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
+    expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('buildSeekLayout');
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/media.m3u8/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/lib/client/tts/hls-audio-controller.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/extend/route.ts'))).toBe(false);

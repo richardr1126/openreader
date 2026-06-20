@@ -65,7 +65,6 @@ export const ttsPlaybackOperationCreateSchema = z.object({
   settingsJson: z.unknown(),
   startOrdinal: z.number().int().nonnegative().default(0),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
-  planOnly: z.boolean().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
@@ -85,6 +84,12 @@ export const ttsPlaybackOperationCreateSchema = z.object({
     }).optional(),
   }),
 });
+
+export const ttsPlaybackPlanOperationCreateSchema = ttsPlaybackOperationCreateSchema
+  .omit({ sessionId: true, planObjectKey: true, aheadWindow: true, backgroundExtent: true })
+  .extend({
+    startOrdinal: z.number().int().nonnegative().default(0),
+  });
 
 export const pdfResolveSchema = z.object({
   documentId: documentIdSchema,
@@ -132,6 +137,12 @@ export const computeOperationSchema = z.object({
       kind: z.literal('tts_playback'),
       documentId: z.string(),
       sessionId: z.string(),
+    }),
+    z.object({
+      kind: z.literal('tts_playback_plan'),
+      documentId: z.string(),
+      settingsHash: z.string(),
+      planSignature: z.string(),
     }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),

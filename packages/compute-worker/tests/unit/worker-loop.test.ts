@@ -91,6 +91,12 @@ describe('worker loop controller', () => {
           return { parsedObjectKey: 'openreader/parsed.json' };
         },
         runTtsPlayback: async () => ({ sessionId: 'session' }),
+        runTtsPlaybackPlan: async () => ({
+          planObjectKey: 'plan.json',
+          planSignature: 'signature',
+          startOrdinal: 0,
+          plannedCount: 0,
+        }),
       },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       jobConcurrency: 1,
@@ -141,6 +147,12 @@ describe('worker loop controller', () => {
           throw new Error('retry me');
         },
         runTtsPlayback: async () => ({ sessionId: 'session' }),
+        runTtsPlaybackPlan: async () => ({
+          planObjectKey: 'plan.json',
+          planSignature: 'signature',
+          startOrdinal: 0,
+          plannedCount: 0,
+        }),
       },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       jobConcurrency: 1,
