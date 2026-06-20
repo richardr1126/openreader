@@ -85,6 +85,7 @@ export const ttsPlaybackOperationCreateSchema = z.object({
       extent: z.enum(['section', 'document']),
       startPage: z.number().int().positive().optional(),
       startSpineIndex: z.number().int().nonnegative().optional(),
+      startCharOffset: z.number().int().nonnegative().optional(),
       isPlainText: z.boolean().optional(),
     }).optional(),
   }),

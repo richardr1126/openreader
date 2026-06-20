@@ -182,6 +182,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
   const { data: session, isPending: isSessionPending } = useAuthSession();
   const {
     sentences,
+    playbackSegments,
     currentSentenceIndex,
     currDocPage,
     currDocPageNumber,
@@ -203,6 +204,55 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     updateConfigKey,
   } = useConfig();
 
+  const currentEpubSpine = useMemo(() => {
+    if (activeReaderType !== 'epub' || typeof currDocPage !== 'string' || currDocPage.length === 0) {
+      return null;
+    }
+    const book = epubBookRef?.current;
+    return book?.isOpen ? resolveSpineFromCfi(book, currDocPage) : null;
+  }, [activeReaderType, currDocPage, epubBookRef]);
+
+  const sidebarSynthItems = useMemo(() => {
+    type SynthItem = {
+      segmentIndex: number;
+      text: string;
+      segmentKey: string | null;
+      locator: TTSSegmentLocator | null;
+    };
+
+    if (activeReaderType === 'epub' && currentEpubSpine && playbackSegments.length > 0) {
+      const chapterItems = playbackSegments
+        .map<SynthItem | null>((segment, index) => {
+          const locator = segment.ownerLocator;
+          if (!isStableEpubLocator(locator)) return null;
+          if (
+            locator.spineIndex !== currentEpubSpine.index
+            || locator.spineHref !== currentEpubSpine.href
+          ) {
+            return null;
+          }
+          return {
+            segmentIndex: index,
+            text: segment.text,
+            segmentKey: segment.key,
+            locator,
+          };
+        })
+        .filter((item): item is SynthItem => item !== null);
+      if (chapterItems.length > 0) return chapterItems;
+    }
+
+    return sentences.map((text, index) => {
+      const segment = playbackSegments[index];
+      return {
+        segmentIndex: index,
+        text,
+        segmentKey: segment?.key ?? null,
+        locator: segment?.ownerLocator ?? null,
+      };
+    });
+  }, [activeReaderType, currentEpubSpine, playbackSegments, sentences]);
+
   /**
    * Canonicalized per-sentence identities for the currently rendered page.
    * Each local sentence is mapped onto the spine-level canonical segment plan
@@ -211,8 +261,21 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
    */
   const [synthRowCanonical, setSynthRowCanonical] = useState<Array<CanonicalizedEpubSegment | null>>([]);
   useEffect(() => {
-    if (typeof currDocPage !== 'string' || !currDocPage || sentences.length === 0) {
+    if (activeReaderType !== 'epub' || typeof currDocPage !== 'string' || !currDocPage || sidebarSynthItems.length === 0) {
       setSynthRowCanonical([]);
+      return;
+    }
+    const direct = sidebarSynthItems.map((item): CanonicalizedEpubSegment | null => {
+      if (!item.segmentKey || !isStableEpubLocator(item.locator)) return null;
+      return {
+        text: item.text,
+        segmentKey: item.segmentKey,
+        segmentIndex: item.segmentIndex,
+        locator: item.locator,
+      };
+    });
+    if (direct.every(Boolean)) {
+      setSynthRowCanonical(direct);
       return;
     }
     const book = epubBookRef?.current;
@@ -230,9 +293,10 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         }
         const spineText = await getSpineItemPlainText(book, spine.href);
         if (cancelled) return;
-        const offsets = resolveMonotonicSentenceOffsets(spineText, sentences);
+        const sentenceTexts = sidebarSynthItems.map((item) => item.text);
+        const offsets = resolveMonotonicSentenceOffsets(spineText, sentenceTexts);
         const next = canonicalizeEpubSegmentsAgainstSpineText({
-          segmentTexts: sentences,
+          segmentTexts: sentenceTexts,
           hintCharOffsets: offsets,
           spineText,
           spineHref: spine.href,
@@ -251,7 +315,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
       }
     })();
     return () => { cancelled = true; };
-  }, [epubBookRef, currDocPage, sentences, documentId, activeReaderType, ttsSegmentMaxBlockLength, resolvedLanguage]);
+  }, [epubBookRef, currDocPage, sidebarSynthItems, documentId, activeReaderType, ttsSegmentMaxBlockLength, resolvedLanguage]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const didAutoScrollOnOpenRef = useRef(false);
@@ -470,13 +534,11 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     // have a spine concept.
     const inferredCurrentLocator: TTSSegmentLocator | null = (() => {
       if (activeReaderType === 'epub' && typeof currDocPage === 'string' && currDocPage.length > 0) {
-        const book = epubBookRef?.current;
-        const spine = book && book.isOpen ? resolveSpineFromCfi(book, currDocPage) : null;
-        if (spine) {
+        if (currentEpubSpine) {
           return {
             readerType: 'epub',
-            spineHref: spine.href,
-            spineIndex: spine.index,
+            spineHref: currentEpubSpine.href,
+            spineIndex: currentEpubSpine.index,
             charOffset: 0,
             cfi: currDocPage,
           };
@@ -502,8 +564,16 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     // their variants to the matching synthesized current-page row. This
     // collapses the visible duplicates (same content showing up twice — once
     // as a synth row with sentence text, once as a manifest row with audio).
+    const visibleManifestRows = activeReaderType === 'epub' && currentEpubSpine
+      ? manifestRows.filter((row) =>
+          isStableEpubLocator(row.locator)
+          && row.locator.spineIndex === currentEpubSpine.index
+          && row.locator.spineHref === currentEpubSpine.href
+        )
+      : manifestRows;
+
     const manifestBySegmentKey = new Map<string, TTSSegmentRow>();
-    for (const row of manifestRows) {
+    for (const row of visibleManifestRows) {
       if (row.segmentKey) manifestBySegmentKey.set(row.segmentKey, row);
     }
 
@@ -529,15 +599,18 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     // Variants/audio are always taken from the manifest match when present,
     // regardless of which locator wins.
     if (inferredCurrentLocator) {
-      for (let segmentIndex = 0; segmentIndex < sentences.length; segmentIndex += 1) {
-        const sentence = sentences[segmentIndex] ?? '';
-        const canonical = synthRowCanonical[segmentIndex] ?? null;
+      for (let rowIndex = 0; rowIndex < sidebarSynthItems.length; rowIndex += 1) {
+        const item = sidebarSynthItems[rowIndex]!;
+        const segmentIndex = item.segmentIndex;
+        const sentence = item.text;
+        const canonical = synthRowCanonical[rowIndex] ?? null;
         const segmentKey = canonical?.segmentKey
+          ?? item.segmentKey
           ?? (sentence ? buildSegmentKey(keyPrefix, sentence) : null);
         const manifestMatch = segmentKey ? manifestBySegmentKey.get(segmentKey) : undefined;
         if (segmentKey && manifestMatch) claimedManifestKeys.add(segmentKey);
 
-        const localPerSentence = canonical?.locator ?? null;
+        const localPerSentence = canonical?.locator ?? item.locator ?? null;
         const mergedLocator: TTSSegmentLocator =
           localPerSentence
           ?? manifestMatch?.locator
@@ -564,7 +637,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     // screen) render as their own listings. They keep their original locator
     // and group, so they sort into their chapter bucket at their real
     // `charOffset` position.
-    for (const row of manifestRows) {
+    for (const row of visibleManifestRows) {
       if (row.segmentKey && claimedManifestKeys.has(row.segmentKey)) continue;
       entries.push({
         segmentIndex: row.segmentIndex,
@@ -588,7 +661,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     });
 
     return entries;
-  }, [manifestData, manifestRows, currDocPage, currDocPageNumber, sentences, epubBookRef, documentId, activeReaderType, synthRowCanonical]);
+  }, [manifestData, manifestRows, currDocPage, currDocPageNumber, sidebarSynthItems, currentEpubSpine, documentId, activeReaderType, synthRowCanonical]);
 
   const totalVariants = rowsToRender.reduce((sum, r) => sum + r.row.variants.length, 0);
 

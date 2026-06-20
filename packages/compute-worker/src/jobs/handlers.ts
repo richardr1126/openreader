@@ -86,6 +86,7 @@ const ttsPlaybackRequestSchema = z.object({
       extent: z.enum(['section', 'document']),
       startPage: z.number().int().positive().optional(),
       startSpineIndex: z.number().int().nonnegative().optional(),
+      startCharOffset: z.number().int().nonnegative().optional(),
       isPlainText: z.boolean().optional(),
     }).optional(),
   }),
@@ -336,10 +337,13 @@ async function deriveEpubSourceUnits(
   // hint the client uses when re-anchoring highlights against the spine text).
   const units: CanonicalTtsSourceUnit[] = [];
   for (const item of spine) {
-    let chapterOffset = 0;
+    const chapterText = normalizeSourceText(item.text);
+    let searchFrom = 0;
     for (const block of item.blocks) {
       const normalized = normalizeSourceText(block);
       if (!normalized) continue;
+      const found = chapterText.indexOf(normalized, searchFrom);
+      const chapterOffset = found >= 0 ? found : searchFrom;
       units.push({
         sourceKey: `spine:${item.index}:${item.href}#${chapterOffset}`,
         text: block,
@@ -350,9 +354,7 @@ async function deriveEpubSourceUnits(
           charOffset: chapterOffset,
         } as CanonicalTtsSourceUnit['locator'],
       });
-      // +1 approximates the single inter-block space the client's whole-chapter
-      // normalization collapses to; exactness isn't required (it's a search hint).
-      chapterOffset += normalized.length + 1;
+      searchFrom = Math.min(chapterText.length, chapterOffset + normalized.length);
     }
   }
   return units;
@@ -452,11 +454,21 @@ function locatorSpineIndex(locator: unknown): number | null {
   return Number.isFinite(spineIndex) ? spineIndex : null;
 }
 
+function locatorCharOffset(locator: unknown): number | null {
+  if (!locator || typeof locator !== 'object') return null;
+  const rec = locator as { readerType?: unknown; charOffset?: unknown };
+  if (rec.readerType !== 'epub') return null;
+  const charOffset = Number(rec.charOffset);
+  return Number.isFinite(charOffset) ? charOffset : null;
+}
+
 /**
  * Resolve the absolute canonical ordinal where playback should begin, given the
- * whole-document plan and the session's start hints. Prefers the exact segment
- * key, then a normalized text match, then the first segment at/after the start
- * page (PDF) or spine item (EPUB). Falls back to ordinal 0.
+ * whole-document plan and the session's start hints. PDF uses the exact key/text
+ * hints first because app and worker segment from the same parsed block model.
+ * EPUB uses stable spine coordinates first because the client renders viewport
+ * windows while the worker plans per DOM block; local segment keys/text are only
+ * advisory and must not pull playback back to the title page.
  */
 export function resolvePlaybackStartOrdinal(
   segments: TtsPlaybackSegmentInput[],
@@ -464,6 +476,24 @@ export function resolvePlaybackStartOrdinal(
 ): number {
   if (segments.length === 0) return 0;
   const planning = request.planning;
+
+  const documentSource = planning.documentSource;
+  if (request.readerType === 'epub' && documentSource?.startSpineIndex !== undefined) {
+    const startSpineIndex = Math.max(0, Math.floor(documentSource.startSpineIndex));
+    const startCharOffset = documentSource.startCharOffset === undefined
+      ? null
+      : Math.max(0, Math.floor(documentSource.startCharOffset));
+    const match = segments.find((segment) => {
+      const spineIndex = locatorSpineIndex(segment.locator);
+      if (spineIndex == null) return false;
+      if (spineIndex > startSpineIndex) return true;
+      if (spineIndex < startSpineIndex) return false;
+      if (startCharOffset == null) return true;
+      const charOffset = locatorCharOffset(segment.locator);
+      return charOffset == null || charOffset >= startCharOffset;
+    });
+    if (match) return match.segmentIndex;
+  }
 
   if (planning.startSegmentKey) {
     const match = segments.find((segment) => segment.segmentKey === planning.startSegmentKey);
@@ -477,21 +507,12 @@ export function resolvePlaybackStartOrdinal(
     }
   }
 
-  const documentSource = planning.documentSource;
   if (documentSource) {
     if (request.readerType === 'pdf' && documentSource.startPage !== undefined) {
       const startPage = Math.max(1, Math.floor(documentSource.startPage));
       const match = segments.find((segment) => {
         const page = locatorPageNumber(segment.locator);
         return page != null && page >= startPage;
-      });
-      if (match) return match.segmentIndex;
-    }
-    if (request.readerType === 'epub' && documentSource.startSpineIndex !== undefined) {
-      const startSpineIndex = Math.max(0, Math.floor(documentSource.startSpineIndex));
-      const match = segments.find((segment) => {
-        const spineIndex = locatorSpineIndex(segment.locator);
-        return spineIndex != null && spineIndex >= startSpineIndex;
       });
       if (match) return match.segmentIndex;
     }

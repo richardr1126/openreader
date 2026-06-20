@@ -302,6 +302,7 @@ export interface paths {
                                 extent: "section" | "document";
                                 startPage?: number;
                                 startSpineIndex?: number;
+                                startCharOffset?: number;
                                 isPlainText?: boolean;
                             };
                         };

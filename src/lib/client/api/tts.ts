@@ -20,7 +20,7 @@ export const createTtsPlaybackSession = async (
     documentId: string;
     settings: TTSSegmentSettings;
     /** Current reading position; the worker derives reading text from here. */
-    startLocation?: { page?: number; spineIndex?: number };
+    startLocation?: { page?: number; spineIndex?: number; charOffset?: number };
     /** Optional exact segment hint so worker-owned playback starts at the clicked sentence. */
     startSegmentKey?: string;
     startText?: string;

@@ -87,6 +87,8 @@ export interface TtsPlaybackJobRequest {
       startPage?: number;
       /** EPUB: 0-based spine index to start generating from. */
       startSpineIndex?: number;
+      /** EPUB: normalized chapter-relative character offset to start at. */
+      startCharOffset?: number;
       /** HTML: parse as plain text (.txt) rather than markdown. */
       isPlainText?: boolean;
     };

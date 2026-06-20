@@ -155,6 +155,7 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('const startOrdinal = 0');
     expect(streamSessionRoute).toContain('...(startPage !== undefined ? { startPage } : {})');
     expect(streamSessionRoute).toContain('...(startSpineIndex !== undefined ? { startSpineIndex } : {})');
+    expect(streamSessionRoute).toContain('...(startCharOffset !== undefined ? { startCharOffset } : {})');
     // Single forward-generation job throttled to a client cursor; segment
     // discovery is SSE-driven (no polling), and the disconnect-continuation
     // extent comes from the admin ttsPlaybackBackgroundExtent setting.

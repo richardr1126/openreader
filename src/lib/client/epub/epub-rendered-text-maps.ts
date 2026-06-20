@@ -1,8 +1,12 @@
 'use client';
 
 import type { Rendition } from 'epubjs';
-import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+import {
+  normalizeSegmentIdentityText,
+  type CanonicalTtsSegment,
+} from '@openreader/tts/segment-plan';
 import { normalizeMappedChars, type MappedChar } from '@/lib/client/highlight-char-map';
+import { isStableEpubLocator } from '@/types/client';
 
 type EpubMappedPosition = {
   node: Text;
@@ -13,6 +17,9 @@ type EpubMappedChar = MappedChar<EpubMappedPosition>;
 
 export type EpubRenderedTextMap = {
   sourceKey: string;
+  spineHref?: string;
+  spineIndex?: number;
+  baseCharOffset?: number;
   chars: EpubMappedPosition[];
   // Normalized rendered text; `text[i]` is the character at `chars[i]`. Used to
   // locate spoken words by content within a resolved segment region.
@@ -81,6 +88,7 @@ export const buildRenderedTextMaps = (
   rendition: Rendition,
   rangeCfi: string,
   sourceKey: string,
+  spineAnchor?: { spineHref: string; spineIndex: number; charOffset: number } | null,
 ): EpubRenderedTextMap[] => {
   const contents = rendition.getContents();
   const contentsArray = Array.isArray(contents) ? contents : [contents];
@@ -96,6 +104,13 @@ export const buildRenderedTextMaps = (
 
       maps.push({
         sourceKey,
+        ...(spineAnchor
+          ? {
+              spineHref: spineAnchor.spineHref,
+              spineIndex: spineAnchor.spineIndex,
+              baseCharOffset: spineAnchor.charOffset,
+            }
+          : {}),
         chars: normalized.map((token) => token.pos),
         text: normalized.map((token) => token.char).join(''),
         content,
@@ -137,10 +152,36 @@ export const resolveVisibleSegmentRange = (
   for (const map of maps) {
     const startsInMap = segment.startAnchor.sourceKey === map.sourceKey;
     const endsInMap = segment.endAnchor.sourceKey === map.sourceKey;
-    if (!startsInMap && !endsInMap) continue;
+    if (startsInMap || endsInMap) {
+      const startOffset = startsInMap ? segment.startAnchor.offset : 0;
+      const endOffset = endsInMap ? segment.endAnchor.offset : map.chars.length;
+      const range = createRangeFromMappedOffsets(map, startOffset, endOffset);
+      if (range) {
+        return { map, range, startOffset, endOffset };
+      }
+    }
 
-    const startOffset = startsInMap ? segment.startAnchor.offset : 0;
-    const endOffset = endsInMap ? segment.endAnchor.offset : map.chars.length;
+    const locator = segment.ownerLocator;
+    if (
+      !isStableEpubLocator(locator)
+      || map.spineHref !== locator.spineHref
+      || map.spineIndex !== locator.spineIndex
+      || typeof map.baseCharOffset !== 'number'
+    ) {
+      continue;
+    }
+
+    const segmentStart = Math.max(0, Math.floor(locator.charOffset));
+    const segmentLength = Math.max(1, normalizeSegmentIdentityText(segment.text).length);
+    const segmentEnd = segmentStart + segmentLength;
+    const mapStart = Math.max(0, Math.floor(map.baseCharOffset));
+    const mapEnd = mapStart + map.chars.length;
+    if (segmentEnd <= mapStart || segmentStart >= mapEnd) {
+      continue;
+    }
+
+    const startOffset = Math.max(0, segmentStart - mapStart);
+    const endOffset = Math.min(map.chars.length, segmentEnd - mapStart);
     const range = createRangeFromMappedOffsets(map, startOffset, endOffset);
     if (range) {
       return { map, range, startOffset, endOffset };

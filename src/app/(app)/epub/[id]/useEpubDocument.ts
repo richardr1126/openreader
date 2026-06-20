@@ -22,6 +22,7 @@ import {
   buildRenderedTextMaps,
   type EpubRenderedTextMap,
 } from '@/lib/client/epub/epub-rendered-text-maps';
+import { buildEpubChunkAnchor } from '@/lib/client/epub/spine-coordinates';
 import {
   useEPUBHighlighting,
 } from '@/hooks/epub/useEPUBHighlighting';
@@ -233,10 +234,13 @@ export function useEpubDocument(
       }
       if (isStale()) return '';
       const textContent = range.toString().trim();
+      const startAnchor = await buildEpubChunkAnchor(book, start.cfi, textContent);
+      if (isStale()) return '';
       setRenderedTextMaps(buildRenderedTextMaps(
         rendition,
         rangeCfi,
         normalizeTtsLocationKey(start.cfi),
+        startAnchor,
       ));
 
       // Canonical path: derive this page's TTS segments as a window into the
@@ -268,6 +272,15 @@ export function useEpubDocument(
             spineHref: canonicalWindow.spineHref,
             spineIndex: canonicalWindow.spineIndex,
           },
+          startLocator: canonicalWindow.segments[0]?.ownerLocator ?? (startAnchor
+            ? {
+                readerType: 'epub',
+                spineHref: startAnchor.spineHref,
+                spineIndex: startAnchor.spineIndex,
+                charOffset: startAnchor.charOffset,
+                cfi: start.cfi,
+              }
+            : undefined),
         });
       } else {
         // Fallback for spine boundaries, footnotes/nav/image pages, or text not
@@ -276,6 +289,15 @@ export function useEpubDocument(
         setTTSText(textContent, {
           shouldPause,
           location: start.cfi,
+          startLocator: startAnchor
+            ? {
+                readerType: 'epub',
+                spineHref: startAnchor.spineHref,
+                spineIndex: startAnchor.spineIndex,
+                charOffset: startAnchor.charOffset,
+                cfi: start.cfi,
+              }
+            : undefined,
         });
       }
 

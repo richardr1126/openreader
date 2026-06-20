@@ -76,7 +76,7 @@ function parseSettings(value: unknown): TTSSegmentSettings | null {
 function parseBody(value: unknown): {
   documentId: string;
   settings: TTSSegmentSettings;
-  startLocation: { page?: number; spineIndex?: number };
+  startLocation: { page?: number; spineIndex?: number; charOffset?: number };
   maxBlockLength?: number;
   language?: string;
   startSegmentKey?: string;
@@ -96,6 +96,9 @@ function parseBody(value: unknown): {
     : undefined;
   const spineIndex = Number.isFinite(Number(startRec?.spineIndex))
     ? Math.max(0, Math.floor(Number(startRec?.spineIndex)))
+    : undefined;
+  const charOffset = Number.isFinite(Number(startRec?.charOffset))
+    ? Math.max(0, Math.floor(Number(startRec?.charOffset)))
     : undefined;
 
   // `planning` is now limited to segmentation knobs; reading text is derived
@@ -122,6 +125,7 @@ function parseBody(value: unknown): {
     startLocation: {
       ...(page ? { page } : {}),
       ...(spineIndex !== undefined ? { spineIndex } : {}),
+      ...(charOffset !== undefined ? { charOffset } : {}),
     },
     ...(maxBlockLength ? { maxBlockLength } : {}),
     ...(language ? { language } : {}),
@@ -171,6 +175,9 @@ export async function POST(request: NextRequest) {
       : undefined;
     const startSpineIndex = scope.readerType === 'epub'
       ? (parsed.startLocation.spineIndex ?? 0)
+      : undefined;
+    const startCharOffset = scope.readerType === 'epub'
+      ? parsed.startLocation.charOffset
       : undefined;
     // Seed startOrdinal to 0; the worker resolves the real absolute ordinal from
     // the start hints (startSegmentKey / startText / startPage / startSpineIndex)
@@ -243,6 +250,7 @@ export async function POST(request: NextRequest) {
           extent: planExtent,
           ...(startPage !== undefined ? { startPage } : {}),
           ...(startSpineIndex !== undefined ? { startSpineIndex } : {}),
+          ...(startCharOffset !== undefined ? { startCharOffset } : {}),
           isPlainText,
         },
       },

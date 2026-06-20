@@ -1313,6 +1313,11 @@
                             "minimum": 0,
                             "maximum": 9007199254740991
                           },
+                          "startCharOffset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
                           "isPlainText": {
                             "type": "boolean"
                           }

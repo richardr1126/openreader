@@ -152,6 +152,50 @@ describe('worker-owned TTS playback source derivation', () => {
     expect(resolvePlaybackStartOrdinal(segments, baseRequest({}))).toBe(0);
   });
 
+  test('resolvePlaybackStartOrdinal uses EPUB spine coordinates before segment key/text hints', () => {
+    const request = {
+      ...baseRequest({
+        startSegmentKey: 'client-whole-chapter-key-that-worker-will-not-match',
+        startText: 'Repeated heading',
+        documentSource: {
+          namespace: null,
+          extent: 'document',
+          startSpineIndex: 1,
+          startCharOffset: 500,
+        },
+      }),
+      readerType: 'epub' as const,
+    } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
+    const segments = [
+      {
+        segmentIndex: 0,
+        segmentKey: 'title-page',
+        text: 'Repeated heading',
+        locator: { readerType: 'epub', spineHref: 'title.xhtml', spineIndex: 0, charOffset: 0 },
+      },
+      {
+        segmentIndex: 1,
+        segmentKey: 'chapter-one-early',
+        text: 'Repeated heading',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 1, charOffset: 120 },
+      },
+      {
+        segmentIndex: 2,
+        segmentKey: 'chapter-one-target',
+        text: 'Chapter one target.',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 1, charOffset: 520 },
+      },
+      {
+        segmentIndex: 3,
+        segmentKey: 'chapter-two',
+        text: 'Chapter two.',
+        locator: { readerType: 'epub', spineHref: 'ch2.xhtml', spineIndex: 2, charOffset: 0 },
+      },
+    ];
+
+    expect(resolvePlaybackStartOrdinal(segments, request)).toBe(2);
+  });
+
   test('plan signature ignores start position and voice/speed but varies with segmentation knobs', () => {
     const fromTop = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),

@@ -88,6 +88,7 @@ interface TTSContextType extends TTSPlaybackState {
 
   // Sentence/segment list and cursor (for the segments sidebar)
   sentences: string[];
+  playbackSegments: CanonicalTtsSegment[];
   currentSentenceIndex: number;
 
   // Alignment metadata for the current sentence
@@ -131,6 +132,12 @@ interface SetTextOptions {
   canonicalSegments?: CanonicalTtsSegment[];
   /** Spine identity of `canonicalSegments`, for the ordinal-continuity gate. */
   canonicalSpine?: { spineHref: string; spineIndex: number };
+  /**
+   * Stable locator for the visible start position. Load-bearing for EPUB worker
+   * playback: the worker owns a different per-block plan, so startup must anchor
+   * by spine coordinates instead of client-local segment keys.
+   */
+  startLocator?: TTSSegmentLocator;
 }
 
 type TTSPendingJumpTarget = {
@@ -181,7 +188,7 @@ const normalizeStartMatchText = (text: string): string =>
 
 const locatorMatchesPlaybackStart = (
   locator: TTSSegmentLocator | null | undefined,
-  startLocation: { page?: number; spineIndex?: number },
+  startLocation: { page?: number; spineIndex?: number; charOffset?: number },
 ): boolean => {
   if (!locator) return false;
   if (locator.readerType === 'pdf') {
@@ -197,12 +204,22 @@ const resolvePlaybackStartIndex = (input: {
   plan: CanonicalTtsSegment[];
   desiredSegment?: CanonicalTtsSegment;
   desiredText: string;
-  startLocation: { page?: number; spineIndex?: number };
+  startLocation: { page?: number; spineIndex?: number; charOffset?: number };
 }): number => {
   if (input.plan.length === 0) return 0;
   if (input.desiredSegment?.key) {
     const byKey = input.plan.findIndex((segment) => segment.key === input.desiredSegment!.key);
     if (byKey >= 0) return byKey;
+  }
+  if (typeof input.startLocation.spineIndex === 'number' && typeof input.startLocation.charOffset === 'number') {
+    const byEpubCoordinate = input.plan.findIndex((segment) => {
+      const locator = segment.ownerLocator;
+      if (locator?.readerType !== 'epub' || typeof locator.spineIndex !== 'number') return false;
+      if (locator.spineIndex > input.startLocation.spineIndex!) return true;
+      if (locator.spineIndex < input.startLocation.spineIndex!) return false;
+      return typeof locator.charOffset !== 'number' || locator.charOffset >= input.startLocation.charOffset!;
+    });
+    if (byEpubCoordinate >= 0) return byEpubCoordinate;
   }
 
   const desiredText = normalizeStartMatchText(input.desiredSegment?.text ?? input.desiredText);
@@ -776,7 +793,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const currentSource: CanonicalTtsSourceUnit = {
       sourceKey: currentSourceKey,
       text,
-      locator: locatorForLocation(resolvedLocation, activeReaderType),
+      locator: normalizedOptions.startLocator ?? locatorForLocation(resolvedLocation, activeReaderType),
     };
     const effectiveCurrentUnits = currentUnits && currentUnits.length > 0 ? currentUnits : [currentSource];
     const currentSourceKeySet = new Set(effectiveCurrentUnits.map((unit) => unit.sourceKey));
@@ -1147,14 +1164,22 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       const startLocation = activeReaderType === 'pdf'
         ? { page: Math.max(1, Number(currDocPageNumber) || 1) }
         : activeReaderType === 'epub'
-          ? {
-              spineIndex: Math.max(
+          ? (() => {
+              const locator = playbackSegment?.ownerLocator;
+              const spineIndex = Math.max(
                 0,
-                playbackSegment?.ownerLocator?.spineIndex
+                locator?.spineIndex
                   ?? lastPlayedCanonicalRef.current?.spineIndex
                   ?? 0,
-              ),
-            }
+              );
+              const charOffset = typeof locator?.charOffset === 'number' && Number.isFinite(locator.charOffset)
+                ? Math.max(0, Math.floor(locator.charOffset))
+                : undefined;
+              return {
+                spineIndex,
+                ...(charOffset !== undefined ? { charOffset } : {}),
+              };
+            })()
           : {};
 
       const headers: TTSRequestHeaders = {
@@ -1634,6 +1659,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSentence: sentences[currentIndex] || '',
     currentSegment: playbackSegments[currentIndex] ?? null,
     sentences,
+    playbackSegments,
     currentSentenceIndex: currentIndex,
     currentSentenceAlignment,
     currentWordIndex,
