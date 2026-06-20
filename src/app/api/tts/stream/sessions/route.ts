@@ -233,8 +233,10 @@ export async function POST(request: NextRequest) {
         ...(parsed.language ? { language: parsed.language } : {}),
         ...(parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
         ...(parsed.startText ? { startText: parsed.startText } : {}),
-        // PDF segments stay within blocks/pages, matching the client preview.
-        enforceSourceBoundaries: scope.readerType === 'pdf',
+        // PDF and EPUB segment per source unit (PDF layout block / EPUB DOM
+        // block) so each unit is segmented in isolation — bounded, O(n) work,
+        // and no whole-book canonical remapping. HTML stays a single flat unit.
+        enforceSourceBoundaries: scope.readerType === 'pdf' || scope.readerType === 'epub',
         documentSource: {
           namespace: scope.testNamespace,
           skipBlockKinds,

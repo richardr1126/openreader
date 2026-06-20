@@ -49,10 +49,13 @@ describe.runIf(hasSample)('worker-owned EPUB spine extraction + derivation', () 
       expect(item.href).toBeTruthy();
       // body.textContent never contains raw tag markup.
       expect(item.text).not.toMatch(/<[a-z/!]/i);
+      // Block-level chunks tile the chapter (concatenation reproduces no markup).
+      expect(item.blocks.length).toBeGreaterThan(0);
+      for (const block of item.blocks) expect(block).not.toMatch(/<[a-z/!]/i);
     }
   });
 
-  test('document extent derives one epub source unit per non-empty spine item', async () => {
+  test('document extent derives one epub source unit per block (PDF-like granularity)', async () => {
     const storage = fakeStorage();
     const units = await resolvePlaybackSourceUnits(
       epubRequest({ namespace: null, extent: 'document', startSpineIndex: 0 }),
@@ -60,10 +63,24 @@ describe.runIf(hasSample)('worker-owned EPUB spine extraction + derivation', () 
       PREFIX,
     );
     expect(units.length).toBeGreaterThan(0);
+    // More units than spine items: chapters are split into per-block source units.
+    const spine = await extractEpubSpine(epubBytes);
+    const nonEmptySpine = spine.filter((s) => s.text.trim().length > 0).length;
+    expect(units.length).toBeGreaterThanOrEqual(nonEmptySpine);
+    // Per spine item, block base offsets are non-decreasing (chapter-relative hint).
+    const offsetsByKey = new Map<string, number[]>();
     for (const unit of units) {
-      expect(unit.sourceKey).toMatch(/^spine:\d+:/);
-      expect(unit.locator).toMatchObject({ readerType: 'epub', charOffset: 0 });
+      expect(unit.sourceKey).toMatch(/^spine:\d+:.+#\d+$/);
       expect(unit.text.trim().length).toBeGreaterThan(0);
+      const loc = unit.locator as { readerType: string; spineIndex: number; charOffset: number };
+      expect(loc.readerType).toBe('epub');
+      expect(loc.charOffset).toBeGreaterThanOrEqual(0);
+      const list = offsetsByKey.get(`${loc.spineIndex}`) ?? [];
+      list.push(loc.charOffset);
+      offsetsByKey.set(`${loc.spineIndex}`, list);
+    }
+    for (const offsets of offsetsByKey.values()) {
+      for (let i = 1; i < offsets.length; i += 1) expect(offsets[i]).toBeGreaterThan(offsets[i - 1]);
     }
   });
 
@@ -82,9 +99,9 @@ describe.runIf(hasSample)('worker-owned EPUB spine extraction + derivation', () 
       PREFIX,
     );
     // Whole-book plan: the same units no matter where playback starts, and they
-    // include spine items before the requested start spine.
+    // include blocks from spine items before the requested start spine.
     expect(fromMid.map((u) => u.sourceKey)).toEqual(fromStart.map((u) => u.sourceKey));
-    expect(fromMid.some((u) => u.sourceKey === `spine:${target.index}:${target.href}`)).toBe(true);
+    expect(fromMid.some((u) => u.sourceKey.startsWith(`spine:${target.index}:${target.href}#`))).toBe(true);
     expect(fromMid.length).toBeGreaterThan(1);
   });
 });

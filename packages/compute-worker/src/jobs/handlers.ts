@@ -22,6 +22,7 @@ import { resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import {
   buildSegmentKeyPrefix,
+  normalizeSourceText,
   planCanonicalTtsSegments,
   type CanonicalTtsSourceUnit,
 } from '@openreader/tts/segment-plan';
@@ -324,23 +325,37 @@ async function deriveEpubSourceUnits(
   // Position-independent plan: derive the whole book (all spine items from index
   // 0) regardless of the session's start position. The start position is resolved
   // separately into an absolute `startOrdinal`; the background extent setting (not
-  // plan scope) controls how far generation runs on disconnect. This keeps the
-  // plan + ordinals identical no matter where playback begins.
-  // One source unit per spine item (the whole chapter text); the segmenter
-  // splits it into segments and assigns per-segment charOffsets. Mirrors the
-  // client's `planSpineSegments` sourceKey/locator shape so identity matches.
-  return spine
-    .filter((item) => item.text.trim().length > 0)
-    .map((item) => ({
-      sourceKey: `spine:${item.index}:${item.href}`,
-      text: item.text,
-      locator: {
-        readerType: 'epub',
-        spineHref: item.href,
-        spineIndex: item.index,
-        charOffset: 0,
-      } as CanonicalTtsSourceUnit['locator'],
-    }));
+  // plan scope) controls how far generation runs on disconnect.
+  //
+  // One source unit per BLOCK (paragraph/heading/…), not per whole chapter, so the
+  // segmenter runs with `enforceSourceBoundaries` over small bounded units —
+  // mirroring how PDF derives one unit per layout block. This avoids joining the
+  // whole book into one canonical string and the O(n²) remapping that froze the
+  // worker. Each unit carries its block's char offset within the chapter's
+  // normalized text so per-segment `charOffset`s stay chapter-relative (a stable
+  // hint the client uses when re-anchoring highlights against the spine text).
+  const units: CanonicalTtsSourceUnit[] = [];
+  for (const item of spine) {
+    let chapterOffset = 0;
+    for (const block of item.blocks) {
+      const normalized = normalizeSourceText(block);
+      if (!normalized) continue;
+      units.push({
+        sourceKey: `spine:${item.index}:${item.href}#${chapterOffset}`,
+        text: block,
+        locator: {
+          readerType: 'epub',
+          spineHref: item.href,
+          spineIndex: item.index,
+          charOffset: chapterOffset,
+        } as CanonicalTtsSourceUnit['locator'],
+      });
+      // +1 approximates the single inter-block space the client's whole-chapter
+      // normalization collapses to; exactness isn't required (it's a search hint).
+      chapterOffset += normalized.length + 1;
+    }
+  }
+  return units;
 }
 
 async function derivePdfSourceUnits(
@@ -381,7 +396,12 @@ function perSegmentLocator(
   offset: number,
 ): unknown {
   if (ownerLocator && ownerLocator.readerType === 'epub') {
-    return { ...ownerLocator, charOffset: Math.max(0, Math.floor(offset)) };
+    // `ownerLocator.charOffset` is the block's base offset within the chapter;
+    // `offset` is the segment's offset within that block. Sum keeps the stamped
+    // charOffset chapter-relative (matching the single whole-chapter unit the
+    // client anchors against).
+    const base = Math.max(0, Math.floor(ownerLocator.charOffset ?? 0));
+    return { ...ownerLocator, charOffset: base + Math.max(0, Math.floor(offset)) };
   }
   return ownerLocator;
 }

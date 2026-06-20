@@ -54,7 +54,7 @@ interface NormalizedTextMap {
   rawByNormalizedIndex: number[];
 }
 
-const normalizeSourceText = (text: string): string =>
+export const normalizeSourceText = (text: string): string =>
   preprocessSentenceForAudio(text)
     .replace(/\s+/g, ' ')
     .trim();
