@@ -1215,40 +1215,6 @@
                   "planning": {
                     "type": "object",
                     "properties": {
-                      "sourceUnits": {
-                        "maxItems": 4096,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "sourceKey": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 512
-                            },
-                            "text": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 100000
-                            },
-                            "locator": {}
-                          },
-                          "required": [
-                            "sourceKey",
-                            "text"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "currentSourceKeys": {
-                        "maxItems": 4096,
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 512
-                        }
-                      },
                       "startSegmentKey": {
                         "type": "string",
                         "minLength": 1,

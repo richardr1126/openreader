@@ -57,27 +57,15 @@ export interface TtsPlaybackJobRequest {
    */
   backgroundExtent?: 'section' | 'document';
   planning: {
-    /**
-     * Explicit client-provided source units (legacy path). Optional — when
-     * absent, the worker derives source units itself from `documentSource`
-     * (worker-owned planning).
-     */
-    sourceUnits?: Array<{
-      sourceKey: string;
-      text: string;
-      locator?: unknown;
-    }>;
-    currentSourceKeys?: string[];
     startSegmentKey?: string;
     startText?: string;
     maxBlockLength?: number;
     enforceSourceBoundaries?: boolean;
     language?: string;
     /**
-     * Worker-owned derivation input. When present (and `sourceUnits` is
-     * absent), the worker reads the document's parsed artifact and derives the
-     * source units itself, so generation can continue independently of the
-     * client. `extent` bounds how far ahead the worker generates.
+     * Worker-owned derivation input. The worker reads the document artifact and
+     * derives source units itself, so generation can continue independently of
+     * the client. `extent` bounds how far ahead the worker generates.
      */
     documentSource?: {
       namespace: string | null;

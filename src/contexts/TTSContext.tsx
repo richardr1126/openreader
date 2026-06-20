@@ -118,8 +118,8 @@ interface SetTextOptions {
   location?: TTSLocation;
   /**
    * Stable locator for the visible start position. Load-bearing for EPUB worker
-   * playback: the worker owns a different per-block plan, so startup must anchor
-   * by spine coordinates instead of client-local segment keys.
+   * playback: startup anchors by spine coordinates because the worker plan is
+   * keyed from persisted document structure, not transient viewport state.
    */
   startLocator?: TTSSegmentLocator;
 }
@@ -292,10 +292,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [isProcessing, setIsProcessing] = useState(false);
 
   /**
-   * Resolved reader type for segment planning. Mirrors the `activeReaderType`
-   * used inside `setText` so external consumers (e.g. the
-   * sidebar) can compute identical `segmentKey`s from local text and match
-   * them against persisted manifest rows by content identity.
+   * Resolved reader type for playback/session scoping. Consumers use this to
+   * interpret worker-plan locators and merge persisted manifest status.
    */
   const activeReaderType: ReaderType = useMemo(
     () => (isEPUB ? 'epub' : currentReaderType),
@@ -368,11 +366,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const playbackAnchorRef = useRef<PlaybackAnchor | null>(null);
   const sentencesRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
-  // Highest canonical segment ordinal already spoken in the current spine item.
-  // Drives exact, viewport-independent page-turn handoff: the next page begins
-  // at the first window segment whose ordinal exceeds this. Replaces fuzzy
-  // fingerprint matching for within-chapter turns (the spine→spine handoff in
-  // tts-epub-handoff.ts remains the fallback path's safety net).
+  // Last worker-plan EPUB position. Used as a resume anchor when epub.js
+  // navigation lands before the next visible locator is recorded.
   const lastPlayedCanonicalRef = useRef<{ spineHref: string; spineIndex: number; ordinal: number } | null>(null);
   const audioUnlockAttemptRef = useRef(0);
   const playbackProjectionRafRef = useRef<number | null>(null);
@@ -698,9 +693,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [isPlaying, skipBlank, advance, isEPUB, currDocPageNumber]);
 
   /**
-   * Sets the current text and splits it into sentences
+   * Records the current viewport anchor. Sentence planning is worker-owned.
    * 
-   * @param {string} text - The text to be processed
+   * @param {string} text - The rendered text visible at this anchor
    */
   const setText = useCallback((text: string, options?: boolean | SetTextOptions) => {
     const normalizedOptions: SetTextOptions = typeof options === 'boolean'
@@ -1056,7 +1051,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
       // Fetch the worker's canonical plan (full ordered segments + text) and
       // make it the playback model so currentIndex/sidebar/highlighting are
-      // driven by the worker, not per-page client planning.
+      // driven by worker segments, not viewport text extraction.
       const fetchPlan = async () => {
         const res = await fetch(session.planUrl, { cache: 'no-store' });
         if (!res.ok) return null;
@@ -1078,9 +1073,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setSentences(canonicalPlan.map((segment) => segment.text));
 
       // Resolve the starting index within the worker plan. Prefer the exact
-      // segment key, then fall back to normalized visible text at the requested
-      // page/spine so startup does not jump to segment zero when local and
-      // worker planning disagree on key shape.
+      // segment key, then use normalized visible text at the requested
+      // page/spine so startup does not jump to segment zero when the visible
+      // anchor points inside a worker-planned segment.
       const startPlanIndex = resolvePlaybackStartIndex({
         plan: canonicalPlan,
         desiredSegment: playbackSegment,
@@ -1343,7 +1338,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const resolvedLocation: TTSLocation | undefined = (() => {
       if (!locator) return undefined;
       // Stable EPUB locators carry the jump-hint CFI in `cfi`, not `location`
-      // (which is now reserved for HTML / legacy rows).
+      // (which is reserved for HTML locator identity).
       if (locator.readerType === 'epub' && typeof locator.cfi === 'string' && locator.cfi) {
         return locator.cfi;
       }

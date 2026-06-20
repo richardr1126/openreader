@@ -28,11 +28,12 @@ import type { TTSSegmentLocator } from '@/types/client';
  * block that straddles a page break (starts on page A, ends on page B) is the
  * *same* canonical segment (same key, same ordinal) wherever it is referenced,
  * but it belongs only to page A — page B's window begins at the next segment.
- * This clean partition is what makes the sidebar list and manual skip
- * deterministic and keeps playback from repeating a straddler on the page turn.
- * The playback layer (TTSContext) additionally uses ordinal continuity to hand
- * off to ordinal + 1 across the seam. See `tts-segment-plan.ts` for the planner
- * and `spine-coordinates.ts` for the offset helpers this builds on.
+ * This clean partition gives the client a stable bridge between the visible
+ * EPUB window and the worker-owned playback plan. The worker remains the source
+ * of playable segments; this module only resolves the current viewport to
+ * chapter offsets, ordinals, and locators for jump/index/highlight behavior.
+ * See `tts-segment-plan.ts` for the planner and `spine-coordinates.ts` for the
+ * offset helpers this builds on.
  */
 
 export interface SpinePlanParams {
@@ -65,9 +66,8 @@ export interface CanonicalWindowResult {
 }
 
 /**
- * Plan one spine item's full text into canonical segments. Pure/sync — the
- * single source of truth shared by playback windowing, the sidebar, and
- * persistence canonicalization so all three mint identical segment keys.
+ * Plan one spine item's full text into canonical segments. Pure/sync and used
+ * only as a client-side coordinate bridge; playback itself uses the worker plan.
  */
 export function planSpineSegments(input: {
   spineText: string;
@@ -163,7 +163,7 @@ const WINDOW_START_SNAP_TOLERANCE = 8;
  *    *out* to the next page begins on this page, so it is kept here (and
  *    excluded from the next page by the same start rule).
  *
- * Because both the sidebar and manual skip read this exact list, navigation is
+ * Because all viewport lookups use this exact partition, navigation is
  * deterministic and a block is highlighted as the same segment on every visit.
  */
 export function selectCanonicalWindow(
@@ -222,8 +222,7 @@ export interface ViewportAnchorContext {
  * whole-chapter source unit). `cfi` is attached as a non-identity jump hint.
  *
  * When `viewport` is provided, anchors are additionally rewritten to
- * viewport-local coordinates so the page's segments can be highlighted. Omit it
- * for prefetch/walker slices (not rendered on the current page).
+ * viewport-local coordinates so the page's segments can be highlighted.
  */
 export function materializeWindowSegments(
   plan: readonly CanonicalTtsSegment[],
@@ -250,8 +249,8 @@ export function materializeWindowSegments(
     if (viewport) {
       next.startAnchor = { sourceKey: viewport.sourceKey, offset: clampToViewport(seg.startAnchor.offset) };
       next.endAnchor = { sourceKey: viewport.sourceKey, offset: clampToViewport(seg.endAnchor.offset) };
-      // Keep ownerSourceKey in lock-step with the rewritten anchors so local
-      // planning, sorting, and highlight fallbacks agree on the visible source.
+      // Keep ownerSourceKey in lock-step with the rewritten anchors so visible
+      // range lookup and word highlighting agree on the rendered source.
       next.ownerSourceKey = viewport.sourceKey;
     }
     out.push(next);
@@ -298,10 +297,10 @@ export interface BuildEpubCanonicalWindowOptions {
 }
 
 /**
- * Foreground path: build the canonical window for the currently rendered page
- * from its start CFI + visible text. Returns null when the page text can't be
- * located in the spine item (footnotes, nav docs, image-only pages) so the
- * caller can fall back to the legacy preview-based plan.
+ * Build the canonical window for the currently rendered page from its start CFI
+ * + visible text. Returns null when the page text can't be located in the spine
+ * item (footnotes, nav docs, image-only pages); the caller can still seed
+ * playback from the visible text and best-known start locator.
  */
 export async function buildEpubCanonicalWindow(
   book: Book | null | undefined,
@@ -340,48 +339,4 @@ export async function buildEpubCanonicalWindow(
     spineIndex: spine.index,
     cfi: options.startCfi,
   }, viewport);
-}
-
-export interface BuildEpubCanonicalWindowFromChunkOptions {
-  spineHref: string;
-  spineIndex: number;
-  /** Chunk start offset in normalized character space (from the walker). */
-  chunkOffset: number;
-  text: string;
-  cfi?: string;
-  keyPrefix?: string;
-  maxBlockLength?: number;
-  language?: string;
-}
-
-/**
- * Prefetch/walker path: build a canonical window from already-resolved spine
- * coordinates (the walker reports spineHref/spineIndex/chunkOffset/text), so no
- * CFI resolution or range extraction is needed.
- */
-export async function buildEpubCanonicalWindowFromChunk(
-  book: Book | null | undefined,
-  options: BuildEpubCanonicalWindowFromChunkOptions,
-): Promise<CanonicalWindowResult | null> {
-  if (!book?.isOpen) return null;
-  if (!options.text.trim()) return null;
-
-  const plan = await buildSpineCanonicalPlan(book, {
-    spineHref: options.spineHref,
-    spineIndex: options.spineIndex,
-    keyPrefix: options.keyPrefix,
-    maxBlockLength: options.maxBlockLength,
-    language: options.language,
-  });
-  if (plan.length === 0) return null;
-
-  const startOffset = Math.max(0, options.chunkOffset);
-  const endOffset = startOffset + normalizeSegmentIdentityText(options.text).length;
-  const range = selectCanonicalWindow(plan, startOffset, endOffset);
-  if (!range) return null;
-  return buildResult(plan, range, {
-    spineHref: options.spineHref,
-    spineIndex: options.spineIndex,
-    cfi: options.cfi,
-  });
 }

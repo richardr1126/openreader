@@ -284,12 +284,6 @@ export interface paths {
                         /** @enum {string} */
                         backgroundExtent?: "section" | "document";
                         planning: {
-                            sourceUnits?: {
-                                sourceKey: string;
-                                text: string;
-                                locator?: unknown;
-                            }[];
-                            currentSourceKeys?: string[];
                             startSegmentKey?: string;
                             startText?: string;
                             maxBlockLength?: number;

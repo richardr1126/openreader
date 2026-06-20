@@ -69,12 +69,6 @@ const ttsPlaybackRequestSchema = z.object({
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
-    sourceUnits: z.array(z.object({
-      sourceKey: z.string().trim().min(1).max(512),
-      text: z.string().min(1).max(100_000),
-      locator: z.unknown().optional(),
-    })).max(4096).optional(),
-    currentSourceKeys: z.array(z.string().trim().min(1).max(512)).max(4096).optional(),
     startSegmentKey: z.string().trim().min(1).max(512).optional(),
     startText: z.string().trim().min(1).max(20_000).optional(),
     maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -249,10 +243,9 @@ type TtsPlaybackSegmentInput = {
 };
 
 /**
- * Resolve the canonical source units for a playback job. Prefers explicit
- * client-provided units (legacy path); otherwise derives them itself from the
- * document's parsed artifact (worker-owned planning) so generation can run
- * ahead independently of the client. `extent` bounds how far it reads.
+ * Resolve the canonical source units for a playback job from the persisted
+ * document artifact. This keeps planning/generation worker-owned so playback can
+ * continue independently of the client.
  */
 export async function resolvePlaybackSourceUnits(
   request: z.infer<typeof ttsPlaybackRequestSchema>,
@@ -260,16 +253,6 @@ export async function resolvePlaybackSourceUnits(
   s3Prefix: string,
 ): Promise<CanonicalTtsSourceUnit[]> {
   const planning = request.planning;
-  if (planning.sourceUnits?.length) {
-    return planning.sourceUnits
-      .map((unit) => ({
-        sourceKey: unit.sourceKey.trim(),
-        text: unit.text,
-        locator: (unit.locator ?? null) as CanonicalTtsSourceUnit['locator'],
-      }))
-      .filter((unit) => unit.sourceKey && unit.text.trim());
-  }
-
   const documentSource = planning.documentSource;
   if (!documentSource) return [];
 

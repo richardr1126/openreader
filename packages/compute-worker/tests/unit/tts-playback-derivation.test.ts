@@ -66,18 +66,6 @@ function baseRequest(planning: Record<string, unknown>) {
 }
 
 describe('worker-owned TTS playback source derivation', () => {
-  test('legacy path returns client-provided source units verbatim', async () => {
-    const storage = fakeStorage();
-    const units = await resolvePlaybackSourceUnits(
-      baseRequest({
-        sourceUnits: [{ sourceKey: 'k', text: 'hi', locator: { readerType: 'pdf', page: 1 } }],
-      }),
-      storage,
-      PREFIX,
-    );
-    expect(units).toEqual([{ sourceKey: 'k', text: 'hi', locator: { readerType: 'pdf', page: 1 } }]);
-  });
-
   test('derivation returns the whole document, skipping headers', async () => {
     const storage = fakeStorage();
     const units = await resolvePlaybackSourceUnits(

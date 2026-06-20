@@ -129,7 +129,6 @@ Each due task is claimed with a database-backed lease, due tasks start independe
 
 - `/api/audiobook`
 - `/api/audiobook/chapter`
-- `/api/tts/segments/ensure`
 
 :::info
 `serverExternalPackages` should include `ffmpeg-static` so package paths resolve at runtime instead of being bundled into route output.
@@ -146,7 +145,7 @@ FFmpeg workloads benefit from more memory/CPU. This repo includes:
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "app/api/audiobook/route.ts": { "memory": 3009 },
-    "app/api/tts/segments/ensure/route.ts": { "memory": 3009 }
+    "app/api/audiobook/chapter/route.ts": { "memory": 3009 }
   }
 }
 ```

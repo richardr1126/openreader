@@ -464,17 +464,17 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
       groupKey: string;
       groupLabel: string;
       /**
-       * Synthesized rows are local UI projections. For EPUB they are only
-       * allowed after the worker plan is loaded, so the sidebar never flashes
-       * through the older viewport-local sentence split.
+       * Synthesized rows are UI projections from the worker plan. For EPUB,
+       * render only the current spine window so pagination changes do not
+       * reintroduce viewport-local sentence lists.
        */
       isSynthesized: boolean;
     };
     if (visiblePlanItems.length === 0) return [] as Entry[];
 
-    // Fallback locator for the live viewport. Used when per-sentence
-    // canonical resolution hasn't completed yet and for PDF/HTML, which don't
-    // have a spine concept.
+    // Best-known locator for the live viewport. Used when a worker-plan row has
+    // no row-specific locator yet, and for PDF/HTML where spine coordinates do
+    // not exist.
     const inferredCurrentLocator: TTSSegmentLocator | null = (() => {
       if (activeReaderType === 'epub' && typeof currDocPage === 'string' && currDocPage.length > 0) {
         if (currentEpubSpine) {
@@ -895,7 +895,7 @@ function SegmentMetadataPopover({ row }: { row: TTSSegmentRow }) {
                       ? `pdf p.${row.locator.page}`
                       : isHtmlLocator(row.locator)
                         ? `html ${row.locator.location}`
-                        : `${row.locator.readerType || '?'} (legacy)`}
+                        : `${row.locator.readerType || '?'} (unmapped)`}
                 </span>
               ) : (
                 <span className="text-soft text-[11px]">none</span>

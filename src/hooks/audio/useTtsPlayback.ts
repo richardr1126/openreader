@@ -31,7 +31,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   } = input;
   const playbackTimelineRef = useRef<TtsPlaybackTimeline | null>(null);
   const playbackSessionRef = useRef<{ sessionId: string; audioUrl: string; timelineUrl: string } | null>(null);
-  const playbackTimelinePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackActiveRef = useRef(false);
@@ -44,10 +43,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   } | null>(null);
 
   const stopPlaybackTimelinePolling = useCallback(() => {
-    if (playbackTimelinePollRef.current) {
-      clearInterval(playbackTimelinePollRef.current);
-      playbackTimelinePollRef.current = null;
-    }
     if (playbackCursorIntervalRef.current) {
       clearInterval(playbackCursorIntervalRef.current);
       playbackCursorIntervalRef.current = null;
@@ -145,7 +140,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackCursorIntervalRef,
     playbackEventsUnsubRef,
     playbackSessionRef,
-    playbackTimelinePollRef,
     projectPlaybackTime,
     refreshPlaybackTimeline,
     resetPlaybackRefs,

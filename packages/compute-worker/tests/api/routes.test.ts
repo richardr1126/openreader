@@ -131,15 +131,14 @@ describe('compute worker API routes', () => {
         settingsJson: { voice: 'alloy' },
         startOrdinal: 4,
         planning: {
-          sourceUnits: [{
-            sourceKey: 'pdf-page-12',
-            text: 'A worker-owned playback segment.',
-            locator: { readerType: 'pdf', page: 12 },
-          }],
-          currentSourceKeys: ['pdf-page-12'],
           maxBlockLength: 500,
           enforceSourceBoundaries: true,
           language: 'en',
+          documentSource: {
+            namespace: null,
+            extent: 'section',
+            startPage: 12,
+          },
         },
       },
     });
@@ -154,12 +153,11 @@ describe('compute worker API routes', () => {
       kind: 'tts_playback',
       payload: {
         planning: {
-          sourceUnits: [{
-            sourceKey: 'pdf-page-12',
-            text: 'A worker-owned playback segment.',
-            locator: { readerType: 'pdf', page: 12 },
-          }],
-          currentSourceKeys: ['pdf-page-12'],
+          documentSource: {
+            namespace: null,
+            extent: 'section',
+            startPage: 12,
+          },
         },
       },
     });

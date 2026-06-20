@@ -3,7 +3,6 @@ import type { Book } from 'epubjs';
 
 import {
   buildEpubCanonicalWindow,
-  buildEpubCanonicalWindowFromChunk,
   buildSpineCanonicalPlan,
   materializeWindowSegments,
   planSpineSegments,
@@ -225,27 +224,6 @@ describe('buildSpineCanonicalPlan (cached)', () => {
     // reuse across languages). Same language returns the cached reference.
     expect(ja).not.toBe(en);
     expect(await buildSpineCanonicalPlan(book, { ...base, language: 'en' })).toBe(en);
-  });
-});
-
-describe('buildEpubCanonicalWindowFromChunk', () => {
-  test('windows a chunk to canonical segments with playback-identical keys', async () => {
-    const book = makeFakeBook(SPINE_TEXT);
-    const segments = plan();
-    const target = segments[3];
-    const window = await buildEpubCanonicalWindowFromChunk(book, {
-      spineHref: SPINE_HREF,
-      spineIndex: SPINE_INDEX,
-      chunkOffset: target.startAnchor.offset,
-      text: target.text,
-      cfi: 'epubcfi(/6/4!/8)',
-      keyPrefix: KEY_PREFIX,
-      maxBlockLength: MAX_BLOCK,
-    });
-    expect(window).not.toBeNull();
-    expect(window!.segments[0].key).toBe(target.key);
-    expect(window!.segments[0].ownerLocator?.charOffset).toBe(target.startAnchor.offset);
-    expect(window!.windowStartOrdinal).toBe(target.ordinal);
   });
 });
 
