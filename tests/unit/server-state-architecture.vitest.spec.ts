@@ -145,7 +145,11 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
     expect(streamSessionRoute).toContain('startSegmentKey');
     expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
-    expect(workerRoutes).toContain('Readable.from(streamAudio())');
+    expect(workerRoutes).toContain('Readable.from(streamRange())');
+    // The audio stream is seekable (range-capable + finite Content-Length) so the
+    // browser honors post-generation playbackRate, including on Safari.
+    expect(workerRoutes).toContain("reply.header('Accept-Ranges', 'bytes')");
+    expect(workerRoutes).toContain('parseRangeHeader');
     expect(workerRoutes).toContain('verifyTtsPlaybackToken');
     expect(workerRoutes).toContain('updatePlaybackCursor');
     expect(streamSessionRoute).toContain('const startOrdinal = 0');

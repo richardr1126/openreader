@@ -1232,10 +1232,19 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         audio.setAttribute('playsinline', 'true');
         unlockedAudioRef.current = audio;
       }
+      // Set defaultPlaybackRate as well as playbackRate: the audio.load() below runs
+      // the media resource-selection algorithm which resets playbackRate back to
+      // defaultPlaybackRate, so without this the first play reverts to 1.0x. The
+      // stream is now seekable (range-capable, finite Content-Length), so non-unity
+      // rates are honored — including on Safari.
+      audio.defaultPlaybackRate = audioSpeed;
       audio.playbackRate = audioSpeed;
       audio.volume = 1;
       audio.onplay = () => {
         if (runId !== playbackRunIdRef.current) return;
+        // Re-assert speed: load()'s reset can land after this point, so pin it once
+        // playback actually starts.
+        audio.playbackRate = audioSpeed;
         setIsProcessing(false);
         if ('mediaSession' in navigator) {
           navigator.mediaSession.playbackState = 'playing';

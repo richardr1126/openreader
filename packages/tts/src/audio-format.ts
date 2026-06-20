@@ -7,6 +7,32 @@ import { ttsLogger } from './logger';
 export type SniffedAudioFormat = 'mp3' | 'wav' | 'ogg' | 'flac' | 'aac' | 'unknown';
 
 /**
+ * The single MP3 encoding profile every TTS segment is normalized to. Progressive
+ * playback concatenates per-segment MP3s into one stream that the browser must be
+ * able to seek (so post-generation `playbackRate` works, especially on Safari).
+ *
+ * Seekability requires the concatenated stream to be byte↔time linear, which holds
+ * iff every segment shares:
+ *  - a constant bitrate (CBR) — VBR breaks the linear byte→time mapping; with CBR
+ *    the browser computes `duration = Content-Length / (bitrate/8)` from the first
+ *    frame and seeks by `byte = time × (bitrate/8)`, so no Xing header is needed;
+ *  - the same sample rate and channel count — a decoder reads these from the first
+ *    frame of the concatenated stream and a mid-stream change garbles the audio.
+ *
+ * 44.1 kHz mono @ 128 kbps CBR keeps speech clean (the prior VBR q2 profile guarded
+ * against low-bitrate high-frequency fatigue; 128k CBR stays comfortably above that)
+ * while making the stream seekable. The audiobook export re-encodes to 64k for size.
+ */
+export const STREAM_AUDIO_PROFILE = {
+  sampleRateHz: 44100,
+  channels: 1,
+  bitrateKbps: 128,
+} as const;
+
+/** Constant bytes per second of audio for {@link STREAM_AUDIO_PROFILE} (CBR ⇒ linear). */
+export const STREAM_AUDIO_BYTES_PER_SECOND = (STREAM_AUDIO_PROFILE.bitrateKbps * 1000) / 8;
+
+/**
  * Detect an audio container/codec from a buffer's leading bytes (magic numbers).
  *
  * Biased toward only reporting `mp3` when we are confident, so the common path
@@ -125,24 +151,15 @@ function spawnFfmpegToBuffer(args: string[], signal?: AbortSignal): Promise<Buff
 }
 
 /**
- * Transcode an arbitrary audio buffer to mp3 using the bundled ffmpeg. The input
- * is written to a temp file (ffmpeg needs seekable input for some containers) and
- * the mp3 is captured from stdout.
+ * Transcode an arbitrary audio buffer to a {@link STREAM_AUDIO_PROFILE} mp3 using
+ * the bundled ffmpeg. The input is written to a temp file (ffmpeg needs seekable
+ * input for some containers) and the mp3 is read back from a temp file.
  *
- * Uses VBR quality 2 (~170-210 kbps) rather than a low CBR bitrate: this audio is
- * what the user listens to live, and aggressive low-bitrate encoding of pristine
- * high-fidelity TTS (e.g. 44.1 kHz wav) introduces high-frequency artifacts that
- * cause listening fatigue. The audiobook export still re-encodes to 64k for size.
- *
- * The mp3 is written to a seekable temp file rather than piped to stdout: VBR mp3
- * stores its total-duration metadata in a Xing/Info header at the *start* of the
- * file, which ffmpeg can only emit by seeking back after encoding finishes. On a
- * pipe that seek is impossible, so a piped VBR mp3 carries no valid duration. The
- * HTML5 <audio> element then extrapolates duration from the first frame's bitrate
- * (correct for CBR, wrong for VBR), which makes the `ended` event fire at the
- * wrong time — or stall without firing — and stops segment-to-segment playback.
- * Writing to a real file lets ffmpeg backpatch the Xing header so duration is
- * accurate and `ended` fires reliably.
+ * Emits CBR (`-b:a`), a fixed sample rate (`-ar`) and mono (`-ac`) so every segment
+ * shares one byte↔time-linear profile and concatenates into a seekable stream — see
+ * {@link STREAM_AUDIO_PROFILE}. `-write_xing 0` drops the Xing/Info header: for CBR
+ * it carries no useful duration (we serve a known Content-Length), and a per-segment
+ * Xing frame would decode as ~26ms of silence mid-stream, breaking gapless playback.
  */
 export async function transcodeToMp3(buffer: Buffer, signal?: AbortSignal): Promise<Buffer> {
   let workDir: string | null = null;
@@ -160,8 +177,10 @@ export async function transcodeToMp3(buffer: Buffer, signal?: AbortSignal): Prom
         '-i', inputPath,
         '-vn',
         '-c:a', 'libmp3lame',
-        '-q:a', '2',
-        '-write_xing', '1',
+        '-b:a', `${STREAM_AUDIO_PROFILE.bitrateKbps}k`,
+        '-ar', String(STREAM_AUDIO_PROFILE.sampleRateHz),
+        '-ac', String(STREAM_AUDIO_PROFILE.channels),
+        '-write_xing', '0',
         '-f', 'mp3',
         outputPath,
       ],
@@ -176,24 +195,61 @@ export async function transcodeToMp3(buffer: Buffer, signal?: AbortSignal): Prom
   }
 }
 
+let cachedSilenceSecond: Promise<Buffer> | null = null;
+
 /**
- * Ensure a TTS buffer is mp3. OpenAI-compatible servers vary in which audio
- * formats they emit (some default to or only support wav), so we sniff the bytes
- * and transcode anything that isn't already mp3. Real-mp3 responses pass through
- * untouched, so the common path adds zero cost.
+ * One second of {@link STREAM_AUDIO_PROFILE} CBR silence, generated once via ffmpeg
+ * and cached. Used to pad the tail of a progressive stream up to its advertised
+ * Content-Length with *valid* MP3 frames (not zero bytes), so the browser decodes
+ * cleanly to the end and fires `ended` rather than stalling on garbage. Because the
+ * profile is CBR, this fixed buffer can be repeated/sliced to fill any byte length.
+ */
+export function getCbrSilenceSecond(signal?: AbortSignal): Promise<Buffer> {
+  if (!cachedSilenceSecond) {
+    cachedSilenceSecond = spawnFfmpegToBuffer(
+      [
+        '-nostdin',
+        '-loglevel', 'error',
+        '-f', 'lavfi',
+        '-i', `anullsrc=r=${STREAM_AUDIO_PROFILE.sampleRateHz}:cl=mono`,
+        '-t', '1',
+        '-c:a', 'libmp3lame',
+        '-b:a', `${STREAM_AUDIO_PROFILE.bitrateKbps}k`,
+        '-ar', String(STREAM_AUDIO_PROFILE.sampleRateHz),
+        '-ac', String(STREAM_AUDIO_PROFILE.channels),
+        '-write_xing', '0',
+        '-f', 'mp3',
+        'pipe:1',
+      ],
+      signal,
+    ).catch((error) => {
+      // Don't cache a rejected promise — allow a later retry.
+      cachedSilenceSecond = null;
+      throw error;
+    });
+  }
+  return cachedSilenceSecond;
+}
+
+/**
+ * Normalize a TTS buffer to a {@link STREAM_AUDIO_PROFILE} mp3. Every segment is
+ * (re)encoded to the one CBR/sample-rate/channel profile — including inputs that
+ * are already mp3 — because progressive playback concatenates these segments into a
+ * single seekable stream and a provider's own mp3 (VBR, or a different bitrate /
+ * sample rate / channel count) would break the byte↔time linearity that seeking and
+ * post-generation `playbackRate` depend on. Segment audio is cached, so this one-time
+ * transcode cost is amortized across every playback and the audiobook export.
  */
 export async function normalizeToMp3(buffer: Buffer, signal?: AbortSignal): Promise<Buffer> {
   if (buffer.length === 0) return buffer;
 
   const format = sniffAudioFormat(buffer);
-  if (format === 'mp3') return buffer;
-
   const transcoded = await transcodeToMp3(buffer, signal);
   ttsLogger.info({
     event: 'tts.audio_format.normalized_to_mp3',
     sourceFormat: format,
     sourceBytes: buffer.length,
     outputBytes: transcoded.length,
-  }, 'Normalized non-mp3 TTS audio to mp3');
+  }, 'Normalized TTS audio to stream profile mp3');
   return transcoded;
 }
