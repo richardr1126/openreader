@@ -140,18 +140,30 @@ describe('server-state architecture', () => {
 
   test('drives TTS playback through worker-owned progressive streams', () => {
     const context = source('src/contexts/TTSContext.tsx');
+    const clientTts = source('src/lib/client/api/tts.ts');
     const playbackHook = source('src/hooks/audio/useTtsPlayback.ts');
     const epubHighlighting = source('src/hooks/epub/useEPUBHighlighting.ts');
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
     expect(context).toContain('createTtsPlaybackSession');
+    expect(context).toContain('createTtsPlaybackPlanSession');
+    expect(clientTts).toContain('body: JSON.stringify({ ...payload, planOnly: true })');
     expect(context).toContain('useTtsPlayback');
     expect(context).toContain('resolvePlaybackStartIndex');
     expect(playbackHook).toContain('normalizePlaybackTimeline');
     expect(playbackHook).toContain('projectTimelineAtTime');
     expect(context).toContain('audio.src = session.audioUrl');
+    expect(context).toContain('const hasViewportAnchor = Boolean(playbackAnchorRef.current?.text.trim())');
+    expect(context).not.toContain('if (!sentences[currentIndex]) return');
+    expect(context).toContain("currentSentence: sentences[currentIndex] || ''");
+    expect(context).not.toContain('playbackAnchor:');
+    expect(source('src/components/reader/SegmentsSidebar.tsx')).not.toContain('playbackAnchor');
+    expect(context).toContain('playbackPlanSource === \'worker\'');
+    expect(context).toContain('setPlaybackPlanSource(\'worker\')');
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
+    expect(streamSessionRoute).toContain('if (!parsed.planOnly)');
+    expect(streamSessionRoute).toContain('planOnly: true');
     expect(streamSessionRoute).toContain('startSegmentKey');
     expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
     expect(workerRoutes).toContain('Readable.from(streamRange())');

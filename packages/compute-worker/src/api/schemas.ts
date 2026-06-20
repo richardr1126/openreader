@@ -65,6 +65,7 @@ export const ttsPlaybackOperationCreateSchema = z.object({
   settingsJson: z.unknown(),
   startOrdinal: z.number().int().nonnegative().default(0),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  planOnly: z.boolean().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({

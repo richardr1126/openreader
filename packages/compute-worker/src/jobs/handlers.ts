@@ -66,6 +66,7 @@ const ttsPlaybackRequestSchema = z.object({
   settingsJson: z.unknown(),
   startOrdinal: z.number().int().nonnegative(),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  planOnly: z.boolean().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
@@ -970,6 +971,20 @@ export function createJobHandlers(input: {
           startOrdinal,
           lastError: null,
         });
+        if (parsed.planOnly) {
+          await updateTtsPlaybackSession({
+            sessionId: parsed.sessionId,
+            status: 'succeeded',
+            planObjectKey,
+            startOrdinal,
+            lastError: null,
+          });
+          return {
+            sessionId: parsed.sessionId,
+            planObjectKey,
+            timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+          };
+        }
 
         const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
         const plannedCount = plannedSegments.length;

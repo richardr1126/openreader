@@ -130,6 +130,7 @@ describe('compute worker API routes', () => {
         settingsHash: 'settings-hash',
         settingsJson: { voice: 'alloy' },
         startOrdinal: 4,
+        planOnly: true,
         planning: {
           maxBlockLength: 500,
           enforceSourceBoundaries: true,
@@ -152,6 +153,7 @@ describe('compute worker API routes', () => {
     expect(fake.enqueuedRequests.at(-1)).toMatchObject({
       kind: 'tts_playback',
       payload: {
+        planOnly: true,
         planning: {
           documentSource: {
             namespace: null,

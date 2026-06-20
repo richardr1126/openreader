@@ -16,17 +16,7 @@ export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Pro
 };
 
 export const createTtsPlaybackSession = async (
-  payload: {
-    documentId: string;
-    settings: TTSSegmentSettings;
-    /** Current reading position; the worker derives reading text from here. */
-    startLocation?: { page?: number; spineIndex?: number; charOffset?: number };
-    /** Optional exact segment hint so worker-owned playback starts at the clicked sentence. */
-    startSegmentKey?: string;
-    startText?: string;
-    /** Segmentation knobs only; reading text is derived server-side. */
-    planning?: { maxBlockLength?: number; language?: string };
-  },
+  payload: TtsPlaybackSessionPayload,
   headers: TTSRequestHeaders,
   signal?: AbortSignal,
 ): Promise<{
@@ -53,6 +43,59 @@ export const createTtsPlaybackSession = async (
       problem = null;
     }
     const err = new Error(`TTS playback session failed with status ${response.status}`) as TTSRequestError;
+    err.status = response.status;
+    if (typeof problem === 'object' && problem !== null) {
+      const rec = problem as Record<string, unknown>;
+      if (typeof rec.code === 'string') err.code = rec.code;
+      if (typeof rec.type === 'string') err.type = rec.type;
+      if (typeof rec.title === 'string') err.title = rec.title;
+      if (typeof rec.detail === 'string') err.detail = rec.detail;
+    }
+    throw err;
+  }
+
+  return await response.json();
+};
+
+export type TtsPlaybackSessionPayload = {
+  documentId: string;
+  settings: TTSSegmentSettings;
+  /** Current reading position; the worker derives reading text from here. */
+  startLocation?: { page?: number; spineIndex?: number; charOffset?: number };
+  /** Optional exact segment hint so worker-owned playback starts at the clicked sentence. */
+  startSegmentKey?: string;
+  startText?: string;
+  /** Segmentation knobs only; reading text is derived server-side. */
+  planning?: { maxBlockLength?: number; language?: string };
+};
+
+export const createTtsPlaybackPlanSession = async (
+  payload: TtsPlaybackSessionPayload,
+  headers: TTSRequestHeaders,
+  signal?: AbortSignal,
+): Promise<{
+  sessionId: string;
+  operation: unknown;
+  timelineUrl: string;
+  planUrl: string;
+  eventsUrl: string;
+  expiresAt: number;
+}> => {
+  const response = await fetch('/api/tts/stream/sessions', {
+    method: 'POST',
+    headers: headers as HeadersInit,
+    body: JSON.stringify({ ...payload, planOnly: true }),
+    signal,
+  });
+
+  if (!response.ok) {
+    let problem: unknown = null;
+    try {
+      problem = await response.json();
+    } catch {
+      problem = null;
+    }
+    const err = new Error(`TTS playback plan failed with status ${response.status}`) as TTSRequestError;
     err.status = response.status;
     if (typeof problem === 'object' && problem !== null) {
       const rec = problem as Record<string, unknown>;

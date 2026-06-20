@@ -81,6 +81,7 @@ function parseBody(value: unknown): {
   language?: string;
   startSegmentKey?: string;
   startText?: string;
+  planOnly: boolean;
 } | null {
   if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
@@ -118,6 +119,7 @@ function parseBody(value: unknown): {
   const startText = typeof rec.startText === 'string' && rec.startText.trim()
     ? rec.startText.trim()
     : undefined;
+  const planOnly = rec.planOnly === true;
 
   return {
     documentId,
@@ -131,6 +133,7 @@ function parseBody(value: unknown): {
     ...(language ? { language } : {}),
     ...(startSegmentKey ? { startSegmentKey } : {}),
     ...(startText ? { startText } : {}),
+    planOnly,
   };
 }
 
@@ -207,19 +210,22 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     });
 
-    // Supersede this user's other active playback sessions so their (now
-    // abandoned) worker jobs stop and release the worker's concurrency slot —
-    // otherwise a refreshed/closed session keeps generating in the background and
-    // starves the new one. The worker's cursor/status poll picks this up within
-    // ~500ms and exits gracefully.
-    await db
-      .update(ttsPlaybackSessions)
-      .set({ status: 'canceled', updatedAt: now })
-      .where(and(
-        eq(ttsPlaybackSessions.userId, scope.userId),
-        ne(ttsPlaybackSessions.sessionId, sessionId),
-        inArray(ttsPlaybackSessions.status, ['queued', 'running']),
-      ));
+    if (!parsed.planOnly) {
+      // Supersede this user's other active playback sessions so their (now
+      // abandoned) worker jobs stop and release the worker's concurrency slot —
+      // otherwise a refreshed/closed session keeps generating in the background and
+      // starves the new one. The worker's cursor/status poll picks this up within
+      // ~500ms and exits gracefully. Plan-only sessions must not interrupt active
+      // playback because they only persist the canonical segment plan.
+      await db
+        .update(ttsPlaybackSessions)
+        .set({ status: 'canceled', updatedAt: now })
+        .where(and(
+          eq(ttsPlaybackSessions.userId, scope.userId),
+          ne(ttsPlaybackSessions.sessionId, sessionId),
+          inArray(ttsPlaybackSessions.status, ['queued', 'running']),
+        ));
+    }
 
     const operation = await new ComputeWorkerClient().createTtsPlaybackOperation({
       sessionId,
@@ -231,10 +237,10 @@ export async function POST(request: NextRequest) {
       settingsHash,
       settingsJson,
       startOrdinal,
+      ...(parsed.planOnly ? { planOnly: true } : {}),
       // One forward-generation job, throttled to a window ahead of the client's
       // playback cursor; on disconnect it continues to the background extent.
-      aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
-      backgroundExtent,
+      ...(parsed.planOnly ? {} : { aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW, backgroundExtent }),
       planning: {
         ...(parsed.maxBlockLength ? { maxBlockLength: parsed.maxBlockLength } : {}),
         ...(parsed.language ? { language: parsed.language } : {}),
@@ -265,21 +271,26 @@ export async function POST(request: NextRequest) {
       })
       .where(eq(ttsPlaybackSessions.sessionId, sessionId));
 
-    return NextResponse.json({
+    const responseBase = {
       sessionId,
       operation,
-      audioUrl: buildWorkerAudioUrl({
-        sessionId,
-        userId: scope.userId,
-        storageUserId: scope.storageUserId,
-        documentId: parsed.documentId,
-        expiresAt,
-      }),
       timelineUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/timeline`,
       planUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/plan`,
       eventsUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/events`,
       expiresAt,
-    }, { status: 202 });
+    };
+    return NextResponse.json(parsed.planOnly
+      ? responseBase
+      : {
+          ...responseBase,
+          audioUrl: buildWorkerAudioUrl({
+            sessionId,
+            userId: scope.userId,
+            storageUserId: scope.storageUserId,
+            documentId: parsed.documentId,
+            expiresAt,
+          }),
+        }, { status: 202 });
   } catch (error) {
     return errorResponse(error, {
       logger,

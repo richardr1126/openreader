@@ -42,6 +42,8 @@ export interface TtsPlaybackJobRequest {
   settingsJson: unknown;
   startOrdinal: number;
   planObjectKey?: string;
+  /** Persist the canonical plan and resolve startOrdinal, then return before audio generation. */
+  planOnly?: boolean;
   /**
    * How many segments ahead of the client's playback cursor the worker may
    * generate while the client is connected (cursor is fresh). When the cursor

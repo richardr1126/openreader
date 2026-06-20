@@ -108,6 +108,15 @@ export interface paths {
                         "application/json": string;
                     };
                 };
+                /** @description Progressive MP3 audio byte range */
+                206: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
                 /** @description Default Response */
                 400: {
                     headers: {
@@ -136,6 +145,45 @@ export interface paths {
                 };
                 /** @description Default Response */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                416: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -280,6 +328,7 @@ export interface paths {
                         /** @default 0 */
                         startOrdinal: number;
                         planObjectKey?: string;
+                        planOnly?: boolean;
                         aheadWindow?: number;
                         /** @enum {string} */
                         backgroundExtent?: "section" | "document";
