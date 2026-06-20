@@ -125,7 +125,15 @@ describe('server-state architecture', () => {
   });
 
   test('uses centralized query keys for manifests, rate limits, and admin state', () => {
-    expect(source('src/components/reader/SegmentsSidebar.tsx')).toContain('queryKeys.ttsManifest');
+    const sidebar = source('src/components/reader/SegmentsSidebar.tsx');
+    const manifestRoute = source('src/app/api/tts/segments/manifest/route.ts');
+    expect(sidebar).toContain('queryKeys.ttsManifest');
+    expect(sidebar).toContain("params.set('readerType', 'epub')");
+    expect(sidebar).toContain("params.set('spineIndex', String(currentEpubSpine.index))");
+    expect(sidebar).toContain("params.set('spineHref', currentEpubSpine.href)");
+    expect(manifestRoute).toContain("request.nextUrl.searchParams.get('readerType')");
+    expect(manifestRoute).toContain("eq(ttsSegmentEntries.locatorReaderType, 'epub')");
+    expect(manifestRoute).toContain('eq(ttsSegmentEntries.locatorSpineIndex, spineIndex)');
     expect(source('src/contexts/AuthRateLimitContext.tsx')).toContain('queryKeys.rateLimit');
     expect(source('src/components/admin/AdminProvidersPanel.tsx')).toContain('queryKeys.admin(sessionId');
   });
@@ -133,6 +141,7 @@ describe('server-state architecture', () => {
   test('drives TTS playback through worker-owned progressive streams', () => {
     const context = source('src/contexts/TTSContext.tsx');
     const playbackHook = source('src/hooks/audio/useTtsPlayback.ts');
+    const epubHighlighting = source('src/hooks/epub/useEPUBHighlighting.ts');
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
@@ -156,6 +165,8 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('...(startPage !== undefined ? { startPage } : {})');
     expect(streamSessionRoute).toContain('...(startSpineIndex !== undefined ? { startSpineIndex } : {})');
     expect(streamSessionRoute).toContain('...(startCharOffset !== undefined ? { startCharOffset } : {})');
+    expect(epubHighlighting).toContain('resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)');
+    expect(epubHighlighting).not.toContain('segment.startAnchor.sourceKey !== resolved.map.sourceKey');
     // Single forward-generation job throttled to a client cursor; segment
     // discovery is SSE-driven (no polling), and the disconnect-continuation
     // extent comes from the admin ttsPlaybackBackgroundExtent setting.

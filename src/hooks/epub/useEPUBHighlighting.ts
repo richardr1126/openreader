@@ -107,10 +107,10 @@ export function useEPUBHighlighting({
 
     if (!renditionRef.current) return;
 
-    if (!segment || segment.startAnchor.sourceKey !== segment.ownerSourceKey) return;
+    if (!segment) return;
 
     const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
-    if (!resolved || segment.startAnchor.sourceKey !== resolved.map.sourceKey) return;
+    if (!resolved) return;
 
     // Map each spoken word onto the rendered region with the shared token-
     // sequence aligner (same primitive as the HTML and PDF viewers). The region

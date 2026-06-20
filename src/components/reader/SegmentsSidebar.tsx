@@ -322,14 +322,17 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
   const userScrollUntilMsRef = useRef(0);
   const programmaticScrollUntilMsRef = useRef(0);
   const lastSegmentRefreshKeyRef = useRef('');
+  const manifestScopeKey = activeReaderType === 'epub' && currentEpubSpine
+    ? `epub:${currentEpubSpine.index}:${currentEpubSpine.href}`
+    : 'document';
   const segmentsQueryKey = useMemo(
-    () => queryKeys.ttsManifest(session?.user?.id ?? 'no-session', documentId),
-    [documentId, session?.user?.id],
+    () => queryKeys.ttsManifest(session?.user?.id ?? 'no-session', documentId, manifestScopeKey),
+    [documentId, manifestScopeKey, session?.user?.id],
   );
 
   const segmentsQuery = useInfiniteQuery({
     queryKey: segmentsQueryKey,
-    enabled: !isSessionPending && isOpen && !!documentId,
+    enabled: !isSessionPending && isOpen && !!documentId && (activeReaderType !== 'epub' || !!currentEpubSpine),
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam, signal }) => {
       if (!documentId) {
@@ -345,6 +348,11 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         documentId,
         limit: String(MANIFEST_PAGE_SIZE),
       });
+      if (activeReaderType === 'epub' && currentEpubSpine) {
+        params.set('readerType', 'epub');
+        params.set('spineIndex', String(currentEpubSpine.index));
+        params.set('spineHref', currentEpubSpine.href);
+      }
       if (cursor) params.set('cursor', cursor);
       const res = await fetch(`/api/tts/segments/manifest?${params.toString()}`, {
         signal,

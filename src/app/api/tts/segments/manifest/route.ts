@@ -101,6 +101,14 @@ function isAbortLikeMessage(message: string | null | undefined): boolean {
   return /abort/i.test(message);
 }
 
+function parseOptionalNonNegativeInteger(value: string | null): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function buildKeysetWhere(cursor: TTSSegmentManifestCursor) {
   return or(
     gt(ttsSegmentEntries.locatorReaderRank, cursor.locatorReaderRank),
@@ -191,6 +199,9 @@ export async function GET(request: NextRequest) {
     const documentId = documentIdRaw?.trim().toLowerCase();
     const limit = parseManifestPageSize(request.nextUrl.searchParams.get('limit'));
     const cursor = decodeManifestCursor(request.nextUrl.searchParams.get('cursor'));
+    const readerType = request.nextUrl.searchParams.get('readerType')?.trim().toLowerCase() ?? '';
+    const spineIndex = parseOptionalNonNegativeInteger(request.nextUrl.searchParams.get('spineIndex'));
+    const spineHref = request.nextUrl.searchParams.get('spineHref')?.trim() ?? '';
     if (!documentId) {
       return NextResponse.json({ error: 'Missing documentId' }, { status: 400 });
     }
@@ -198,10 +209,19 @@ export async function GET(request: NextRequest) {
     const scope = await resolveSegmentDocumentScope(request, documentId);
     if (scope instanceof Response) return scope;
 
+    const locatorScopeWhere = readerType === 'epub' && spineIndex !== null
+      ? and(
+          eq(ttsSegmentEntries.locatorReaderType, 'epub'),
+          eq(ttsSegmentEntries.locatorSpineIndex, spineIndex),
+          ...(spineHref ? [eq(ttsSegmentEntries.locatorSpineHref, spineHref)] : []),
+        )
+      : null;
+
     const scopeWhere = and(
       eq(ttsSegmentEntries.userId, scope.storageUserId),
       eq(ttsSegmentEntries.documentId, documentId),
       eq(ttsSegmentEntries.documentVersion, scope.documentVersion),
+      ...(locatorScopeWhere ? [locatorScopeWhere] : []),
     );
 
     const groupWhere = cursor
