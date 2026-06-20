@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Transition } from '@headlessui/react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Book } from 'epubjs';
@@ -11,16 +11,7 @@ import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
 import { Button, IconButton, PopoverIconTrigger, PopoverRoot, PopoverSurface } from '@/components/ui';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@openreader/tts/locator';
-import { buildSegmentKey, buildSegmentKeyPrefix } from '@openreader/tts/segment-plan';
-import {
-  canonicalizeEpubSegmentsAgainstSpineText,
-  type CanonicalizedEpubSegment,
-} from '@/lib/client/epub/canonicalize-epub-segment';
-import {
-  getSpineItemPlainText,
-  resolveMonotonicSentenceOffsets,
-  resolveSpineFromCfi,
-} from '@/lib/client/epub/spine-coordinates';
+import { resolveSpineFromCfi } from '@/lib/client/epub/spine-coordinates';
 import {
   isHtmlLocator,
   isPdfLocator,
@@ -183,6 +174,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
   const {
     sentences,
     playbackSegments,
+    playbackPlanSource,
     currentSentenceIndex,
     currDocPage,
     currDocPageNumber,
@@ -200,7 +192,6 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
     voice,
     voiceSpeed,
     ttsInstructions,
-    ttsSegmentMaxBlockLength,
     updateConfigKey,
   } = useConfig();
 
@@ -220,7 +211,11 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
       locator: TTSSegmentLocator | null;
     };
 
-    if (activeReaderType === 'epub' && currentEpubSpine && playbackSegments.length > 0) {
+    if (playbackPlanSource !== 'worker' || playbackSegments.length === 0) {
+      return [];
+    }
+
+    if (activeReaderType === 'epub' && currentEpubSpine) {
       const chapterItems = playbackSegments
         .map<SynthItem | null>((segment, index) => {
           const locator = segment.ownerLocator;
@@ -239,83 +234,25 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
           };
         })
         .filter((item): item is SynthItem => item !== null);
-      if (chapterItems.length > 0) return chapterItems;
+      return chapterItems;
     }
 
-    return sentences.map((text, index) => {
-      const segment = playbackSegments[index];
+    return playbackSegments.map<SynthItem | null>((segment, index) => {
+      const text = segment.text || sentences[index] || '';
+      if (!text.trim()) return null;
       return {
         segmentIndex: index,
         text,
-        segmentKey: segment?.key ?? null,
-        locator: segment?.ownerLocator ?? null,
+        segmentKey: segment.key ?? null,
+        locator: segment.ownerLocator ?? null,
       };
-    });
-  }, [activeReaderType, currentEpubSpine, playbackSegments, sentences]);
+    }).filter((item): item is SynthItem => item !== null);
+  }, [activeReaderType, currentEpubSpine, playbackPlanSource, playbackSegments, sentences]);
 
-  /**
-   * Canonicalized per-sentence identities for the currently rendered page.
-   * Each local sentence is mapped onto the spine-level canonical segment plan
-   * (forward-only ordinal walk), so overlap-boundary local splits still resolve
-   * to the same canonical `segmentKey`/`charOffset` as persisted rows.
-   */
-  const [synthRowCanonical, setSynthRowCanonical] = useState<Array<CanonicalizedEpubSegment | null>>([]);
-  useEffect(() => {
-    if (activeReaderType !== 'epub' || typeof currDocPage !== 'string' || !currDocPage || sidebarSynthItems.length === 0) {
-      setSynthRowCanonical([]);
-      return;
-    }
-    const direct = sidebarSynthItems.map((item): CanonicalizedEpubSegment | null => {
-      if (!item.segmentKey || !isStableEpubLocator(item.locator)) return null;
-      return {
-        text: item.text,
-        segmentKey: item.segmentKey,
-        segmentIndex: item.segmentIndex,
-        locator: item.locator,
-      };
-    });
-    if (direct.every(Boolean)) {
-      setSynthRowCanonical(direct);
-      return;
-    }
-    const book = epubBookRef?.current;
-    if (!book?.isOpen) {
-      setSynthRowCanonical([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const spine = resolveSpineFromCfi(book, currDocPage);
-        if (!spine) {
-          if (!cancelled) setSynthRowCanonical([]);
-          return;
-        }
-        const spineText = await getSpineItemPlainText(book, spine.href);
-        if (cancelled) return;
-        const sentenceTexts = sidebarSynthItems.map((item) => item.text);
-        const offsets = resolveMonotonicSentenceOffsets(spineText, sentenceTexts);
-        const next = canonicalizeEpubSegmentsAgainstSpineText({
-          segmentTexts: sentenceTexts,
-          hintCharOffsets: offsets,
-          spineText,
-          spineHref: spine.href,
-          spineIndex: spine.index,
-          cfi: currDocPage,
-          keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
-          maxBlockLength: ttsSegmentMaxBlockLength,
-          language: resolvedLanguage,
-        });
-        if (!cancelled) setSynthRowCanonical(next);
-      } catch (error) {
-        // Don't leave a previous page's canonical mapping in place if this
-        // resolution fails — clear it so we fall back to non-canonical rows.
-        console.warn('Failed to canonicalize EPUB sidebar segments:', error);
-        if (!cancelled) setSynthRowCanonical([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [epubBookRef, currDocPage, sidebarSynthItems, documentId, activeReaderType, ttsSegmentMaxBlockLength, resolvedLanguage]);
+  const visiblePlanItems = useMemo(() => {
+    if (activeReaderType !== 'epub' || currentEpubSpine) return sidebarSynthItems;
+    return [];
+  }, [activeReaderType, currentEpubSpine, sidebarSynthItems]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const didAutoScrollOnOpenRef = useRef(false);
@@ -520,22 +457,20 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
   const rowsToRender = useMemo(() => {
     type Entry = {
       segmentIndex: number;
+      displayIndex: number;
       sentenceText: string;
       row: TTSSegmentRow;
       isCurrentLocation: boolean;
       groupKey: string;
       groupLabel: string;
       /**
-       * Synthesized rows are produced locally from the currently rendered page's
-       * sentences. They carry sentence text and the live-play highlight. Manifest
-       * rows come from the server-side manifest and may overlap synthesized rows
-       * for the current page; we render them as their own listings so the
-       * sidebar can show the rest of the chapter (and other chapters) without
-       * needing to re-derive page boundaries on the client.
+       * Synthesized rows are local UI projections. For EPUB they are only
+       * allowed after the worker plan is loaded, so the sidebar never flashes
+       * through the older viewport-local sentence split.
        */
       isSynthesized: boolean;
     };
-    if (!manifestData) return [] as Entry[];
+    if (visiblePlanItems.length === 0) return [] as Entry[];
 
     // Fallback locator for the live viewport. Used when per-sentence
     // canonical resolution hasn't completed yet and for PDF/HTML, which don't
@@ -568,10 +503,9 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
       return null;
     })();
 
-    // Index manifest rows by their content-stable segmentKey so we can attach
-    // their variants to the matching synthesized current-page row. This
-    // collapses the visible duplicates (same content showing up twice — once
-    // as a synth row with sentence text, once as a manifest row with audio).
+    // Index manifest rows so worker-plan rows can attach persisted status/audio
+    // variants. Manifest rows are never rendered by themselves because they do
+    // not carry text; the worker plan is the sidebar text source.
     const visibleManifestRows = activeReaderType === 'epub' && currentEpubSpine
       ? manifestRows.filter((row) =>
           isStableEpubLocator(row.locator)
@@ -580,100 +514,59 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         )
       : manifestRows;
 
-    const manifestBySegmentKey = new Map<string, TTSSegmentRow>();
+    const manifestBySegmentIdentity = new Map<string, TTSSegmentRow>();
+    const manifestBySegmentKey = new Map<string, TTSSegmentRow[]>();
     for (const row of visibleManifestRows) {
-      if (row.segmentKey) manifestBySegmentKey.set(row.segmentKey, row);
+      if (!row.segmentKey) continue;
+      manifestBySegmentIdentity.set(`${row.segmentKey}|${locatorIdentityKey(row.locator)}`, row);
+      const bucket = manifestBySegmentKey.get(row.segmentKey) ?? [];
+      bucket.push(row);
+      manifestBySegmentKey.set(row.segmentKey, bucket);
     }
 
     const entries: Entry[] = [];
-    const claimedManifestKeys = new Set<string>();
-    const keyPrefix = buildSegmentKeyPrefix(documentId, activeReaderType);
 
-    // Synthesized rows: one per local sentence. Always tagged as
-    // `isCurrentLocation: true` so the live-playback highlight can fire on
-    // `currentSentenceIndex`. We compute each sentence's `segmentKey` the same
-    // way TTSContext does for persistence; when a manifest row carries the
-    // same key, we pull in its variants/audio but keep the locally-resolved
-    // per-sentence locator for sort positioning.
-    //
-    // **Locator preference (drives sort order):**
-    //   1. Canonicalized per-sentence locator (`synthRowCanonical[i]`) —
-    //      identity-stable with persisted manifest rows across resize and
-    //      boundary split variations.
-    //   2. Matching manifest row's persisted locator — fallback while the
-    //      async resolution is still running.
-    //   3. `inferredCurrentLocator` (chapter + 0) — final fallback.
-    //
-    // Variants/audio are always taken from the manifest match when present,
-    // regardless of which locator wins.
-    if (inferredCurrentLocator) {
-      for (let rowIndex = 0; rowIndex < sidebarSynthItems.length; rowIndex += 1) {
-        const item = sidebarSynthItems[rowIndex]!;
-        const segmentIndex = item.segmentIndex;
-        const sentence = item.text;
-        const canonical = synthRowCanonical[rowIndex] ?? null;
-        const segmentKey = canonical?.segmentKey
-          ?? item.segmentKey
-          ?? (sentence ? buildSegmentKey(keyPrefix, sentence) : null);
-        const manifestMatch = segmentKey ? manifestBySegmentKey.get(segmentKey) : undefined;
-        if (segmentKey && manifestMatch) claimedManifestKeys.add(segmentKey);
-
-        const localPerSentence = canonical?.locator ?? item.locator ?? null;
-        const mergedLocator: TTSSegmentLocator =
-          localPerSentence
-          ?? manifestMatch?.locator
-          ?? inferredCurrentLocator;
-        const synthRow: TTSSegmentRow = {
-          segmentIndex,
-          segmentKey,
-          locator: mergedLocator,
-          variants: manifestMatch?.variants ?? [],
-        };
-        entries.push({
-          segmentIndex,
-          sentenceText: sentence,
-          row: synthRow,
-          isCurrentLocation: true,
-          groupKey: locatorGroupKey(mergedLocator),
-          groupLabel: formatLocatorGroupLabel(mergedLocator),
-          isSynthesized: true,
-        });
-      }
-    }
-
-    // Manifest rows not claimed by a synth row (i.e. content not currently on
-    // screen) render as their own listings. They keep their original locator
-    // and group, so they sort into their chapter bucket at their real
-    // `charOffset` position.
-    for (const row of visibleManifestRows) {
-      if (row.segmentKey && claimedManifestKeys.has(row.segmentKey)) continue;
+    for (let rowIndex = 0; rowIndex < visiblePlanItems.length; rowIndex += 1) {
+      const item = visiblePlanItems[rowIndex]!;
+      const segmentKey = item.segmentKey;
+      const manifestMatch = segmentKey
+        ? (
+            manifestBySegmentIdentity.get(`${segmentKey}|${locatorIdentityKey(item.locator)}`)
+            ?? (manifestBySegmentKey.get(segmentKey)?.length === 1 ? manifestBySegmentKey.get(segmentKey)![0] : undefined)
+          )
+        : undefined;
+      const rowLocator = item.locator ?? manifestMatch?.locator ?? inferredCurrentLocator;
+      if (!rowLocator) continue;
+      const row: TTSSegmentRow = {
+        segmentIndex: item.segmentIndex,
+        segmentKey,
+        locator: rowLocator,
+        variants: manifestMatch?.variants ?? [],
+      };
       entries.push({
-        segmentIndex: row.segmentIndex,
-        sentenceText: '',
+        segmentIndex: item.segmentIndex,
+        displayIndex: rowIndex,
+        sentenceText: item.text,
         row,
-        isCurrentLocation: false,
-        groupKey: locatorGroupKey(row.locator),
-        groupLabel: formatLocatorGroupLabel(row.locator),
-        isSynthesized: false,
+        isCurrentLocation: true,
+        groupKey: locatorGroupKey(rowLocator),
+        groupLabel: formatLocatorGroupLabel(rowLocator),
+        isSynthesized: true,
       });
     }
 
     entries.sort((a, b) => {
       const byLocator = compareSegmentLocators(a.row.locator, b.row.locator);
       if (byLocator !== 0) return byLocator;
-      // Within the same locator group, place synthesized (current-page) rows
-      // first so the user's active reading position floats to the top of the
-      // chapter group.
-      if (a.isSynthesized !== b.isSynthesized) return a.isSynthesized ? -1 : 1;
-      return a.segmentIndex - b.segmentIndex;
+      return a.displayIndex - b.displayIndex;
     });
 
     return entries;
-  }, [manifestData, manifestRows, currDocPage, currDocPageNumber, sidebarSynthItems, currentEpubSpine, documentId, activeReaderType, synthRowCanonical]);
+  }, [manifestRows, currDocPage, currDocPageNumber, visiblePlanItems, currentEpubSpine, activeReaderType]);
 
   const totalVariants = rowsToRender.reduce((sum, r) => sum + r.row.variants.length, 0);
 
-  const hasLoadedManifest = !!manifestData;
+  const hasLoadedManifest = playbackPlanSource === 'worker' || !!manifestData;
   const isManifestLoading = isManifestPending && !manifestData;
   const manifestErrorMessage = manifestError instanceof Error ? manifestError.message : 'Failed to load';
 
@@ -805,10 +698,10 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
               )}
               {hasLoadedManifest && rowsToRender.length > 0 && (
                 <ul className="divide-y divide-line-soft">
-                  {rowsToRender.map(({ segmentIndex, sentenceText, row, isCurrentLocation, groupKey, groupLabel, isSynthesized }, rowIndex) => {
+                  {rowsToRender.map(({ segmentIndex, displayIndex, sentenceText, row, isCurrentLocation, groupKey, groupLabel, isSynthesized }, rowIndex) => {
                     const previousGroupKey = rowIndex > 0 ? rowsToRender[rowIndex - 1]?.groupKey : null;
                     const showGroupHeader = previousGroupKey !== groupKey;
-                    const isCurrent = isCurrentLocation && segmentIndex === currentSentenceIndex;
+                    const isCurrent = isPlaying && isCurrentLocation && segmentIndex === currentSentenceIndex;
                     const variants = row.variants ?? [];
                     const bestVariant = variants
                       .slice()
@@ -849,10 +742,10 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                             onClick={() => { if (canJump) handleJump(segmentIndex, row.locator); }}
                             disabled={!canJump}
                             className={`text-xs font-medium shrink-0 pt-0.5 ${canJump ? 'text-soft hover:text-accent' : 'text-faint cursor-not-allowed'}`}
-                            title={canJump ? (playable ? 'Play this segment' : 'Jump to this segment') : 'Text not loaded yet'}
-                            aria-label={`Segment ${segmentIndex + 1}`}
+                            title={playable ? 'Play this segment' : 'Jump to this segment'}
+                            aria-label={`Segment ${displayIndex + 1}`}
                           >
-                            {formatIndex(segmentIndex)}
+                            {formatIndex(displayIndex)}
                           </button>
 
                           <div className="min-w-0 flex-1">
@@ -863,11 +756,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                               className={`block w-full text-left ${canJump ? '' : 'cursor-not-allowed'}`}
                             >
                               <p className={`text-sm leading-snug ${isCurrent ? 'text-foreground' : 'text-soft'} line-clamp-2`}>
-                                {sentenceText || (
-                                  <span className="text-soft italic text-xs">
-                                    [text not loaded — press play to fetch]
-                                  </span>
-                                )}
+                                {sentenceText}
                               </p>
                             </button>
 
@@ -885,12 +774,6 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
                                   playing
                                 </span>
                               )}
-                              {!canJump && (
-                                <span className="text-[10px] text-faint border border-line rounded px-1 py-0.5">
-                                  not loaded
-                                </span>
-                              )}
-
                               {variants.length > 0 && (
                                 <span className="flex flex-wrap items-start gap-0.5 max-w-full">
                                   {variants.map((variant) => {

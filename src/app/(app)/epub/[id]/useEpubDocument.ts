@@ -289,11 +289,6 @@ export function useEpubDocument(
         setTTSText(textContent, {
           shouldPause,
           location: start.cfi,
-          canonicalSegments: canonicalWindow.segments,
-          canonicalSpine: {
-            spineHref: canonicalWindow.spineHref,
-            spineIndex: canonicalWindow.spineIndex,
-          },
           startLocator: canonicalWindow.segments[0]?.ownerLocator ?? (startAnchor
             ? {
                 readerType: 'epub',

@@ -29,8 +29,7 @@ import {
   clearWordHighlights,
   highlightWordIndex,
 } from '@/lib/client/pdf';
-import { buildPageTextFromBlocks, buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
-import type { CanonicalTtsSourceUnit } from '@openreader/tts/segment-plan';
+import { buildPageTextFromBlocks } from '@openreader/tts/pdf-sources';
 import {
   DEFAULT_DOCUMENT_SETTINGS,
   type DocumentSettings,
@@ -227,11 +226,6 @@ export function usePdfDocument(
         return;
       }
 
-      const sourceUnitsFromParsedPage = (pageNum: number): CanonicalTtsSourceUnit[] => {
-        const page = pageFromParsed(pageNum);
-        return buildPdfPageSourceUnits(page, pageNum, documentSettings.pdf?.skipBlockKinds ?? []);
-      };
-
       const getPageText = async (pageNumber: number): Promise<string> => {
         // Ignore stale/in-flight work if the document or worker changed.
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
@@ -262,10 +256,8 @@ export function usePdfDocument(
       const shouldPreparePlayback = text === '' || text !== currDocText || lastPreparedPlaybackPageRef.current !== currDocPageNumber;
       if (shouldPreparePlayback) {
         setCurrDocText(text);
-        const sourceUnits = sourceUnitsFromParsedPage(currDocPageNumber);
         setTTSText(text, {
           location: currDocPageNumber,
-          ...(sourceUnits.length > 0 ? { sourceUnits } : {}),
         });
       }
       lastPreparedPlaybackPageRef.current = currDocPageNumber;
