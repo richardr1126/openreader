@@ -68,6 +68,7 @@ import type {
   TTSRequestHeaders,
   TTSSegmentLocator,
 } from '@/types/client';
+import { isStableEpubLocator } from '@/types/client';
 
 import type { ReaderType } from '@/types/user-state';
 
@@ -114,7 +115,7 @@ interface TTSContextType extends TTSPlaybackState {
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   prepareInitialPosition: (location: TTSLocation, sentenceIndex: number) => void;
-  registerLocationChangeHandler: (handler: ((location: TTSLocation) => void) | null) => void;  // EPUB-only: Handles chapter navigation
+  registerLocationChangeHandler: (handler: ((location: TTSLocation | TTSSegmentLocator) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
   /** Effective reader type used to mint segmentKeys (see buildSegmentKeyPrefix). */
   activeReaderType: ReaderType;
@@ -363,7 +364,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [pathname]);
 
   // Add ref for location change handler
-  const locationChangeHandlerRef = useRef<((location: TTSLocation) => void) | null>(null);
+  const locationChangeHandlerRef = useRef<((location: TTSLocation | TTSSegmentLocator) => void) | null>(null);
 
   /**
    * Registers a handler function for location changes in EPUB documents
@@ -371,7 +372,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    *
    * @param {Function} handler - Function to handle location changes
    */
-  const registerLocationChangeHandler = useCallback((handler: ((location: TTSLocation) => void) | null) => {
+  const registerLocationChangeHandler = useCallback((handler: ((location: TTSLocation | TTSSegmentLocator) => void) | null) => {
     locationChangeHandlerRef.current = handler;
   }, []);
 
@@ -1486,6 +1487,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       clearPendingEpubJump();
     }
 
+    const epubLocatorTarget = isEPUB && isStableEpubLocator(locator) ? locator : null;
     const resolvedLocation: TTSLocation | undefined = (() => {
       if (!locator) return undefined;
       // Stable EPUB locators carry the jump-hint CFI in `cfi`, not `location`
@@ -1498,14 +1500,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       return undefined;
     })();
 
-    if (resolvedLocation === undefined) {
+    if (resolvedLocation === undefined && !epubLocatorTarget) {
       stopAndPlayFromIndex(index);
       return;
     }
 
-    const isSameLocation = typeof resolvedLocation === 'string'
+    const isSameLocation = resolvedLocation !== undefined && typeof resolvedLocation === 'string'
       ? String(currDocPage) === String(resolvedLocation)
-      : Number(currDocPageNumber || 1) === Number(resolvedLocation);
+      : resolvedLocation !== undefined && Number(currDocPageNumber || 1) === Number(resolvedLocation);
 
     if (isSameLocation) {
       stopAndPlayFromIndex(index);
@@ -1528,7 +1530,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       // A jump breaks ordinal continuity — drop the handoff anchor so the new
       // page plays from its resolved index rather than being trimmed.
       lastPlayedCanonicalRef.current = null;
-    } else {
+    } else if (resolvedLocation !== undefined) {
       pendingJumpTargetRef.current = {
         locationKey: normalizeLocationKey(resolvedLocation),
         index: Math.max(0, index),
@@ -1538,10 +1540,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentIndex(0);
     setIsPlaying(true);
     if (isEPUB && locationChangeHandlerRef.current) {
-      locationChangeHandlerRef.current(resolvedLocation);
+      locationChangeHandlerRef.current(epubLocatorTarget ?? resolvedLocation!);
       return;
     }
-    skipToLocation(resolvedLocation, false);
+    if (resolvedLocation !== undefined) {
+      skipToLocation(resolvedLocation, false);
+    }
   }, [
     stopAndPlayFromIndex,
     currDocPage,

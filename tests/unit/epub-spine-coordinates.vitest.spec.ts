@@ -9,6 +9,12 @@ import {
   resolveMonotonicSentenceOffsets,
   resolveSpineFromCfi,
 } from '../../src/lib/client/epub/spine-coordinates';
+import {
+  clearEpubWindowIndex,
+  findIndexedEpubWindowForLocator,
+  registerEpubWindowIndexEntry,
+  resolveEpubLocatorToCfi,
+} from '../../src/lib/client/epub/location-index';
 import { isStableEpubLocator } from '../../src/types/client';
 
 interface FakeSection {
@@ -21,6 +27,7 @@ interface FakeSection {
   // defensive shape-handling can be tested.
   load: (request?: unknown) => Promise<Element | Document>;
   unload: () => void;
+  cfiFromRange?: (range: Range) => string;
 }
 
 function makeFakeBook(items: Array<{ index: number; href: string; cfiBase: string; text: string }>) {
@@ -65,6 +72,7 @@ function makeFakeBook(items: Array<{ index: number; href: string; cfiBase: strin
   };
 
   const book = {
+    isOpen: true,
     spine: { get, spineItems: sections },
     load: () => Promise.resolve(undefined),
   } as unknown as Book;
@@ -258,6 +266,59 @@ describe('buildEpubLocator anchored-search regression', () => {
     // The returned offset must be past where the early echo lives.
     const earlyEchoIndex = chapterText.toLowerCase().indexOf(earlyEcho.toLowerCase());
     expect(locator.charOffset).toBeGreaterThan(earlyEchoIndex);
+  });
+});
+
+describe('EPUB location index', () => {
+  test('finds an indexed rendered window by stable spine charOffset', () => {
+    const { book } = makeFakeBook([
+      { index: 0, href: 'ch.xhtml', cfiBase: '/6/2', text: 'alpha beta gamma delta' },
+    ]);
+    clearEpubWindowIndex(book);
+    registerEpubWindowIndexEntry(book, {
+      spineHref: 'ch.xhtml',
+      spineIndex: 0,
+      startCfi: 'epubcfi(/6/2!/4:0)',
+      endCfi: 'epubcfi(/6/2!/4:20)',
+      startCharOffset: 10,
+      endCharOffset: 40,
+      startOrdinal: 3,
+      endOrdinal: 8,
+    });
+
+    const match = findIndexedEpubWindowForLocator(book, {
+      readerType: 'epub',
+      spineHref: 'ch.xhtml',
+      spineIndex: 0,
+      charOffset: 18,
+    });
+    expect(match?.startCfi).toBe('epubcfi(/6/2!/4:0)');
+
+    const miss = findIndexedEpubWindowForLocator(book, {
+      readerType: 'epub',
+      spineHref: 'ch.xhtml',
+      spineIndex: 0,
+      charOffset: 45,
+    });
+    expect(miss).toBeNull();
+  });
+
+  test('resolves a stable spine charOffset to a section CFI', async () => {
+    if (typeof document === 'undefined') return;
+    const { book, sections } = makeFakeBook([
+      { index: 0, href: 'ch.xhtml', cfiBase: '/6/2', text: 'alpha beta gamma delta' },
+    ]);
+    clearEpubWindowIndex(book);
+    sections[0].cfiFromRange = (range) => `epubcfi(/6/2!/4:${range.startOffset})`;
+
+    const cfi = await resolveEpubLocatorToCfi(book, {
+      readerType: 'epub',
+      spineHref: 'ch.xhtml',
+      spineIndex: 0,
+      charOffset: 6,
+    });
+
+    expect(cfi).toBe('epubcfi(/6/2!/4:6)');
   });
 });
 

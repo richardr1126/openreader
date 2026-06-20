@@ -58,6 +58,10 @@ export interface CanonicalWindowResult {
   windowEndOrdinal: number;
   /** The full, pristine per-chapter canonical plan (shared reference, do not mutate). */
   plan: CanonicalTtsSegment[];
+  /** Normalized spine offset where the rendered window starts, when known. */
+  viewportStartCharOffset?: number;
+  /** Normalized spine offset where the rendered window ends, when known. */
+  viewportEndCharOffset?: number;
 }
 
 /**
@@ -246,9 +250,8 @@ export function materializeWindowSegments(
     if (viewport) {
       next.startAnchor = { sourceKey: viewport.sourceKey, offset: clampToViewport(seg.startAnchor.offset) };
       next.endAnchor = { sourceKey: viewport.sourceKey, offset: clampToViewport(seg.endAnchor.offset) };
-      // Keep ownerSourceKey in lock-step with the rewritten anchors: the word
-      // highlighter requires startAnchor.sourceKey === ownerSourceKey to treat
-      // the segment as anchored in the rendered page.
+      // Keep ownerSourceKey in lock-step with the rewritten anchors so local
+      // planning, sorting, and highlight fallbacks agree on the visible source.
       next.ownerSourceKey = viewport.sourceKey;
     }
     out.push(next);
@@ -271,6 +274,12 @@ const buildResult = (
     windowStartOrdinal: plan[range.startIndex].ordinal,
     windowEndOrdinal: plan[range.endIndex].ordinal,
     plan,
+    ...(viewport
+      ? {
+          viewportStartCharOffset: viewport.baseOffset,
+          viewportEndCharOffset: viewport.baseOffset + viewport.length,
+        }
+      : {}),
   };
 };
 

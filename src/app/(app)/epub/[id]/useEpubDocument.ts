@@ -22,6 +22,11 @@ import {
   buildRenderedTextMaps,
   type EpubRenderedTextMap,
 } from '@/lib/client/epub/epub-rendered-text-maps';
+import {
+  clearEpubWindowIndex,
+  registerEpubWindowIndexEntry,
+  resolveEpubLocatorToCfi,
+} from '@/lib/client/epub/location-index';
 import { buildEpubChunkAnchor } from '@/lib/client/epub/spine-coordinates';
 import {
   useEPUBHighlighting,
@@ -69,7 +74,7 @@ export interface EpubDocumentState {
   renditionRef: RefObject<Rendition | undefined>;
   tocRef: RefObject<NavItem[]>;
   locationRef: RefObject<string | number>;
-  handleLocationChanged: (location: string | number) => void;
+  handleLocationChanged: (location: string | number | TTSSegmentLocator) => void;
   setRendition: (rendition: Rendition) => void;
   isAudioCombining: boolean;
   highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => void;
@@ -154,6 +159,7 @@ export function useEpubDocument(
     setCurrDocPages(undefined);
     isEPUBSetOnce.current = false;
     shouldPauseRef.current = true;
+    clearEpubWindowIndex(bookRef.current);
     bookRef.current = null;
     renditionEventsCleanupRef.current?.();
     renditionEventsCleanupRef.current = null;
@@ -173,6 +179,7 @@ export function useEpubDocument(
     try {
       setIsPlaybackReady(false);
       setMetadataLanguage(null);
+      clearEpubWindowIndex(bookRef.current);
       bookRef.current = null;
       renditionEventsCleanupRef.current?.();
       renditionEventsCleanupRef.current = null;
@@ -264,6 +271,21 @@ export function useEpubDocument(
       if (isStale()) return '';
 
       if (canonicalWindow) {
+        if (
+          typeof canonicalWindow.viewportStartCharOffset === 'number'
+          && typeof canonicalWindow.viewportEndCharOffset === 'number'
+        ) {
+          registerEpubWindowIndexEntry(book, {
+            spineHref: canonicalWindow.spineHref,
+            spineIndex: canonicalWindow.spineIndex,
+            startCfi: start.cfi,
+            endCfi: end.cfi,
+            startCharOffset: canonicalWindow.viewportStartCharOffset,
+            endCharOffset: canonicalWindow.viewportEndCharOffset,
+            startOrdinal: canonicalWindow.windowStartOrdinal,
+            endOrdinal: canonicalWindow.windowEndOrdinal,
+          });
+        }
         setTTSText(textContent, {
           shouldPause,
           location: start.cfi,
@@ -350,6 +372,10 @@ export function useEpubDocument(
       });
   }, [extractPageText, setIsEPUB, skipToLocation]);
 
+  const resolveLocatorToCfi = useCallback((locator: TTSSegmentLocator) => (
+    resolveEpubLocatorToCfi(bookRef.current, locator)
+  ), []);
+
   const handleLocationChanged = useEPUBLocationController({
     documentId,
     isEpubSetOnceRef: isEPUBSetOnce,
@@ -361,6 +387,7 @@ export function useEpubDocument(
     renditionRef,
     locationRef,
     scheduleProgress,
+    resolveLocatorToCfi,
   });
 
 

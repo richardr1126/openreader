@@ -4,6 +4,8 @@ import { useCallback, type MutableRefObject, type RefObject } from 'react';
 import type { Book, Rendition } from 'epubjs';
 
 import type { ScheduleDocumentProgress } from '@/types/user-state';
+import type { TTSSegmentLocator } from '@/types/client';
+import { isStableEpubLocator } from '@/types/client';
 
 import {
   isDirectionalEpubLocation,
@@ -23,7 +25,12 @@ type UseEpubLocationControllerParams = {
   renditionRef: RefObject<Rendition | undefined>;
   locationRef: RefObject<EpubLocation>;
   scheduleProgress: ScheduleDocumentProgress;
+  resolveLocatorToCfi: (locator: TTSSegmentLocator) => Promise<string | null>;
 };
+
+function isEpubLocatorTarget(value: EpubLocation | TTSSegmentLocator): value is TTSSegmentLocator {
+  return !!value && typeof value === 'object' && isStableEpubLocator(value);
+}
 
 export function useEPUBLocationController({
   documentId,
@@ -36,7 +43,8 @@ export function useEPUBLocationController({
   renditionRef,
   locationRef,
   scheduleProgress,
-}: UseEpubLocationControllerParams): (location: EpubLocation) => void {
+  resolveLocatorToCfi,
+}: UseEpubLocationControllerParams): (location: EpubLocation | TTSSegmentLocator) => void {
   const safeRenditionNavigate = useCallback((navigation: 'next' | 'prev' | 'display', location?: string) => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
@@ -67,7 +75,27 @@ export function useEPUBLocationController({
     }
   }, [bookRef, renditionRef]);
 
-  const handleLocationChanged = useCallback((location: EpubLocation) => {
+  const handleLocationChanged = useCallback((location: EpubLocation | TTSSegmentLocator) => {
+    if (isEpubLocatorTarget(location)) {
+      if (!isEpubSetOnceRef.current) {
+        setIsEpub(true);
+        isEpubSetOnceRef.current = true;
+      }
+      shouldPauseRef.current = false;
+      void resolveLocatorToCfi(location)
+        .then((cfi) => {
+          if (!cfi) {
+            console.warn('Unable to resolve EPUB locator to CFI:', location);
+            return;
+          }
+          safeRenditionNavigate('display', cfi);
+        })
+        .catch((error) => {
+          console.warn('EPUB locator navigation failed:', error);
+        });
+      return;
+    }
+
     // Handle directional navigation before first-location initialization so
     // "prev"/"next" are not treated as raw CFI strings.
     if (isDirectionalEpubLocation(location) && renditionRef.current) {
@@ -143,6 +171,7 @@ export function useEPUBLocationController({
     shouldPauseRef,
     scheduleProgress,
     skipToLocation,
+    resolveLocatorToCfi,
   ]);
 
   return handleLocationChanged;
