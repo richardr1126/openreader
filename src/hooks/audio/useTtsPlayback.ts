@@ -13,6 +13,7 @@ type UseTtsPlaybackInput = {
   playbackSegmentsRef: MutableRefObject<CanonicalTtsSegment[]>;
   currentIndexRef: MutableRefObject<number>;
   setCurrDocPage: (location: TTSLocation) => void;
+  syncPlaybackLocator?: (locator: import('@/types/client').TTSSegmentLocator | null) => void;
   setCurrentIndex: (index: number) => void;
   setCurrentSentenceAlignment: (alignment: TTSSentenceAlignment | undefined) => void;
   setCurrentWordIndex: (wordIndex: number | null) => void;
@@ -25,6 +26,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackSegmentsRef,
     currentIndexRef,
     setCurrDocPage,
+    syncPlaybackLocator,
     setCurrentIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
@@ -44,7 +46,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     index: number;
     wordIndex: number | null;
     alignment: TTSSentenceAlignment | null | undefined;
-    page: number | null;
+    locatorKey: string;
   } | null>(null);
 
   const stopPlaybackTimelinePolling = useCallback(() => {
@@ -80,6 +82,16 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     const page = locator?.readerType === 'pdf' && typeof locator.page === 'number'
       ? Math.max(1, Math.floor(locator.page))
       : null;
+    const locatorKey = locator
+      ? JSON.stringify({
+        readerType: locator.readerType,
+        page: locator.page ?? null,
+        spineIndex: locator.spineIndex ?? null,
+        spineHref: locator.spineHref ?? null,
+        charOffset: locator.charOffset ?? null,
+        location: locator.location ?? null,
+      })
+      : '';
     const previous = lastProjectionRef.current;
     const segmentId = projection.segment.segmentId;
     const alignment = projection.segment.alignment ?? undefined;
@@ -89,7 +101,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       && previous.index === nextIndex
       && previous.wordIndex === projection.wordIndex
       && previous.alignment === alignment
-      && previous.page === page
+      && previous.locatorKey === locatorKey
     ) {
       return;
     }
@@ -98,7 +110,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       index: nextIndex,
       wordIndex: projection.wordIndex,
       alignment,
-      page,
+      locatorKey,
     };
 
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
@@ -110,10 +122,14 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if (page !== null) {
       setCurrDocPage(page);
     }
+    if (locator) {
+      syncPlaybackLocator?.(locator);
+    }
   }, [
     currentIndexRef,
     playbackSegmentsRef,
     setCurrDocPage,
+    syncPlaybackLocator,
     setCurrentIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,

@@ -60,57 +60,18 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
 
   return (
     <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
-      <div className="px-2 md:px-3 pt-1 flex items-center justify-center gap-1 min-h-10">
-        {/* Speed control */}
-        <SpeedControl 
-          setSpeedAndRestart={setSpeedAndRestart} 
-          setAudioPlayerSpeedAndRestart={setAudioPlayerSpeedAndRestart}
-        />
+      {/* Single centered column; its width is driven by the controls row so the
+          scrubber and status text line up to exactly that width. */}
+      <div className="mx-auto flex w-fit flex-col items-stretch gap-1 px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
+        {/* Now-playing / seek-preview text */}
+        <div className="w-0 min-w-full truncate text-center text-[11px] text-soft">
+          {previewSegment
+            ? `${previewSegment.estimated ? 'Estimated' : 'Ready'} · ${previewText || `Segment ${previewSegment.ordinal + 1}`}`
+            : (currentSentence || 'Playback position')}
+        </div>
 
-        {/* Page Navigation */}
-        {currentPage && numPages && (
-          <Navigator 
-            currentPage={currentPage} 
-            numPages={numPages} 
-            skipToLocation={skipToLocation}
-          />
-        )}
-
-        {/* Playback Controls */}
-        <IconButton
-          onClick={skipBackward}
-          aria-label="Skip backward"
-          disabled={isProcessing || !isPlaybackReady}
-          className="relative"
-        >
-          {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
-        </IconButton>
-
-        <IconButton
-          onClick={togglePlay}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
-          disabled={!isPlaying && (!isPlaybackReady || isProcessing)}
-          className="relative"
-        >
-          {!isPlaying && !isPlaybackReady
-            ? <LoadingSpinner />
-            : (isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />)}
-        </IconButton>
-
-        <IconButton
-          onClick={skipForward}
-          aria-label="Skip forward"
-          disabled={isProcessing || !isPlaybackReady}
-          className="relative"
-        >
-          {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}
-        </IconButton>
-
-        {/* Voice control */}
-        <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />
-      </div>
-      <div className="px-3 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex max-w-3xl items-center gap-2 text-[11px] text-soft">
+        {/* Scrubber — full width of the column (== controls row width) */}
+        <div className="flex w-full items-center gap-2 text-[11px] text-soft">
           <span className="w-10 tabular-nums text-right">{formatTime(shownSec)}</span>
           <input
             aria-label="Playback position"
@@ -136,10 +97,56 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           />
           <span className="w-10 tabular-nums">{formatTime(playbackDurationSec)}</span>
         </div>
-        <div className="mx-auto mt-0.5 max-w-3xl truncate text-center text-[11px] text-soft">
-          {previewSegment
-            ? `${previewSegment.estimated ? 'Estimated' : 'Ready'} · ${previewText || `Segment ${previewSegment.ordinal + 1}`}`
-            : (currentSentence || 'Playback position')}
+
+        {/* Playback controls */}
+        <div className="flex min-h-10 items-center justify-center gap-1">
+          {/* Speed control */}
+          <SpeedControl
+            setSpeedAndRestart={setSpeedAndRestart}
+            setAudioPlayerSpeedAndRestart={setAudioPlayerSpeedAndRestart}
+          />
+
+          {/* Page Navigation */}
+          {currentPage && numPages && (
+            <Navigator
+              currentPage={currentPage}
+              numPages={numPages}
+              skipToLocation={skipToLocation}
+            />
+          )}
+
+          {/* Playback Controls */}
+          <IconButton
+            onClick={skipBackward}
+            aria-label="Skip backward"
+            disabled={isProcessing || !isPlaybackReady}
+            className="relative"
+          >
+            {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
+          </IconButton>
+
+          <IconButton
+            onClick={togglePlay}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+            disabled={!isPlaying && (!isPlaybackReady || isProcessing)}
+            className="relative"
+          >
+            {!isPlaying && !isPlaybackReady
+              ? <LoadingSpinner />
+              : (isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />)}
+          </IconButton>
+
+          <IconButton
+            onClick={skipForward}
+            aria-label="Skip forward"
+            disabled={isProcessing || !isPlaybackReady}
+            className="relative"
+          >
+            {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}
+          </IconButton>
+
+          {/* Voice control */}
+          <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />
         </div>
       </div>
     </div>

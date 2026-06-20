@@ -191,6 +191,9 @@ describe('server-state architecture', () => {
     expect(context).toContain('postTtsPlaybackCursor');
     expect(context).toContain('seekPlaybackTo');
     expect(context).toContain('audio.currentTime = targetSec');
+    expect(context).toContain('playbackSyncNavigationRef');
+    expect(context).toContain('syncPlaybackLocator');
+    expect(context).toContain('startOrdinal: startPlanIndex');
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('openOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('buildSeekLayout');

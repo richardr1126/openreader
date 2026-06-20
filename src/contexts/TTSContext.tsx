@@ -385,6 +385,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const playbackProjectionRafRef = useRef<number | null>(null);
   const playbackRequestHeadersRef = useRef<TTSRequestHeaders | null>(null);
   const playbackPlanRef = useRef<ReturnType<typeof normalizePlaybackPlan> | null>(null);
+  const playbackSyncNavigationRef = useRef(false);
   // One persistent <audio> element reused for every playback session. iOS Safari
   // autoplay unlock is per-element: the element that gets play()'d inside a user
   // gesture is the only one allowed to play() later. The playback source is set
@@ -392,6 +393,21 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   // gesture — so it must reuse THIS pre-unlocked element rather than minting a
   // fresh `new Audio()` that Safari would block.
   const unlockedAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const syncPlaybackLocator = useCallback((locator: TTSSegmentLocator | null) => {
+    if (!locator || !playbackActiveRef.current) return;
+    if (locator.readerType === 'pdf' && typeof locator.page === 'number') {
+      playbackSyncNavigationRef.current = true;
+      setCurrDocPage(Math.max(1, Math.floor(locator.page)));
+      return;
+    }
+    if (locator.readerType === 'epub') {
+      const handler = locationChangeHandlerRef.current;
+      if (!handler) return;
+      playbackSyncNavigationRef.current = true;
+      handler(locator);
+    }
+  }, []);
 
   const {
     playbackActiveRef,
@@ -406,6 +422,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSegmentsRef,
     currentIndexRef,
     setCurrDocPage,
+    syncPlaybackLocator,
     setCurrentIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
@@ -581,6 +598,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stopPlaybackProjectionLoop();
     resetPlaybackRefs();
     playbackPlanRef.current = null;
+    playbackSyncNavigationRef.current = false;
     setPlaybackSeekLayout(null);
     setPlaybackTimeSec(0);
     playbackRequestHeadersRef.current = null;
@@ -655,6 +673,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * @param {boolean} shouldPause - Whether to pause playback
    */
   const skipToLocation = useCallback((location: TTSLocation, shouldPause = false) => {
+    if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+      setCurrDocPage(location);
+      return;
+    }
+
     if (shouldPause) {
       resumeAfterLocationChangeRef.current = false;
     } else if (isPlayingRef.current) {
@@ -673,7 +696,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackAnchor(null);
     setCurrDocPage(location);
 
-  }, [abortAudio, invalidatePlaybackRun]);
+  }, [abortAudio, invalidatePlaybackRun, playbackActiveRef]);
 
   const prepareInitialPosition = useCallback((location: TTSLocation, sentenceIndex: number) => {
     skipToLocation(location, true);
@@ -798,6 +821,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackAnchorRef.current = nextAnchor;
     setPlaybackAnchor(nextAnchor);
 
+    if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+      playbackSyncNavigationRef.current = false;
+      setIsProcessing(false);
+      return;
+    }
+
     if (handleBlankSection(text.trim())) return;
 
     const shouldPause = normalizedOptions.shouldPause ?? false;
@@ -858,6 +887,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun,
     currDocPage,
     clearPendingEpubJump,
+    playbackActiveRef,
   ]);
 
   /**
@@ -1149,9 +1179,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSegment?: CanonicalTtsSegment;
     sentence: string;
     startLocation: { page?: number; spineIndex?: number; charOffset?: number };
-  }) => {
+  }): ReturnType<typeof normalizePlaybackPlan> => {
     const canonicalPlan = playbackPlanToCanonicalSegments(plan);
-    playbackPlanRef.current = plan;
     playbackSegmentsRef.current = canonicalPlan;
     setPlaybackSegments(canonicalPlan);
     setPlaybackPlanSource('worker');
@@ -1165,7 +1194,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (currentIndexRef.current !== startPlanIndex) {
       setCurrentIndex(startPlanIndex);
     }
-    return { canonicalPlan, startPlanIndex };
+    const effectivePlan = {
+      ...plan,
+      startOrdinal: startPlanIndex,
+    };
+    playbackPlanRef.current = effectivePlan;
+    return effectivePlan;
   }, [playbackSegmentsRef]);
 
   const createAndApplyPlaybackPlan = useCallback(async (
@@ -1174,12 +1208,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   ) => {
     if (!request) return null;
     const existing = playbackPlanRef.current;
-    if (existing?.planObjectKey && existing.segments.length > 0) return existing;
+    if (existing?.planObjectKey && existing.segments.length > 0) {
+      return applyPlaybackPlan(existing, request);
+    }
     const planHandle = await createTtsPlaybackPlan(request.payload, request.headers, signal);
     const plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
     if (!plan) return null;
-    applyPlaybackPlan(plan, request);
-    return plan;
+    return applyPlaybackPlan(plan, request);
   }, [applyPlaybackPlan, fetchPlaybackPlanUntilReady]);
 
   useEffect(() => {
@@ -1590,6 +1625,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
       setCurrentIndex(nextIndex);
     }
+    if (target.locator && typeof target.locator === 'object') {
+      syncPlaybackLocator(target.locator as TTSSegmentLocator);
+    }
     projectPlaybackTime(targetSec);
     const session = playbackSessionRef.current;
     const headers = playbackRequestHeadersRef.current;
@@ -1601,6 +1639,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSeekLayout,
     playbackSessionRef,
     projectPlaybackTime,
+    syncPlaybackLocator,
   ]);
 
   /**
