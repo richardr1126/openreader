@@ -467,6 +467,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   // tts-epub-handoff.ts remains the fallback path's safety net).
   const lastPlayedCanonicalRef = useRef<{ spineHref: string; spineIndex: number; ordinal: number } | null>(null);
   const audioUnlockAttemptRef = useRef(0);
+  const playbackProjectionRafRef = useRef<number | null>(null);
   // One persistent <audio> element reused for every playback session. iOS Safari
   // autoplay unlock is per-element: the element that gets play()'d inside a user
   // gesture is the only one allowed to play() later. The playback source is set
@@ -585,12 +586,36 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  const stopPlaybackProjectionLoop = useCallback(() => {
+    if (playbackProjectionRafRef.current !== null) {
+      cancelAnimationFrame(playbackProjectionRafRef.current);
+      playbackProjectionRafRef.current = null;
+    }
+  }, []);
+
+  const startPlaybackProjectionLoop = useCallback((audio: HTMLAudioElement, runId: number) => {
+    stopPlaybackProjectionLoop();
+
+    const tick = () => {
+      if (runId !== playbackRunIdRef.current || audio.paused || audio.ended) {
+        playbackProjectionRafRef.current = null;
+        return;
+      }
+      projectPlaybackTime(audio.currentTime);
+      playbackProjectionRafRef.current = requestAnimationFrame(tick);
+    };
+
+    projectPlaybackTime(audio.currentTime);
+    playbackProjectionRafRef.current = requestAnimationFrame(tick);
+  }, [projectPlaybackTime, stopPlaybackProjectionLoop]);
+
   /**
    * Stops the current audio playback and optionally clears pending requests.
    */
   const abortAudio = useCallback((clearPending = false) => {
     // Ensure next playback attempt is not blocked by a stale in-flight guard.
     invalidatePlaybackRun();
+    stopPlaybackProjectionLoop();
     resetPlaybackRefs();
     const audio = unlockedAudioRef.current;
     if (audio) {
@@ -608,7 +633,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnTimeoutRef.current = null;
     }
     setCurrentWordIndex(null);
-  }, [invalidatePlaybackRun, resetPlaybackRefs]);
+  }, [invalidatePlaybackRun, resetPlaybackRefs, stopPlaybackProjectionLoop]);
 
   /**
    * Pauses the current audio playback while preserving seek position.
@@ -622,6 +647,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         console.warn('Error pausing TTS audio:', error);
       }
     }
+    stopPlaybackProjectionLoop();
 
     if (pageTurnTimeoutRef.current) {
       clearTimeout(pageTurnTimeoutRef.current);
@@ -634,7 +660,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'paused';
     }
-  }, []);
+  }, [stopPlaybackProjectionLoop]);
 
   const recordManualPause = useCallback(() => {
     // Cancel any queued auto-resume intent and mark an explicit user pause.
@@ -1271,6 +1297,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         // Re-assert speed: load()'s reset can land after this point, so pin it once
         // playback actually starts.
         audio.playbackRate = audioSpeed;
+        startPlaybackProjectionLoop(audio, runId);
         setIsProcessing(false);
         if ('mediaSession' in navigator) {
           navigator.mediaSession.playbackState = 'playing';
@@ -1278,6 +1305,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       };
       audio.onpause = () => {
         if (runId !== playbackRunIdRef.current) return;
+        stopPlaybackProjectionLoop();
         playbackInFlightRef.current = false;
         if ('mediaSession' in navigator) {
           navigator.mediaSession.playbackState = 'paused';
@@ -1285,6 +1313,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       };
       audio.onended = () => {
         if (runId !== playbackRunIdRef.current) return;
+        stopPlaybackProjectionLoop();
         playbackInFlightRef.current = false;
         setIsProcessing(false);
         resetPlaybackRefs();
@@ -1294,6 +1323,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       };
       audio.onerror = () => {
         if (runId !== playbackRunIdRef.current) return;
+        stopPlaybackProjectionLoop();
         playbackInFlightRef.current = false;
         setIsProcessing(false);
         resetPlaybackRefs();
@@ -1321,6 +1351,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       audio.onstalled = null;
       audio.onplaying = () => {
         if (runId !== playbackRunIdRef.current) return;
+        startPlaybackProjectionLoop(audio, runId);
         setIsProcessing(false);
       };
 
@@ -1358,9 +1389,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       audio.src = session.audioUrl;
       audio.load();
       await audio.play();
+      if (runId === playbackRunIdRef.current && !audio.paused && !audio.ended) {
+        startPlaybackProjectionLoop(audio, runId);
+      }
     } catch (error) {
       if (runId !== playbackRunIdRef.current || isAbortLikeError(error)) return;
       console.error('Error playing TTS playback:', error);
+      stopPlaybackProjectionLoop();
       playbackInFlightRef.current = false;
       setIsProcessing(false);
       resetPlaybackRefs();
@@ -1392,6 +1427,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resetPlaybackRefs,
     resolvedLanguage,
     sentences,
+    startPlaybackProjectionLoop,
+    stopPlaybackProjectionLoop,
     stopPlaybackTimelinePolling,
     ttsSegmentMaxBlockLength,
     ttsInstructions,

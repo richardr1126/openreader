@@ -18,6 +18,8 @@ type UseTtsPlaybackInput = {
   setCurrentWordIndex: (wordIndex: number | null) => void;
 };
 
+const WORD_HIGHLIGHT_LEAD_SEC = 0.12;
+
 export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const {
     playbackSegmentsRef,
@@ -33,6 +35,13 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackActiveRef = useRef(false);
+  const lastProjectionRef = useRef<{
+    segmentId: string;
+    index: number;
+    wordIndex: number | null;
+    alignment: TTSSentenceAlignment | null | undefined;
+    page: number | null;
+  } | null>(null);
 
   const stopPlaybackTimelinePolling = useCallback(() => {
     if (playbackTimelinePollRef.current) {
@@ -56,7 +65,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const projectPlaybackTime = useCallback((currentTimeSec: number) => {
     const timeline = playbackTimelineRef.current;
     if (!timeline) return;
-    const projection = projectTimelineAtTime(timeline, currentTimeSec);
+    const projection = projectTimelineAtTime(timeline, currentTimeSec, { wordLeadSec: WORD_HIGHLIGHT_LEAD_SEC });
     if (!projection.segment) return;
 
     const segments = playbackSegmentsRef.current;
@@ -67,15 +76,39 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if (nextIndex < 0) {
       nextIndex = projection.segment.sourceSegmentIndex ?? projection.segment.ordinal;
     }
+    const locator = projection.segment.locator;
+    const page = locator?.readerType === 'pdf' && typeof locator.page === 'number'
+      ? Math.max(1, Math.floor(locator.page))
+      : null;
+    const previous = lastProjectionRef.current;
+    const segmentId = projection.segment.segmentId;
+    const alignment = projection.segment.alignment ?? undefined;
+    if (
+      previous
+      && previous.segmentId === segmentId
+      && previous.index === nextIndex
+      && previous.wordIndex === projection.wordIndex
+      && previous.alignment === alignment
+      && previous.page === page
+    ) {
+      return;
+    }
+    lastProjectionRef.current = {
+      segmentId,
+      index: nextIndex,
+      wordIndex: projection.wordIndex,
+      alignment,
+      page,
+    };
+
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
       setCurrentIndex(nextIndex);
     }
-    setCurrentSentenceAlignment(projection.segment.alignment ?? undefined);
+    setCurrentSentenceAlignment(alignment);
     setCurrentWordIndex(projection.wordIndex);
 
-    const locator = projection.segment.locator;
-    if (locator?.readerType === 'pdf' && typeof locator.page === 'number') {
-      setCurrDocPage(Math.max(1, Math.floor(locator.page)));
+    if (page !== null) {
+      setCurrDocPage(page);
     }
   }, [
     currentIndexRef,
@@ -104,6 +137,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackActiveRef.current = false;
     playbackSessionRef.current = null;
     playbackTimelineRef.current = null;
+    lastProjectionRef.current = null;
   }, [stopPlaybackTimelinePolling]);
 
   return {

@@ -131,6 +131,7 @@ export function resolveWordIndexAtTime(
 export function projectTimelineAtTime(
   timeline: TtsPlaybackTimeline,
   currentTimeSec: number,
+  options?: { wordLeadSec?: number },
 ): TtsPlaybackTimeProjection {
   const currentTimeMs = Number.isFinite(currentTimeSec) ? currentTimeSec * 1000 : 0;
   const match = findTimelineSegmentAtMs(timeline.segments, currentTimeMs);
@@ -144,10 +145,11 @@ export function projectTimelineAtTime(
   }
 
   const localTimeSec = Math.max(0, (currentTimeMs - match.segment.startMs) / 1000);
+  const wordLocalTimeSec = Math.max(0, localTimeSec + Math.max(0, options?.wordLeadSec ?? 0));
   return {
     segment: match.segment,
     segmentIndex: match.index,
     localTimeSec,
-    wordIndex: resolveWordIndexAtTime(match.segment.alignment, localTimeSec),
+    wordIndex: resolveWordIndexAtTime(match.segment.alignment, wordLocalTimeSec),
   };
 }
