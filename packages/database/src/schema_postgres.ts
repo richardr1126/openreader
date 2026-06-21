@@ -276,6 +276,7 @@ export const ttsPlaybackSessions = pgTable('tts_playback_sessions', {
   settingsHash: text('settings_hash').notNull(),
   settingsJson: jsonb('settings_json').notNull(),
   startOrdinal: integer('start_ordinal').notNull().default(0),
+  generationStartOrdinal: integer('generation_start_ordinal').notNull().default(0),
   cursorOrdinal: integer('cursor_ordinal').notNull().default(0),
   cursorUpdatedAt: bigint('cursor_updated_at', { mode: 'number' }),
   planObjectKey: text('plan_object_key'),

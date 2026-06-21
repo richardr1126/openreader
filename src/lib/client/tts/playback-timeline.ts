@@ -1,6 +1,6 @@
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
-import { normalizeLocator } from '@openreader/tts/segments';
+import { normalizeLocator } from '@openreader/tts/locator';
 
 export type TtsPlaybackTimelineSegment = {
   ordinal: number;

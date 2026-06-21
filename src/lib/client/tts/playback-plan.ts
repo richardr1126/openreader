@@ -1,5 +1,5 @@
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
-import { normalizeLocator } from '@openreader/tts/segments';
+import { normalizeLocator } from '@openreader/tts/locator';
 import type { TTSSegmentLocator } from '@/types/client';
 
 /**

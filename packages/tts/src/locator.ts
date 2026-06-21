@@ -6,6 +6,63 @@ import {
 } from './types';
 import type { TTSLocation } from './types';
 
+/**
+ * Validate and shape a locator for persistence. EPUB locators MUST carry the
+ * stable spine coordinates (`spineHref`, `spineIndex`, `charOffset`) — the
+ * legacy CFI-only shape is rejected (returns null) so we never store a
+ * viewport-dependent locator. PDF and HTML branches are unchanged.
+ *
+ * This is a pure function (types only) and lives here — rather than in
+ * `segments.ts` — so client bundles can import it without pulling in the
+ * server-only toolchain (`fs`, `crypto`, ffmpeg/`child_process`).
+ */
+export function normalizeLocator(locator: TTSSegmentLocator | undefined): TTSSegmentLocator | null {
+  if (!locator) return null;
+  if (locator.readerType === 'pdf') {
+    if (typeof locator.page !== 'number' || !Number.isFinite(locator.page)) return null;
+    return {
+      readerType: 'pdf',
+      page: Math.max(1, Math.floor(locator.page)),
+      ...(typeof locator.blockId === 'string' && locator.blockId.trim()
+        ? { blockId: locator.blockId.trim() }
+        : {}),
+    };
+  }
+  if (locator.readerType === 'html') {
+    if (typeof locator.location !== 'string' || !locator.location.trim()) return null;
+    return {
+      readerType: 'html',
+      location: locator.location.trim(),
+    };
+  }
+  if (locator.readerType === 'epub') {
+    const spineHref = typeof locator.spineHref === 'string' ? locator.spineHref.trim() : '';
+    const spineIndex = typeof locator.spineIndex === 'number' && Number.isFinite(locator.spineIndex)
+      ? Math.max(0, Math.floor(locator.spineIndex))
+      : -1;
+    const charOffset = typeof locator.charOffset === 'number' && Number.isFinite(locator.charOffset)
+      ? Math.max(0, Math.floor(locator.charOffset))
+      : -1;
+    if (!spineHref || spineIndex < 0 || charOffset < 0) {
+      // Reject draft/legacy EPUB locators that lack stable coordinates. The
+      // client is expected to resolve these via the spine-coordinates helper
+      // before posting.
+      return null;
+    }
+    const normalized: TTSSegmentLocator = {
+      readerType: 'epub',
+      spineHref,
+      spineIndex,
+      charOffset,
+    };
+    if (typeof locator.cfi === 'string' && locator.cfi.trim()) {
+      normalized.cfi = locator.cfi.trim();
+    }
+    return normalized;
+  }
+  return null;
+}
+
 export function normalizeTtsLocationKey(location: TTSLocation): string {
   return typeof location === 'number' ? `num:${location}` : `str:${location}`;
 }

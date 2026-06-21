@@ -103,9 +103,13 @@ async function updateTtsPlaybackSession(input: {
    * Absolute canonical ordinal the worker should generate around. This seeds the
    * cursor without changing the session's audio-layout origin.
    */
+  generationStartOrdinal?: number;
   cursorOrdinal?: number;
 }): Promise<void> {
   const now = Date.now();
+  const generationStartOrdinal = input.generationStartOrdinal === undefined
+    ? undefined
+    : Math.max(0, Math.floor(input.generationStartOrdinal));
   const cursorOrdinal = input.cursorOrdinal === undefined
     ? undefined
     : Math.max(0, Math.floor(input.cursorOrdinal));
@@ -115,6 +119,7 @@ async function updateTtsPlaybackSession(input: {
       status: input.status,
       ...(input.planObjectKey === undefined ? {} : { planObjectKey: input.planObjectKey }),
       ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
+      ...(generationStartOrdinal === undefined ? {} : { generationStartOrdinal }),
       ...(cursorOrdinal === undefined
         ? {}
         : { cursorOrdinal, cursorUpdatedAt: now }),
@@ -994,6 +999,7 @@ export function createJobHandlers(input: {
           sessionId: parsed.sessionId,
           status: 'running',
           planObjectKey,
+          generationStartOrdinal: startOrdinal,
           cursorOrdinal: startOrdinal,
           lastError: null,
         });

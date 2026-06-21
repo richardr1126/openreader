@@ -149,6 +149,7 @@ export function registerComputeWorkerRoutes(input: {
     settingsHash: string;
     settingsJson: unknown;
     startOrdinal: number;
+    generationStartOrdinal: number;
     cursorOrdinal: number;
     planObjectKey: string | null;
     expiresAt: number;
@@ -186,6 +187,7 @@ export function registerComputeWorkerRoutes(input: {
         settingsHash: ttsPlaybackSessions.settingsHash,
         settingsJson: ttsPlaybackSessions.settingsJson,
         startOrdinal: ttsPlaybackSessions.startOrdinal,
+        generationStartOrdinal: ttsPlaybackSessions.generationStartOrdinal,
         cursorOrdinal: ttsPlaybackSessions.cursorOrdinal,
         planObjectKey: ttsPlaybackSessions.planObjectKey,
         expiresAt: ttsPlaybackSessions.expiresAt,
@@ -543,7 +545,12 @@ export function registerComputeWorkerRoutes(input: {
           if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
             return;
           }
-          if (ordinal < session.cursorOrdinal) {
+          const seg = await readCompletedPlaybackSegment(session, ordinal);
+          if (seg) {
+            audioKey = seg.audioKey;
+            break;
+          }
+          if (ordinal < session.generationStartOrdinal) {
             const room = need - sent;
             const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
             if (silenceBytes > 0) {
@@ -554,11 +561,6 @@ export function registerComputeWorkerRoutes(input: {
             }
             skipWithin = 0;
             paddedMissingPrefix = true;
-            break;
-          }
-          const seg = await readCompletedPlaybackSegment(session, ordinal);
-          if (seg) {
-            audioKey = seg.audioKey;
             break;
           }
           if (session.status === 'succeeded') {

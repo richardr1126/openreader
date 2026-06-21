@@ -8,18 +8,17 @@ import {
   getComputeWorkerPublicBaseUrl,
   isComputeWorkerAvailable,
 } from '@/lib/server/compute-worker/client';
-import { buildTtsSegmentSettingsHash, buildTtsSegmentSettingsJson } from '@openreader/tts/segments';
 import { createTtsPlaybackToken } from '@openreader/tts/playback-token';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { getDocumentSkipBlockKinds } from '@/lib/server/tts/document-skip-kinds';
+import {
+  buildTtsPlaybackPlanningInput,
+  parseTtsPlaybackRequestBody,
+} from '@/lib/server/tts/playback-request';
 import { TTS_PLAYBACK_SESSION_TTL_MS } from '@/lib/server/tts/playback-sessions';
 import { getRuntimeConfig } from '@/lib/server/admin/settings';
 import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { isTtsProviderType } from '@openreader/tts/provider-catalog';
-import { normalizeLanguageTag } from '@openreader/tts/language';
-import type { TTSSegmentSettings } from '@/types/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,108 +51,6 @@ function buildWorkerAudioUrl(input: {
   return url.toString();
 }
 
-function parseSettings(value: unknown): TTSSegmentSettings | null {
-  if (!value || typeof value !== 'object') return null;
-  const rec = value as Record<string, unknown>;
-  if (typeof rec.providerRef !== 'string') return null;
-  if (!isTtsProviderType(rec.providerType)) return null;
-  if (typeof rec.ttsModel !== 'string') return null;
-  if (typeof rec.voice !== 'string') return null;
-  if (!Number.isFinite(Number(rec.nativeSpeed))) return null;
-  if (rec.ttsInstructions !== undefined && typeof rec.ttsInstructions !== 'string') return null;
-  if (rec.language !== undefined && typeof rec.language !== 'string') return null;
-  return {
-    providerRef: rec.providerRef,
-    providerType: rec.providerType,
-    ttsModel: rec.ttsModel,
-    voice: rec.voice,
-    nativeSpeed: Number(rec.nativeSpeed),
-    ...(typeof rec.ttsInstructions === 'string' ? { ttsInstructions: rec.ttsInstructions } : {}),
-    ...(typeof rec.language === 'string' ? { language: normalizeLanguageTag(rec.language) } : {}),
-  };
-}
-
-function parseBody(value: unknown): {
-  documentId: string;
-  settings: TTSSegmentSettings;
-  startLocation: { page?: number; spineIndex?: number; charOffset?: number };
-  maxBlockLength?: number;
-  language?: string;
-  startSegmentKey?: string;
-  startText?: string;
-  planObjectKey?: string;
-  planSignature?: string;
-  planId?: string;
-  startOrdinal?: number;
-} | null {
-  if (!value || typeof value !== 'object') return null;
-  const rec = value as Record<string, unknown>;
-  const documentId = typeof rec.documentId === 'string' ? rec.documentId.trim().toLowerCase() : '';
-  const settings = parseSettings(rec.settings);
-  if (!documentId || !settings) return null;
-
-  const startRec = rec.startLocation && typeof rec.startLocation === 'object'
-    ? rec.startLocation as Record<string, unknown>
-    : null;
-  const page = Number.isFinite(Number(startRec?.page))
-    ? Math.max(1, Math.floor(Number(startRec?.page)))
-    : undefined;
-  const spineIndex = Number.isFinite(Number(startRec?.spineIndex))
-    ? Math.max(0, Math.floor(Number(startRec?.spineIndex)))
-    : undefined;
-  const charOffset = Number.isFinite(Number(startRec?.charOffset))
-    ? Math.max(0, Math.floor(Number(startRec?.charOffset)))
-    : undefined;
-
-  // `planning` is now limited to segmentation knobs; reading text is derived
-  // server-side from the document (worker-owned planning).
-  const planningRec = rec.planning && typeof rec.planning === 'object'
-    ? rec.planning as Record<string, unknown>
-    : null;
-  const maxBlockLength = Number.isFinite(Number(planningRec?.maxBlockLength))
-    ? Math.max(1, Math.floor(Number(planningRec?.maxBlockLength)))
-    : undefined;
-  const language = typeof planningRec?.language === 'string'
-    ? normalizeLanguageTag(planningRec.language)
-    : undefined;
-  const startSegmentKey = typeof rec.startSegmentKey === 'string' && rec.startSegmentKey.trim()
-    ? rec.startSegmentKey.trim()
-    : undefined;
-  const startText = typeof rec.startText === 'string' && rec.startText.trim()
-    ? rec.startText.trim()
-    : undefined;
-  const planObjectKey = typeof rec.planObjectKey === 'string' && rec.planObjectKey.trim()
-    ? rec.planObjectKey.trim()
-    : undefined;
-  const planSignature = typeof rec.planSignature === 'string' && rec.planSignature.trim()
-    ? rec.planSignature.trim()
-    : undefined;
-  const planId = typeof rec.planId === 'string' && rec.planId.trim()
-    ? rec.planId.trim()
-    : undefined;
-  const requestedStartOrdinal = Number.isFinite(Number(rec.startOrdinal))
-    ? Math.max(0, Math.floor(Number(rec.startOrdinal)))
-    : undefined;
-
-  return {
-    documentId,
-    settings,
-    startLocation: {
-      ...(page ? { page } : {}),
-      ...(spineIndex !== undefined ? { spineIndex } : {}),
-      ...(charOffset !== undefined ? { charOffset } : {}),
-    },
-    ...(maxBlockLength ? { maxBlockLength } : {}),
-    ...(language ? { language } : {}),
-    ...(startSegmentKey ? { startSegmentKey } : {}),
-    ...(startText ? { startText } : {}),
-    ...(planObjectKey ? { planObjectKey } : {}),
-    ...(planSignature ? { planSignature } : {}),
-    ...(planId ? { planId } : {}),
-    ...(requestedStartOrdinal !== undefined ? { startOrdinal: requestedStartOrdinal } : {}),
-  };
-}
-
 export async function POST(request: NextRequest) {
   const { logger } = createRequestLogger({
     route: '/api/tts/stream/sessions',
@@ -167,7 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = parseBody(await request.json().catch(() => null));
+    const parsed = parseTtsPlaybackRequestBody(await request.json().catch(() => null));
     if (!parsed) {
       return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
     }
@@ -179,32 +76,15 @@ export async function POST(request: NextRequest) {
     // document (whole book for EPUB) with absolute ordinals, reused across
     // sessions. The audio layout origin stays at ordinal 0; the selected start
     // ordinal only seeds the generation cursor.
-    const planExtent = scope.readerType === 'epub' ? 'section' : 'document';
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
     const { ttsPlaybackBackgroundExtent: backgroundExtent } = await getRuntimeConfig();
-    const skipBlockKinds = scope.readerType === 'pdf'
-      ? await getDocumentSkipBlockKinds(parsed.documentId, scope.storageUserId)
-      : [];
-    const isPlainText = scope.readerType === 'html'
-      ? scope.documentName.toLowerCase().endsWith('.txt')
-      : false;
-    const startPage = scope.readerType === 'pdf'
-      ? (parsed.startLocation.page ?? 1)
-      : undefined;
-    const startSpineIndex = scope.readerType === 'epub'
-      ? (parsed.startLocation.spineIndex ?? 0)
-      : undefined;
-    const startCharOffset = scope.readerType === 'epub'
-      ? parsed.startLocation.charOffset
-      : undefined;
     const startOrdinal = 0;
     const generationCursorOrdinal = parsed.startOrdinal ?? 0;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
-    const settingsHash = buildTtsSegmentSettingsHash(parsed.settings);
-    const settingsJson = buildTtsSegmentSettingsJson(parsed.settings);
+    const { settingsHash, settingsJson, planning } = await buildTtsPlaybackPlanningInput(parsed, scope);
 
     const sessionId = randomUUID();
     await db.insert(ttsPlaybackSessions).values({
@@ -218,6 +98,7 @@ export async function POST(request: NextRequest) {
       settingsHash,
       settingsJson,
       startOrdinal,
+      generationStartOrdinal: generationCursorOrdinal,
       cursorOrdinal: generationCursorOrdinal,
       cursorUpdatedAt: now,
       ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
@@ -252,25 +133,7 @@ export async function POST(request: NextRequest) {
       // playback cursor; on disconnect it continues to the background extent.
       aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
       backgroundExtent,
-      planning: {
-        ...(parsed.maxBlockLength ? { maxBlockLength: parsed.maxBlockLength } : {}),
-        ...(parsed.language ? { language: parsed.language } : {}),
-        ...(parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
-        ...(parsed.startText ? { startText: parsed.startText } : {}),
-        // PDF and EPUB segment per source unit (PDF layout block / EPUB DOM
-        // block) so each unit is segmented in isolation — bounded, O(n) work,
-        // and no whole-book canonical remapping. HTML stays a single flat unit.
-        enforceSourceBoundaries: scope.readerType === 'pdf' || scope.readerType === 'epub',
-        documentSource: {
-          namespace: scope.testNamespace,
-          skipBlockKinds,
-          extent: planExtent,
-          ...(startPage !== undefined ? { startPage } : {}),
-          ...(startSpineIndex !== undefined ? { startSpineIndex } : {}),
-          ...(startCharOffset !== undefined ? { startCharOffset } : {}),
-          isPlainText,
-        },
-      },
+      planning,
     });
 
     await db

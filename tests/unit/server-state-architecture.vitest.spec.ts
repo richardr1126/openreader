@@ -181,7 +181,7 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
-    expect(streamSessionRoute).toContain('startSegmentKey');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('startSegmentKey');
     expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
     expect(workerRoutes).toContain("/v1/tts-playback-plans/operations");
     expect(workerRoutes).toContain('Readable.from(streamRange())');
@@ -191,18 +191,23 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain('parseRangeHeader');
     expect(workerRoutes).toContain('verifyTtsPlaybackToken');
     expect(workerRoutes).toContain('updatePlaybackCursor');
-    expect(workerRoutes.indexOf('if (ordinal < session.cursorOrdinal)')).toBeLessThan(
-      workerRoutes.indexOf('const seg = await readCompletedPlaybackSegment(session, ordinal)'),
+    expect(workerRoutes).not.toContain('ordinal < session.cursorOrdinal');
+    expect(workerRoutes.indexOf('const seg = await readCompletedPlaybackSegment(session, ordinal)')).toBeLessThan(
+      workerRoutes.indexOf('if (ordinal < session.generationStartOrdinal)'),
     );
     expect(streamSessionRoute).toContain('const startOrdinal = 0');
     expect(streamSessionRoute).toContain('const generationCursorOrdinal = parsed.startOrdinal ?? 0');
+    expect(streamSessionRoute).toContain('generationStartOrdinal: generationCursorOrdinal');
     expect(streamSessionRoute).toContain('cursorOrdinal: generationCursorOrdinal');
-    expect(streamSessionRoute).toContain('startOrdinal: generationCursorOrdinal');
+    expect(streamSessionRoute).toContain('startOrdinal,');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('cursorOrdinal: startOrdinal');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('generationStartOrdinal: startOrdinal');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
-    expect(streamSessionRoute).toContain('...(startPage !== undefined ? { startPage } : {})');
-    expect(streamSessionRoute).toContain('...(startSpineIndex !== undefined ? { startSpineIndex } : {})');
-    expect(streamSessionRoute).toContain('...(startCharOffset !== undefined ? { startCharOffset } : {})');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("typeof rec.nativeSpeed !== 'number'");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("readOptionalInt(startRec, 'page', 1)");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("const planExtent = 'document'");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("scope.readerType === 'pdf' ? { startPage: parsed.startLocation.page ?? 1 }");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex ?? 0 }");
     expect(epubHighlighting).toContain('resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)');
     expect(epubHighlighting).not.toContain('segment.startAnchor.sourceKey !== resolved.map.sourceKey');
     // Single forward-generation job throttled to a client cursor; segment
@@ -253,6 +258,9 @@ describe('server-state architecture', () => {
     expect(adminFeatures).toContain('ttsPlaybackBackgroundExtent');
     expect(adminFeatures).toContain('PLAYBACK_BACKGROUND_EXTENT_OPTIONS');
     expect(context).not.toContain('restartPlaybackSessionFromCurrentPosition');
+    expect(context).toContain('const setPlaybackIndex = useCallback((index: number) =>');
+    expect(context.match(/setCurrentIndex\(/g)?.length).toBe(1);
+    expect(context.match(/currentIndexRef\.current =/g)?.length).toBe(1);
     expect(context).not.toContain('generationStartOrdinal');
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('scrubberTrackBackground');
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('segment.generated ? ready : estimated');

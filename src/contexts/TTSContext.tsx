@@ -433,6 +433,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const planPreviewRunIdRef = useRef(0);
   const sentencesRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
+  const setPlaybackIndex = useCallback((index: number) => {
+    const normalized = Math.max(0, Math.floor(index));
+    currentIndexRef.current = normalized;
+    setCurrentIndex(normalized);
+  }, []);
   // Last worker-plan EPUB position. Used as a resume anchor when epub.js
   // navigation lands before the next visible locator is recorded.
   const lastPlayedCanonicalRef = useRef<{ spineHref: string; spineIndex: number; ordinal: number } | null>(null);
@@ -479,7 +484,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentIndexRef,
     setCurrDocPage,
     syncPlaybackLocator,
-    setCurrentIndex,
+    setPlaybackIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
   });
@@ -507,6 +512,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         el.preload = 'auto';
         unlockedAudioRef.current = el;
       }
+      // If the element is already carrying a live (non-silent) stream — e.g. a
+      // paused worker playback we're about to resume — do NOT overwrite its src
+      // with the silent wav. Assigning `src` discards the worker stream URL and
+      // resets `currentTime` to 0, which (because the stream is a whole-document
+      // byte layout) restarts playback at the very beginning of the document.
+      // The element was already user-activated by the initial play, so no unlock
+      // is needed on resume.
+      if (playbackActiveRef.current && el.src && el.src !== SILENT_WAV_DATA_URI) {
+        return;
+      }
       // Play a silent source on the persistent element WITHIN this gesture so
       // Safari marks it as user-activated; the worker playback URL reuses it later.
       el.src = SILENT_WAV_DATA_URI;
@@ -532,7 +547,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     } catch {
       // ignore
     }
-  }, [audioContext]);
+  }, [audioContext, playbackActiveRef]);
 
   const invalidatePlaybackRun = useCallback(() => {
     playbackRunIdRef.current += 1;
@@ -567,10 +582,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   useEffect(() => {
     playbackSegmentsRef.current = playbackSegments;
   }, [playbackSegments]);
-
-  useEffect(() => {
-    currentIndexRef.current = currentIndex;
-  }, [currentIndex]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -753,8 +764,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         location,
       );
       if (planIndex >= 0) {
-        currentIndexRef.current = planIndex;
-        setCurrentIndex(planIndex);
+        setPlaybackIndex(planIndex);
       }
       return;
     }
@@ -769,7 +779,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     abortAudio(true);
     if (shouldPause) setIsPlaying(false);
-    setCurrentIndex(0);
+    setPlaybackIndex(0);
     setSentences([]);
     setPlaybackSegments([]);
     setPlaybackPlanSource('idle');
@@ -777,7 +787,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackAnchor(null);
     setCurrDocPage(location);
 
-  }, [abortAudio, activeReaderType, invalidatePlaybackRun, pauseActivePlayback, playbackActiveRef]);
+  }, [abortAudio, activeReaderType, invalidatePlaybackRun, pauseActivePlayback, playbackActiveRef, setPlaybackIndex]);
 
   const prepareInitialPosition = useCallback((location: TTSLocation, sentenceIndex: number) => {
     skipToLocation(location, true);
@@ -799,7 +809,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // one session, so page/section boundaries are crossed seamlessly inside the
     // playback session: `advance` never page-turns for PDF/HTML, it only moves the cursor.
     if (nextIndex < sentences.length && nextIndex >= 0) {
-      setCurrentIndex(nextIndex);
+      setPlaybackIndex(nextIndex);
       return;
     }
 
@@ -819,7 +829,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         lastPlayedCanonicalRef.current = null;
       }
       invalidatePlaybackRun();
-      setCurrentIndex(0);
+      setPlaybackIndex(0);
       setSentences([]);
       setPlaybackSegments([]);
       setPlaybackPlanSource('idle');
@@ -834,7 +844,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // PDF/HTML: the plan already spans to the end of the forward document, so
     // running past either end of the plan is the end of playback.
     setIsPlaying(false);
-  }, [currentIndex, sentences, isEPUB, invalidatePlaybackRun]);
+  }, [currentIndex, sentences, isEPUB, invalidatePlaybackRun, setPlaybackIndex]);
 
   /**
    * Handles blank text sections based on document type
@@ -900,8 +910,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const plan = playbackSegmentsRef.current;
     const planIndex = resolveFirstPlanIndexForDocumentAnchor(plan, activeReaderType, resolvedLocation);
     if (planIndex >= 0) {
-      currentIndexRef.current = planIndex;
-      setCurrentIndex(planIndex);
+      setPlaybackIndex(planIndex);
     } else if (!playbackActiveRef.current) {
       // Document extraction is only a viewport/content anchor. If the current
       // worker plan does not cover this anchor, retire it so the plan API can
@@ -912,14 +921,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setPlaybackSegments([]);
       setPlaybackPlanSource('idle');
       setSentences([]);
-      currentIndexRef.current = 0;
-      setCurrentIndex(0);
+      setPlaybackIndex(0);
       sentenceAlignmentCacheRef.current.clear();
       setCurrentSentenceAlignment(undefined);
       setCurrentWordIndex(null);
     }
     setIsProcessing(false);
-  }, [activeReaderType, playbackActiveRef]);
+  }, [activeReaderType, playbackActiveRef, setPlaybackIndex]);
 
   const setDocumentPlaybackAnchor = useCallback((
     location: TTSLocation,
@@ -1020,7 +1028,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setPlaybackSegments([]);
       setPlaybackPlanSource('idle');
       setSentences([]);
-      setCurrentIndex(0);
+      setPlaybackIndex(0);
       if (!pendingEpubLocator && isEPUB) {
         clearPendingEpubJump();
       }
@@ -1054,6 +1062,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPageNumber,
     clearPendingEpubJump,
     playbackActiveRef,
+    setPlaybackIndex,
   ]);
 
   /**
@@ -1122,8 +1131,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       (target.segmentKey && segment.key === target.segmentKey) || segment.ordinal === target.ordinal
     );
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
-      currentIndexRef.current = nextIndex;
-      setCurrentIndex(nextIndex);
+      setPlaybackIndex(nextIndex);
     }
     if (target.locator && typeof target.locator === 'object') {
       syncPlaybackLocator(target.locator as TTSSegmentLocator);
@@ -1148,6 +1156,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSeekLayout,
     playbackSessionRef,
     projectPlaybackTime,
+    setPlaybackIndex,
     syncPlaybackLocator,
   ]);
 
@@ -1447,8 +1456,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       startLocation: request.startLocation,
     });
     if (currentIndexRef.current !== startPlanIndex) {
-      currentIndexRef.current = startPlanIndex;
-      setCurrentIndex(startPlanIndex);
+      setPlaybackIndex(startPlanIndex);
     }
     const effectivePlan = {
       ...plan,
@@ -1456,7 +1464,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     };
     playbackPlanRef.current = effectivePlan;
     return effectivePlan;
-  }, [playbackSegmentsRef]);
+  }, [playbackSegmentsRef, setPlaybackIndex]);
 
   const createAndApplyPlaybackPlan = useCallback(async (
     request: ReturnType<typeof buildPlaybackSessionRequest>,
@@ -1788,7 +1796,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef.current = null;
     setPlaybackSeekLayout(null);
     setPlaybackTimeSec(0);
-    setCurrentIndex(0);
+    setPlaybackIndex(0);
     setSentences([]);
     setPlaybackSegments([]);
     setPlaybackPlanSource('idle');
@@ -1801,7 +1809,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-  }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump]);
+  }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, setPlaybackIndex]);
 
   const clearSegmentCaches = useCallback(() => {
     // Keep the current viewport/sentence list intact, but force audio state to
@@ -1824,10 +1832,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Same autoplay-unlock issue as togglePlay when starting from a fresh load.
     unlockPlaybackOnUserGesture();
 
-    currentIndexRef.current = index;
-    setCurrentIndex(index);
+    setPlaybackIndex(index);
     setIsPlaying(true);
-  }, [abortAudio, invalidatePlaybackRun, unlockPlaybackOnUserGesture]);
+  }, [abortAudio, invalidatePlaybackRun, setPlaybackIndex, unlockPlaybackOnUserGesture]);
 
   const playFromSegment = useCallback((index: number, locator?: TTSSegmentLocator | null) => {
     if (isEPUB) {
@@ -1838,8 +1845,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       const targetIndex = Math.max(0, Math.floor(index));
       const targetSegment = playbackSegmentsRef.current[targetIndex] ?? playbackSegments[targetIndex];
       const targetLocator = locator ?? targetSegment?.ownerLocator ?? null;
-      currentIndexRef.current = targetIndex;
-      setCurrentIndex(targetIndex);
+      setPlaybackIndex(targetIndex);
       const page = pdfLocatorPage(targetLocator);
       if (page !== null) {
         setCurrDocPage(page);
@@ -1913,7 +1919,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       };
     }
     resumeAfterLocationChangeRef.current = true;
-    setCurrentIndex(0);
+    setPlaybackIndex(0);
     setIsPlaying(true);
     if (isEPUB && locationChangeHandlerRef.current) {
       locationChangeHandlerRef.current(epubLocatorTarget ?? resolvedLocation!);
@@ -1936,6 +1942,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     unlockPlaybackOnUserGesture,
     skipToLocation,
     clearPendingEpubJump,
+    setPlaybackIndex,
   ]);
 
   /**

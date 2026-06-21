@@ -5,7 +5,7 @@ import type {
   TTSSegmentSettings,
   VoicesResponse,
 } from '@/types/client';
-import { normalizeLocator } from '@openreader/tts/segments';
+import { normalizeLocator } from '@openreader/tts/locator';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
   const response = await fetch('/api/tts/voices', {

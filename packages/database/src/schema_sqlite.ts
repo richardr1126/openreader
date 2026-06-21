@@ -274,6 +274,7 @@ export const ttsPlaybackSessions = sqliteTable('tts_playback_sessions', {
   settingsHash: text('settings_hash').notNull(),
   settingsJson: text('settings_json').notNull(),
   startOrdinal: integer('start_ordinal').notNull().default(0),
+  generationStartOrdinal: integer('generation_start_ordinal').notNull().default(0),
   cursorOrdinal: integer('cursor_ordinal').notNull().default(0),
   cursorUpdatedAt: integer('cursor_updated_at'),
   planObjectKey: text('plan_object_key'),

@@ -15,7 +15,7 @@ type UseTtsPlaybackInput = {
   currentIndexRef: MutableRefObject<number>;
   setCurrDocPage: (location: TTSLocation) => void;
   syncPlaybackLocator?: (locator: import('@/types/client').TTSSegmentLocator | null) => void;
-  setCurrentIndex: (index: number) => void;
+  setPlaybackIndex: (index: number) => void;
   setCurrentSentenceAlignment: (alignment: TTSSentenceAlignment | undefined) => void;
   setCurrentWordIndex: (wordIndex: number | null) => void;
 };
@@ -28,7 +28,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     currentIndexRef,
     setCurrDocPage,
     syncPlaybackLocator,
-    setCurrentIndex,
+    setPlaybackIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
   } = input;
@@ -114,7 +114,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     };
 
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
-      setCurrentIndex(nextIndex);
+      setPlaybackIndex(nextIndex);
     }
     setCurrentSentenceAlignment(alignment);
     setCurrentWordIndex(projection.wordIndex);
@@ -130,7 +130,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackSegmentsRef,
     setCurrDocPage,
     syncPlaybackLocator,
-    setCurrentIndex,
+    setPlaybackIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
   ]);

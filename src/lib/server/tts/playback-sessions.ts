@@ -27,6 +27,7 @@ export type TtsPlaybackSessionRow = {
   settingsHash: string;
   settingsJson: unknown;
   startOrdinal: number;
+  generationStartOrdinal: number;
   cursorOrdinal: number;
   cursorUpdatedAt: number | null;
   planObjectKey: string | null;
