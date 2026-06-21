@@ -132,6 +132,22 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   };
 }
 
+export function validateTtsPlaybackStartLocation(
+  parsed: ParsedTtsPlaybackRequestBody,
+  scope: ResolvedSegmentDocumentScope,
+): string | null {
+  if (
+    scope.readerType === 'epub'
+    && (
+      typeof parsed.startLocation.spineIndex !== 'number'
+      || typeof parsed.startLocation.charOffset !== 'number'
+    )
+  ) {
+    return 'EPUB playback start requires stable spine coordinates';
+  }
+  return null;
+}
+
 export async function buildTtsPlaybackPlanningInput(
   parsed: ParsedTtsPlaybackRequestBody,
   scope: ResolvedSegmentDocumentScope,
@@ -159,15 +175,15 @@ export async function buildTtsPlaybackPlanningInput(
     planning: {
       ...(parsed.maxBlockLength !== undefined ? { maxBlockLength: parsed.maxBlockLength } : {}),
       ...(parsed.language ? { language: parsed.language } : {}),
-      ...(parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
-      ...(parsed.startText ? { startText: parsed.startText } : {}),
+      ...(scope.readerType !== 'epub' && parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
+      ...(scope.readerType !== 'epub' && parsed.startText ? { startText: parsed.startText } : {}),
       enforceSourceBoundaries: scope.readerType === 'pdf' || scope.readerType === 'epub',
       documentSource: {
         namespace: scope.testNamespace,
         skipBlockKinds,
         extent: planExtent,
         ...(scope.readerType === 'pdf' ? { startPage: parsed.startLocation.page ?? 1 } : {}),
-        ...(scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex ?? 0 } : {}),
+        ...(scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex } : {}),
         ...(scope.readerType === 'epub' && parsed.startLocation.charOffset !== undefined
           ? { startCharOffset: parsed.startLocation.charOffset }
           : {}),

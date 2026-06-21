@@ -271,6 +271,23 @@ export function useEpubDocument(
       if (isStale()) return '';
 
       if (canonicalWindow) {
+        const viewportStartLocator = typeof canonicalWindow.viewportStartCharOffset === 'number'
+          ? {
+              readerType: 'epub' as const,
+              spineHref: canonicalWindow.spineHref,
+              spineIndex: canonicalWindow.spineIndex,
+              charOffset: canonicalWindow.viewportStartCharOffset,
+              cfi: start.cfi,
+            }
+          : startAnchor
+            ? {
+                readerType: 'epub' as const,
+                spineHref: startAnchor.spineHref,
+                spineIndex: startAnchor.spineIndex,
+                charOffset: startAnchor.charOffset,
+                cfi: start.cfi,
+              }
+            : undefined;
         if (
           typeof canonicalWindow.viewportStartCharOffset === 'number'
           && typeof canonicalWindow.viewportEndCharOffset === 'number'
@@ -289,20 +306,12 @@ export function useEpubDocument(
         setTTSText(textContent, {
           shouldPause,
           location: start.cfi,
-          startLocator: canonicalWindow.segments[0]?.ownerLocator ?? (startAnchor
-            ? {
-                readerType: 'epub',
-                spineHref: startAnchor.spineHref,
-                spineIndex: startAnchor.spineIndex,
-                charOffset: startAnchor.charOffset,
-                cfi: start.cfi,
-              }
-            : undefined),
+          startLocator: viewportStartLocator,
         });
       } else {
-        // Fallback for spine boundaries, footnotes/nav/image pages, or text not
-        // indexable in the spine. The worker stream derives continuation from
-        // the persisted document; this local path only seeds the visible window.
+        // Visible-text-only path for spine boundaries, footnotes/nav/image pages,
+        // or text not indexable in the spine. Playback will only start if this
+        // visible text still mapped to a real spine coordinate.
         setTTSText(textContent, {
           shouldPause,
           location: start.cfi,

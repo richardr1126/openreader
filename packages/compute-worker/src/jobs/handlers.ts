@@ -458,11 +458,9 @@ function locatorCharOffset(locator: unknown): number | null {
 
 /**
  * Resolve the absolute canonical ordinal where playback should begin, given the
- * whole-document plan and the session's start hints. PDF uses the exact key/text
- * hints first because app and worker segment from the same parsed block model.
- * EPUB uses stable spine coordinates first because the client renders viewport
- * windows while the worker plans per DOM block; local segment keys/text are only
- * advisory and must not pull playback back to the title page.
+ * whole-document plan and the session's start hints. EPUB is coordinate-only:
+ * rendered-window text and segment keys are not unique enough to choose a start
+ * ordinal, so a missing coordinate match is a hard planning error.
  */
 export function resolvePlaybackStartOrdinal(
   segments: TtsPlaybackSegmentInput[],
@@ -487,6 +485,10 @@ export function resolvePlaybackStartOrdinal(
       return charOffset == null || charOffset >= startCharOffset;
     });
     if (match) return match.segmentIndex;
+    throw new Error(`Unable to resolve EPUB playback start ordinal for spine ${startSpineIndex} at char offset ${startCharOffset ?? 0}`);
+  }
+  if (request.readerType === 'epub') {
+    throw new Error('EPUB playback start requires stable spine coordinates');
   }
 
   if (planning.startSegmentKey) {

@@ -119,6 +119,9 @@ export function buildSeekLayout(input: {
 }) {
   const nativeSpeed = (input.settingsJson as { nativeSpeed?: unknown } | null)?.nativeSpeed;
   const msPerChar = estimateMsPerCharForNativeSpeed(nativeSpeed);
+  // Real durations where a segment has been generated (so the scrubber/timeline
+  // match the gapless real audio and live highlighting stays accurate), estimate
+  // for the not-yet-generated tail.
   const slots: PlanSlotInput[] = input.artifact.segments.map((segment) => ({
     segmentIndex: segment.segmentIndex,
     segmentKey: segment.segmentKey,

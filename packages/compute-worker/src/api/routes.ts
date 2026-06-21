@@ -443,6 +443,9 @@ export function registerComputeWorkerRoutes(input: {
             const startOrdinal = Math.max(0, Math.floor(session.startOrdinal));
             const completed = await listCompletedDurations(session);
             const estimateRate = estimateRateForSession(session);
+            // Real durations where generated (so the byte map matches the gapless
+            // real audio and seeking lands accurately within the generated region),
+            // estimate for the not-yet-generated tail.
             const mapSlots: PlanSlotInput[] = planSegments.map((segment) => ({
               segmentIndex: segment.segmentIndex,
               text: segment.text,
@@ -451,7 +454,7 @@ export function registerComputeWorkerRoutes(input: {
             const totalSlots: PlanSlotInput[] = planSegments.map((segment) => ({
               segmentIndex: segment.segmentIndex,
               text: segment.text,
-              durationMs: null, // pure estimate → stable across requests
+              durationMs: null, // pure estimate → stable Content-Length across requests
             }));
             const mapLayout = buildByteLayout(mapSlots, startOrdinal, estimateRate);
             const total = buildByteLayout(totalSlots, startOrdinal, estimateRate).totalBytes;
@@ -580,6 +583,11 @@ export function registerComputeWorkerRoutes(input: {
         await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
           app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
         });
+        // Serve the segment's real CBR audio gaplessly — each segment is a whole
+        // number of MP3 frames, so concatenation keeps the stream byte↔time linear
+        // (and live highlighting accurate). NEVER pad/trim mid-segment: a mid-frame
+        // cut drops a partial frame on decode, so playback runs slightly ahead of
+        // the byte grid and the highlight drifts behind, accumulating per segment.
         let bytes = stripId3Tag(Buffer.from(await storage.readObject(audioKey)));
         if (skipWithin > 0) {
           bytes = bytes.subarray(Math.min(skipWithin, bytes.length));

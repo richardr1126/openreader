@@ -66,6 +66,15 @@ export async function GET(
       planId,
       ...(session ? { sessionId: session.sessionId } : {}),
       startOrdinal,
+      // The worker is the single source of truth for where playback begins: it
+      // resolves this from stable spine coordinates (EPUB) / page (PDF) and writes
+      // it back when it flips the session to `running`. The client follows it for
+      // its current-segment index and initial audio seek. `status` lets the client
+      // wait until that value is the worker-resolved one rather than the seed.
+      generationStartOrdinal: session
+        ? Math.max(0, Math.floor(session.generationStartOrdinal))
+        : startOrdinal,
+      status: session ? session.status : null,
       durationMs: layout.durationMs,
       segments: layout.slots.map((slot) => ({
         ordinal: slot.segmentIndex,

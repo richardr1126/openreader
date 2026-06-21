@@ -210,9 +210,9 @@ export function resolveMonotonicSentenceOffsets(
  * viewport's start CFI). Returns the spine identity plus the normalized
  * character offset where this chunk begins in the spine item's text.
  *
- * When the chunk text can't be located inside the spine item we still return
- * the spine identity with `chunkOffset = 0` so callers have *something* stable
- * to attach to.
+ * Returns null when the chunk text can't be located inside the spine item.
+ * Playback start coordinates must be real; offset 0 would silently start audio
+ * from the chapter beginning or title page when the rendered window did not map.
  */
 export async function buildEpubChunkAnchor(
   book: Book,
@@ -222,9 +222,8 @@ export async function buildEpubChunkAnchor(
   const spine = resolveSpineFromCfi(book, chunkCfi);
   if (!spine) return null;
   const spineText = await getSpineItemPlainText(book, spine.href);
-  const chunkOffset = chunkText
-    ? Math.max(0, findSegmentOffset(spineText, chunkText, 0))
-    : 0;
+  const chunkOffset = chunkText ? findSegmentOffset(spineText, chunkText, 0) : -1;
+  if (chunkOffset < 0) return null;
   return {
     spineHref: spine.href,
     spineIndex: spine.index,

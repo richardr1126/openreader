@@ -184,6 +184,50 @@ describe('worker-owned TTS playback source derivation', () => {
     expect(resolvePlaybackStartOrdinal(segments, request)).toBe(2);
   });
 
+  test('resolvePlaybackStartOrdinal rejects EPUB starts without a coordinate match', () => {
+    const segments = [
+      {
+        segmentIndex: 0,
+        segmentKey: 'repeated-heading',
+        text: 'Repeated heading',
+        locator: { readerType: 'epub', spineHref: 'title.xhtml', spineIndex: 0, charOffset: 0 },
+      },
+      {
+        segmentIndex: 1,
+        segmentKey: 'chapter-one',
+        text: 'Chapter one.',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 1, charOffset: 120 },
+      },
+    ];
+    const withoutCoordinates = {
+      ...baseRequest({
+        startSegmentKey: 'repeated-heading',
+        startText: 'Repeated heading',
+      }),
+      readerType: 'epub' as const,
+    } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
+    const unmatchedCoordinates = {
+      ...baseRequest({
+        startSegmentKey: 'repeated-heading',
+        startText: 'Repeated heading',
+        documentSource: {
+          namespace: null,
+          extent: 'document',
+          startSpineIndex: 99,
+          startCharOffset: 0,
+        },
+      }),
+      readerType: 'epub' as const,
+    } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
+
+    expect(() => resolvePlaybackStartOrdinal(segments, withoutCoordinates)).toThrow(
+      'EPUB playback start requires stable spine coordinates',
+    );
+    expect(() => resolvePlaybackStartOrdinal(segments, unmatchedCoordinates)).toThrow(
+      'Unable to resolve EPUB playback start ordinal',
+    );
+  });
+
   test('plan signature ignores start position and voice/speed but varies with segmentation knobs', () => {
     const fromTop = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),

@@ -239,14 +239,29 @@ const resolveFirstPlanIndexForDocumentAnchor = (
 
 const resolvePlaybackStartIndex = (input: {
   plan: CanonicalTtsSegment[];
+  readerType: ReaderType;
   desiredSegment?: CanonicalTtsSegment;
   desiredText: string;
   startLocation: PlaybackStartLocation;
 }): number => {
-  if (input.plan.length === 0) return 0;
-  if (input.desiredSegment?.key) {
-    const byKey = input.plan.findIndex((segment) => segment.key === input.desiredSegment!.key);
-    if (byKey >= 0) return byKey;
+  if (input.plan.length === 0) return -1;
+  if (input.readerType === 'epub') {
+    if (typeof input.startLocation.spineIndex !== 'number') return -1;
+    const startCharOffset = typeof input.startLocation.charOffset === 'number'
+      ? input.startLocation.charOffset
+      : 0;
+    const byEpubCoordinate = input.plan.findIndex((segment) => {
+      const locator = segment.ownerLocator;
+      if (locator?.readerType !== 'epub' || typeof locator.spineIndex !== 'number') return false;
+      if (locator.spineIndex > input.startLocation.spineIndex!) return true;
+      if (locator.spineIndex < input.startLocation.spineIndex!) return false;
+      return typeof locator.charOffset !== 'number' || locator.charOffset >= startCharOffset;
+    });
+    return byEpubCoordinate;
+  }
+  if (input.desiredSegment && Number.isFinite(input.desiredSegment.ordinal)) {
+    const byOrdinal = input.plan.findIndex((segment) => segment.ordinal === input.desiredSegment!.ordinal);
+    if (byOrdinal >= 0) return byOrdinal;
   }
   const byPdfPage = resolveFirstPlanIndexForPdfPage(input.plan, input.startLocation.page);
   if (byPdfPage >= 0) return byPdfPage;
@@ -438,9 +453,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentIndexRef.current = normalized;
     setCurrentIndex(normalized);
   }, []);
-  // Last worker-plan EPUB position. Used as a resume anchor when epub.js
-  // navigation lands before the next visible locator is recorded.
-  const lastPlayedCanonicalRef = useRef<{ spineHref: string; spineIndex: number; ordinal: number } | null>(null);
   const audioUnlockAttemptRef = useRef(0);
   const playbackProjectionRafRef = useRef<number | null>(null);
   const playbackRequestHeadersRef = useRef<TTSRequestHeaders | null>(null);
@@ -824,10 +836,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       if (isPlayingRef.current) {
         resumeAfterLocationChangeRef.current = true;
       }
-      if (backwards) {
-        // Backward navigation breaks forward ordinal continuity.
-        lastPlayedCanonicalRef.current = null;
-      }
       invalidatePlaybackRun();
       setPlaybackIndex(0);
       setSentences([]);
@@ -976,6 +984,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     };
     playbackAnchorRef.current = nextAnchor;
     setPlaybackAnchor(nextAnchor);
+    if (pendingEpubLocator) {
+      clearPendingEpubJump();
+    }
 
     if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
       playbackSyncNavigationRef.current = false;
@@ -1127,9 +1138,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (!target) return;
 
     setPlaybackTimeSec(targetSec);
-    const nextIndex = playbackSegmentsRef.current.findIndex((segment) =>
-      (target.segmentKey && segment.key === target.segmentKey) || segment.ordinal === target.ordinal
-    );
+    const nextIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === target.ordinal);
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
       setPlaybackIndex(nextIndex);
     }
@@ -1164,9 +1173,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const layout = playbackSeekLayout;
     const segment = playbackSegmentsRef.current[index];
     if (!layout || !segment) return false;
-    const target = layout.segments.find((entry) =>
-      (segment.key && entry.segmentKey === segment.key) || entry.ordinal === segment.ordinal
-    );
+    const target = layout.segments.find((entry) => entry.ordinal === segment.ordinal);
     if (!target) return false;
     seekPlaybackTo(target.startMs / 1000);
     return true;
@@ -1248,9 +1255,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     preloadGenerationSignatureRef.current = signature;
     clearPendingEpubJump();
-    // maxBlockLength/language changes re-shape the canonical plan (new ordinals),
-    // so the previous handoff anchor is no longer comparable.
-    lastPlayedCanonicalRef.current = null;
   }, [
     documentId,
     configProviderRef,
@@ -1338,21 +1342,23 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       if (page === null) return null;
       startLocation = { page };
     } else if (activeReaderType === 'epub') {
-      const locator = playbackSegment?.ownerLocator
-        ?? (isStableEpubLocator(anchor?.locator) ? anchor.locator : null)
-        ?? (isStableEpubLocator(pendingEpubJumpRef.current?.locator) ? pendingEpubJumpRef.current.locator : null);
+      const anchorLocator = isStableEpubLocator(anchor?.locator) ? anchor.locator : null;
+      const segmentLocator = isStableEpubLocator(playbackSegment?.ownerLocator) ? playbackSegment.ownerLocator : null;
+      const locator = selectedIndex > 0 && segmentLocator
+        ? segmentLocator
+        : anchorLocator ?? (anchor?.hasContent ? null : segmentLocator);
+      if (!locator) return null;
       const spineIndex = Math.max(
         0,
-        locator?.spineIndex
-          ?? lastPlayedCanonicalRef.current?.spineIndex
-          ?? 0,
+        locator.spineIndex,
       );
-      const charOffset = typeof locator?.charOffset === 'number' && Number.isFinite(locator.charOffset)
+      const charOffset = typeof locator.charOffset === 'number' && Number.isFinite(locator.charOffset)
         ? Math.max(0, Math.floor(locator.charOffset))
-        : undefined;
+        : null;
+      if (charOffset === null) return null;
       startLocation = {
         spineIndex,
-        ...(charOffset !== undefined ? { charOffset } : {}),
+        charOffset,
       };
     }
 
@@ -1377,8 +1383,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           language: resolvedLanguage,
         },
         startLocation,
-        ...(playbackSegment?.key ? { startSegmentKey: playbackSegment.key } : {}),
-        ...(activeReaderType === 'epub' && sentence.trim() ? { startText: sentence } : {}),
+        ...(activeReaderType !== 'epub' && playbackSegment?.key ? { startSegmentKey: playbackSegment.key } : {}),
         planning: {
           maxBlockLength: ttsSegmentMaxBlockLength,
           language: resolvedLanguage,
@@ -1449,22 +1454,31 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackSegments(canonicalPlan);
     setPlaybackPlanSource('worker');
     setSentences(canonicalPlan.map((segment) => segment.text));
+    // NOTE: do NOT use plan.startOrdinal here — the plan is position-independent
+    // and cached per document:settingsHash, so its startOrdinal is stale (it
+    // reflects whichever position the plan was first built with). The per-session
+    // start must be resolved fresh from the current request.
     const startPlanIndex = resolvePlaybackStartIndex({
       plan: canonicalPlan,
+      readerType: activeReaderType,
       desiredSegment: request.playbackSegment,
       desiredText: request.sentence,
       startLocation: request.startLocation,
     });
+    const startSegment = canonicalPlan[startPlanIndex];
+    if (!startSegment) {
+      throw new Error('TTS playback plan did not contain the requested start segment');
+    }
     if (currentIndexRef.current !== startPlanIndex) {
       setPlaybackIndex(startPlanIndex);
     }
     const effectivePlan = {
       ...plan,
-      startOrdinal: startPlanIndex,
+      startOrdinal: startSegment.ordinal,
     };
     playbackPlanRef.current = effectivePlan;
     return effectivePlan;
-  }, [playbackSegmentsRef, setPlaybackIndex]);
+  }, [activeReaderType, playbackSegmentsRef, setPlaybackIndex]);
 
   const createAndApplyPlaybackPlan = useCallback(async (
     request: ReturnType<typeof buildPlaybackSessionRequest>,
@@ -1597,18 +1611,44 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       playbackRequestHeadersRef.current = headers;
 
       applyPlaybackPlan(plan, { playbackSegment, sentence, startLocation });
-      const initialSeekLayout = await getTtsPlaybackSeekLayout(session.seekLayoutUrl).catch(() => null);
+
+      // Follow the worker. It resolves the absolute start ordinal from stable
+      // spine coordinates (EPUB) / page (PDF) — not from text/key guessing — and
+      // writes `generationStartOrdinal` when it flips the session to `running`.
+      // Poll the seek layout until that worker-resolved value is available, then
+      // align BOTH the current-segment index and the audio seek to the same
+      // ordinal. This is the single source of truth: the client no longer guesses
+      // a start that could disagree with where the worker actually generates audio
+      // (which left the element seeked into silence).
+      const initialSeekLayout = await (async () => {
+        const deadline = Date.now() + 20_000;
+        for (;;) {
+          if (runId !== playbackRunIdRef.current) return null;
+          const layout = await getTtsPlaybackSeekLayout(session.seekLayoutUrl).catch(() => null);
+          if (layout?.status === 'running' || layout?.status === 'succeeded') return layout;
+          if (Date.now() > deadline) {
+            throw new Error('TTS playback session did not expose a worker-resolved start ordinal in time');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      })();
       if (runId !== playbackRunIdRef.current) return;
-      if (initialSeekLayout) {
-        setPlaybackSeekLayout(initialSeekLayout);
-      }
+      if (!initialSeekLayout) return;
+      setPlaybackSeekLayout(initialSeekLayout);
       const initialStartSec = (() => {
-        if (!initialSeekLayout) return 0;
-        const selected = playbackSegmentsRef.current[currentIndexRef.current];
-        const slot = initialSeekLayout.segments.find((segment) =>
-          (selected?.key && segment.segmentKey === selected.key) || segment.ordinal === selected?.ordinal
-        );
-        return slot ? Math.max(0, slot.startMs / 1000) : 0;
+        const startOrdinal = initialSeekLayout.generationStartOrdinal;
+        const planIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === startOrdinal);
+        if (planIndex < 0) {
+          throw new Error(`TTS playback start ordinal ${startOrdinal} is not present in the canonical plan`);
+        }
+        if (planIndex >= 0 && currentIndexRef.current !== planIndex) {
+          setPlaybackIndex(planIndex);
+        }
+        const slot = initialSeekLayout.segments.find((segment) => segment.ordinal === startOrdinal);
+        if (!slot) {
+          throw new Error(`TTS playback start ordinal ${startOrdinal} is not present in the seek layout`);
+        }
+        return Math.max(0, slot.startMs / 1000);
       })();
 
       let audio = unlockedAudioRef.current;
@@ -1791,7 +1831,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackInFlightRef.current = false;
     pendingJumpTargetRef.current = null;
     clearPendingEpubJump();
-    lastPlayedCanonicalRef.current = null;
     setIsPlaying(false);
     playbackPlanRef.current = null;
     setPlaybackSeekLayout(null);
@@ -1877,6 +1916,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       return;
     }
 
+    if (isEPUB && epubLocatorTarget) {
+      const targetSegment = playbackSegmentsRef.current[index] ?? playbackSegments[index];
+      const nextAnchor: PlaybackAnchor = {
+        text: targetSegment?.text ?? '',
+        location: epubLocatorTarget.cfi ?? currDocPage,
+        locator: epubLocatorTarget,
+        hasContent: Boolean(targetSegment?.text?.trim()),
+      };
+      playbackAnchorRef.current = nextAnchor;
+      setPlaybackAnchor(nextAnchor);
+    }
+
     const isSameLocation = resolvedLocation !== undefined && typeof resolvedLocation === 'string'
       ? String(currDocPage) === String(resolvedLocation)
       : resolvedLocation !== undefined && pdfAnchorPage(currDocPageNumber) === pdfAnchorPage(resolvedLocation);
@@ -1898,20 +1949,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         epoch: epubJumpEpochRef.current,
         locator: epubLocatorTarget,
       };
-      if (epubLocatorTarget) {
-        const nextAnchor: PlaybackAnchor = {
-          text: playbackSegments[index]?.text ?? '',
-          location: epubLocatorTarget.cfi ?? currDocPage,
-          locator: epubLocatorTarget,
-          hasContent: Boolean(playbackSegments[index]?.text?.trim()),
-        };
-        playbackAnchorRef.current = nextAnchor;
-        setPlaybackAnchor(nextAnchor);
-      }
       pendingJumpTargetRef.current = null;
-      // A jump breaks ordinal continuity — drop the handoff anchor so the new
-      // page plays from its resolved index rather than being trimmed.
-      lastPlayedCanonicalRef.current = null;
     } else if (resolvedLocation !== undefined) {
       pendingJumpTargetRef.current = {
         locationKey: normalizeLocationKey(resolvedLocation),

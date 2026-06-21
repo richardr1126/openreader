@@ -72,13 +72,11 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if (!projection.segment) return;
 
     const segments = playbackSegmentsRef.current;
-    const segmentKey = projection.segment.segmentKey;
-    let nextIndex = segmentKey
-      ? segments.findIndex((segment) => segment.key === segmentKey)
-      : -1;
-    if (nextIndex < 0) {
-      nextIndex = segments.findIndex((segment) => segment.ordinal === projection.segment?.ordinal);
-    }
+    // `ordinal` is the authoritative, unique plan index. `segmentKey` is a hash
+    // of the segment text and is NOT unique (repeated lines, chapter labels,
+    // dividers, refrains), so playback projection must not use it.
+    const targetOrdinal = projection.segment.ordinal;
+    const nextIndex = segments.findIndex((segment) => segment.ordinal === targetOrdinal);
     if (nextIndex < 0) return;
     const locator = projection.segment.locator;
     const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;

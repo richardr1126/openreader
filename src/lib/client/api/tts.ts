@@ -130,6 +130,10 @@ export type TtsPlaybackSeekLayout = {
   planId: string;
   sessionId?: string;
   startOrdinal: number;
+  // Worker-resolved absolute ordinal where generation/playback begins. The client
+  // follows this for its current-segment index and initial audio seek.
+  generationStartOrdinal: number;
+  status: string | null;
   durationMs: number;
   segments: TtsPlaybackSeekLayoutSegment[];
 };
@@ -147,15 +151,27 @@ export const getTtsPlaybackSeekLayout = async (
   }
   const value = await response.json() as unknown;
   if (!value || typeof value !== 'object') {
-    return { planId: '', startOrdinal: 0, durationMs: 0, segments: [] };
+    throw new Error('TTS playback seek layout response was not an object');
   }
   const rec = value as Record<string, unknown>;
   const rawSegments = Array.isArray(rec.segments) ? rec.segments : [];
+  const startOrdinal = Number(rec.startOrdinal);
+  const generationStartOrdinal = Number(rec.generationStartOrdinal);
+  const durationMs = Number(rec.durationMs);
+  if (
+    !Number.isFinite(startOrdinal)
+    || !Number.isFinite(generationStartOrdinal)
+    || !Number.isFinite(durationMs)
+  ) {
+    throw new Error('TTS playback seek layout response was missing required numeric fields');
+  }
   return {
     planId: typeof rec.planId === 'string' ? rec.planId : '',
     sessionId: typeof rec.sessionId === 'string' ? rec.sessionId : undefined,
-    startOrdinal: Number.isFinite(Number(rec.startOrdinal)) ? Math.max(0, Math.floor(Number(rec.startOrdinal))) : 0,
-    durationMs: Number.isFinite(Number(rec.durationMs)) ? Math.max(0, Math.floor(Number(rec.durationMs))) : 0,
+    startOrdinal: Math.max(0, Math.floor(startOrdinal)),
+    generationStartOrdinal: Math.max(0, Math.floor(generationStartOrdinal)),
+    status: typeof rec.status === 'string' ? rec.status : null,
+    durationMs: Math.max(0, Math.floor(durationMs)),
     segments: rawSegments
       .map((item): TtsPlaybackSeekLayoutSegment | null => {
         if (!item || typeof item !== 'object') return null;
