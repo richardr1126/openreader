@@ -41,7 +41,6 @@ export interface TtsPlaybackJobRequest {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   settingsJson: unknown;
-  startOrdinal: number;
   planObjectKey?: string;
   /**
    * How many segments ahead of the client's playback cursor the worker may
@@ -98,7 +97,6 @@ export interface TtsPlaybackPlanJobRequest {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   settingsJson: unknown;
-  startOrdinal: number;
   planning: TtsPlaybackJobRequest['planning'];
 }
 

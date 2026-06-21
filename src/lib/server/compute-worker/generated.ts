@@ -331,8 +331,6 @@ export interface paths {
                         readerType: "pdf" | "epub" | "html";
                         settingsHash: string;
                         settingsJson: unknown;
-                        /** @default 0 */
-                        startOrdinal: number;
                         planObjectKey?: string;
                         aheadWindow?: number;
                         /** @enum {string} */
@@ -456,8 +454,6 @@ export interface paths {
                         readerType: "pdf" | "epub" | "html";
                         settingsHash: string;
                         settingsJson: unknown;
-                        /** @default 0 */
-                        startOrdinal: number;
                         planning: {
                             startSegmentKey?: string;
                             startText?: string;

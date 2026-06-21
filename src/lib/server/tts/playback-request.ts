@@ -23,7 +23,6 @@ export type ParsedTtsPlaybackRequestBody = {
   planObjectKey?: string;
   planSignature?: string;
   planId?: string;
-  startOrdinal?: number;
 };
 
 function readOptionalInt(
@@ -101,14 +100,12 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   const planObjectKey = readOptionalString(rec, 'planObjectKey');
   const planSignature = readOptionalString(rec, 'planSignature');
   const planId = readOptionalString(rec, 'planId');
-  const startOrdinal = readOptionalInt(rec, 'startOrdinal', 0);
   if (
     startSegmentKey === null
     || startText === null
     || planObjectKey === null
     || planSignature === null
     || planId === null
-    || startOrdinal === null
   ) {
     return null;
   }
@@ -128,7 +125,6 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
     ...(planObjectKey ? { planObjectKey } : {}),
     ...(planSignature ? { planSignature } : {}),
     ...(planId ? { planId } : {}),
-    ...(startOrdinal !== undefined ? { startOrdinal } : {}),
   };
 }
 
@@ -208,7 +204,6 @@ export function toTtsPlaybackPlanRequest(input: {
     readerType: input.scope.readerType,
     settingsHash: input.settingsHash,
     settingsJson: input.settingsJson,
-    startOrdinal: 0,
     planning: input.planning,
   };
 }

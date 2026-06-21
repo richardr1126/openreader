@@ -32,7 +32,6 @@ function epubRequest(documentSource: Record<string, unknown>) {
     readerType: 'epub' as const,
     settingsHash: 'hash',
     settingsJson: { voice: 'alloy', providerRef: 'p', providerType: 'openai', ttsModel: 'm', nativeSpeed: 1 },
-    startOrdinal: 0,
     planning: { documentSource },
   } as Parameters<typeof resolvePlaybackSourceUnits>[0];
 }

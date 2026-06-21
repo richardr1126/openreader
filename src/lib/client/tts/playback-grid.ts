@@ -2,7 +2,7 @@ import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { normalizeLocator } from '@openreader/tts/locator';
 
-export type TtsPlaybackTimelineSegment = {
+export type TtsPlaybackGridSegment = {
   ordinal: number;
   sourceSegmentIndex?: number;
   segmentKey: string | null;
@@ -10,33 +10,39 @@ export type TtsPlaybackTimelineSegment = {
   startMs: number;
   endMs: number;
   durationMs: number;
+  audioState: 'pending' | 'ready' | 'generating' | 'error' | 'silent-gap' | 'missing-prefix';
+  durationSource: 'estimated' | 'exact';
+  generated: boolean;
+  estimated: boolean;
   locator: TTSSegmentLocator | null;
   alignment: TTSSentenceAlignment | null;
 };
 
-export type TtsPlaybackTimeline = {
+export type TtsPlaybackGrid = {
   sessionId: string;
   documentId: string;
   status: string;
   startOrdinal: number;
+  generationStartOrdinal: number;
   durationMs: number;
-  segments: TtsPlaybackTimelineSegment[];
+  segments: TtsPlaybackGridSegment[];
 };
 
 export type TtsPlaybackTimeProjection = {
-  segment: TtsPlaybackTimelineSegment | null;
+  segment: TtsPlaybackGridSegment | null;
   segmentIndex: number;
   localTimeSec: number;
   wordIndex: number | null;
 };
 
-export function normalizePlaybackTimeline(value: unknown): TtsPlaybackTimeline {
+export function normalizePlaybackGrid(value: unknown): TtsPlaybackGrid {
   if (!value || typeof value !== 'object') {
     return {
       sessionId: '',
       documentId: '',
       status: 'unknown',
       startOrdinal: 0,
+      generationStartOrdinal: 0,
       durationMs: 0,
       segments: [],
     };
@@ -44,7 +50,7 @@ export function normalizePlaybackTimeline(value: unknown): TtsPlaybackTimeline {
   const rec = value as Record<string, unknown>;
   const rawSegments = Array.isArray(rec.segments) ? rec.segments : [];
   const segments = rawSegments
-    .map((item): TtsPlaybackTimelineSegment | null => {
+    .map((item): TtsPlaybackGridSegment | null => {
       if (!item || typeof item !== 'object') return null;
       const row = item as Record<string, unknown>;
       const ordinal = Number(row.ordinal);
@@ -59,19 +65,33 @@ export function normalizePlaybackTimeline(value: unknown): TtsPlaybackTimeline {
           ? { sourceSegmentIndex: Math.max(0, Math.floor(Number(row.sourceSegmentIndex))) }
           : {}),
         segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
-        segmentId: typeof row.segmentId === 'string' ? row.segmentId : '',
+        segmentId: typeof row.segmentId === 'string' && row.segmentId
+          ? row.segmentId
+          : `ordinal:${Math.max(0, Math.floor(ordinal))}`,
         startMs: Math.max(0, Math.floor(startMs)),
         endMs: Math.max(0, Math.floor(endMs)),
         durationMs: Number.isFinite(durationMs) && durationMs > 0
           ? Math.floor(durationMs)
           : Math.max(1, Math.floor(endMs - startMs)),
+        audioState: row.audioState === 'ready'
+          || row.audioState === 'generating'
+          || row.audioState === 'error'
+          || row.audioState === 'silent-gap'
+          || row.audioState === 'missing-prefix'
+          ? row.audioState
+          : row.generated === true ? 'ready' : 'pending',
+        durationSource: row.durationSource === 'exact' || row.durationSource === 'estimated'
+          ? row.durationSource
+          : row.generated === true ? 'exact' : 'estimated',
+        generated: row.generated === true || row.audioState === 'ready',
+        estimated: row.estimated === true || row.durationSource === 'estimated',
         locator: row.locator && typeof row.locator === 'object'
           ? normalizeLocator(row.locator as TTSSegmentLocator)
           : null,
         alignment: row.alignment && typeof row.alignment === 'object' ? row.alignment as TTSSentenceAlignment : null,
       };
     })
-    .filter((item): item is TtsPlaybackTimelineSegment => Boolean(item))
+    .filter((item): item is TtsPlaybackGridSegment => Boolean(item))
     .sort((a, b) => a.startMs - b.startMs || a.ordinal - b.ordinal);
 
   return {
@@ -79,15 +99,18 @@ export function normalizePlaybackTimeline(value: unknown): TtsPlaybackTimeline {
     documentId: typeof rec.documentId === 'string' ? rec.documentId : '',
     status: typeof rec.status === 'string' ? rec.status : 'unknown',
     startOrdinal: Number.isFinite(Number(rec.startOrdinal)) ? Math.max(0, Math.floor(Number(rec.startOrdinal))) : 0,
+    generationStartOrdinal: Number.isFinite(Number(rec.generationStartOrdinal))
+      ? Math.max(0, Math.floor(Number(rec.generationStartOrdinal)))
+      : Number.isFinite(Number(rec.startOrdinal)) ? Math.max(0, Math.floor(Number(rec.startOrdinal))) : 0,
     durationMs: Number.isFinite(Number(rec.durationMs)) ? Math.max(0, Math.floor(Number(rec.durationMs))) : 0,
     segments,
   };
 }
 
-export function findTimelineSegmentAtMs(
-  segments: TtsPlaybackTimelineSegment[],
+export function findPlaybackGridSegmentAtMs(
+  segments: TtsPlaybackGridSegment[],
   timeMs: number,
-): { segment: TtsPlaybackTimelineSegment; index: number } | null {
+): { segment: TtsPlaybackGridSegment; index: number } | null {
   if (segments.length === 0 || !Number.isFinite(timeMs)) return null;
   const clampedTimeMs = Math.max(0, timeMs);
   let low = 0;
@@ -131,13 +154,13 @@ export function resolveWordIndexAtTime(
   return index >= 0 ? index : null;
 }
 
-export function projectTimelineAtTime(
-  timeline: TtsPlaybackTimeline,
+export function projectPlaybackGridAtTime(
+  timeline: TtsPlaybackGrid,
   currentTimeSec: number,
   options?: { wordLeadSec?: number },
 ): TtsPlaybackTimeProjection {
   const currentTimeMs = Number.isFinite(currentTimeSec) ? currentTimeSec * 1000 : 0;
-  const match = findTimelineSegmentAtMs(timeline.segments, currentTimeMs);
+  const match = findPlaybackGridSegmentAtMs(timeline.segments, currentTimeMs);
   if (!match) {
     return {
       segment: null,

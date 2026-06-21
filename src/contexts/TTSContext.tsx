@@ -1472,12 +1472,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (currentIndexRef.current !== startPlanIndex) {
       setPlaybackIndex(startPlanIndex);
     }
-    const effectivePlan = {
-      ...plan,
-      startOrdinal: startSegment.ordinal,
-    };
-    playbackPlanRef.current = effectivePlan;
-    return effectivePlan;
+    playbackPlanRef.current = plan;
+    return plan;
   }, [activeReaderType, playbackSegmentsRef, setPlaybackIndex]);
 
   const createAndApplyPlaybackPlan = useCallback(async (
@@ -1598,7 +1594,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         ...(plan.planId ? { planId: plan.planId } : {}),
         planObjectKey: plan.planObjectKey,
         ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
-        ...(plan.startOrdinal !== undefined ? { startOrdinal: plan.startOrdinal } : {}),
       }, headers);
       if (runId !== playbackRunIdRef.current) return;
 
@@ -1635,6 +1630,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       if (runId !== playbackRunIdRef.current) return;
       if (!initialSeekLayout) return;
       setPlaybackSeekLayout(initialSeekLayout);
+      await refreshPlaybackTimeline(session.timelineUrl);
+      if (runId !== playbackRunIdRef.current) return;
       const initialStartSec = (() => {
         const startOrdinal = initialSeekLayout.generationStartOrdinal;
         const planIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === startOrdinal);
@@ -1775,6 +1772,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     buildPlaybackSessionRequest,
     createAndApplyPlaybackPlan,
     fetchPlaybackPlanUntilReady,
+    refreshPlaybackTimeline,
     isAbortLikeError,
     playbackActiveRef,
     playbackSessionRef,

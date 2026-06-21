@@ -703,7 +703,6 @@ export function registerComputeWorkerRoutes(input: {
         readerType: parsed.data.readerType,
         settingsHash: parsed.data.settingsHash,
         planSignature,
-        startOrdinal: parsed.data.startOrdinal,
         startSegmentKey: parsed.data.planning.startSegmentKey,
         startText: parsed.data.planning.startText,
         startPage: documentSource?.startPage,

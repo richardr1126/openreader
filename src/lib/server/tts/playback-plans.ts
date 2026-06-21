@@ -11,6 +11,7 @@ import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import type { ComputeOperation, TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
 import { getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
 import type { TTSSegmentLocator } from '@/types/client';
+import type { TTSSentenceAlignment } from '@/types/tts';
 
 export type TtsPlaybackPlanArtifactSegment = {
   segmentIndex: number;
@@ -111,11 +112,38 @@ export async function listCompletedDurationsForPlan(input: {
   return map;
 }
 
-export function buildSeekLayout(input: {
+export type TtsPlaybackGridSegment = {
+  ordinal: number;
+  sourceSegmentIndex: number;
+  segmentKey: string | null;
+  segmentId: string | null;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+  audioState: 'pending' | 'ready';
+  durationSource: 'estimated' | 'exact';
+  generated: boolean;
+  estimated: boolean;
+  locator: TTSSegmentLocator | null;
+  alignment: TTSSentenceAlignment | null;
+  updatedAt?: number | null;
+};
+
+export type TtsPlaybackGrid = {
+  durationMs: number;
+  segments: TtsPlaybackGridSegment[];
+};
+
+export function buildPlaybackGrid(input: {
   artifact: TtsPlaybackPlanArtifact;
   settingsJson: unknown;
   completedDurations: Map<number, number>;
   startOrdinal: number;
+  completedSegments?: Map<number, {
+    segmentId: string;
+    alignment: TTSSentenceAlignment | null;
+    updatedAt?: number | null;
+  }>;
 }) {
   const nativeSpeed = (input.settingsJson as { nativeSpeed?: unknown } | null)?.nativeSpeed;
   const msPerChar = estimateMsPerCharForNativeSpeed(nativeSpeed);
@@ -129,5 +157,27 @@ export function buildSeekLayout(input: {
     text: segment.text,
     durationMs: input.completedDurations.get(segment.segmentIndex) ?? null,
   }));
-  return buildPlaybackCbrLayout(slots, input.startOrdinal, msPerChar);
+  const layout = buildPlaybackCbrLayout(slots, input.startOrdinal, msPerChar);
+  return {
+    durationMs: layout.durationMs,
+    segments: layout.slots.map((slot): TtsPlaybackGridSegment => {
+      const completed = input.completedSegments?.get(slot.segmentIndex) ?? null;
+      return {
+        ordinal: slot.segmentIndex,
+        sourceSegmentIndex: slot.segmentIndex,
+        segmentKey: slot.segmentKey,
+        segmentId: completed?.segmentId ?? null,
+        startMs: slot.startMs,
+        endMs: slot.endMs,
+        durationMs: slot.durationMs,
+        audioState: slot.generated ? 'ready' : 'pending',
+        durationSource: slot.generated ? 'exact' : 'estimated',
+        generated: slot.generated,
+        estimated: slot.estimated,
+        locator: slot.locator as TTSSegmentLocator | null,
+        alignment: completed?.alignment ?? null,
+        updatedAt: completed?.updatedAt ?? null,
+      };
+    }),
+  };
 }

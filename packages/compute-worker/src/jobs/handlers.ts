@@ -66,7 +66,6 @@ const ttsPlaybackRequestSchema = z.object({
   readerType: z.enum(['pdf', 'epub', 'html']),
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
-  startOrdinal: z.number().int().nonnegative(),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
@@ -90,9 +89,7 @@ const ttsPlaybackRequestSchema = z.object({
 
 const ttsPlaybackPlanRequestSchema = ttsPlaybackRequestSchema
   .omit({ sessionId: true, planObjectKey: true, aheadWindow: true, backgroundExtent: true })
-  .extend({
-    startOrdinal: z.number().int().nonnegative(),
-  });
+  .extend({});
 
 async function updateTtsPlaybackSession(input: {
   sessionId: string;
@@ -100,16 +97,29 @@ async function updateTtsPlaybackSession(input: {
   planObjectKey?: string;
   lastError?: string | null;
   /**
-   * Absolute canonical ordinal the worker should generate around. This seeds the
-   * cursor without changing the session's audio-layout origin.
+   * Absolute canonical ordinal the worker generates around AND the origin of the
+   * progressive audio stream / byte+time layout. These are the same ordinal: the
+   * stream begins at the resolved start (Chapter One/page N) with no silent
+   * run-up in front of it. An earlier design kept the layout origin at 0 and
+   * padded `[0, start)` with CBR silence, but that silence is sliced mid-frame
+   * (the 1s silence unit isn't a whole number of MP3 frames), so its decoded
+   * duration drifts shorter than its advertised byte length — the element seeks
+   * past the silence into real audio and runs ahead of the highlight. The prefix
+   * region is never generated anyway (see the generation filter below), so it
+   * carried no audible content; dropping it removes the drift with no loss.
    */
   generationStartOrdinal?: number;
+  /** Audio-layout origin. Kept equal to {@link generationStartOrdinal}. */
+  startOrdinal?: number;
   cursorOrdinal?: number;
 }): Promise<void> {
   const now = Date.now();
   const generationStartOrdinal = input.generationStartOrdinal === undefined
     ? undefined
     : Math.max(0, Math.floor(input.generationStartOrdinal));
+  const startOrdinal = input.startOrdinal === undefined
+    ? undefined
+    : Math.max(0, Math.floor(input.startOrdinal));
   const cursorOrdinal = input.cursorOrdinal === undefined
     ? undefined
     : Math.max(0, Math.floor(input.cursorOrdinal));
@@ -120,6 +130,7 @@ async function updateTtsPlaybackSession(input: {
       ...(input.planObjectKey === undefined ? {} : { planObjectKey: input.planObjectKey }),
       ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
       ...(generationStartOrdinal === undefined ? {} : { generationStartOrdinal }),
+      ...(startOrdinal === undefined ? {} : { startOrdinal }),
       ...(cursorOrdinal === undefined
         ? {}
         : { cursorOrdinal, cursorUpdatedAt: now }),

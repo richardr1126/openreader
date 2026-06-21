@@ -63,7 +63,6 @@ export const ttsPlaybackOperationCreateSchema = z.object({
   readerType: z.enum(['pdf', 'epub', 'html']),
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
-  startOrdinal: z.number().int().nonnegative().default(0),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
@@ -87,9 +86,7 @@ export const ttsPlaybackOperationCreateSchema = z.object({
 
 export const ttsPlaybackPlanOperationCreateSchema = ttsPlaybackOperationCreateSchema
   .omit({ sessionId: true, planObjectKey: true, aheadWindow: true, backgroundExtent: true })
-  .extend({
-    startOrdinal: z.number().int().nonnegative().default(0),
-  });
+  .extend({});
 
 export const pdfResolveSchema = z.object({
   documentId: documentIdSchema,

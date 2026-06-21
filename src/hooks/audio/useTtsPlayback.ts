@@ -2,10 +2,10 @@
 
 import { useCallback, useRef, type MutableRefObject } from 'react';
 import {
-  normalizePlaybackTimeline,
-  projectTimelineAtTime,
-  type TtsPlaybackTimeline,
-} from '@/lib/client/tts/playback-timeline';
+  normalizePlaybackGrid,
+  projectPlaybackGridAtTime,
+  type TtsPlaybackGrid,
+} from '@/lib/client/tts/playback-grid';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
 import { isPdfLocator } from '@/types/client';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
@@ -32,7 +32,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
   } = input;
-  const playbackTimelineRef = useRef<TtsPlaybackTimeline | null>(null);
+  const playbackTimelineRef = useRef<TtsPlaybackGrid | null>(null);
   const playbackSessionRef = useRef<{
     sessionId: string;
     audioUrl: string;
@@ -68,7 +68,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const projectPlaybackTime = useCallback((currentTimeSec: number) => {
     const timeline = playbackTimelineRef.current;
     if (!timeline) return;
-    const projection = projectTimelineAtTime(timeline, currentTimeSec, { wordLeadSec: WORD_HIGHLIGHT_LEAD_SEC });
+    const projection = projectPlaybackGridAtTime(timeline, currentTimeSec, { wordLeadSec: WORD_HIGHLIGHT_LEAD_SEC });
     if (!projection.segment) return;
 
     const segments = playbackSegmentsRef.current;
@@ -141,7 +141,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if (!response.ok) {
       throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
     }
-    const timeline = normalizePlaybackTimeline(await response.json());
+    const timeline = normalizePlaybackGrid(await response.json());
     playbackTimelineRef.current = timeline;
     return timeline;
   }, []);

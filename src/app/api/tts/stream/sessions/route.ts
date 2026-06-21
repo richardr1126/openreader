@@ -77,13 +77,14 @@ export async function POST(request: NextRequest) {
 
     // The worker derives one position-independent canonical plan over the whole
     // document (whole book for EPUB) with absolute ordinals, reused across
-    // sessions. The audio layout origin stays at ordinal 0; the selected start
-    // ordinal only seeds the generation cursor.
+    // sessions. The audio layout origin stays at ordinal 0. Generation start is
+    // resolved by the worker from the stable document coordinate in `planning`;
+    // queued rows are intentionally seeded at 0 until that worker-owned value is
+    // published back to the session.
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
     const { ttsPlaybackBackgroundExtent: backgroundExtent } = await getRuntimeConfig();
     const startOrdinal = 0;
-    const generationCursorOrdinal = parsed.startOrdinal ?? 0;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
@@ -101,8 +102,8 @@ export async function POST(request: NextRequest) {
       settingsHash,
       settingsJson,
       startOrdinal,
-      generationStartOrdinal: generationCursorOrdinal,
-      cursorOrdinal: generationCursorOrdinal,
+      generationStartOrdinal: 0,
+      cursorOrdinal: 0,
       cursorUpdatedAt: now,
       ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       expiresAt,
@@ -130,7 +131,6 @@ export async function POST(request: NextRequest) {
       readerType: scope.readerType,
       settingsHash,
       settingsJson,
-      startOrdinal: generationCursorOrdinal,
       ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       // One forward-generation job, throttled to a window ahead of the client's
       // playback cursor; on disconnect it continues to the background extent.

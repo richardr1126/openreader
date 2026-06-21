@@ -1365,12 +1365,6 @@
                     "maxLength": 256
                   },
                   "settingsJson": {},
-                  "startOrdinal": {
-                    "default": 0,
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
                   "planObjectKey": {
                     "type": "string",
                     "minLength": 1,
@@ -1483,7 +1477,6 @@
                   "readerType",
                   "settingsHash",
                   "settingsJson",
-                  "startOrdinal",
                   "planning"
                 ],
                 "additionalProperties": false
@@ -1739,12 +1732,6 @@
                     "maxLength": 256
                   },
                   "settingsJson": {},
-                  "startOrdinal": {
-                    "default": 0,
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
                   "planning": {
                     "type": "object",
                     "properties": {
@@ -1839,7 +1826,6 @@
                   "readerType",
                   "settingsHash",
                   "settingsJson",
-                  "startOrdinal",
                   "planning"
                 ],
                 "additionalProperties": false

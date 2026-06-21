@@ -129,7 +129,6 @@ describe('compute worker API routes', () => {
         readerType: 'pdf',
         settingsHash: 'settings-hash',
         settingsJson: { voice: 'alloy' },
-        startOrdinal: 4,
         planning: {
           maxBlockLength: 500,
           enforceSourceBoundaries: true,
@@ -177,7 +176,6 @@ describe('compute worker API routes', () => {
         readerType: 'pdf',
         settingsHash: 'settings-hash',
         settingsJson: { providerRef: 'p', providerType: 'openai', ttsModel: 'm', voice: 'v', nativeSpeed: 1 },
-        startOrdinal: 0,
         planning: {
           maxBlockLength: 500,
           enforceSourceBoundaries: true,

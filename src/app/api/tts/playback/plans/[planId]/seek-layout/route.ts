@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import { resolveTtsPlaybackSession } from '@/lib/server/tts/playback-sessions';
 import {
-  buildSeekLayout,
+  buildPlaybackGrid,
   listCompletedDurationsForPlan,
   readTtsPlaybackPlanArtifact,
   resolveTtsPlaybackPlanOperation,
@@ -55,7 +55,7 @@ export async function GET(
       documentVersion: artifact.documentVersion || scope.documentVersion,
       settingsHash,
     });
-    const layout = buildSeekLayout({
+    const layout = buildPlaybackGrid({
       artifact,
       settingsJson,
       completedDurations,
@@ -76,15 +76,7 @@ export async function GET(
         : startOrdinal,
       status: session ? session.status : null,
       durationMs: layout.durationMs,
-      segments: layout.slots.map((slot) => ({
-        ordinal: slot.segmentIndex,
-        startMs: slot.startMs,
-        endMs: slot.endMs,
-        generated: slot.generated,
-        estimated: slot.estimated,
-        locator: slot.locator,
-        segmentKey: slot.segmentKey,
-      })),
+      segments: layout.segments,
     }, {
       headers: {
         'Cache-Control': 'private, no-store',

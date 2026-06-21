@@ -5,6 +5,7 @@ import type {
   TTSSegmentSettings,
   VoicesResponse,
 } from '@/types/client';
+import type { TTSSentenceAlignment } from '@/types/tts';
 import { normalizeLocator } from '@openreader/tts/locator';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
@@ -73,7 +74,6 @@ export type TtsPlaybackSessionPayload = {
   planId?: string;
   planObjectKey?: string;
   planSignature?: string;
-  startOrdinal?: number;
 };
 
 export const createTtsPlaybackPlan = async (
@@ -118,12 +118,18 @@ export const createTtsPlaybackPlan = async (
 
 export type TtsPlaybackSeekLayoutSegment = {
   ordinal: number;
+  sourceSegmentIndex?: number;
   startMs: number;
   endMs: number;
+  durationMs: number;
+  audioState: 'pending' | 'ready' | 'generating' | 'error' | 'silent-gap' | 'missing-prefix';
+  durationSource: 'estimated' | 'exact';
   generated: boolean;
   estimated: boolean;
   locator: TTSSegmentLocator | null;
   segmentKey: string | null;
+  segmentId: string | null;
+  alignment: TTSSentenceAlignment | null;
 };
 
 export type TtsPlaybackSeekLayout = {
@@ -179,18 +185,37 @@ export const getTtsPlaybackSeekLayout = async (
         const ordinal = Number(row.ordinal);
         const startMs = Number(row.startMs);
         const endMs = Number(row.endMs);
+        const durationMs = Number(row.durationMs);
         if (!Number.isFinite(ordinal) || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
         if (endMs <= startMs) return null;
         return {
           ordinal: Math.max(0, Math.floor(ordinal)),
+          ...(Number.isFinite(Number(row.sourceSegmentIndex))
+            ? { sourceSegmentIndex: Math.max(0, Math.floor(Number(row.sourceSegmentIndex))) }
+            : {}),
           startMs: Math.max(0, Math.floor(startMs)),
           endMs: Math.max(0, Math.floor(endMs)),
-          generated: row.generated === true,
-          estimated: row.estimated === true,
+          durationMs: Number.isFinite(durationMs) && durationMs > 0
+            ? Math.max(1, Math.floor(durationMs))
+            : Math.max(1, Math.floor(endMs - startMs)),
+          audioState: row.audioState === 'ready'
+            || row.audioState === 'generating'
+            || row.audioState === 'error'
+            || row.audioState === 'silent-gap'
+            || row.audioState === 'missing-prefix'
+            ? row.audioState
+            : row.generated === true ? 'ready' : 'pending',
+          durationSource: row.durationSource === 'exact' || row.durationSource === 'estimated'
+            ? row.durationSource
+            : row.generated === true ? 'exact' : 'estimated',
+          generated: row.generated === true || row.audioState === 'ready',
+          estimated: row.estimated === true || row.durationSource === 'estimated',
           locator: row.locator && typeof row.locator === 'object'
             ? normalizeLocator(row.locator as TTSSegmentLocator)
             : null,
           segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
+          segmentId: typeof row.segmentId === 'string' ? row.segmentId : null,
+          alignment: row.alignment && typeof row.alignment === 'object' ? row.alignment as TTSSentenceAlignment : null,
         };
       })
       .filter((item): item is TtsPlaybackSeekLayoutSegment => Boolean(item)),

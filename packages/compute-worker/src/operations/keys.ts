@@ -36,7 +36,6 @@ export function buildTtsPlaybackOperationKey(input: {
   documentId: string;
   documentVersion: number;
   settingsHash: string;
-  startOrdinal: number;
 }): string {
   // One generation job per session: the sessionId makes the key unique, so a
   // re-requested identical session reuses its op while distinct sessions don't
@@ -47,7 +46,6 @@ export function buildTtsPlaybackOperationKey(input: {
     input.documentId,
     String(input.documentVersion),
     input.settingsHash,
-    String(input.startOrdinal),
     input.sessionId,
   ].join('|');
 }
@@ -58,7 +56,6 @@ export function buildTtsPlaybackPlanOperationKey(input: {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   planSignature: string;
-  startOrdinal: number;
   startSegmentKey?: string;
   startText?: string;
   startPage?: number;
@@ -73,7 +70,6 @@ export function buildTtsPlaybackPlanOperationKey(input: {
     input.readerType,
     input.settingsHash,
     input.planSignature,
-    String(input.startOrdinal),
     input.startSegmentKey?.trim() || '',
     input.startText?.trim() || '',
     input.startPage === undefined ? '' : String(input.startPage),
@@ -87,10 +83,10 @@ export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   documentId: string;
   sessionId: string;
 } | null {
-  // tts_playback | v1 | documentId | version | settingsHash | startOrdinal | sessionId
+  // tts_playback | v1 | documentId | version | settingsHash | sessionId
   const parts = opKey.split('|');
   const [kind, version, documentId] = parts;
-  const sessionId = parts[6];
+  const sessionId = parts[5];
   if (kind !== 'tts_playback' || version !== 'v1' || !documentId || !sessionId) return null;
   return { kind: 'tts_playback', documentId, sessionId };
 }

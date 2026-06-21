@@ -4,19 +4,20 @@ import {
   resolveTtsPlaybackSession,
 } from '@/lib/server/tts/playback-sessions';
 import {
-  buildSeekLayout,
+  buildPlaybackGrid,
   readTtsPlaybackPlanArtifact,
 } from '@/lib/server/tts/playback-plans';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import type { TTSSentenceAlignment } from '@/types/tts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function parseAlignment(value: string | null): unknown {
+function parseAlignment(value: string | null): TTSSentenceAlignment | null {
   if (!value) return null;
   try {
-    return JSON.parse(value);
+    return JSON.parse(value) as TTSSentenceAlignment;
   } catch {
     return null;
   }
@@ -39,28 +40,17 @@ export async function GET(
     }
 
     const segments = await listCompletedTtsPlaybackSegments(session);
-    const completedByOrdinal = new Map(segments.map((segment) => [segment.ordinal, segment]));
-    const layout = buildSeekLayout({
+    const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
+      segmentId: segment.segmentId,
+      alignment: parseAlignment(segment.alignmentJson),
+      updatedAt: segment.updatedAt,
+    }]));
+    const layout = buildPlaybackGrid({
       artifact: (await readTtsPlaybackPlanArtifact(session.planObjectKey)).artifact,
       settingsJson: session.settingsJson,
       completedDurations: new Map(segments.map((segment) => [segment.ordinal, segment.durationMs])),
       startOrdinal: Math.max(0, Math.floor(session.startOrdinal)),
-    });
-    const timeline = layout.slots.flatMap((slot) => {
-      const segment = completedByOrdinal.get(slot.segmentIndex);
-      if (!segment) return [];
-      return [{
-        ordinal: slot.segmentIndex,
-        sourceSegmentIndex: slot.segmentIndex,
-        segmentKey: slot.segmentKey,
-        segmentId: segment.segmentId,
-        startMs: slot.startMs,
-        endMs: slot.endMs,
-        durationMs: slot.durationMs,
-        locator: slot.locator,
-        alignment: parseAlignment(segment.alignmentJson),
-        updatedAt: segment.updatedAt,
-      }];
+      completedSegments,
     });
 
     return NextResponse.json({
@@ -68,8 +58,9 @@ export async function GET(
       documentId: session.documentId,
       status: session.status,
       startOrdinal: Math.max(0, Math.floor(session.startOrdinal)),
+      generationStartOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal)),
       durationMs: layout.durationMs,
-      segments: timeline,
+      segments: layout.segments,
     }, {
       headers: {
         'Cache-Control': 'private, no-store',

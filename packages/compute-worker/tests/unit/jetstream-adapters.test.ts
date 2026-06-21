@@ -169,7 +169,6 @@ describe('jetstream adapters', () => {
         readerType: 'pdf',
         settingsHash: 'settings',
         settingsJson: { nativeSpeed: 1 },
-        startOrdinal: 0,
         planning: {},
       },
     });
