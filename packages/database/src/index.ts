@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { createRequire } from 'node:module';
 import path from 'path';
 import fs from 'fs';
 import * as schema from './schema';
@@ -10,6 +11,7 @@ import * as authSchemaPostgres from './schema_auth_postgres';
 // require() is used instead of dynamic import() because getDrizzleDB() must remain
 // synchronous for the SQLite code path.
 
+const require = createRequire(import.meta.url);
 
 const UNCLAIMED_USER_ID = 'unclaimed';
 

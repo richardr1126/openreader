@@ -28,12 +28,12 @@ import {
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { getFFmpegPath } from '@/lib/server/audiobooks/ffmpeg-bin';
-import { generateTTSBuffer } from '@/lib/server/tts/generate';
+import { generateTTSBuffer } from '@openreader/tts/generate';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
-import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
-import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@/lib/server/tts/upstream-response';
-import { defaultVoiceForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { isBuiltInTtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
+import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
+import { defaultVoiceForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { isBuiltInTtsProviderId } from '@openreader/tts/provider-catalog';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { listAdminProviders } from '@/lib/server/admin/providers';
 import type { AudiobookGenerationSettings } from '@/types/client';

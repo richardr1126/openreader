@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sniffAudioFormat } from '@/lib/server/tts/audio-format';
+import { sniffAudioFormat } from '@openreader/tts/audio-format';
 
 function bytes(...values: number[]): Buffer {
   return Buffer.from(values);

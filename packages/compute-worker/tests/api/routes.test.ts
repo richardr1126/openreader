@@ -29,6 +29,20 @@ describe('compute worker API routes', () => {
     expect(protectedRoute.statusCode).toBe(401);
   });
 
+  test('allows public playback audio route through bearer auth but requires a signed playback token', async () => {
+    const missing = await runtime.app.inject({
+      method: 'GET',
+      url: '/v1/tts-playback/session-1/audio',
+    });
+    expect(missing.statusCode).toBe(400);
+
+    const invalid = await runtime.app.inject({
+      method: 'GET',
+      url: '/v1/tts-playback/session-1/audio?token=not-a-token',
+    });
+    expect(invalid.statusCode).toBe(403);
+  });
+
   test('validates operation creation body and returns 400 for invalid payload', async () => {
     const response = await runtime.app.inject({
       method: 'POST',
@@ -100,24 +114,55 @@ describe('compute worker API routes', () => {
     expect(replacement.subject).toEqual(initial.subject);
   });
 
-  test('creates whisper alignment operations without exposing internal keys', async () => {
+  test('creates TTS playback operations without exposing internal keys', async () => {
+    const documentId = 'b'.repeat(64);
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/whisper-align/operations',
+      url: '/v1/tts-playback/operations',
       headers: AUTH,
       payload: {
-        text: 'Canonical worker text',
-        audioObjectKey: 'openreader/audio.mp3',
-        lang: 'en',
+        sessionId: 'playback-session-1',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId,
+        documentVersion: 123,
+        readerType: 'pdf',
+        settingsHash: 'settings-hash',
+        settingsJson: { voice: 'alloy' },
+        startOrdinal: 4,
+        planning: {
+          sourceUnits: [{
+            sourceKey: 'pdf-page-12',
+            text: 'A worker-owned playback segment.',
+            locator: { readerType: 'pdf', page: 12 },
+          }],
+          currentSourceKeys: ['pdf-page-12'],
+          maxBlockLength: 500,
+          enforceSourceBoundaries: true,
+          language: 'en',
+        },
       },
     });
 
     expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      subject: { kind: 'whisper_align' },
+      subject: { kind: 'tts_playback', documentId, sessionId: 'playback-session-1' },
       status: 'queued',
     });
     expect(response.json()).not.toHaveProperty('opKey');
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'tts_playback',
+      payload: {
+        planning: {
+          sourceUnits: [{
+            sourceKey: 'pdf-page-12',
+            text: 'A worker-owned playback segment.',
+            locator: { readerType: 'pdf', page: 12 },
+          }],
+          currentSourceKeys: ['pdf-page-12'],
+        },
+      },
+    });
   });
 
   test('resolves the current PDF artifact and operation without exposing parser identity', async () => {
@@ -221,22 +266,22 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('"status":"succeeded"');
   });
 
-  test('marks stale running whisper and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {
+  test('marks stale running playback and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {
     const now = Date.now();
     fake.seedState({
-      opId: 'op-stale-whisper-running',
-      opKey: 'k-stale-whisper-running',
-      kind: 'whisper_align',
-      jobId: 'job-op-stale-whisper-running',
+      opId: 'op-stale-playback-running',
+      opKey: 'k-stale-playback-running',
+      kind: 'tts_playback',
+      jobId: 'job-op-stale-playback-running',
       status: 'running',
       queuedAt: 1,
       updatedAt: now - 40_000,
     });
     fake.seedState({
-      opId: 'op-stale-whisper-queued',
-      opKey: 'k-stale-whisper-queued',
-      kind: 'whisper_align',
-      jobId: 'job-op-stale-whisper-queued',
+      opId: 'op-stale-playback-queued',
+      opKey: 'k-stale-playback-queued',
+      kind: 'tts_playback',
+      jobId: 'job-op-stale-playback-queued',
       status: 'queued',
       queuedAt: 1,
       updatedAt: now - 40_000,
@@ -264,25 +309,25 @@ describe('compute worker API routes', () => {
     // orphanRecoveryPromise path through ensureOrphanedOpRecovery().
     const fetch = await runtime.app.inject({
       method: 'GET',
-      url: '/v1/operations/op-stale-whisper-running',
+      url: '/v1/operations/op-stale-playback-running',
       headers: AUTH,
     });
 
     expect(fetch.statusCode).toBe(200);
     expect(fetch.json()).toMatchObject({
-      opId: 'op-stale-whisper-running',
+      opId: 'op-stale-playback-running',
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',
       },
     });
-    expect(fake.getState('op-stale-whisper-running')).toMatchObject({
+    expect(fake.getState('op-stale-playback-running')).toMatchObject({
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',
       },
     });
-    expect(fake.getState('op-stale-whisper-queued')).toMatchObject({
+    expect(fake.getState('op-stale-playback-queued')).toMatchObject({
       status: 'queued',
     });
     expect(fake.getState('op-stale-pdf-running')).toMatchObject({

@@ -22,8 +22,8 @@ import { OperationOrchestrator } from '../operations';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
-  WhisperAlignJobRequest,
-  WhisperAlignJobResult,
+  TtsPlaybackJobRequest,
+  TtsPlaybackJobResult,
 } from '../operations/contracts';
 import {
   JetStreamOperationEventStream,
@@ -45,7 +45,7 @@ import {
   EVENTS_STREAM_NAME,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
-  WHISPER_JOBS_SUBJECT,
+  TTS_PLAYBACK_JOBS_SUBJECT,
 } from '../infrastructure/nats';
 import { registerHttpHooks } from './http-hooks';
 import {
@@ -72,9 +72,6 @@ const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
 const IDLE_STATUS_LOG_INTERVAL_MS = 60_000;
 const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
-// Bounded pull window so consumer loops yield periodically and can be stopped
-// cleanly when going idle, instead of blocking on a long-lived pull.
-const WHISPER_MAX_DELIVER = 1;
 
 export type { ComputeWorkerRouteDeps } from './routes';
 
@@ -150,6 +147,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       readObject: storageDisabled,
       objectExists: storageDisabled,
       deleteObject: storageDisabled,
+      putObject: storageDisabled,
       putParsedPdf: storageDisabled,
     }
     : createArtifactStorage({
@@ -209,14 +207,14 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     pdfLayoutHardCapMs: pdfHardCapMs,
   }, 'compute runtime config');
 
-  const whisperJobCodec = createJsonCodec<QueuedJob<WhisperAlignJobRequest>>();
   const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
+  const ttsPlaybackJobCodec = createJsonCodec<QueuedJob<TtsPlaybackJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<WhisperAlignJobResult | PdfLayoutJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<WhisperAlignJobResult | PdfLayoutJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -224,8 +222,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const operationQueue = new JetStreamOperationQueue({
     getJs: async () => (await ensureConnected()).js,
-    whisperSubject: WHISPER_JOBS_SUBJECT,
     layoutSubject: LAYOUT_JOBS_SUBJECT,
+    ttsPlaybackSubject: TTS_PLAYBACK_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -270,6 +268,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       operationEventStream,
       artifactExists: options.routeDeps?.artifactExists ?? storage.objectExists,
     },
+    storage,
     s3Prefix,
     ensureOrphanedOpRecovery,
     getOpState,
@@ -286,6 +285,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     whisperTimeoutMs,
     pdfTimeoutMs,
     pdfHardCapMs,
+    s3Prefix,
   });
 
   const workerLoops = createWorkerLoopController({
@@ -294,8 +294,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     logger: app.log,
     jobConcurrency,
     pdfAttempts,
-    whisperCodec: whisperJobCodec,
     pdfCodec: layoutJobCodec,
+    ttsPlaybackCodec: ttsPlaybackJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -326,8 +326,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     startWorkers: (session) => {
       if (disableWorkers) return;
       workerLoops.start(session, {
-        whisper: session.whisperConsumer,
         pdfLayout: session.layoutConsumer,
+        ttsPlayback: session.ttsPlaybackConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

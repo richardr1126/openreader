@@ -262,6 +262,36 @@ export const documentBlobLeases = sqliteTable('document_blob_leases', {
   leaseUntilMs: integer('lease_until_ms').notNull(),
 });
 
+export const ttsPlaybackSessions = sqliteTable('tts_playback_sessions', {
+  sessionId: text('session_id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  storageUserId: text('storage_user_id').notNull(),
+  documentId: text('document_id').notNull(),
+  documentVersion: integer('document_version').notNull(),
+  readerType: text('reader_type').notNull(),
+  status: text('status').notNull().default('queued'),
+  workerOpId: text('worker_op_id'),
+  settingsHash: text('settings_hash').notNull(),
+  settingsJson: text('settings_json').notNull(),
+  startOrdinal: integer('start_ordinal').notNull().default(0),
+  cursorOrdinal: integer('cursor_ordinal').notNull().default(0),
+  cursorUpdatedAt: integer('cursor_updated_at'),
+  planObjectKey: text('plan_object_key'),
+  expiresAt: integer('expires_at').notNull(),
+  lastError: text('last_error'),
+  createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
+}, (table) => [
+  index('idx_tts_playback_sessions_user_doc_settings').on(
+    table.userId,
+    table.documentId,
+    table.documentVersion,
+    table.settingsHash,
+    table.startOrdinal,
+  ),
+  index('idx_tts_playback_sessions_expiry').on(table.expiresAt),
+]);
+
 export const ttsSegmentVariants = sqliteTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

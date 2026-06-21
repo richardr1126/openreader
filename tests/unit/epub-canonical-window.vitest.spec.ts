@@ -9,7 +9,7 @@ import {
   planSpineSegments,
   selectCanonicalWindow,
 } from '../../src/lib/client/epub/epub-canonical-window';
-import type { CanonicalTtsSegment } from '../../src/lib/shared/tts-segment-plan';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 const SPINE_HREF = 'OEBPS/ch01.xhtml';
 const SPINE_INDEX = 1;

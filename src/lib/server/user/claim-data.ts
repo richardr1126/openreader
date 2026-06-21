@@ -25,7 +25,7 @@ import { logDegraded } from '../errors/logging';
 import { hashForLog, serverLogger } from '../logger';
 import { getS3Config } from '../storage/s3';
 import { copyTtsSegmentPrefix, deleteTtsSegmentPrefix } from '../tts/segments-blobstore';
-import { buildTtsSegmentDocumentPrefix } from '../tts/segments';
+import { buildTtsSegmentDocumentPrefix } from '@openreader/tts/segments';
 
 type AudiobookRow = {
   id: string;

@@ -17,9 +17,9 @@ import type {
   TTSSegmentVariant,
   TTSSegmentsManifestResponse,
 } from '@/types/client';
-import { isTtsProviderType } from '@/lib/shared/tts-provider-catalog';
-import { normalizeLanguageTag } from '@/lib/shared/language';
-import { resolveEffectiveProviderType } from '@/lib/shared/tts-provider-policy';
+import { isTtsProviderType } from '@openreader/tts/provider-catalog';
+import { normalizeLanguageTag } from '@openreader/tts/language';
+import { resolveEffectiveProviderType } from '@openreader/tts/provider-policy';
 import { resolveSegmentAudioUrls } from '@/lib/server/tts/segment-audio-urls';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';

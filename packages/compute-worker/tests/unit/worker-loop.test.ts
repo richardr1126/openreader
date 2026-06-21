@@ -81,25 +81,20 @@ describe('worker loop controller', () => {
         documentObjectKey: 'openreader/doc.pdf',
       },
     });
-    const whisperCodec = createJsonCodec<QueuedJob<{
-      text: string;
-      audioObjectKey: string;
-    }>>();
     const controller = createWorkerLoopController({
       orchestrator,
       handlers: {
-        runWhisper: async () => ({ alignments: [] }),
         runPdfLayout: async (_payload, _queueWaitMs, hooks) => {
           await hooks?.onProgress?.(progress);
           active = false;
           complete();
           return { parsedObjectKey: 'openreader/parsed.json' };
         },
+        runTtsPlayback: async () => ({ sessionId: 'session' }),
       },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       jobConcurrency: 1,
       pdfAttempts: 2,
-      whisperCodec,
       pdfCodec: pdf.codec,
       isOwnerActive: () => active,
       isStopping: () => false,
@@ -107,7 +102,7 @@ describe('worker loop controller', () => {
       onInFlightJobsChanged: (delta) => { inFlight += delta; },
     });
 
-    controller.start(owner, { whisper: createConsumer(), pdfLayout: createConsumer(pdf.msg) });
+    controller.start(owner, { pdfLayout: createConsumer(pdf.msg) });
     await completed;
     await controller.stop();
 
@@ -140,17 +135,16 @@ describe('worker loop controller', () => {
     const controller = createWorkerLoopController({
       orchestrator,
       handlers: {
-        runWhisper: async () => ({ alignments: [] }),
         runPdfLayout: async () => {
           active = false;
           attempted();
           throw new Error('retry me');
         },
+        runTtsPlayback: async () => ({ sessionId: 'session' }),
       },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       jobConcurrency: 1,
       pdfAttempts: 2,
-      whisperCodec: createJsonCodec(),
       pdfCodec: pdf.codec,
       isOwnerActive: () => active,
       isStopping: () => false,
@@ -158,7 +152,7 @@ describe('worker loop controller', () => {
       onInFlightJobsChanged: vi.fn(),
     });
 
-    controller.start(owner, { whisper: createConsumer(), pdfLayout: createConsumer(pdf.msg) });
+    controller.start(owner, { pdfLayout: createConsumer(pdf.msg) });
     await attemptCompleted;
     await new Promise((resolve) => setTimeout(resolve, 0));
     await controller.stop();

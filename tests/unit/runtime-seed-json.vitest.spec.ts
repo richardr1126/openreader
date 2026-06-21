@@ -269,6 +269,7 @@ describe('runtime config JSON seeding', () => {
       computeParseSustainedMax: 12,
       computeParseSustainedWindowSec: 300,
       maxUploadMb: 150,
+      ttsPlaybackBackgroundExtent: 'document',
     };
     try {
       await db.delete(adminSettings).where(inArray(adminSettings.key, keys));

@@ -1,28 +1,4 @@
-import { createHash } from 'node:crypto';
 import { PDF_PARSER_VERSION } from './contracts';
-
-function sha256Hex(input: string): string {
-  return createHash('sha256').update(input).digest('hex');
-}
-
-export function buildWhisperOperationKey(input: {
-  audioObjectKey: string;
-  text: string;
-  lang?: string;
-  cacheKey?: string;
-}): string {
-  const cacheKey = input.cacheKey?.trim();
-  if (cacheKey) {
-    return `whisper_align|v1|cache|${cacheKey}|${input.audioObjectKey}`;
-  }
-  return [
-    'whisper_align',
-    'v1',
-    input.audioObjectKey,
-    input.lang ?? '',
-    sha256Hex(input.text),
-  ].join('|');
-}
 
 export function buildPdfOperationKey(input: {
   documentId: string;
@@ -53,4 +29,38 @@ export function pdfSubjectFromOperationKey(opKey: string): {
     documentId,
     namespace: namespace || null,
   };
+}
+
+export function buildTtsPlaybackOperationKey(input: {
+  sessionId: string;
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  startOrdinal: number;
+}): string {
+  // One generation job per session: the sessionId makes the key unique, so a
+  // re-requested identical session reuses its op while distinct sessions don't
+  // collide on the dedup key.
+  return [
+    'tts_playback',
+    'v1',
+    input.documentId,
+    String(input.documentVersion),
+    input.settingsHash,
+    String(input.startOrdinal),
+    input.sessionId,
+  ].join('|');
+}
+
+export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
+  kind: 'tts_playback';
+  documentId: string;
+  sessionId: string;
+} | null {
+  // tts_playback | v1 | documentId | version | settingsHash | startOrdinal | sessionId
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  const sessionId = parts[6];
+  if (kind !== 'tts_playback' || version !== 'v1' || !documentId || !sessionId) return null;
+  return { kind: 'tts_playback', documentId, sessionId };
 }

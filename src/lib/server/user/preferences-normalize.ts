@@ -1,6 +1,6 @@
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/user-state';
-import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
-import { resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
+import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@openreader/tts/provider-catalog';
+import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 
 export interface PreferenceNormalizationContext {
   showAllProviderModels: boolean;
@@ -102,8 +102,6 @@ export function sanitizePreferencesPatch(
         break;
       case 'voiceSpeed':
       case 'audioPlayerSpeed':
-      case 'segmentPreloadDepthPages':
-      case 'segmentPreloadSentenceLookahead':
       case 'ttsSegmentMaxBlockLength':
       case 'headerMargin':
       case 'footerMargin':

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   selectResults: [] as unknown[][],
   deleteWhere: vi.fn(async () => undefined),
+  updateSet: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
   deleteTtsSegmentAudioObjects: vi.fn(async () => 0),
 }));
 
@@ -22,6 +23,9 @@ vi.mock('@openreader/database', () => ({
     })),
     delete: vi.fn(() => ({
       where: mocks.deleteWhere,
+    })),
+    update: vi.fn(() => ({
+      set: mocks.updateSet,
     })),
   },
 }));
@@ -50,12 +54,15 @@ describe('TTS segment cache cleanup', () => {
     mocks.selectResults = [];
     mocks.deleteWhere.mockReset();
     mocks.deleteWhere.mockResolvedValue(undefined);
+    mocks.updateSet.mockReset();
+    mocks.updateSet.mockReturnValue({ where: vi.fn(async () => undefined) });
     mocks.deleteTtsSegmentAudioObjects.mockReset();
     mocks.deleteTtsSegmentAudioObjects.mockResolvedValue(2);
   });
 
   test('counts deleted entries rather than joined variants', async () => {
     mocks.selectResults = [
+      [{ sessionId: 'playback-1' }],
       [{ segmentEntryId: 'entry-1' }, { segmentEntryId: 'entry-2' }],
       [
         { segmentId: 'variant-1', audioKey: 'audio-1' },
@@ -73,6 +80,11 @@ describe('TTS segment cache cleanup', () => {
       deletedSegments: 2,
       requestedAudioObjects: 2,
       deletedAudioObjects: 2,
+      invalidatedPlaybackSessions: 1,
     });
+    expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'failed',
+      lastError: 'TTS segment cache was cleared.',
+    }));
   });
 });

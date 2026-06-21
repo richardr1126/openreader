@@ -10,8 +10,8 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { RefreshIcon, InfoIcon } from '@/components/icons/Icons';
 import { Button, IconButton, PopoverIconTrigger, PopoverRoot, PopoverSurface } from '@/components/ui';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
-import { buildSegmentKey, buildSegmentKeyPrefix } from '@/lib/shared/tts-segment-plan';
+import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@openreader/tts/locator';
+import { buildSegmentKey, buildSegmentKeyPrefix } from '@openreader/tts/segment-plan';
 import {
   canonicalizeEpubSegmentsAgainstSpineText,
   type CanonicalizedEpubSegment,
@@ -49,6 +49,7 @@ type ClearSegmentsPayload = {
   deletedSegments?: number;
   requestedAudioObjects?: number;
   deletedAudioObjects?: number;
+  invalidatedPlaybackSessions?: number;
   warning?: string;
 };
 

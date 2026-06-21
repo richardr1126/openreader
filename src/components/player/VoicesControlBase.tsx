@@ -5,10 +5,10 @@ import {
 } from '@headlessui/react';
 import { ChevronUpDownIcon, AudioWaveIcon, CheckIcon } from '@/components/icons/Icons';
 import { useMemo } from 'react';
-import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
-import { keepKokoroVoicesInOneLanguage } from '@/lib/shared/language';
-import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@openreader/tts/kokoro';
+import { keepKokoroVoicesInOneLanguage } from '@openreader/tts/language';
+import { type TtsProviderType } from '@openreader/tts/provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn } from '@/components/ui';
 
 export function VoicesControlBase({

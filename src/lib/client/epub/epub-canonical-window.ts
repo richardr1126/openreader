@@ -10,7 +10,7 @@ import {
   normalizeSegmentIdentityText,
   planCanonicalTtsSegments,
   type CanonicalTtsSegment,
-} from '@/lib/shared/tts-segment-plan';
+} from '@openreader/tts/segment-plan';
 import type { TTSSegmentLocator } from '@/types/client';
 
 /**

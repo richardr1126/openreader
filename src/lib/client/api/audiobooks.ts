@@ -4,9 +4,6 @@ import type {
   TTSRequestError,
   AudiobookStatusResponse,
   CreateChapterPayload,
-  VoicesResponse,
-  TTSSegmentsEnsureRequest,
-  TTSSegmentsEnsureResponse,
 } from '@/types/client';
 import type { TTSAudiobookChapter } from '@/types/tts';
 
@@ -191,53 +188,4 @@ export const downloadAudiobookChapter = async (bookId: string, chapterIndex: num
   const response = await fetch(`/api/audiobook/chapter?bookId=${bookId}&chapterIndex=${chapterIndex}`);
   if (!response.ok) throw new Error('Download failed');
   return await response.blob();
-};
-
-// --- TTS API ---
-
-
-
-export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
-  const response = await fetch('/api/tts/voices', {
-    headers,
-    signal,
-  });
-
-  if (!response.ok) throw new Error('Failed to fetch voices');
-  return await response.json();
-};
-
-export const ensureTtsSegments = async (
-  payload: TTSSegmentsEnsureRequest,
-  headers: TTSRequestHeaders,
-  signal?: AbortSignal,
-): Promise<TTSSegmentsEnsureResponse> => {
-  const response = await fetch('/api/tts/segments/ensure', {
-    method: 'POST',
-    headers: headers as HeadersInit,
-    body: JSON.stringify(payload),
-    signal,
-  });
-
-  if (!response.ok) {
-    let problem: unknown = undefined;
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/problem+json') || contentType.includes('application/json')) {
-      problem = await response.json().catch(() => null);
-    }
-
-    const err = new Error(`TTS segment ensure failed with status ${response.status}`) as TTSRequestError;
-    err.status = response.status;
-    if (typeof problem === 'object' && problem !== null) {
-      const rec = problem as Record<string, unknown>;
-      if (typeof rec.code === 'string') err.code = rec.code;
-      if (typeof rec.type === 'string') err.type = rec.type;
-      if (typeof rec.title === 'string') err.title = rec.title;
-      if (typeof rec.detail === 'string') err.detail = rec.detail;
-    }
-
-    throw err;
-  }
-
-  return await response.json();
 };

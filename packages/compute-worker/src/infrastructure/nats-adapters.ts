@@ -11,7 +11,7 @@ import type {
 } from '../operations';
 import type {
   PdfLayoutJobRequest,
-  WhisperAlignJobRequest,
+  TtsPlaybackJobRequest,
   WorkerOperationKind,
 } from '../operations/contracts';
 import { createJsonCodec } from './json-codec';
@@ -305,37 +305,37 @@ export class JetStreamOperationEventStream<Result = unknown> implements Operatio
 
 export interface JetStreamOperationQueueDeps<TPayload> {
   getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
-  whisperSubject: string;
   layoutSubject: string;
+  ttsPlaybackSubject: string;
   onEnqueued?: (job: QueuedOperation<TPayload>) => Promise<void> | void;
 }
 
-export class JetStreamOperationQueue implements OperationQueue<WhisperAlignJobRequest | PdfLayoutJobRequest> {
+export class JetStreamOperationQueue implements OperationQueue<PdfLayoutJobRequest | TtsPlaybackJobRequest> {
   private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
-  private readonly whisperSubject: string;
   private readonly layoutSubject: string;
-  private readonly onEnqueued?: (job: QueuedOperation<WhisperAlignJobRequest | PdfLayoutJobRequest>) => Promise<void> | void;
-  private readonly whisperCodec = createJsonCodec<QueuedOperation<WhisperAlignJobRequest>>();
+  private readonly ttsPlaybackSubject: string;
+  private readonly onEnqueued?: (job: QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest>) => Promise<void> | void;
   private readonly layoutCodec = createJsonCodec<QueuedOperation<PdfLayoutJobRequest>>();
+  private readonly ttsPlaybackCodec = createJsonCodec<QueuedOperation<TtsPlaybackJobRequest>>();
 
-  constructor(deps: JetStreamOperationQueueDeps<WhisperAlignJobRequest | PdfLayoutJobRequest>) {
+  constructor(deps: JetStreamOperationQueueDeps<PdfLayoutJobRequest | TtsPlaybackJobRequest>) {
     this.getJs = deps.getJs;
-    this.whisperSubject = deps.whisperSubject;
     this.layoutSubject = deps.layoutSubject;
+    this.ttsPlaybackSubject = deps.ttsPlaybackSubject;
     this.onEnqueued = deps.onEnqueued;
   }
 
-  async enqueue(job: QueuedOperation<WhisperAlignJobRequest | PdfLayoutJobRequest>): Promise<void> {
+  async enqueue(job: QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest>): Promise<void> {
     const js = await this.getJs();
-    if (job.kind === 'whisper_align') {
-      await js.publish(
-        this.whisperSubject,
-        this.whisperCodec.encode(job as QueuedOperation<WhisperAlignJobRequest>),
-      );
-    } else if (job.kind === 'pdf_layout') {
+    if (job.kind === 'pdf_layout') {
       await js.publish(
         this.layoutSubject,
         this.layoutCodec.encode(job as QueuedOperation<PdfLayoutJobRequest>),
+      );
+    } else if (job.kind === 'tts_playback') {
+      await js.publish(
+        this.ttsPlaybackSubject,
+        this.ttsPlaybackCodec.encode(job as QueuedOperation<TtsPlaybackJobRequest>),
       );
     } else {
       const exhaustive: never = job.kind;
@@ -345,7 +345,7 @@ export class JetStreamOperationQueue implements OperationQueue<WhisperAlignJobRe
     await this.onEnqueued?.(job);
   }
 
-  async claimNext(_kind: WorkerOperationKind): Promise<QueuedOperation<WhisperAlignJobRequest | PdfLayoutJobRequest> | null> {
+  async claimNext(_kind: WorkerOperationKind): Promise<QueuedOperation<PdfLayoutJobRequest | TtsPlaybackJobRequest> | null> {
     throw new Error('JetStreamOperationQueue.claimNext is not used by the worker runtime');
   }
 

@@ -12,7 +12,7 @@ import {
   locateAlignmentWordSpans,
   type AlignmentCharSpan,
 } from '@/lib/client/highlight-token-alignment';
-import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { TTSSentenceAlignment } from '@/types/tts';
 
 type UseEpubHighlightingParams = {

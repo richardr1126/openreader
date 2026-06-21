@@ -1,7 +1,7 @@
 'use client';
 
 import type { Rendition } from 'epubjs';
-import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import { normalizeMappedChars, type MappedChar } from '@/lib/client/highlight-char-map';
 
 type EpubMappedPosition = {

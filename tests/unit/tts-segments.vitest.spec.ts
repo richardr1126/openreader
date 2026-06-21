@@ -4,13 +4,14 @@ import {
   buildProportionalAlignment,
   buildTtsSegmentEntryId,
   buildTtsSegmentId,
+  buildTtsSegmentSettingsJson,
   buildTtsSegmentSettingsHash,
   buildTtsSegmentTextHash,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
   projectSegmentLocator,
-} from '../../src/lib/server/tts/segments';
+} from '@openreader/tts/segments';
 
 describe('tts segment helpers', () => {
   test('builds a user/document-scoped audio prefix across every version and variant', () => {
@@ -40,6 +41,41 @@ describe('tts segment helpers', () => {
       ttsInstructions: 'calm',
     });
     expect(a).toBe(b);
+  });
+
+  test('builds SQLite settings JSON with worker-readable keys', () => {
+    const previousPostgresUrl = process.env.POSTGRES_URL;
+    delete process.env.POSTGRES_URL;
+    try {
+      const json = buildTtsSegmentSettingsJson({
+        providerRef: 'supertonic',
+        providerType: 'custom-openai',
+        ttsModel: 'sonic',
+        voice: 'narrator',
+        nativeSpeed: 1,
+        ttsInstructions: 'calm',
+        language: 'en',
+      });
+      expect(typeof json).toBe('string');
+      const parsed = JSON.parse(json as string);
+      expect(parsed).toMatchObject({
+        providerRef: 'supertonic',
+        providerType: 'custom-openai',
+        ttsModel: 'sonic',
+        voice: 'narrator',
+        nativeSpeed: 1,
+        ttsInstructions: 'calm',
+        language: 'en',
+      });
+      expect(parsed).not.toHaveProperty('model');
+      expect(parsed).not.toHaveProperty('speed');
+    } finally {
+      if (previousPostgresUrl === undefined) {
+        delete process.env.POSTGRES_URL;
+      } else {
+        process.env.POSTGRES_URL = previousPostgresUrl;
+      }
+    }
   });
 
   test('builds deterministic segment id', () => {
@@ -201,9 +237,22 @@ describe('tts segment helpers', () => {
     });
     expect(alignment.sentenceIndex).toBe(5);
     expect(alignment.words.length).toBe(3);
-    expect(alignment.words[0].startSec).toBe(0);
-    expect(alignment.words[2].endSec).toBeGreaterThan(1.4);
-    expect(alignment.words[1].charStart).toBeGreaterThan(alignment.words[0].charStart);
+    const first = alignment.words[0];
+    const second = alignment.words[1];
+    const third = alignment.words[2];
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(third).toBeDefined();
+    expect(first!.startSec).toBe(0);
+    expect(third!.endSec).toBeGreaterThan(1.4);
+    expect(first!.charStart).toBeDefined();
+    expect(second!.charStart).toBeDefined();
+    const firstCharStart = first!.charStart;
+    const secondCharStart = second!.charStart;
+    if (firstCharStart === undefined || secondCharStart === undefined) {
+      throw new Error('Expected proportional alignment words to include charStart offsets');
+    }
+    expect(secondCharStart).toBeGreaterThan(firstCharStart);
   });
 
   test('builds proportional alignment for no-space languages', () => {

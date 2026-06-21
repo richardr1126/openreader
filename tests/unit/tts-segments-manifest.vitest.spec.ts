@@ -6,7 +6,7 @@ import {
   encodeManifestCursor,
   parseManifestPageSize,
 } from '../../src/lib/server/tts/segments-manifest';
-import { locatorGroupKey, locatorIdentityKey } from '../../src/lib/shared/tts-locator';
+import { locatorGroupKey, locatorIdentityKey } from '@openreader/tts/locator';
 
 describe('tts segments manifest helpers', () => {
   test('dedupe prefers completed variant over newer pending for same settings key', () => {

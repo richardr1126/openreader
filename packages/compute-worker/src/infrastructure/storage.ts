@@ -11,6 +11,7 @@ export interface ArtifactStorage {
   readObject(key: string): Promise<ArrayBuffer>;
   objectExists(key: string): Promise<boolean>;
   deleteObject(key: string): Promise<void>;
+  putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown): Promise<string>;
 }
 
@@ -110,6 +111,15 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
       await config.client.send(new DeleteObjectCommand({
         Bucket: config.bucket,
         Key: safeKey(key),
+      }));
+    },
+    async putObject(key, body, contentType) {
+      await config.client.send(new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: safeKey(key),
+        Body: Buffer.from(body),
+        ContentType: contentType,
+        ServerSideEncryption: 'AES256',
       }));
     },
     async putParsedPdf(documentId, namespace, parsed) {

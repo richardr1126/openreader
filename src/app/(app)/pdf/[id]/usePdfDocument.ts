@@ -29,9 +29,8 @@ import {
   clearWordHighlights,
   highlightWordIndex,
 } from '@/lib/client/pdf';
-import { buildPageTextFromBlocks } from '@/lib/client/pdf-block-text';
-import { buildPdfPageSourceUnits, buildPdfPrefetchPayload } from '@/lib/client/pdf-tts-planning';
-import type { CanonicalTtsSourceUnit } from '@/lib/shared/tts-segment-plan';
+import { buildPageTextFromBlocks, buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
+import type { CanonicalTtsSourceUnit } from '@openreader/tts/segment-plan';
 import {
   DEFAULT_DOCUMENT_SETTINGS,
   type DocumentSettings,
@@ -46,7 +45,6 @@ import type {
   TTSAudiobookChapter,
 } from '@/types/tts';
 import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
-import { clampSegmentPreloadDepth } from '@/types/config';
 import type { BaseDocument } from '@/types/documents';
 
 /**
@@ -137,11 +135,9 @@ export function usePdfDocument(
     setCurrDocPages,
     setIsEPUB,
     setDocumentLanguage,
-    registerVisualPageChangeHandler,
   } = useTTS();
   const {
     providerRef,
-    segmentPreloadDepthPages,
     ttsSegmentMaxBlockLength,
   } = useConfig();
   const parsedPdf = useParsedPdfDocument(documentId);
@@ -172,7 +168,6 @@ export function usePdfDocument(
     settings: documentSettings,
     maxBlockLength: ttsSegmentMaxBlockLength,
   }), [parsedDocument, documentSettings, ttsSegmentMaxBlockLength]);
-  const pageTextCacheRef = useRef<Map<number, string>>(new Map());
   const [currDocPage, setCurrDocPage] = useState<number>(currDocPageNumber);
 
   // Used to cancel/ignore in-flight text extraction when the document changes
@@ -189,10 +184,6 @@ export function usePdfDocument(
   useEffect(() => {
     pdfDocumentRef.current = pdfDocument;
   }, [pdfDocument]);
-
-  useEffect(() => {
-    pageTextCacheRef.current.clear();
-  }, [parsedDocument, documentSettings.pdf?.skipBlockKinds]);
 
   useEffect(() => {
     setCurrDocPage(currDocPageNumber);
@@ -241,18 +232,10 @@ export function usePdfDocument(
         return buildPdfPageSourceUnits(page, pageNum, documentSettings.pdf?.skipBlockKinds ?? []);
       };
 
-      const getPageText = async (pageNumber: number, shouldCache = false): Promise<string> => {
+      const getPageText = async (pageNumber: number): Promise<string> => {
         // Ignore stale/in-flight work if the document or worker changed.
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
           throw new DOMException('Stale PDF extraction', 'AbortError');
-        }
-
-        if (pageTextCacheRef.current.has(pageNumber)) {
-          const cached = pageTextCacheRef.current.get(pageNumber)!;
-          if (!shouldCache) {
-            pageTextCacheRef.current.delete(pageNumber);
-          }
-          return cached;
         }
 
         const parsedPage = pageFromParsed(pageNumber);
@@ -264,37 +247,10 @@ export function usePdfDocument(
           throw new DOMException('Stale PDF extraction', 'AbortError');
         }
 
-        if (shouldCache) {
-          pageTextCacheRef.current.set(pageNumber, extracted);
-        }
         return extracted;
       };
 
-      const totalPages = currDocPages ?? currentPdf.numPages;
-      const prevPageNumber = currDocPageNumber > 1 ? currDocPageNumber - 1 : undefined;
-      const nextPageNumber = currDocPageNumber < totalPages ? currDocPageNumber + 1 : undefined;
-      const preloadDepth = clampSegmentPreloadDepth(segmentPreloadDepthPages);
-      const upcomingPageNumbers: number[] = [];
-      for (let offset = 1; offset <= preloadDepth; offset += 1) {
-        const pageNum = currDocPageNumber + offset;
-        if (pageNum > totalPages) break;
-        upcomingPageNumbers.push(pageNum);
-      }
-
-      const [text, prevText, ...upcomingTexts] = await Promise.all([
-        getPageText(currDocPageNumber),
-        prevPageNumber ? getPageText(prevPageNumber) : Promise.resolve<string | undefined>(undefined),
-        ...upcomingPageNumbers.map((pageNum) => getPageText(pageNum, true)),
-      ]);
-      const {
-        nextText,
-        nextSourceUnits,
-        additionalUpcoming,
-      } = buildPdfPrefetchPayload(
-        upcomingPageNumbers,
-        upcomingTexts,
-        sourceUnitsFromParsedPage,
-      );
+      const text = await getPageText(currDocPageNumber);
 
       if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
         return;
@@ -309,11 +265,6 @@ export function usePdfDocument(
         const sourceUnits = sourceUnitsFromParsedPage(currDocPageNumber);
         setTTSText(text, {
           location: currDocPageNumber,
-          previousText: prevText,
-          nextLocation: nextPageNumber,
-          nextText: nextText,
-          nextSourceUnits,
-          upcomingLocations: additionalUpcoming,
           ...(sourceUnits.length > 0 ? { sourceUnits } : {}),
         });
       }
@@ -330,7 +281,6 @@ export function usePdfDocument(
     currDocPages,
     setTTSText,
     currDocText,
-    segmentPreloadDepthPages,
     parsedDocument,
     parseStatus,
     documentSettings,
@@ -367,7 +317,6 @@ export function usePdfDocument(
       // or fast refresh.
       pdfDocGenerationRef.current += 1;
       loadSeqRef.current += 1;
-      pageTextCacheRef.current.clear();
       setPdfDocument(undefined);
       setCurrDocPages(undefined);
       setCurrDocText(undefined);
@@ -434,7 +383,6 @@ export function usePdfDocument(
     try {
       await parsedPdf.forceReparseMutation.mutateAsync();
       loadSeqRef.current += 1;
-      pageTextCacheRef.current.clear();
       setCurrDocText(undefined);
       setIsPlaybackReady(false);
       lastPreparedPlaybackPageRef.current = null;
@@ -464,7 +412,6 @@ export function usePdfDocument(
     setPdfDocument(undefined);
     setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
     lastPreparedPlaybackPageRef.current = null;
-    pageTextCacheRef.current.clear();
     stop();
   }, [setCurrDocId, setCurrDocName, setCurrDocData, setCurrDocPages, setCurrDocText, setPdfDocument, stop]);
 
@@ -536,18 +483,11 @@ export function usePdfDocument(
     setIsEPUB(false);
   }, [setIsEPUB]);
 
-  useEffect(() => {
-    registerVisualPageChangeHandler(location => {
-      if (typeof location !== 'number') return;
-      if (!pdfDocument) return;
-      const totalPages = currDocPages ?? pdfDocument.numPages;
-      const clamped = Math.min(Math.max(location, 1), totalPages);
-      setCurrDocPage(clamped);
-    });
-    return () => {
-      registerVisualPageChangeHandler(null);
-    };
-  }, [registerVisualPageChangeHandler, currDocPages, pdfDocument]);
+  // The local currDocPage is a read-only mirror of the TTS context page (synced
+  // by the effect above). The context is the single source of truth: manual
+  // navigation calls skipToLocation (which sets the context page) and playback
+  // advances the context page directly as audio crosses page boundaries, so the
+  // viewer always turns. There is no independent local page setter to diverge.
 
   return useMemo(
     () => ({

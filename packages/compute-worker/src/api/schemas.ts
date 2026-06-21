@@ -47,18 +47,47 @@ export const ttsSentenceAlignmentSchema = z.object({
   })),
 });
 
-export const whisperOperationCreateSchema = z.object({
-  text: z.string().trim().min(1),
-  lang: z.string().trim().min(1).max(16).optional(),
-  cacheKey: z.string().trim().min(1).max(256).optional(),
-  audioObjectKey: z.string().trim().min(1).max(2048),
-});
-
 export const pdfOperationCreateSchema = z.object({
   documentId: documentIdSchema,
   namespace: namespaceSchema,
   documentObjectKey: z.string().trim().min(1).max(2048),
   replaceToken: z.string().trim().min(1).max(256).optional(),
+});
+
+export const ttsPlaybackOperationCreateSchema = z.object({
+  sessionId: z.string().trim().min(1).max(128),
+  userId: z.string().trim().min(1).max(256),
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative(),
+  readerType: z.enum(['pdf', 'epub', 'html']),
+  settingsHash: z.string().trim().min(1).max(256),
+  settingsJson: z.unknown(),
+  startOrdinal: z.number().int().nonnegative().default(0),
+  planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  aheadWindow: z.number().int().positive().max(4096).optional(),
+  backgroundExtent: z.enum(['section', 'document']).optional(),
+  planning: z.object({
+    sourceUnits: z.array(z.object({
+      sourceKey: z.string().trim().min(1).max(512),
+      text: z.string().min(1).max(100_000),
+      locator: z.unknown().optional(),
+    })).max(4096).optional(),
+    currentSourceKeys: z.array(z.string().trim().min(1).max(512)).max(4096).optional(),
+    startSegmentKey: z.string().trim().min(1).max(512).optional(),
+    startText: z.string().trim().min(1).max(20_000).optional(),
+    maxBlockLength: z.number().int().positive().max(20_000).optional(),
+    enforceSourceBoundaries: z.boolean().optional(),
+    language: z.string().trim().min(1).max(32).optional(),
+    documentSource: z.object({
+      namespace: z.string().trim().min(1).max(128).nullable(),
+      skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+      extent: z.enum(['section', 'document']),
+      startPage: z.number().int().positive().optional(),
+      startSpineIndex: z.number().int().nonnegative().optional(),
+      isPlainText: z.boolean().optional(),
+    }).optional(),
+  }),
 });
 
 export const pdfResolveSchema = z.object({
@@ -98,11 +127,15 @@ export const pdfLayoutProgressSchema = z.object({
 export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('whisper_align') }),
     z.object({
       kind: z.literal('pdf_layout'),
       documentId: z.string(),
       namespace: z.string().nullable(),
+    }),
+    z.object({
+      kind: z.literal('tts_playback'),
+      documentId: z.string(),
+      sessionId: z.string(),
     }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),

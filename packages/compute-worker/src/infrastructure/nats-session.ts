@@ -8,7 +8,7 @@ import {
   JOBS_STREAM_NAME,
   LAYOUT_CONSUMER_NAME,
   NATS_API_TIMEOUT_MS,
-  WHISPER_CONSUMER_NAME,
+  TTS_PLAYBACK_CONSUMER_NAME,
   ensureJetStreamResources,
 } from './nats';
 
@@ -22,8 +22,8 @@ export interface NatsSession {
   js: JetStreamClient;
   jsm: JetStreamManager;
   kv: Awaited<ReturnType<Kvm['create']>>;
-  whisperConsumer: Consumer;
   layoutConsumer: Consumer;
+  ttsPlaybackConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -157,8 +157,8 @@ export function createNatsSessionManager(input: {
         js,
         jsm,
         kv,
-        whisperConsumer: await js.consumers.get(JOBS_STREAM_NAME, WHISPER_CONSUMER_NAME),
         layoutConsumer: await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME),
+        ttsPlaybackConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

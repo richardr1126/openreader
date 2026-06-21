@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
-import { parseHtmlBlocks, type HtmlBlock } from '@/lib/client/html/blocks';
+import { buildHtmlDocumentText, parseHtmlBlocks, type HtmlBlock } from '@openreader/tts/html-blocks';
 import { createHtmlAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/html';
 import { regenerateAudiobookChapter, runAudiobookGeneration } from '@/lib/client/audiobooks/pipeline';
 import type {
@@ -50,19 +50,6 @@ function isTxtName(name: string | undefined | null): boolean {
   return !!name && name.toLowerCase().endsWith('.txt');
 }
 
-/**
- * Concatenate every block's plain text into one TTS source. We treat the
- * entire HTML/TXT/MD document as a single "page" with a flat sequence of
- * segments (sentence indices), so playback advances naturally through the
- * doc without any per-block locator bookkeeping.
- */
-function buildFullDocumentText(blocks: HtmlBlock[]): string {
-  return blocks
-    .map((b) => b.plainText)
-    .filter((t) => t && t.trim())
-    .join('\n\n');
-}
-
 export function useHtmlDocument(): HtmlDocumentState {
   const { setText: setTTSText, stop, setIsEPUB } = useTTS();
   const {
@@ -80,7 +67,7 @@ export function useHtmlDocument(): HtmlDocumentState {
     [currDocData, isTxt],
   );
 
-  const currDocText = useMemo(() => buildFullDocumentText(blocks), [blocks]);
+  const currDocText = useMemo(() => buildHtmlDocumentText(blocks), [blocks]);
 
   // HTML reader is not an EPUB reader.
   useEffect(() => {

@@ -108,8 +108,8 @@ describe('jetstream adapters', () => {
     const js = new FakeJetStream();
     const queue = new JetStreamOperationQueue({
       getJs: async () => js as never,
-      whisperSubject: 'jobs.whisper',
       layoutSubject: 'jobs.layout',
+      ttsPlaybackSubject: 'jobs.tts_playback',
     });
     const events = new JetStreamOperationEventStream({
       getJs: async () => js as never,
@@ -162,8 +162,8 @@ describe('jetstream adapters', () => {
     });
     const queue = new JetStreamOperationQueue({
       getJs: async () => js as never,
-      whisperSubject: 'jobs.whisper',
       layoutSubject: 'jobs.layout',
+      ttsPlaybackSubject: 'jobs.tts_playback',
     });
 
     let now = 1_000;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildPageTextFromBlocks } from '../../src/lib/client/pdf-block-text';
+import { buildPageTextFromBlocks } from '@openreader/tts/pdf-sources';
 import type { ParsedPdfPage } from '../../src/types/parsed-pdf';
 
 describe('buildPageTextFromBlocks', () => {

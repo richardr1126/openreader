@@ -1,5 +1,5 @@
-import { preprocessSentenceForAudio } from '@/lib/shared/nlp';
-import type { CanonicalTtsSegment } from '@/lib/shared/tts-segment-plan';
+import { preprocessSentenceForAudio } from '@openreader/tts/nlp';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 export type CompletedEpubBoundarySegment = {
   key: string;

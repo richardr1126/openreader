@@ -3,7 +3,7 @@
 import { ChevronUpDownIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
 
 export const SpeedControl = ({ 

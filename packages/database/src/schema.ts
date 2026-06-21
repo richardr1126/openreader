@@ -23,3 +23,4 @@ export const adminProviders = usePostgres ? postgresSchema.adminProviders : sqli
 export const adminSettings = usePostgres ? postgresSchema.adminSettings : sqliteSchema.adminSettings;
 export const scheduledTasks = usePostgres ? postgresSchema.scheduledTasks : sqliteSchema.scheduledTasks;
 export const documentBlobLeases = usePostgres ? postgresSchema.documentBlobLeases : sqliteSchema.documentBlobLeases;
+export const ttsPlaybackSessions = usePostgres ? postgresSchema.ttsPlaybackSessions : sqliteSchema.ttsPlaybackSessions;

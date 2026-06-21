@@ -264,6 +264,36 @@ export const documentBlobLeases = pgTable('document_blob_leases', {
   leaseUntilMs: bigint('lease_until_ms', { mode: 'number' }).notNull(),
 });
 
+export const ttsPlaybackSessions = pgTable('tts_playback_sessions', {
+  sessionId: text('session_id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  storageUserId: text('storage_user_id').notNull(),
+  documentId: text('document_id').notNull(),
+  documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
+  readerType: text('reader_type').notNull(),
+  status: text('status').notNull().default('queued'),
+  workerOpId: text('worker_op_id'),
+  settingsHash: text('settings_hash').notNull(),
+  settingsJson: jsonb('settings_json').notNull(),
+  startOrdinal: integer('start_ordinal').notNull().default(0),
+  cursorOrdinal: integer('cursor_ordinal').notNull().default(0),
+  cursorUpdatedAt: bigint('cursor_updated_at', { mode: 'number' }),
+  planObjectKey: text('plan_object_key'),
+  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+  lastError: text('last_error'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+}, (table) => [
+  index('idx_tts_playback_sessions_user_doc_settings').on(
+    table.userId,
+    table.documentId,
+    table.documentVersion,
+    table.settingsHash,
+    table.startOrdinal,
+  ),
+  index('idx_tts_playback_sessions_expiry').on(table.expiresAt),
+]);
+
 export const ttsSegmentVariants = pgTable('tts_segment_variants', {
   segmentId: text('segment_id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),

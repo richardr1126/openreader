@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getVoices } from '@/lib/client/api/audiobooks';
+import { getVoices } from '@/lib/client/api/tts';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { type TtsProviderType } from '@openreader/tts/provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 
 /**
  * Custom hook for managing TTS voices
@@ -19,7 +19,6 @@ export function useVoiceManagement(
   providerRef: string | undefined,
   providerType: TtsProviderType | undefined,
   ttsModel: string | undefined,
-  enabled = true,
 ) {
   const { data: session, isPending: isSessionPending } = useAuthSession();
   const effectiveProviderRef = providerRef || 'openai';
@@ -36,7 +35,7 @@ export function useVoiceManagement(
       'x-tts-model': effectiveModel,
       'Content-Type': 'application/json',
     }, signal),
-    enabled: enabled && !isSessionPending,
+    enabled: !isSessionPending,
   });
   const availableVoices = query.isPending
     ? []

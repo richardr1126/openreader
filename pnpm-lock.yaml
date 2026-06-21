@@ -32,6 +32,9 @@ importers:
       '@openreader/database':
         specifier: workspace:*
         version: link:packages/database
+      '@openreader/tts':
+        specifier: workspace:*
+        version: link:packages/tts
       '@speech-sdk/core':
         specifier: ^0.15.0
         version: 0.15.0
@@ -252,6 +255,21 @@ importers:
       '@nats-io/transport-node':
         specifier: ^3.4.0
         version: 3.4.0
+      '@openreader/database':
+        specifier: workspace:*
+        version: link:../database
+      '@openreader/tts':
+        specifier: workspace:*
+        version: link:../tts
+      '@speech-sdk/core':
+        specifier: ^0.15.0
+        version: 0.15.0
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.0)(kysely@0.28.17)(pg@8.21.0)
+      fast-xml-parser:
+        specifier: ^5.8.0
+        version: 5.8.0
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
@@ -261,9 +279,18 @@ importers:
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
+      linkedom:
+        specifier: ^0.18.12
+        version: 0.18.12(canvas@3.2.3)
+      lru-cache:
+        specifier: ^11.5.1
+        version: 11.5.1
       onnxruntime-node:
         specifier: ^1.26.0
         version: 1.26.0
+      openai:
+        specifier: ^6.41.0
+        version: 6.41.0(zod@4.4.3)
       pdfjs-dist:
         specifier: 4.8.69
         version: 4.8.69
@@ -273,6 +300,9 @@ importers:
       pino-pretty:
         specifier: ^13.1.3
         version: 13.1.3
+      replicate:
+        specifier: ^1.4.0
+        version: 1.4.0
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -294,6 +324,30 @@ importers:
       pg:
         specifier: ^8.21.0
         version: 8.21.0
+
+  packages/tts:
+    dependencies:
+      '@speech-sdk/core':
+        specifier: ^0.15.0
+        version: 0.15.0
+      ffmpeg-static:
+        specifier: ^5.3.0
+        version: 5.3.0
+      lru-cache:
+        specifier: ^11.5.1
+        version: 11.5.1
+      openai:
+        specifier: ^6.41.0
+        version: 6.41.0(zod@4.4.3)
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      pino-pretty:
+        specifier: ^13.1.3
+        version: 13.1.3
+      replicate:
+        specifier: ^1.4.0
+        version: 1.4.0
 
 packages:
 
@@ -3966,7 +4020,6 @@ packages:
 
   openai@6.41.0:
     resolution: {integrity: sha512-IGWPopZq6Rjoynjfb3NSLf/z2MTw7UiOsm9TAjPGAjUESH7Uq41Trg4QWehBEn58p74i+m7uoRPV2vXcpPXhyA==}
-    hasBin: true
     peerDependencies:
       ws: ^8.18.0
       zod: ^3.25 || ^4.0

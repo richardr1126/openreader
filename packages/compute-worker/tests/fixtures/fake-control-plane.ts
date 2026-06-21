@@ -1,13 +1,13 @@
 import type {
   PdfLayoutJobResult,
-  WhisperAlignJobResult,
+  TtsPlaybackJobResult,
   WorkerOperationEvent,
   WorkerOperationRequest,
   WorkerOperationState,
 } from '../../src/operations/contracts';
 import type { ComputeWorkerRouteDeps } from '../../src/api/app';
 
-type ComputeResult = WhisperAlignJobResult | PdfLayoutJobResult;
+type ComputeResult = PdfLayoutJobResult | TtsPlaybackJobResult;
 type ComputeState = WorkerOperationState<ComputeResult>;
 type ComputeEvent = WorkerOperationEvent<ComputeResult>;
 
@@ -18,6 +18,7 @@ export class FakeControlPlane {
   private readonly eventsByOpId = new Map<string, ComputeEvent[]>();
   private readonly artifactKeys = new Set<string>();
   private nextOpId = 1;
+  readonly enqueuedRequests: WorkerOperationRequest[] = [];
 
   readonly deps = {
     orchestrator: {
@@ -98,6 +99,7 @@ export class FakeControlPlane {
   }
 
   private async enqueueOrReuse(request: WorkerOperationRequest): Promise<ComputeState> {
+    this.enqueuedRequests.push(request);
     const existingId = this.opIdByOpKey.get(request.opKey);
     if (existingId) {
       const existing = this.stateByOpId.get(existingId);

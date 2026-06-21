@@ -61,6 +61,17 @@ function positiveIntValue(defaultValue: number): RuntimeConfigKeyDef<number> {
   };
 }
 
+function enumValue<T extends string>(allowed: readonly T[], defaultValue: T): RuntimeConfigKeyDef<T> {
+  return {
+    default: defaultValue,
+    validate(value) {
+      return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+        ? (value as T)
+        : undefined;
+    },
+  };
+}
+
 export const RUNTIME_CONFIG_SCHEMA = {
   defaultTtsProvider: stringValue('custom-openai'),
   changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json'),
@@ -92,6 +103,11 @@ export const RUNTIME_CONFIG_SCHEMA = {
   computeParseSustainedWindowSec: positiveIntValue(600),
   // Maximum size (MB) accepted for a single document upload.
   maxUploadMb: positiveIntValue(200),
+  // How far ahead the worker generates a background ("disconnected") TTS playback
+  // session. 'section' = just the current PDF page / EPUB chapter; 'document' =
+  // the whole document from the current position onward, so background playback
+  // continues even if the client stops. Worker-owned; see worker-owned planning.
+  ttsPlaybackBackgroundExtent: enumValue(['section', 'document'] as const, 'section'),
 } as const satisfies Record<string, RuntimeConfigKeyDef<unknown>>;
 
 export type RuntimeConfigKey = keyof typeof RUNTIME_CONFIG_SCHEMA;

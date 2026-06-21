@@ -22,20 +22,21 @@ export type ComputeOperationEvent<Result = unknown> = {
   snapshot: ComputeOperation<Result>;
 };
 
-export type WhisperAlignRequest =
-  paths['/v1/whisper-align/operations']['post']['requestBody']['content']['application/json'];
 export type PdfLayoutRequest =
   paths['/v1/pdf-layout/operations']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackRequest =
+  paths['/v1/tts-playback/operations']['post']['requestBody']['content']['application/json'];
 export type PdfLayoutResolveRequest =
   paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
 
-export type WhisperAlignResult = {
-  alignments: TTSSentenceAlignment[];
+export type PdfLayoutResult = {
+  parsedObjectKey: string;
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
-export type PdfLayoutResult = {
-  parsedObjectKey: string;
+export type TtsPlaybackResult = {
+  sessionId: string;
+  planObjectKey?: string;
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 

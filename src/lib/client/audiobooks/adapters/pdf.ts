@@ -1,5 +1,5 @@
 import type { AudiobookSourceAdapter, PreparedAudiobookChapter } from '@/lib/client/audiobooks/pipeline';
-import { normalizeTextForTts } from '@/lib/shared/nlp';
+import { normalizeTextForTts } from '@openreader/tts/nlp';
 import type { ParsedPdfDocument, ParsedPdfBlock } from '@/types/parsed-pdf';
 import type { DocumentSettings } from '@/types/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';

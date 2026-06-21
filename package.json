@@ -45,6 +45,7 @@
     "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^0.1.100",
     "@openreader/database": "workspace:*",
+    "@openreader/tts": "workspace:*",
     "@speech-sdk/core": "^0.15.0",
     "@tanstack/react-query": "^5.101.0",
     "@types/archiver": "^7.0.0",

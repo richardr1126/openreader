@@ -23,12 +23,12 @@ import { mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
 import { cacheStoredDocumentFromBytes, clearDocumentCache } from '@/lib/client/cache/documents';
 import { clearAllDocumentPreviewCaches, clearInMemoryDocumentPreviewCache } from '@/lib/client/cache/previews';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
-import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import { type TtsProviderType } from '@openreader/tts/provider-catalog';
 import {
   resolveProviderDefaults,
   resolveEffectiveProviderType,
   resolveTtsProviderModelPolicy,
-} from '@/lib/shared/tts-provider-policy';
+} from '@openreader/tts/provider-policy';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';

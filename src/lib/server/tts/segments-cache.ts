@@ -1,11 +1,11 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
+import { ttsSegmentEntries, ttsSegmentVariants, ttsPlaybackSessions } from '@openreader/database/schema';
 import {
   deleteTtsSegmentAudioObjects,
   deleteTtsSegmentPrefix,
 } from '@/lib/server/tts/segments-blobstore';
-import { buildTtsSegmentDocumentPrefix } from '@/lib/server/tts/segments';
+import { buildTtsSegmentDocumentPrefix } from '@openreader/tts/segments';
 import { getS3Config } from '@/lib/server/storage/s3';
 import type { ReaderType } from '@/types/user-state';
 import { serverLogger } from '@/lib/server/logger';
@@ -22,12 +22,14 @@ export type ClearTtsSegmentCacheResult = {
   deletedSegments: number;
   requestedAudioObjects: number;
   deletedAudioObjects: number;
+  invalidatedPlaybackSessions: number;
   warning?: string;
 };
 
 export async function clearTtsSegmentCache(
   input: ClearTtsSegmentCacheInput,
 ): Promise<ClearTtsSegmentCacheResult> {
+  const now = Date.now();
   const conditions = [
     eq(ttsSegmentEntries.userId, input.userId),
     eq(ttsSegmentEntries.documentId, input.documentId),
@@ -38,6 +40,34 @@ export async function clearTtsSegmentCache(
   }
   if (input.readerType) {
     conditions.push(eq(ttsSegmentEntries.readerType, input.readerType));
+  }
+
+  const playbackSessionConditions = [
+    eq(ttsPlaybackSessions.storageUserId, input.userId),
+    eq(ttsPlaybackSessions.documentId, input.documentId),
+    inArray(ttsPlaybackSessions.status, ['queued', 'running']),
+  ];
+  if (typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)) {
+    playbackSessionConditions.push(eq(ttsPlaybackSessions.documentVersion, Math.floor(input.documentVersion)));
+  }
+  if (input.readerType) {
+    playbackSessionConditions.push(eq(ttsPlaybackSessions.readerType, input.readerType));
+  }
+
+  const activePlaybackSessionRows = (await db
+    .select({ sessionId: ttsPlaybackSessions.sessionId })
+    .from(ttsPlaybackSessions)
+    .where(and(...playbackSessionConditions))) as Array<{ sessionId: string }>;
+
+  if (activePlaybackSessionRows.length > 0) {
+    await db
+      .update(ttsPlaybackSessions)
+      .set({
+        status: 'failed',
+        lastError: 'TTS segment cache was cleared.',
+        updatedAt: now,
+      })
+      .where(and(...playbackSessionConditions));
   }
 
   const entryRows = (await db
@@ -98,6 +128,7 @@ export async function clearTtsSegmentCache(
     deletedSegments: warning ? 0 : new Set(entryRows.map((row) => row.segmentEntryId)).size,
     requestedAudioObjects: uniqueAudioKeys.length,
     deletedAudioObjects,
+    invalidatedPlaybackSessions: activePlaybackSessionRows.length,
     ...(warning ? { warning } : {}),
   };
 }

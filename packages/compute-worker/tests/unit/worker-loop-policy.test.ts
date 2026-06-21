@@ -12,7 +12,8 @@ describe('worker loop policy', () => {
     expect(decideRetryAction({ kind: 'pdf_layout', deliveryCount: 3, pdfAttempts: 3 })).toBe('term_fail');
   });
 
-  test('retry policy: whisper jobs terminate immediately by default', () => {
-    expect(decideRetryAction({ kind: 'whisper_align', deliveryCount: 1, pdfAttempts: 10 })).toBe('term_fail');
+  test('retry policy: playback jobs use the configured attempt limit', () => {
+    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 1, pdfAttempts: 2 })).toBe('nak_retry');
+    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 2, pdfAttempts: 2 })).toBe('term_fail');
   });
 });

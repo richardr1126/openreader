@@ -79,7 +79,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/whisper-align/operations": {
+    "/v1/tts-playback/{sessionId}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query: {
+                    token: string;
+                };
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Progressive MP3 audio stream */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pdf-layout/operations": {
         parameters: {
             query?: never;
             header?: never;
@@ -98,10 +176,10 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        text: string;
-                        lang?: string;
-                        cacheKey?: string;
-                        audioObjectKey: string;
+                        documentId: string;
+                        namespace: string | null;
+                        documentObjectKey: string;
+                        replaceToken?: string;
                     };
                 };
             };
@@ -116,12 +194,14 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
-                                kind: "whisper_align";
-                            } | {
-                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -169,7 +249,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/pdf-layout/operations": {
+    "/v1/tts-playback/operations": {
         parameters: {
             query?: never;
             header?: never;
@@ -188,10 +268,43 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        sessionId: string;
+                        userId: string;
+                        storageUserId: string;
                         documentId: string;
-                        namespace: string | null;
-                        documentObjectKey: string;
-                        replaceToken?: string;
+                        documentVersion: number;
+                        /** @enum {string} */
+                        readerType: "pdf" | "epub" | "html";
+                        settingsHash: string;
+                        settingsJson: unknown;
+                        /** @default 0 */
+                        startOrdinal: number;
+                        planObjectKey?: string;
+                        aheadWindow?: number;
+                        /** @enum {string} */
+                        backgroundExtent?: "section" | "document";
+                        planning: {
+                            sourceUnits?: {
+                                sourceKey: string;
+                                text: string;
+                                locator?: unknown;
+                            }[];
+                            currentSourceKeys?: string[];
+                            startSegmentKey?: string;
+                            startText?: string;
+                            maxBlockLength?: number;
+                            enforceSourceBoundaries?: boolean;
+                            language?: string;
+                            documentSource?: {
+                                namespace: string | null;
+                                skipBlockKinds?: string[];
+                                /** @enum {string} */
+                                extent: "section" | "document";
+                                startPage?: number;
+                                startSpineIndex?: number;
+                                isPlainText?: boolean;
+                            };
+                        };
                     };
                 };
             };
@@ -206,12 +319,14 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
-                                kind: "whisper_align";
-                            } | {
-                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -299,12 +414,14 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
-                                    kind: "whisper_align";
-                                } | {
-                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback";
+                                    documentId: string;
+                                    sessionId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -381,12 +498,14 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
-                                kind: "whisper_align";
-                            } | {
-                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -583,12 +702,14 @@ export interface components {
             opId: string;
             subject: {
                 /** @enum {string} */
-                kind: "whisper_align";
-            } | {
-                /** @enum {string} */
                 kind: "pdf_layout";
                 documentId: string;
                 namespace: string | null;
+            } | {
+                /** @enum {string} */
+                kind: "tts_playback";
+                documentId: string;
+                sessionId: string;
             };
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -619,12 +740,14 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
-                    kind: "whisper_align";
-                } | {
-                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback";
+                    documentId: string;
+                    sessionId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -658,12 +781,14 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
-                    kind: "whisper_align";
-                } | {
-                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback";
+                    documentId: string;
+                    sessionId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";

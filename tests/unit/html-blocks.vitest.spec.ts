@@ -4,7 +4,7 @@ import {
   parseHtmlBlocks,
   splitMarkdownBlocks,
   splitTxtBlocks,
-} from '../../src/lib/client/html/blocks';
+} from '@openreader/tts/html-blocks';
 
 describe('parseHtmlBlocks (markdown)', () => {
   test('splits headings, paragraphs, and lists into separate blocks', () => {

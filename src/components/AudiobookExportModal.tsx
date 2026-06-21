@@ -10,8 +10,8 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { getTtsLanguageCompatibilityWarnings, resolveTtsLanguage } from '@/lib/shared/language';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { getTtsLanguageCompatibilityWarnings, resolveTtsLanguage } from '@openreader/tts/language';
 import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
 import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, RangeInput, Select } from '@/components/ui';
 import { 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createHtmlAudiobookSourceAdapter } from '../../src/lib/client/audiobooks/adapters/html';
-import { parseHtmlBlocks, type HtmlBlock } from '../../src/lib/client/html/blocks';
+import { parseHtmlBlocks, type HtmlBlock } from '@openreader/tts/html-blocks';
 
 const blocksFromMd = (src: string): HtmlBlock[] => parseHtmlBlocks(src, false);
 const blocksFromTxt = (src: string): HtmlBlock[] => parseHtmlBlocks(src, true);

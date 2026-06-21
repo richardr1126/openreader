@@ -11,7 +11,7 @@ import {
   Button,
   Input,
 } from '@/components/ui';
-import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { type TtsProviderId } from '@openreader/tts/provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';

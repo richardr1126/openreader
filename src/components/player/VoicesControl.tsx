@@ -5,7 +5,7 @@ import { useTTS } from '@/contexts/TTSContext';
 import { useCallback } from 'react';
 import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { InfoIcon } from '@/components/icons/Icons';
-import { getTtsLanguageCompatibilityWarnings } from '@/lib/shared/language';
+import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 
 export const VoicesControl = ({ availableVoices, setVoiceAndRestart }: {
   availableVoices: string[];

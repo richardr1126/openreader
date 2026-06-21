@@ -7,17 +7,17 @@ describe('orphan recovery', () => {
     vi.useRealTimers();
   });
 
-  test('recovers a running whisper op when a later sweep crosses the timeout in the same session', async () => {
+  test('recovers a running playback op when a later sweep crosses the timeout in the same session', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-03T08:00:00.000Z'));
 
     const fake = new FakeControlPlane();
     const startedAt = Date.now();
     fake.seedState({
-      opId: 'op-whisper-running',
-      opKey: 'k-whisper-running',
-      kind: 'whisper_align',
-      jobId: 'job-op-whisper-running',
+      opId: 'op-playback-running',
+      opKey: 'k-playback-running',
+      kind: 'tts_playback',
+      jobId: 'job-op-playback-running',
       status: 'running',
       queuedAt: startedAt,
       updatedAt: startedAt,
@@ -31,7 +31,7 @@ describe('orphan recovery', () => {
       opStaleMs: 1_800_000,
     });
     expect(firstSweep).toEqual([]);
-    expect(fake.getState('op-whisper-running')).toMatchObject({
+    expect(fake.getState('op-playback-running')).toMatchObject({
       status: 'running',
     });
 
@@ -45,11 +45,11 @@ describe('orphan recovery', () => {
       opStaleMs: 1_800_000,
     });
     expect(secondSweep).toEqual([{
-      opId: 'op-whisper-running',
-      kind: 'whisper_align',
+      opId: 'op-playback-running',
+      kind: 'tts_playback',
       status: 'running',
     }]);
-    expect(fake.getState('op-whisper-running')).toMatchObject({
+    expect(fake.getState('op-playback-running')).toMatchObject({
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',

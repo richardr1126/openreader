@@ -11,6 +11,10 @@ function isHealthPath(path: string): boolean {
   return path === '/health/live' || path === '/health/ready';
 }
 
+function isPublicPlaybackPath(path: string): boolean {
+  return /^\/v1\/tts-playback\/[^/]+\/audio$/.test(path);
+}
+
 function isAuthed(request: FastifyRequest, expectedToken: string): boolean {
   const auth = request.headers.authorization;
   return auth?.startsWith('Bearer ') === true
@@ -55,7 +59,7 @@ export function registerHttpHooks(input: {
     (request as FastifyRequest & { [REQUEST_COUNTED_KEY]?: boolean })[REQUEST_COUNTED_KEY] = true;
     input.onInFlightHttpChanged(1);
     input.markActivity(`http_started:${path}`);
-    if (!isHealthPath(path) && !isAuthed(request, input.workerToken)) {
+    if (!isHealthPath(path) && !isPublicPlaybackPath(path) && !isAuthed(request, input.workerToken)) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
   });

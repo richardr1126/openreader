@@ -10,7 +10,7 @@ import {
 } from '@/lib/server/admin/settings';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { validateProviderType, validateSlug } from '@/lib/server/admin/providers';
-import type { TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import type { TtsProviderId } from '@openreader/tts/provider-catalog';
 
 /**
  * Idempotent boot-time seeding for the admin layer. Safe to call multiple times.

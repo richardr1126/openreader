@@ -8,7 +8,7 @@
  * remembering which DOM position each surviving character came from.
  *
  * The cleaning rules (patterns + glyph set) are imported from
- * `@/lib/shared/audio-text` so this position-preserving variant and the plain
+ * `@openreader/tts/audio-text` so this position-preserving variant and the plain
  * string `preprocessSentenceForAudio` can never drift apart. This module only
  * owns the position-tracking mechanics.
  *
@@ -23,7 +23,7 @@ import {
   URL_PATTERN,
   isStrippedGlyph,
   linkReplacement,
-} from '@/lib/shared/audio-text';
+} from '@openreader/tts/audio-text';
 
 export interface MappedChar<TPos> {
   char: string;

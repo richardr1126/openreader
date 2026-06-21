@@ -12,7 +12,7 @@ import type {
   TTSAudiobookChapter,
   TTSAudiobookFormat,
 } from '@/types/tts';
-import { normalizeTextForTts } from '@/lib/shared/nlp';
+import { normalizeTextForTts } from '@openreader/tts/nlp';
 
 export interface PreparedAudiobookChapter {
   index: number;

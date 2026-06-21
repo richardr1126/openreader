@@ -23,8 +23,8 @@ export class InMemoryOperationQueue implements OperationQueue {
   private readonly byKind = new Map<WorkerOperationKind, QueuedOperation[]>();
 
   constructor() {
-    this.byKind.set('whisper_align', []);
     this.byKind.set('pdf_layout', []);
+    this.byKind.set('tts_playback', []);
   }
 
   async enqueue(job: QueuedOperation): Promise<void> {

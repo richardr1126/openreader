@@ -1,4 +1,34 @@
 import { z } from 'zod';
+import { and, eq, inArray } from 'drizzle-orm';
+import { db } from '@openreader/database';
+import { ttsSegmentEntries, ttsSegmentVariants, ttsPlaybackSessions } from '@openreader/database/schema';
+import { generateTTSBuffer } from '@openreader/tts/generate';
+import {
+  buildTtsSegmentAudioKey,
+  buildTtsSegmentEntryId,
+  buildTtsSegmentId,
+  buildTtsSegmentTextHash,
+  locatorFingerprint,
+  normalizeLocator,
+  normalizeSegmentText,
+  probeAudioDurationMsFromBuffer,
+  projectSegmentLocator,
+} from '@openreader/tts/segments';
+import type { TTSSegmentSettings } from '@openreader/tts/types';
+import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
+import { isBuiltInTtsProviderId, isTtsProviderType } from '@openreader/tts/provider-catalog';
+import { resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
+import { normalizeLanguageTag } from '@openreader/tts/language';
+import {
+  buildSegmentKeyPrefix,
+  planCanonicalTtsSegments,
+  type CanonicalTtsSourceUnit,
+} from '@openreader/tts/segment-plan';
+import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
+import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
+import { documentSourceKey, parsedPdfArtifactKey, ttsPlaybackArtifactKey } from '../storage/artifact-addressing';
+import { extractEpubSpine } from '../inference/epub/spine-text';
+import type { ParsedPdfDocument } from '../operations/contracts';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
@@ -8,19 +38,14 @@ import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   PdfLayoutProgress,
-  WhisperAlignJobRequest,
-  WhisperAlignJobResult,
+  TtsPlaybackJobRequest,
+  TtsPlaybackJobResult,
+  TtsPlaybackProgress,
 } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
-
-const whisperRequestSchema = z.object({
-  text: z.string().trim().min(1),
-  lang: z.string().trim().min(1).max(16).optional(),
-  cacheKey: z.string().trim().min(1).max(256).optional(),
-  audioObjectKey: z.string().trim().min(1).max(2048),
-});
+import { resolveTtsCredentials } from './tts-credentials';
 
 const pdfRequestSchema = z.object({
   documentId: z.string().trim().min(1),
@@ -28,13 +53,713 @@ const pdfRequestSchema = z.object({
   documentObjectKey: z.string().trim().min(1).max(2048),
 });
 
+const ttsPlaybackRequestSchema = z.object({
+  sessionId: z.string().trim().min(1).max(128),
+  userId: z.string().trim().min(1).max(256),
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: z.string().trim().min(1),
+  documentVersion: z.number().int().nonnegative(),
+  readerType: z.enum(['pdf', 'epub', 'html']),
+  settingsHash: z.string().trim().min(1).max(256),
+  settingsJson: z.unknown(),
+  startOrdinal: z.number().int().nonnegative(),
+  planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  aheadWindow: z.number().int().positive().max(4096).optional(),
+  backgroundExtent: z.enum(['section', 'document']).optional(),
+  planning: z.object({
+    sourceUnits: z.array(z.object({
+      sourceKey: z.string().trim().min(1).max(512),
+      text: z.string().min(1).max(100_000),
+      locator: z.unknown().optional(),
+    })).max(4096).optional(),
+    currentSourceKeys: z.array(z.string().trim().min(1).max(512)).max(4096).optional(),
+    startSegmentKey: z.string().trim().min(1).max(512).optional(),
+    startText: z.string().trim().min(1).max(20_000).optional(),
+    maxBlockLength: z.number().int().positive().max(20_000).optional(),
+    enforceSourceBoundaries: z.boolean().optional(),
+    language: z.string().trim().min(1).max(32).optional(),
+    documentSource: z.object({
+      namespace: z.string().trim().min(1).max(128).nullable(),
+      skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+      extent: z.enum(['section', 'document']),
+      startPage: z.number().int().positive().optional(),
+      startSpineIndex: z.number().int().nonnegative().optional(),
+      isPlainText: z.boolean().optional(),
+    }).optional(),
+  }),
+});
+
+async function updateTtsPlaybackSession(input: {
+  sessionId: string;
+  status: 'running' | 'succeeded' | 'failed';
+  planObjectKey?: string;
+  lastError?: string | null;
+}): Promise<void> {
+  const now = Date.now();
+  await db
+    .update(ttsPlaybackSessions)
+    .set({
+      status: input.status,
+      ...(input.planObjectKey === undefined ? {} : { planObjectKey: input.planObjectKey }),
+      ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
+      updatedAt: now,
+    })
+    .where(eq(ttsPlaybackSessions.sessionId, input.sessionId));
+}
+
+async function assertTtsPlaybackSessionActive(sessionId: string): Promise<void> {
+  const rows = (await db
+    .select({ status: ttsPlaybackSessions.status, lastError: ttsPlaybackSessions.lastError })
+    .from(ttsPlaybackSessions)
+    .where(eq(ttsPlaybackSessions.sessionId, sessionId))
+    .limit(1)) as Array<{ status: string; lastError: string | null }>;
+  const row = rows[0];
+  if (!row) throw new Error('TTS playback session no longer exists');
+  if (row.status !== 'queued' && row.status !== 'running') {
+    throw new Error(row.lastError || `TTS playback session is ${row.status}`);
+  }
+}
+
+// Sliding-window pacing constants for the single forward-generation job.
+const TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW = 8;
+// How long after the client's last cursor write we still treat it as connected.
+// Past this the client is assumed disconnected (JS suspended / tab closed) and
+// generation switches to "background" mode bounded by `backgroundExtent`.
+const TTS_PLAYBACK_CURSOR_STALE_MS = 15_000;
+// Poll cadence while throttling ahead of a fresh cursor.
+const TTS_PLAYBACK_THROTTLE_POLL_MS = 500;
+// Minimum spacing between progress heartbeats while idling/throttling; each one
+// extends the JetStream ack-wait (via the worker loop's onProgress → msg.working()).
+const TTS_PLAYBACK_HEARTBEAT_MS = 5_000;
+
+async function readTtsPlaybackSessionCursor(sessionId: string): Promise<{
+  status: string;
+  cursorOrdinal: number;
+  cursorUpdatedAt: number | null;
+  expiresAt: number;
+} | null> {
+  const rows = (await db
+    .select({
+      status: ttsPlaybackSessions.status,
+      cursorOrdinal: ttsPlaybackSessions.cursorOrdinal,
+      cursorUpdatedAt: ttsPlaybackSessions.cursorUpdatedAt,
+      expiresAt: ttsPlaybackSessions.expiresAt,
+    })
+    .from(ttsPlaybackSessions)
+    .where(eq(ttsPlaybackSessions.sessionId, sessionId))
+    .limit(1)) as Array<{
+      status: string;
+      cursorOrdinal: number | null;
+      cursorUpdatedAt: number | null;
+      expiresAt: number;
+    }>;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    status: row.status,
+    cursorOrdinal: Math.max(0, Math.floor(Number(row.cursorOrdinal ?? 0))),
+    cursorUpdatedAt: row.cursorUpdatedAt == null ? null : Number(row.cursorUpdatedAt),
+    expiresAt: Number(row.expiresAt),
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * The "section" a plan segment belongs to, used to bound background generation
+ * when `backgroundExtent === 'section'`: a PDF page or an EPUB spine entry.
+ * HTML has no sections, so it returns null (the whole document is one section).
+ */
+function playbackSectionKey(locator: unknown, readerType: 'pdf' | 'epub' | 'html'): string | null {
+  if (!locator || typeof locator !== 'object') return null;
+  const rec = locator as Record<string, unknown>;
+  if (readerType === 'pdf' && Number.isFinite(Number(rec.page))) return `p${Math.floor(Number(rec.page))}`;
+  if (readerType === 'epub' && Number.isFinite(Number(rec.spineIndex))) return `s${Math.floor(Number(rec.spineIndex))}`;
+  return null;
+}
+
+function textHmacSecret(): string {
+  return process.env.AUTH_SECRET?.trim()
+    || 'openreader-default-tts-segment-secret';
+}
+
+export function parseTtsSettings(value: unknown): TTSSegmentSettings {
+  let raw = value;
+  if (typeof raw === 'string') {
+    raw = JSON.parse(raw);
+  }
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('TTS playback settingsJson must be an object');
+  }
+  const rec = raw as Record<string, unknown>;
+  const ttsModel = typeof rec.ttsModel === 'string'
+    ? rec.ttsModel
+    : typeof rec.model === 'string'
+      ? rec.model
+      : null;
+  const nativeSpeed = rec.nativeSpeed ?? rec.speed;
+  const ttsInstructions = typeof rec.ttsInstructions === 'string'
+    ? rec.ttsInstructions
+    : typeof rec.instructions === 'string'
+      ? rec.instructions
+      : '';
+  if (typeof rec.providerRef !== 'string') throw new Error('TTS playback settings missing providerRef');
+  if (!isTtsProviderType(rec.providerType)) throw new Error('TTS playback settings missing providerType');
+  if (typeof ttsModel !== 'string') throw new Error('TTS playback settings missing ttsModel');
+  if (typeof rec.voice !== 'string') throw new Error('TTS playback settings missing voice');
+  if (!Number.isFinite(Number(nativeSpeed))) throw new Error('TTS playback settings missing nativeSpeed');
+  return {
+    providerRef: rec.providerRef,
+    providerType: rec.providerType,
+    ttsModel,
+    voice: rec.voice,
+    nativeSpeed: Number(nativeSpeed),
+    ttsInstructions,
+    language: typeof rec.language === 'string' ? normalizeLanguageTag(rec.language) : 'en',
+  };
+}
+
+function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+}
+
+type TtsPlaybackSegmentInput = {
+  segmentIndex: number;
+  segmentKey?: string | null;
+  text: string;
+  locator: unknown;
+};
+
+/**
+ * Resolve the canonical source units for a playback job. Prefers explicit
+ * client-provided units (legacy path); otherwise derives them itself from the
+ * document's parsed artifact (worker-owned planning) so generation can run
+ * ahead independently of the client. `extent` bounds how far it reads.
+ */
+export async function resolvePlaybackSourceUnits(
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  storage: Pick<ArtifactStorage, 'readObject'>,
+  s3Prefix: string,
+): Promise<CanonicalTtsSourceUnit[]> {
+  const planning = request.planning;
+  if (planning.sourceUnits?.length) {
+    return planning.sourceUnits
+      .map((unit) => ({
+        sourceKey: unit.sourceKey.trim(),
+        text: unit.text,
+        locator: (unit.locator ?? null) as CanonicalTtsSourceUnit['locator'],
+      }))
+      .filter((unit) => unit.sourceKey && unit.text.trim());
+  }
+
+  const documentSource = planning.documentSource;
+  if (!documentSource) return [];
+
+  if (request.readerType === 'pdf') {
+    return derivePdfSourceUnits(request, documentSource, storage, s3Prefix);
+  }
+  if (request.readerType === 'epub') {
+    return deriveEpubSourceUnits(request, documentSource, storage, s3Prefix);
+  }
+  return deriveHtmlSourceUnits(request, documentSource, storage, s3Prefix);
+}
+
+async function deriveHtmlSourceUnits(
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  documentSource: NonNullable<z.infer<typeof ttsPlaybackRequestSchema>['planning']['documentSource']>,
+  storage: Pick<ArtifactStorage, 'readObject'>,
+  s3Prefix: string,
+): Promise<CanonicalTtsSourceUnit[]> {
+  const sourceKey = documentSourceKey({
+    documentId: request.documentId,
+    namespace: documentSource.namespace,
+    prefix: s3Prefix,
+  });
+  const bytes = await storage.readObject(sourceKey);
+  const source = Buffer.from(bytes).toString('utf8');
+  const blocks = parseHtmlBlocks(source, Boolean(documentSource.isPlainText));
+  const text = buildHtmlDocumentText(blocks);
+  if (!text.trim()) return [];
+
+  // The HTML reader treats the whole document as one flat page (location '1'),
+  // so the worker emits a single full-document source unit matching the client.
+  return [{
+    sourceKey: '1',
+    text,
+    locator: { readerType: 'html', location: '1' } as CanonicalTtsSourceUnit['locator'],
+  }];
+}
+
+async function deriveEpubSourceUnits(
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  documentSource: NonNullable<z.infer<typeof ttsPlaybackRequestSchema>['planning']['documentSource']>,
+  storage: Pick<ArtifactStorage, 'readObject'>,
+  s3Prefix: string,
+): Promise<CanonicalTtsSourceUnit[]> {
+  const sourceKey = documentSourceKey({
+    documentId: request.documentId,
+    namespace: documentSource.namespace,
+    prefix: s3Prefix,
+  });
+  const bytes = await storage.readObject(sourceKey);
+  const spine = await extractEpubSpine(bytes);
+  if (spine.length === 0) return [];
+
+  const startSpineIndex = Math.max(0, Math.floor(documentSource.startSpineIndex ?? 0));
+  const selected = documentSource.extent === 'section'
+    ? spine.filter((item) => item.index === startSpineIndex)
+    : spine.filter((item) => item.index >= startSpineIndex);
+
+  // One source unit per spine item (the whole chapter text); the segmenter
+  // splits it into segments and assigns per-segment charOffsets. Mirrors the
+  // client's `planSpineSegments` sourceKey/locator shape so identity matches.
+  return selected
+    .filter((item) => item.text.trim().length > 0)
+    .map((item) => ({
+      sourceKey: `spine:${item.index}:${item.href}`,
+      text: item.text,
+      locator: {
+        readerType: 'epub',
+        spineHref: item.href,
+        spineIndex: item.index,
+        charOffset: 0,
+      } as CanonicalTtsSourceUnit['locator'],
+    }));
+}
+
+async function derivePdfSourceUnits(
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  documentSource: NonNullable<z.infer<typeof ttsPlaybackRequestSchema>['planning']['documentSource']>,
+  storage: Pick<ArtifactStorage, 'readObject'>,
+  s3Prefix: string,
+): Promise<CanonicalTtsSourceUnit[]> {
+  const artifactKey = parsedPdfArtifactKey({
+    documentId: request.documentId,
+    namespace: documentSource.namespace,
+    prefix: s3Prefix,
+  });
+  const raw = await storage.readObject(artifactKey);
+  const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as ParsedPdfDocument;
+  const pages = [...(parsed.pages ?? [])].sort((a, b) => a.pageNumber - b.pageNumber);
+  if (pages.length === 0) return [];
+
+  const startPage = Math.max(1, Math.floor(documentSource.startPage ?? 1));
+  const selected = documentSource.extent === 'section'
+    ? pages.filter((page) => page.pageNumber === startPage)
+    : pages.filter((page) => page.pageNumber >= startPage);
+
+  const skipKinds = documentSource.skipBlockKinds ?? [];
+  const units: CanonicalTtsSourceUnit[] = [];
+  for (const page of selected) {
+    units.push(...buildPdfPageSourceUnits(page, page.pageNumber, skipKinds));
+  }
+  return units;
+}
+
+/**
+ * Stamp a segment's owner locator with its own per-segment offset. For EPUB the
+ * canonical plan's `startAnchor.offset` IS the normalized-text charOffset the
+ * client uses for the locator identity / highlighting, so we copy it here
+ * (the chapter source unit carries charOffset 0 for every segment otherwise).
+ */
+function perSegmentLocator(
+  ownerLocator: CanonicalTtsSourceUnit['locator'],
+  offset: number,
+): unknown {
+  if (ownerLocator && ownerLocator.readerType === 'epub') {
+    return { ...ownerLocator, charOffset: Math.max(0, Math.floor(offset)) };
+  }
+  return ownerLocator;
+}
+
+export function planTtsPlaybackSegments(
+  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  sourceUnits: CanonicalTtsSourceUnit[],
+): TtsPlaybackSegmentInput[] {
+  const planning = request.planning;
+  if (sourceUnits.length === 0) return [];
+
+  const currentSourceKeys = new Set(
+    (planning.currentSourceKeys?.length
+      ? planning.currentSourceKeys
+      : sourceUnits.map((unit) => unit.sourceKey)
+    ).map((key) => key.trim()).filter(Boolean),
+  );
+
+  const plan = planCanonicalTtsSegments(sourceUnits, {
+    readerType: request.readerType,
+    maxBlockLength: planning.maxBlockLength,
+    keyPrefix: buildSegmentKeyPrefix(request.documentId, request.readerType),
+    enforceSourceBoundaries: Boolean(planning.enforceSourceBoundaries),
+    language: planning.language || parseTtsSettings(request.settingsJson).language,
+  });
+
+  const eligible = plan.segments.filter((segment) => currentSourceKeys.has(segment.ownerSourceKey));
+  const normalizedStartText = planning.startText ? normalizeSegmentText(planning.startText) : '';
+  let startIndex = 0;
+  if (planning.startSegmentKey) {
+    const match = eligible.findIndex((segment) => segment.key === planning.startSegmentKey);
+    if (match >= 0) startIndex = match;
+  }
+  if (startIndex === 0 && normalizedStartText) {
+    const match = eligible.findIndex((segment) => normalizeSegmentText(segment.text) === normalizedStartText);
+    if (match >= 0) startIndex = match;
+  }
+
+  const rows: TtsPlaybackSegmentInput[] = [];
+  for (const [index, segment] of eligible.slice(startIndex).entries()) {
+    rows.push({
+      segmentIndex: index,
+      segmentKey: segment.key,
+      text: segment.text,
+      locator: perSegmentLocator(segment.ownerLocator, segment.startAnchor.offset),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Persist the reusable canonical plan for a playback session to object storage
+ * and return its key. SQL stores only the key; this artifact is the full,
+ * ordered segment plan (keys, text, locators) the worker generated against.
+ */
+async function persistTtsPlaybackPlan(input: {
+  storage: Pick<ArtifactStorage, 'putObject'>;
+  s3Prefix: string;
+  request: z.infer<typeof ttsPlaybackRequestSchema>;
+  segments: TtsPlaybackSegmentInput[];
+}): Promise<string> {
+  const key = ttsPlaybackArtifactKey({
+    sessionId: input.request.sessionId,
+    kind: 'plan',
+    prefix: input.s3Prefix,
+  });
+  const artifact = {
+    schemaVersion: 1 as const,
+    sessionId: input.request.sessionId,
+    documentId: input.request.documentId,
+    documentVersion: input.request.documentVersion,
+    readerType: input.request.readerType,
+    settingsHash: input.request.settingsHash,
+    segments: input.segments.map((segment) => ({
+      segmentIndex: segment.segmentIndex,
+      segmentKey: segment.segmentKey ?? null,
+      text: segment.text,
+      locator: segment.locator,
+    })),
+  };
+  await input.storage.putObject(key, Buffer.from(JSON.stringify(artifact)), 'application/json');
+  return key;
+}
+
+/**
+ * Read back the persisted plan for a session as generation inputs. Sliding-
+ * window jobs after the first reuse this instead of re-deriving source units
+ * and re-segmenting (which would re-parse the whole document each window).
+ * Returns null when no plan has been persisted yet (the first job).
+ */
+async function readPersistedTtsPlaybackPlanSegments(
+  storage: Pick<ArtifactStorage, 'readObject'>,
+  planObjectKey: string,
+): Promise<TtsPlaybackSegmentInput[] | null> {
+  try {
+    const bytes = await storage.readObject(planObjectKey);
+    const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as {
+      segments?: Array<{ segmentIndex?: unknown; segmentKey?: unknown; text?: unknown; locator?: unknown }>;
+    };
+    if (!Array.isArray(parsed.segments)) return null;
+    return parsed.segments
+      .map((row): TtsPlaybackSegmentInput | null => {
+        const segmentIndex = Number(row.segmentIndex);
+        const text = typeof row.text === 'string' ? row.text : '';
+        if (!Number.isFinite(segmentIndex) || !text) return null;
+        return {
+          segmentIndex: Math.max(0, Math.floor(segmentIndex)),
+          segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
+          text,
+          locator: row.locator ?? null,
+        };
+      })
+      .filter((row): row is TtsPlaybackSegmentInput => Boolean(row));
+  } catch {
+    return null;
+  }
+}
+
+const SEGMENT_MAX_ATTEMPTS = 2;
+
+async function generateExplicitTtsPlaybackSegments(input: {
+  request: z.infer<typeof ttsPlaybackRequestSchema>;
+  s3Prefix: string;
+  segments: TtsPlaybackSegmentInput[];
+  putAudioObject: (key: string, body: Buffer) => Promise<void>;
+  /**
+   * Pacing gate, called before each segment with its plan ordinal. Returns
+   * 'continue' to generate it, 'stop' to end generation gracefully (the client
+   * has fallen far enough behind / a background extent boundary is reached).
+   * May block (heartbeating) while throttling ahead of the playback cursor.
+   */
+  onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
+  /** Called after a segment's audio is ready (or already was), with its plan ordinal. */
+  onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
+}): Promise<void> {
+  const segments = input.segments;
+  if (segments.length === 0) return;
+
+  const settings = parseTtsSettings(input.request.settingsJson);
+  const requestCreds = await resolveTtsCredentials({
+    providerHeader: settings.providerRef,
+  });
+  if ('error' in requestCreds) {
+    throw new Error(`Unable to resolve TTS provider credentials: ${requestCreds.error}`);
+  }
+
+  const effectiveProviderRef = requestCreds.adminRecord?.slug || settings.providerRef;
+  const resolvedProviderType = isBuiltInTtsProviderId(requestCreds.provider)
+    ? requestCreds.provider
+    : 'unknown';
+  const effectiveModel = resolveTtsModelForProvider({
+    providerRef: effectiveProviderRef,
+    providerType: resolvedProviderType,
+    model: settings.ttsModel,
+    sharedProviders: requestCreds.adminRecord ? [requestCreds.adminRecord] : [],
+    fallbackProviderRef: '',
+    showAllProviderModels: true,
+  });
+  const effectiveInstructions = resolveEffectiveTtsInstructions({
+    model: effectiveModel,
+    requestInstructions: settings.ttsInstructions,
+    sharedDefaultInstructions: requestCreds.adminRecord?.defaultInstructions,
+  }) ?? '';
+  const effectiveSettings: TTSSegmentSettings = {
+    ...settings,
+    providerRef: effectiveProviderRef,
+    providerType: resolvedProviderType,
+    ttsModel: effectiveModel,
+    ttsInstructions: effectiveInstructions,
+  };
+
+  const secret = textHmacSecret();
+  const nowMs = Date.now();
+  const normalized = segments.map((segment) => {
+    const text = normalizeSegmentText(segment.text);
+    const locator = normalizeLocator(segment.locator as never);
+    if (!text || !locator) return null;
+    const locatorHash = locatorFingerprint(locator);
+    const segmentKey = typeof segment.segmentKey === 'string' && segment.segmentKey.trim()
+      ? segment.segmentKey.trim()
+      : null;
+    const textHash = buildTtsSegmentTextHash(text, secret);
+    const locatorProjection = projectSegmentLocator(locator);
+    const segmentEntryId = buildTtsSegmentEntryId({
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      segmentIndex: segment.segmentIndex,
+      segmentKey,
+      locatorIdentityKey: locatorProjection.locatorIdentityKey,
+      textHash,
+    });
+    const segmentId = buildTtsSegmentId({
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      settingsHash: input.request.settingsHash,
+      segmentIndex: segment.segmentIndex,
+      segmentKey,
+      normalizedText: text,
+      locatorFingerprint: locatorHash,
+    });
+    return {
+      original: segment,
+      text,
+      locatorProjection,
+      segmentEntryId,
+      segmentId,
+      segmentKey,
+      textHash,
+    };
+  }).filter((segment): segment is NonNullable<typeof segment> => Boolean(segment));
+
+  if (normalized.length === 0) return;
+
+  const existingRows = (await db
+    .select({
+      segmentId: ttsSegmentVariants.segmentId,
+      status: ttsSegmentVariants.status,
+      audioKey: ttsSegmentVariants.audioKey,
+    })
+    .from(ttsSegmentVariants)
+    .where(and(
+      eq(ttsSegmentVariants.userId, input.request.storageUserId),
+      inArray(ttsSegmentVariants.segmentId, normalized.map((segment) => segment.segmentId)),
+    ))) as Array<{ segmentId: string; status: string; audioKey: string | null }>;
+  const existingById = new Map(existingRows.map((row) => [row.segmentId, row]));
+
+  for (const segment of normalized) {
+    // The pacing gate is the single stop/cancel point: it reads session status +
+    // cursor and returns 'stop' when the session was superseded/expired (so a
+    // canceled session ends gracefully here rather than throwing → 'failed').
+    const planOrdinal = segment.original.segmentIndex;
+    if (input.onBeforeSegment) {
+      const decision = await input.onBeforeSegment(planOrdinal);
+      if (decision === 'stop') break;
+    }
+    await db
+      .insert(ttsSegmentEntries)
+      .values({
+        segmentEntryId: segment.segmentEntryId,
+        userId: input.request.storageUserId,
+        documentId: input.request.documentId,
+        readerType: input.request.readerType,
+        documentVersion: input.request.documentVersion,
+        segmentIndex: segment.original.segmentIndex,
+        segmentKey: segment.segmentKey,
+        ...segment.locatorProjection,
+        textHash: segment.textHash,
+        textLength: segment.text.length,
+        updatedAt: nowMs,
+      })
+      .onConflictDoUpdate({
+        target: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
+        set: {
+          readerType: input.request.readerType,
+          documentVersion: input.request.documentVersion,
+          segmentIndex: segment.original.segmentIndex,
+          segmentKey: segment.segmentKey,
+          ...segment.locatorProjection,
+          textHash: segment.textHash,
+          textLength: segment.text.length,
+          updatedAt: nowMs,
+        },
+      });
+
+    const existing = existingById.get(segment.segmentId);
+    if (existing?.status === 'completed' && existing.audioKey) {
+      await input.onSegmentCompleted?.(planOrdinal);
+      continue;
+    }
+
+    const audioKey = existing?.audioKey || buildTtsSegmentAudioKey({
+      storagePrefix: input.s3Prefix,
+      namespace: null,
+      userId: input.request.storageUserId,
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      settingsHash: input.request.settingsHash,
+      segmentId: segment.segmentId,
+    });
+
+    await db
+      .insert(ttsSegmentVariants)
+      .values({
+        segmentId: segment.segmentId,
+        userId: input.request.storageUserId,
+        segmentEntryId: segment.segmentEntryId,
+        settingsHash: input.request.settingsHash,
+        settingsJson: input.request.settingsJson,
+        audioKey,
+        audioFormat: 'mp3',
+        status: 'generating',
+        error: null,
+        updatedAt: Date.now(),
+      })
+      .onConflictDoUpdate({
+        target: [ttsSegmentVariants.segmentId, ttsSegmentVariants.userId],
+        set: {
+          segmentEntryId: segment.segmentEntryId,
+          settingsHash: input.request.settingsHash,
+          settingsJson: input.request.settingsJson,
+          audioKey,
+          audioFormat: 'mp3',
+          status: 'generating',
+          error: null,
+          updatedAt: Date.now(),
+        },
+      });
+
+    let lastError: unknown = null;
+    let completed = false;
+    for (let attempt = 1; attempt <= SEGMENT_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const audioBuffer = await generateTTSBuffer({
+          text: segment.text,
+          voice: effectiveSettings.voice,
+          speed: effectiveSettings.nativeSpeed,
+          format: 'mp3',
+          model: effectiveSettings.ttsModel,
+          instructions: effectiveSettings.ttsInstructions,
+          language: effectiveSettings.language,
+          provider: requestCreds.provider,
+          apiKey: requestCreds.apiKey,
+          baseUrl: requestCreds.baseUrl,
+        });
+        await input.putAudioObject(audioKey, audioBuffer);
+        const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
+        const alignment = await runWhisperAlignmentFromAudioBuffer({
+          audioBuffer: bufferToArrayBuffer(audioBuffer),
+          text: segment.text,
+          lang: effectiveSettings.language,
+          cacheKey: `${segment.segmentId}:${audioKey}`,
+        }).then((result) => {
+          const first = result.alignments[0];
+          return first ? { ...first, sentenceIndex: segment.original.segmentIndex } : null;
+        }).catch(() => null);
+
+        await db
+          .update(ttsSegmentVariants)
+          .set({
+            status: 'completed',
+            durationMs,
+            alignmentJson: alignment ? JSON.stringify(alignment) : null,
+            error: null,
+            updatedAt: Date.now(),
+          })
+          .where(and(
+            eq(ttsSegmentVariants.segmentId, segment.segmentId),
+            eq(ttsSegmentVariants.userId, input.request.storageUserId),
+          ));
+        completed = true;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (completed) {
+      await input.onSegmentCompleted?.(planOrdinal);
+      continue;
+    }
+
+    // A single segment failing must not nuke the session: mark it `error` and
+    // move on. The playback timeline stops at the first gap (contiguous
+    // prefix), so already-generated audio keeps playing; a persistent gap just
+    // halts playback cleanly at this segment instead of failing the whole job.
+    await db
+      .update(ttsSegmentVariants)
+      .set({
+        status: 'error',
+        error: lastError instanceof Error ? lastError.message : String(lastError),
+        updatedAt: Date.now(),
+      })
+      .where(and(
+        eq(ttsSegmentVariants.segmentId, segment.segmentId),
+        eq(ttsSegmentVariants.userId, input.request.storageUserId),
+      ));
+  }
+}
+
 export interface JobHandlers {
-  runWhisper(payload: WhisperAlignJobRequest, queueWaitMs: number): Promise<WhisperAlignJobResult>;
   runPdfLayout(
     payload: PdfLayoutJobRequest,
     queueWaitMs: number,
     hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
   ): Promise<PdfLayoutJobResult>;
+  runTtsPlayback(
+    payload: TtsPlaybackJobRequest,
+    queueWaitMs: number,
+    hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> },
+  ): Promise<TtsPlaybackJobResult>;
 }
 
 export function createJobHandlers(input: {
@@ -42,34 +767,9 @@ export function createJobHandlers(input: {
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfHardCapMs: number;
+  s3Prefix: string;
 }): JobHandlers {
   return {
-    async runWhisper(payload, queueWaitMs) {
-      const parsed = whisperRequestSchema.parse(payload);
-      const s3FetchStartedAt = Date.now();
-      const audioBuffer = await withTimeout(
-        input.storage.readObject(parsed.audioObjectKey),
-        input.whisperTimeoutMs,
-        'whisper s3 fetch',
-      );
-      const s3FetchMs = Date.now() - s3FetchStartedAt;
-      const computeStartedAt = Date.now();
-      const result = await withTimeout(
-        runWhisperAlignmentFromAudioBuffer({
-          audioBuffer,
-          text: parsed.text,
-          cacheKey: parsed.cacheKey,
-          lang: parsed.lang,
-        }),
-        input.whisperTimeoutMs,
-        'whisper alignment job',
-      );
-      return {
-        ...result,
-        timing: { queueWaitMs, s3FetchMs, computeMs: Date.now() - computeStartedAt },
-      };
-    },
-
     async runPdfLayout(payload, queueWaitMs, hooks) {
       const parsed = pdfRequestSchema.parse(payload);
       const s3FetchStartedAt = Date.now();
@@ -121,6 +821,146 @@ export function createJobHandlers(input: {
         parsedObjectKey,
         timing: { queueWaitMs, s3FetchMs, computeMs },
       };
+    },
+
+    async runTtsPlayback(payload, queueWaitMs, hooks) {
+      const parsed = ttsPlaybackRequestSchema.parse(payload);
+      const startedAt = Date.now();
+      await assertTtsPlaybackSessionActive(parsed.sessionId);
+      await updateTtsPlaybackSession({
+        sessionId: parsed.sessionId,
+        status: 'running',
+        lastError: null,
+      });
+      try {
+        // One generation job per session derives the full forward plan once and
+        // persists it (the key is deterministic from the session id). On a
+        // JetStream redelivery we reuse the persisted plan rather than re-parsing.
+        const planObjectKey = ttsPlaybackArtifactKey({
+          sessionId: parsed.sessionId,
+          kind: 'plan',
+          prefix: input.s3Prefix,
+        });
+        let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
+        if (!plannedSegments) {
+          const sourceUnits = await resolvePlaybackSourceUnits(parsed, input.storage, input.s3Prefix);
+          plannedSegments = planTtsPlaybackSegments(parsed, sourceUnits);
+          await persistTtsPlaybackPlan({
+            storage: input.storage,
+            s3Prefix: input.s3Prefix,
+            request: parsed,
+            segments: plannedSegments,
+          });
+        }
+        await updateTtsPlaybackSession({
+          sessionId: parsed.sessionId,
+          status: 'running',
+          planObjectKey,
+          lastError: null,
+        });
+
+        const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
+        const plannedCount = plannedSegments.length;
+        const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
+        const backgroundExtent = parsed.backgroundExtent ?? 'section';
+
+        // Section map (for background-extent bounding) + ordered ordinals.
+        const sectionByOrdinal = new Map<number, string | null>();
+        for (const segment of plannedSegments) {
+          sectionByOrdinal.set(segment.segmentIndex, playbackSectionKey(segment.locator, parsed.readerType));
+        }
+        const orderedOrdinals = plannedSegments.map((s) => s.segmentIndex).sort((a, b) => a - b);
+        const backgroundTargetFor = (cursorOrdinal: number): number => {
+          if (backgroundExtent === 'document') return lastOrdinal;
+          const section = sectionByOrdinal.get(cursorOrdinal) ?? null;
+          if (section == null) return lastOrdinal; // HTML / unknown ⇒ whole document
+          let target = cursorOrdinal;
+          for (const ord of orderedOrdinals) {
+            if (ord >= cursorOrdinal && (sectionByOrdinal.get(ord) ?? null) === section) target = ord;
+          }
+          return target;
+        };
+
+        // Throttle generation to a window ahead of the client's playback cursor.
+        // When the cursor goes stale (client disconnected / JS suspended), keep
+        // generating to the background-extent boundary so background playback
+        // survives, then idle (heartbeating) until the cursor returns or the
+        // session expires. `stoppedEarly` ⇒ we never reached the plan end, so no
+        // ENDLIST.
+        let stoppedEarly = false;
+        let lastCompletedThrough = -1;
+        let lastHeartbeatAt = 0;
+        const heartbeat = async (): Promise<void> => {
+          const now = Date.now();
+          if (now - lastHeartbeatAt < TTS_PLAYBACK_HEARTBEAT_MS) return;
+          lastHeartbeatAt = now;
+          await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
+        };
+
+        const onBeforeSegment = async (planOrdinal: number): Promise<'continue' | 'stop'> => {
+          for (;;) {
+            const cursor = await readTtsPlaybackSessionCursor(parsed.sessionId);
+            if (!cursor || (cursor.status !== 'queued' && cursor.status !== 'running')) {
+              stoppedEarly = true;
+              return 'stop';
+            }
+            const now = Date.now();
+            if (now > cursor.expiresAt) {
+              stoppedEarly = true;
+              return 'stop';
+            }
+            const fresh = cursor.cursorUpdatedAt != null
+              && (now - cursor.cursorUpdatedAt) <= TTS_PLAYBACK_CURSOR_STALE_MS;
+            if (fresh) {
+              if (planOrdinal <= cursor.cursorOrdinal + aheadWindow) return 'continue';
+            } else if (planOrdinal <= backgroundTargetFor(cursor.cursorOrdinal)) {
+              return 'continue';
+            }
+            // Caught up (fresh) or past the background buffer (stale): wait.
+            await heartbeat();
+            await sleep(TTS_PLAYBACK_THROTTLE_POLL_MS);
+          }
+        };
+
+        const onSegmentCompleted = async (planOrdinal: number): Promise<void> => {
+          if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
+          lastHeartbeatAt = Date.now();
+          await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
+        };
+
+        await generateExplicitTtsPlaybackSegments({
+          request: parsed,
+          s3Prefix: input.s3Prefix,
+          segments: plannedSegments,
+          putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
+          onBeforeSegment,
+          onSegmentCompleted,
+        });
+
+        // Only finalize (→ ENDLIST) when we generated the whole plan. On an early
+        // stop the session was superseded/expired/disconnected — leave its status
+        // alone so we don't clobber a `canceled` set by a newer session.
+        if (!stoppedEarly) {
+          await updateTtsPlaybackSession({
+            sessionId: parsed.sessionId,
+            status: 'succeeded',
+            planObjectKey,
+            lastError: null,
+          });
+        }
+        return {
+          sessionId: parsed.sessionId,
+          planObjectKey,
+          timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+        };
+      } catch (error) {
+        await updateTtsPlaybackSession({
+          sessionId: parsed.sessionId,
+          status: 'failed',
+          lastError: error instanceof Error ? error.message : String(error),
+        }).catch(() => undefined);
+        throw error;
+      }
     },
   };
 }

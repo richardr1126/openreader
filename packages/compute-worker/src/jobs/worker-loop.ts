@@ -2,11 +2,11 @@ import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
-  PdfLayoutProgress,
-  WhisperAlignJobRequest,
-  WhisperAlignJobResult,
+  TtsPlaybackJobRequest,
+  TtsPlaybackJobResult,
   WorkerJobTiming,
   WorkerOperationKind,
+  WorkerOperationProgress,
 } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
@@ -15,10 +15,9 @@ import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
 const PULL_EXPIRES_MS = 5_000;
-const WHISPER_MAX_DELIVER = 1;
 const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
-  whisper_align: 15_000,
   pdf_layout: 120_000,
+  tts_playback: 30_000,
 };
 
 export interface QueuedJob<TPayload> {
@@ -34,7 +33,7 @@ export interface WorkerLoopOrchestrator {
   markRunning(input: { opId: string; startedAt?: number; updatedAt?: number; timing?: WorkerJobTiming }): Promise<unknown>;
   markProgress(input: {
     opId: string;
-    progress: PdfLayoutProgress;
+    progress: WorkerOperationProgress;
     updatedAt?: number;
     timing?: WorkerJobTiming;
   }): Promise<unknown>;
@@ -86,6 +85,17 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : String(error);
 }
 
+function toErrorLog(error: unknown): { message: string; name?: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      message: error.message || String(error),
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+  return { message: String(error) };
+}
+
 function safeDurationMs(start: number, end: number): number {
   return Math.max(0, Math.floor(end - start));
 }
@@ -107,8 +117,8 @@ export function createWorkerLoopController(input: {
   logger: WorkerLogger;
   jobConcurrency: number;
   pdfAttempts: number;
-  whisperCodec: JsonCodec<QueuedJob<WhisperAlignJobRequest>>;
   pdfCodec: JsonCodec<QueuedJob<PdfLayoutJobRequest>>;
+  ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -123,13 +133,13 @@ export function createWorkerLoopController(input: {
     workerLabel: string;
     startedAt: number;
     queueWaitTiming?: { queueWaitMs: number };
-    latestProgress?: PdfLayoutProgress;
+    latestProgress?: WorkerOperationProgress;
   };
 
   type JobRunner<TPayload, TResult> = (
     payload: TPayload,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
+    hooks?: { onProgress?: (progress: WorkerOperationProgress) => Promise<void> },
   ) => Promise<TResult>;
 
   type WorkDefinition<TPayload, TResult> = {
@@ -231,9 +241,10 @@ export function createWorkerLoopController(input: {
       }, 'job.terminal');
     } catch (error) {
       const errorMessage = toErrorMessage(error);
+      const errorLog = toErrorLog(error);
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
-      const action = decideRetryAction({ kind, deliveryCount, pdfAttempts: input.pdfAttempts, whisperMaxDeliver: WHISPER_MAX_DELIVER });
+      const action = decideRetryAction({ kind, deliveryCount, pdfAttempts: input.pdfAttempts });
       const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
       if (context) {
         const update = action === 'nak_retry'
@@ -260,6 +271,8 @@ export function createWorkerLoopController(input: {
         jobId: context?.decoded.jobId,
         status: action === 'nak_retry' ? 'running' : 'failed',
         error: errorMessage,
+        errorName: errorLog.name,
+        errorStack: errorLog.stack,
         deliveryCount,
         retryAction: action === 'nak_retry' ? 'nack_retry' : 'term',
       }, 'job.terminal');
@@ -302,20 +315,25 @@ export function createWorkerLoopController(input: {
   };
 
   return {
-    start(owner: object, consumers: { whisper: Consumer; pdfLayout: Consumer }): void {
+    start(owner: object, consumers: { pdfLayout: Consumer; ttsPlayback?: Consumer }): void {
       stopRequested = false;
       loops = [];
-      const whisperWork: WorkDefinition<WhisperAlignJobRequest, WhisperAlignJobResult> = {
-        codec: input.whisperCodec,
-        run: input.handlers.runWhisper,
-      };
       const pdfWork: WorkDefinition<PdfLayoutJobRequest, PdfLayoutJobResult> = {
         codec: input.pdfCodec,
         run: input.handlers.runPdfLayout,
       };
+      const ttsPlaybackWork: WorkDefinition<TtsPlaybackJobRequest, TtsPlaybackJobResult> | null =
+        input.ttsPlaybackCodec && consumers.ttsPlayback
+          ? {
+            codec: input.ttsPlaybackCodec,
+            run: input.handlers.runTtsPlayback,
+          }
+          : null;
       for (let i = 0; i < input.jobConcurrency; i += 1) {
-        loops.push(runLoop({ owner, consumer: consumers.whisper, ...whisperWork, workerLabel: `whisper-${i + 1}` }));
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
+        if (ttsPlaybackWork && consumers.ttsPlayback) {
+          loops.push(runLoop({ owner, consumer: consumers.ttsPlayback, ...ttsPlaybackWork, workerLabel: `tts-playback-${i + 1}` }));
+        }
       }
     },
     async stop(): Promise<void> {

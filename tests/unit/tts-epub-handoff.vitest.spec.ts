@@ -6,7 +6,7 @@ import {
   resolveEpubReplaySuppressionAction,
   shouldSuppressCompletedEpubBoundaryReplay,
 } from '../../src/lib/client/epub/tts-epub-handoff';
-import type { CanonicalTtsSegment } from '../../src/lib/shared/tts-segment-plan';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 const segment = (
   text: string,

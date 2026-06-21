@@ -3,7 +3,7 @@ import {
   type DocumentSettings,
 } from '@/types/document-settings';
 import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
-import { normalizeLanguageTag } from '@/lib/shared/language';
+import { normalizeLanguageTag } from '@openreader/tts/language';
 
 function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
   if (!Array.isArray(value)) return [...(DEFAULT_DOCUMENT_SETTINGS.pdf?.skipBlockKinds ?? [])];

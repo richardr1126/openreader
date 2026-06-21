@@ -3,13 +3,13 @@ import {
   resolveTtsProviderModelPolicy,
   resolveProviderDefaults,
   type ProviderDefaultResolverEntry,
-} from '@/lib/shared/tts-provider-policy';
-import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
+} from '@openreader/tts/provider-policy';
+import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@openreader/tts/provider-catalog';
 import type { AudiobookGenerationSettings } from '@/types/client';
 import type { TTSAudiobookFormat } from '@/types/tts';
-import { resolveEffectiveTtsInstructions } from '@/lib/server/admin/tts-instructions';
+import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
 import { resolvePreferredSharedProviderSlug } from '@/lib/shared/shared-provider-selection';
-import { normalizeLanguageTag } from '@/lib/shared/language';
+import { normalizeLanguageTag } from '@openreader/tts/language';
 
 function isAudiobookFormat(value: unknown): value is TTSAudiobookFormat {
   return value === 'mp3' || value === 'm4b';

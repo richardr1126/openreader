@@ -1,4 +1,4 @@
-import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@/lib/shared/tts-locator';
+import { compareSegmentLocators, locatorGroupKey, locatorIdentityKey } from '@openreader/tts/locator';
 import type {
   TTSSegmentLocator,
   TTSSegmentVariant,

@@ -21,7 +21,7 @@
  * resolves to a neighboring token rather than vanishing.
  */
 import type { TTSSentenceAlignment } from '@/types/tts';
-import { segmentWords } from '@/lib/shared/language';
+import { segmentWords } from '@openreader/tts/language';
 import {
   findBestHighlightTokenMatch,
   locateAlignmentWordSpans,

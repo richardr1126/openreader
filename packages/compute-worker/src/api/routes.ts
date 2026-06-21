@@ -1,4 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { Readable } from 'node:stream';
+import { and, eq, gt } from 'drizzle-orm';
+import { db } from '@openreader/database';
+import { ttsPlaybackSessions, ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
+import { verifyTtsPlaybackToken } from '@openreader/tts/playback-token';
 import { encodeSseFrame } from '../operations';
 import type {
   PdfLayoutJobResult,
@@ -6,13 +11,15 @@ import type {
   WorkerOperationEvent,
   WorkerOperationRequest,
   WorkerOperationState,
-  WhisperAlignJobResult,
+  TtsPlaybackJobResult,
 } from '../operations/contracts';
 import { hashOpKey } from '../infrastructure/nats-adapters';
 import type { StreamedOperationState } from '../operations/recovery';
 import type { ReconciliationStateStore } from '../operations/reconciliation';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
-import { buildPdfOperationKey, buildWhisperOperationKey } from '../operations/keys';
+import { buildPdfOperationKey, buildTtsPlaybackOperationKey } from '../operations/keys';
+import { requireEnv } from '../infrastructure/config';
+import type { ArtifactStorage } from '../infrastructure/storage';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -23,7 +30,7 @@ import {
   pdfOperationCreateSchema,
   pdfResolveSchema,
   computeOperationSchema,
-  whisperOperationCreateSchema,
+  ttsPlaybackOperationCreateSchema,
 } from './schemas';
 
 const OP_EVENTS_KEEPALIVE_MS = 15_000;
@@ -34,7 +41,7 @@ interface OperationEventStreamLike {
   subscribe(input: {
     opId: string;
     sinceEventId?: number;
-    onEvent: (event: WorkerOperationEvent<WhisperAlignJobResult | PdfLayoutJobResult>) => void | Promise<void>;
+    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult>) => void | Promise<void>;
     onError?: (error: unknown) => void;
   }): Promise<() => void>;
 }
@@ -95,6 +102,7 @@ function isTerminalStatus(status: import('../operations/contracts').WorkerJobSta
 export function registerComputeWorkerRoutes(input: {
   app: FastifyInstance;
   deps: ComputeWorkerRouteDeps;
+  storage: ArtifactStorage;
   s3Prefix: string;
   ensureOrphanedOpRecovery: () => Promise<void>;
   getOpState: (opId: string) => Promise<StreamedOperationState | null>;
@@ -106,6 +114,7 @@ export function registerComputeWorkerRoutes(input: {
   const {
     app,
     deps,
+    storage,
     s3Prefix,
     ensureOrphanedOpRecovery,
     getOpState,
@@ -114,6 +123,106 @@ export function registerComputeWorkerRoutes(input: {
     markActivity,
     onActiveSseChanged,
   } = input;
+
+  type PlaybackSessionRow = {
+    sessionId: string;
+    userId: string;
+    storageUserId: string;
+    documentId: string;
+    documentVersion: number;
+    readerType: string;
+    status: string;
+    settingsHash: string;
+    startOrdinal: number;
+    cursorOrdinal: number;
+    expiresAt: number;
+  };
+
+  type CompletedPlaybackSegment = {
+    ordinal: number;
+    audioKey: string;
+    durationMs: number;
+  };
+
+  const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const stripId3Tag = (bytes: Buffer): Buffer => {
+    if (bytes.length < 10 || bytes.subarray(0, 3).toString('ascii') !== 'ID3') return bytes;
+    const size =
+      ((bytes[6] & 0x7f) << 21)
+      | ((bytes[7] & 0x7f) << 14)
+      | ((bytes[8] & 0x7f) << 7)
+      | (bytes[9] & 0x7f);
+    const end = 10 + size;
+    return end > 0 && end < bytes.length ? bytes.subarray(end) : bytes;
+  };
+
+  const readPlaybackSession = async (sessionId: string): Promise<PlaybackSessionRow | null> => {
+    const rows = (await db
+      .select({
+        sessionId: ttsPlaybackSessions.sessionId,
+        userId: ttsPlaybackSessions.userId,
+        storageUserId: ttsPlaybackSessions.storageUserId,
+        documentId: ttsPlaybackSessions.documentId,
+        documentVersion: ttsPlaybackSessions.documentVersion,
+        readerType: ttsPlaybackSessions.readerType,
+        status: ttsPlaybackSessions.status,
+        settingsHash: ttsPlaybackSessions.settingsHash,
+        startOrdinal: ttsPlaybackSessions.startOrdinal,
+        cursorOrdinal: ttsPlaybackSessions.cursorOrdinal,
+        expiresAt: ttsPlaybackSessions.expiresAt,
+      })
+      .from(ttsPlaybackSessions)
+      .where(eq(ttsPlaybackSessions.sessionId, sessionId))
+      .limit(1)) as PlaybackSessionRow[];
+    return rows[0] ?? null;
+  };
+
+  const readCompletedPlaybackSegment = async (
+    session: PlaybackSessionRow,
+    ordinal: number,
+  ): Promise<CompletedPlaybackSegment | null> => {
+    const rows = (await db
+      .select({
+        ordinal: ttsSegmentEntries.segmentIndex,
+        audioKey: ttsSegmentVariants.audioKey,
+        durationMs: ttsSegmentVariants.durationMs,
+      })
+      .from(ttsSegmentEntries)
+      .innerJoin(ttsSegmentVariants, and(
+        eq(ttsSegmentVariants.segmentEntryId, ttsSegmentEntries.segmentEntryId),
+        eq(ttsSegmentVariants.userId, ttsSegmentEntries.userId),
+      ))
+      .where(and(
+        eq(ttsSegmentEntries.userId, session.storageUserId),
+        eq(ttsSegmentEntries.documentId, session.documentId),
+        eq(ttsSegmentEntries.documentVersion, session.documentVersion),
+        eq(ttsSegmentEntries.segmentIndex, ordinal),
+        eq(ttsSegmentVariants.settingsHash, session.settingsHash),
+        eq(ttsSegmentVariants.status, 'completed'),
+        gt(ttsSegmentVariants.audioKey, ''),
+      ))
+      .limit(1)) as Array<{ ordinal: number; audioKey: string | null; durationMs: number | null }>;
+    const row = rows[0];
+    if (!row?.audioKey) return null;
+    return {
+      ordinal: Number(row.ordinal),
+      audioKey: row.audioKey,
+      durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
+    };
+  };
+
+  const updatePlaybackCursor = async (sessionId: string, ordinal: number): Promise<void> => {
+    const now = Date.now();
+    await db
+      .update(ttsPlaybackSessions)
+      .set({
+        cursorOrdinal: Math.max(0, Math.floor(ordinal)),
+        cursorUpdatedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(ttsPlaybackSessions.sessionId, sessionId));
+  };
 
   app.get('/health/live', {
     schema: {
@@ -135,34 +244,116 @@ export function registerComputeWorkerRoutes(input: {
     },
   }, async () => ({ ok: true, natsConnected: getNatsConnected() }));
 
-  app.post('/v1/whisper-align/operations', {
+  app.get('/v1/tts-playback/:sessionId/audio', {
     schema: {
-      body: jsonSchema(whisperOperationCreateSchema),
-      response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
+      security: [],
+      params: {
+        type: 'object',
+        properties: { sessionId: { type: 'string' } },
+        required: ['sessionId'],
+      },
+      querystring: {
+        type: 'object',
+        properties: { token: { type: 'string' } },
+        required: ['token'],
+      },
+      response: {
+        200: { type: 'string', description: 'Progressive MP3 audio stream' },
+        400: errorResponseSchema,
+        403: errorResponseSchema,
+        404: errorResponseSchema,
+      },
     },
   }, async (request, reply) => {
-    const parsed = whisperOperationCreateSchema.safeParse(request.body);
-    if (!parsed.success) {
+    const params = request.params as { sessionId?: string };
+    const query = request.query as { token?: string };
+    const sessionId = params.sessionId?.trim() ?? '';
+    if (!sessionId || !query.token) {
       reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
+      return { error: 'Missing playback session id or token' };
     }
 
-    const requestOp: WorkerOperationRequest = {
-      kind: 'whisper_align',
-      opKey: buildWhisperOperationKey(parsed.data),
-      payload: parsed.data,
+    let tokenPayload: ReturnType<typeof verifyTtsPlaybackToken>;
+    try {
+      tokenPayload = verifyTtsPlaybackToken(query.token, requireEnv('TTS_PLAYBACK_TOKEN_SECRET'));
+    } catch (error) {
+      reply.code(403);
+      return { error: toErrorMessage(error) };
+    }
+    if (tokenPayload.sessionId !== sessionId) {
+      reply.code(403);
+      return { error: 'Playback token session mismatch' };
+    }
+
+    const initialSession = await readPlaybackSession(sessionId);
+    if (!initialSession) {
+      reply.code(404);
+      return { error: 'Playback session not found' };
+    }
+    if (
+      initialSession.userId !== tokenPayload.userId
+      || initialSession.storageUserId !== tokenPayload.storageUserId
+      || initialSession.documentId !== tokenPayload.documentId
+    ) {
+      reply.code(403);
+      return { error: 'Playback token scope mismatch' };
+    }
+
+    let closed = false;
+    request.raw.on('close', () => {
+      closed = true;
+      app.log.info({ sessionId }, 'tts.playback.audio.client_closed');
+    });
+
+    const startedAt = Date.now();
+    const streamAudio = async function* (): AsyncGenerator<Buffer> {
+      let ordinal = Math.max(0, Math.floor(initialSession.startOrdinal));
+      let wroteFirstByte = false;
+      for (;;) {
+        if (closed) return;
+        const session = await readPlaybackSession(sessionId);
+        if (!session) return;
+        if (Date.now() > session.expiresAt) {
+          app.log.info({ sessionId, ordinal }, 'tts.playback.audio.session_expired');
+          return;
+        }
+        if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
+          app.log.info({ sessionId, ordinal, status: session.status }, 'tts.playback.audio.session_stopped');
+          return;
+        }
+
+        const segment = await readCompletedPlaybackSegment(session, ordinal);
+        if (!segment) {
+          if (session.status === 'succeeded') {
+            app.log.info({ sessionId, ordinal }, 'tts.playback.audio.stopped_at_gap');
+            return;
+          }
+          await sleep(500);
+          continue;
+        }
+
+        const waitMs = Date.now() - startedAt;
+        await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
+          app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
+        });
+        const bytes = Buffer.from(await storage.readObject(segment.audioKey));
+        const body = wroteFirstByte ? stripId3Tag(bytes) : bytes;
+        if (!wroteFirstByte) {
+          wroteFirstByte = true;
+          app.log.info({ sessionId, ordinal, firstByteMs: waitMs }, 'tts.playback.audio.first_byte');
+        } else {
+          app.log.info({ sessionId, ordinal, waitMs }, 'tts.playback.audio.segment');
+        }
+        markActivity('tts_playback_audio_segment');
+        yield body;
+        ordinal += 1;
+      }
     };
-    await ensureOrphanedOpRecovery();
-    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
-    app.log.info({
-      kind: requestOp.kind,
-      opId: op.opId,
-      jobId: op.jobId,
-      status: op.status,
-      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
-    }, 'op.accepted');
-    reply.code(202);
-    return toComputeOperation(op);
+
+    reply.header('Content-Type', 'audio/mpeg');
+    reply.header('Cache-Control', 'private, no-store');
+    reply.header('X-Accel-Buffering', 'no');
+    return Readable.from(streamAudio());
   });
 
   app.post('/v1/pdf-layout/operations', {
@@ -188,6 +379,36 @@ export function registerComputeWorkerRoutes(input: {
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    reply.code(202);
+    return toComputeOperation(op);
+  });
+
+  app.post('/v1/tts-playback/operations', {
+    schema: {
+      body: jsonSchema(ttsPlaybackOperationCreateSchema),
+      response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackOperationCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+
+    const requestOp: WorkerOperationRequest = {
+      kind: 'tts_playback',
+      opKey: buildTtsPlaybackOperationKey(parsed.data),
+      payload: parsed.data,
+    };
+    await ensureOrphanedOpRecovery();
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    app.log.info({
+      kind: requestOp.kind,
+      opId: op.opId,
+      jobId: op.jobId,
+      status: op.status,
+      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
+    }, 'op.accepted');
     reply.code(202);
     return toComputeOperation(op);
   });
@@ -290,7 +511,7 @@ export function registerComputeWorkerRoutes(input: {
 
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
-      const frameEvent: ComputeOperationEvent<WhisperAlignJobResult | PdfLayoutJobResult> = {
+      const frameEvent: ComputeOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult> = {
         eventId,
         snapshot: toComputeOperation(snapshot),
       };

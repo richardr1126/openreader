@@ -1,4 +1,4 @@
-import { isBuiltInTtsProviderId } from '@/lib/shared/tts-provider-catalog';
+import { isBuiltInTtsProviderId } from '@openreader/tts/provider-catalog';
 
 export interface SharedProviderSlugEntry {
   slug: string;

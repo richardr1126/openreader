@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { resolveEffectiveTtsInstructions } from '../../src/lib/server/admin/tts-instructions';
+import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
 
 describe('resolveEffectiveTtsInstructions', () => {
   test('uses explicit request instructions when model supports them', () => {

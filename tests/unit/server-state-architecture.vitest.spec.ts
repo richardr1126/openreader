@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 
@@ -116,8 +116,10 @@ describe('server-state architecture', () => {
     expect(parsedDocumentHook).toContain('queryClient.setQueryData<ParsedPdfQueryState>');
   });
 
-  test('loads voices and claims through centralized query hooks', () => {
-    expect(source('src/hooks/audio/useVoiceManagement.ts')).toContain('queryKeys.ttsVoices');
+  test('loads TTS voice metadata and claims through centralized query hooks', () => {
+    const voiceHook = source('src/hooks/audio/useVoiceManagement.ts');
+    expect(voiceHook).toContain('queryKeys.ttsVoices');
+    expect(voiceHook).toContain('resolveTtsProviderModelPolicy');
     expect(source('src/components/auth/ClaimDataModal.tsx')).toContain('useClaimData(false)');
     expect(source('src/contexts/OnboardingFlowContext.tsx')).toContain('useClaimData(');
   });
@@ -128,11 +130,48 @@ describe('server-state architecture', () => {
     expect(source('src/components/admin/AdminProvidersPanel.tsx')).toContain('queryKeys.admin(sessionId');
   });
 
-  test('keys TTS audio blobs by server-owned audio identity and version', () => {
+  test('drives TTS playback through worker-owned progressive streams', () => {
     const context = source('src/contexts/TTSContext.tsx');
-    expect(context).toContain('audioKey: playbackSource.manifest.audioKey');
-    expect(context).toContain('version: playbackSource.manifest.updatedAt');
-    expect(context).not.toContain('version: playbackSource.manifest.durationMs');
+    const playbackHook = source('src/hooks/audio/useTtsPlayback.ts');
+    const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
+    const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
+    const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
+    expect(context).toContain('createTtsPlaybackSession');
+    expect(context).toContain('useTtsPlayback');
+    expect(context).toContain('resolvePlaybackStartIndex');
+    expect(playbackHook).toContain('normalizePlaybackTimeline');
+    expect(playbackHook).toContain('projectTimelineAtTime');
+    expect(context).toContain('audio.src = session.audioUrl');
+    expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
+    expect(streamSessionRoute).toContain('startSegmentKey');
+    expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
+    expect(workerRoutes).toContain('Readable.from(streamAudio())');
+    expect(workerRoutes).toContain('verifyTtsPlaybackToken');
+    expect(workerRoutes).toContain('updatePlaybackCursor');
+    expect(streamSessionRoute).toContain('const startOrdinal = 0');
+    expect(streamSessionRoute).toContain('...(startPage !== undefined ? { startPage } : {})');
+    expect(streamSessionRoute).toContain('...(startSpineIndex !== undefined ? { startSpineIndex } : {})');
+    // Single forward-generation job throttled to a client cursor; segment
+    // discovery is SSE-driven (no polling), and the disconnect-continuation
+    // extent comes from the admin ttsPlaybackBackgroundExtent setting.
+    expect(streamSessionRoute).toContain('TTS_PLAYBACK_AHEAD_WINDOW');
+    expect(streamSessionRoute).toContain('backgroundExtent');
+    expect(context).toContain('subscribeTtsPlaybackEvents');
+    expect(context).toContain('postTtsPlaybackCursor');
+    expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('openOperationEvents');
+    expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/media.m3u8/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/lib/client/tts/hls-audio-controller.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/extend/route.ts'))).toBe(false);
+    expect(streamSessions).toContain('Math.floor(options?.minOrdinal ?? 0)');
+    expect(streamSessions).not.toContain('Math.max(session.startOrdinal');
+    expect(streamSessions).toContain('readStreamPlanSegments(session)');
+    expect(streamSessions).toContain('locatorIdentityKey(plan.locator)');
+    expect(context).not.toContain('plannedSegmentsByLocationRef');
+    expect(context).not.toContain('pendingNextLocationRef');
+    expect(existsSync(path.join(root, 'src/lib/client/cache/audio.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/lib/client/tts/audio-warm-cache.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/lib/client/pdf-tts-planning.ts'))).toBe(false);
   });
 
   test('keeps Cache Storage best-effort and admits only successful full responses', () => {

@@ -4,7 +4,7 @@ import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 import type { TTSSegmentLocator } from '@/types/client';
-import { segmentWords } from '@/lib/shared/language';
+import { segmentWords } from '@openreader/tts/language';
 import {
   buildAlignmentTokenRanges,
   type HighlightTokenRange,

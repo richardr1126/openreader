@@ -4,7 +4,7 @@ import {
   canonicalizeEpubSegmentAgainstSpineText,
   canonicalizeEpubSegmentsAgainstSpineText,
 } from '../../src/lib/client/epub/canonicalize-epub-segment';
-import { planCanonicalTtsSegments } from '../../src/lib/shared/tts-segment-plan';
+import { planCanonicalTtsSegments } from '@openreader/tts/segment-plan';
 
 describe('canonicalizeEpubSegmentAgainstSpineText', () => {
   test('maps an exact sentence to the canonical segment identity', () => {

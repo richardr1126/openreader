@@ -1,4 +1,4 @@
-import type { TTSSentenceAlignment, ParsedPdfDocument } from '../api/types';
+import type { ParsedPdfDocument } from '../api/types';
 
 export type {
   TTSAudioBuffer,
@@ -14,27 +14,12 @@ export type {
   ParsedPdfDocument,
 } from '../api/types';
 
-export const ALIGN_QUEUE_NAME = 'whisper-align';
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
+export const TTS_PLAYBACK_QUEUE_NAME = 'tts-playback';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
 
 export function encodeParserVersion(parserVersion: string, defaultVersion = PDF_PARSER_VERSION): string {
   return encodeURIComponent(parserVersion.trim() || defaultVersion);
-}
-
-export interface WhisperAlignJobBase {
-  text: string;
-  lang?: string;
-  cacheKey?: string;
-}
-
-export interface WhisperAlignJobRequest extends WhisperAlignJobBase {
-  audioObjectKey: string;
-}
-
-export interface WhisperAlignJobResult {
-  alignments: TTSSentenceAlignment[];
-  timing?: WorkerJobTiming;
 }
 
 export interface PdfLayoutJobBase {
@@ -44,6 +29,74 @@ export interface PdfLayoutJobBase {
 
 export interface PdfLayoutJobRequest extends PdfLayoutJobBase {
   documentObjectKey: string;
+}
+
+export interface TtsPlaybackJobRequest {
+  sessionId: string;
+  userId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  settingsJson: unknown;
+  startOrdinal: number;
+  planObjectKey?: string;
+  /**
+   * How many segments ahead of the client's playback cursor the worker may
+   * generate while the client is connected (cursor is fresh). When the cursor
+   * goes stale (client disconnected / JS suspended) the worker stops honoring
+   * this window and generates forward up to the `backgroundExtent` boundary so
+   * background playback survives. Omitted ⇒ a small default window.
+   */
+  aheadWindow?: number;
+  /**
+   * On disconnect, how far the worker keeps generating so background playback
+   * continues without the client: 'section' = finish the current PDF page /
+   * EPUB chapter; 'document' = generate to the end of the forward plan.
+   */
+  backgroundExtent?: 'section' | 'document';
+  planning: {
+    /**
+     * Explicit client-provided source units (legacy path). Optional — when
+     * absent, the worker derives source units itself from `documentSource`
+     * (worker-owned planning).
+     */
+    sourceUnits?: Array<{
+      sourceKey: string;
+      text: string;
+      locator?: unknown;
+    }>;
+    currentSourceKeys?: string[];
+    startSegmentKey?: string;
+    startText?: string;
+    maxBlockLength?: number;
+    enforceSourceBoundaries?: boolean;
+    language?: string;
+    /**
+     * Worker-owned derivation input. When present (and `sourceUnits` is
+     * absent), the worker reads the document's parsed artifact and derives the
+     * source units itself, so generation can continue independently of the
+     * client. `extent` bounds how far ahead the worker generates.
+     */
+    documentSource?: {
+      namespace: string | null;
+      skipBlockKinds?: string[];
+      extent: 'section' | 'document';
+      /** PDF: 1-based page to start generating from. */
+      startPage?: number;
+      /** EPUB: 0-based spine index to start generating from. */
+      startSpineIndex?: number;
+      /** HTML: parse as plain text (.txt) rather than markdown. */
+      isPlainText?: boolean;
+    };
+  };
+}
+
+export interface TtsPlaybackJobResult {
+  sessionId: string;
+  planObjectKey?: string;
+  timing?: WorkerJobTiming;
 }
 
 export type PdfLayoutJobResult =
@@ -80,6 +133,19 @@ export interface PdfLayoutProgress {
   phase: PdfLayoutProgressPhase;
 }
 
+/**
+ * Lightweight progress watermark for a TTS playback job, pushed to the client via
+ * the operation-events SSE channel. `completedThroughOrdinal` is the highest
+ * contiguous plan ordinal whose audio is ready; the client reacts by refetching
+ * the timeline and nudging the audio engine to discover the new segments.
+ */
+export interface TtsPlaybackProgress {
+  completedThroughOrdinal: number;
+  plannedCount: number;
+}
+
+export type WorkerOperationProgress = PdfLayoutProgress | TtsPlaybackProgress;
+
 export interface WorkerJobStatusResponse<Result> {
   status: WorkerJobState;
   result?: Result;
@@ -87,13 +153,7 @@ export interface WorkerJobStatusResponse<Result> {
   timing?: WorkerJobTiming;
 }
 
-export type WorkerOperationKind = 'whisper_align' | 'pdf_layout';
-
-export interface WhisperAlignOperationRequest {
-  kind: 'whisper_align';
-  opKey: string;
-  payload: WhisperAlignJobRequest;
-}
+export type WorkerOperationKind = 'pdf_layout' | 'tts_playback';
 
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
@@ -101,7 +161,15 @@ export interface PdfLayoutOperationRequest {
   payload: PdfLayoutJobRequest;
 }
 
-export type WorkerOperationRequest = WhisperAlignOperationRequest | PdfLayoutOperationRequest;
+export interface TtsPlaybackOperationRequest {
+  kind: 'tts_playback';
+  opKey: string;
+  payload: TtsPlaybackJobRequest;
+}
+
+export type WorkerOperationRequest =
+  | PdfLayoutOperationRequest
+  | TtsPlaybackOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;
@@ -115,7 +183,7 @@ export interface WorkerOperationState<Result = unknown> {
   result?: Result;
   error?: WorkerJobErrorShape;
   timing?: WorkerJobTiming;
-  progress?: PdfLayoutProgress;
+  progress?: WorkerOperationProgress;
 }
 
 export interface WorkerOperationEvent<Result = unknown> {

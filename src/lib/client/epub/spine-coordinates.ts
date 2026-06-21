@@ -1,7 +1,7 @@
 import type { Book } from 'epubjs';
 import type Section from 'epubjs/types/section';
 
-import { normalizeSegmentIdentityText } from '@/lib/shared/tts-segment-plan';
+import { normalizeSegmentIdentityText } from '@openreader/tts/segment-plan';
 import type { TTSSegmentLocator } from '@/types/client';
 
 /**

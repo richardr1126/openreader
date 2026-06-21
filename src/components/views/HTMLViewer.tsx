@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { DocumentSkeleton } from '@/components/documents/DocumentSkeleton';
 import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
-import type { HtmlBlock } from '@/lib/client/html/blocks';
+import type { HtmlBlock } from '@openreader/tts/html-blocks';
 import {
   clearHtmlSentenceHighlight,
   clearHtmlWordHighlight,

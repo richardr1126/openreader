@@ -57,7 +57,7 @@ describe('state-machine decisions', () => {
   });
 
   test('never reuses kind-mismatched operation', () => {
-    const current = runningState({ kind: 'whisper_align' });
+    const current = runningState({ kind: 'tts_playback' });
 
     expect(shouldReuseExistingOperation({
       current,

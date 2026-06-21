@@ -8,13 +8,13 @@ import {
   speechSdkProviderPrefix,
   supportsNativeModelSpeed,
   supportsTtsInstructions,
-} from '../../src/lib/shared/tts-provider-catalog';
-import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '../../src/lib/shared/tts-provider-policy';
+} from '@openreader/tts/provider-catalog';
+import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import {
   resolveReplicateLanguageInputKey,
   resolveReplicateVoiceInputKey,
   resolveVoices,
-} from '../../src/lib/server/tts/voice-resolution';
+} from '@openreader/tts/voice-resolution';
 import { applyConfigUpdate, getVoicePreferenceKey } from '../../src/lib/client/config/updates';
 import { buildSyncedPreferencePatch } from '../../src/lib/client/config/preferences';
 

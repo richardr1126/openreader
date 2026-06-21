@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/server/auth/auth';
-import { isBuiltInTtsProviderId } from '@/lib/shared/tts-provider-catalog';
-import { defaultModelForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { resolveVoices } from '@/lib/server/tts/voice-resolution';
+import { isBuiltInTtsProviderId } from '@openreader/tts/provider-catalog';
+import { defaultModelForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { resolveVoices } from '@openreader/tts/voice-resolution';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { normalizeServerError, toApiErrorBody, toHttpStatus } from '@/lib/server/errors/contract';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
-    // Auth check - require session
     const session = await auth?.api.getSession({ headers: req.headers });
     if (auth && !session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,11 +25,7 @@ export async function GET(req: NextRequest) {
     });
 
     if ('error' in resolved) {
-      const status = resolved.error === 'no_shared_provider_configured'
-        ? 503
-        : resolved.error === 'provider_disabled'
-          ? 503
-          : 404;
+      const status = resolved.error === 'provider_unknown' ? 404 : 503;
       return NextResponse.json(
         {
           error: resolved.error === 'no_shared_provider_configured'
@@ -45,6 +42,7 @@ export async function GET(req: NextRequest) {
         normalize: { code: 'TTS_VOICES_UNSUPPORTED_PROVIDER', errorClass: 'validation', httpStatus: 500 },
       });
     }
+
     const effectiveProviderRef = resolved.adminRecord?.slug
       ?? req.headers.get('x-tts-provider')
       ?? runtimeConfig.defaultTtsProvider;

@@ -5,15 +5,9 @@ import { useConfig, ViewType } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import {
-  SEGMENT_PRELOAD_DEPTH_MIN,
-  SEGMENT_PRELOAD_DEPTH_MAX,
-  SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN,
-  SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX,
   TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN,
   TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX,
   TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP,
-  clampSegmentPreloadDepth,
-  clampSegmentPreloadSentenceLookahead,
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
 import {
@@ -28,7 +22,7 @@ import {
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
-import { getLanguageDisplayName, getTtsLanguageCompatibilityWarnings } from '@/lib/shared/language';
+import { getLanguageDisplayName, getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 
 const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
   { kind: 'header', label: 'Header' },
@@ -138,8 +132,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
     viewType,
     skipBlank,
     epubTheme,
-    segmentPreloadDepthPages,
-    segmentPreloadSentenceLookahead,
     ttsSegmentMaxBlockLength,
     updateConfigKey,
     pdfHighlightEnabled,
@@ -160,17 +152,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
     ?? DOCUMENT_LANGUAGE_OPTIONS[0];
   const selectedView = viewTypeTextMapping.find(v => v.id === viewType) || viewTypeTextMapping[0];
   const isPdfMode = !epub && !html && !!pdf;
-  const [localPreloadDepth, setLocalPreloadDepth] = useState(segmentPreloadDepthPages);
-  const [localSentenceLookahead, setLocalSentenceLookahead] = useState(segmentPreloadSentenceLookahead);
   const [localMaxBlockLength, setLocalMaxBlockLength] = useState(ttsSegmentMaxBlockLength);
-
-  useEffect(() => {
-    setLocalPreloadDepth(segmentPreloadDepthPages);
-  }, [segmentPreloadDepthPages]);
-
-  useEffect(() => {
-    setLocalSentenceLookahead(segmentPreloadSentenceLookahead);
-  }, [segmentPreloadSentenceLookahead]);
 
   useEffect(() => {
     setLocalMaxBlockLength(ttsSegmentMaxBlockLength);
@@ -321,36 +303,6 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
 
 
           <div className="space-y-3 pt-1">
-            <RangeSetting
-              label="Segment preload depth"
-              value={localPreloadDepth}
-              min={SEGMENT_PRELOAD_DEPTH_MIN}
-              max={SEGMENT_PRELOAD_DEPTH_MAX}
-              step={1}
-              description="Upcoming pages/locations to queue."
-              formatter={(value) => String(value)}
-              onChange={(value) => {
-                const next = clampSegmentPreloadDepth(value);
-                setLocalPreloadDepth(next);
-                void updateConfigKey('segmentPreloadDepthPages', next);
-              }}
-            />
-
-            <RangeSetting
-              label="Segment lookahead per page/location"
-              value={localSentenceLookahead}
-              min={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN}
-              max={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX}
-              step={1}
-              description="Segments to prepare per queued page/section."
-              formatter={(value) => String(value)}
-              onChange={(value) => {
-                const next = clampSegmentPreloadSentenceLookahead(value);
-                setLocalSentenceLookahead(next);
-                void updateConfigKey('segmentPreloadSentenceLookahead', next);
-              }}
-            />
-
             <RangeSetting
               label="TTS segment max block length"
               value={localMaxBlockLength}

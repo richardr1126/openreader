@@ -1,6 +1,6 @@
 import type { AudiobookSourceAdapter, PreparedAudiobookChapter } from '@/lib/client/audiobooks/pipeline';
-import { normalizeTextForTts } from '@/lib/shared/nlp';
-import type { HtmlBlock } from '@/lib/client/html/blocks';
+import { normalizeTextForTts } from '@openreader/tts/nlp';
+import type { HtmlBlock } from '@openreader/tts/html-blocks';
 
 interface HtmlAudiobookAdapterOptions {
   blocks: HtmlBlock[];

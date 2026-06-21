@@ -1,9 +1,9 @@
 import type { WorkerOperationState } from '../operations/contracts';
-import { pdfSubjectFromOperationKey } from '../operations/keys';
+import { pdfSubjectFromOperationKey, ttsPlaybackSubjectFromOperationKey } from '../operations/keys';
 
 export type ComputeOperationSubject =
-  | { kind: 'whisper_align' }
-  | { kind: 'pdf_layout'; documentId: string; namespace: string | null };
+  | { kind: 'pdf_layout'; documentId: string; namespace: string | null }
+  | { kind: 'tts_playback'; documentId: string; sessionId: string };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -28,7 +28,7 @@ export function toComputeOperation<Result>(
 ): ComputeOperation<Result> {
   const subject = state.kind === 'pdf_layout'
     ? (pdfSubjectFromOperationKey(state.opKey) ?? { kind: 'pdf_layout', documentId: '', namespace: null })
-    : { kind: 'whisper_align' as const };
+    : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,
     subject,

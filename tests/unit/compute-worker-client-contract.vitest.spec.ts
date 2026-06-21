@@ -1,7 +1,26 @@
 import { afterEach, describe, expect, test } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { createComputeWorkerApp, type ComputeWorkerApp } from '../../packages/compute-worker/src/api/app';
 import { FakeControlPlane } from '../../packages/compute-worker/tests/fixtures/fake-control-plane';
 import { ComputeWorkerClient } from '../../src/lib/server/compute-worker/client';
+
+const root = path.resolve(import.meta.dirname, '../..');
+const workerSrcRoot = path.join(root, 'packages/compute-worker/src');
+
+function collectSourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      files.push(...collectSourceFiles(fullPath));
+    } else if (/\.(ts|tsx|js|mjs|cjs)$/.test(entry)) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
 
 describe('ComputeWorkerClient contract', () => {
   let runtime: ComputeWorkerApp | null = null;
@@ -54,5 +73,19 @@ describe('ComputeWorkerClient contract', () => {
       artifact: null,
       operation: { opId: created.opId },
     });
+  });
+
+  test('keeps compute-worker source independent from app server modules', () => {
+    for (const file of collectSourceFiles(workerSrcRoot)) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, path.relative(root, file)).not.toMatch(/from ['"].*src\/lib\/server\//);
+      expect(source, path.relative(root, file)).not.toMatch(/from ['"].*src\/app\//);
+    }
+  });
+
+  test('keeps worker database dependency compatible with ESM execution', () => {
+    const databaseEntry = readFileSync(path.join(root, 'packages/database/src/index.ts'), 'utf8');
+    expect(databaseEntry).toContain("import { createRequire } from 'node:module'");
+    expect(databaseEntry).toContain('createRequire(import.meta.url)');
   });
 });

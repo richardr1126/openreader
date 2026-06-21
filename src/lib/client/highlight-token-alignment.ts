@@ -1,6 +1,6 @@
 import { CmpStr } from 'cmpstr';
 
-import { normalizeUnicodeToken, segmentWords } from '@/lib/shared/language';
+import { normalizeUnicodeToken, segmentWords } from '@openreader/tts/language';
 import type { TTSSentenceAlignment } from '@/types/tts';
 
 const cmp = CmpStr.create().setMetric('dice').setFlags('itw');

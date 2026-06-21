@@ -35,8 +35,6 @@ interface EPUBViewerProps {
     | 'clearHighlights'
     | 'highlightWordIndex'
     | 'clearWordHighlights'
-    | 'walkUpcomingRenderedLocations'
-    | 'resolveEpubLocator'
   >;
 }
 
@@ -58,13 +56,9 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
     clearHighlights,
     highlightWordIndex,
     clearWordHighlights,
-    walkUpcomingRenderedLocations,
-    resolveEpubLocator,
   } = epubState;
   const {
     registerLocationChangeHandler,
-    registerEpubLocationWalker,
-    registerEpubLocatorResolver,
     pause,
     currentSegment,
     currentSentenceAlignment,
@@ -96,20 +90,12 @@ export function EPUBViewer({ className = '', epubState }: EPUBViewerProps) {
   // Register the location change handler
   useEffect(() => {
     registerLocationChangeHandler(handleLocationChanged);
-    registerEpubLocationWalker(walkUpcomingRenderedLocations);
-    registerEpubLocatorResolver(resolveEpubLocator);
     return () => {
       registerLocationChangeHandler(null);
-      registerEpubLocationWalker(null);
-      registerEpubLocatorResolver(null);
     };
   }, [
     registerLocationChangeHandler,
-    registerEpubLocationWalker,
-    registerEpubLocatorResolver,
     handleLocationChanged,
-    walkUpcomingRenderedLocations,
-    resolveEpubLocator,
   ]);
 
   // Handle highlighting

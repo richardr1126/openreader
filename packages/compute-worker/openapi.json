@@ -286,21 +286,6 @@
                   "kind": {
                     "type": "string",
                     "enum": [
-                      "whisper_align"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
                       "pdf_layout"
                     ]
                   },
@@ -322,6 +307,29 @@
                   "kind",
                   "documentId",
                   "namespace"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "tts_playback"
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "documentId",
+                  "sessionId"
                 ],
                 "additionalProperties": false
               }
@@ -433,21 +441,6 @@
                       "kind": {
                         "type": "string",
                         "enum": [
-                          "whisper_align"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "enum": [
                           "pdf_layout"
                         ]
                       },
@@ -469,6 +462,29 @@
                       "kind",
                       "documentId",
                       "namespace"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "tts_playback"
+                        ]
+                      },
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "sessionId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "documentId",
+                      "sessionId"
                     ],
                     "additionalProperties": false
                   }
@@ -605,21 +621,6 @@
                           "kind": {
                             "type": "string",
                             "enum": [
-                              "whisper_align"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "kind"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
                               "pdf_layout"
                             ]
                           },
@@ -641,6 +642,29 @@
                           "kind",
                           "documentId",
                           "namespace"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "sessionId"
                         ],
                         "additionalProperties": false
                       }
@@ -801,7 +825,100 @@
         }
       }
     },
-    "/v1/whisper-align/operations": {
+    "/v1/tts-playback/{sessionId}/audio": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "token",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Progressive MP3 audio stream",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Progressive MP3 audio stream"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pdf-layout/operations": {
       "post": {
         "requestBody": {
           "required": true,
@@ -810,29 +927,36 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "text": {
+                  "documentId": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^[a-f0-9]{64}$"
                   },
-                  "lang": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 16
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
-                  "cacheKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "audioObjectKey": {
+                  "documentObjectKey": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 2048
+                  },
+                  "replaceToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
                   }
                 },
                 "required": [
-                  "text",
-                  "audioObjectKey"
+                  "documentId",
+                  "namespace",
+                  "documentObjectKey"
                 ],
                 "additionalProperties": false
               }
@@ -852,21 +976,6 @@
                     },
                     "subject": {
                       "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "whisper_align"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
                         {
                           "type": "object",
                           "properties": {
@@ -894,6 +1003,29 @@
                             "kind",
                             "documentId",
                             "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
                           ],
                           "additionalProperties": false
                         }
@@ -1010,7 +1142,7 @@
         }
       }
     },
-    "/v1/pdf-layout/operations": {
+    "/v1/tts-playback/operations": {
       "post": {
         "requestBody": {
           "required": true,
@@ -1019,36 +1151,193 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "documentId": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
-                  "namespace": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
-                      },
-                      {
-                        "type": "null"
-                      }
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "readerType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub",
+                      "html"
                     ]
                   },
-                  "documentObjectKey": {
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "settingsJson": {},
+                  "startOrdinal": {
+                    "default": 0,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "planObjectKey": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 2048
                   },
-                  "replaceToken": {
+                  "aheadWindow": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 4096
+                  },
+                  "backgroundExtent": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
+                    "enum": [
+                      "section",
+                      "document"
+                    ]
+                  },
+                  "planning": {
+                    "type": "object",
+                    "properties": {
+                      "sourceUnits": {
+                        "maxItems": 4096,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sourceKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 512
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            },
+                            "locator": {}
+                          },
+                          "required": [
+                            "sourceKey",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "currentSourceKeys": {
+                        "maxItems": 4096,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 512
+                        }
+                      },
+                      "startSegmentKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "startText": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 20000
+                      },
+                      "maxBlockLength": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 20000
+                      },
+                      "enforceSourceBoundaries": {
+                        "type": "boolean"
+                      },
+                      "language": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
+                      },
+                      "documentSource": {
+                        "type": "object",
+                        "properties": {
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "skipBlockKinds": {
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "extent": {
+                            "type": "string",
+                            "enum": [
+                              "section",
+                              "document"
+                            ]
+                          },
+                          "startPage": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "startSpineIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "isPlainText": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "namespace",
+                          "extent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "required": [
+                  "sessionId",
+                  "userId",
+                  "storageUserId",
                   "documentId",
-                  "namespace",
-                  "documentObjectKey"
+                  "documentVersion",
+                  "readerType",
+                  "settingsHash",
+                  "settingsJson",
+                  "startOrdinal",
+                  "planning"
                 ],
                 "additionalProperties": false
               }
@@ -1068,21 +1357,6 @@
                     },
                     "subject": {
                       "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "whisper_align"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
                         {
                           "type": "object",
                           "properties": {
@@ -1110,6 +1384,29 @@
                             "kind",
                             "documentId",
                             "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
                           ],
                           "additionalProperties": false
                         }
@@ -1309,21 +1606,6 @@
                                     "kind": {
                                       "type": "string",
                                       "enum": [
-                                        "whisper_align"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "kind"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": [
                                         "pdf_layout"
                                       ]
                                     },
@@ -1345,6 +1627,29 @@
                                     "kind",
                                     "documentId",
                                     "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "sessionId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "sessionId"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -1505,21 +1810,6 @@
                             "kind": {
                               "type": "string",
                               "enum": [
-                                "whisper_align"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -1541,6 +1831,29 @@
                             "kind",
                             "documentId",
                             "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
                           ],
                           "additionalProperties": false
                         }

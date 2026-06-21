@@ -11,7 +11,7 @@ export type ComputeTimeoutConfig = {
   pdfHardCapMs: number;
 };
 
-export type ComputeOperationKind = 'whisper_align' | 'pdf_layout';
+export type ComputeOperationKind = 'pdf_layout' | 'tts_playback';
 export type IdleTimeoutAndHardCapInput<T> = {
   run: (touchProgress: () => void) => Promise<T>;
   idleTimeoutMs: number;
