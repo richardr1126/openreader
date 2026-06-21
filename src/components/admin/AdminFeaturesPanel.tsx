@@ -29,6 +29,27 @@ interface ProviderOption {
   providerType: TtsProviderId;
 }
 
+type PlaybackBackgroundExtent = 'section' | 'document';
+
+interface PlaybackBackgroundExtentOption {
+  value: PlaybackBackgroundExtent;
+  label: string;
+  description: string;
+}
+
+const PLAYBACK_BACKGROUND_EXTENT_OPTIONS: PlaybackBackgroundExtentOption[] = [
+  {
+    value: 'section',
+    label: 'Current section',
+    description: 'Continue through the current PDF page or EPUB chapter after the client stops heartbeating.',
+  },
+  {
+    value: 'document',
+    label: 'Full document',
+    description: 'Continue generating from the current position through the rest of the document.',
+  },
+];
+
 async function fetchAdminSettings(): Promise<SettingsResponse> {
   const res = await fetch('/api/admin/settings');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -160,6 +181,11 @@ export function AdminFeaturesPanel() {
   const selectedProviderOption = effectiveSelectedProvider;
   const shouldRenderRateLimitInputs = draft.disableTtsRateLimit === false;
   const shouldRenderComputeRateLimitInputs = draft.disableComputeRateLimit === false;
+  const playbackBackgroundExtentValue: PlaybackBackgroundExtent =
+    draft.ttsPlaybackBackgroundExtent === 'document' ? 'document' : 'section';
+  const playbackBackgroundExtentOption = PLAYBACK_BACKGROUND_EXTENT_OPTIONS.find(
+    (option) => option.value === playbackBackgroundExtentValue,
+  ) ?? PLAYBACK_BACKGROUND_EXTENT_OPTIONS[0];
 
   const handleProviderChange = (opt: ProviderOption) => {
     updateDraft('defaultTtsProvider', opt.id);
@@ -397,6 +423,42 @@ export function AdminFeaturesPanel() {
               <span className="text-xs text-muted">MB</span>
             </div>
           </div>
+        </div>
+      </Section>
+
+      <Section
+        title="TTS playback"
+        subtitle="Worker generation behavior for progressive playback."
+        action={<Badge tone="foreground">Playback</Badge>}
+      >
+        <div className="space-y-1.5 pb-2 border-b border-offbase">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Background generation extent</p>
+              <p className="text-xs text-muted mt-0.5">
+                How far the worker keeps generating after playback cursor updates stop.
+              </p>
+            </div>
+            <div className="shrink-0">{renderSource('ttsPlaybackBackgroundExtent')}</div>
+          </div>
+          <Select
+            value={playbackBackgroundExtentOption}
+            onChange={(option) => updateDraft('ttsPlaybackBackgroundExtent', option.value)}
+            options={PLAYBACK_BACKGROUND_EXTENT_OPTIONS}
+            getOptionKey={(option) => option.value}
+            renderValue={(option) => option.label}
+            renderOption={(option, { selected }) => (
+              <span className="block">
+                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                  {option.label}
+                </span>
+                <span className="block truncate text-xs text-muted">
+                  {option.description}
+                </span>
+              </span>
+            )}
+            chevronClassName="h-4 w-4 text-muted"
+          />
         </div>
       </Section>
 

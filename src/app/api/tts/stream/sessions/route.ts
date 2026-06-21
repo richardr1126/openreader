@@ -177,9 +177,8 @@ export async function POST(request: NextRequest) {
 
     // The worker derives one position-independent canonical plan over the whole
     // document (whole book for EPUB) with absolute ordinals, reused across
-    // sessions; the start position only selects this session's startOrdinal (audio
-    // window). `extent` is retained for the request shape but no longer scopes plan
-    // derivation — `backgroundExtent` (below) controls generation reach instead.
+    // sessions. The audio layout origin stays at ordinal 0; the selected start
+    // ordinal only seeds the generation cursor.
     const planExtent = scope.readerType === 'epub' ? 'section' : 'document';
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
@@ -199,10 +198,8 @@ export async function POST(request: NextRequest) {
     const startCharOffset = scope.readerType === 'epub'
       ? parsed.startLocation.charOffset
       : undefined;
-    // When the client already has a playback plan, start from its resolved
-    // absolute ordinal; otherwise the worker resolves it from the start hints and
-    // writes it back to the session before audio reads begin.
-    const startOrdinal = parsed.startOrdinal ?? 0;
+    const startOrdinal = 0;
+    const generationCursorOrdinal = parsed.startOrdinal ?? 0;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
@@ -221,6 +218,8 @@ export async function POST(request: NextRequest) {
       settingsHash,
       settingsJson,
       startOrdinal,
+      cursorOrdinal: generationCursorOrdinal,
+      cursorUpdatedAt: now,
       ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       expiresAt,
       createdAt: now,
@@ -247,7 +246,7 @@ export async function POST(request: NextRequest) {
       readerType: scope.readerType,
       settingsHash,
       settingsJson,
-      startOrdinal,
+      startOrdinal: generationCursorOrdinal,
       ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       // One forward-generation job, throttled to a window ahead of the client's
       // playback cursor; on disconnect it continues to the background extent.

@@ -63,7 +63,7 @@ import type {
   TTSRequestHeaders,
   TTSSegmentLocator,
 } from '@/types/client';
-import { isStableEpubLocator } from '@/types/client';
+import { isPdfLocator, isStableEpubLocator } from '@/types/client';
 
 import type { ReaderType } from '@/types/user-state';
 
@@ -105,6 +105,7 @@ interface TTSContextType extends TTSPlaybackState {
   playFromSegment: (index: number, locator?: TTSSegmentLocator | null) => void;
   seekPlaybackTo: (seconds: number) => void;
   setText: (text: string, options?: boolean | SetTextOptions) => void;
+  setDocumentPlaybackAnchor: (location: TTSLocation, hasReadableText: boolean, locator?: TTSSegmentLocator | null) => void;
   setCurrDocPages: (num: number | undefined) => void;
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
@@ -141,6 +142,13 @@ type PlaybackAnchor = {
   text: string;
   location: TTSLocation;
   locator: TTSSegmentLocator | null;
+  hasContent: boolean;
+};
+
+type PlaybackStartLocation = {
+  page?: number;
+  spineIndex?: number;
+  charOffset?: number;
 };
 
 // Read once per module load from SSR-injected runtime config. This sits at
@@ -170,13 +178,27 @@ const normalizeStartMatchText = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const pdfLocatorPage = (locator: TTSSegmentLocator | null | undefined): number | null => {
+  return isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
+};
+
+const pdfAnchorPage = (location: TTSLocation | undefined): number | null => {
+  return typeof location === 'number' && Number.isFinite(location)
+    ? Math.max(1, Math.floor(location))
+    : null;
+};
+
 const locatorMatchesPlaybackStart = (
   locator: TTSSegmentLocator | null | undefined,
-  startLocation: { page?: number; spineIndex?: number; charOffset?: number },
+  startLocation: PlaybackStartLocation,
 ): boolean => {
   if (!locator) return false;
   if (locator.readerType === 'pdf') {
-    return typeof startLocation.page === 'number' && locator.page === startLocation.page;
+    const locatorPage = pdfLocatorPage(locator);
+    return locatorPage !== null
+      && typeof startLocation.page === 'number'
+      && Number.isFinite(startLocation.page)
+      && locatorPage === Math.max(1, Math.floor(startLocation.page));
   }
   if (locator.readerType === 'epub') {
     return typeof startLocation.spineIndex === 'number' && locator.spineIndex === startLocation.spineIndex;
@@ -184,17 +206,50 @@ const locatorMatchesPlaybackStart = (
   return true;
 };
 
+const resolveFirstPlanIndexForPdfPage = (
+  plan: CanonicalTtsSegment[],
+  page: number | undefined,
+): number => {
+  if (typeof page !== 'number' || !Number.isFinite(page)) return -1;
+  const targetPage = Math.max(1, Math.floor(page));
+  return plan.findIndex((segment) => {
+    return pdfLocatorPage(segment.ownerLocator) === targetPage;
+  });
+};
+
+const resolveFirstPlanIndexForDocumentAnchor = (
+  plan: CanonicalTtsSegment[],
+  readerType: ReaderType,
+  location: TTSLocation,
+): number => {
+  if (readerType === 'pdf') {
+    const page = pdfAnchorPage(location);
+    return page === null ? -1 : resolveFirstPlanIndexForPdfPage(plan, page);
+  }
+  if (readerType === 'html') {
+    const locationKey = String(location || '1');
+    const exactLocation = plan.findIndex((segment) => {
+      const locator = segment.ownerLocator;
+      return locator?.readerType === 'html' && String(locator.location || '1') === locationKey;
+    });
+    return exactLocation >= 0 ? exactLocation : (plan.length > 0 ? 0 : -1);
+  }
+  return -1;
+};
+
 const resolvePlaybackStartIndex = (input: {
   plan: CanonicalTtsSegment[];
   desiredSegment?: CanonicalTtsSegment;
   desiredText: string;
-  startLocation: { page?: number; spineIndex?: number; charOffset?: number };
+  startLocation: PlaybackStartLocation;
 }): number => {
   if (input.plan.length === 0) return 0;
   if (input.desiredSegment?.key) {
     const byKey = input.plan.findIndex((segment) => segment.key === input.desiredSegment!.key);
     if (byKey >= 0) return byKey;
   }
+  const byPdfPage = resolveFirstPlanIndexForPdfPage(input.plan, input.startLocation.page);
+  if (byPdfPage >= 0) return byPdfPage;
   if (typeof input.startLocation.spineIndex === 'number' && typeof input.startLocation.charOffset === 'number') {
     const byEpubCoordinate = input.plan.findIndex((segment) => {
       const locator = segment.ownerLocator;
@@ -396,9 +451,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const syncPlaybackLocator = useCallback((locator: TTSSegmentLocator | null) => {
     if (!locator || !playbackActiveRef.current) return;
-    if (locator.readerType === 'pdf' && typeof locator.page === 'number') {
+    const page = pdfLocatorPage(locator);
+    if (page !== null) {
       playbackSyncNavigationRef.current = true;
-      setCurrDocPage(Math.max(1, Math.floor(locator.page)));
+      setCurrDocPage(page);
       return;
     }
     if (locator.readerType === 'epub') {
@@ -555,7 +611,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const writeCursor = () => {
       const currentSession = playbackSessionRef.current;
       if (!currentSession) return;
-      const cursor = Math.max(0, currentIndexRef.current);
+      const currentSegment = playbackSegmentsRef.current[currentIndexRef.current];
+      if (!currentSegment) return;
+      const cursor = Math.max(0, currentSegment.ordinal);
       void postTtsPlaybackCursor(currentSession.sessionId, cursor, headers);
     };
     writeCursor();
@@ -597,9 +655,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     stopPlaybackProjectionLoop();
     resetPlaybackRefs();
-    playbackPlanRef.current = null;
     playbackSyncNavigationRef.current = false;
-    setPlaybackSeekLayout(null);
     setPlaybackTimeSec(0);
     playbackRequestHeadersRef.current = null;
     const audio = unlockedAudioRef.current;
@@ -674,7 +730,32 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const skipToLocation = useCallback((location: TTSLocation, shouldPause = false) => {
     if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+      if (activeReaderType === 'pdf' || activeReaderType === 'html') {
+        playbackSyncNavigationRef.current = false;
+      } else {
+        setCurrDocPage(location);
+        return;
+      }
+    }
+
+    if (activeReaderType === 'pdf' || activeReaderType === 'html') {
       setCurrDocPage(location);
+      if (shouldPause) {
+        resumeAfterLocationChangeRef.current = false;
+        pauseActivePlayback();
+        setIsPlaying(false);
+      } else if (isPlayingRef.current) {
+        resumeAfterLocationChangeRef.current = true;
+      }
+      const planIndex = resolveFirstPlanIndexForDocumentAnchor(
+        playbackSegmentsRef.current,
+        activeReaderType,
+        location,
+      );
+      if (planIndex >= 0) {
+        currentIndexRef.current = planIndex;
+        setCurrentIndex(planIndex);
+      }
       return;
     }
 
@@ -696,7 +777,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackAnchor(null);
     setCurrDocPage(location);
 
-  }, [abortAudio, invalidatePlaybackRun, playbackActiveRef]);
+  }, [abortAudio, activeReaderType, invalidatePlaybackRun, pauseActivePlayback, playbackActiveRef]);
 
   const prepareInitialPosition = useCallback((location: TTSLocation, sentenceIndex: number) => {
     skipToLocation(location, true);
@@ -782,6 +863,72 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     return true;
   }, [isPlaying, skipBlank, advance, isEPUB, currDocPageNumber]);
 
+  const applyDocumentPlaybackAnchor = useCallback((
+    location: TTSLocation,
+    hasReadableText: boolean,
+    locator?: TTSSegmentLocator | null,
+  ) => {
+    let resolvedLocation: TTSLocation = location;
+    let defaultLocator: TTSSegmentLocator | null = null;
+    if (activeReaderType === 'pdf') {
+      const page = pdfAnchorPage(location);
+      if (page === null) {
+        setIsProcessing(false);
+        return;
+      }
+      resolvedLocation = page;
+      defaultLocator = { readerType: 'pdf', page };
+    } else if (activeReaderType === 'html') {
+      defaultLocator = { readerType: 'html', location: String(resolvedLocation || '1') };
+    }
+    const nextAnchor: PlaybackAnchor = {
+      text: '',
+      location: resolvedLocation,
+      locator: locator ?? defaultLocator,
+      hasContent: hasReadableText,
+    };
+    playbackAnchorRef.current = nextAnchor;
+    setPlaybackAnchor(nextAnchor);
+    setCurrDocPage(resolvedLocation);
+
+    if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+      playbackSyncNavigationRef.current = false;
+      setIsProcessing(false);
+      return;
+    }
+
+    const plan = playbackSegmentsRef.current;
+    const planIndex = resolveFirstPlanIndexForDocumentAnchor(plan, activeReaderType, resolvedLocation);
+    if (planIndex >= 0) {
+      currentIndexRef.current = planIndex;
+      setCurrentIndex(planIndex);
+    } else if (!playbackActiveRef.current) {
+      // Document extraction is only a viewport/content anchor. If the current
+      // worker plan does not cover this anchor, retire it so the plan API can
+      // derive a canonical plan from the stored document artifact.
+      playbackPlanRef.current = null;
+      setPlaybackSeekLayout(null);
+      playbackSegmentsRef.current = [];
+      setPlaybackSegments([]);
+      setPlaybackPlanSource('idle');
+      setSentences([]);
+      currentIndexRef.current = 0;
+      setCurrentIndex(0);
+      sentenceAlignmentCacheRef.current.clear();
+      setCurrentSentenceAlignment(undefined);
+      setCurrentWordIndex(null);
+    }
+    setIsProcessing(false);
+  }, [activeReaderType, playbackActiveRef]);
+
+  const setDocumentPlaybackAnchor = useCallback((
+    location: TTSLocation,
+    hasReadableText: boolean,
+    locator?: TTSSegmentLocator | null,
+  ) => {
+    applyDocumentPlaybackAnchor(location, hasReadableText, locator);
+  }, [applyDocumentPlaybackAnchor]);
+
   /**
    * Records the current viewport anchor. Sentence planning is worker-owned.
    * 
@@ -817,6 +964,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       text,
       location: resolvedLocation,
       locator: pendingEpubLocator ?? normalizedOptions.startLocator ?? null,
+      hasContent: Boolean(text.trim()),
     };
     playbackAnchorRef.current = nextAnchor;
     setPlaybackAnchor(nextAnchor);
@@ -830,6 +978,21 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (handleBlankSection(text.trim())) return;
 
     const shouldPause = normalizedOptions.shouldPause ?? false;
+    if (activeReaderType === 'pdf') {
+      if (shouldPause) {
+        resumeAfterLocationChangeRef.current = false;
+        setIsPlaying(false);
+      }
+
+      const page = pdfAnchorPage(resolvedLocation) ?? pdfAnchorPage(currDocPageNumber);
+      if (page === null) {
+        setIsProcessing(false);
+        return;
+      }
+      applyDocumentPlaybackAnchor(page, Boolean(text.trim()));
+      return;
+    }
+
     const pauseEpochAtStart = pauseEpochRef.current;
     const pendingAutoResume = resumeAfterLocationChangeRef.current;
     const shouldResumePlayback = !shouldPause && (isPlaying || pendingAutoResume);
@@ -884,8 +1047,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     handleBlankSection,
     abortAudio,
     isEPUB,
+    activeReaderType,
+    applyDocumentPlaybackAnchor,
     invalidatePlaybackRun,
     currDocPage,
+    currDocPageNumber,
     clearPendingEpubJump,
     playbackActiveRef,
   ]);
@@ -941,10 +1107,70 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   ]);
 
 
+  const seekPlaybackTo = useCallback((seconds: number) => {
+    const layout = playbackSeekLayout;
+    if (!layout || layout.segments.length === 0) return;
+    const durationSec = Math.max(0, layout.durationMs / 1000);
+    const targetSec = Math.max(0, Math.min(seconds, durationSec));
+    const targetMs = targetSec * 1000;
+    const target = layout.segments.find((segment) => targetMs >= segment.startMs && targetMs < segment.endMs)
+      ?? layout.segments[layout.segments.length - 1];
+    if (!target) return;
+
+    setPlaybackTimeSec(targetSec);
+    const nextIndex = playbackSegmentsRef.current.findIndex((segment) =>
+      (target.segmentKey && segment.key === target.segmentKey) || segment.ordinal === target.ordinal
+    );
+    if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
+      currentIndexRef.current = nextIndex;
+      setCurrentIndex(nextIndex);
+    }
+    if (target.locator && typeof target.locator === 'object') {
+      syncPlaybackLocator(target.locator as TTSSegmentLocator);
+    }
+
+    const audio = unlockedAudioRef.current;
+    if (audio && playbackActiveRef.current && audio.src) {
+      try {
+        audio.currentTime = targetSec;
+      } catch {
+        // Best-effort; the projection still updates immediately below.
+      }
+    }
+    projectPlaybackTime(targetSec);
+    const session = playbackSessionRef.current;
+    const headers = playbackRequestHeadersRef.current;
+    if (session && headers) {
+      void postTtsPlaybackCursor(session.sessionId, target.ordinal, headers);
+    }
+  }, [
+    playbackActiveRef,
+    playbackSeekLayout,
+    playbackSessionRef,
+    projectPlaybackTime,
+    syncPlaybackLocator,
+  ]);
+
+  const seekPlaybackToSegmentIndex = useCallback((index: number): boolean => {
+    const layout = playbackSeekLayout;
+    const segment = playbackSegmentsRef.current[index];
+    if (!layout || !segment) return false;
+    const target = layout.segments.find((entry) =>
+      (segment.key && entry.segmentKey === segment.key) || entry.ordinal === segment.ordinal
+    );
+    if (!target) return false;
+    seekPlaybackTo(target.startMs / 1000);
+    return true;
+  }, [playbackSeekLayout, seekPlaybackTo]);
+
   /**
    * Moves forward one sentence in the text
    */
   const skipForward = useCallback(async () => {
+    const nextIndex = currentIndex + 1;
+    if (playbackActiveRef.current && seekPlaybackToSegmentIndex(nextIndex)) {
+      return;
+    }
     // Only show processing state if we're currently playing
     if (isPlaying) {
       setIsProcessing(true);
@@ -952,12 +1178,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     abortAudio(true);
     await advance();
-  }, [isPlaying, abortAudio, advance, invalidatePlaybackRun]);
+  }, [currentIndex, playbackActiveRef, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
   /**
    * Moves backward one sentence in the text
    */
   const skipBackward = useCallback(async () => {
+    const nextIndex = currentIndex - 1;
+    if (playbackActiveRef.current && seekPlaybackToSegmentIndex(nextIndex)) {
+      return;
+    }
     // Only show processing state if we're currently playing
     if (isPlaying) {
       setIsProcessing(true);
@@ -965,7 +1195,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     abortAudio(true);
     await advance(true);
-  }, [isPlaying, abortAudio, advance, invalidatePlaybackRun]);
+  }, [currentIndex, playbackActiveRef, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
+
 
   /**
    * Updates the voice and speed settings from the configuration
@@ -1080,35 +1311,41 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSegment: CanonicalTtsSegment | undefined;
     startLocation: { page?: number; spineIndex?: number; charOffset?: number };
   } | null => {
-    const playbackSegment = playbackSegments[currentIndex];
+    const selectedIndex = Math.max(0, Math.floor(currentIndexRef.current));
+    const playbackSegment = playbackSegments[selectedIndex];
     const anchor = playbackAnchorRef.current;
-    const sentence = playbackSegment?.text ?? sentences[currentIndex] ?? anchor?.text ?? '';
+    const sentence = activeReaderType === 'epub'
+      ? (playbackSegment?.text ?? sentences[selectedIndex] ?? anchor?.text ?? '')
+      : activeReaderType === 'html' || activeReaderType === 'pdf'
+      ? (playbackSegment?.text ?? sentences[selectedIndex] ?? '')
+      : (playbackSegment?.text ?? sentences[selectedIndex] ?? anchor?.text ?? '');
     if (!documentId) {
       return null;
     }
 
-    const startLocation = activeReaderType === 'pdf'
-      ? { page: Math.max(1, Number(anchor?.location ?? currDocPageNumber) || 1) }
-      : activeReaderType === 'epub'
-        ? (() => {
-            const locator = playbackSegment?.ownerLocator
-              ?? (isStableEpubLocator(anchor?.locator) ? anchor.locator : null)
-              ?? (isStableEpubLocator(pendingEpubJumpRef.current?.locator) ? pendingEpubJumpRef.current.locator : null);
-            const spineIndex = Math.max(
-              0,
-              locator?.spineIndex
-                ?? lastPlayedCanonicalRef.current?.spineIndex
-                ?? 0,
-            );
-            const charOffset = typeof locator?.charOffset === 'number' && Number.isFinite(locator.charOffset)
-              ? Math.max(0, Math.floor(locator.charOffset))
-              : undefined;
-            return {
-              spineIndex,
-              ...(charOffset !== undefined ? { charOffset } : {}),
-            };
-          })()
-        : {};
+    let startLocation: { page?: number; spineIndex?: number; charOffset?: number } = {};
+    if (activeReaderType === 'pdf') {
+      const page = pdfAnchorPage(anchor?.location) ?? pdfAnchorPage(currDocPageNumber);
+      if (page === null) return null;
+      startLocation = { page };
+    } else if (activeReaderType === 'epub') {
+      const locator = playbackSegment?.ownerLocator
+        ?? (isStableEpubLocator(anchor?.locator) ? anchor.locator : null)
+        ?? (isStableEpubLocator(pendingEpubJumpRef.current?.locator) ? pendingEpubJumpRef.current.locator : null);
+      const spineIndex = Math.max(
+        0,
+        locator?.spineIndex
+          ?? lastPlayedCanonicalRef.current?.spineIndex
+          ?? 0,
+      );
+      const charOffset = typeof locator?.charOffset === 'number' && Number.isFinite(locator.charOffset)
+        ? Math.max(0, Math.floor(locator.charOffset))
+        : undefined;
+      startLocation = {
+        spineIndex,
+        ...(charOffset !== undefined ? { charOffset } : {}),
+      };
+    }
 
     const headers: TTSRequestHeaders = {
       'Content-Type': 'application/json',
@@ -1132,7 +1369,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         },
         startLocation,
         ...(playbackSegment?.key ? { startSegmentKey: playbackSegment.key } : {}),
-        ...(sentence.trim() ? { startText: sentence } : {}),
+        ...(activeReaderType === 'epub' && sentence.trim() ? { startText: sentence } : {}),
         planning: {
           maxBlockLength: ttsSegmentMaxBlockLength,
           language: resolvedLanguage,
@@ -1175,6 +1412,24 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     return plan && plan.segments.length > 0 ? plan : null;
   }, []);
 
+  const fetchPlaybackSeekLayoutUntilReady = useCallback(async (
+    seekLayoutUrl: string,
+    signal?: AbortSignal,
+  ) => {
+    const fetchLayout = async () => {
+      const layout = await getTtsPlaybackSeekLayout(seekLayoutUrl, signal).catch(() => null);
+      return layout && layout.durationMs > 0 && layout.segments.length > 0 ? layout : null;
+    };
+
+    let layout = await fetchLayout();
+    for (let attempt = 0; !layout && attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      if (signal?.aborted) return null;
+      layout = await fetchLayout();
+    }
+    return layout;
+  }, []);
+
   const applyPlaybackPlan = useCallback((plan: ReturnType<typeof normalizePlaybackPlan>, request: {
     playbackSegment?: CanonicalTtsSegment;
     sentence: string;
@@ -1192,6 +1447,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       startLocation: request.startLocation,
     });
     if (currentIndexRef.current !== startPlanIndex) {
+      currentIndexRef.current = startPlanIndex;
       setCurrentIndex(startPlanIndex);
     }
     const effectivePlan = {
@@ -1209,17 +1465,47 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (!request) return null;
     const existing = playbackPlanRef.current;
     if (existing?.planObjectKey && existing.segments.length > 0) {
+      if (existing.planId && !playbackSeekLayout) {
+        const layout = await fetchPlaybackSeekLayoutUntilReady(
+          `/api/tts/playback/plans/${encodeURIComponent(existing.planId)}/seek-layout`,
+          signal,
+        );
+        if (!signal?.aborted && layout) setPlaybackSeekLayout(layout);
+      }
       return applyPlaybackPlan(existing, request);
     }
     const planHandle = await createTtsPlaybackPlan(request.payload, request.headers, signal);
     const plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
     if (!plan) return null;
+    const layout = await fetchPlaybackSeekLayoutUntilReady(planHandle.seekLayoutUrl, signal);
+    if (!signal?.aborted && layout) setPlaybackSeekLayout(layout);
     return applyPlaybackPlan(plan, request);
-  }, [applyPlaybackPlan, fetchPlaybackPlanUntilReady]);
+  }, [applyPlaybackPlan, fetchPlaybackPlanUntilReady, fetchPlaybackSeekLayoutUntilReady, playbackSeekLayout]);
+
+  const waitForAudioSeekReady = useCallback(async (audio: HTMLAudioElement, runId: number): Promise<void> => {
+    if (runId !== playbackRunIdRef.current) return;
+    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) return;
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        audio.removeEventListener('loadedmetadata', finish);
+        audio.removeEventListener('durationchange', finish);
+        audio.removeEventListener('canplay', finish);
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const timeout = window.setTimeout(finish, 1500);
+      audio.addEventListener('loadedmetadata', finish, { once: true });
+      audio.addEventListener('durationchange', finish, { once: true });
+      audio.addEventListener('canplay', finish, { once: true });
+    });
+  }, []);
 
   useEffect(() => {
     if (isPlaying || playbackPlanSource === 'worker') return;
-    if (!playbackAnchor?.text.trim()) return;
+    if (!playbackAnchor?.hasContent && !playbackAnchor?.text.trim()) return;
     const request = buildPlaybackSessionRequest();
     if (!request) return;
 
@@ -1233,6 +1519,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         const plan = await fetchPlaybackPlanUntilReady(session.planUrl, controller.signal);
         if (controller.signal.aborted || runId !== planPreviewRunIdRef.current || !plan) return;
 
+        const layout = await fetchPlaybackSeekLayoutUntilReady(session.seekLayoutUrl, controller.signal);
+        if (controller.signal.aborted || runId !== planPreviewRunIdRef.current || !layout) return;
+        setPlaybackSeekLayout(layout);
         applyPlaybackPlan(plan, request);
       } catch (error) {
         if (controller.signal.aborted || isAbortLikeError(error)) return;
@@ -1247,6 +1536,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     buildPlaybackSessionRequest,
     applyPlaybackPlan,
     fetchPlaybackPlanUntilReady,
+    fetchPlaybackSeekLayoutUntilReady,
     isAbortLikeError,
     isPlaying,
     playbackAnchor,
@@ -1299,12 +1589,19 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       playbackRequestHeadersRef.current = headers;
 
       applyPlaybackPlan(plan, { playbackSegment, sentence, startLocation });
-      void getTtsPlaybackSeekLayout(session.seekLayoutUrl)
-        .then((layout) => {
-          if (runId !== playbackRunIdRef.current) return;
-          setPlaybackSeekLayout(layout);
-        })
-        .catch(() => undefined);
+      const initialSeekLayout = await getTtsPlaybackSeekLayout(session.seekLayoutUrl).catch(() => null);
+      if (runId !== playbackRunIdRef.current) return;
+      if (initialSeekLayout) {
+        setPlaybackSeekLayout(initialSeekLayout);
+      }
+      const initialStartSec = (() => {
+        if (!initialSeekLayout) return 0;
+        const selected = playbackSegmentsRef.current[currentIndexRef.current];
+        const slot = initialSeekLayout.segments.find((segment) =>
+          (selected?.key && segment.segmentKey === selected.key) || segment.ordinal === selected?.ordinal
+        );
+        return slot ? Math.max(0, slot.startMs / 1000) : 0;
+      })();
 
       let audio = unlockedAudioRef.current;
       if (!audio) {
@@ -1395,6 +1692,18 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       playbackActiveRef.current = true;
       audio.src = session.audioUrl;
       audio.load();
+      if (initialStartSec > 0) {
+        await waitForAudioSeekReady(audio, runId);
+        if (runId !== playbackRunIdRef.current) return;
+        try {
+          audio.currentTime = initialStartSec;
+          setPlaybackTimeSec(initialStartSec);
+          projectPlaybackTime(initialStartSec);
+        } catch {
+          // The stream is range-capable; if the browser rejects an early seek,
+          // the normal playback projection will recover once metadata is ready.
+        }
+      }
       await audio.play();
       if (runId === playbackRunIdRef.current && !audio.paused && !audio.ended) {
         startPlaybackProjectionLoop(audio, runId);
@@ -1427,6 +1736,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     startPlaybackForegroundSync,
     startPlaybackProjectionLoop,
     stopPlaybackProjectionLoop,
+    waitForAudioSeekReady,
   ]);
 
   /**
@@ -1439,7 +1749,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       return;
     }
     const hasWorkerSentence = Boolean(sentences[currentIndex]);
-    const hasViewportAnchor = Boolean(playbackAnchorRef.current?.text.trim());
+    const hasViewportAnchor = Boolean(playbackAnchorRef.current?.hasContent || playbackAnchorRef.current?.text.trim());
     if (!hasWorkerSentence && !hasViewportAnchor) return;
     // Single synchronous guard: covers the async gap between starting playback
     // session and the audio element firing playback events.
@@ -1475,6 +1785,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearPendingEpubJump();
     lastPlayedCanonicalRef.current = null;
     setIsPlaying(false);
+    playbackPlanRef.current = null;
+    setPlaybackSeekLayout(null);
+    setPlaybackTimeSec(0);
     setCurrentIndex(0);
     setSentences([]);
     setPlaybackSegments([]);
@@ -1511,6 +1824,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Same autoplay-unlock issue as togglePlay when starting from a fresh load.
     unlockPlaybackOnUserGesture();
 
+    currentIndexRef.current = index;
     setCurrentIndex(index);
     setIsPlaying(true);
   }, [abortAudio, invalidatePlaybackRun, unlockPlaybackOnUserGesture]);
@@ -1518,6 +1832,24 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const playFromSegment = useCallback((index: number, locator?: TTSSegmentLocator | null) => {
     if (isEPUB) {
       clearPendingEpubJump();
+    }
+
+    if (activeReaderType === 'pdf') {
+      const targetIndex = Math.max(0, Math.floor(index));
+      const targetSegment = playbackSegmentsRef.current[targetIndex] ?? playbackSegments[targetIndex];
+      const targetLocator = locator ?? targetSegment?.ownerLocator ?? null;
+      currentIndexRef.current = targetIndex;
+      setCurrentIndex(targetIndex);
+      const page = pdfLocatorPage(targetLocator);
+      if (page !== null) {
+        setCurrDocPage(page);
+      }
+      if (playbackActiveRef.current && seekPlaybackToSegmentIndex(targetIndex)) {
+        return;
+      }
+      unlockPlaybackOnUserGesture();
+      setIsPlaying(true);
+      return;
     }
 
     const epubLocatorTarget = isEPUB && isStableEpubLocator(locator) ? locator : null;
@@ -1529,7 +1861,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         return locator.cfi;
       }
       if (typeof locator.location === 'string' && locator.location) return locator.location;
-      if (typeof locator.page === 'number' && Number.isFinite(locator.page)) return Math.floor(locator.page);
+      const page = pdfLocatorPage(locator);
+      if (page !== null) return page;
       return undefined;
     })();
 
@@ -1540,7 +1873,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     const isSameLocation = resolvedLocation !== undefined && typeof resolvedLocation === 'string'
       ? String(currDocPage) === String(resolvedLocation)
-      : resolvedLocation !== undefined && Number(currDocPageNumber || 1) === Number(resolvedLocation);
+      : resolvedLocation !== undefined && pdfAnchorPage(currDocPageNumber) === pdfAnchorPage(resolvedLocation);
 
     if (isSameLocation) {
       stopAndPlayFromIndex(index);
@@ -1564,6 +1897,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           text: playbackSegments[index]?.text ?? '',
           location: epubLocatorTarget.cfi ?? currDocPage,
           locator: epubLocatorTarget,
+          hasContent: Boolean(playbackSegments[index]?.text?.trim()),
         };
         playbackAnchorRef.current = nextAnchor;
         setPlaybackAnchor(nextAnchor);
@@ -1590,6 +1924,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, [
     stopAndPlayFromIndex,
+    activeReaderType,
+    playbackSegments,
+    playbackActiveRef,
+    seekPlaybackToSegmentIndex,
     currDocPage,
     currDocPageNumber,
     isEPUB,
@@ -1598,48 +1936,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     unlockPlaybackOnUserGesture,
     skipToLocation,
     clearPendingEpubJump,
-  ]);
-
-  const seekPlaybackTo = useCallback((seconds: number) => {
-    const layout = playbackSeekLayout;
-    if (!layout || layout.segments.length === 0) return;
-    const durationSec = Math.max(0, layout.durationMs / 1000);
-    const targetSec = Math.max(0, Math.min(seconds, durationSec));
-    const targetMs = targetSec * 1000;
-    const target = layout.segments.find((segment) => targetMs >= segment.startMs && targetMs < segment.endMs)
-      ?? layout.segments[layout.segments.length - 1];
-    if (!target) return;
-
-    const audio = unlockedAudioRef.current;
-    if (audio && playbackActiveRef.current && audio.src) {
-      try {
-        audio.currentTime = targetSec;
-      } catch {
-        // Best-effort; the projection still updates immediately below.
-      }
-    }
-    setPlaybackTimeSec(targetSec);
-    const nextIndex = playbackSegmentsRef.current.findIndex((segment) =>
-      (target.segmentKey && segment.key === target.segmentKey) || segment.ordinal === target.ordinal
-    );
-    if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
-      setCurrentIndex(nextIndex);
-    }
-    if (target.locator && typeof target.locator === 'object') {
-      syncPlaybackLocator(target.locator as TTSSegmentLocator);
-    }
-    projectPlaybackTime(targetSec);
-    const session = playbackSessionRef.current;
-    const headers = playbackRequestHeadersRef.current;
-    if (session && headers) {
-      void postTtsPlaybackCursor(session.sessionId, target.ordinal, headers);
-    }
-  }, [
-    playbackActiveRef,
-    playbackSeekLayout,
-    playbackSessionRef,
-    projectPlaybackTime,
-    syncPlaybackLocator,
   ]);
 
   /**
@@ -1660,6 +1956,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsPlaying(false);
     clearPendingEpubJump();
     abortAudio(true); // Clear pending requests since speed changed
+    playbackPlanRef.current = null;
+    setPlaybackSeekLayout(null);
+    setPlaybackPlanSource('idle');
 
     // Update speed and config
     setSpeed(newSpeed);
@@ -1692,6 +1991,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsPlaying(false);
     clearPendingEpubJump();
     abortAudio(true); // Clear pending requests since voice changed
+    playbackPlanRef.current = null;
+    setPlaybackSeekLayout(null);
+    setPlaybackPlanSource('idle');
 
     // Update voice and config
     setVoice(newVoice);
@@ -1769,6 +2071,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playFromSegment,
     seekPlaybackTo,
     setText,
+    setDocumentPlaybackAnchor,
     setCurrDocPages,
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
@@ -1805,6 +2108,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playFromSegment,
     seekPlaybackTo,
     setText,
+    setDocumentPlaybackAnchor,
     setCurrDocPages,
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,

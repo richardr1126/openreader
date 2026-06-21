@@ -511,16 +511,50 @@ export function registerComputeWorkerRoutes(input: {
       let slotIdx = startLoc ? startLoc.slotIndex : mapLayout.slots.length;
       let skipWithin = startLoc ? startLoc.offsetWithin : 0;
       let wroteFirstByte = false;
+      let silenceUnit: Buffer | null = null;
+
+      const streamSilence = async function* (byteCount: number): AsyncGenerator<Buffer> {
+        let written = 0;
+        while (written < byteCount && !closed) {
+          if (silenceUnit === null) {
+            silenceUnit = await getCbrSilenceSecond().catch(() => Buffer.alloc(0));
+          }
+          const remaining = byteCount - written;
+          let chunk: Buffer;
+          if (silenceUnit.length > 0) {
+            chunk = remaining >= silenceUnit.length ? silenceUnit : silenceUnit.subarray(0, remaining);
+          } else {
+            chunk = Buffer.alloc(Math.min(remaining, 65536)); // ffmpeg unavailable fallback
+          }
+          yield chunk;
+          written += chunk.length;
+        }
+      };
 
       for (; slotIdx < mapLayout.slots.length && sent < need; slotIdx += 1) {
-        const ordinal = mapLayout.slots[slotIdx].segmentIndex;
+        const slot = mapLayout.slots[slotIdx];
+        const ordinal = slot.segmentIndex;
         let audioKey: string | null = null;
+        let paddedMissingPrefix = false;
         for (;;) {
           if (closed) return;
           const session = await readPlaybackSession(sessionId);
           if (!session || Date.now() > session.expiresAt) return;
           if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
             return;
+          }
+          if (ordinal < session.cursorOrdinal) {
+            const room = need - sent;
+            const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
+            if (silenceBytes > 0) {
+              for await (const chunk of streamSilence(silenceBytes)) {
+                yield chunk;
+                sent += chunk.length;
+              }
+            }
+            skipWithin = 0;
+            paddedMissingPrefix = true;
+            break;
           }
           const seg = await readCompletedPlaybackSegment(session, ordinal);
           if (seg) {
@@ -536,7 +570,10 @@ export function registerComputeWorkerRoutes(input: {
           markActivity('tts_playback_audio_wait');
           await sleep(400);
         }
-        if (!audioKey) break;
+        if (!audioKey) {
+          if (paddedMissingPrefix) continue;
+          break;
+        }
 
         await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
           app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
@@ -564,15 +601,7 @@ export function registerComputeWorkerRoutes(input: {
       // document (the advertised total is a whole-document estimate), so it must
       // never be materialized as a single buffer.
       if (sent < need && !closed) {
-        const silenceUnit = await getCbrSilenceSecond().catch(() => Buffer.alloc(0));
-        while (sent < need && !closed) {
-          const remaining = need - sent;
-          let chunk: Buffer;
-          if (silenceUnit.length > 0) {
-            chunk = remaining >= silenceUnit.length ? silenceUnit : silenceUnit.subarray(0, remaining);
-          } else {
-            chunk = Buffer.alloc(Math.min(remaining, 65536)); // ffmpeg unavailable fallback
-          }
+        for await (const chunk of streamSilence(need - sent)) {
           yield chunk;
           sent += chunk.length;
         }

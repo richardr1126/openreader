@@ -1,9 +1,11 @@
 import type {
   TTSRequestError,
   TTSRequestHeaders,
+  TTSSegmentLocator,
   TTSSegmentSettings,
   VoicesResponse,
 } from '@/types/client';
+import { normalizeLocator } from '@openreader/tts/segments';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
   const response = await fetch('/api/tts/voices', {
@@ -120,7 +122,7 @@ export type TtsPlaybackSeekLayoutSegment = {
   endMs: number;
   generated: boolean;
   estimated: boolean;
-  locator: unknown;
+  locator: TTSSegmentLocator | null;
   segmentKey: string | null;
 };
 
@@ -143,7 +145,40 @@ export const getTtsPlaybackSeekLayout = async (
   if (!response.ok) {
     throw new Error(`TTS playback seek layout failed with status ${response.status}`);
   }
-  return await response.json();
+  const value = await response.json() as unknown;
+  if (!value || typeof value !== 'object') {
+    return { planId: '', startOrdinal: 0, durationMs: 0, segments: [] };
+  }
+  const rec = value as Record<string, unknown>;
+  const rawSegments = Array.isArray(rec.segments) ? rec.segments : [];
+  return {
+    planId: typeof rec.planId === 'string' ? rec.planId : '',
+    sessionId: typeof rec.sessionId === 'string' ? rec.sessionId : undefined,
+    startOrdinal: Number.isFinite(Number(rec.startOrdinal)) ? Math.max(0, Math.floor(Number(rec.startOrdinal))) : 0,
+    durationMs: Number.isFinite(Number(rec.durationMs)) ? Math.max(0, Math.floor(Number(rec.durationMs))) : 0,
+    segments: rawSegments
+      .map((item): TtsPlaybackSeekLayoutSegment | null => {
+        if (!item || typeof item !== 'object') return null;
+        const row = item as Record<string, unknown>;
+        const ordinal = Number(row.ordinal);
+        const startMs = Number(row.startMs);
+        const endMs = Number(row.endMs);
+        if (!Number.isFinite(ordinal) || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+        if (endMs <= startMs) return null;
+        return {
+          ordinal: Math.max(0, Math.floor(ordinal)),
+          startMs: Math.max(0, Math.floor(startMs)),
+          endMs: Math.max(0, Math.floor(endMs)),
+          generated: row.generated === true,
+          estimated: row.estimated === true,
+          locator: row.locator && typeof row.locator === 'object'
+            ? normalizeLocator(row.locator as TTSSegmentLocator)
+            : null,
+          segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
+        };
+      })
+      .filter((item): item is TtsPlaybackSeekLayoutSegment => Boolean(item)),
+  };
 };
 
 export type TtsPlaybackEventSnapshot = {

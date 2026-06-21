@@ -100,26 +100,24 @@ async function updateTtsPlaybackSession(input: {
   planObjectKey?: string;
   lastError?: string | null;
   /**
-   * Absolute canonical ordinal the audio stream should begin at, resolved by the
-   * worker from the start position against the position-independent plan. When
-   * provided we also seed the cursor to it (fresh) so generation paces a window
-   * ahead of the start position rather than from ordinal 0.
+   * Absolute canonical ordinal the worker should generate around. This seeds the
+   * cursor without changing the session's audio-layout origin.
    */
-  startOrdinal?: number;
+  cursorOrdinal?: number;
 }): Promise<void> {
   const now = Date.now();
-  const startOrdinal = input.startOrdinal === undefined
+  const cursorOrdinal = input.cursorOrdinal === undefined
     ? undefined
-    : Math.max(0, Math.floor(input.startOrdinal));
+    : Math.max(0, Math.floor(input.cursorOrdinal));
   await db
     .update(ttsPlaybackSessions)
     .set({
       status: input.status,
       ...(input.planObjectKey === undefined ? {} : { planObjectKey: input.planObjectKey }),
       ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
-      ...(startOrdinal === undefined
+      ...(cursorOrdinal === undefined
         ? {}
-        : { startOrdinal, cursorOrdinal: startOrdinal, cursorUpdatedAt: now }),
+        : { cursorOrdinal, cursorUpdatedAt: now }),
       updatedAt: now,
     })
     .where(eq(ttsPlaybackSessions.sessionId, input.sessionId));
@@ -996,7 +994,7 @@ export function createJobHandlers(input: {
           sessionId: parsed.sessionId,
           status: 'running',
           planObjectKey,
-          startOrdinal,
+          cursorOrdinal: startOrdinal,
           lastError: null,
         });
         const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);

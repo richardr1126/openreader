@@ -1,5 +1,6 @@
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import { normalizeLocator } from '@openreader/tts/segments';
 
 export type TtsPlaybackTimelineSegment = {
   ordinal: number;
@@ -64,7 +65,9 @@ export function normalizePlaybackTimeline(value: unknown): TtsPlaybackTimeline {
         durationMs: Number.isFinite(durationMs) && durationMs > 0
           ? Math.floor(durationMs)
           : Math.max(1, Math.floor(endMs - startMs)),
-        locator: row.locator && typeof row.locator === 'object' ? row.locator as TTSSegmentLocator : null,
+        locator: row.locator && typeof row.locator === 'object'
+          ? normalizeLocator(row.locator as TTSSegmentLocator)
+          : null,
         alignment: row.alignment && typeof row.alignment === 'object' ? row.alignment as TTSSentenceAlignment : null,
       };
     })

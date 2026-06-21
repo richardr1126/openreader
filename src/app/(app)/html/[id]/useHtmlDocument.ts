@@ -51,7 +51,7 @@ function isTxtName(name: string | undefined | null): boolean {
 }
 
 export function useHtmlDocument(): HtmlDocumentState {
-  const { setText: setTTSText, stop, setIsEPUB } = useTTS();
+  const { setDocumentPlaybackAnchor, stop, setIsEPUB } = useTTS();
   const {
     providerRef,
     ttsSegmentMaxBlockLength,
@@ -80,13 +80,13 @@ export function useHtmlDocument(): HtmlDocumentState {
   useEffect(() => {
     if (currDocData === undefined) {
       lastFedDocRef.current = null;
-      setTTSText('');
+      setDocumentPlaybackAnchor(1, false);
       setIsPlaybackReady(false);
       return;
     }
     if (!currDocText) {
       lastFedDocRef.current = null;
-      setTTSText('');
+      setDocumentPlaybackAnchor(1, false);
       setIsPlaybackReady(true);
       return;
     }
@@ -97,24 +97,24 @@ export function useHtmlDocument(): HtmlDocumentState {
     }
     setIsPlaybackReady(false);
     lastFedDocRef.current = key;
-    setTTSText(currDocText);
+    setDocumentPlaybackAnchor(1, true, { readerType: 'html', location: '1' });
     setIsPlaybackReady(true);
-  }, [currDocName, currDocText, currDocData, setTTSText]);
+  }, [currDocName, currDocText, currDocData, setDocumentPlaybackAnchor]);
 
   const clearCurrDoc = useCallback(() => {
     setCurrDocData(undefined);
     setCurrDocName(undefined);
     setIsPlaybackReady(false);
     lastFedDocRef.current = null;
-    setTTSText('');
+    setDocumentPlaybackAnchor(1, false);
     stop();
-  }, [setTTSText, stop]);
+  }, [setDocumentPlaybackAnchor, stop]);
 
   const setCurrentDocument = useCallback(async (meta: BaseDocument): Promise<void> => {
     try {
       setIsPlaybackReady(false);
       lastFedDocRef.current = null;
-      setTTSText('');
+      setDocumentPlaybackAnchor(1, false);
       const doc = await ensureCachedDocument(meta);
       if (doc.type !== 'html') {
         // Throw so the catch handler clears stale reader state instead of
@@ -129,7 +129,7 @@ export function useHtmlDocument(): HtmlDocumentState {
       clearCurrDoc();
       throw error;
     }
-  }, [clearCurrDoc, setTTSText]);
+  }, [clearCurrDoc, setDocumentPlaybackAnchor]);
 
   const audiobookAdapter = useMemo(
     () =>

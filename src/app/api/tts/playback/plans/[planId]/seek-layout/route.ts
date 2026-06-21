@@ -46,7 +46,7 @@ export async function GET(
     if (session instanceof Response) return session;
     const startOrdinal = session
       ? Math.max(0, Math.floor(session.startOrdinal))
-      : Math.max(0, Math.floor(operation.result.startOrdinal));
+      : 0;
     const settingsHash = session?.settingsHash || subject.settingsHash || artifact.settingsHash;
     const settingsJson = session?.settingsJson ?? artifact.settingsJson;
     const completedDurations = await listCompletedDurationsForPlan({

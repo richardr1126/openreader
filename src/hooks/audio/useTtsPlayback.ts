@@ -7,6 +7,7 @@ import {
   type TtsPlaybackTimeline,
 } from '@/lib/client/tts/playback-timeline';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
+import { isPdfLocator } from '@/types/client';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 type UseTtsPlaybackInput = {
@@ -76,12 +77,11 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       ? segments.findIndex((segment) => segment.key === segmentKey)
       : -1;
     if (nextIndex < 0) {
-      nextIndex = projection.segment.sourceSegmentIndex ?? projection.segment.ordinal;
+      nextIndex = segments.findIndex((segment) => segment.ordinal === projection.segment?.ordinal);
     }
+    if (nextIndex < 0) return;
     const locator = projection.segment.locator;
-    const page = locator?.readerType === 'pdf' && typeof locator.page === 'number'
-      ? Math.max(1, Math.floor(locator.page))
-      : null;
+    const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
     const locatorKey = locator
       ? JSON.stringify({
         readerType: locator.readerType,

@@ -127,7 +127,7 @@ export function usePdfDocument(
   persistDocumentSettings: (settings: DocumentSettings) => Promise<unknown>,
 ): PdfDocumentState {
   const {
-    setText: setTTSText,
+    setDocumentPlaybackAnchor,
     stop,
     currDocPageNumber,
     currDocPages,
@@ -222,7 +222,7 @@ export function usePdfDocument(
       if (parseStatus !== 'ready' || !parsedDocument) {
         lastPreparedPlaybackPageRef.current = null;
         setCurrDocText(undefined);
-        setTTSText('', { location: currDocPageNumber });
+        setDocumentPlaybackAnchor(currDocPageNumber, false);
         return;
       }
 
@@ -256,9 +256,7 @@ export function usePdfDocument(
       const shouldPreparePlayback = text === '' || text !== currDocText || lastPreparedPlaybackPageRef.current !== currDocPageNumber;
       if (shouldPreparePlayback) {
         setCurrDocText(text);
-        setTTSText(text, {
-          location: currDocPageNumber,
-        });
+        setDocumentPlaybackAnchor(currDocPageNumber, Boolean(text.trim()));
       }
       lastPreparedPlaybackPageRef.current = currDocPageNumber;
       setIsPlaybackReady(true);
@@ -271,7 +269,7 @@ export function usePdfDocument(
   }, [
     currDocPageNumber,
     currDocPages,
-    setTTSText,
+    setDocumentPlaybackAnchor,
     currDocText,
     parsedDocument,
     parseStatus,

@@ -1,4 +1,5 @@
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+import { normalizeLocator } from '@openreader/tts/segments';
 import type { TTSSegmentLocator } from '@/types/client';
 
 /**
@@ -41,7 +42,9 @@ export function normalizePlaybackPlan(value: unknown): TtsPlaybackPlan {
         segmentIndex: Number.isFinite(Number(row.segmentIndex)) ? Math.max(0, Math.floor(Number(row.segmentIndex))) : 0,
         segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
         text,
-        locator: row.locator && typeof row.locator === 'object' ? row.locator as TTSSegmentLocator : null,
+        locator: row.locator && typeof row.locator === 'object'
+          ? normalizeLocator(row.locator as TTSSegmentLocator)
+          : null,
       };
     })
     .filter((item): item is TtsPlaybackPlanSegment => Boolean(item));

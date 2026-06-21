@@ -216,9 +216,10 @@ export async function listCompletedTtsPlaybackSegments(
       locatorIdentityKey: row.locatorIdentityKey,
     }));
 
-  // Stable ordinals: walk the plan in order, match each plan segment to a
-  // completed row, and stop at the first gap. The published ordinal is the
-  // plan's own `segmentIndex`, which the client uses as its playback index.
+  // Stable ordinals: walk the plan in order and match completed rows. The
+  // published ordinal is the plan's own `segmentIndex`, which the client uses
+  // as its playback index. Gaps are allowed: a far seek can generate ordinal 80
+  // before 0-79, while the audio layout still remains one global plan.
   const toRow = (row: typeof completed[number], ordinal: number): TtsPlaybackSegmentRow => ({
     ordinal,
     sourceSegmentIndex: row.sourceSegmentIndex,
@@ -233,11 +234,6 @@ export async function listCompletedTtsPlaybackSegments(
 
   const ordered: Array<TtsPlaybackSegmentRow> = [];
   if (planSegments && planSegments.length > 0) {
-    // The canonical plan spans the whole document with absolute ordinals, but this
-    // session's audio stream begins at its startOrdinal and generation runs forward
-    // from there. Skip the (ungenerated) plan prefix so the contiguous-run match
-    // starts at startOrdinal — otherwise it would break at ordinal 0 and yield an
-    // empty timeline. The first generated segment becomes time 0 for this session.
     const startFrom = Math.max(0, Math.floor(session.startOrdinal));
     const unused = new Set(completed.map((_, index) => index));
     const take = (predicate: (row: typeof completed[number]) => boolean): typeof completed[number] | null => {
@@ -265,7 +261,7 @@ export async function listCompletedTtsPlaybackSegments(
       ) ?? take((row) =>
         row.segmentKey === plan.segmentKey
       );
-      if (!match) break; // contiguous prefix: first missing plan segment ends playback timing
+      if (!match) continue;
       ordered.push(toRow(match, plan.segmentIndex));
     }
   } else {
