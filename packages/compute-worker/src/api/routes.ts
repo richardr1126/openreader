@@ -18,7 +18,12 @@ import { hashOpKey } from '../infrastructure/nats-adapters';
 import type { StreamedOperationState } from '../operations/recovery';
 import type { ReconciliationStateStore } from '../operations/reconciliation';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
-import { getCbrSilenceSecond } from '@openreader/tts/audio-format';
+import {
+  cumulativeCbrFrameBytes,
+  getCbrSilenceFrameLengths,
+  getCbrSilenceSecond,
+  MP3_FRAME_DURATION_MS,
+} from '@openreader/tts/audio-format';
 import {
   buildByteLayout,
   locateByte,
@@ -443,9 +448,21 @@ export function registerComputeWorkerRoutes(input: {
             const startOrdinal = Math.max(0, Math.floor(session.startOrdinal));
             const completed = await listCompletedDurations(session);
             const estimateRate = estimateRateForSession(session);
+            // Size every not-yet-generated (silence) slot in WHOLE MP3 frames, with
+            // its exact frame byte length, so the silence we emit decodes to exactly
+            // the duration the byte/time grid advertises. Without this, each silence
+            // slot is sliced mid-frame and drops a partial frame on decode, drifting
+            // the highlight ahead of the audio (worst at deep starts / long prefixes).
+            const silenceFrameLengths = await getCbrSilenceFrameLengths().catch(() => [] as number[]);
+            const layoutOptions = {
+              frameDurationMs: MP3_FRAME_DURATION_MS,
+              silenceBytesForFrames: silenceFrameLengths.length > 0
+                ? (frames: number) => cumulativeCbrFrameBytes(silenceFrameLengths, frames)
+                : undefined,
+            };
             // Real durations where generated (so the byte map matches the gapless
             // real audio and seeking lands accurately within the generated region),
-            // estimate for the not-yet-generated tail.
+            // frame-quantized silence for the not-yet-generated tail.
             const mapSlots: PlanSlotInput[] = planSegments.map((segment) => ({
               segmentIndex: segment.segmentIndex,
               text: segment.text,
@@ -456,8 +473,8 @@ export function registerComputeWorkerRoutes(input: {
               text: segment.text,
               durationMs: null, // pure estimate → stable Content-Length across requests
             }));
-            const mapLayout = buildByteLayout(mapSlots, startOrdinal, estimateRate);
-            const total = buildByteLayout(totalSlots, startOrdinal, estimateRate).totalBytes;
+            const mapLayout = buildByteLayout(mapSlots, startOrdinal, estimateRate, layoutOptions);
+            const total = buildByteLayout(totalSlots, startOrdinal, estimateRate, layoutOptions).totalBytes;
             return { kind: 'ok', total, mapLayout };
           }
         }
@@ -522,7 +539,13 @@ export function registerComputeWorkerRoutes(input: {
         let written = 0;
         while (written < byteCount && !closed) {
           if (silenceUnit === null) {
-            silenceUnit = await getCbrSilenceSecond().catch(() => Buffer.alloc(0));
+            // ID3-strip the silence unit so it is exactly whole MP3 frames: ffmpeg
+            // prepends a ~44B ID3v2 tag, and repeating/slicing a buffer with that
+            // tag inline would desync frames and not match the frame-quantized
+            // byteLength the layout advertised. The frame table (getCbrSilenceFrameLengths)
+            // is already ID3-free, so the stripped buffer and the byte map agree.
+            const raw = await getCbrSilenceSecond().catch(() => Buffer.alloc(0));
+            silenceUnit = raw.length > 0 ? stripId3Tag(Buffer.from(raw)) : raw;
           }
           const remaining = byteCount - written;
           let chunk: Buffer;
@@ -554,6 +577,8 @@ export function registerComputeWorkerRoutes(input: {
             break;
           }
           if (ordinal < session.generationStartOrdinal) {
+            // Never-generated prefix [0, generationStartOrdinal): emit the slot's
+            // whole-frame silence so it decodes to exactly its grid duration.
             const room = need - sent;
             const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
             if (silenceBytes > 0) {
@@ -572,6 +597,12 @@ export function registerComputeWorkerRoutes(input: {
             app.log.info({ sessionId, ordinal }, 'tts.playback.audio.stopped_at_gap');
             break;
           }
+          // Still generating (status running): wait for this segment to finish.
+          // Forward playback self-paces — generation stays ahead of the cursor (which
+          // we advance as we serve), so the segment is on its way. A seek past the
+          // frontier issues a new range request and updates the cursor, so generation
+          // jumps there; we wait (brief buffering) rather than silencing the rest of
+          // the response, which the browser would never re-request.
           markActivity('tts_playback_audio_wait');
           await sleep(400);
         }

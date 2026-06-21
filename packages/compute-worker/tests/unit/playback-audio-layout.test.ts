@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { STREAM_AUDIO_BYTES_PER_SECOND } from '@openreader/tts/audio-format';
+import {
+  cumulativeCbrFrameBytes,
+  MP3_FRAME_DURATION_MS,
+  parseMp3FrameLengths,
+  STREAM_AUDIO_BYTES_PER_SECOND,
+} from '@openreader/tts/audio-format';
 import {
   DEFAULT_MS_PER_CHAR,
   bytesForDurationMs,
@@ -129,5 +134,71 @@ describe('parseRangeHeader', () => {
 
   test('unknown total size is unsatisfiable for any range', () => {
     expect(parseRangeHeader('bytes=0-', 0)).toBe('unsatisfiable');
+  });
+});
+
+// Build a synthetic MPEG-1 Layer III @ 128 kbps / 44.1 kHz frame: header declares
+// length 417 (+1 when padded), rest is filler. Mirrors STREAM_AUDIO_PROFILE output.
+function fakeMp3Frame(padding: 0 | 1): Buffer {
+  const length = 417 + padding;
+  const frame = Buffer.alloc(length);
+  frame[0] = 0xff;
+  frame[1] = 0xfb; // sync + MPEG-1 + Layer III
+  frame[2] = 0x90 | (padding << 1); // bitrate idx 9 (128k), samplerate idx 0 (44.1k), padding bit
+  frame[3] = 0x00;
+  return frame;
+}
+
+describe('MP3 frame parsing + cumulative silence bytes', () => {
+  test('parseMp3FrameLengths reads each frame length and skips an ID3v2 tag', () => {
+    const frames = Buffer.concat([fakeMp3Frame(1), fakeMp3Frame(0), fakeMp3Frame(1)]);
+    expect(parseMp3FrameLengths(frames)).toEqual([418, 417, 418]);
+
+    // 10-byte ID3v2 header (size 0) prepended — must be skipped.
+    const id3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    expect(parseMp3FrameLengths(Buffer.concat([id3, frames]))).toEqual([418, 417, 418]);
+  });
+
+  test('cumulativeCbrFrameBytes sums whole frames, cycling the table', () => {
+    const table = [418, 417, 418];
+    expect(cumulativeCbrFrameBytes(table, 0)).toBe(0);
+    expect(cumulativeCbrFrameBytes(table, 3)).toBe(1253); // one full cycle
+    expect(cumulativeCbrFrameBytes(table, 5)).toBe(1253 + 418 + 417); // +2 frames
+    expect(cumulativeCbrFrameBytes([], 5)).toBe(0); // no table → degrade to 0
+  });
+});
+
+describe('buildByteLayout frame-quantized silence', () => {
+  const frameMs = MP3_FRAME_DURATION_MS;
+  const bytesForFrames = (frames: number) => frames * 418; // pretend every frame is 418 B
+
+  test('silence slots snap to whole frames in both duration and bytes', () => {
+    // 40 chars * 50 ms = 2000 ms estimate → a whole number of frames.
+    const frames = Math.round(2000 / frameMs);
+    const plan: PlanSlotInput[] = [{ segmentIndex: 0, text: 'x'.repeat(40), durationMs: null }];
+    const layout = buildByteLayout(plan, 0, 50, {
+      frameDurationMs: frameMs,
+      silenceBytesForFrames: bytesForFrames,
+    });
+    expect(layout.slots[0]).toMatchObject({
+      durationMs: Math.max(1, Math.round(frames * frameMs)),
+      byteLength: bytesForFrames(frames),
+      generated: false,
+      estimated: true,
+    });
+  });
+
+  test('generated slots keep their real duration; silence falls back to CBR bytes without a resolver', () => {
+    const plan: PlanSlotInput[] = [
+      { segmentIndex: 0, text: 'a', durationMs: 1000 }, // generated
+      { segmentIndex: 1, text: 'bbbb', durationMs: null }, // silence
+    ];
+    const layout = buildByteLayout(plan, 0, 50, { frameDurationMs: frameMs });
+    // generated slot untouched by quantization
+    expect(layout.slots[0]).toMatchObject({ durationMs: 1000, byteLength: 16000, generated: true });
+    // silence quantized in time; byteLength uses the linear CBR fallback (no resolver)
+    const frames = Math.round((4 * 50) / frameMs);
+    expect(layout.slots[1].durationMs).toBe(Math.max(1, Math.round(frames * frameMs)));
+    expect(layout.slots[1].estimated).toBe(true);
   });
 });

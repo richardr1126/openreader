@@ -32,6 +32,100 @@ export const STREAM_AUDIO_PROFILE = {
 /** Constant bytes per second of audio for {@link STREAM_AUDIO_PROFILE} (CBR ⇒ linear). */
 export const STREAM_AUDIO_BYTES_PER_SECOND = (STREAM_AUDIO_PROFILE.bitrateKbps * 1000) / 8;
 
+/** Samples per MPEG-1 Layer III frame (fixed by the format). */
+export const MP3_FRAME_SAMPLES = 1152;
+
+/**
+ * Exact decoded duration of one {@link STREAM_AUDIO_PROFILE} MP3 frame. A CBR MP3
+ * frame is indivisible: it decodes to exactly this many ms regardless of byte
+ * count, and slicing a stream mid-frame drops the partial frame on decode. So any
+ * silence we synthesize must be measured in *whole frames* to stay byte↔time
+ * accurate — see {@link parseMp3FrameLengths} / {@link cumulativeCbrFrameBytes}.
+ */
+export const MP3_FRAME_DURATION_MS = (MP3_FRAME_SAMPLES / STREAM_AUDIO_PROFILE.sampleRateHz) * 1000;
+
+// MPEG-1 tables (we only ever parse our own STREAM_AUDIO_PROFILE output).
+const MPEG1_L3_BITRATES_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
+const MPEG1_SAMPLE_RATES_HZ = [44100, 48000, 32000, 0];
+
+/**
+ * Walk an MPEG-1 Layer III buffer frame by frame and return each frame's byte
+ * length (417 or 418 at 128 kbps/44.1 kHz — the CBR padding bit alternates to hold
+ * the average bitrate). Skips a leading ID3v2 tag if present. Used to lay out and
+ * emit silence on exact frame boundaries so its decoded duration equals the byte
+ * length the grid advertises.
+ */
+export function parseMp3FrameLengths(buffer: Buffer): number[] {
+  const lengths: number[] = [];
+  let offset = 0;
+  if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'ID3') {
+    const tagSize =
+      ((buffer[6] & 0x7f) << 21)
+      | ((buffer[7] & 0x7f) << 14)
+      | ((buffer[8] & 0x7f) << 7)
+      | (buffer[9] & 0x7f);
+    offset = 10 + tagSize;
+  }
+  while (offset + 4 <= buffer.length) {
+    // Frame sync: 11 set bits.
+    if (buffer[offset] !== 0xff || (buffer[offset + 1] & 0xe0) !== 0xe0) {
+      offset += 1;
+      continue;
+    }
+    const version = (buffer[offset + 1] >> 3) & 0x03; // 3 = MPEG-1
+    const layer = (buffer[offset + 1] >> 1) & 0x03; // 1 = Layer III
+    const bitrateIdx = (buffer[offset + 2] >> 4) & 0x0f;
+    const sampleRateIdx = (buffer[offset + 2] >> 2) & 0x03;
+    const padding = (buffer[offset + 2] >> 1) & 0x01;
+    const bitrateKbps = MPEG1_L3_BITRATES_KBPS[bitrateIdx];
+    const sampleRateHz = MPEG1_SAMPLE_RATES_HZ[sampleRateIdx];
+    if (version !== 0x03 || layer !== 0x01 || !bitrateKbps || !sampleRateHz) {
+      offset += 1; // Not a frame we understand — resync at the next byte.
+      continue;
+    }
+    const frameLength = Math.floor((144000 * bitrateKbps) / sampleRateHz) + padding;
+    if (frameLength <= 0 || offset + frameLength > buffer.length) break;
+    lengths.push(frameLength);
+    offset += frameLength;
+  }
+  return lengths;
+}
+
+/**
+ * Total bytes occupied by the first `frameCount` frames of a CBR silence buffer,
+ * cycling the frame-length table. Because each frame is whole, this is the *exact*
+ * byte length to advertise (and emit) for `frameCount` frames of silence, so the
+ * decoded duration (`frameCount × MP3_FRAME_DURATION_MS`) matches the byte grid.
+ */
+export function cumulativeCbrFrameBytes(frameLengths: number[], frameCount: number): number {
+  if (frameLengths.length === 0 || frameCount <= 0) return 0;
+  const n = frameLengths.length;
+  const cycleBytes = frameLengths.reduce((sum, len) => sum + len, 0);
+  const fullCycles = Math.floor(frameCount / n);
+  const remainder = frameCount % n;
+  let bytes = fullCycles * cycleBytes;
+  for (let i = 0; i < remainder; i += 1) bytes += frameLengths[i];
+  return bytes;
+}
+
+let cachedSilenceFrameLengths: Promise<number[]> | null = null;
+
+/**
+ * Frame-length table of {@link getCbrSilenceSecond}, parsed once and cached. Lets
+ * the audio stream size and emit silence in whole frames (no mid-frame cuts).
+ */
+export function getCbrSilenceFrameLengths(): Promise<number[]> {
+  if (!cachedSilenceFrameLengths) {
+    cachedSilenceFrameLengths = getCbrSilenceSecond()
+      .then((buffer) => parseMp3FrameLengths(buffer))
+      .catch((error) => {
+        cachedSilenceFrameLengths = null; // allow retry
+        throw error;
+      });
+  }
+  return cachedSilenceFrameLengths;
+}
+
 /**
  * Detect an audio container/codec from a buffer's leading bytes (magic numbers).
  *

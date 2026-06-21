@@ -1,4 +1,4 @@
-import { STREAM_AUDIO_BYTES_PER_SECOND } from './audio-format';
+import { MP3_FRAME_DURATION_MS, STREAM_AUDIO_BYTES_PER_SECOND } from './audio-format';
 
 /**
  * Pure helpers that map the progressive playback stream between time, bytes,
@@ -71,24 +71,60 @@ export interface PlaybackCbrLayout {
   slots: PlaybackLayoutSlot[];
 }
 
+export interface PlaybackCbrLayoutOptions {
+  /**
+   * When set, every *not-generated* (silence) slot is quantized to a whole number
+   * of MP3 frames: its duration becomes `frames × MP3_FRAME_DURATION_MS`. This is
+   * what makes the silence the worker emits decode to exactly the duration the grid
+   * advertises — without it, a slot's byte length is an arbitrary count that gets
+   * sliced mid-frame, dropping a partial frame per slot and drifting the highlight.
+   * Pass it on BOTH the worker byte map and the client time grid so they agree.
+   */
+  frameDurationMs?: number;
+  /**
+   * Exact byte length for `frames` whole frames of CBR silence (worker-only; needs
+   * the parsed silence frame table). When provided, silence slots use it so the
+   * byte map lands on real frame boundaries. The client time grid omits it (it maps
+   * by time, never bytes) and falls back to the linear CBR estimate.
+   */
+  silenceBytesForFrames?: (frames: number) => number;
+}
+
 export function buildPlaybackCbrLayout(
   plan: PlanSlotInput[],
   startOrdinal: number,
   msPerChar: number,
+  options?: PlaybackCbrLayoutOptions,
 ): PlaybackCbrLayout {
   const ordered = plan
     .filter((segment) => segment.segmentIndex >= startOrdinal)
     .sort((a, b) => a.segmentIndex - b.segmentIndex);
+
+  const frameMs = options?.frameDurationMs && options.frameDurationMs > 0
+    ? options.frameDurationMs
+    : 0;
 
   const slots: PlaybackLayoutSlot[] = [];
   let cursorMs = 0;
   let cursorBytes = 0;
   for (const segment of ordered) {
     const generated = segment.durationMs != null && segment.durationMs > 0;
-    const durationMs = generated
-      ? Math.max(1, Math.round(segment.durationMs as number))
-      : estimateDurationMs(segment.text, msPerChar);
-    const byteLength = bytesForDurationMs(durationMs);
+    let durationMs: number;
+    let byteLength: number;
+    if (generated) {
+      durationMs = Math.max(1, Math.round(segment.durationMs as number));
+      byteLength = bytesForDurationMs(durationMs);
+    } else if (frameMs > 0) {
+      // Silence quantized to whole frames so decoded duration == byte grid.
+      const frames = Math.max(1, Math.round(estimateDurationMs(segment.text, msPerChar) / frameMs));
+      durationMs = Math.max(1, Math.round(frames * frameMs));
+      byteLength = options?.silenceBytesForFrames
+        ? options.silenceBytesForFrames(frames)
+        : bytesForDurationMs(durationMs);
+    } else {
+      durationMs = estimateDurationMs(segment.text, msPerChar);
+      byteLength = bytesForDurationMs(durationMs);
+    }
     slots.push({
       segmentIndex: segment.segmentIndex,
       segmentKey: segment.segmentKey ?? null,

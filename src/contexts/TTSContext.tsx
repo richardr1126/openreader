@@ -670,6 +670,33 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackProjectionRafRef.current = requestAnimationFrame(tick);
   }, [projectPlaybackTime, stopPlaybackProjectionLoop]);
 
+  // Fast resync on return-to-foreground. While the display is off the tab freezes:
+  // the rAF projection loop and the SSE/heartbeat that refresh the timeline grid
+  // all stop, but the audio element keeps playing in the background. On resume the
+  // grid is stale — it still holds *estimated* durations for everything that played
+  // while hidden — so projecting `audio.currentTime` lands on the wrong segment and
+  // the highlight/page chase the audio chapter-by-chapter as the grid slowly
+  // refreshes (painfully slow for EPUB, where each chapter navigation is async).
+  // Forcing one fresh timeline (now with real durations for the whole played span)
+  // and re-projecting immediately collapses that chase into a single correct jump.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+      if (!playbackActiveRef.current) return;
+      const session = playbackSessionRef.current;
+      const audio = unlockedAudioRef.current;
+      if (!session || !audio || audio.paused || audio.ended) return;
+      void refreshPlaybackTimeline(session.timelineUrl)
+        .then(() => {
+          if (!playbackActiveRef.current || audio.paused || audio.ended) return;
+          projectPlaybackTime(audio.currentTime);
+        })
+        .catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [playbackActiveRef, playbackSessionRef, projectPlaybackTime, refreshPlaybackTimeline]);
+
   /**
    * Stops the current audio playback and optionally clears pending requests.
    */

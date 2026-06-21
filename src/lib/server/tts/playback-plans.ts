@@ -7,6 +7,7 @@ import {
   estimateMsPerCharForNativeSpeed,
   type PlanSlotInput,
 } from '@openreader/tts/playback-cbr-layout';
+import { MP3_FRAME_DURATION_MS } from '@openreader/tts/audio-format';
 import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import type { ComputeOperation, TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
 import { getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
@@ -157,7 +158,13 @@ export function buildPlaybackGrid(input: {
     text: segment.text,
     durationMs: input.completedDurations.get(segment.segmentIndex) ?? null,
   }));
-  const layout = buildPlaybackCbrLayout(slots, input.startOrdinal, msPerChar);
+  // Quantize silence slots to whole MP3 frames so the grid's startMs values match
+  // the frame-accurate silence the worker emits (the byte map uses the same
+  // quantization). The grid maps by time, never bytes, so it omits the exact
+  // frame-byte resolver the worker passes.
+  const layout = buildPlaybackCbrLayout(slots, input.startOrdinal, msPerChar, {
+    frameDurationMs: MP3_FRAME_DURATION_MS,
+  });
   return {
     durationMs: layout.durationMs,
     segments: layout.slots.map((slot): TtsPlaybackGridSegment => {
