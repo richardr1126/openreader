@@ -86,3 +86,59 @@ export function ttsPlaybackPlanArtifactKey(input: {
   const version = Math.max(0, Math.floor(input.documentVersion));
   return `${input.prefix}/tts_playback_plan_v1/${input.documentId}/${version}/${input.readerType}/${input.planSignature}.json`;
 }
+
+const SAFE_HASH_SEGMENT_REGEX = /^[a-f0-9]{8,128}$/i;
+const SAFE_OBJECT_PATH_SEGMENT_REGEX = /^[a-zA-Z0-9._=-]{1,256}$/;
+
+/**
+ * Durable generated-audio metadata for one playback segment. The object is
+ * keyed by the same identity that used to live in `tts_segment_variants`: user
+ * storage scope + document/version + settings hash + segment id.
+ */
+export function ttsPlaybackSegmentMetadataArtifactKey(input: {
+  storageUserHash: string;
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  segmentId: string;
+  prefix: string;
+}): string {
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.storageUserHash)) {
+    throw new Error(`Invalid playback storage user hash: ${input.storageUserHash}`);
+  }
+  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
+    throw new Error(`Invalid document id: ${input.documentId}`);
+  }
+  if (!SAFE_OBJECT_PATH_SEGMENT_REGEX.test(input.settingsHash)) {
+    throw new Error(`Invalid playback settings hash: ${input.settingsHash}`);
+  }
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.segmentId)) {
+    throw new Error(`Invalid playback segment id: ${input.segmentId}`);
+  }
+  const version = Math.max(0, Math.floor(input.documentVersion));
+  return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${input.segmentId}.json`;
+}
+
+/**
+ * Compact index used by stream/sidebar readers to avoid database joins or S3
+ * list operations. It points at completed per-segment metadata artifacts.
+ */
+export function ttsPlaybackSegmentIndexArtifactKey(input: {
+  storageUserHash: string;
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  prefix: string;
+}): string {
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.storageUserHash)) {
+    throw new Error(`Invalid playback storage user hash: ${input.storageUserHash}`);
+  }
+  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
+    throw new Error(`Invalid document id: ${input.documentId}`);
+  }
+  if (!SAFE_OBJECT_PATH_SEGMENT_REGEX.test(input.settingsHash)) {
+    throw new Error(`Invalid playback settings hash: ${input.settingsHash}`);
+  }
+  const version = Math.max(0, Math.floor(input.documentVersion));
+  return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/index.json`;
+}

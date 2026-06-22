@@ -49,6 +49,7 @@ import type {
   TtsPlaybackProgress,
 } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
+import type { TtsPlaybackStorage } from '../playback/storage';
 import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
 import { resolveTtsCredentials } from './tts-credentials';
@@ -686,6 +687,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
+  playbackStorage?: TtsPlaybackStorage;
   /** Read previously-stored segment audio back (for the alignment self-heal path). */
   readAudioObject?: (key: string) => Promise<Buffer>;
   /**
@@ -781,13 +783,20 @@ async function generateExplicitTtsPlaybackSegments(input: {
       segmentId: ttsSegmentVariants.segmentId,
       status: ttsSegmentVariants.status,
       audioKey: ttsSegmentVariants.audioKey,
+      durationMs: ttsSegmentVariants.durationMs,
       alignmentJson: ttsSegmentVariants.alignmentJson,
     })
     .from(ttsSegmentVariants)
     .where(and(
       eq(ttsSegmentVariants.userId, input.request.storageUserId),
       inArray(ttsSegmentVariants.segmentId, normalized.map((segment) => segment.segmentId)),
-    ))) as Array<{ segmentId: string; status: string; audioKey: string | null; alignmentJson: string | null }>;
+    ))) as Array<{
+    segmentId: string;
+    status: string;
+    audioKey: string | null;
+    durationMs: number | null;
+    alignmentJson: string | null;
+  }>;
   const existingById = new Map(existingRows.map((row) => [row.segmentId, row]));
 
   // Word-level alignment from an audio buffer. Shared by the generation path and
@@ -807,6 +816,54 @@ async function generateExplicitTtsPlaybackSegments(input: {
       const first = result.alignments[0];
       return first ? { ...first, sentenceIndex: segment.original.segmentIndex } : null;
     }).catch(() => null);
+  };
+
+  const persistSegmentMetadata = async (
+    segment: (typeof normalized)[number],
+    status: 'generating' | 'completed' | 'error',
+    metadata: {
+      audioKey: string;
+      durationMs?: number | null;
+      alignment?: Awaited<ReturnType<typeof computeAlignment>> | null;
+      error?: unknown | null;
+      updatedAt?: number;
+    },
+  ): Promise<void> => {
+    if (!input.playbackStorage) return;
+    const updatedAt = metadata.updatedAt ?? Date.now();
+    await input.playbackStorage.artifacts.putSegmentMetadata({
+      schemaVersion: 1,
+      status,
+      storageUserId: input.request.storageUserId,
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      readerType: input.request.readerType,
+      settingsHash: input.request.settingsHash,
+      settingsJson: input.request.settingsJson,
+      segmentId: segment.segmentId,
+      segmentEntryId: segment.segmentEntryId,
+      segmentIndex: segment.original.segmentIndex,
+      segmentKey: segment.segmentKey,
+      textHash: segment.textHash,
+      textLength: segment.text.length,
+      audioKey: metadata.audioKey,
+      audioFormat: 'mp3',
+      durationMs: metadata.durationMs ?? null,
+      alignment: metadata.alignment ?? null,
+      error: metadata.error ?? null,
+      updatedAt,
+    });
+    await input.playbackStorage.claims.markSegmentClaim({
+      storageUserId: input.request.storageUserId,
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      settingsHash: input.request.settingsHash,
+      segmentId: segment.segmentId,
+      status,
+      audioKey: metadata.audioKey,
+      ownerId: input.request.sessionId,
+      now: updatedAt,
+    }).catch(() => undefined);
   };
 
   for (const segment of normalized) {
@@ -870,6 +927,14 @@ async function generateExplicitTtsPlaybackSegments(input: {
           // Leave alignment null; a future generation pass retries the self-heal.
         }
       }
+      await persistSegmentMetadata(segment, 'completed', {
+        audioKey: existing.audioKey,
+        durationMs: Math.max(1, Number(existing.durationMs ?? 1000)),
+        alignment: existing.alignmentJson
+          ? JSON.parse(existing.alignmentJson) as Awaited<ReturnType<typeof computeAlignment>>
+          : null,
+        updatedAt: Date.now(),
+      }).catch(() => undefined);
       await input.onSegmentCompleted?.(planOrdinal);
       continue;
     }
@@ -934,6 +999,17 @@ async function generateExplicitTtsPlaybackSegments(input: {
       }
       continue;
     }
+    await input.playbackStorage?.claims.claimSegment({
+      storageUserId: input.request.storageUserId,
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      settingsHash: input.request.settingsHash,
+      segmentId: segment.segmentId,
+      audioKey,
+      ownerId: input.request.sessionId,
+      now: claimedAt,
+      staleAfterMs: SEGMENT_GENERATING_STALE_MS,
+    }).catch(() => undefined);
 
     let lastError: unknown = null;
     let lastErrorInfo: SegmentErrorInfo | null = null;
@@ -969,6 +1045,12 @@ async function generateExplicitTtsPlaybackSegments(input: {
             eq(ttsSegmentVariants.segmentId, segment.segmentId),
             eq(ttsSegmentVariants.userId, input.request.storageUserId),
           ));
+        await persistSegmentMetadata(segment, 'completed', {
+          audioKey,
+          durationMs,
+          alignment,
+          updatedAt: Date.now(),
+        }).catch(() => undefined);
         completed = true;
         break;
       } catch (error) {
@@ -1005,6 +1087,13 @@ async function generateExplicitTtsPlaybackSegments(input: {
         eq(ttsSegmentVariants.segmentId, segment.segmentId),
         eq(ttsSegmentVariants.userId, input.request.storageUserId),
       ));
+    await persistSegmentMetadata(segment, 'error', {
+      audioKey,
+      error: lastErrorInfo ?? {
+        message: lastError instanceof Error ? lastError.message : String(lastError),
+      },
+      updatedAt: Date.now(),
+    }).catch(() => undefined);
   }
 }
 
@@ -1027,6 +1116,7 @@ export interface JobHandlers {
 
 export function createJobHandlers(input: {
   storage: ArtifactStorage;
+  playbackStorage?: TtsPlaybackStorage;
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfHardCapMs: number;
@@ -1192,6 +1282,7 @@ export function createJobHandlers(input: {
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
+          playbackStorage: input.playbackStorage,
           readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
           onBeforeSegment,
           onSegmentCompleted,

@@ -40,6 +40,7 @@ import {
   normalizeS3Prefix,
   type ArtifactStorage,
 } from '../infrastructure/storage';
+import { createTtsPlaybackStorage } from '../playback/storage';
 import { createJobHandlers } from '../jobs/handlers';
 import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
@@ -223,6 +224,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
   });
+  const playbackStorage = createTtsPlaybackStorage({
+    getKv: async () => (await ensureConnected()).kv,
+    storage,
+    s3Prefix,
+  });
 
   const operationQueue = new JetStreamOperationQueue({
     getJs: async () => (await ensureConnected()).js,
@@ -287,6 +293,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const jobHandlers = createJobHandlers({
     storage,
+    playbackStorage,
     whisperTimeoutMs,
     pdfTimeoutMs,
     pdfHardCapMs,
