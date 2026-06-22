@@ -466,10 +466,15 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   // fresh `new Audio()` that Safari would block.
   const unlockedAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // The single "make the view follow the cursor" primitive. Used identically by
+  // live playback (projection), the scrubber, and skip — so paused skip turns the
+  // page exactly like playback. It does NOT depend on playback being active.
   const syncPlaybackLocator = useCallback((locator: TTSSegmentLocator | null) => {
-    if (!locator || !playbackActiveRef.current) return;
+    if (!locator) return;
     const page = pdfLocatorPage(locator);
     if (page !== null) {
+      // eslint-disable-next-line no-console
+      console.log('[cursor-follow] sync pdf page', page);
       playbackSyncNavigationRef.current = true;
       setCurrDocPage(page);
       return;
@@ -477,6 +482,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (locator.readerType === 'epub') {
       const handler = locationChangeHandlerRef.current;
       if (!handler) return;
+      // eslint-disable-next-line no-console
+      console.log('[cursor-follow] sync epub locator', {
+        spineIndex: locator.spineIndex,
+        charOffset: locator.charOffset,
+        cfi: locator.cfi ?? null,
+      });
       playbackSyncNavigationRef.current = true;
       handler(locator);
     }
@@ -779,7 +790,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * @param {boolean} shouldPause - Whether to pause playback
    */
   const skipToLocation = useCallback((location: TTSLocation, shouldPause = false) => {
-    if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+    // Cursor-follow echo (set by syncPlaybackLocator): keep the plan, just record
+    // the position. Independent of play state so paused skip is swallowed too.
+    if (playbackSyncNavigationRef.current) {
       if (activeReaderType === 'pdf' || activeReaderType === 'html') {
         playbackSyncNavigationRef.current = false;
       } else {
@@ -936,7 +949,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackAnchor(nextAnchor);
     setCurrDocPage(resolvedLocation);
 
-    if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+    if (playbackSyncNavigationRef.current) {
       playbackSyncNavigationRef.current = false;
       setIsProcessing(false);
       return;
@@ -1015,7 +1028,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       clearPendingEpubJump();
     }
 
-    if (playbackSyncNavigationRef.current && playbackActiveRef.current) {
+    if (playbackSyncNavigationRef.current) {
+      // eslint-disable-next-line no-console
+      console.log('[cursor-follow] setText swallow (keep plan)', {
+        location: typeof resolvedLocation === 'string' ? resolvedLocation.slice(0, 40) : resolvedLocation,
+      });
       playbackSyncNavigationRef.current = false;
       setIsProcessing(false);
       return;
@@ -1211,9 +1228,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const skipForward = useCallback(async () => {
     const nextIndex = currentIndex + 1;
-    if (playbackActiveRef.current && seekPlaybackToSegmentIndex(nextIndex)) {
+    // Move the cursor within the loaded (whole-book) plan and let the view
+    // follow — same path as playback/scrubber, regardless of play state. Only
+    // fall back to advance when there's no seek layout yet (plan not loaded).
+    if (seekPlaybackToSegmentIndex(nextIndex)) {
+      // eslint-disable-next-line no-console
+      console.log('[cursor-follow] skipForward via seek', nextIndex);
       return;
     }
+    // eslint-disable-next-line no-console
+    console.log('[cursor-follow] skipForward via advance (no seek layout)', nextIndex);
     // Only show processing state if we're currently playing
     if (isPlaying) {
       setIsProcessing(true);
@@ -1221,16 +1245,20 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     abortAudio(true);
     await advance();
-  }, [currentIndex, playbackActiveRef, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
+  }, [currentIndex, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
   /**
    * Moves backward one sentence in the text
    */
   const skipBackward = useCallback(async () => {
     const nextIndex = currentIndex - 1;
-    if (playbackActiveRef.current && seekPlaybackToSegmentIndex(nextIndex)) {
+    if (nextIndex >= 0 && seekPlaybackToSegmentIndex(nextIndex)) {
+      // eslint-disable-next-line no-console
+      console.log('[cursor-follow] skipBackward via seek', nextIndex);
       return;
     }
+    // eslint-disable-next-line no-console
+    console.log('[cursor-follow] skipBackward via advance (no seek layout)', nextIndex);
     // Only show processing state if we're currently playing
     if (isPlaying) {
       setIsProcessing(true);
@@ -1238,7 +1266,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun();
     abortAudio(true);
     await advance(true);
-  }, [currentIndex, playbackActiveRef, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
+  }, [currentIndex, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
 
   /**

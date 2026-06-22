@@ -259,7 +259,11 @@ describe('server-state architecture', () => {
     expect(context).toContain('const page = pdfLocatorPage(locator);');
     expect(context).toContain('const page = pdfLocatorPage(targetLocator);');
     expect(context).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html') {\n        playbackSyncNavigationRef.current = false;");
-    expect(context).toContain('if (playbackSyncNavigationRef.current && playbackActiveRef.current) {\n      playbackSyncNavigationRef.current = false;\n      setIsProcessing(false);\n      return;\n    }');
+    // Cursor-follow swallow is independent of play state (paused skip follows the
+    // page exactly like playback), so the consume sites no longer gate on
+    // playbackActiveRef.
+    expect(context).toContain('if (playbackSyncNavigationRef.current) {\n      playbackSyncNavigationRef.current = false;\n      setIsProcessing(false);\n      return;\n    }');
+    expect(context).not.toContain('playbackSyncNavigationRef.current && playbackActiveRef.current');
     expect(playbackHook).toContain('const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;');
     expect(playbackHook).not.toContain('const normalizePdfPage = (page: unknown): number | null =>');
     expect(playbackHook).not.toContain("normalizePdfPage((locator as { page?: unknown }).page)");
