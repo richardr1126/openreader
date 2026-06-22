@@ -22,6 +22,18 @@ type UseTtsPlaybackInput = {
 
 const WORD_HIGHLIGHT_LEAD_SEC = 0.12;
 
+function locatorProjectionKey(locator: import('@/types/client').TTSSegmentLocator | null): string {
+  if (!locator) return '';
+  return [
+    locator.readerType,
+    locator.page ?? '',
+    locator.spineIndex ?? '',
+    locator.spineHref ?? '',
+    locator.charOffset ?? '',
+    locator.location ?? '',
+  ].join('|');
+}
+
 export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const {
     playbackSegmentsRef,
@@ -42,6 +54,10 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackActiveRef = useRef(false);
+  const ordinalIndexCacheRef = useRef<{
+    source: CanonicalTtsSegment[];
+    byOrdinal: Map<number, number>;
+  } | null>(null);
   const lastProjectionRef = useRef<{
     segmentId: string;
     index: number;
@@ -72,24 +88,23 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if (!projection.segment) return;
 
     const segments = playbackSegmentsRef.current;
+    let ordinalIndexCache = ordinalIndexCacheRef.current;
+    if (!ordinalIndexCache || ordinalIndexCache.source !== segments) {
+      ordinalIndexCache = {
+        source: segments,
+        byOrdinal: new Map(segments.map((segment, index) => [segment.ordinal, index])),
+      };
+      ordinalIndexCacheRef.current = ordinalIndexCache;
+    }
     // `ordinal` is the authoritative, unique plan index. `segmentKey` is a hash
     // of the segment text and is NOT unique (repeated lines, chapter labels,
     // dividers, refrains), so playback projection must not use it.
     const targetOrdinal = projection.segment.ordinal;
-    const nextIndex = segments.findIndex((segment) => segment.ordinal === targetOrdinal);
+    const nextIndex = ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1;
     if (nextIndex < 0) return;
     const locator = projection.segment.locator;
     const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
-    const locatorKey = locator
-      ? JSON.stringify({
-        readerType: locator.readerType,
-        page: locator.page ?? null,
-        spineIndex: locator.spineIndex ?? null,
-        spineHref: locator.spineHref ?? null,
-        charOffset: locator.charOffset ?? null,
-        location: locator.location ?? null,
-      })
-      : '';
+    const locatorKey = locatorProjectionKey(locator);
     const previous = lastProjectionRef.current;
     const segmentId = projection.segment.segmentId;
     const alignment = projection.segment.alignment ?? undefined;
@@ -151,6 +166,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackActiveRef.current = false;
     playbackSessionRef.current = null;
     playbackTimelineRef.current = null;
+    ordinalIndexCacheRef.current = null;
     lastProjectionRef.current = null;
   }, [stopPlaybackTimelinePolling]);
 

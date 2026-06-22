@@ -20,6 +20,7 @@ import { getRuntimeConfig } from '@/lib/server/admin/settings';
 import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import { checkTtsPlaybackQuota } from '@/lib/server/tts/playback-quota';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,12 +84,22 @@ export async function POST(request: NextRequest) {
     // published back to the session.
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
-    const { ttsPlaybackBackgroundExtent: backgroundExtent } = await getRuntimeConfig();
+    const runtimeConfig = await getRuntimeConfig();
+    const { ttsPlaybackBackgroundExtent: backgroundExtent } = runtimeConfig;
     const startOrdinal = 0;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
     const { settingsHash, settingsJson, planning } = await buildTtsPlaybackPlanningInput(parsed, scope);
+    const quotaResponse = await checkTtsPlaybackQuota({
+      request,
+      scope,
+      documentId: parsed.documentId,
+      settingsHash,
+      planObjectKey: parsed.planObjectKey,
+      runtimeConfig,
+    });
+    if (quotaResponse) return quotaResponse;
 
     const sessionId = randomUUID();
     await db.insert(ttsPlaybackSessions).values({

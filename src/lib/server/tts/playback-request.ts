@@ -1,7 +1,8 @@
-import { buildTtsSegmentSettingsHash, buildTtsSegmentSettingsJson } from '@openreader/tts/segments';
+import { buildTtsPlaybackSettingsHash, buildTtsSegmentSettingsJson } from '@openreader/tts/segments';
 import { isTtsProviderType } from '@openreader/tts/provider-catalog';
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { getDocumentSkipBlockKinds } from '@/lib/server/tts/document-skip-kinds';
+import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TtsPlaybackPlanRequest, TtsPlaybackRequest } from '@/lib/server/compute-worker/protocol';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import type { TTSSegmentSettings } from '@/types/client';
@@ -20,6 +21,7 @@ export type ParsedTtsPlaybackRequestBody = {
   language?: string;
   startSegmentKey?: string;
   startText?: string;
+  skipBlockKinds?: ParsedPdfBlockKind[];
   planObjectKey?: string;
   planSignature?: string;
   planId?: string;
@@ -43,6 +45,21 @@ function readOptionalString(record: Record<string, unknown>, key: string): strin
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed || undefined;
+}
+
+function readOptionalSkipBlockKinds(record: Record<string, unknown>): ParsedPdfBlockKind[] | undefined | null {
+  if (!('skipBlockKinds' in record)) return undefined;
+  const value = record.skipBlockKinds;
+  if (!Array.isArray(value)) return null;
+  const allowed = new Set(PARSED_PDF_BLOCK_KINDS);
+  const out: ParsedPdfBlockKind[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') return null;
+    const kind = item.trim();
+    if (!allowed.has(kind as ParsedPdfBlockKind)) return null;
+    out.push(kind as ParsedPdfBlockKind);
+  }
+  return Array.from(new Set(out));
 }
 
 function parseSettings(value: unknown): TTSSegmentSettings | null {
@@ -94,6 +111,8 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   if (maxBlockLength === null) return null;
   const planningLanguage = readOptionalString(planningRec, 'language');
   if (planningLanguage === null) return null;
+  const skipBlockKinds = readOptionalSkipBlockKinds(planningRec);
+  if (skipBlockKinds === null) return null;
 
   const startSegmentKey = readOptionalString(rec, 'startSegmentKey');
   const startText = readOptionalString(rec, 'startText');
@@ -120,6 +139,7 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
     },
     ...(maxBlockLength !== undefined ? { maxBlockLength } : {}),
     ...(planningLanguage ? { language: normalizeLanguageTag(planningLanguage) } : {}),
+    ...(skipBlockKinds !== undefined ? { skipBlockKinds } : {}),
     ...(startSegmentKey ? { startSegmentKey } : {}),
     ...(startText ? { startText } : {}),
     ...(planObjectKey ? { planObjectKey } : {}),
@@ -132,16 +152,28 @@ export function validateTtsPlaybackStartLocation(
   parsed: ParsedTtsPlaybackRequestBody,
   scope: ResolvedSegmentDocumentScope,
 ): string | null {
-  if (
-    scope.readerType === 'epub'
-    && (
-      typeof parsed.startLocation.spineIndex !== 'number'
-      || typeof parsed.startLocation.charOffset !== 'number'
-    )
-  ) {
-    return 'EPUB playback start requires stable spine coordinates';
+  switch (scope.readerType) {
+    case 'epub':
+      if (
+        typeof parsed.startLocation.spineIndex !== 'number'
+        || typeof parsed.startLocation.charOffset !== 'number'
+      ) {
+        return 'EPUB playback start requires stable spine coordinates';
+      }
+      return null;
+    case 'pdf':
+      if (typeof parsed.startLocation.page !== 'number') {
+        return 'PDF playback start requires a stable page coordinate';
+      }
+      return null;
+    case 'html':
+      if (!parsed.startSegmentKey && !parsed.startText) {
+        return 'HTML playback start requires a stable segment key or text anchor';
+      }
+      return null;
+    default:
+      return 'Unsupported reader type for TTS playback';
   }
-  return null;
 }
 
 export async function buildTtsPlaybackPlanningInput(
@@ -152,18 +184,31 @@ export async function buildTtsPlaybackPlanningInput(
   settingsJson: string;
   planning: TtsPlaybackRequest['planning'];
 }> {
-  const settingsHash = buildTtsSegmentSettingsHash(parsed.settings);
   const rawSettingsJson = buildTtsSegmentSettingsJson(parsed.settings);
   const settingsJson = typeof rawSettingsJson === 'string'
     ? rawSettingsJson
     : JSON.stringify(rawSettingsJson);
   const planExtent = 'document';
   const skipBlockKinds = scope.readerType === 'pdf'
-    ? await getDocumentSkipBlockKinds(parsed.documentId, scope.storageUserId)
+    ? parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds(parsed.documentId, scope.storageUserId)
     : [];
   const isPlainText = scope.readerType === 'html'
     ? scope.documentName.toLowerCase().endsWith('.txt')
     : false;
+  const enforceSourceBoundaries = scope.readerType === 'pdf' || scope.readerType === 'epub';
+
+  // The audio variant hash must vary with segmentation, not just voice: changing
+  // skipBlockKinds (etc.) changes which text lands at each ordinal, so reusing a
+  // voice-only hash would let the prior segmentation's audio be served against
+  // the new grid. Mirrors the worker's plan signature inputs (handlers.ts).
+  const settingsHash = buildTtsPlaybackSettingsHash(parsed.settings, {
+    maxBlockLength: parsed.maxBlockLength ?? null,
+    language: parsed.language ?? parsed.settings.language ?? null,
+    enforceSourceBoundaries,
+    skipBlockKinds,
+    isPlainText,
+    namespace: scope.testNamespace,
+  });
 
   return {
     settingsHash,
@@ -173,7 +218,7 @@ export async function buildTtsPlaybackPlanningInput(
       ...(parsed.language ? { language: parsed.language } : {}),
       ...(scope.readerType !== 'epub' && parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
       ...(scope.readerType !== 'epub' && parsed.startText ? { startText: parsed.startText } : {}),
-      enforceSourceBoundaries: scope.readerType === 'pdf' || scope.readerType === 'epub',
+      enforceSourceBoundaries,
       documentSource: {
         namespace: scope.testNamespace,
         skipBlockKinds,

@@ -30,6 +30,7 @@ import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { serializeReaderPosition } from '@/lib/client/reader-progress';
+import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
 
 // Dynamic import for client-side rendering only
@@ -72,7 +73,15 @@ export default function PDFViewerPage() {
     createFullAudioBook: createPDFAudioBook,
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
-  const { currentSentenceIndex, pause, prepareInitialPosition, sentences, stop } = useTTS();
+  const {
+    currentSentenceIndex,
+    pause,
+    prepareInitialPosition,
+    sentences,
+    stop,
+    invalidatePlaybackPlan,
+    setPdfSkipBlockKinds,
+  } = useTTS();
   const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
   const stopRef = useLatestRef(stop);
   const { isAtLimit } = useAuthRateLimit();
@@ -97,6 +106,11 @@ export default function PDFViewerPage() {
   const shouldShowExpandedParseLoader = !isLoading
     && hasResolvedParseStatus
     && (parseUiState === 'pending' || parseUiState === 'running' || parseUiState === 'failed' || hasRealParseProgress);
+
+  useEffect(() => {
+    setPdfSkipBlockKinds(documentSettings.pdf?.skipBlockKinds ?? []);
+    return () => setPdfSkipBlockKinds(null);
+  }, [documentSettings.pdf?.skipBlockKinds, setPdfSkipBlockKinds]);
 
   useEffect(() => {
     disableProgressPersistenceRef.current();
@@ -539,10 +553,17 @@ export default function PDFViewerPage() {
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         language={documentSettings.language ?? 'auto'}
         onLanguageChange={(language) => {
-          void updateDocumentSettings({
+          const nextSettings: DocumentSettingsValue = {
             ...documentSettings,
             schemaVersion: 1,
             language,
+          };
+          void updateDocumentSettings(nextSettings).then(() => {
+            // Language changes how the worker segments text. The worker route
+            // reads this from persisted document settings, so re-plan only after
+            // the PUT has finished; otherwise the plan prefetch can recache the
+            // old/default settings.
+            invalidatePlaybackPlan();
           });
         }}
         pdf={{
@@ -554,13 +575,19 @@ export default function PDFViewerPage() {
             const current = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
             if (enabled) current.add(kind);
             else current.delete(kind);
-            void updateDocumentSettings({
+            const nextSettings: DocumentSettingsValue = {
               ...documentSettings,
               schemaVersion: 1,
               pdf: {
                 ...(documentSettings.pdf ?? {}),
                 skipBlockKinds: Array.from(current),
               },
+            };
+            void updateDocumentSettings(nextSettings).then(() => {
+              // skipBlockKinds feeds the worker-side plan signature. The server
+              // reads it from the document-settings row, so wait for persistence
+              // before dropping the cached plan and triggering prefetch.
+              invalidatePlaybackPlan();
             });
           },
           onForceReparse: requestForceReparse,

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   buildTtsSegmentDocumentPrefix,
+  buildTtsPlaybackSettingsHash,
   buildProportionalAlignment,
   buildTtsSegmentEntryId,
   buildTtsSegmentId,
@@ -41,6 +42,36 @@ describe('tts segment helpers', () => {
       ttsInstructions: 'calm',
     });
     expect(a).toBe(b);
+  });
+
+  test('playback settings hash changes when segmentation settings change', () => {
+    const settings = {
+      providerRef: 'openai',
+      providerType: 'openai' as const,
+      ttsModel: 'gpt-4o-mini-tts',
+      voice: 'alloy',
+      nativeSpeed: 1,
+      ttsInstructions: 'calm',
+      language: 'en',
+    };
+    const baseSegmentation = {
+      maxBlockLength: 1200,
+      language: 'en',
+      enforceSourceBoundaries: true,
+      skipBlockKinds: ['header'],
+      isPlainText: false,
+      namespace: null,
+    };
+    const base = buildTtsPlaybackSettingsHash(settings, baseSegmentation);
+    expect(buildTtsPlaybackSettingsHash(settings, {
+      ...baseSegmentation,
+      skipBlockKinds: ['header', 'footer'],
+    })).not.toBe(base);
+    expect(buildTtsPlaybackSettingsHash(settings, {
+      ...baseSegmentation,
+      maxBlockLength: 800,
+    })).not.toBe(base);
+    expect(buildTtsPlaybackSettingsHash({ ...settings, voice: 'verse' }, baseSegmentation)).not.toBe(base);
   });
 
   test('builds SQLite settings JSON with worker-readable keys', () => {

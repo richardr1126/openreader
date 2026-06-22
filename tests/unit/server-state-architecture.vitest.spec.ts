@@ -155,6 +155,7 @@ describe('server-state architecture', () => {
     const playbackPlan = source('src/lib/client/tts/playback-plan.ts');
     const playbackGrid = source('src/lib/client/tts/playback-grid.ts');
     const ttsApi = source('src/lib/client/api/tts.ts');
+    const pdfPage = source('src/app/(app)/pdf/[id]/page.tsx');
     expect(context).toContain('createTtsPlaybackSession');
     expect(context).toContain('createTtsPlaybackPlan');
     expect(context).toContain('fetchPlaybackSeekLayoutUntilReady');
@@ -173,11 +174,17 @@ describe('server-state architecture', () => {
     expect(context).toContain('const hasViewportAnchor = Boolean(playbackAnchorRef.current?.hasContent || playbackAnchorRef.current?.text.trim())');
     expect(context).not.toContain("activeReaderType === 'epub' && sentence.trim()");
     expect(context).toContain("activeReaderType !== 'epub' && playbackSegment?.key");
+    expect(context).toContain("activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds }");
+    expect(clientTts).toContain('skipBlockKinds?: ParsedPdfBlockKind[]');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('readOptionalSkipBlockKinds(planningRec)');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds');
     expect(context).toContain('if (!locator) return null;');
     expect(context).toContain('charOffset,');
     expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).toContain('startLocator: viewportStartLocator');
     expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('startLocator: canonicalWindow.segments[0]?.ownerLocator');
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).toContain('setDocumentPlaybackAnchor(currDocPageNumber, Boolean(text.trim()))');
+    expect(pdfPage).toContain('void updateDocumentSettings(nextSettings).then(() => {');
+    expect(pdfPage).toContain('reads it from the document-settings row, so wait for persistence');
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).not.toContain('setTTSText(text');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).toContain('setDocumentPlaybackAnchor(1, true');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setText: setTTSText');
@@ -283,7 +290,8 @@ describe('server-state architecture', () => {
     expect(context).toContain('seekPlaybackTo');
     expect(context).toContain('audio.currentTime = targetSec');
     expect(playbackHook).toContain('const targetOrdinal = projection.segment.ordinal;');
-    expect(playbackHook).toContain('segments.findIndex((segment) => segment.ordinal === targetOrdinal)');
+    expect(playbackHook).toContain('ordinalIndexCacheRef');
+    expect(playbackHook).toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
     expect(playbackHook).not.toContain('segment.key === segmentKey');
     expect(playbackHook).toContain('if (nextIndex < 0) return');
     expect(playbackHook).not.toContain('projection.segment.sourceSegmentIndex ?? projection.segment.ordinal');

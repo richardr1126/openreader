@@ -138,6 +138,20 @@ export async function deleteDocumentTtsSegmentCache(input: {
   documentId: string;
   namespace: string | null;
 }): Promise<void> {
+  const now = Date.now();
+  await db
+    .update(ttsPlaybackSessions)
+    .set({
+      status: 'canceled',
+      lastError: 'Document was deleted.',
+      updatedAt: now,
+    })
+    .where(and(
+      eq(ttsPlaybackSessions.storageUserId, input.userId),
+      eq(ttsPlaybackSessions.documentId, input.documentId),
+      inArray(ttsPlaybackSessions.status, ['queued', 'running']),
+    ));
+
   const storagePrefix = getS3Config().prefix;
   for (const storageVersion of ['v1', 'v2'] as const) {
     await deleteTtsSegmentPrefix(buildTtsSegmentDocumentPrefix({

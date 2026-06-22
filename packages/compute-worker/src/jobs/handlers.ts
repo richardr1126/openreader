@@ -1,14 +1,16 @@
-import { createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, lt, ne, or } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { ttsSegmentEntries, ttsSegmentVariants, ttsPlaybackSessions } from '@openreader/database/schema';
 import { generateTTSBuffer } from '@openreader/tts/generate';
+import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
 import {
   buildTtsSegmentAudioKey,
   buildTtsSegmentEntryId,
   buildTtsSegmentId,
   buildTtsSegmentTextHash,
+  computeSegmentationSignature,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
@@ -526,15 +528,14 @@ export function computePlaybackPlanSignature(
 ): string {
   const planning = request.planning;
   const documentSource = planning.documentSource;
-  const signature = {
+  return computeSegmentationSignature({
     maxBlockLength: planning.maxBlockLength ?? null,
     language: planning.language ?? parseTtsSettings(request.settingsJson).language ?? null,
     enforceSourceBoundaries: Boolean(planning.enforceSourceBoundaries),
-    skipBlockKinds: [...(documentSource?.skipBlockKinds ?? [])].map((kind) => kind.trim()).filter(Boolean).sort(),
+    skipBlockKinds: documentSource?.skipBlockKinds ?? [],
     isPlainText: Boolean(documentSource?.isPlainText),
     namespace: documentSource?.namespace ?? null,
-  };
-  return createHash('sha256').update(JSON.stringify(signature)).digest('hex').slice(0, 32);
+  });
 }
 
 /**
@@ -642,11 +643,51 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
 
 const SEGMENT_MAX_ATTEMPTS = 2;
 
+// A variant marked `generating` whose `updatedAt` is older than this is treated
+// as abandoned (worker crash / lost lease) and may be re-claimed by another job.
+// Bounds how long a crashed claim blocks regeneration of a segment.
+const SEGMENT_GENERATING_STALE_MS = 120_000;
+
+type SegmentErrorInfo = {
+  message: string;
+  code?: 'UPSTREAM_RATE_LIMIT' | 'UPSTREAM_ERROR';
+  upstreamStatus?: number;
+  retryAfterSeconds?: number;
+};
+
+/**
+ * Classify a synthesis failure so the stored `error` preserves provider context
+ * (HTTP status, Retry-After) instead of an opaque message, and so the retry loop
+ * can stop early on non-retryable client errors. Retryable: provider 429 and 5xx
+ * (and unknown/transport errors). Non-retryable: other 4xx (bad request / auth).
+ */
+function classifySegmentError(error: unknown): { info: SegmentErrorInfo; retryable: boolean } {
+  const message = error instanceof Error ? error.message : String(error);
+  const upstreamStatus = getUpstreamStatus(error);
+  if (upstreamStatus === undefined) {
+    return { info: { message }, retryable: true };
+  }
+  if (upstreamStatus === 429) {
+    const retryAfterSeconds = getUpstreamRetryAfterSeconds(error);
+    return {
+      info: { message, code: 'UPSTREAM_RATE_LIMIT', upstreamStatus, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
+      retryable: true,
+    };
+  }
+  if (upstreamStatus >= 500) {
+    return { info: { message, code: 'UPSTREAM_ERROR', upstreamStatus }, retryable: true };
+  }
+  // Other 4xx (bad request, auth, unsupported voice): retrying won't help.
+  return { info: { message, code: 'UPSTREAM_ERROR', upstreamStatus }, retryable: false };
+}
+
 async function generateExplicitTtsPlaybackSegments(input: {
   request: z.infer<typeof ttsPlaybackRequestSchema>;
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
+  /** Read previously-stored segment audio back (for the alignment self-heal path). */
+  readAudioObject?: (key: string) => Promise<Buffer>;
   /**
    * Pacing gate, called before each segment with its plan ordinal. Returns
    * 'continue' to generate it, 'stop' to end generation gracefully (the client
@@ -740,13 +781,33 @@ async function generateExplicitTtsPlaybackSegments(input: {
       segmentId: ttsSegmentVariants.segmentId,
       status: ttsSegmentVariants.status,
       audioKey: ttsSegmentVariants.audioKey,
+      alignmentJson: ttsSegmentVariants.alignmentJson,
     })
     .from(ttsSegmentVariants)
     .where(and(
       eq(ttsSegmentVariants.userId, input.request.storageUserId),
       inArray(ttsSegmentVariants.segmentId, normalized.map((segment) => segment.segmentId)),
-    ))) as Array<{ segmentId: string; status: string; audioKey: string | null }>;
+    ))) as Array<{ segmentId: string; status: string; audioKey: string | null; alignmentJson: string | null }>;
   const existingById = new Map(existingRows.map((row) => [row.segmentId, row]));
+
+  // Word-level alignment from an audio buffer. Shared by the generation path and
+  // the completed-but-unaligned self-heal path; returns null on any failure so a
+  // missing alignment degrades to sentence-level highlighting rather than failing.
+  const computeAlignment = async (
+    audio: Buffer,
+    segment: (typeof normalized)[number],
+    audioKey: string,
+  ) => {
+    return runWhisperAlignmentFromAudioBuffer({
+      audioBuffer: bufferToArrayBuffer(audio),
+      text: segment.text,
+      lang: effectiveSettings.language,
+      cacheKey: `${segment.segmentId}:${audioKey}`,
+    }).then((result) => {
+      const first = result.alignments[0];
+      return first ? { ...first, sentenceIndex: segment.original.segmentIndex } : null;
+    }).catch(() => null);
+  };
 
   for (const segment of normalized) {
     // The pacing gate is the single stop/cancel point: it reads session status +
@@ -788,6 +849,27 @@ async function generateExplicitTtsPlaybackSegments(input: {
 
     const existing = existingById.get(segment.segmentId);
     if (existing?.status === 'completed' && existing.audioKey) {
+      // Self-heal: audio exists but a prior transient Whisper failure left no
+      // alignment. Re-derive it from the stored audio without re-synthesizing,
+      // so a one-time alignment failure doesn't permanently lose word-level
+      // highlighting for this segment (best-effort; retried again next pass).
+      if (!existing.alignmentJson && input.readAudioObject) {
+        try {
+          const storedAudio = await input.readAudioObject(existing.audioKey);
+          const alignment = await computeAlignment(storedAudio, segment, existing.audioKey);
+          if (alignment) {
+            await db
+              .update(ttsSegmentVariants)
+              .set({ alignmentJson: JSON.stringify(alignment), updatedAt: Date.now() })
+              .where(and(
+                eq(ttsSegmentVariants.segmentId, segment.segmentId),
+                eq(ttsSegmentVariants.userId, input.request.storageUserId),
+              ));
+          }
+        } catch {
+          // Leave alignment null; a future generation pass retries the self-heal.
+        }
+      }
       await input.onSegmentCompleted?.(planOrdinal);
       continue;
     }
@@ -802,35 +884,59 @@ async function generateExplicitTtsPlaybackSegments(input: {
       segmentId: segment.segmentId,
     });
 
-    await db
+    // Atomic claim: only take ownership when no row exists, the row isn't already
+    // completed, and any prior `generating` claim is stale (crashed worker). The
+    // conflict `setWhere` + `returning()` makes this a compare-and-set — if a
+    // concurrent job already holds (or finished) this segment, we get no row back
+    // and skip synthesis instead of paying for a duplicate generation.
+    const claimedAt = Date.now();
+    const claimRow = {
+      segmentId: segment.segmentId,
+      userId: input.request.storageUserId,
+      segmentEntryId: segment.segmentEntryId,
+      settingsHash: input.request.settingsHash,
+      settingsJson: input.request.settingsJson,
+      audioKey,
+      audioFormat: 'mp3' as const,
+      status: 'generating' as const,
+      error: null,
+      updatedAt: claimedAt,
+    };
+    const claimed = (await db
       .insert(ttsSegmentVariants)
-      .values({
-        segmentId: segment.segmentId,
-        userId: input.request.storageUserId,
-        segmentEntryId: segment.segmentEntryId,
-        settingsHash: input.request.settingsHash,
-        settingsJson: input.request.settingsJson,
-        audioKey,
-        audioFormat: 'mp3',
-        status: 'generating',
-        error: null,
-        updatedAt: Date.now(),
-      })
+      .values(claimRow)
       .onConflictDoUpdate({
         target: [ttsSegmentVariants.segmentId, ttsSegmentVariants.userId],
-        set: {
-          segmentEntryId: segment.segmentEntryId,
-          settingsHash: input.request.settingsHash,
-          settingsJson: input.request.settingsJson,
-          audioKey,
-          audioFormat: 'mp3',
-          status: 'generating',
-          error: null,
-          updatedAt: Date.now(),
-        },
-      });
+        set: claimRow,
+        setWhere: and(
+          ne(ttsSegmentVariants.status, 'completed'),
+          or(
+            ne(ttsSegmentVariants.status, 'generating'),
+            lt(ttsSegmentVariants.updatedAt, claimedAt - SEGMENT_GENERATING_STALE_MS),
+          ),
+        ),
+      })
+      .returning({ segmentId: ttsSegmentVariants.segmentId })) as Array<{ segmentId: string }>;
+
+    if (claimed.length === 0) {
+      // Another job owns this segment, or it completed since our snapshot. Report
+      // completion only if it is actually done; otherwise let the owner finish.
+      const [current] = (await db
+        .select({ status: ttsSegmentVariants.status, audioKey: ttsSegmentVariants.audioKey })
+        .from(ttsSegmentVariants)
+        .where(and(
+          eq(ttsSegmentVariants.segmentId, segment.segmentId),
+          eq(ttsSegmentVariants.userId, input.request.storageUserId),
+        ))
+        .limit(1)) as Array<{ status: string; audioKey: string | null }>;
+      if (current?.status === 'completed' && current.audioKey) {
+        await input.onSegmentCompleted?.(planOrdinal);
+      }
+      continue;
+    }
 
     let lastError: unknown = null;
+    let lastErrorInfo: SegmentErrorInfo | null = null;
     let completed = false;
     for (let attempt = 1; attempt <= SEGMENT_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -848,15 +954,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
         });
         await input.putAudioObject(audioKey, audioBuffer);
         const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
-        const alignment = await runWhisperAlignmentFromAudioBuffer({
-          audioBuffer: bufferToArrayBuffer(audioBuffer),
-          text: segment.text,
-          lang: effectiveSettings.language,
-          cacheKey: `${segment.segmentId}:${audioKey}`,
-        }).then((result) => {
-          const first = result.alignments[0];
-          return first ? { ...first, sentenceIndex: segment.original.segmentIndex } : null;
-        }).catch(() => null);
+        const alignment = await computeAlignment(audioBuffer, segment, audioKey);
 
         await db
           .update(ttsSegmentVariants)
@@ -875,6 +973,11 @@ async function generateExplicitTtsPlaybackSegments(input: {
         break;
       } catch (error) {
         lastError = error;
+        const classified = classifySegmentError(error);
+        lastErrorInfo = classified.info;
+        // Don't waste a second synthesis on a non-retryable client error
+        // (bad request / auth / unsupported voice).
+        if (!classified.retryable) break;
       }
     }
 
@@ -887,11 +990,15 @@ async function generateExplicitTtsPlaybackSegments(input: {
     // move on. The playback timeline stops at the first gap (contiguous
     // prefix), so already-generated audio keeps playing; a persistent gap just
     // halts playback cleanly at this segment instead of failing the whole job.
+    // The error is stored structured (code/upstreamStatus/retryAfterSeconds) so a
+    // provider 429/5xx is distinguishable from an opaque failure.
     await db
       .update(ttsSegmentVariants)
       .set({
         status: 'error',
-        error: lastError instanceof Error ? lastError.message : String(lastError),
+        error: JSON.stringify(lastErrorInfo ?? {
+          message: lastError instanceof Error ? lastError.message : String(lastError),
+        }),
         updatedAt: Date.now(),
       })
       .where(and(
@@ -1085,6 +1192,7 @@ export function createJobHandlers(input: {
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
+          readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
           onBeforeSegment,
           onSegmentCompleted,
         });

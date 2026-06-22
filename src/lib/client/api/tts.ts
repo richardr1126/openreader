@@ -5,6 +5,7 @@ import type {
   TTSSegmentSettings,
   VoicesResponse,
 } from '@/types/client';
+import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { normalizeLocator } from '@openreader/tts/locator';
 
@@ -70,7 +71,7 @@ export type TtsPlaybackSessionPayload = {
   startSegmentKey?: string;
   startText?: string;
   /** Segmentation knobs only; reading text is derived server-side. */
-  planning?: { maxBlockLength?: number; language?: string };
+  planning?: { maxBlockLength?: number; language?: string; skipBlockKinds?: ParsedPdfBlockKind[] };
   planId?: string;
   planObjectKey?: string;
   planSignature?: string;

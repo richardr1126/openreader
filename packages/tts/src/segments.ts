@@ -42,6 +42,63 @@ export function buildTtsSegmentSettingsHash(settings: TTSSegmentSettings): strin
   return createHash('sha256').update(settingsCanonical(settings)).digest('hex');
 }
 
+/**
+ * Inputs that change how a document is segmented (and therefore which text lands
+ * at each ordinal). These are independent of voice/speed: two playback sessions
+ * with identical voices but different `skipBlockKinds` produce different segment
+ * text at the same ordinal, so anything keyed by audio content must vary with
+ * this signature.
+ */
+export interface SegmentationSignatureInput {
+  maxBlockLength: number | null;
+  language: string | null;
+  enforceSourceBoundaries: boolean;
+  skipBlockKinds: readonly string[];
+  isPlainText: boolean;
+  namespace: string | null;
+}
+
+/**
+ * Canonical, stable string form of the segmentation knobs. Key order is load-
+ * bearing: it must stay in sync with both producers (the worker's plan signature
+ * and the app's playback settings hash) so a given segmentation always hashes to
+ * the same value on both sides.
+ */
+export function segmentationSignatureCanonical(input: SegmentationSignatureInput): string {
+  return JSON.stringify({
+    maxBlockLength: input.maxBlockLength ?? null,
+    language: input.language ?? null,
+    enforceSourceBoundaries: Boolean(input.enforceSourceBoundaries),
+    skipBlockKinds: [...input.skipBlockKinds].map((kind) => kind.trim()).filter(Boolean).sort(),
+    isPlainText: Boolean(input.isPlainText),
+    namespace: input.namespace ?? null,
+  });
+}
+
+export function computeSegmentationSignature(input: SegmentationSignatureInput): string {
+  return createHash('sha256').update(segmentationSignatureCanonical(input)).digest('hex').slice(0, 32);
+}
+
+/**
+ * Hash that keys generated playback audio variants. Combines the voice/format
+ * settings with the segmentation signature: the audio content depends on BOTH
+ * (the voice that spoke it and the segmentation that decided the sentence
+ * boundaries), so a change to either must produce a distinct hash. Without the
+ * segmentation half, two segmentations sharing a voice would collide at the same
+ * ordinal and one's audio could be served against the other's grid.
+ */
+export function buildTtsPlaybackSettingsHash(
+  settings: TTSSegmentSettings,
+  segmentation: SegmentationSignatureInput,
+): string {
+  const separator = String.fromCharCode(0);
+  return createHash('sha256')
+    .update(settingsCanonical(settings))
+    .update(separator)
+    .update(segmentationSignatureCanonical(segmentation))
+    .digest('hex');
+}
+
 export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSegmentSettings | string {
   const canonical: TTSSegmentSettings = {
     providerRef: settings.providerRef,

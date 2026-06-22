@@ -64,6 +64,7 @@ import type {
   TTSSegmentLocator,
 } from '@/types/client';
 import { isPdfLocator, isStableEpubLocator } from '@/types/client';
+import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
 
@@ -110,6 +111,9 @@ interface TTSContextType extends TTSPlaybackState {
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   setVoiceAndRestart: (voice: string) => void;
+  /** Drop the cached playback plan after a segmentation change (block kinds / language). */
+  invalidatePlaybackPlan: () => void;
+  setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
   setDocumentLanguage: (language: string) => void;
@@ -387,6 +391,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [playbackPlanSource, setPlaybackPlanSource] = useState<'idle' | 'worker'>('idle');
   const [playbackSeekLayout, setPlaybackSeekLayout] = useState<TtsPlaybackSeekLayout | null>(null);
   const [playbackTimeSec, setPlaybackTimeSec] = useState(0);
+  const playbackTimeSecRef = useRef(0);
+  const lastPlaybackTimePublishedAtRef = useRef(0);
   const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [speed, setSpeed] = useState(voiceSpeed);
@@ -395,6 +401,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [ttsModel, setTTSModel] = useState(configTTSModel);
   const [ttsInstructions, setTTSInstructions] = useState(configTTSInstructions);
   const [documentLanguage, setDocumentLanguage] = useState('auto');
+  const [pdfSkipBlockKinds, setPdfSkipBlockKinds] = useState<ParsedPdfBlockKind[] | null>(null);
   const resolvedLanguage = useMemo(
     () => resolveTtsLanguage({ configuredLanguage: documentLanguage, voice }),
     [documentLanguage, voice],
@@ -473,8 +480,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (!locator) return;
     const page = pdfLocatorPage(locator);
     if (page !== null) {
-      // eslint-disable-next-line no-console
-      console.log('[cursor-follow] sync pdf page', page);
       playbackSyncNavigationRef.current = true;
       setCurrDocPage(page);
       return;
@@ -482,12 +487,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (locator.readerType === 'epub') {
       const handler = locationChangeHandlerRef.current;
       if (!handler) return;
-      // eslint-disable-next-line no-console
-      console.log('[cursor-follow] sync epub locator', {
-        spineIndex: locator.spineIndex,
-        charOffset: locator.charOffset,
-        cfi: locator.cfi ?? null,
-      });
       playbackSyncNavigationRef.current = true;
       handler(locator);
     }
@@ -617,6 +616,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, []);
 
+  const publishPlaybackTimeSec = useCallback((value: number, options?: { force?: boolean }) => {
+    const next = Math.max(0, Number.isFinite(value) ? value : 0);
+    playbackTimeSecRef.current = next;
+    const now = Date.now();
+    const force = Boolean(options?.force);
+    if (!force && now - lastPlaybackTimePublishedAtRef.current < 250) return;
+    lastPlaybackTimePublishedAtRef.current = now;
+    setPlaybackTimeSec(next);
+  }, []);
+
   const startPlaybackForegroundSync = useCallback((runId: number, headers: TTSRequestHeaders) => {
     const activeSession = playbackSessionRef.current;
     if (!activeSession) return;
@@ -671,15 +680,15 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         playbackProjectionRafRef.current = null;
         return;
       }
-      setPlaybackTimeSec(audio.currentTime);
+      publishPlaybackTimeSec(audio.currentTime);
       projectPlaybackTime(audio.currentTime);
       playbackProjectionRafRef.current = requestAnimationFrame(tick);
     };
 
-    setPlaybackTimeSec(audio.currentTime);
+    publishPlaybackTimeSec(audio.currentTime, { force: true });
     projectPlaybackTime(audio.currentTime);
     playbackProjectionRafRef.current = requestAnimationFrame(tick);
-  }, [projectPlaybackTime, stopPlaybackProjectionLoop]);
+  }, [projectPlaybackTime, publishPlaybackTimeSec, stopPlaybackProjectionLoop]);
 
   // Fast resync on return-to-foreground. While the display is off the tab freezes:
   // the rAF projection loop and the SSE/heartbeat that refresh the timeline grid
@@ -717,7 +726,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stopPlaybackProjectionLoop();
     resetPlaybackRefs();
     playbackSyncNavigationRef.current = false;
-    setPlaybackTimeSec(0);
+    publishPlaybackTimeSec(0, { force: true });
     playbackRequestHeadersRef.current = null;
     const audio = unlockedAudioRef.current;
     if (audio) {
@@ -735,7 +744,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnTimeoutRef.current = null;
     }
     setCurrentWordIndex(null);
-  }, [invalidatePlaybackRun, resetPlaybackRefs, stopPlaybackProjectionLoop]);
+  }, [invalidatePlaybackRun, publishPlaybackTimeSec, resetPlaybackRefs, stopPlaybackProjectionLoop]);
 
   /**
    * Pauses the current audio playback while preserving seek position.
@@ -1029,10 +1038,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     if (playbackSyncNavigationRef.current) {
-      // eslint-disable-next-line no-console
-      console.log('[cursor-follow] setText swallow (keep plan)', {
-        location: typeof resolvedLocation === 'string' ? resolvedLocation.slice(0, 40) : resolvedLocation,
-      });
       playbackSyncNavigationRef.current = false;
       setIsProcessing(false);
       return;
@@ -1181,7 +1186,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ?? layout.segments[layout.segments.length - 1];
     if (!target) return;
 
-    setPlaybackTimeSec(targetSec);
+    publishPlaybackTimeSec(targetSec, { force: true });
     const nextIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === target.ordinal);
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
       setPlaybackIndex(nextIndex);
@@ -1209,6 +1214,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSeekLayout,
     playbackSessionRef,
     projectPlaybackTime,
+    publishPlaybackTimeSec,
     setPlaybackIndex,
     syncPlaybackLocator,
   ]);
@@ -1232,12 +1238,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // follow — same path as playback/scrubber, regardless of play state. Only
     // fall back to advance when there's no seek layout yet (plan not loaded).
     if (seekPlaybackToSegmentIndex(nextIndex)) {
-      // eslint-disable-next-line no-console
-      console.log('[cursor-follow] skipForward via seek', nextIndex);
       return;
     }
-    // eslint-disable-next-line no-console
-    console.log('[cursor-follow] skipForward via advance (no seek layout)', nextIndex);
     // Only show processing state if we're currently playing
     if (isPlaying) {
       setIsProcessing(true);
@@ -1253,12 +1255,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const skipBackward = useCallback(async () => {
     const nextIndex = currentIndex - 1;
     if (nextIndex >= 0 && seekPlaybackToSegmentIndex(nextIndex)) {
-      // eslint-disable-next-line no-console
-      console.log('[cursor-follow] skipBackward via seek', nextIndex);
       return;
     }
-    // eslint-disable-next-line no-console
-    console.log('[cursor-follow] skipBackward via advance (no seek layout)', nextIndex);
     // Only show processing state if we're currently playing
     if (isPlaying) {
       setIsProcessing(true);
@@ -1439,9 +1437,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         },
         startLocation,
         ...(activeReaderType !== 'epub' && playbackSegment?.key ? { startSegmentKey: playbackSegment.key } : {}),
+        ...(activeReaderType !== 'epub' && sentence.trim() ? { startText: sentence.trim() } : {}),
         planning: {
           maxBlockLength: ttsSegmentMaxBlockLength,
           language: resolvedLanguage,
+          ...(activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds } : {}),
         },
       },
     };
@@ -1455,6 +1455,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     effectiveNativeSpeed,
     playbackSegments,
     providerModelPolicy.supportsInstructions,
+    pdfSkipBlockKinds,
     resolvedLanguage,
     sentences,
     ttsInstructions,
@@ -1766,7 +1767,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         // Time advancing means audio is genuinely playing from the buffer, so
         // clear any stale buffering state (e.g. a transient `waiting`).
         setIsProcessing(false);
-        setPlaybackTimeSec(audio.currentTime);
+        publishPlaybackTimeSec(audio.currentTime, { force: true });
         projectPlaybackTime(audio.currentTime);
       };
       // `waiting` means playback actually halted to rebuffer the progressive
@@ -1797,7 +1798,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         if (runId !== playbackRunIdRef.current) return;
         try {
           audio.currentTime = initialStartSec;
-          setPlaybackTimeSec(initialStartSec);
+          publishPlaybackTimeSec(initialStartSec, { force: true });
           projectPlaybackTime(initialStartSec);
         } catch {
           // The stream is range-capable; if the browser rejects an early seek,
@@ -1832,6 +1833,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackActiveRef,
     playbackSessionRef,
     projectPlaybackTime,
+    publishPlaybackTimeSec,
     applyPlaybackPlan,
     resetPlaybackRefs,
     startPlaybackForegroundSync,
@@ -1887,7 +1889,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsPlaying(false);
     playbackPlanRef.current = null;
     setPlaybackSeekLayout(null);
-    setPlaybackTimeSec(0);
+    publishPlaybackTimeSec(0, { force: true });
     setPlaybackIndex(0);
     setSentences([]);
     setPlaybackSegments([]);
@@ -1901,7 +1903,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-  }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, setPlaybackIndex]);
+  }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, publishPlaybackTimeSec, setPlaybackIndex]);
 
   const clearSegmentCaches = useCallback(() => {
     // Keep the current viewport/sentence list intact, but force audio state to
@@ -2139,6 +2141,32 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [abortAudio, updateConfigKey, isPlaying, clearPendingEpubJump]);
 
   /**
+   * Drops the cached position-independent playback plan and its derived seek
+   * layout so the next playback fetches a fresh one. Callers that mutate
+   * segmentation knobs must invalidate explicitly, mirroring how voice/speed
+   * changes reset the plan in `setVoiceAndRestart`. Resumes playback if it was
+   * active so the change takes effect immediately.
+   */
+  const invalidatePlaybackPlan = useCallback(() => {
+    const wasPlaying = isPlaying;
+    const mySeq = ++restartSeqRef.current;
+    playbackPlanRef.current = null;
+    setPlaybackSeekLayout(null);
+    setPlaybackPlanSource('idle');
+    if (!wasPlaying) return;
+    setIsProcessing(true);
+    setIsPlaying(false);
+    abortAudio(true);
+    // Bridge two renders so the playback driver sees a real false→true edge.
+    window.setTimeout(() => {
+      setIsProcessing(false);
+      if (mySeq === restartSeqRef.current) {
+        setIsPlaying(true);
+      }
+    }, 0);
+  }, [abortAudio, isPlaying]);
+
+  /**
    * Provides the TTS context value to child components
    */
   const value = useMemo(() => ({
@@ -2174,6 +2202,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    invalidatePlaybackPlan,
+    setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
     setDocumentLanguage,
@@ -2211,6 +2241,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
+    invalidatePlaybackPlan,
+    setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
