@@ -1370,6 +1370,11 @@
                     "minLength": 1,
                     "maxLength": 2048
                   },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "aheadWindow": {
                     "type": "integer",
                     "exclusiveMinimum": 0,

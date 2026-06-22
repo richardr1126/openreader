@@ -17,17 +17,20 @@ class MemoryKv implements KvStoreLike {
   async put(key: string, data: Uint8Array): Promise<unknown> {
     this.revision += 1;
     this.rows.set(key, { operation: 'PUT', value: data, revision: this.revision });
+    return undefined;
   }
 
   async create(key: string, data: Uint8Array): Promise<unknown> {
     if (this.rows.has(key)) throw new Error('key exists');
     await this.put(key, data);
+    return undefined;
   }
 
   async update(key: string, data: Uint8Array, version: number): Promise<unknown> {
     const current = this.rows.get(key);
     if (!current || current.revision !== version) throw new Error('wrong last sequence');
     await this.put(key, data);
+    return undefined;
   }
 
   async keys(filter?: string | string[]): Promise<AsyncIterable<string>> {

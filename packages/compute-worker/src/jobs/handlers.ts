@@ -108,6 +108,9 @@ async function updateTtsPlaybackSession(input: {
   generationStartOrdinal?: number;
   cursorOrdinal?: number;
 }): Promise<void> {
+  // Legacy compatibility write. KV is the worker-owned playback session source;
+  // remove this once app-side session/sidebar routes are artifact-backed and the
+  // legacy cleanup task deletes tts_playback_sessions.
   const now = Date.now();
   const generationStartOrdinal = input.generationStartOrdinal === undefined
     ? undefined
@@ -131,6 +134,8 @@ async function updateTtsPlaybackSession(input: {
 }
 
 async function assertTtsPlaybackSessionActive(sessionId: string): Promise<void> {
+  // Legacy fallback for playback sessions created before KV seeding. Remove with
+  // updateTtsPlaybackSession after the cleanup task lands.
   const rows = (await db
     .select({ status: ttsPlaybackSessions.status, lastError: ttsPlaybackSessions.lastError })
     .from(ttsPlaybackSessions)
@@ -161,6 +166,8 @@ async function readTtsPlaybackSessionCursor(sessionId: string): Promise<{
   cursorUpdatedAt: number | null;
   expiresAt: number;
 } | null> {
+  // Legacy fallback for cursor polling. The generation loop prefers KV and only
+  // calls this for sessions without KV state.
   const rows = (await db
     .select({
       status: ttsPlaybackSessions.status,
@@ -1179,12 +1186,23 @@ export function createJobHandlers(input: {
     async runTtsPlayback(payload, queueWaitMs, hooks) {
       const parsed = ttsPlaybackRequestSchema.parse(payload);
       const startedAt = Date.now();
-      await assertTtsPlaybackSessionActive(parsed.sessionId);
+      const kvSession = await input.playbackStorage?.sessions.getSession(parsed.sessionId).catch(() => null);
+      if (kvSession) {
+        if (kvSession.status !== 'queued' && kvSession.status !== 'running') {
+          throw new Error(kvSession.lastError || `TTS playback session is ${kvSession.status}`);
+        }
+      } else {
+        await assertTtsPlaybackSessionActive(parsed.sessionId);
+      }
       await updateTtsPlaybackSession({
         sessionId: parsed.sessionId,
         status: 'running',
         lastError: null,
       });
+      await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
+        status: 'running',
+        lastError: null,
+      }).catch(() => undefined);
       try {
         const plan = await resolveAndPersistTtsPlaybackPlan({
           request: parsed,
@@ -1201,6 +1219,14 @@ export function createJobHandlers(input: {
           cursorOrdinal: startOrdinal,
           lastError: null,
         });
+        await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
+          status: 'running',
+          planObjectKey,
+          generationStartOrdinal: startOrdinal,
+          cursorOrdinal: startOrdinal,
+          cursorUpdatedAt: Date.now(),
+          lastError: null,
+        }).catch(() => undefined);
         const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
         const plannedCount = plannedSegments.length;
         const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
@@ -1241,7 +1267,15 @@ export function createJobHandlers(input: {
 
         const onBeforeSegment = async (planOrdinal: number): Promise<'continue' | 'stop'> => {
           for (;;) {
-            const cursor = await readTtsPlaybackSessionCursor(parsed.sessionId);
+            const kvCursor = await input.playbackStorage?.sessions.getSession(parsed.sessionId).catch(() => null);
+            const cursor = kvCursor
+              ? {
+                status: kvCursor.status,
+                cursorOrdinal: Math.max(0, Math.floor(Number(kvCursor.cursorOrdinal ?? 0))),
+                cursorUpdatedAt: kvCursor.cursorUpdatedAt == null ? null : Number(kvCursor.cursorUpdatedAt),
+                expiresAt: Number(kvCursor.expiresAt),
+              }
+              : await readTtsPlaybackSessionCursor(parsed.sessionId);
             if (!cursor || (cursor.status !== 'queued' && cursor.status !== 'running')) {
               stoppedEarly = true;
               return 'stop';
@@ -1298,6 +1332,11 @@ export function createJobHandlers(input: {
             planObjectKey,
             lastError: null,
           });
+          await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
+            status: 'succeeded',
+            planObjectKey,
+            lastError: null,
+          }).catch(() => undefined);
         }
         return {
           sessionId: parsed.sessionId,
@@ -1307,6 +1346,10 @@ export function createJobHandlers(input: {
       } catch (error) {
         await updateTtsPlaybackSession({
           sessionId: parsed.sessionId,
+          status: 'failed',
+          lastError: error instanceof Error ? error.message : String(error),
+        }).catch(() => undefined);
+        await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
           status: 'failed',
           lastError: error instanceof Error ? error.message : String(error),
         }).catch(() => undefined);

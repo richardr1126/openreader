@@ -332,6 +332,7 @@ export interface paths {
                         settingsHash: string;
                         settingsJson: unknown;
                         planObjectKey?: string;
+                        expiresAt?: number;
                         aheadWindow?: number;
                         /** @enum {string} */
                         backgroundExtent?: "section" | "document";

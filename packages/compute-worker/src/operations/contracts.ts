@@ -42,6 +42,8 @@ export interface TtsPlaybackJobRequest {
   settingsHash: string;
   settingsJson: unknown;
   planObjectKey?: string;
+  /** Absolute epoch-ms expiry for the ephemeral playback session. */
+  expiresAt?: number;
   /**
    * How many segments ahead of the client's playback cursor the worker may
    * generate while the client is connected (cursor is fresh). When the cursor

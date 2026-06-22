@@ -280,6 +280,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       artifactExists: options.routeDeps?.artifactExists ?? storage.objectExists,
     },
     storage,
+    playbackStorage: options.routeDeps ? undefined : playbackStorage,
     s3Prefix,
     ensureOrphanedOpRecovery,
     getOpState,
