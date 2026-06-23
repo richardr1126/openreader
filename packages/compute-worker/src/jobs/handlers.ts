@@ -849,7 +849,13 @@ async function generateExplicitTtsPlaybackSegments(input: {
     });
 
     // Atomic claim: only take ownership when no completed claim exists and any
-    // prior `generating` claim is stale (crashed worker).
+    // prior `generating` claim is stale (crashed worker). The S3 index is the
+    // source of truth for completion: completed-with-audio segments already
+    // `continue`d above, so reaching here means there is no durable completed
+    // artifact. A `completed` claim at this point is therefore stale (the user
+    // cleared cached audio, deleting S3 but not the NATS claim), so allow
+    // overwriting it and regenerating instead of skipping the segment forever.
+    const hasDurableCompletedArtifact = existing?.status === 'completed' && Boolean(existing.audioKey);
     const claimedAt = Date.now();
     const claimed = await input.playbackStorage.claims.claimSegment({
       storageUserId: input.request.storageUserId,
@@ -861,6 +867,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       ownerId: input.request.sessionId,
       now: claimedAt,
       staleAfterMs: SEGMENT_GENERATING_STALE_MS,
+      allowReclaimCompleted: !hasDurableCompletedArtifact,
     });
 
     if (!claimed.claimed) {

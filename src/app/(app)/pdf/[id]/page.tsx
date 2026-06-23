@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -89,7 +88,7 @@ export default function PDFViewerPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPdfViewerReady, setIsPdfViewerReady] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'segments'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [showDetailedParseLoader, setShowDetailedParseLoader] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
@@ -501,10 +500,8 @@ export default function PDFViewerPage() {
               onZoomDecrease={handleZoomOut}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
-              onOpenSegments={() => setActiveSidebar((prev) => prev === 'segments' ? null : 'segments')}
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
-              isSegmentsOpen={activeSidebar === 'segments'}
               showAudiobookExport={canExportAudiobook}
               minZoom={50}
               maxZoom={300}
@@ -551,6 +548,7 @@ export default function PDFViewerPage() {
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        documentId={id as string}
         language={documentSettings.language ?? 'auto'}
         onLanguageChange={(language) => {
           const nextSettings: DocumentSettingsValue = {
@@ -601,11 +599,6 @@ export default function PDFViewerPage() {
         message={FORCE_REPARSE_CONFIRM_MESSAGE}
         confirmText={FORCE_REPARSE_CONFIRM_TEXT}
         cancelText="Cancel"
-      />
-      <SegmentsSidebar
-        isOpen={activeSidebar === 'segments'}
-        setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'segments' : (prev === 'segments' ? null : prev))}
-        documentId={id as string}
       />
     </>
   );

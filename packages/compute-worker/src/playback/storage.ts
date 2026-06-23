@@ -111,6 +111,13 @@ export interface TtsPlaybackSegmentClaimStore {
     ownerId?: string | null;
     now?: number;
     staleAfterMs: number;
+    // When the caller has confirmed there is no durable (S3) completed artifact
+    // for this segment, a lingering `completed` claim is stale — e.g. the user
+    // cleared cached audio, which deletes the S3 index/metadata/audio but not the
+    // NATS claim. Allow overwriting it so the segment regenerates instead of being
+    // permanently skipped. Safe because the index is written before the completed
+    // claim, so a completed claim without an index entry can only be cleared state.
+    allowReclaimCompleted?: boolean;
   }): Promise<{ claimed: true; claim: TtsPlaybackSegmentClaim } | { claimed: false; claim: TtsPlaybackSegmentClaim | null }>;
   markSegmentClaim(input: {
     storageUserId: string;
@@ -278,10 +285,15 @@ export function createTtsPlaybackKvStore(input: {
           return { claimed: false, claim: raced?.claim ?? null };
         }
       }
-      if (current.claim.status === 'completed') return { claimed: false, claim: current.claim };
-      const stale = current.claim.status !== 'generating'
-        || current.claim.updatedAt < now - Math.max(0, claimInput.staleAfterMs);
-      if (!stale) return { claimed: false, claim: current.claim };
+      if (current.claim.status === 'completed') {
+        // Trust a completed claim unless the caller proved the durable artifact is
+        // gone (cleared cache); otherwise overwrite it and regenerate below.
+        if (!claimInput.allowReclaimCompleted) return { claimed: false, claim: current.claim };
+      } else {
+        const stale = current.claim.status !== 'generating'
+          || current.claim.updatedAt < now - Math.max(0, claimInput.staleAfterMs);
+        if (!stale) return { claimed: false, claim: current.claim };
+      }
       try {
         await kv.update(key, claimCodec.encode(next), current.revision);
         return { claimed: true, claim: next };

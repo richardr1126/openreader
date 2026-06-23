@@ -10,7 +10,6 @@ import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
@@ -63,7 +62,7 @@ export default function HTMLPage() {
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'segments' | 'audiobook'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -241,10 +240,8 @@ export default function HTMLPage() {
               onZoomIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
               onZoomDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
-              onOpenSegments={() => setActiveSidebar((prev) => prev === 'segments' ? null : 'segments')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
               isSettingsOpen={activeSidebar === 'settings'}
-              isSegmentsOpen={activeSidebar === 'segments'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
@@ -293,6 +290,7 @@ export default function HTMLPage() {
         html
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        documentId={id as string}
         language={language}
         onLanguageChange={(nextLanguage) => {
           void bootstrap.updateSettings({
@@ -301,11 +299,6 @@ export default function HTMLPage() {
             language: nextLanguage,
           });
         }}
-      />
-      <SegmentsSidebar
-        isOpen={activeSidebar === 'segments'}
-        setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'segments' : (prev === 'segments' ? null : prev))}
-        documentId={id as string}
       />
     </>
   );

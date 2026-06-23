@@ -10,7 +10,6 @@ import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { SegmentsSidebar } from '@/components/reader/SegmentsSidebar';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import type { TTSAudiobookChapter } from '@/types/tts';
 import type { AudiobookGenerationSettings } from '@/types/client';
@@ -43,7 +42,6 @@ export default function EPUBPage() {
     clearCurrDoc,
     createFullAudioBook: createEPUBAudioBook,
     regenerateChapter: regenerateEPUBChapter,
-    bookRef,
     metadataLanguage,
   } = epubState;
   const { stop, setDocumentLanguage } = useTTS();
@@ -54,7 +52,7 @@ export default function EPUBPage() {
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'segments'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -227,10 +225,8 @@ export default function EPUBPage() {
               onZoomDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
-              onOpenSegments={() => setActiveSidebar((prev) => prev === 'segments' ? null : 'segments')}
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
-              isSegmentsOpen={activeSidebar === 'segments'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
               maxZoom={100}
@@ -274,6 +270,7 @@ export default function EPUBPage() {
         epub
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
+        documentId={routeDocumentId || ''}
         language={language}
         detectedLanguage={metadataLanguage}
         onLanguageChange={(nextLanguage) => {
@@ -283,12 +280,6 @@ export default function EPUBPage() {
             language: nextLanguage,
           });
         }}
-      />
-      <SegmentsSidebar
-        isOpen={activeSidebar === 'segments'}
-        setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'segments' : (prev === 'segments' ? null : prev))}
-        documentId={routeDocumentId || ''}
-        epubBookRef={bookRef}
       />
     </>
   );

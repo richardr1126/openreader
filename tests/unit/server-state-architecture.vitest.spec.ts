@@ -125,10 +125,12 @@ describe('server-state architecture', () => {
   });
 
   test('keeps legacy TTS manifest queries removed while centralizing other server state', () => {
-    const sidebar = source('src/components/reader/SegmentsSidebar.tsx');
-    expect(sidebar).not.toContain('queryKeys.ttsManifest');
-    expect(sidebar).not.toContain('/api/tts/segments/manifest');
-    expect(sidebar).toContain("playbackPlanSource !== 'worker'");
+    // The segments sidebar (the last legacy-manifest consumer) was removed; its
+    // only surviving capability — clearing cached audio — moved to reader settings.
+    expect(existsSync(path.join(root, 'src/components/reader/SegmentsSidebar.tsx'))).toBe(false);
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('queryKeys.ttsManifest');
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('/api/tts/segments/manifest');
+    expect(source('src/components/documents/DocumentSettings.tsx')).toContain("'/api/tts/segments/clear'");
     expect(source('src/contexts/AuthRateLimitContext.tsx')).toContain('queryKeys.rateLimit');
     expect(source('src/components/admin/AdminProvidersPanel.tsx')).toContain('queryKeys.admin(sessionId');
   });
@@ -188,7 +190,6 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('if (!sentences[currentIndex]) return');
     expect(context).toContain("currentSentence: sentences[currentIndex] || ''");
     expect(context).not.toContain('playbackAnchor:');
-    expect(source('src/components/reader/SegmentsSidebar.tsx')).not.toContain('playbackAnchor');
     expect(context).toContain('playbackPlanSource === \'worker\'');
     expect(context).toContain('setPlaybackPlanSource(\'worker\')');
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');

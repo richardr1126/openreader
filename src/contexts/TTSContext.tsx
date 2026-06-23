@@ -1906,13 +1906,35 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, publishPlaybackTimeSec, setPlaybackIndex]);
 
   const clearSegmentCaches = useCallback(() => {
-    // Keep the current viewport/sentence list intact, but force audio state to
-    // be re-resolved after a server-side clear.
+    // A server-side clear deletes every generated-audio object and the segment
+    // index for this document. The cached plan/seek-layout/segments now point at
+    // artifacts that no longer exist, so we must drop them all — otherwise the
+    // next play reuses the stale plan and the audio stream waits forever on a
+    // start ordinal whose audio was deleted (the "unplayable after clear" bug).
+    // Resetting plan source to 'idle' also lets the plan-preview effect rebuild a
+    // fresh plan + seek layout for the scrubber/grid.
+    const wasPlaying = isPlaying;
+    const mySeq = ++restartSeqRef.current;
+    playbackPlanRef.current = null;
+    setPlaybackSeekLayout(null);
+    setPlaybackPlanSource('idle');
+    setPlaybackSegments([]);
     abortAudio(true);
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-  }, [abortAudio]);
+    if (!wasPlaying) return;
+    // Bridge two renders so the playback driver sees a real false→true edge and
+    // requests a brand-new session that regenerates the cleared segments.
+    setIsProcessing(true);
+    setIsPlaying(false);
+    window.setTimeout(() => {
+      setIsProcessing(false);
+      if (mySeq === restartSeqRef.current) {
+        setIsPlaying(true);
+      }
+    }, 0);
+  }, [abortAudio, isPlaying]);
 
   /**
    * Stops the current audio playback and starts playing from a specified index

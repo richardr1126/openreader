@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { useConfig, ViewType } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
@@ -20,9 +22,18 @@ import {
   Select,
 } from '@/components/ui';
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
+import { Button } from '@/components/ui';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
 import { getLanguageDisplayName, getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
+
+type ClearSegmentsPayload = {
+  error?: string;
+  deletedSegments?: number;
+  requestedAudioObjects?: number;
+  deletedAudioObjects?: number;
+  warning?: string;
+};
 
 const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
   { kind: 'header', label: 'Header' },
@@ -110,9 +121,10 @@ function RangeSetting({
   );
 }
 
-export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
+export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
   isOpen: boolean,
   setIsOpen: (isOpen: boolean) => void,
+  documentId?: string,
   epub?: boolean,
   html?: boolean,
   language?: string,
@@ -142,7 +154,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
     htmlWordHighlightEnabled,
     ttsModel,
   } = useConfig();
-  const { voice, resolvedLanguage, invalidatePlaybackPlan } = useTTS();
+  const { voice, resolvedLanguage, invalidatePlaybackPlan, clearSegmentCaches } = useTTS();
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     voice,
@@ -157,6 +169,44 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
   useEffect(() => {
     setLocalMaxBlockLength(ttsSegmentMaxBlockLength);
   }, [ttsSegmentMaxBlockLength]);
+
+  const clearSegmentsMutation = useMutation({
+    mutationFn: async (): Promise<ClearSegmentsPayload | null> => {
+      if (!documentId) throw new Error('Missing document id');
+      const res = await fetch('/api/tts/segments/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId }),
+      });
+      const payload = (await res.json().catch(() => null)) as ClearSegmentsPayload | null;
+      if (!res.ok) {
+        throw new Error(payload?.error || `Request failed (${res.status})`);
+      }
+      return payload;
+    },
+    onSuccess: (payload) => {
+      // Drop the stale cached plan/segments so the next play rebuilds against the
+      // freshly cleared storage instead of regenerating from a deleted plan.
+      clearSegmentCaches();
+      if (payload?.warning) {
+        toast.error(`Audio cleared, but cleanup was partial: ${payload.warning}`);
+      } else if (payload) {
+        const deletedAudioObjects = Number(payload.deletedAudioObjects ?? 0);
+        toast.success(`Cleared ${deletedAudioObjects} cached audio object${deletedAudioObjects === 1 ? '' : 's'}.`);
+      }
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to clear cached audio');
+    },
+  });
+  const { mutate: clearSegments, isPending: isClearingSegments } = clearSegmentsMutation;
+
+  const handleClearCache = () => {
+    if (!documentId || isClearingSegments) return;
+    const confirmed = window.confirm('Clear all cached audio for this document? Playback will regenerate from scratch the next time you press play.');
+    if (!confirmed) return;
+    clearSegments();
+  };
 
   return (
     <ReaderSidebarShell
@@ -321,6 +371,24 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
               }}
             />
           </div>
+
+          {documentId ? (
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Cached audio</label>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleClearCache}
+                disabled={isClearingSegments}
+                className="w-full"
+              >
+                {isClearingSegments ? 'Clearing…' : 'Clear cached audio'}
+              </Button>
+              <p className="text-xs text-muted">
+                Deletes all generated audio for this document. Playback regenerates from scratch on the next play.
+              </p>
+            </div>
+          ) : null}
         </Section>
 
         {epub && (

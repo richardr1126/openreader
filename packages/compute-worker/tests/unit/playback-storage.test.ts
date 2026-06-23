@@ -132,6 +132,28 @@ describe('TTS playback storage', () => {
       .resolves.toMatchObject({ claimed: false, claim: { status: 'completed', ownerId: 'two' } });
   });
 
+  test('reclaims a completed claim when the durable artifact is gone (cleared cache)', async () => {
+    const kv = new MemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    const claimInput = {
+      storageUserId: 'storage-1',
+      documentId: 'b'.repeat(64),
+      documentVersion: 7,
+      settingsHash: 'settings-hash',
+      segmentId: 'c'.repeat(64),
+      audioKey: 'openreader/audio.mp3',
+      staleAfterMs: 1_000,
+    };
+
+    await store.markSegmentClaim({ ...claimInput, status: 'completed', ownerId: 'one', now: 1_000 });
+    // Without the flag a completed claim is permanent (the "broken forever" path).
+    await expect(store.claimSegment({ ...claimInput, ownerId: 'two', now: 5_000 }))
+      .resolves.toMatchObject({ claimed: false, claim: { status: 'completed' } });
+    // With the flag (no S3 index entry => stale completed claim) it is reclaimed.
+    await expect(store.claimSegment({ ...claimInput, ownerId: 'two', now: 5_000, allowReclaimCompleted: true }))
+      .resolves.toMatchObject({ claimed: true, claim: { status: 'generating', ownerId: 'two' } });
+  });
+
   test('writes segment metadata and a compact sorted index to S3 storage', async () => {
     const storage = new MemoryStorage();
     const store = createTtsPlaybackSegmentArtifactStore({ storage, s3Prefix: 'openreader' });
