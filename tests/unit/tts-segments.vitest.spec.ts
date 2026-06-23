@@ -15,7 +15,7 @@ import {
 } from '@openreader/tts/segments';
 
 describe('tts segment helpers', () => {
-  test('builds a user/document-scoped audio prefix across every version and variant', () => {
+  test('builds a user/document-scoped audio prefix across every version and settings identity', () => {
     expect(buildTtsSegmentDocumentPrefix({
       storagePrefix: 'openreader',
       namespace: 'test namespace',

@@ -98,6 +98,19 @@ export interface paths {
             requestBody?: never;
             responses: {
                 /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -141,6 +154,19 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
                 /** @description Default Response */
                 404: {
                     headers: {
@@ -191,6 +217,19 @@ export interface paths {
                 };
             };
             responses: {
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
                 /** @description Default Response */
                 404: {
                     headers: {
@@ -465,6 +504,7 @@ export interface paths {
                         settingsHash: string;
                         settingsJson: unknown;
                         planObjectKey?: string;
+                        generationRunId?: string;
                         expiresAt?: number;
                         aheadWindow?: number;
                         /** @enum {string} */

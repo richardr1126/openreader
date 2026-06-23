@@ -49,7 +49,7 @@ export async function GET(
       artifact: (await readTtsPlaybackPlanArtifact(session.planObjectKey)).artifact,
       settingsJson: session.settingsJson,
       completedDurations: new Map(segments.map((segment) => [segment.ordinal, segment.durationMs])),
-      startOrdinal: Math.max(0, Math.floor(session.startOrdinal)),
+      startOrdinal: 0,
       completedSegments,
     });
 
@@ -57,7 +57,7 @@ export async function GET(
       sessionId: session.sessionId,
       documentId: session.documentId,
       status: session.status,
-      startOrdinal: Math.max(0, Math.floor(session.startOrdinal)),
+      startOrdinal: 0,
       generationStartOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal)),
       durationMs: layout.durationMs,
       segments: layout.segments,

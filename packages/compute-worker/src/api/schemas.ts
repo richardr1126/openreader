@@ -64,6 +64,7 @@ export const ttsPlaybackOperationCreateSchema = z.object({
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  generationRunId: z.string().trim().min(1).max(128).optional(),
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
@@ -86,7 +87,7 @@ export const ttsPlaybackOperationCreateSchema = z.object({
 });
 
 export const ttsPlaybackPlanOperationCreateSchema = ttsPlaybackOperationCreateSchema
-  .omit({ sessionId: true, planObjectKey: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
+  .omit({ sessionId: true, planObjectKey: true, generationRunId: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
   .extend({});
 
 export const ttsPlaybackCursorUpdateSchema = z.object({

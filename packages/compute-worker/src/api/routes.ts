@@ -153,6 +153,11 @@ export function registerComputeWorkerRoutes(input: {
     durationMs: number;
   };
 
+  type PlaybackSegmentState =
+    | { status: 'completed'; ordinal: number; audioKey: string; durationMs: number }
+    | { status: 'error'; ordinal: number; durationMs: number }
+    | { status: 'pending'; ordinal: number };
+
   type PlaybackSegmentManifestRow = CompletedPlaybackSegment & {
     sourceSegmentIndex: number;
     segmentKey: string | null;
@@ -231,17 +236,50 @@ export function registerComputeWorkerRoutes(input: {
     return readCompletedPlaybackSegmentFromIndex(session, ordinal);
   };
 
+  const readPlaybackSegmentStateFromIndex = async (
+    session: PlaybackSessionRow,
+    ordinal: number,
+  ): Promise<PlaybackSegmentState> => {
+    const index = await playbackStorage?.artifacts.readSegmentIndex({
+      storageUserId: session.storageUserId,
+      documentId: session.documentId,
+      documentVersion: session.documentVersion,
+      settingsHash: session.settingsHash,
+    }).catch(() => null);
+    const row = index?.segments.find((segment) => segment.segmentIndex === ordinal);
+    if (row?.status === 'completed' && row.audioKey) {
+      return {
+        status: 'completed',
+        ordinal: row.segmentIndex,
+        audioKey: row.audioKey,
+        durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
+      };
+    }
+    if (row?.status === 'error') {
+      return {
+        status: 'error',
+        ordinal: row.segmentIndex,
+        durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
+      };
+    }
+    return { status: 'pending', ordinal };
+  };
+
   const updatePlaybackCursor = async (sessionId: string, ordinal: number): Promise<void> => {
     const now = Date.now();
     await playbackStorage?.sessions.updateCursor(sessionId, ordinal, now).catch((error) => {
       app.log.warn({ sessionId, error: toErrorMessage(error) }, 'tts.playback.cursor_kv_update_failed');
     });
+    const session = await readPlaybackSession(sessionId);
+    if (session) {
+      await enqueuePlaybackContinuationIfNeeded(session, now, 'stream');
+    }
   };
 
   const putPlaybackSessionState = async (
     requestBody: typeof ttsPlaybackOperationCreateSchema._output,
     status: PlaybackSessionRow['status'],
-    workerOpId: string,
+    workerOpId: string | null,
   ): Promise<void> => {
     const now = Date.now();
     await playbackStorage?.sessions.putSession({
@@ -256,6 +294,9 @@ export function registerComputeWorkerRoutes(input: {
       workerOpId,
       settingsHash: requestBody.settingsHash,
       settingsJson: requestBody.settingsJson,
+      aheadWindow: requestBody.aheadWindow ?? null,
+      backgroundExtent: requestBody.backgroundExtent ?? null,
+      planning: requestBody.planning,
       startOrdinal: 0,
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
@@ -267,6 +308,66 @@ export function registerComputeWorkerRoutes(input: {
     }).catch((error) => {
       app.log.warn({ sessionId: requestBody.sessionId, error: toErrorMessage(error) }, 'tts.playback.session_kv_put_failed');
     });
+  };
+
+  const enqueuePlaybackContinuationIfNeeded = async (
+    session: PlaybackSessionRow,
+    now: number,
+    reason: 'cursor' | 'stream',
+  ): Promise<void> => {
+    if (!playbackStorage) return;
+    if (session.status !== 'queued' && session.status !== 'running') return;
+    if (now > session.expiresAt) return;
+
+    if (session.workerOpId) {
+      const current = await getOpState(session.workerOpId).catch((error) => {
+        app.log.warn({ sessionId: session.sessionId, opId: session.workerOpId, error: toErrorMessage(error) }, 'tts.playback.resume_state_read_failed');
+        return null;
+      });
+      if (current && !isTerminalStatus(current.status)) return;
+    }
+
+    const requestBody: typeof ttsPlaybackOperationCreateSchema._output = {
+      sessionId: session.sessionId,
+      userId: session.userId,
+      storageUserId: session.storageUserId,
+      documentId: session.documentId,
+      documentVersion: session.documentVersion,
+      readerType: session.readerType,
+      settingsHash: session.settingsHash,
+      settingsJson: session.settingsJson,
+      ...(session.planObjectKey ? { planObjectKey: session.planObjectKey } : {}),
+      generationRunId: `${reason}:${now}:${Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)))}`,
+      expiresAt: session.expiresAt,
+      ...(session.aheadWindow == null ? {} : { aheadWindow: session.aheadWindow }),
+      ...(session.backgroundExtent == null ? {} : { backgroundExtent: session.backgroundExtent }),
+      planning: session.planning && typeof session.planning === 'object'
+        ? session.planning as typeof ttsPlaybackOperationCreateSchema._output['planning']
+        : {},
+    };
+
+    const requestOp: WorkerOperationRequest = {
+      kind: 'tts_playback',
+      opKey: buildTtsPlaybackOperationKey(requestBody),
+      payload: requestBody,
+    };
+    await ensureOrphanedOpRecovery();
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    await playbackStorage.sessions.patchSession(session.sessionId, {
+      status: op.status === 'failed' ? 'failed' : 'running',
+      workerOpId: op.opId,
+      lastError: op.status === 'failed' ? (op.error?.message ?? 'Failed to enqueue playback continuation') : null,
+      updatedAt: now,
+    }).catch((error) => {
+      app.log.warn({ sessionId: session.sessionId, opId: op.opId, error: toErrorMessage(error) }, 'tts.playback.resume_session_patch_failed');
+    });
+    app.log.info({
+      sessionId: session.sessionId,
+      opId: op.opId,
+      status: op.status,
+      reason,
+      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
+    }, 'tts.playback.resume_enqueued');
   };
 
   // Generous base speaking rate (ms of audio per source character) for *estimating*
@@ -466,6 +567,13 @@ export function registerComputeWorkerRoutes(input: {
       ...(parsed.data.expiresAt === undefined ? {} : { expiresAt: parsed.data.expiresAt }),
       updatedAt: now,
     });
+    await enqueuePlaybackContinuationIfNeeded({
+      ...session,
+      cursorOrdinal: parsed.data.ordinal,
+      cursorUpdatedAt: now,
+      expiresAt: parsed.data.expiresAt ?? session.expiresAt,
+      updatedAt: now,
+    }, now, 'cursor');
     return {
       sessionId,
       cursorOrdinal: parsed.data.ordinal,
@@ -566,7 +674,7 @@ export function registerComputeWorkerRoutes(input: {
         if (session.planObjectKey) {
           const planSegments = await readPlanSegments(session.planObjectKey);
           if (planSegments) {
-            const startOrdinal = Math.max(0, Math.floor(session.startOrdinal));
+            const startOrdinal = 0;
             const completed = await listCompletedDurations(session);
             const estimateRate = estimateRateForSession(session);
             // Size every not-yet-generated (silence) slot in WHOLE MP3 frames, with
@@ -685,6 +793,7 @@ export function registerComputeWorkerRoutes(input: {
         const ordinal = slot.segmentIndex;
         let audioKey: string | null = null;
         let paddedMissingPrefix = false;
+        let paddedErrorSegment = false;
         for (;;) {
           if (closed) return;
           const session = await readPlaybackSession(sessionId);
@@ -692,9 +801,26 @@ export function registerComputeWorkerRoutes(input: {
           if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
             return;
           }
-          const seg = await readCompletedPlaybackSegment(session, ordinal);
-          if (seg) {
-            audioKey = seg.audioKey;
+          const segmentState = await readPlaybackSegmentStateFromIndex(session, ordinal);
+          if (segmentState.status === 'completed') {
+            audioKey = segmentState.audioKey;
+            break;
+          }
+          if (segmentState.status === 'error') {
+            const room = need - sent;
+            const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
+            if (silenceBytes > 0) {
+              for await (const chunk of streamSilence(silenceBytes)) {
+                yield chunk;
+                sent += chunk.length;
+              }
+            }
+            skipWithin = 0;
+            paddedErrorSegment = true;
+            app.log.info({ sessionId, ordinal }, 'tts.playback.audio.skipped_error_segment');
+            await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
+              app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
+            });
             break;
           }
           if (ordinal < session.generationStartOrdinal) {
@@ -728,7 +854,7 @@ export function registerComputeWorkerRoutes(input: {
           await sleep(400);
         }
         if (!audioKey) {
-          if (paddedMissingPrefix) continue;
+          if (paddedMissingPrefix || paddedErrorSegment) continue;
           break;
         }
 
@@ -812,6 +938,7 @@ export function registerComputeWorkerRoutes(input: {
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
 
+    await putPlaybackSessionState(parsed.data, 'queued', null);
     const requestOp: WorkerOperationRequest = {
       kind: 'tts_playback',
       opKey: buildTtsPlaybackOperationKey(parsed.data),
@@ -819,7 +946,15 @@ export function registerComputeWorkerRoutes(input: {
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
-    await putPlaybackSessionState(parsed.data, op.status, op.opId);
+    await playbackStorage?.sessions.patchSession(parsed.data.sessionId, {
+      workerOpId: op.opId,
+      ...(op.status === 'failed'
+        ? { status: 'failed' as const, lastError: op.error?.message ?? 'Failed to enqueue playback operation' }
+        : {}),
+      updatedAt: Date.now(),
+    }).catch((error) => {
+      app.log.warn({ sessionId: parsed.data.sessionId, opId: op.opId, error: toErrorMessage(error) }, 'tts.playback.session_worker_op_patch_failed');
+    });
     app.log.info({
       kind: requestOp.kind,
       opId: op.opId,

@@ -107,6 +107,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const whisperTimeoutMs = timeoutConfig.whisperTimeoutMs;
   const pdfTimeoutMs = timeoutConfig.pdfTimeoutMs;
   const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
+  const ttsPlaybackSegmentTimeoutMs = timeoutConfig.ttsPlaybackSegmentTimeoutMs;
   const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
   const prewarmModels = readBoolEnv('COMPUTE_PREWARM_MODELS', false);
   const jobsStreamMaxBytes = readPositiveIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
@@ -298,6 +299,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     whisperTimeoutMs,
     pdfTimeoutMs,
     pdfHardCapMs,
+    ttsPlaybackSegmentTimeoutMs,
     s3Prefix,
   });
 

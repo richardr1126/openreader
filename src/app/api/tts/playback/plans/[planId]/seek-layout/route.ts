@@ -46,9 +46,7 @@ export async function GET(
     const sessionId = request.nextUrl.searchParams.get('sessionId')?.trim() || '';
     const session = sessionId ? await resolveTtsPlaybackSession(request, sessionId) : null;
     if (session instanceof Response) return session;
-    const startOrdinal = session
-      ? Math.max(0, Math.floor(session.startOrdinal))
-      : 0;
+    const startOrdinal = 0;
     const settingsJson = session?.settingsJson ?? artifact.settingsJson;
     const completedSegments = session ? await listCompletedTtsPlaybackSegments(session) : [];
     const completedDurations = new Map(completedSegments.map((segment) => [segment.ordinal, segment.durationMs]));

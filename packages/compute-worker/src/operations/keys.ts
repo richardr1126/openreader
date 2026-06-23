@@ -36,10 +36,10 @@ export function buildTtsPlaybackOperationKey(input: {
   documentId: string;
   documentVersion: number;
   settingsHash: string;
+  generationRunId?: string;
 }): string {
-  // One generation job per session: the sessionId makes the key unique, so a
-  // re-requested identical session reuses its op while distinct sessions don't
-  // collide on the dedup key.
+  // One active generation job per session/run. Cursor-driven continuations pass
+  // a fresh generationRunId so a terminal bounded run does not get reused.
   return [
     'tts_playback',
     'v1',
@@ -47,6 +47,7 @@ export function buildTtsPlaybackOperationKey(input: {
     String(input.documentVersion),
     input.settingsHash,
     input.sessionId,
+    input.generationRunId?.trim() || '',
   ].join('|');
 }
 

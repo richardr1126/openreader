@@ -66,6 +66,7 @@ const ttsPlaybackRequestSchema = z.object({
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  generationRunId: z.string().trim().min(1).max(128).optional(),
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
@@ -88,23 +89,23 @@ const ttsPlaybackRequestSchema = z.object({
 });
 
 const ttsPlaybackPlanRequestSchema = ttsPlaybackRequestSchema
-  .omit({ sessionId: true, planObjectKey: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
+  .omit({ sessionId: true, planObjectKey: true, generationRunId: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
   .extend({});
 
-// Sliding-window pacing constants for the single forward-generation job.
+// Sliding-window pacing constants for bounded forward-generation runs.
 const TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW = 8;
 // How long after the client's last cursor write we still treat it as connected.
 // Past this the client is assumed disconnected (JS suspended / tab closed) and
 // generation switches to "background" mode bounded by `backgroundExtent`.
 const TTS_PLAYBACK_CURSOR_STALE_MS = 15_000;
-// Poll cadence while throttling ahead of a fresh cursor.
-const TTS_PLAYBACK_THROTTLE_POLL_MS = 500;
-// Minimum spacing between progress heartbeats while idling/throttling; each one
-// extends the JetStream ack-wait (via the worker loop's onProgress → msg.working()).
-const TTS_PLAYBACK_HEARTBEAT_MS = 5_000;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+class TtsPlaybackSegmentTimeoutError extends Error {
+  readonly code = 'UPSTREAM_TIMEOUT';
+
+  constructor(timeoutMs: number) {
+    super(`TTS playback segment synthesis timed out after ${timeoutMs}ms`);
+    this.name = 'TtsPlaybackSegmentTimeoutError';
+  }
 }
 
 /**
@@ -163,6 +164,26 @@ export function parseTtsSettings(value: unknown): TTSSegmentSettings {
 
 function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+}
+
+async function withAbortableTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const operation = run(controller.signal);
+  try {
+    return await withTimeout(operation, timeoutMs, label);
+  } catch (error) {
+    if (error instanceof Error && error.message === `${label} timed out after ${timeoutMs}ms`) {
+      controller.abort();
+      throw new TtsPlaybackSegmentTimeoutError(timeoutMs);
+    }
+    throw error;
+  } finally {
+    controller.abort();
+  }
 }
 
 type TtsPlaybackSegmentInput = {
@@ -533,13 +554,14 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
   startOrdinal: number;
 }> {
   const planSignature = computePlaybackPlanSignature(input.request);
-  const planObjectKey = ttsPlaybackPlanArtifactKey({
+  const computedPlanObjectKey = ttsPlaybackPlanArtifactKey({
     documentId: input.request.documentId,
     documentVersion: input.request.documentVersion,
     readerType: input.request.readerType,
     planSignature,
     prefix: input.s3Prefix,
   });
+  const planObjectKey = input.request.planObjectKey ?? computedPlanObjectKey;
   let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
   if (!plannedSegments || plannedSegments.length === 0) {
     const sourceUnits = await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix);
@@ -561,14 +583,14 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
 
 const SEGMENT_MAX_ATTEMPTS = 2;
 
-// A variant marked `generating` whose `updatedAt` is older than this is treated
+// A segment claim marked `generating` whose `updatedAt` is older than this is treated
 // as abandoned (worker crash / lost lease) and may be re-claimed by another job.
 // Bounds how long a crashed claim blocks regeneration of a segment.
 const SEGMENT_GENERATING_STALE_MS = 120_000;
 
 type SegmentErrorInfo = {
   message: string;
-  code?: 'UPSTREAM_RATE_LIMIT' | 'UPSTREAM_ERROR';
+  code?: 'UPSTREAM_RATE_LIMIT' | 'UPSTREAM_ERROR' | 'UPSTREAM_TIMEOUT';
   upstreamStatus?: number;
   retryAfterSeconds?: number;
 };
@@ -581,6 +603,9 @@ type SegmentErrorInfo = {
  */
 function classifySegmentError(error: unknown): { info: SegmentErrorInfo; retryable: boolean } {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof TtsPlaybackSegmentTimeoutError) {
+    return { info: { message, code: error.code }, retryable: false };
+  }
   const upstreamStatus = getUpstreamStatus(error);
   if (upstreamStatus === undefined) {
     return { info: { message }, retryable: true };
@@ -607,15 +632,17 @@ async function generateExplicitTtsPlaybackSegments(input: {
   playbackStorage?: TtsPlaybackStorage;
   /** Read previously-stored segment audio back (for the alignment self-heal path). */
   readAudioObject?: (key: string) => Promise<Buffer>;
+  synthesisTimeoutMs: number;
   /**
    * Pacing gate, called before each segment with its plan ordinal. Returns
    * 'continue' to generate it, 'stop' to end generation gracefully (the client
    * has fallen far enough behind / a background extent boundary is reached).
-   * May block (heartbeating) while throttling ahead of the playback cursor.
    */
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
   /** Called after a segment's audio is ready (or already was), with its plan ordinal. */
   onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
+  /** Called after a segment is recorded as an error, with its plan ordinal. */
+  onSegmentErrored?: (planOrdinal: number) => Promise<void>;
 }): Promise<void> {
   const segments = input.segments;
   if (segments.length === 0) return;
@@ -806,6 +833,10 @@ async function generateExplicitTtsPlaybackSegments(input: {
       await input.onSegmentCompleted?.(planOrdinal);
       continue;
     }
+    if (existing?.status === 'error') {
+      await input.onSegmentErrored?.(planOrdinal);
+      continue;
+    }
 
     const audioKey = existing?.audioKey || buildTtsSegmentAudioKey({
       storagePrefix: input.s3Prefix,
@@ -844,18 +875,22 @@ async function generateExplicitTtsPlaybackSegments(input: {
     let completed = false;
     for (let attempt = 1; attempt <= SEGMENT_MAX_ATTEMPTS; attempt += 1) {
       try {
-        const audioBuffer = await generateTTSBuffer({
-          text: segment.text,
-          voice: effectiveSettings.voice,
-          speed: effectiveSettings.nativeSpeed,
-          format: 'mp3',
-          model: effectiveSettings.ttsModel,
-          instructions: effectiveSettings.ttsInstructions,
-          language: effectiveSettings.language,
-          provider: requestCreds.provider,
-          apiKey: requestCreds.apiKey,
-          baseUrl: requestCreds.baseUrl,
-        });
+        const audioBuffer = await withAbortableTimeout(
+          (signal) => generateTTSBuffer({
+            text: segment.text,
+            voice: effectiveSettings.voice,
+            speed: effectiveSettings.nativeSpeed,
+            format: 'mp3',
+            model: effectiveSettings.ttsModel,
+            instructions: effectiveSettings.ttsInstructions,
+            language: effectiveSettings.language,
+            provider: requestCreds.provider,
+            apiKey: requestCreds.apiKey,
+            baseUrl: requestCreds.baseUrl,
+          }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
+          input.synthesisTimeoutMs,
+          'tts playback segment synthesis',
+        );
         await input.putAudioObject(audioKey, audioBuffer);
         const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
         const alignment = await computeAlignment(audioBuffer, segment, audioKey);
@@ -896,6 +931,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       },
       updatedAt: Date.now(),
     }).catch(() => undefined);
+    await input.onSegmentErrored?.(planOrdinal);
   }
 }
 
@@ -922,6 +958,7 @@ export function createJobHandlers(input: {
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfHardCapMs: number;
+  ttsPlaybackSegmentTimeoutMs: number;
   s3Prefix: string;
 }): JobHandlers {
   return {
@@ -990,10 +1027,6 @@ export function createJobHandlers(input: {
       if (kvSession.status !== 'queued' && kvSession.status !== 'running') {
         throw new Error(kvSession.lastError || `TTS playback session is ${kvSession.status}`);
       }
-      await playbackStorage.sessions.patchSession(parsed.sessionId, {
-        status: 'running',
-        lastError: null,
-      });
       try {
         const plan = await resolveAndPersistTtsPlaybackPlan({
           request: parsed,
@@ -1001,13 +1034,18 @@ export function createJobHandlers(input: {
           s3Prefix: input.s3Prefix,
         });
         const { planObjectKey, plannedSegments, startOrdinal } = plan;
+        const isContinuationRun = Boolean(parsed.generationRunId);
+        const sessionCursorOrdinal = Math.max(0, Math.floor(Number(kvSession.cursorOrdinal ?? startOrdinal)));
+        const sessionCursorUpdatedAt = kvSession.cursorUpdatedAt == null ? null : Number(kvSession.cursorUpdatedAt);
 
         await playbackStorage.sessions.patchSession(parsed.sessionId, {
           status: 'running',
           planObjectKey,
-          generationStartOrdinal: startOrdinal,
-          cursorOrdinal: startOrdinal,
-          cursorUpdatedAt: Date.now(),
+          generationStartOrdinal: isContinuationRun
+            ? Math.max(0, Math.floor(Number(kvSession.generationStartOrdinal ?? startOrdinal)))
+            : startOrdinal,
+          cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal,
+          cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
           lastError: null,
         });
         const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
@@ -1032,58 +1070,47 @@ export function createJobHandlers(input: {
           return target;
         };
 
-        // Throttle generation to a window ahead of the client's playback cursor.
-        // When the cursor goes stale (client disconnected / JS suspended), keep
-        // generating to the background-extent boundary so background playback
-        // survives, then idle (heartbeating) until the cursor returns or the
-        // session expires. `stoppedEarly` ⇒ we never reached the plan end, so no
-        // ENDLIST.
+        // Bound each worker run to the currently allowed generation window.
+        // When caught up to a fresh cursor, or past the stale-cursor background
+        // target, the job exits successfully instead of idling in the worker slot.
         let stoppedEarly = false;
         let lastCompletedThrough = -1;
-        let lastHeartbeatAt = 0;
-        const heartbeat = async (): Promise<void> => {
-          const now = Date.now();
-          if (now - lastHeartbeatAt < TTS_PLAYBACK_HEARTBEAT_MS) return;
-          lastHeartbeatAt = now;
-          await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
-        };
 
         const onBeforeSegment = async (planOrdinal: number): Promise<'continue' | 'stop'> => {
-          for (;;) {
-            const kvCursor = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
-            const cursor = kvCursor
-              ? {
-                status: kvCursor.status,
-                cursorOrdinal: Math.max(0, Math.floor(Number(kvCursor.cursorOrdinal ?? 0))),
-                cursorUpdatedAt: kvCursor.cursorUpdatedAt == null ? null : Number(kvCursor.cursorUpdatedAt),
-                expiresAt: Number(kvCursor.expiresAt),
-              }
-              : null;
-            if (!cursor || (cursor.status !== 'queued' && cursor.status !== 'running')) {
-              stoppedEarly = true;
-              return 'stop';
+          const kvCursor = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
+          const cursor = kvCursor
+            ? {
+              status: kvCursor.status,
+              cursorOrdinal: Math.max(0, Math.floor(Number(kvCursor.cursorOrdinal ?? 0))),
+              cursorUpdatedAt: kvCursor.cursorUpdatedAt == null ? null : Number(kvCursor.cursorUpdatedAt),
+              expiresAt: Number(kvCursor.expiresAt),
             }
-            const now = Date.now();
-            if (now > cursor.expiresAt) {
-              stoppedEarly = true;
-              return 'stop';
-            }
-            const fresh = cursor.cursorUpdatedAt != null
-              && (now - cursor.cursorUpdatedAt) <= TTS_PLAYBACK_CURSOR_STALE_MS;
-            if (fresh) {
-              if (planOrdinal <= cursor.cursorOrdinal + aheadWindow) return 'continue';
-            } else if (planOrdinal <= backgroundTargetFor(cursor.cursorOrdinal)) {
-              return 'continue';
-            }
-            // Caught up (fresh) or past the background buffer (stale): wait.
-            await heartbeat();
-            await sleep(TTS_PLAYBACK_THROTTLE_POLL_MS);
+            : null;
+          if (!cursor || (cursor.status !== 'queued' && cursor.status !== 'running')) {
+            stoppedEarly = true;
+            return 'stop';
           }
+          const now = Date.now();
+          if (now > cursor.expiresAt) {
+            stoppedEarly = true;
+            return 'stop';
+          }
+          const fresh = cursor.cursorUpdatedAt != null
+            && (now - cursor.cursorUpdatedAt) <= TTS_PLAYBACK_CURSOR_STALE_MS;
+          if (fresh) {
+            if (planOrdinal <= cursor.cursorOrdinal + aheadWindow) return 'continue';
+            stoppedEarly = true;
+            return 'stop';
+          }
+          if (planOrdinal <= backgroundTargetFor(cursor.cursorOrdinal)) {
+            return 'continue';
+          }
+          stoppedEarly = true;
+          return 'stop';
         };
 
         const onSegmentCompleted = async (planOrdinal: number): Promise<void> => {
           if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
-          lastHeartbeatAt = Date.now();
           await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
         };
 
@@ -1101,8 +1128,12 @@ export function createJobHandlers(input: {
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
           playbackStorage,
           readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
+          synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
           onBeforeSegment,
           onSegmentCompleted,
+          onSegmentErrored: async () => {
+            await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
+          },
         });
 
         // Only finalize (→ ENDLIST) when we generated the whole plan. On an early

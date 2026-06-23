@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
       settingsJson,
       ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
       expiresAt,
-      // One forward-generation job, throttled to a window ahead of the client's
-      // playback cursor; on disconnect it continues to the background extent.
+      // Bounded forward-generation runs fill a window ahead of the client's
+      // playback cursor; cursor heartbeats enqueue follow-up runs as needed.
       aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
       backgroundExtent,
       planning,

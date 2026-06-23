@@ -92,8 +92,7 @@ const SAFE_OBJECT_PATH_SEGMENT_REGEX = /^[a-zA-Z0-9._=-]{1,256}$/;
 
 /**
  * Durable generated-audio metadata for one playback segment. The object is
- * keyed by the same identity that used to live in `tts_segment_variants`: user
- * storage scope + document/version + settings hash + segment id.
+ * keyed by user storage scope + document/version + settings hash + segment id.
  */
 export function ttsPlaybackSegmentMetadataArtifactKey(input: {
   storageUserHash: string;

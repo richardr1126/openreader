@@ -141,6 +141,7 @@ describe('server-state architecture', () => {
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const streamTimelineRoute = source('src/app/api/tts/stream/[sessionId]/timeline/route.ts');
+    const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
     const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
@@ -219,8 +220,14 @@ describe('server-state architecture', () => {
     expect(workerKeys).not.toContain('String(input.startOrdinal)');
     expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planObjectKey?: string;');
     expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planning:');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('cursorOrdinal: startOrdinal');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('generationStartOrdinal: startOrdinal');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('const isContinuationRun = Boolean(parsed.generationRunId)');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('status: \'running\',\n          planObjectKey,\n          generationStartOrdinal');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('status: \'running\',\n        lastError: null');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('planObjectKey,\n          startOrdinal,\n          generationStartOrdinal');
+    expect(workerRoutes).toContain('const startOrdinal = 0;');
+    expect(streamTimelineRoute).toContain('startOrdinal: 0');
+    expect(seekLayoutRoute).toContain('const startOrdinal = 0;');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("typeof rec.nativeSpeed !== 'number'");
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("readOptionalInt(startRec, 'page', 1)");

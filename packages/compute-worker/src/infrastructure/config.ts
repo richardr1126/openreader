@@ -9,6 +9,7 @@ export type ComputeTimeoutConfig = {
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfHardCapMs: number;
+  ttsPlaybackSegmentTimeoutMs: number;
 };
 
 export type ComputeOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan';
@@ -66,10 +67,12 @@ let opStaleMsCache: number | null = null;
 
 export function getComputeTimeoutConfig(): ComputeTimeoutConfig {
   if (timeoutConfigCache) return timeoutConfigCache;
+  const whisperTimeoutMs = readPositiveIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', DEFAULT_COMPUTE_WHISPER_TIMEOUT_MS);
   timeoutConfigCache = {
-    whisperTimeoutMs: readPositiveIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', DEFAULT_COMPUTE_WHISPER_TIMEOUT_MS),
+    whisperTimeoutMs,
     pdfTimeoutMs: readPositiveIntEnv('COMPUTE_PDF_TIMEOUT_MS', DEFAULT_COMPUTE_PDF_TIMEOUT_MS),
     pdfHardCapMs: DEFAULT_COMPUTE_PDF_HARD_CAP_MS,
+    ttsPlaybackSegmentTimeoutMs: readPositiveIntEnv('COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS', whisperTimeoutMs),
   };
   return timeoutConfigCache;
 }

@@ -42,6 +42,12 @@ export interface TtsPlaybackJobRequest {
   settingsHash: string;
   settingsJson: unknown;
   planObjectKey?: string;
+  /**
+   * Distinguishes bounded generation runs for the same session. Initial session
+   * creation may omit this; cursor-driven continuations set a fresh token so the
+   * operation dedupe key does not reuse a prior terminal run.
+   */
+  generationRunId?: string;
   /** Absolute epoch-ms expiry for the ephemeral playback session. */
   expiresAt?: number;
   /**

@@ -27,7 +27,7 @@ export type PdfLayoutRequest =
 export type TtsPlaybackRequest =
   paths['/v1/tts-playback/operations']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackPlanRequest =
-  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'aheadWindow' | 'backgroundExtent'>;
+  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent'>;
 export type PdfLayoutResolveRequest =
   paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
 

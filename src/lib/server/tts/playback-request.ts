@@ -197,7 +197,7 @@ export async function buildTtsPlaybackPlanningInput(
     : false;
   const enforceSourceBoundaries = scope.readerType === 'pdf' || scope.readerType === 'epub';
 
-  // The audio variant hash must vary with segmentation, not just voice: changing
+  // The audio settings hash must vary with segmentation, not just voice: changing
   // skipBlockKinds (etc.) changes which text lands at each ordinal, so reusing a
   // voice-only hash would let the prior segmentation's audio be served against
   // the new grid. Mirrors the worker's plan signature inputs (handlers.ts).

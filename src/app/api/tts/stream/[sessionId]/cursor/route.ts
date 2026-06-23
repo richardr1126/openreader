@@ -18,11 +18,10 @@ function parseOrdinal(value: unknown): number | null {
 }
 
 /**
- * Heartbeat the client's playback cursor for a playback session. The worker's
- * single generation job reads this to throttle how far ahead it generates while
- * the client is connected; when these stop arriving (cursor goes stale) the
- * worker switches to background-extent generation. Also rolls the session TTL so
- * an actively-read session does not expire mid-playback.
+ * Heartbeat the client's playback cursor for a playback session. The compute
+ * worker uses this to enqueue bounded generation runs as playback advances.
+ * Also rolls the session TTL so an actively-read session does not expire
+ * mid-playback.
  */
 export async function POST(
   request: NextRequest,

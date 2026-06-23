@@ -147,7 +147,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
 
     if (activeReaderType === 'epub' && currentEpubSpine) {
       const chapterItems = playbackSegments
-        .map<SynthItem | null>((segment, index) => {
+        .map<SynthItem | null>((segment) => {
           const locator = segment.ownerLocator;
           if (!isStableEpubLocator(locator)) return null;
           if (
@@ -157,7 +157,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
             return null;
           }
           return {
-            segmentIndex: index,
+            segmentIndex: segment.ordinal,
             text: segment.text,
             segmentKey: segment.key,
             locator,
@@ -177,7 +177,7 @@ export function SegmentsSidebar({ isOpen, setIsOpen, documentId, epubBookRef }: 
         if (!Number.isFinite(currentPage) || Math.floor(locator.page) !== currentPage) return null;
       }
       return {
-        segmentIndex: index,
+        segmentIndex: segment.ordinal,
         text,
         segmentKey: segment.key ?? null,
         locator: segment.ownerLocator ?? null,

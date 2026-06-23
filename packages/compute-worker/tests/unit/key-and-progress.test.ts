@@ -4,7 +4,7 @@ import {
   buildInferProgressForPageParsed,
   buildInferProgressForPageStart,
 } from '../../src/jobs/pdf-progress';
-import { buildPdfOperationKey } from '../../src/operations/keys';
+import { buildPdfOperationKey, buildTtsPlaybackOperationKey } from '../../src/operations/keys';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 
 describe('compute worker helpers', () => {
@@ -48,5 +48,19 @@ describe('compute worker helpers', () => {
       .not.toBe(buildPdfOperationKey(request, 'parser-v2'));
     expect(parsedPdfArtifactKey({ ...request, prefix: 'openreader', parserVersion: 'parser-v1' }))
       .not.toBe(parsedPdfArtifactKey({ ...request, prefix: 'openreader', parserVersion: 'parser-v2' }));
+  });
+
+  test('playback resume run id rotates session operation identity', () => {
+    const request = {
+      sessionId: 'session-1',
+      documentId: 'doc-1',
+      documentVersion: 3,
+      settingsHash: 'settings-1',
+    };
+
+    expect(buildTtsPlaybackOperationKey(request))
+      .not.toBe(buildTtsPlaybackOperationKey({ ...request, generationRunId: 'cursor:1:8' }));
+    expect(buildTtsPlaybackOperationKey({ ...request, generationRunId: 'cursor:1:8' }))
+      .toBe(buildTtsPlaybackOperationKey({ ...request, generationRunId: 'cursor:1:8' }));
   });
 });
