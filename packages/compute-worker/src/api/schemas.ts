@@ -89,6 +89,11 @@ export const ttsPlaybackPlanOperationCreateSchema = ttsPlaybackOperationCreateSc
   .omit({ sessionId: true, planObjectKey: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
   .extend({});
 
+export const ttsPlaybackCursorUpdateSchema = z.object({
+  ordinal: z.number().int().nonnegative(),
+  expiresAt: z.number().int().positive().optional(),
+});
+
 export const pdfResolveSchema = z.object({
   documentId: documentIdSchema,
   namespace: namespaceSchema,

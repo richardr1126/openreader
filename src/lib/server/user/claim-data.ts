@@ -4,8 +4,6 @@ import {
   audiobooks,
   audiobookChapters,
   documentSettings,
-  ttsSegmentEntries,
-  ttsSegmentVariants,
   userPreferences,
   userDocumentProgress,
   userFolders,
@@ -23,9 +21,6 @@ import {
 import { isS3Configured } from '../storage/s3';
 import { logDegraded } from '../errors/logging';
 import { hashForLog, serverLogger } from '../logger';
-import { getS3Config } from '../storage/s3';
-import { copyTtsSegmentPrefix, deleteTtsSegmentPrefix } from '../tts/segments-blobstore';
-import { buildTtsSegmentDocumentPrefix } from '@openreader/tts/segments';
 
 type AudiobookRow = {
   id: string;
@@ -133,7 +128,7 @@ export async function claimAnonymousData(
 
   const foldersClaimed = await transferUserFolders(unclaimedUserId, userId);
   const [documentsClaimed, audiobooksClaimed, preferencesClaimed, progressClaimed, documentSettingsClaimed, onboardingClaimed] = await Promise.all([
-    transferUserDocuments(unclaimedUserId, userId, { namespace, transferTts: true }),
+    transferUserDocuments(unclaimedUserId, userId, { namespace }),
     transferUserAudiobooks(unclaimedUserId, userId, namespace),
     transferUserPreferences(unclaimedUserId, userId),
     transferUserProgress(unclaimedUserId, userId),
@@ -201,8 +196,8 @@ export async function transferUserOnboarding(fromUserId: string, toUserId: strin
  * Transfer documents from one userId to another.
  *
  * This is used when an anonymous user upgrades to an authenticated account.
- * The source document blob is shared, while user-scoped TTS metadata and audio
- * are copied before the old ownership is removed.
+ * The source document blob is shared. TTS playback artifacts are session-scoped
+ * in worker storage and are intentionally not transferred between users.
  *
  * @returns number of document rows transferred
  */
@@ -216,11 +211,6 @@ export async function transferUserDocuments(
   if (fromUserId === toUserId) return 0;
 
   const database = options?.db ?? db;
-  // Object storage is always present in a real deployment; `skipStorage` lets
-  // tests transfer metadata only. The shared, content-addressed document blob is
-  // never touched here — it stays as long as any owner (the new user) remains.
-  const copyStorage = !options?.skipStorage && isS3Configured();
-
   const rows = await database.select().from(documents).where(eq(documents.userId, fromUserId));
   if (rows.length === 0) return 0;
 
@@ -229,145 +219,12 @@ export async function transferUserDocuments(
       .insert(documents)
       .values({ ...row, userId: toUserId })
       .onConflictDoNothing();
-    if (options?.transferTts) {
-      await transferDocumentTtsSegments({
-        documentId: row.id,
-        fromUserId,
-        toUserId,
-        namespace: options.namespace ?? null,
-        database,
-        copyStorage,
-      });
-    }
     await database.delete(documents).where(and(
       eq(documents.userId, fromUserId),
       eq(documents.id, row.id),
     ));
   }
   return rows.length;
-}
-
-async function transferDocumentTtsSegments(input: {
-  documentId: string;
-  fromUserId: string;
-  toUserId: string;
-  namespace: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  database: any;
-  copyStorage: boolean;
-}): Promise<void> {
-  // Built only when storage is in play — getS3Config() throws if storage is
-  // unconfigured, which is exactly the metadata-only path tests exercise.
-  const sourceTtsPrefixes = () => (['v1', 'v2'] as const).map((storageVersion) => ({
-    from: buildTtsSegmentDocumentPrefix({
-      storagePrefix: getS3Config().prefix,
-      namespace: input.namespace,
-      userId: input.fromUserId,
-      documentId: input.documentId,
-      storageVersion,
-    }),
-    to: buildTtsSegmentDocumentPrefix({
-      storagePrefix: getS3Config().prefix,
-      namespace: input.namespace,
-      userId: input.toUserId,
-      documentId: input.documentId,
-      storageVersion,
-    }),
-  }));
-
-  if (input.copyStorage) {
-    for (const { from, to } of sourceTtsPrefixes()) {
-      await copyTtsSegmentPrefix(from, to);
-    }
-  }
-
-  const entries = await input.database
-    .select()
-    .from(ttsSegmentEntries)
-    .where(and(
-      eq(ttsSegmentEntries.userId, input.fromUserId),
-      eq(ttsSegmentEntries.documentId, input.documentId),
-    ));
-  const variants = entries.length > 0
-    ? await input.database
-      .select()
-      .from(ttsSegmentVariants)
-      .where(and(
-        eq(ttsSegmentVariants.userId, input.fromUserId),
-        inArray(ttsSegmentVariants.segmentEntryId, entries.map(
-          (entry: typeof ttsSegmentEntries.$inferSelect) => entry.segmentEntryId,
-        )),
-      ))
-    : [];
-
-  if (entries.length > 0) {
-    await input.database.insert(ttsSegmentEntries)
-      .values(entries.map((entry: typeof ttsSegmentEntries.$inferSelect) => ({
-        ...entry,
-        userId: input.toUserId,
-      })))
-      .onConflictDoNothing();
-  }
-
-  const encodedFrom = encodeURIComponent(input.fromUserId);
-  const encodedTo = encodeURIComponent(input.toUserId);
-  const sourceAudioKeyPrefix = `/users/${encodedFrom}/docs/${input.documentId}/`;
-  const destAudioKeyPrefix = `/users/${encodedTo}/docs/${input.documentId}/`;
-  if (variants.length > 0) {
-    await input.database.insert(ttsSegmentVariants)
-      .values(variants.map((variant: typeof ttsSegmentVariants.$inferSelect) => {
-        const audioKey = variant.audioKey ?? null;
-        if (!audioKey || audioKey.includes(sourceAudioKeyPrefix)) {
-          return {
-            ...variant,
-            userId: input.toUserId,
-            audioKey: audioKey?.replace(sourceAudioKeyPrefix, destAudioKeyPrefix) ?? null,
-          };
-        }
-        // The key did not contain the expected source path, so it cannot be
-        // safely remapped. Leaving it would point the new owner at the source
-        // user's (soon-deleted) audio, so null it out and log for investigation.
-        logDegraded(serverLogger, {
-          event: 'user.claim.tts_variant_audio_key.unmapped',
-          msg: 'TTS segment variant audioKey did not match expected source path during claim',
-          step: 'remap_tts_variant_audio_key',
-          context: {
-            originalAudioKey: audioKey,
-            fromUserIdHash: hashForLog(input.fromUserId),
-            toUserIdHash: hashForLog(input.toUserId),
-            documentId: input.documentId,
-          },
-        });
-        return {
-          ...variant,
-          userId: input.toUserId,
-          audioKey: null,
-        };
-      }))
-      .onConflictDoNothing();
-  }
-
-  // Always remove the source metadata: the source account (e.g. the persistent
-  // 'unclaimed' user) is not deleted, so nothing would cascade it away.
-  if (variants.length > 0) {
-    await input.database.delete(ttsSegmentVariants).where(and(
-      eq(ttsSegmentVariants.userId, input.fromUserId),
-      inArray(ttsSegmentVariants.segmentId, variants.map(
-        (variant: typeof ttsSegmentVariants.$inferSelect) => variant.segmentId,
-      )),
-    ));
-  }
-  await input.database.delete(ttsSegmentEntries).where(and(
-    eq(ttsSegmentEntries.userId, input.fromUserId),
-    eq(ttsSegmentEntries.documentId, input.documentId),
-  ));
-
-  // Remove the now-copied source audio objects too (only when storage is in play).
-  if (input.copyStorage) {
-    for (const { from } of sourceTtsPrefixes()) {
-      await deleteTtsSegmentPrefix(from);
-    }
-  }
 }
 
 /**

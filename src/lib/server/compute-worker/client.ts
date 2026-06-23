@@ -4,6 +4,8 @@ import type {
   PdfLayoutResult,
   TtsPlaybackRequest,
   TtsPlaybackPlanRequest,
+  TtsPlaybackSessionState,
+  TtsPlaybackCompletedSegment,
   ComputeOperation,
 } from './protocol';
 
@@ -93,6 +95,38 @@ export class ComputeWorkerClient {
 
   createTtsPlaybackPlanOperation(input: TtsPlaybackPlanRequest): Promise<ComputeOperation> {
     return this.requestJson('POST', '/v1/tts-playback-plans/operations', input);
+  }
+
+  async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {
+    try {
+      return await this.requestJson('GET', `/v1/tts-playback/${encodeURIComponent(sessionId)}/session`);
+    } catch (error) {
+      if (error instanceof WorkerHttpError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  listTtsPlaybackSegments(input: {
+    sessionId: string;
+    minOrdinal?: number;
+    limit?: number;
+  }): Promise<{ sessionId: string; segments: TtsPlaybackCompletedSegment[] }> {
+    const search = new URLSearchParams();
+    if (input.minOrdinal !== undefined) search.set('minOrdinal', String(input.minOrdinal));
+    if (input.limit !== undefined) search.set('limit', String(input.limit));
+    const suffix = search.size > 0 ? `?${search.toString()}` : '';
+    return this.requestJson('GET', `/v1/tts-playback/${encodeURIComponent(input.sessionId)}/segments${suffix}`);
+  }
+
+  updateTtsPlaybackCursor(input: {
+    sessionId: string;
+    ordinal: number;
+    expiresAt?: number;
+  }): Promise<{ sessionId: string; cursorOrdinal: number; expiresAt: number }> {
+    return this.requestJson('POST', `/v1/tts-playback/${encodeURIComponent(input.sessionId)}/cursor`, {
+      ordinal: input.ordinal,
+      ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
+    });
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {

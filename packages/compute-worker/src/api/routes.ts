@@ -1,8 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { Readable } from 'node:stream';
-import { and, eq, gt } from 'drizzle-orm';
-import { db } from '@openreader/database';
-import { ttsPlaybackSessions, ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
 import { verifyTtsPlaybackToken } from '@openreader/tts/playback-token';
 import { encodeSseFrame } from '../operations';
 import type {
@@ -50,6 +47,7 @@ import {
   pdfResolveSchema,
   computeOperationSchema,
   ttsPlaybackPlanOperationCreateSchema,
+  ttsPlaybackCursorUpdateSchema,
   ttsPlaybackOperationCreateSchema,
 } from './schemas';
 
@@ -155,6 +153,14 @@ export function registerComputeWorkerRoutes(input: {
     durationMs: number;
   };
 
+  type PlaybackSegmentManifestRow = CompletedPlaybackSegment & {
+    sourceSegmentIndex: number;
+    segmentKey: string | null;
+    segmentId: string;
+    alignmentJson: string | null;
+    updatedAt: number | null;
+  };
+
   const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
   const stripId3Tag = (bytes: Buffer): Buffer => {
@@ -168,45 +174,35 @@ export function registerComputeWorkerRoutes(input: {
     return end > 0 && end < bytes.length ? bytes.subarray(end) : bytes;
   };
 
-  const readLegacyPlaybackSession = async (sessionId: string): Promise<PlaybackSessionRow | null> => {
-    const rows = (await db
-      .select({
-        sessionId: ttsPlaybackSessions.sessionId,
-        userId: ttsPlaybackSessions.userId,
-        storageUserId: ttsPlaybackSessions.storageUserId,
-        documentId: ttsPlaybackSessions.documentId,
-        documentVersion: ttsPlaybackSessions.documentVersion,
-        readerType: ttsPlaybackSessions.readerType,
-        status: ttsPlaybackSessions.status,
-        settingsHash: ttsPlaybackSessions.settingsHash,
-        settingsJson: ttsPlaybackSessions.settingsJson,
-        startOrdinal: ttsPlaybackSessions.startOrdinal,
-        generationStartOrdinal: ttsPlaybackSessions.generationStartOrdinal,
-        cursorOrdinal: ttsPlaybackSessions.cursorOrdinal,
-        planObjectKey: ttsPlaybackSessions.planObjectKey,
-        expiresAt: ttsPlaybackSessions.expiresAt,
-      })
-      .from(ttsPlaybackSessions)
-      .where(eq(ttsPlaybackSessions.sessionId, sessionId))
-      .limit(1)) as Array<Omit<PlaybackSessionRow, 'schemaVersion' | 'cursorUpdatedAt' | 'lastError' | 'updatedAt'> & {
-      readerType: string;
-    }>;
-    const row = rows[0];
-    if (!row) return null;
-    if (row.readerType !== 'pdf' && row.readerType !== 'epub' && row.readerType !== 'html') return null;
-    return {
-      schemaVersion: 1,
-      ...row,
-      readerType: row.readerType,
-      cursorUpdatedAt: null,
-      lastError: null,
-      updatedAt: Date.now(),
-    };
+  const readPlaybackSession = async (sessionId: string): Promise<PlaybackSessionRow | null> => {
+    return await playbackStorage?.sessions.getSession(sessionId) ?? null;
   };
 
-  const readPlaybackSession = async (sessionId: string): Promise<PlaybackSessionRow | null> => {
-    return await playbackStorage?.sessions.getSession(sessionId)
-      ?? await readLegacyPlaybackSession(sessionId);
+  const readSegmentIndexRows = async (
+    session: PlaybackSessionRow,
+  ): Promise<PlaybackSegmentManifestRow[]> => {
+    const index = await playbackStorage?.artifacts.readSegmentIndex({
+      storageUserId: session.storageUserId,
+      documentId: session.documentId,
+      documentVersion: session.documentVersion,
+      settingsHash: session.settingsHash,
+    }).catch(() => null);
+    const rows: PlaybackSegmentManifestRow[] = [];
+    for (const row of index?.segments ?? []) {
+      if (row.status !== 'completed' || !row.audioKey) continue;
+      const metadata = await playbackStorage?.artifacts.readSegmentMetadata(row.metadataKey).catch(() => null);
+      rows.push({
+        ordinal: row.segmentIndex,
+        sourceSegmentIndex: row.segmentIndex,
+        segmentKey: row.segmentKey,
+        segmentId: row.segmentId,
+        audioKey: row.audioKey,
+        durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
+        alignmentJson: metadata?.alignment ? JSON.stringify(metadata.alignment) : null,
+        updatedAt: row.updatedAt ?? null,
+      });
+    }
+    return rows.sort((a, b) => a.ordinal - b.ordinal);
   };
 
   const readCompletedPlaybackSegmentFromIndex = async (
@@ -228,48 +224,11 @@ export function registerComputeWorkerRoutes(input: {
     };
   };
 
-  const readLegacyCompletedPlaybackSegment = async (
-    session: PlaybackSessionRow,
-    ordinal: number,
-  ): Promise<CompletedPlaybackSegment | null> => {
-    const rows = (await db
-      .select({
-        ordinal: ttsSegmentEntries.segmentIndex,
-        audioKey: ttsSegmentVariants.audioKey,
-        durationMs: ttsSegmentVariants.durationMs,
-      })
-      .from(ttsSegmentEntries)
-      .innerJoin(ttsSegmentVariants, and(
-        eq(ttsSegmentVariants.segmentEntryId, ttsSegmentEntries.segmentEntryId),
-        eq(ttsSegmentVariants.userId, ttsSegmentEntries.userId),
-      ))
-      .where(and(
-        eq(ttsSegmentEntries.userId, session.storageUserId),
-        eq(ttsSegmentEntries.documentId, session.documentId),
-        eq(ttsSegmentEntries.documentVersion, session.documentVersion),
-        eq(ttsSegmentEntries.segmentIndex, ordinal),
-        eq(ttsSegmentVariants.settingsHash, session.settingsHash),
-        eq(ttsSegmentVariants.status, 'completed'),
-        gt(ttsSegmentVariants.audioKey, ''),
-      ))
-      .limit(1)) as Array<{ ordinal: number; audioKey: string | null; durationMs: number | null }>;
-    const row = rows[0];
-    if (!row?.audioKey) return null;
-    return {
-      ordinal: Number(row.ordinal),
-      audioKey: row.audioKey,
-      durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
-    };
-  };
-
   const readCompletedPlaybackSegment = async (
     session: PlaybackSessionRow,
     ordinal: number,
   ): Promise<CompletedPlaybackSegment | null> => {
-    return await readCompletedPlaybackSegmentFromIndex(session, ordinal)
-      // Legacy fallback until the stream/sidebar routes are fully artifact-backed.
-      // Remove with the legacy cleanup task.
-      ?? await readLegacyCompletedPlaybackSegment(session, ordinal);
+    return readCompletedPlaybackSegmentFromIndex(session, ordinal);
   };
 
   const updatePlaybackCursor = async (sessionId: string, ordinal: number): Promise<void> => {
@@ -277,21 +236,12 @@ export function registerComputeWorkerRoutes(input: {
     await playbackStorage?.sessions.updateCursor(sessionId, ordinal, now).catch((error) => {
       app.log.warn({ sessionId, error: toErrorMessage(error) }, 'tts.playback.cursor_kv_update_failed');
     });
-    // Legacy compatibility until the app-side playback session helpers stop
-    // reading tts_playback_sessions. Remove with the legacy cleanup task.
-    await db
-      .update(ttsPlaybackSessions)
-      .set({
-        cursorOrdinal: Math.max(0, Math.floor(ordinal)),
-        cursorUpdatedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(ttsPlaybackSessions.sessionId, sessionId));
   };
 
   const putPlaybackSessionState = async (
     requestBody: typeof ttsPlaybackOperationCreateSchema._output,
     status: PlaybackSessionRow['status'],
+    workerOpId: string,
   ): Promise<void> => {
     const now = Date.now();
     await playbackStorage?.sessions.putSession({
@@ -303,6 +253,7 @@ export function registerComputeWorkerRoutes(input: {
       documentVersion: requestBody.documentVersion,
       readerType: requestBody.readerType,
       status,
+      workerOpId,
       settingsHash: requestBody.settingsHash,
       settingsJson: requestBody.settingsJson,
       startOrdinal: 0,
@@ -391,42 +342,10 @@ export function registerComputeWorkerRoutes(input: {
     return map;
   };
 
-  const listLegacyCompletedDurations = async (
-    session: PlaybackSessionRow,
-  ): Promise<Map<number, number>> => {
-    const rows = (await db
-      .select({
-        ordinal: ttsSegmentEntries.segmentIndex,
-        durationMs: ttsSegmentVariants.durationMs,
-      })
-      .from(ttsSegmentEntries)
-      .innerJoin(ttsSegmentVariants, and(
-        eq(ttsSegmentVariants.segmentEntryId, ttsSegmentEntries.segmentEntryId),
-        eq(ttsSegmentVariants.userId, ttsSegmentEntries.userId),
-      ))
-      .where(and(
-        eq(ttsSegmentEntries.userId, session.storageUserId),
-        eq(ttsSegmentEntries.documentId, session.documentId),
-        eq(ttsSegmentEntries.documentVersion, session.documentVersion),
-        eq(ttsSegmentVariants.settingsHash, session.settingsHash),
-        eq(ttsSegmentVariants.status, 'completed'),
-        gt(ttsSegmentVariants.audioKey, ''),
-      ))) as Array<{ ordinal: number; durationMs: number | null }>;
-    const map = new Map<number, number>();
-    for (const row of rows) {
-      map.set(Number(row.ordinal), Math.max(1, Number(row.durationMs ?? 1000)));
-    }
-    return map;
-  };
-
   const listCompletedDurations = async (
     session: PlaybackSessionRow,
   ): Promise<Map<number, number>> => {
-    const fromIndex = await listCompletedDurationsFromIndex(session);
-    if (fromIndex.size > 0) return fromIndex;
-    // Legacy fallback until the stream/sidebar routes are fully artifact-backed.
-    // Remove with the legacy cleanup task.
-    return listLegacyCompletedDurations(session);
+    return listCompletedDurationsFromIndex(session);
   };
 
   app.get('/health/live', {
@@ -448,6 +367,111 @@ export function registerComputeWorkerRoutes(input: {
       },
     },
   }, async () => ({ ok: true, natsConnected: getNatsConnected() }));
+
+  app.get('/v1/tts-playback/:sessionId/session', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { sessionId: { type: 'string' } },
+        required: ['sessionId'],
+      },
+      response: { 400: errorResponseSchema, 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const params = request.params as { sessionId?: string };
+    const sessionId = params.sessionId?.trim() ?? '';
+    if (!sessionId) {
+      reply.code(400);
+      return { error: 'Missing playback session id' };
+    }
+    const session = await readPlaybackSession(sessionId);
+    if (!session) {
+      reply.code(404);
+      return { error: 'Playback session not found' };
+    }
+    return session;
+  });
+
+  app.get('/v1/tts-playback/:sessionId/segments', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { sessionId: { type: 'string' } },
+        required: ['sessionId'],
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          minOrdinal: { type: 'number' },
+          limit: { type: 'number' },
+        },
+      },
+      response: { 400: errorResponseSchema, 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const params = request.params as { sessionId?: string };
+    const query = request.query as { minOrdinal?: string | number; limit?: string | number };
+    const sessionId = params.sessionId?.trim() ?? '';
+    if (!sessionId) {
+      reply.code(400);
+      return { error: 'Missing playback session id' };
+    }
+    const session = await readPlaybackSession(sessionId);
+    if (!session) {
+      reply.code(404);
+      return { error: 'Playback session not found' };
+    }
+    const minOrdinal = Math.max(0, Math.floor(Number(query.minOrdinal ?? 0)));
+    const limit = Math.max(1, Math.min(Math.floor(Number(query.limit ?? 500)), 1000));
+    const rows = await readSegmentIndexRows(session);
+    return {
+      sessionId,
+      segments: rows
+        .filter((row) => row.ordinal >= minOrdinal)
+        .slice(0, limit),
+    };
+  });
+
+  app.post('/v1/tts-playback/:sessionId/cursor', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { sessionId: { type: 'string' } },
+        required: ['sessionId'],
+      },
+      body: jsonSchema(ttsPlaybackCursorUpdateSchema),
+      response: { 400: errorResponseSchema, 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const params = request.params as { sessionId?: string };
+    const sessionId = params.sessionId?.trim() ?? '';
+    if (!sessionId) {
+      reply.code(400);
+      return { error: 'Missing playback session id' };
+    }
+    const parsed = ttsPlaybackCursorUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    const session = await readPlaybackSession(sessionId);
+    if (!session) {
+      reply.code(404);
+      return { error: 'Playback session not found' };
+    }
+    const now = Date.now();
+    await playbackStorage?.sessions.patchSession(sessionId, {
+      cursorOrdinal: parsed.data.ordinal,
+      cursorUpdatedAt: now,
+      ...(parsed.data.expiresAt === undefined ? {} : { expiresAt: parsed.data.expiresAt }),
+      updatedAt: now,
+    });
+    return {
+      sessionId,
+      cursorOrdinal: parsed.data.ordinal,
+      expiresAt: parsed.data.expiresAt ?? session.expiresAt,
+    };
+  });
 
   app.get('/v1/tts-playback/:sessionId/audio', {
     schema: {
@@ -795,7 +819,7 @@ export function registerComputeWorkerRoutes(input: {
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
-    await putPlaybackSessionState(parsed.data, op.status);
+    await putPlaybackSessionState(parsed.data, op.status, op.opId);
     app.log.info({
       kind: requestOp.kind,
       opId: op.opId,

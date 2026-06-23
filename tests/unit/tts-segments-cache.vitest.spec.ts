@@ -1,38 +1,12 @@
+import { createHash } from 'crypto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  selectResults: [] as unknown[][],
-  deleteWhere: vi.fn(async () => undefined),
-  updateSet: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
-  deleteTtsSegmentAudioObjects: vi.fn(async () => 0),
-}));
-
-function resultBuilder(result: unknown[]) {
-  return {
-    innerJoin: vi.fn(() => ({
-      where: vi.fn(async () => result),
-    })),
-    where: vi.fn(async () => result),
-  };
-}
-
-vi.mock('@openreader/database', () => ({
-  db: {
-    select: vi.fn(() => ({
-      from: vi.fn(() => resultBuilder(mocks.selectResults.shift() ?? [])),
-    })),
-    delete: vi.fn(() => ({
-      where: mocks.deleteWhere,
-    })),
-    update: vi.fn(() => ({
-      set: mocks.updateSet,
-    })),
-  },
+  deleteTtsSegmentPrefix: vi.fn(async () => 0),
 }));
 
 vi.mock('@/lib/server/tts/segments-blobstore', () => ({
-  deleteTtsSegmentAudioObjects: mocks.deleteTtsSegmentAudioObjects,
-  deleteTtsSegmentPrefix: vi.fn(async () => 0),
+  deleteTtsSegmentPrefix: mocks.deleteTtsSegmentPrefix,
 }));
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -51,40 +25,26 @@ import { clearTtsSegmentCache } from '../../src/lib/server/tts/segments-cache';
 
 describe('TTS segment cache cleanup', () => {
   beforeEach(() => {
-    mocks.selectResults = [];
-    mocks.deleteWhere.mockReset();
-    mocks.deleteWhere.mockResolvedValue(undefined);
-    mocks.updateSet.mockReset();
-    mocks.updateSet.mockReturnValue({ where: vi.fn(async () => undefined) });
-    mocks.deleteTtsSegmentAudioObjects.mockReset();
-    mocks.deleteTtsSegmentAudioObjects.mockResolvedValue(2);
+    mocks.deleteTtsSegmentPrefix.mockReset();
+    mocks.deleteTtsSegmentPrefix.mockResolvedValue(2);
   });
 
-  test('counts deleted entries rather than joined variants', async () => {
-    mocks.selectResults = [
-      [{ sessionId: 'playback-1' }],
-      [{ segmentEntryId: 'entry-1' }, { segmentEntryId: 'entry-2' }],
-      [
-        { segmentId: 'variant-1', audioKey: 'audio-1' },
-        { segmentId: 'variant-2', audioKey: 'audio-2' },
-        { segmentId: 'variant-3', audioKey: 'audio-2' },
-      ],
-    ];
-
+  test('deletes legacy and playback artifact prefixes', async () => {
     const result = await clearTtsSegmentCache({
       userId: 'user-1',
       documentId: 'doc-1',
+      documentVersion: 3,
     });
 
     expect(result).toMatchObject({
-      deletedSegments: 2,
-      requestedAudioObjects: 2,
-      deletedAudioObjects: 2,
-      invalidatedPlaybackSessions: 1,
+      deletedSegments: 0,
+      requestedAudioObjects: 6,
+      deletedAudioObjects: 6,
+      invalidatedPlaybackSessions: 0,
     });
-    expect(mocks.updateSet).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'failed',
-      lastError: 'TTS segment cache was cleared.',
-    }));
+    const userHash = createHash('sha256').update('user-1').digest('hex');
+    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith('openreader-test/tts_segments_v1/users/user-1/docs/doc-1/');
+    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith('openreader-test/tts_segments_v2/users/user-1/docs/doc-1/');
+    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith(`openreader-test/tts_playback_segments_v1/users/${userHash}/docs/doc-1/3/`);
   });
 });

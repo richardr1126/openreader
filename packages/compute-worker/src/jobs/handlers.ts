@@ -1,8 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { and, eq, inArray, lt, ne, or } from 'drizzle-orm';
-import { db } from '@openreader/database';
-import { ttsSegmentEntries, ttsSegmentVariants, ttsPlaybackSessions } from '@openreader/database/schema';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
 import {
@@ -15,7 +12,6 @@ import {
   normalizeLocator,
   normalizeSegmentText,
   probeAudioDurationMsFromBuffer,
-  projectSegmentLocator,
 } from '@openreader/tts/segments';
 import type { TTSSegmentSettings } from '@openreader/tts/types';
 import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
@@ -70,6 +66,7 @@ const ttsPlaybackRequestSchema = z.object({
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
@@ -91,62 +88,8 @@ const ttsPlaybackRequestSchema = z.object({
 });
 
 const ttsPlaybackPlanRequestSchema = ttsPlaybackRequestSchema
-  .omit({ sessionId: true, planObjectKey: true, aheadWindow: true, backgroundExtent: true })
+  .omit({ sessionId: true, planObjectKey: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
   .extend({});
-
-async function updateTtsPlaybackSession(input: {
-  sessionId: string;
-  status: 'running' | 'succeeded' | 'failed';
-  planObjectKey?: string;
-  lastError?: string | null;
-  /**
-   * Absolute canonical ordinal the worker generates around. This seeds the
-   * cursor without changing the session's audio-layout origin (the stream/grid
-   * stays whole-document from ordinal 0; `[0, generationStartOrdinal)` is filled
-   * with frame-accurate CBR silence so the full timeline remains seekable).
-   */
-  generationStartOrdinal?: number;
-  cursorOrdinal?: number;
-}): Promise<void> {
-  // Legacy compatibility write. KV is the worker-owned playback session source;
-  // remove this once app-side session/sidebar routes are artifact-backed and the
-  // legacy cleanup task deletes tts_playback_sessions.
-  const now = Date.now();
-  const generationStartOrdinal = input.generationStartOrdinal === undefined
-    ? undefined
-    : Math.max(0, Math.floor(input.generationStartOrdinal));
-  const cursorOrdinal = input.cursorOrdinal === undefined
-    ? undefined
-    : Math.max(0, Math.floor(input.cursorOrdinal));
-  await db
-    .update(ttsPlaybackSessions)
-    .set({
-      status: input.status,
-      ...(input.planObjectKey === undefined ? {} : { planObjectKey: input.planObjectKey }),
-      ...(input.lastError === undefined ? {} : { lastError: input.lastError }),
-      ...(generationStartOrdinal === undefined ? {} : { generationStartOrdinal }),
-      ...(cursorOrdinal === undefined
-        ? {}
-        : { cursorOrdinal, cursorUpdatedAt: now }),
-      updatedAt: now,
-    })
-    .where(eq(ttsPlaybackSessions.sessionId, input.sessionId));
-}
-
-async function assertTtsPlaybackSessionActive(sessionId: string): Promise<void> {
-  // Legacy fallback for playback sessions created before KV seeding. Remove with
-  // updateTtsPlaybackSession after the cleanup task lands.
-  const rows = (await db
-    .select({ status: ttsPlaybackSessions.status, lastError: ttsPlaybackSessions.lastError })
-    .from(ttsPlaybackSessions)
-    .where(eq(ttsPlaybackSessions.sessionId, sessionId))
-    .limit(1)) as Array<{ status: string; lastError: string | null }>;
-  const row = rows[0];
-  if (!row) throw new Error('TTS playback session no longer exists');
-  if (row.status !== 'queued' && row.status !== 'running') {
-    throw new Error(row.lastError || `TTS playback session is ${row.status}`);
-  }
-}
 
 // Sliding-window pacing constants for the single forward-generation job.
 const TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW = 8;
@@ -159,39 +102,6 @@ const TTS_PLAYBACK_THROTTLE_POLL_MS = 500;
 // Minimum spacing between progress heartbeats while idling/throttling; each one
 // extends the JetStream ack-wait (via the worker loop's onProgress → msg.working()).
 const TTS_PLAYBACK_HEARTBEAT_MS = 5_000;
-
-async function readTtsPlaybackSessionCursor(sessionId: string): Promise<{
-  status: string;
-  cursorOrdinal: number;
-  cursorUpdatedAt: number | null;
-  expiresAt: number;
-} | null> {
-  // Legacy fallback for cursor polling. The generation loop prefers KV and only
-  // calls this for sessions without KV state.
-  const rows = (await db
-    .select({
-      status: ttsPlaybackSessions.status,
-      cursorOrdinal: ttsPlaybackSessions.cursorOrdinal,
-      cursorUpdatedAt: ttsPlaybackSessions.cursorUpdatedAt,
-      expiresAt: ttsPlaybackSessions.expiresAt,
-    })
-    .from(ttsPlaybackSessions)
-    .where(eq(ttsPlaybackSessions.sessionId, sessionId))
-    .limit(1)) as Array<{
-      status: string;
-      cursorOrdinal: number | null;
-      cursorUpdatedAt: number | null;
-      expiresAt: number;
-    }>;
-  const row = rows[0];
-  if (!row) return null;
-  return {
-    status: row.status,
-    cursorOrdinal: Math.max(0, Math.floor(Number(row.cursorOrdinal ?? 0))),
-    cursorUpdatedAt: row.cursorUpdatedAt == null ? null : Number(row.cursorUpdatedAt),
-    expiresAt: Number(row.expiresAt),
-  };
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -744,7 +654,6 @@ async function generateExplicitTtsPlaybackSegments(input: {
   };
 
   const secret = textHmacSecret();
-  const nowMs = Date.now();
   const normalized = segments.map((segment) => {
     const text = normalizeSegmentText(segment.text);
     const locator = normalizeLocator(segment.locator as never);
@@ -754,13 +663,12 @@ async function generateExplicitTtsPlaybackSegments(input: {
       ? segment.segmentKey.trim()
       : null;
     const textHash = buildTtsSegmentTextHash(text, secret);
-    const locatorProjection = projectSegmentLocator(locator);
     const segmentEntryId = buildTtsSegmentEntryId({
       documentId: input.request.documentId,
       documentVersion: input.request.documentVersion,
       segmentIndex: segment.segmentIndex,
       segmentKey,
-      locatorIdentityKey: locatorProjection.locatorIdentityKey,
+      locatorIdentityKey: locatorHash,
       textHash,
     });
     const segmentId = buildTtsSegmentId({
@@ -775,7 +683,6 @@ async function generateExplicitTtsPlaybackSegments(input: {
     return {
       original: segment,
       text,
-      locatorProjection,
       segmentEntryId,
       segmentId,
       segmentKey,
@@ -785,26 +692,17 @@ async function generateExplicitTtsPlaybackSegments(input: {
 
   if (normalized.length === 0) return;
 
-  const existingRows = (await db
-    .select({
-      segmentId: ttsSegmentVariants.segmentId,
-      status: ttsSegmentVariants.status,
-      audioKey: ttsSegmentVariants.audioKey,
-      durationMs: ttsSegmentVariants.durationMs,
-      alignmentJson: ttsSegmentVariants.alignmentJson,
-    })
-    .from(ttsSegmentVariants)
-    .where(and(
-      eq(ttsSegmentVariants.userId, input.request.storageUserId),
-      inArray(ttsSegmentVariants.segmentId, normalized.map((segment) => segment.segmentId)),
-    ))) as Array<{
-    segmentId: string;
-    status: string;
-    audioKey: string | null;
-    durationMs: number | null;
-    alignmentJson: string | null;
-  }>;
-  const existingById = new Map(existingRows.map((row) => [row.segmentId, row]));
+  if (!input.playbackStorage) {
+    throw new Error('TTS playback storage is required for segment generation');
+  }
+
+  const existingIndex = await input.playbackStorage.artifacts.readSegmentIndex({
+    storageUserId: input.request.storageUserId,
+    documentId: input.request.documentId,
+    documentVersion: input.request.documentVersion,
+    settingsHash: input.request.settingsHash,
+  });
+  const existingById = new Map((existingIndex?.segments ?? []).map((row) => [row.segmentId, row]));
 
   // Word-level alignment from an audio buffer. Shared by the generation path and
   // the completed-but-unaligned self-heal path; returns null on any failure so a
@@ -882,54 +780,19 @@ async function generateExplicitTtsPlaybackSegments(input: {
       const decision = await input.onBeforeSegment(planOrdinal);
       if (decision === 'stop') break;
     }
-    await db
-      .insert(ttsSegmentEntries)
-      .values({
-        segmentEntryId: segment.segmentEntryId,
-        userId: input.request.storageUserId,
-        documentId: input.request.documentId,
-        readerType: input.request.readerType,
-        documentVersion: input.request.documentVersion,
-        segmentIndex: segment.original.segmentIndex,
-        segmentKey: segment.segmentKey,
-        ...segment.locatorProjection,
-        textHash: segment.textHash,
-        textLength: segment.text.length,
-        updatedAt: nowMs,
-      })
-      .onConflictDoUpdate({
-        target: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
-        set: {
-          readerType: input.request.readerType,
-          documentVersion: input.request.documentVersion,
-          segmentIndex: segment.original.segmentIndex,
-          segmentKey: segment.segmentKey,
-          ...segment.locatorProjection,
-          textHash: segment.textHash,
-          textLength: segment.text.length,
-          updatedAt: nowMs,
-        },
-      });
 
     const existing = existingById.get(segment.segmentId);
     if (existing?.status === 'completed' && existing.audioKey) {
+      const existingMetadata = await input.playbackStorage.artifacts.readSegmentMetadata(existing.metadataKey);
       // Self-heal: audio exists but a prior transient Whisper failure left no
       // alignment. Re-derive it from the stored audio without re-synthesizing,
       // so a one-time alignment failure doesn't permanently lose word-level
       // highlighting for this segment (best-effort; retried again next pass).
-      if (!existing.alignmentJson && input.readAudioObject) {
+      let alignment = existingMetadata?.alignment ?? null;
+      if (!alignment && input.readAudioObject) {
         try {
           const storedAudio = await input.readAudioObject(existing.audioKey);
-          const alignment = await computeAlignment(storedAudio, segment, existing.audioKey);
-          if (alignment) {
-            await db
-              .update(ttsSegmentVariants)
-              .set({ alignmentJson: JSON.stringify(alignment), updatedAt: Date.now() })
-              .where(and(
-                eq(ttsSegmentVariants.segmentId, segment.segmentId),
-                eq(ttsSegmentVariants.userId, input.request.storageUserId),
-              ));
-          }
+          alignment = await computeAlignment(storedAudio, segment, existing.audioKey);
         } catch {
           // Leave alignment null; a future generation pass retries the self-heal.
         }
@@ -937,9 +800,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       await persistSegmentMetadata(segment, 'completed', {
         audioKey: existing.audioKey,
         durationMs: Math.max(1, Number(existing.durationMs ?? 1000)),
-        alignment: existing.alignmentJson
-          ? JSON.parse(existing.alignmentJson) as Awaited<ReturnType<typeof computeAlignment>>
-          : null,
+        alignment,
         updatedAt: Date.now(),
       }).catch(() => undefined);
       await input.onSegmentCompleted?.(planOrdinal);
@@ -956,57 +817,10 @@ async function generateExplicitTtsPlaybackSegments(input: {
       segmentId: segment.segmentId,
     });
 
-    // Atomic claim: only take ownership when no row exists, the row isn't already
-    // completed, and any prior `generating` claim is stale (crashed worker). The
-    // conflict `setWhere` + `returning()` makes this a compare-and-set — if a
-    // concurrent job already holds (or finished) this segment, we get no row back
-    // and skip synthesis instead of paying for a duplicate generation.
+    // Atomic claim: only take ownership when no completed claim exists and any
+    // prior `generating` claim is stale (crashed worker).
     const claimedAt = Date.now();
-    const claimRow = {
-      segmentId: segment.segmentId,
-      userId: input.request.storageUserId,
-      segmentEntryId: segment.segmentEntryId,
-      settingsHash: input.request.settingsHash,
-      settingsJson: input.request.settingsJson,
-      audioKey,
-      audioFormat: 'mp3' as const,
-      status: 'generating' as const,
-      error: null,
-      updatedAt: claimedAt,
-    };
-    const claimed = (await db
-      .insert(ttsSegmentVariants)
-      .values(claimRow)
-      .onConflictDoUpdate({
-        target: [ttsSegmentVariants.segmentId, ttsSegmentVariants.userId],
-        set: claimRow,
-        setWhere: and(
-          ne(ttsSegmentVariants.status, 'completed'),
-          or(
-            ne(ttsSegmentVariants.status, 'generating'),
-            lt(ttsSegmentVariants.updatedAt, claimedAt - SEGMENT_GENERATING_STALE_MS),
-          ),
-        ),
-      })
-      .returning({ segmentId: ttsSegmentVariants.segmentId })) as Array<{ segmentId: string }>;
-
-    if (claimed.length === 0) {
-      // Another job owns this segment, or it completed since our snapshot. Report
-      // completion only if it is actually done; otherwise let the owner finish.
-      const [current] = (await db
-        .select({ status: ttsSegmentVariants.status, audioKey: ttsSegmentVariants.audioKey })
-        .from(ttsSegmentVariants)
-        .where(and(
-          eq(ttsSegmentVariants.segmentId, segment.segmentId),
-          eq(ttsSegmentVariants.userId, input.request.storageUserId),
-        ))
-        .limit(1)) as Array<{ status: string; audioKey: string | null }>;
-      if (current?.status === 'completed' && current.audioKey) {
-        await input.onSegmentCompleted?.(planOrdinal);
-      }
-      continue;
-    }
-    await input.playbackStorage?.claims.claimSegment({
+    const claimed = await input.playbackStorage.claims.claimSegment({
       storageUserId: input.request.storageUserId,
       documentId: input.request.documentId,
       documentVersion: input.request.documentVersion,
@@ -1016,7 +830,14 @@ async function generateExplicitTtsPlaybackSegments(input: {
       ownerId: input.request.sessionId,
       now: claimedAt,
       staleAfterMs: SEGMENT_GENERATING_STALE_MS,
-    }).catch(() => undefined);
+    });
+
+    if (!claimed.claimed) {
+      if (claimed.claim?.status === 'completed' && claimed.claim.audioKey) {
+        await input.onSegmentCompleted?.(planOrdinal);
+      }
+      continue;
+    }
 
     let lastError: unknown = null;
     let lastErrorInfo: SegmentErrorInfo | null = null;
@@ -1039,19 +860,6 @@ async function generateExplicitTtsPlaybackSegments(input: {
         const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
         const alignment = await computeAlignment(audioBuffer, segment, audioKey);
 
-        await db
-          .update(ttsSegmentVariants)
-          .set({
-            status: 'completed',
-            durationMs,
-            alignmentJson: alignment ? JSON.stringify(alignment) : null,
-            error: null,
-            updatedAt: Date.now(),
-          })
-          .where(and(
-            eq(ttsSegmentVariants.segmentId, segment.segmentId),
-            eq(ttsSegmentVariants.userId, input.request.storageUserId),
-          ));
         await persistSegmentMetadata(segment, 'completed', {
           audioKey,
           durationMs,
@@ -1081,19 +889,6 @@ async function generateExplicitTtsPlaybackSegments(input: {
     // halts playback cleanly at this segment instead of failing the whole job.
     // The error is stored structured (code/upstreamStatus/retryAfterSeconds) so a
     // provider 429/5xx is distinguishable from an opaque failure.
-    await db
-      .update(ttsSegmentVariants)
-      .set({
-        status: 'error',
-        error: JSON.stringify(lastErrorInfo ?? {
-          message: lastError instanceof Error ? lastError.message : String(lastError),
-        }),
-        updatedAt: Date.now(),
-      })
-      .where(and(
-        eq(ttsSegmentVariants.segmentId, segment.segmentId),
-        eq(ttsSegmentVariants.userId, input.request.storageUserId),
-      ));
     await persistSegmentMetadata(segment, 'error', {
       audioKey,
       error: lastErrorInfo ?? {
@@ -1186,23 +981,19 @@ export function createJobHandlers(input: {
     async runTtsPlayback(payload, queueWaitMs, hooks) {
       const parsed = ttsPlaybackRequestSchema.parse(payload);
       const startedAt = Date.now();
-      const kvSession = await input.playbackStorage?.sessions.getSession(parsed.sessionId).catch(() => null);
-      if (kvSession) {
-        if (kvSession.status !== 'queued' && kvSession.status !== 'running') {
-          throw new Error(kvSession.lastError || `TTS playback session is ${kvSession.status}`);
-        }
-      } else {
-        await assertTtsPlaybackSessionActive(parsed.sessionId);
+      if (!input.playbackStorage) {
+        throw new Error('TTS playback storage is required');
       }
-      await updateTtsPlaybackSession({
-        sessionId: parsed.sessionId,
+      const playbackStorage = input.playbackStorage;
+      const kvSession = await playbackStorage.sessions.getSession(parsed.sessionId);
+      if (!kvSession) throw new Error('TTS playback session no longer exists');
+      if (kvSession.status !== 'queued' && kvSession.status !== 'running') {
+        throw new Error(kvSession.lastError || `TTS playback session is ${kvSession.status}`);
+      }
+      await playbackStorage.sessions.patchSession(parsed.sessionId, {
         status: 'running',
         lastError: null,
       });
-      await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
-        status: 'running',
-        lastError: null,
-      }).catch(() => undefined);
       try {
         const plan = await resolveAndPersistTtsPlaybackPlan({
           request: parsed,
@@ -1211,22 +1002,14 @@ export function createJobHandlers(input: {
         });
         const { planObjectKey, plannedSegments, startOrdinal } = plan;
 
-        await updateTtsPlaybackSession({
-          sessionId: parsed.sessionId,
-          status: 'running',
-          planObjectKey,
-          generationStartOrdinal: startOrdinal,
-          cursorOrdinal: startOrdinal,
-          lastError: null,
-        });
-        await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSession(parsed.sessionId, {
           status: 'running',
           planObjectKey,
           generationStartOrdinal: startOrdinal,
           cursorOrdinal: startOrdinal,
           cursorUpdatedAt: Date.now(),
           lastError: null,
-        }).catch(() => undefined);
+        });
         const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
         const plannedCount = plannedSegments.length;
         const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
@@ -1267,7 +1050,7 @@ export function createJobHandlers(input: {
 
         const onBeforeSegment = async (planOrdinal: number): Promise<'continue' | 'stop'> => {
           for (;;) {
-            const kvCursor = await input.playbackStorage?.sessions.getSession(parsed.sessionId).catch(() => null);
+            const kvCursor = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
             const cursor = kvCursor
               ? {
                 status: kvCursor.status,
@@ -1275,7 +1058,7 @@ export function createJobHandlers(input: {
                 cursorUpdatedAt: kvCursor.cursorUpdatedAt == null ? null : Number(kvCursor.cursorUpdatedAt),
                 expiresAt: Number(kvCursor.expiresAt),
               }
-              : await readTtsPlaybackSessionCursor(parsed.sessionId);
+              : null;
             if (!cursor || (cursor.status !== 'queued' && cursor.status !== 'running')) {
               stoppedEarly = true;
               return 'stop';
@@ -1316,7 +1099,7 @@ export function createJobHandlers(input: {
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
-          playbackStorage: input.playbackStorage,
+          playbackStorage,
           readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
           onBeforeSegment,
           onSegmentCompleted,
@@ -1326,17 +1109,11 @@ export function createJobHandlers(input: {
         // stop the session was superseded/expired/disconnected — leave its status
         // alone so we don't clobber a `canceled` set by a newer session.
         if (!stoppedEarly) {
-          await updateTtsPlaybackSession({
-            sessionId: parsed.sessionId,
+          await playbackStorage.sessions.patchSession(parsed.sessionId, {
             status: 'succeeded',
             planObjectKey,
             lastError: null,
           });
-          await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
-            status: 'succeeded',
-            planObjectKey,
-            lastError: null,
-          }).catch(() => undefined);
         }
         return {
           sessionId: parsed.sessionId,
@@ -1344,12 +1121,7 @@ export function createJobHandlers(input: {
           timing: { queueWaitMs, computeMs: Date.now() - startedAt },
         };
       } catch (error) {
-        await updateTtsPlaybackSession({
-          sessionId: parsed.sessionId,
-          status: 'failed',
-          lastError: error instanceof Error ? error.message : String(error),
-        }).catch(() => undefined);
-        await input.playbackStorage?.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSession(parsed.sessionId, {
           status: 'failed',
           lastError: error instanceof Error ? error.message : String(error),
         }).catch(() => undefined);

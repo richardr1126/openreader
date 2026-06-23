@@ -1,11 +1,9 @@
-import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@openreader/database';
-import { ttsPlaybackSessions } from '@openreader/database/schema';
 import {
   TTS_PLAYBACK_SESSION_TTL_MS,
   resolveTtsPlaybackSession,
 } from '@/lib/server/tts/playback-sessions';
+import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -46,10 +44,11 @@ export async function POST(
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
-    await db
-      .update(ttsPlaybackSessions)
-      .set({ cursorOrdinal: ordinal, cursorUpdatedAt: now, expiresAt, updatedAt: now })
-      .where(eq(ttsPlaybackSessions.sessionId, session.sessionId));
+    await getComputeWorkerClient().updateTtsPlaybackCursor({
+      sessionId: session.sessionId,
+      ordinal,
+      expiresAt,
+    });
 
     return NextResponse.json({ sessionId: session.sessionId, cursorOrdinal: ordinal, expiresAt });
   } catch (error) {

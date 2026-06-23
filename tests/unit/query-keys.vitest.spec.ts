@@ -16,13 +16,6 @@ describe('query keys', () => {
     expect(queryKeys.audiobook('user', 'book')).toEqual(['audiobook', 'user', 'book']);
     expect(queryKeys.sharedProviders('user')).toEqual(['tts-shared-providers', 'user']);
     expect(queryKeys.ttsVoices('user', 'shared', 'model')).toEqual(['tts-voices', 'user', 'shared', 'model']);
-    expect(queryKeys.ttsManifest('user', 'doc')).toEqual(['tts-manifest', 'user', 'doc', 'document']);
-    expect(queryKeys.ttsManifest('user', 'doc', 'epub:2:OEBPS/ch02.xhtml')).toEqual([
-      'tts-manifest',
-      'user',
-      'doc',
-      'epub:2:OEBPS/ch02.xhtml',
-    ]);
     expect(queryKeys.parsedDocument('user', 'doc')).toEqual(['parsed-document', 'user', 'doc']);
     expect(queryKeys.claimCounts('user')).toEqual(['claim-counts', 'user']);
     expect(queryKeys.rateLimit('user')).toEqual(['rate-limit', 'user']);

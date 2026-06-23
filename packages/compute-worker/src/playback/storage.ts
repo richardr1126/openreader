@@ -20,6 +20,7 @@ export interface TtsPlaybackSessionState {
   documentVersion: number;
   readerType: 'pdf' | 'epub' | 'html';
   status: TtsPlaybackSessionStatus;
+  workerOpId?: string | null;
   settingsHash: string;
   settingsJson: unknown;
   startOrdinal: number;

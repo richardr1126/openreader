@@ -3,11 +3,7 @@ import type {
   TTSAudiobookFormat,
 } from '@/types/tts';
 import type { TtsProviderType } from '@openreader/tts/provider-catalog';
-import type {
-  TTSSegmentLocator,
-  TTSSegmentSettings,
-  TTSSentenceAlignment,
-} from '@openreader/tts/types';
+import type { TTSSentenceAlignment } from '@openreader/tts/types';
 export type {
   TTSSegmentLocator,
   TTSSegmentSettings,
@@ -83,39 +79,4 @@ export interface CreateChapterPayload {
 
 export interface VoicesResponse {
   voices: string[];
-}
-
-export interface TTSSegmentVariant {
-  segmentId: string;
-  settings: TTSSegmentSettings | null;
-  audioPresignUrl: string | null;
-  audioFallbackUrl: string | null;
-  durationMs: number | null;
-  status: 'pending' | 'completed' | 'error';
-  textLength: number;
-  alignmentWordCount: number;
-  audioKey: string | null;
-  updatedAt: number | null;
-}
-
-export interface TTSSegmentRow {
-  segmentIndex: number;
-  /**
-   * Content-stable identity for this segment, derived from the normalized
-   * sentence text on the client (see `buildSegmentKey` in
-   * `lib/shared/tts-segment-plan.ts`). The sidebar uses this to merge
-   * locally-synthesized current-page rows with persisted manifest rows of the
-   * same content, so audio/variants attach to the visible text row instead of
-   * showing as a separate listing.
-   */
-  segmentKey: string | null;
-  locator: TTSSegmentLocator | null;
-  variants: TTSSegmentVariant[];
-}
-
-export interface TTSSegmentsManifestResponse {
-  documentId: string;
-  segments: TTSSegmentRow[];
-  nextCursor: string | null;
-  hasMore: boolean;
 }

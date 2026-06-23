@@ -1,7 +1,4 @@
-import { and, eq, gt } from 'drizzle-orm';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { db } from '@openreader/database';
-import { ttsSegmentEntries, ttsSegmentVariants } from '@openreader/database/schema';
 import {
   buildPlaybackCbrLayout,
   estimateMsPerCharForNativeSpeed,
@@ -80,37 +77,6 @@ export async function readTtsPlaybackPlanArtifact(planObjectKey: string): Promis
       segments,
     },
   };
-}
-
-export async function listCompletedDurationsForPlan(input: {
-  storageUserId: string;
-  documentId: string;
-  documentVersion: number;
-  settingsHash: string;
-}): Promise<Map<number, number>> {
-  const rows = (await db
-    .select({
-      ordinal: ttsSegmentEntries.segmentIndex,
-      durationMs: ttsSegmentVariants.durationMs,
-    })
-    .from(ttsSegmentEntries)
-    .innerJoin(ttsSegmentVariants, and(
-      eq(ttsSegmentVariants.segmentEntryId, ttsSegmentEntries.segmentEntryId),
-      eq(ttsSegmentVariants.userId, ttsSegmentEntries.userId),
-    ))
-    .where(and(
-      eq(ttsSegmentEntries.userId, input.storageUserId),
-      eq(ttsSegmentEntries.documentId, input.documentId),
-      eq(ttsSegmentEntries.documentVersion, input.documentVersion),
-      eq(ttsSegmentVariants.settingsHash, input.settingsHash),
-      eq(ttsSegmentVariants.status, 'completed'),
-      gt(ttsSegmentVariants.audioKey, ''),
-    ))) as Array<{ ordinal: number; durationMs: number | null }>;
-  const map = new Map<number, number>();
-  for (const row of rows) {
-    map.set(Number(row.ordinal), Math.max(1, Number(row.durationMs ?? 1000)));
-  }
-  return map;
 }
 
 export type TtsPlaybackGridSegment = {

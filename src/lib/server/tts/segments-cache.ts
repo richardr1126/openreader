@@ -1,15 +1,10 @@
-import { and, eq, inArray } from 'drizzle-orm';
-import { db } from '@openreader/database';
-import { ttsSegmentEntries, ttsSegmentVariants, ttsPlaybackSessions } from '@openreader/database/schema';
+import { createHash } from 'crypto';
 import {
-  deleteTtsSegmentAudioObjects,
   deleteTtsSegmentPrefix,
 } from '@/lib/server/tts/segments-blobstore';
 import { buildTtsSegmentDocumentPrefix } from '@openreader/tts/segments';
 import { getS3Config } from '@/lib/server/storage/s3';
 import type { ReaderType } from '@/types/user-state';
-import { serverLogger } from '@/lib/server/logger';
-import { logDegraded } from '@/lib/server/errors/logging';
 
 type ClearTtsSegmentCacheInput = {
   userId: string;
@@ -26,110 +21,44 @@ export type ClearTtsSegmentCacheResult = {
   warning?: string;
 };
 
+function storageUserHash(userId: string): string {
+  return createHash('sha256').update(userId).digest('hex');
+}
+
+async function deletePlaybackSegmentArtifactPrefix(input: {
+  userId: string;
+  documentId: string;
+  documentVersion?: number;
+}): Promise<number> {
+  const cfg = getS3Config();
+  const base = `${cfg.prefix}/tts_playback_segments_v1/users/${storageUserHash(input.userId)}/docs/${input.documentId}/`;
+  const prefix = typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)
+    ? `${base}${Math.floor(input.documentVersion)}/`
+    : base;
+  return deleteTtsSegmentPrefix(prefix);
+}
+
 export async function clearTtsSegmentCache(
   input: ClearTtsSegmentCacheInput,
 ): Promise<ClearTtsSegmentCacheResult> {
-  const now = Date.now();
-  const conditions = [
-    eq(ttsSegmentEntries.userId, input.userId),
-    eq(ttsSegmentEntries.documentId, input.documentId),
-  ];
-
-  if (typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)) {
-    conditions.push(eq(ttsSegmentEntries.documentVersion, Math.floor(input.documentVersion)));
-  }
-  if (input.readerType) {
-    conditions.push(eq(ttsSegmentEntries.readerType, input.readerType));
-  }
-
-  const playbackSessionConditions = [
-    eq(ttsPlaybackSessions.storageUserId, input.userId),
-    eq(ttsPlaybackSessions.documentId, input.documentId),
-    inArray(ttsPlaybackSessions.status, ['queued', 'running']),
-  ];
-  if (typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)) {
-    playbackSessionConditions.push(eq(ttsPlaybackSessions.documentVersion, Math.floor(input.documentVersion)));
-  }
-  if (input.readerType) {
-    playbackSessionConditions.push(eq(ttsPlaybackSessions.readerType, input.readerType));
-  }
-
-  const activePlaybackSessionRows = (await db
-    .select({ sessionId: ttsPlaybackSessions.sessionId })
-    .from(ttsPlaybackSessions)
-    .where(and(...playbackSessionConditions))) as Array<{ sessionId: string }>;
-
-  if (activePlaybackSessionRows.length > 0) {
-    await db
-      .update(ttsPlaybackSessions)
-      .set({
-        status: 'failed',
-        lastError: 'TTS segment cache was cleared.',
-        updatedAt: now,
-      })
-      .where(and(...playbackSessionConditions));
-  }
-
-  const entryRows = (await db
-    .select({ segmentEntryId: ttsSegmentEntries.segmentEntryId })
-    .from(ttsSegmentEntries)
-    .where(and(...conditions))) as Array<{ segmentEntryId: string }>;
-
-  const rows = (await db
-    .select({
-      segmentId: ttsSegmentVariants.segmentId,
-      audioKey: ttsSegmentVariants.audioKey,
-    })
-    .from(ttsSegmentVariants)
-    .innerJoin(
-      ttsSegmentEntries,
-      and(
-        eq(ttsSegmentEntries.segmentEntryId, ttsSegmentVariants.segmentEntryId),
-        eq(ttsSegmentEntries.userId, ttsSegmentVariants.userId),
-      ),
-    )
-    .where(and(...conditions))) as Array<{ segmentId: string; audioKey: string | null }>;
-
-  const audioKeys = rows
-    .map((row) => row.audioKey)
-    .filter((key): key is string => Boolean(key));
-  const uniqueAudioKeys = Array.from(new Set(audioKeys));
-
+  const cfg = getS3Config();
   let deletedAudioObjects = 0;
-  let warning: string | undefined;
-  if (uniqueAudioKeys.length > 0) {
-    try {
-      deletedAudioObjects = await deleteTtsSegmentAudioObjects(uniqueAudioKeys);
-      if (deletedAudioObjects < uniqueAudioKeys.length) {
-        warning = `Deleted ${deletedAudioObjects} of ${uniqueAudioKeys.length} audio objects.`;
-      }
-    } catch (error) {
-      warning = error instanceof Error ? error.message : 'Failed deleting some audio objects';
-      logDegraded(serverLogger, {
-        event: 'tts.segments.cache.audio_cleanup_failed',
-        msg: 'Failed clearing some TTS segment audio objects',
-        step: 'delete_tts_audio_objects',
-        context: {
-          documentId: input.documentId,
-          userId: input.userId,
-        },
-        error,
-      });
-    }
+  for (const storageVersion of ['v1', 'v2'] as const) {
+    deletedAudioObjects += await deleteTtsSegmentPrefix(buildTtsSegmentDocumentPrefix({
+      storagePrefix: cfg.prefix,
+      namespace: null,
+      userId: input.userId,
+      documentId: input.documentId,
+      storageVersion,
+    }));
   }
-
-  // Keep metadata when storage cleanup is incomplete so a later retry still
-  // knows which objects must be removed.
-  if (!warning) {
-    await db.delete(ttsSegmentEntries).where(and(...conditions));
-  }
+  deletedAudioObjects += await deletePlaybackSegmentArtifactPrefix(input);
 
   return {
-    deletedSegments: warning ? 0 : new Set(entryRows.map((row) => row.segmentEntryId)).size,
-    requestedAudioObjects: uniqueAudioKeys.length,
+    deletedSegments: 0,
+    requestedAudioObjects: deletedAudioObjects,
     deletedAudioObjects,
-    invalidatedPlaybackSessions: activePlaybackSessionRows.length,
-    ...(warning ? { warning } : {}),
+    invalidatedPlaybackSessions: 0,
   };
 }
 
@@ -138,33 +67,15 @@ export async function deleteDocumentTtsSegmentCache(input: {
   documentId: string;
   namespace: string | null;
 }): Promise<void> {
-  const now = Date.now();
-  await db
-    .update(ttsPlaybackSessions)
-    .set({
-      status: 'canceled',
-      lastError: 'Document was deleted.',
-      updatedAt: now,
-    })
-    .where(and(
-      eq(ttsPlaybackSessions.storageUserId, input.userId),
-      eq(ttsPlaybackSessions.documentId, input.documentId),
-      inArray(ttsPlaybackSessions.status, ['queued', 'running']),
-    ));
-
-  const storagePrefix = getS3Config().prefix;
+  const cfg = getS3Config();
   for (const storageVersion of ['v1', 'v2'] as const) {
     await deleteTtsSegmentPrefix(buildTtsSegmentDocumentPrefix({
-      storagePrefix,
+      storagePrefix: cfg.prefix,
       namespace: input.namespace,
       userId: input.userId,
       documentId: input.documentId,
       storageVersion,
     }));
   }
-
-  await db.delete(ttsSegmentEntries).where(and(
-    eq(ttsSegmentEntries.userId, input.userId),
-    eq(ttsSegmentEntries.documentId, input.documentId),
-  ));
+  await deletePlaybackSegmentArtifactPrefix(input);
 }

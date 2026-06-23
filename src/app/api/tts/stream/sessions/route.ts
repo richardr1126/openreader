@@ -1,8 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, eq, inArray, ne } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@openreader/database';
-import { ttsPlaybackSessions } from '@openreader/database/schema';
 import {
   ComputeWorkerClient,
   getComputeWorkerPublicBaseUrl,
@@ -76,17 +73,10 @@ export async function POST(request: NextRequest) {
     const startLocationError = validateTtsPlaybackStartLocation(parsed, scope);
     if (startLocationError) return NextResponse.json({ error: startLocationError }, { status: 400 });
 
-    // The worker derives one position-independent canonical plan over the whole
-    // document (whole book for EPUB) with absolute ordinals, reused across
-    // sessions. The audio layout origin stays at ordinal 0. Generation start is
-    // resolved by the worker from the stable document coordinate in `planning`;
-    // queued rows are intentionally seeded at 0 until that worker-owned value is
-    // published back to the session.
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
     const runtimeConfig = await getRuntimeConfig();
     const { ttsPlaybackBackgroundExtent: backgroundExtent } = runtimeConfig;
-    const startOrdinal = 0;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
@@ -102,37 +92,6 @@ export async function POST(request: NextRequest) {
     if (quotaResponse) return quotaResponse;
 
     const sessionId = randomUUID();
-    await db.insert(ttsPlaybackSessions).values({
-      sessionId,
-      userId: scope.userId,
-      storageUserId: scope.storageUserId,
-      documentId: parsed.documentId,
-      documentVersion: scope.documentVersion,
-      readerType: scope.readerType,
-      status: 'queued',
-      settingsHash,
-      settingsJson,
-      startOrdinal,
-      generationStartOrdinal: 0,
-      cursorOrdinal: 0,
-      cursorUpdatedAt: now,
-      ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
-      expiresAt,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    // Supersede this user's other active playback sessions so their (now
-    // abandoned) worker jobs stop and release the worker's playback slot.
-    await db
-      .update(ttsPlaybackSessions)
-      .set({ status: 'canceled', updatedAt: now })
-      .where(and(
-        eq(ttsPlaybackSessions.userId, scope.userId),
-        ne(ttsPlaybackSessions.sessionId, sessionId),
-        inArray(ttsPlaybackSessions.status, ['queued', 'running']),
-      ));
-
     const operation = await new ComputeWorkerClient().createTtsPlaybackOperation({
       sessionId,
       userId: scope.userId,
@@ -150,15 +109,6 @@ export async function POST(request: NextRequest) {
       backgroundExtent,
       planning,
     });
-
-    await db
-      .update(ttsPlaybackSessions)
-      .set({
-        workerOpId: operation.opId,
-        status: operation.status,
-        updatedAt: Date.now(),
-      })
-      .where(eq(ttsPlaybackSessions.sessionId, sessionId));
 
     const responseBase = {
       sessionId,

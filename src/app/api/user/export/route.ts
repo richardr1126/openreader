@@ -7,8 +7,6 @@ import {
   audiobooks,
   audiobookChapters,
   documentSettings,
-  ttsSegmentEntries,
-  ttsSegmentVariants,
   userDocumentProgress,
   userJobEvents,
   userPreferences,
@@ -23,7 +21,6 @@ import archiver from 'archiver';
 import { appendUserExportArchive } from '@/lib/server/user/data-export';
 import { getDocumentBlobStream } from '@/lib/server/documents/blobstore';
 import { getAudiobookObjectStream, listAudiobookObjects } from '@/lib/server/audiobooks/blobstore';
-import { getTtsSegmentAudioObjectStream } from '@/lib/server/tts/segments-blobstore';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
@@ -63,8 +60,6 @@ export async function GET(req: NextRequest) {
     ttsUsage,
     jobEvents,
     perDocumentSettings,
-    segmentEntries,
-    segmentVariants,
     userDocs,
     userAudiobooks,
     folders,
@@ -91,16 +86,6 @@ export async function GET(req: NextRequest) {
       .from(documentSettings)
       .where(eq(documentSettings.userId, userId))
       .orderBy(desc(documentSettings.updatedAt)),
-    db
-      .select()
-      .from(ttsSegmentEntries)
-      .where(eq(ttsSegmentEntries.userId, userId))
-      .orderBy(desc(ttsSegmentEntries.updatedAt)),
-    db
-      .select()
-      .from(ttsSegmentVariants)
-      .where(eq(ttsSegmentVariants.userId, userId))
-      .orderBy(desc(ttsSegmentVariants.updatedAt)),
     db
       .select()
       .from(documents)
@@ -207,8 +192,6 @@ export async function GET(req: NextRequest) {
         documents: userDocs,
         audiobooks: userAudiobooks,
         audiobookChapters: allChapters,
-        ttsSegmentEntries: segmentEntries,
-        ttsSegmentVariants: segmentVariants,
         storageEnabled,
         getDocumentBlobStream: async (documentId: string) => {
           requireStorage();
@@ -221,10 +204,6 @@ export async function GET(req: NextRequest) {
         getAudiobookObjectStream: async (bookId: string, ownerId: string, fileName: string) => {
           requireStorage();
           return getAudiobookObjectStream(bookId, ownerId, fileName, testNamespace);
-        },
-        getTtsSegmentAudioStream: async (audioKey: string) => {
-          requireStorage();
-          return (await getTtsSegmentAudioObjectStream(audioKey)).stream;
         },
       });
 

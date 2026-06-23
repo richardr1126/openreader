@@ -50,6 +50,39 @@ export type TtsPlaybackPlanResult = {
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
+export type TtsPlaybackSessionState = {
+  schemaVersion: 1;
+  sessionId: string;
+  userId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  workerOpId?: string | null;
+  settingsHash: string;
+  settingsJson: unknown;
+  startOrdinal: number;
+  generationStartOrdinal: number;
+  cursorOrdinal: number;
+  cursorUpdatedAt: number | null;
+  planObjectKey: string | null;
+  expiresAt: number;
+  lastError: string | null;
+  updatedAt: number;
+};
+
+export type TtsPlaybackCompletedSegment = {
+  ordinal: number;
+  sourceSegmentIndex: number;
+  segmentKey: string | null;
+  segmentId: string;
+  audioKey: string;
+  durationMs: number;
+  alignmentJson: string | null;
+  updatedAt: number | null;
+};
+
 export type PdfLayoutResolution = {
   artifact: { objectKey: string } | null;
   operation: ComputeOperation<PdfLayoutResult> | null;

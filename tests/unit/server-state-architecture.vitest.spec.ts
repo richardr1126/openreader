@@ -124,16 +124,11 @@ describe('server-state architecture', () => {
     expect(source('src/contexts/OnboardingFlowContext.tsx')).toContain('useClaimData(');
   });
 
-  test('uses centralized query keys for manifests, rate limits, and admin state', () => {
+  test('keeps legacy TTS manifest queries removed while centralizing other server state', () => {
     const sidebar = source('src/components/reader/SegmentsSidebar.tsx');
-    const manifestRoute = source('src/app/api/tts/segments/manifest/route.ts');
-    expect(sidebar).toContain('queryKeys.ttsManifest');
-    expect(sidebar).toContain("params.set('readerType', 'epub')");
-    expect(sidebar).toContain("params.set('spineIndex', String(currentEpubSpine.index))");
-    expect(sidebar).toContain("params.set('spineHref', currentEpubSpine.href)");
-    expect(manifestRoute).toContain("request.nextUrl.searchParams.get('readerType')");
-    expect(manifestRoute).toContain("eq(ttsSegmentEntries.locatorReaderType, 'epub')");
-    expect(manifestRoute).toContain('eq(ttsSegmentEntries.locatorSpineIndex, spineIndex)');
+    expect(sidebar).not.toContain('queryKeys.ttsManifest');
+    expect(sidebar).not.toContain('/api/tts/segments/manifest');
+    expect(sidebar).toContain("playbackPlanSource !== 'worker'");
     expect(source('src/contexts/AuthRateLimitContext.tsx')).toContain('queryKeys.rateLimit');
     expect(source('src/components/admin/AdminProvidersPanel.tsx')).toContain('queryKeys.admin(sessionId');
   });
@@ -212,13 +207,12 @@ describe('server-state architecture', () => {
     expect(workerRoutes.indexOf('const seg = await readCompletedPlaybackSegment(session, ordinal)')).toBeLessThan(
       workerRoutes.indexOf('if (ordinal < session.generationStartOrdinal)'),
     );
-    expect(streamSessionRoute).toContain('const startOrdinal = 0');
     expect(streamSessionRoute).not.toContain('parsed.startOrdinal');
     expect(streamSessionRoute).not.toContain('generationCursorOrdinal');
     expect(streamSessionRoute).not.toContain('startOrdinal: 0,');
-    expect(streamSessionRoute).toContain('generationStartOrdinal: 0');
-    expect(streamSessionRoute).toContain('cursorOrdinal: 0');
-    expect(streamSessionRoute).toContain('startOrdinal,');
+    expect(streamSessionRoute).not.toContain('generationStartOrdinal: 0');
+    expect(streamSessionRoute).not.toContain('cursorOrdinal: 0');
+    expect(streamSessionRoute).toContain('expiresAt,');
     expect(workerSchemas).not.toContain('startOrdinal: z.number().int().nonnegative().default(0)');
     expect(workerContracts).not.toContain('startOrdinal: number;\n  planObjectKey?: string;');
     expect(workerContracts).not.toContain('startOrdinal: number;\n  planning: TtsPlaybackJobRequest');
@@ -331,8 +325,8 @@ describe('server-state architecture', () => {
     expect(streamSessions).not.toContain('Math.max(session.startOrdinal');
     expect(streamSessions).not.toContain('readStreamPlanSegments(session)');
     expect(streamSessions).not.toContain('locatorIdentityKey(plan.locator)');
-    expect(streamSessions).toContain('ordinal: Math.max(0, Math.floor(Number(row.ordinal)))');
-    expect(streamSessions).toContain('sourceSegmentIndex: Math.max(0, Math.floor(Number(row.ordinal)))');
+    expect(streamSessions).toContain('getComputeWorkerClient().listTtsPlaybackSegments');
+    expect(streamSessions).toContain('return result.segments.map((segment) => ({');
     expect(context).not.toContain('plannedSegmentsByLocationRef');
     expect(context).not.toContain('pendingNextLocationRef');
     expect(existsSync(path.join(root, 'src/lib/client/cache/audio.ts'))).toBe(false);

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { resolveTtsPlaybackSession } from '@/lib/server/tts/playback-sessions';
+import {
+  listCompletedTtsPlaybackSegments,
+  resolveTtsPlaybackSession,
+} from '@/lib/server/tts/playback-sessions';
 import {
   buildPlaybackGrid,
-  listCompletedDurationsForPlan,
   readTtsPlaybackPlanArtifact,
   resolveTtsPlaybackPlanOperation,
 } from '@/lib/server/tts/playback-plans';
@@ -47,14 +49,9 @@ export async function GET(
     const startOrdinal = session
       ? Math.max(0, Math.floor(session.startOrdinal))
       : 0;
-    const settingsHash = session?.settingsHash || subject.settingsHash || artifact.settingsHash;
     const settingsJson = session?.settingsJson ?? artifact.settingsJson;
-    const completedDurations = await listCompletedDurationsForPlan({
-      storageUserId: scope.storageUserId,
-      documentId: subject.documentId,
-      documentVersion: artifact.documentVersion || scope.documentVersion,
-      settingsHash,
-    });
+    const completedSegments = session ? await listCompletedTtsPlaybackSegments(session) : [];
+    const completedDurations = new Map(completedSegments.map((segment) => [segment.ordinal, segment.durationMs]));
     const layout = buildPlaybackGrid({
       artifact,
       settingsJson,
