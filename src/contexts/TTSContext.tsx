@@ -495,6 +495,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const {
     playbackActiveRef,
     playbackCursorIntervalRef,
+    playbackCursorOrdinalRef,
     playbackEventsUnsubRef,
     playbackSessionRef,
     projectPlaybackTime,
@@ -654,9 +655,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     const writeCursor = () => {
       const currentSession = playbackSessionRef.current;
       if (!currentSession) return;
-      const currentSegment = playbackSegmentsRef.current[currentIndexRef.current];
-      if (!currentSegment) return;
-      const cursor = Math.max(0, currentSegment.ordinal);
+      // Source the cursor strictly from the playhead projection — the same value
+      // that drives the highlight — not from `currentIndexRef`, which various
+      // `setPlaybackIndex(0)` resets transiently pollute. `null` => no faithful
+      // playhead yet; skip rather than report a spurious 0.
+      const cursorOrdinal = playbackCursorOrdinalRef.current;
+      if (cursorOrdinal == null) return;
+      const cursor = Math.max(0, cursorOrdinal);
       void postTtsPlaybackCursor(currentSession.sessionId, cursor, headers);
     };
     writeCursor();
@@ -666,6 +671,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }, TTS_PLAYBACK_CURSOR_HEARTBEAT_MS);
   }, [
     playbackCursorIntervalRef,
+    playbackCursorOrdinalRef,
     playbackEventsUnsubRef,
     playbackSessionRef,
     refreshPlaybackTimeline,
@@ -1697,6 +1703,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         if (planIndex >= 0 && currentIndexRef.current !== planIndex) {
           setPlaybackIndex(planIndex);
         }
+        // Seed the cursor with the resolved start so the immediate heartbeat
+        // (in startPlaybackForegroundSync, before the first projection tick)
+        // reports the real start position rather than nothing.
+        playbackCursorOrdinalRef.current = startOrdinal;
         const slot = initialSeekLayout.segments.find((segment) => segment.ordinal === startOrdinal);
         if (!slot) {
           throw new Error(`TTS playback start ordinal ${startOrdinal} is not present in the seek layout`);
@@ -1831,6 +1841,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     refreshPlaybackTimeline,
     isAbortLikeError,
     playbackActiveRef,
+    playbackCursorOrdinalRef,
     playbackSessionRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,

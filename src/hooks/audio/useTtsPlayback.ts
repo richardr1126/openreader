@@ -65,6 +65,12 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     alignment: TTSSentenceAlignment | null | undefined;
     locatorKey: string;
   } | null>(null);
+  // The single playback cursor: the plan ordinal under the playhead. Written
+  // ONLY by the playhead projection (and seeded once at start/seek), so the
+  // heartbeat reports exactly the highlighted segment and never a transient
+  // `setPlaybackIndex(0)` reset bleeding through `currentIndexRef`. `null`
+  // means "no faithful position yet" — don't post.
+  const playbackCursorOrdinalRef = useRef<number | null>(null);
 
   const stopPlaybackTimelinePolling = useCallback(() => {
     if (playbackCursorIntervalRef.current) {
@@ -102,6 +108,10 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     const targetOrdinal = projection.segment.ordinal;
     const nextIndex = ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1;
     if (nextIndex < 0) return;
+    // The playhead's ordinal IS the cursor. Set it before the dedupe early-return
+    // below so the heartbeat always sees the live playhead, even on a tick where
+    // the highlight didn't change.
+    playbackCursorOrdinalRef.current = targetOrdinal;
     const locator = projection.segment.locator;
     const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
     const locatorKey = locatorProjectionKey(locator);
@@ -168,11 +178,13 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackTimelineRef.current = null;
     ordinalIndexCacheRef.current = null;
     lastProjectionRef.current = null;
+    playbackCursorOrdinalRef.current = null;
   }, [stopPlaybackTimelinePolling]);
 
   return {
     playbackActiveRef,
     playbackCursorIntervalRef,
+    playbackCursorOrdinalRef,
     playbackEventsUnsubRef,
     playbackSessionRef,
     projectPlaybackTime,
