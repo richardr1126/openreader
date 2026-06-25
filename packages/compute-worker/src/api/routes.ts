@@ -297,7 +297,6 @@ export function registerComputeWorkerRoutes(input: {
       aheadWindow: requestBody.aheadWindow ?? null,
       backgroundExtent: requestBody.backgroundExtent ?? null,
       planning: requestBody.planning,
-      startOrdinal: 0,
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
       cursorUpdatedAt: now,

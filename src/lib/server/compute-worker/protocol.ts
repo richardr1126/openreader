@@ -62,7 +62,6 @@ export type TtsPlaybackSessionState = {
   workerOpId?: string | null;
   settingsHash: string;
   settingsJson: unknown;
-  startOrdinal: number;
   generationStartOrdinal: number;
   cursorOrdinal: number;
   cursorUpdatedAt: number | null;

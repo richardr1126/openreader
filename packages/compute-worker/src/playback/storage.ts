@@ -26,7 +26,6 @@ export interface TtsPlaybackSessionState {
   aheadWindow?: number | null;
   backgroundExtent?: 'section' | 'document' | null;
   planning?: unknown;
-  startOrdinal: number;
   generationStartOrdinal: number;
   cursorOrdinal: number;
   cursorUpdatedAt: number | null;

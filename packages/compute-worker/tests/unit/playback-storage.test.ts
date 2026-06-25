@@ -87,7 +87,6 @@ describe('TTS playback storage', () => {
       status: 'queued',
       settingsHash: 'settings-hash',
       settingsJson: { voice: 'v' },
-      startOrdinal: 0,
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
       cursorUpdatedAt: null,
