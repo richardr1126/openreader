@@ -36,6 +36,7 @@ import { computePlaybackPlanSignature } from '../jobs/handlers';
 import { requireEnv } from '../infrastructure/config';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import type { TtsPlaybackStorage, TtsPlaybackSessionState } from '../playback/storage';
+import { generationFloorForCursor } from '../playback/generation-window';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -763,6 +764,25 @@ export function registerComputeWorkerRoutes(input: {
       let wroteFirstByte = false;
       let silenceUnit: Buffer | null = null;
 
+      // The ordinal at the requested byte window's start IS the playhead this
+      // request will play from. The browser controls it directly, so it is
+      // race-proof: unlike `session.cursorOrdinal` (which the client's seek POST
+      // may not have landed yet), it always reflects the user's seek target.
+      //
+      // For any seek (start ordinal > 0) we drive the cursor here so generation
+      // re-centers on the target — a forward seek jumps generation ahead, a
+      // backward seek (even below the original start) jumps it behind — without
+      // depending on the client POST winning the race against this request. We
+      // deliberately do NOT do this for the `bytes=0-` probe (start ordinal 0):
+      // that request must NOT pull generation back to 0 on a deep start, and it
+      // relies on scaffolding silence to complete instantly.
+      const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].segmentIndex : 0;
+      if (rangeStartOrdinal > 0) {
+        await updatePlaybackCursor(sessionId, rangeStartOrdinal).catch((error) => {
+          app.log.warn({ sessionId, ordinal: rangeStartOrdinal, error: toErrorMessage(error) }, 'tts.playback.cursor_seed_failed');
+        });
+      }
+
       const streamSilence = async function* (byteCount: number): AsyncGenerator<Buffer> {
         let written = 0;
         while (written < byteCount && !closed) {
@@ -822,9 +842,21 @@ export function registerComputeWorkerRoutes(input: {
             });
             break;
           }
-          if (ordinal < session.generationStartOrdinal) {
-            // Never-generated prefix [0, generationStartOrdinal): emit the slot's
-            // whole-frame silence so it decodes to exactly its grid duration.
+          // Scaffolding silence for the never-generated prefix below the current
+          // generation floor. The floor is shared with the worker's generation
+          // lower bound via generationFloorForCursor (so the two can never drift
+          // → no `bytes=0-` probe hang). A seek request (rangeStartOrdinal > 0)
+          // pins the floor to its own start — race-proof, since it never serves
+          // ordinals below that anyway — so a backward seek waits for real audio
+          // at the target instead of being silenced by a stale higher cursor. The
+          // `bytes=0-` probe (rangeStartOrdinal === 0) uses the live cursor so a
+          // deep start still emits silence for [0, cursor) and completes at once.
+          const silenceFloor = generationFloorForCursor(
+            rangeStartOrdinal > 0 ? rangeStartOrdinal : session.cursorOrdinal,
+          );
+          if (ordinal < silenceFloor) {
+            // Emit the slot's whole-frame silence so it decodes to exactly its
+            // grid duration.
             const room = need - sent;
             const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
             if (silenceBytes > 0) {
@@ -849,6 +881,15 @@ export function registerComputeWorkerRoutes(input: {
           // frontier issues a new range request and updates the cursor, so generation
           // jumps there; we wait (brief buffering) rather than silencing the rest of
           // the response, which the browser would never re-request.
+          //
+          // Re-anchor generation to the ordinal we're blocked on: this drives the
+          // cursor here and (re)enqueues a continuation. After a forward seek the
+          // prior run abandons the skipped gap (its onBeforeSegment floor check),
+          // and this re-anchor starts a fresh run AT the target the moment that run
+          // frees — so re-centering is prompt instead of waiting for the heartbeat.
+          await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
+            app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_reanchor_failed');
+          });
           markActivity('tts_playback_audio_wait');
           await sleep(400);
         }

@@ -205,9 +205,18 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain('parseRangeHeader');
     expect(workerRoutes).toContain('verifyTtsPlaybackToken');
     expect(workerRoutes).toContain('updatePlaybackCursor');
-    expect(workerRoutes).not.toContain('ordinal < session.cursorOrdinal');
-    expect(workerRoutes.indexOf('const seg = await readCompletedPlaybackSegment(session, ordinal)')).toBeLessThan(
-      workerRoutes.indexOf('if (ordinal < session.generationStartOrdinal)'),
+    // The scaffolding-silence floor follows the cursor via the shared helper (so
+    // it cannot drift from the worker's generation floor → no bytes=0- hang), and
+    // a seek request pins the floor to its own race-proof start ordinal. The
+    // completed-audio check must still precede the silence branch so existing
+    // audio below the floor is served, never silenced.
+    expect(workerRoutes).toContain('generationFloorForCursor');
+    expect(workerRoutes).toContain('const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].segmentIndex : 0');
+    expect(workerRoutes).toContain('rangeStartOrdinal > 0 ? rangeStartOrdinal : session.cursorOrdinal');
+    expect(workerRoutes).toContain('if (ordinal < silenceFloor)');
+    expect(workerRoutes).not.toContain('if (ordinal < session.generationStartOrdinal)');
+    expect(workerRoutes.indexOf("if (segmentState.status === 'completed')")).toBeLessThan(
+      workerRoutes.indexOf('if (ordinal < silenceFloor)'),
     );
     expect(streamSessionRoute).not.toContain('parsed.startOrdinal');
     expect(streamSessionRoute).not.toContain('generationCursorOrdinal');
@@ -223,6 +232,21 @@ describe('server-state architecture', () => {
     expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planning:');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('const isContinuationRun = Boolean(parsed.generationRunId)');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal');
+    // Generation centers on the cursor via the same shared floor helper as the
+    // stream's silence boundary: a fresh run uses the resolved start, a
+    // continuation follows the (possibly seeked-backward) cursor — no clamp to
+    // the original start.
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain(
+      'generationFloorForCursor(\n          isContinuationRun ? sessionCursorOrdinal : startOrdinal,\n        )',
+    );
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('segment.segmentIndex >= generationFloor');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('segment.segmentIndex >= startOrdinal');
+    // A run abandons ordinals that fell below the live floor (forward seek) so a
+    // continuation re-anchors at the cursor instead of grinding through the gap.
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
+    // The stream re-anchors generation to the ordinal it is blocked on so the
+    // continuation starts promptly after a seek (not at the next heartbeat).
+    expect(workerRoutes).toContain("await updatePlaybackCursor(sessionId, ordinal).catch((error) => {\n            app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_reanchor_failed');");
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('status: \'running\',\n          planObjectKey,\n          generationStartOrdinal');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('status: \'running\',\n        lastError: null');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('planObjectKey,\n          startOrdinal,\n          generationStartOrdinal');
@@ -252,10 +276,15 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('backgroundExtent');
     expect(context).toContain('subscribeTtsPlaybackEvents');
     expect(context).toContain('postTtsPlaybackCursor');
-    expect(context).toContain('const currentSegment = playbackSegmentsRef.current[currentIndexRef.current]');
-    expect(context).toContain('if (!currentSegment) return');
-    expect(context).toContain('Math.max(0, currentSegment.ordinal)');
-    expect(context).not.toContain('currentSegment?.ordinal ?? currentIndexRef.current');
+    // The heartbeat cursor is the playhead's projected ordinal (the same value
+    // that drives the highlight), held in playbackCursorOrdinalRef. It must NOT
+    // be re-derived from currentIndexRef, which various setPlaybackIndex(0)
+    // resets transiently pollute. `null` => no faithful playhead yet → skip.
+    expect(context).toContain('const cursorOrdinal = playbackCursorOrdinalRef.current');
+    expect(context).toContain('if (cursorOrdinal == null) return');
+    expect(context).toContain('const cursor = Math.max(0, cursorOrdinal)');
+    expect(context).not.toContain('const currentSegment = playbackSegmentsRef.current[currentIndexRef.current]');
+    expect(playbackHook).toContain('playbackCursorOrdinalRef.current = targetOrdinal');
     expect(context).toContain('const pdfLocatorPage = (locator: TTSSegmentLocator | null | undefined): number | null =>');
     expect(context).toContain('return isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;');
     expect(context).toContain('const pdfAnchorPage = (location: TTSLocation | undefined): number | null =>');

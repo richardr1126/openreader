@@ -65,6 +65,8 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     alignment: TTSSentenceAlignment | null | undefined;
     locatorKey: string;
   } | null>(null);
+  // Throttle for the stale-grid self-heal refresh (see projectPlaybackTime).
+  const lastTimelineHealAtRef = useRef(0);
   // The single playback cursor: the plan ordinal under the playhead. Written
   // ONLY by the playhead projection (and seeded once at start/seek), so the
   // heartbeat reports exactly the highlighted segment and never a transient
@@ -87,11 +89,42 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     }
   }, []);
 
+  const refreshPlaybackTimeline = useCallback(async (timelineUrl: string, signal?: AbortSignal) => {
+    const response = await fetch(timelineUrl, {
+      cache: 'no-store',
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
+    }
+    const timeline = normalizePlaybackGrid(await response.json());
+    playbackTimelineRef.current = timeline;
+    return timeline;
+  }, []);
+
   const projectPlaybackTime = useCallback((currentTimeSec: number) => {
     const timeline = playbackTimelineRef.current;
     if (!timeline) return;
     const projection = projectPlaybackGridAtTime(timeline, currentTimeSec, { wordLeadSec: WORD_HIGHLIGHT_LEAD_SEC });
     if (!projection.segment) return;
+
+    // Self-heal a stale grid. The grid carries real durations + word alignment
+    // only for GENERATED slots; ungenerated slots are estimates with null
+    // alignment (so the word highlight vanishes) and estimate-based timing (so
+    // the sentence/scrubber drift). After a forward seek the playhead lands on
+    // such estimated slots until the grid is refreshed with the now-generated
+    // region. The SSE refresh doesn't always cover a post-seek continuation, so
+    // when we're actively playing over an ungenerated slot, pull a fresh grid
+    // (throttled). As the seeked region finishes generating, the refreshed grid
+    // turns those slots exact and the highlight returns — no pause/play needed.
+    if (projection.segment.generated === false) {
+      const session = playbackSessionRef.current;
+      const now = Date.now();
+      if (session?.timelineUrl && now - lastTimelineHealAtRef.current > 1_000) {
+        lastTimelineHealAtRef.current = now;
+        void refreshPlaybackTimeline(session.timelineUrl).catch(() => undefined);
+      }
+    }
 
     const segments = playbackSegmentsRef.current;
     let ordinalIndexCache = ordinalIndexCacheRef.current;
@@ -151,25 +184,13 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   }, [
     currentIndexRef,
     playbackSegmentsRef,
+    refreshPlaybackTimeline,
     setCurrDocPage,
     syncPlaybackLocator,
     setPlaybackIndex,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
   ]);
-
-  const refreshPlaybackTimeline = useCallback(async (timelineUrl: string, signal?: AbortSignal) => {
-    const response = await fetch(timelineUrl, {
-      cache: 'no-store',
-      signal,
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
-    }
-    const timeline = normalizePlaybackGrid(await response.json());
-    playbackTimelineRef.current = timeline;
-    return timeline;
-  }, []);
 
   const resetPlaybackRefs = useCallback(() => {
     stopPlaybackTimelinePolling();

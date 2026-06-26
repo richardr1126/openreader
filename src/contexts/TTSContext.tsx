@@ -462,6 +462,24 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, []);
   const audioUnlockAttemptRef = useRef(0);
   const playbackProjectionRafRef = useRef<number | null>(null);
+  // A seek landed on a not-yet-generated ordinal: we pause there and poll until
+  // the worker generates it, then re-seek accurately and (if still intended)
+  // resume. Holds the target ordinal; the timer drives the poll.
+  const pendingResyncRef = useRef<{ ordinal: number } | null>(null);
+  const resyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopSeekResync = useCallback(() => {
+    if (resyncTimerRef.current) {
+      clearTimeout(resyncTimerRef.current);
+      resyncTimerRef.current = null;
+    }
+  }, []);
+
+  const cancelSeekResync = useCallback(() => {
+    stopSeekResync();
+    pendingResyncRef.current = null;
+  }, [stopSeekResync]);
+
   const playbackRequestHeadersRef = useRef<TTSRequestHeaders | null>(null);
   const playbackPlanRef = useRef<ReturnType<typeof normalizePlaybackPlan> | null>(null);
   const playbackSyncNavigationRef = useRef(false);
@@ -729,6 +747,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const abortAudio = useCallback((clearPending = false) => {
     // Ensure next playback attempt is not blocked by a stale in-flight guard.
     invalidatePlaybackRun();
+    cancelSeekResync();
     stopPlaybackProjectionLoop();
     resetPlaybackRefs();
     playbackSyncNavigationRef.current = false;
@@ -750,7 +769,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       pageTurnTimeoutRef.current = null;
     }
     setCurrentWordIndex(null);
-  }, [invalidatePlaybackRun, publishPlaybackTimeSec, resetPlaybackRefs, stopPlaybackProjectionLoop]);
+  }, [cancelSeekResync, invalidatePlaybackRun, publishPlaybackTimeSec, resetPlaybackRefs, stopPlaybackProjectionLoop]);
 
   /**
    * Pauses the current audio playback while preserving seek position.
@@ -793,9 +812,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const pause = useCallback(() => {
     recordManualPause();
     clearPendingEpubJump();
+    cancelSeekResync();
     pauseActivePlayback();
     setIsPlaying(false);
-  }, [pauseActivePlayback, recordManualPause, clearPendingEpubJump]);
+  }, [cancelSeekResync, pauseActivePlayback, recordManualPause, clearPendingEpubJump]);
 
   /**
    * Navigates to a specific location in the document
@@ -1134,12 +1154,105 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   /**
    * Toggles the playback state between playing and paused
    */
+  // Drive the wait-for-generation resync. Seeking onto a not-yet-generated
+  // ordinal can't play accurately: the audio clock would anchor to an ESTIMATED
+  // byte position that drifts as real audio (with real durations) streams in, so
+  // the highlight and scrubber desync until something re-anchors them. Instead we
+  // pause at the target, keep generation aimed here, and poll the seek layout.
+  // Once the worker has generated this ordinal, the layout exposes its real
+  // startMs; we refresh the grid, seek there (now byte-accurate), and resume if
+  // the user still intends to play. This keeps sync exact through the seek.
+  const startSeekResync = useCallback((ordinal: number) => {
+    pendingResyncRef.current = { ordinal };
+    const runId = playbackRunIdRef.current;
+    const deadline = Date.now() + 60_000;
+    const tick = async () => {
+      const pending = pendingResyncRef.current;
+      const session = playbackSessionRef.current;
+      if (!pending || pending.ordinal !== ordinal || runId !== playbackRunIdRef.current || !session?.seekLayoutUrl) {
+        return;
+      }
+      if (Date.now() > deadline) {
+        pendingResyncRef.current = null;
+        setIsProcessing(false);
+        return;
+      }
+      // Keep the worker generating toward this ordinal while we wait.
+      const headers = playbackRequestHeadersRef.current;
+      if (headers) void postTtsPlaybackCursor(session.sessionId, ordinal, headers);
+
+      const layout = await getTtsPlaybackSeekLayout(session.seekLayoutUrl).catch(() => null);
+      if (runId !== playbackRunIdRef.current || pendingResyncRef.current?.ordinal !== ordinal) return;
+      const slot = layout?.segments.find((segment) => segment.ordinal === ordinal) ?? null;
+
+      if (slot?.generated) {
+        // Real audio + real durations exist now → commit the fresh layout (only
+        // here, to avoid scrubber thrash from per-tick duration changes), refresh
+        // the grid, re-seek accurately, and resume.
+        if (layout) setPlaybackSeekLayout(layout);
+        await refreshPlaybackTimeline(session.timelineUrl).catch(() => undefined);
+        if (runId !== playbackRunIdRef.current || pendingResyncRef.current?.ordinal !== ordinal) return;
+        const targetSec = Math.max(0, slot.startMs / 1000);
+        const idx = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === ordinal);
+        if (idx >= 0 && currentIndexRef.current !== idx) setPlaybackIndex(idx);
+        const audio = unlockedAudioRef.current;
+        if (audio && playbackActiveRef.current && audio.src) {
+          try {
+            audio.currentTime = targetSec;
+          } catch {
+            // Best-effort; projection below still updates the UI.
+          }
+          if (isPlayingRef.current) {
+            audio.playbackRate = audioSpeed;
+            void audio.play().catch(() => undefined);
+          }
+        }
+        publishPlaybackTimeSec(targetSec, { force: true });
+        projectPlaybackTime(targetSec);
+        pendingResyncRef.current = null;
+        setIsProcessing(false);
+        return;
+      }
+
+      resyncTimerRef.current = setTimeout(() => { void tick(); }, 600);
+    };
+    stopSeekResync();
+    void tick();
+  }, [
+    audioSpeed,
+    currentIndexRef,
+    playbackActiveRef,
+    playbackSegmentsRef,
+    playbackSessionRef,
+    projectPlaybackTime,
+    publishPlaybackTimeSec,
+    refreshPlaybackTimeline,
+    setPlaybackIndex,
+    stopSeekResync,
+  ]);
+
   const togglePlay = useCallback(() => {
     if (isPlaying) {
       recordManualPause();
       clearPendingEpubJump();
+      cancelSeekResync();
+      setIsProcessing(false);
       pauseActivePlayback();
       setIsPlaying(false);
+      return;
+    }
+
+    // Resuming while a seek is still waiting for its target to generate: don't
+    // play into the estimated region. Mark intent and let the resync poll start
+    // playback once the accurate position exists.
+    if (pendingResyncRef.current) {
+      unlockPlaybackOnUserGesture();
+      setIsProcessing(true);
+      // Set the intent ref eagerly: the resync's first tick reads isPlayingRef
+      // synchronously, before the isPlaying state effect would update it.
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      startSeekResync(pendingResyncRef.current.ordinal);
       return;
     }
 
@@ -1171,6 +1284,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsPlaying(true);
   }, [
     audioSpeed,
+    cancelSeekResync,
     isPlaying,
     pauseActivePlayback,
     playbackActiveRef,
@@ -1178,6 +1292,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     recordManualPause,
     clearPendingEpubJump,
     startPlaybackForegroundSync,
+    startSeekResync,
     unlockPlaybackOnUserGesture,
   ]);
 
@@ -1192,7 +1307,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ?? layout.segments[layout.segments.length - 1];
     if (!target) return;
 
-    publishPlaybackTimeSec(targetSec, { force: true });
+    // Move the UI to the target immediately so the sentence highlight + page
+    // reflect where the user landed, even while we wait for audio.
+    const targetStartSec = Math.max(0, target.startMs / 1000);
+    publishPlaybackTimeSec(target.generated ? targetSec : targetStartSec, { force: true });
     const nextIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === target.ordinal);
     if (nextIndex >= 0 && currentIndexRef.current !== nextIndex) {
       setPlaybackIndex(nextIndex);
@@ -1201,27 +1319,67 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       syncPlaybackLocator(target.locator as TTSSegmentLocator);
     }
 
-    const audio = unlockedAudioRef.current;
-    if (audio && playbackActiveRef.current && audio.src) {
-      try {
-        audio.currentTime = targetSec;
-      } catch {
-        // Best-effort; the projection still updates immediately below.
-      }
-    }
-    projectPlaybackTime(targetSec);
+    // Always tell the worker to re-center generation on the seek target.
     const session = playbackSessionRef.current;
     const headers = playbackRequestHeadersRef.current;
     if (session && headers) {
       void postTtsPlaybackCursor(session.sessionId, target.ordinal, headers);
     }
+
+    const audio = unlockedAudioRef.current;
+
+    if (target.generated) {
+      // The target's real audio already exists, so the seek is byte-accurate and
+      // there is no estimate drift — seek straight there and keep playing.
+      cancelSeekResync();
+      setIsProcessing(false);
+      if (audio && playbackActiveRef.current && audio.src) {
+        try {
+          audio.currentTime = targetSec;
+        } catch {
+          // Best-effort; the projection still updates immediately below.
+        }
+        if (isPlayingRef.current) {
+          audio.playbackRate = audioSpeed;
+          void audio.play().catch(() => undefined);
+        }
+      }
+      projectPlaybackTime(targetSec);
+      return;
+    }
+
+    // Target is not generated yet. Pause here rather than playing into the
+    // estimated (drifting) region; the resync poll re-seeks accurately and
+    // resumes once the worker generates this ordinal. Pause first, then park the
+    // element at the target so audio and UI agree (and a precise re-seek follows
+    // once the real audio exists).
+    if (isPlayingRef.current && audio) {
+      try {
+        audio.pause();
+      } catch {
+        // ignore
+      }
+      setIsProcessing(true);
+    }
+    if (audio && playbackActiveRef.current && audio.src) {
+      try {
+        audio.currentTime = targetStartSec;
+      } catch {
+        // Best-effort; the resync re-seeks accurately when the audio is ready.
+      }
+    }
+    projectPlaybackTime(targetStartSec);
+    startSeekResync(target.ordinal);
   }, [
+    audioSpeed,
+    cancelSeekResync,
     playbackActiveRef,
     playbackSeekLayout,
     playbackSessionRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,
     setPlaybackIndex,
+    startSeekResync,
     syncPlaybackLocator,
   ]);
 
