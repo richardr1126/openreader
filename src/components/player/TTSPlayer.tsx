@@ -37,8 +37,6 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
     setVoiceAndRestart,
     availableVoices,
     skipToLocation,
-    currentSentence,
-    playbackSegments,
     playbackTimeSec,
     playbackDurationSec,
     playbackSeekLayout,
@@ -46,16 +44,6 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
   } = useTTS();
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
-  const previewSegment = useMemo(() => {
-    if (!playbackSeekLayout) return null;
-    const ms = shownSec * 1000;
-    return playbackSeekLayout.segments.find((segment) => ms >= segment.startMs && ms < segment.endMs)
-      ?? playbackSeekLayout.segments.at(-1)
-      ?? null;
-  }, [playbackSeekLayout, shownSec]);
-  const previewText = previewSegment
-    ? (playbackSegments.find((segment) => segment.ordinal === previewSegment.ordinal)?.text || currentSentence)
-    : currentSentence;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
   const scrubberTrackBackground = useMemo(() => {
     if (!playbackSeekLayout || playbackSeekLayout.durationMs <= 0 || playbackSeekLayout.segments.length === 0) {
@@ -75,70 +63,76 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
   }, [playbackSeekLayout]);
 
   return (
-    <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
-      {/* Single centered column; its width is driven by the controls row so the
-          scrubber and status text line up to exactly that width. */}
-      <div className="mx-auto flex w-fit flex-col items-stretch gap-1 px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
-        {/* Now-playing / seek-preview text */}
-        <div className="w-0 min-w-full truncate text-center text-[11px] text-soft">
-          {previewSegment
-            ? `${previewSegment.estimated ? 'Estimated' : 'Ready'} · ${previewText || `Segment ${previewSegment.ordinal + 1}`}`
-            : (currentSentence || 'Playback position')}
-        </div>
-
-        {/* Scrubber — full width of the column (== controls row width) */}
-        <div className="flex w-full items-center gap-2 text-[11px] text-soft">
-          <span className="w-10 tabular-nums text-right">{formatTime(shownSec)}</span>
-          <div className="relative h-4 min-w-0 flex-1">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full border border-line-soft"
-              style={{ background: scrubberTrackBackground }}
-            />
-            <input
-              aria-label="Playback position"
-              type="range"
-              min={0}
-              max={Math.max(0, Math.round(playbackDurationSec))}
-              step={0.25}
-              value={Math.min(Math.max(0, shownSec), Math.max(0, playbackDurationSec))}
-              disabled={!canSeek}
-              onChange={(event) => setPreviewSec(Number(event.currentTarget.value))}
-              onPointerUp={(event) => {
-                const target = Number((event.currentTarget as HTMLInputElement).value);
-                setPreviewSec(null);
-                seekPlaybackTo(target);
-              }}
-              onKeyUp={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return;
-                const target = Number((event.currentTarget as HTMLInputElement).value);
-                setPreviewSec(null);
-                seekPlaybackTo(target);
-              }}
-              className="absolute inset-0 h-4 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-1 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent [&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-1 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent"
-            />
+    <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface/95 backdrop-blur-sm" data-app-ttsbar>
+      {/* Top Edge Scrubber bar */}
+      <div className="group/scrubber absolute -top-[5px] left-0 right-0 h-2.5 z-40">
+        {/* Track Base Rail (Empty Track) */}
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-line-soft transition-all duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] rounded-full" />
+        
+        {/* Generated Segments Track */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 transition-all duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] rounded-full"
+          style={{ background: scrubberTrackBackground }}
+        />
+        {/* Hidden active range slider overlay */}
+        <input
+          aria-label="Playback position"
+          type="range"
+          min={0}
+          max={Math.max(0, Math.round(playbackDurationSec))}
+          step={0.25}
+          value={Math.min(Math.max(0, shownSec), Math.max(0, playbackDurationSec))}
+          disabled={!canSeek}
+          onChange={(event) => setPreviewSec(Number(event.currentTarget.value))}
+          onPointerUp={(event) => {
+            const target = Number((event.currentTarget as HTMLInputElement).value);
+            setPreviewSec(null);
+            seekPlaybackTo(target);
+          }}
+          onKeyUp={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const target = Number((event.currentTarget as HTMLInputElement).value);
+            setPreviewSec(null);
+            seekPlaybackTo(target);
+          }}
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40
+            [&::-webkit-slider-runnable-track]:h-[2px] [&::-webkit-slider-runnable-track]:bg-transparent
+            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-[3px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:transition-all [&::-webkit-slider-thumb]:duration-fast
+            [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--background)_70%,transparent),0_1px_6px_color-mix(in_srgb,var(--accent)_55%,transparent)]
+            group-hover/scrubber:[&::-webkit-slider-thumb]:scale-y-125 group-active/scrubber:[&::-webkit-slider-thumb]:scale-y-150
+            
+            [&::-moz-range-track]:h-[2px] [&::-moz-range-track]:bg-transparent
+            [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-[3px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:transition-all [&::-moz-range-thumb]:duration-fast
+            [&::-moz-range-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--background)_70%,transparent),0_1px_6px_color-mix(in_srgb,var(--accent)_55%,transparent)]
+            group-hover/scrubber:[&::-moz-range-thumb]:scale-y-125 group-active/scrubber:[&::-moz-range-thumb]:scale-y-150"
+        />
+        {/* Tooltip Popup */}
+        {previewSec !== null && playbackDurationSec > 0 && (
+          <div
+            className="absolute bottom-full mb-2.5 -translate-x-1/2 rounded bg-surface-solid border border-line-soft px-2 py-0.5 text-[10px] font-semibold text-foreground shadow-elev-2 pointer-events-none whitespace-nowrap"
+            style={{
+              left: `${Math.min(95, Math.max(5, (shownSec / playbackDurationSec) * 100))}%`
+            }}
+          >
+            {formatTime(shownSec)}
           </div>
-          <span className="w-10 tabular-nums">{formatTime(playbackDurationSec)}</span>
-        </div>
+        )}
+      </div>
 
-        {/* Playback controls */}
-        <div className="flex min-h-10 items-center justify-center gap-1">
-          {/* Speed control */}
+      {/* Main Single Row Controls Layout */}
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-3 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
+        {/* Left side: Speed control & Voice control */}
+        <div className="flex items-center gap-1 flex-1 min-w-0 justify-start">
           <SpeedControl
             setSpeedAndRestart={setSpeedAndRestart}
             setAudioPlayerSpeedAndRestart={setAudioPlayerSpeedAndRestart}
           />
+          <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />
+        </div>
 
-          {/* Page Navigation */}
-          {currentPage && numPages && (
-            <Navigator
-              currentPage={currentPage}
-              numPages={numPages}
-              skipToLocation={skipToLocation}
-            />
-          )}
-
-          {/* Playback Controls */}
+        {/* Center: Primary playback controls */}
+        <div className="flex items-center gap-1.5">
           <IconButton
             onClick={skipBackward}
             aria-label="Skip backward"
@@ -167,9 +161,20 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           >
             {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}
           </IconButton>
+        </div>
 
-          {/* Voice control */}
-          <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />
+        {/* Right side: Page Navigator & Timer display */}
+        <div className="flex items-center gap-3 flex-1 justify-end">
+          {currentPage && numPages && (
+            <Navigator
+              currentPage={currentPage}
+              numPages={numPages}
+              skipToLocation={skipToLocation}
+            />
+          )}
+          <div className="text-[11px] text-soft font-mono tabular-nums select-none whitespace-nowrap">
+            {formatTime(shownSec)} / {formatTime(playbackDurationSec)}
+          </div>
         </div>
       </div>
     </div>
