@@ -57,6 +57,7 @@ export function buildTtsPlaybackPlanOperationKey(input: {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   planSignature: string;
+  selectedOrdinal?: number;
   startSegmentKey?: string;
   startText?: string;
   startPage?: number;
@@ -71,6 +72,7 @@ export function buildTtsPlaybackPlanOperationKey(input: {
     input.readerType,
     input.settingsHash,
     input.planSignature,
+    input.selectedOrdinal === undefined ? '' : String(input.selectedOrdinal),
     input.startSegmentKey?.trim() || '',
     input.startText?.trim() || '',
     input.startPage === undefined ? '' : String(input.startPage),

@@ -38,6 +38,7 @@ import {
   getTtsPlaybackSeekLayout,
   postTtsPlaybackCursor,
   subscribeTtsPlaybackEvents,
+  type TtsPlaybackPlanPayload,
   type TtsPlaybackSeekLayout,
   type TtsPlaybackSessionPayload,
 } from '@/lib/client/api/tts';
@@ -1513,14 +1514,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [audioSpeed]);
 
   const buildPlaybackSessionRequest = useCallback((): {
-    payload: TtsPlaybackSessionPayload;
+    payload: TtsPlaybackPlanPayload;
     headers: TTSRequestHeaders;
     sentence: string;
     playbackSegment: CanonicalTtsSegment | undefined;
     startLocation: { page?: number; spineIndex?: number; charOffset?: number };
   } | null => {
     const selectedIndex = Math.max(0, Math.floor(currentIndexRef.current));
-    const playbackSegment = playbackSegments[selectedIndex];
+    const currentPlaybackSegments = playbackSegmentsRef.current.length > 0
+      ? playbackSegmentsRef.current
+      : playbackSegments;
+    const playbackSegment = currentPlaybackSegments[selectedIndex];
     const anchor = playbackAnchorRef.current;
     const sentence = activeReaderType === 'epub'
       ? (playbackSegment?.text ?? sentences[selectedIndex] ?? anchor?.text ?? '')
@@ -1559,6 +1563,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       'Content-Type': 'application/json',
       'x-tts-provider': configProviderRef,
     };
+    const selectedOrdinal = Number(playbackSegment?.ordinal);
     return {
       headers,
       sentence,
@@ -1576,6 +1581,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           language: resolvedLanguage,
         },
         startLocation,
+        ...(Number.isFinite(selectedOrdinal)
+          ? { startIntent: { selectedOrdinal: Math.max(0, Math.floor(selectedOrdinal)) } }
+          : {}),
         ...(activeReaderType !== 'epub' && playbackSegment?.key ? { startSegmentKey: playbackSegment.key } : {}),
         ...(activeReaderType !== 'epub' && sentence.trim() ? { startText: sentence.trim() } : {}),
         planning: {
@@ -1764,7 +1772,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setIsProcessing(false);
       return;
     }
-    const { payload, headers, sentence, playbackSegment, startLocation } = request;
 
     setIsProcessing(true);
     resetPlaybackRefs();
@@ -1784,12 +1791,26 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       if (!plan?.planObjectKey) {
         throw new Error('TTS playback plan was not ready in time');
       }
-      const session = await createTtsPlaybackSession({
+      const sessionRequest = buildPlaybackSessionRequest();
+      const selectedOrdinal = sessionRequest?.payload.startIntent?.selectedOrdinal;
+      if (!sessionRequest || !Number.isFinite(Number(selectedOrdinal))) {
+        throw new Error('TTS playback requires a selected worker-plan segment');
+      }
+      const {
+        payload,
+        headers,
+        sentence,
+        playbackSegment,
+        startLocation,
+      } = sessionRequest;
+      const sessionPayload: TtsPlaybackSessionPayload = {
         ...payload,
+        startIntent: { selectedOrdinal: Math.max(0, Math.floor(Number(selectedOrdinal))) },
         ...(plan.planId ? { planId: plan.planId } : {}),
         planObjectKey: plan.planObjectKey,
         ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
-      }, headers);
+      };
+      const session = await createTtsPlaybackSession(sessionPayload, headers);
       if (runId !== playbackRunIdRef.current) return;
 
       playbackSessionRef.current = {

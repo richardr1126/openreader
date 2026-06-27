@@ -62,11 +62,13 @@ export const createTtsPlaybackSession = async (
   return await response.json();
 };
 
-export type TtsPlaybackSessionPayload = {
+export type TtsPlaybackPlanPayload = {
   documentId: string;
   settings: TTSSegmentSettings;
   /** Current reading position; the worker derives reading text from here. */
   startLocation?: { page?: number; spineIndex?: number; charOffset?: number };
+  /** Worker-plan start intent. Required for playback sessions; optional for plan loading. */
+  startIntent?: { selectedOrdinal?: number };
   /** Optional exact segment hint so worker-owned playback starts at the clicked sentence. */
   startSegmentKey?: string;
   startText?: string;
@@ -77,8 +79,13 @@ export type TtsPlaybackSessionPayload = {
   planSignature?: string;
 };
 
+export type TtsPlaybackSessionPayload = TtsPlaybackPlanPayload & {
+  startIntent: { selectedOrdinal: number };
+  planObjectKey: string;
+};
+
 export const createTtsPlaybackPlan = async (
-  payload: TtsPlaybackSessionPayload,
+  payload: TtsPlaybackPlanPayload,
   headers: TTSRequestHeaders,
   signal?: AbortSignal,
 ): Promise<{

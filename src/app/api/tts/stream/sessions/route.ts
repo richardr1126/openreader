@@ -10,7 +10,7 @@ import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import {
   buildTtsPlaybackPlanningInput,
   parseTtsPlaybackRequestBody,
-  validateTtsPlaybackStartLocation,
+  validateTtsPlaybackSessionStartOrdinal,
 } from '@/lib/server/tts/playback-request';
 import { TTS_PLAYBACK_SESSION_TTL_MS } from '@/lib/server/tts/playback-sessions';
 import { getRuntimeConfig } from '@/lib/server/admin/settings';
@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
 
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
-    const startLocationError = validateTtsPlaybackStartLocation(parsed, scope);
-    if (startLocationError) return NextResponse.json({ error: startLocationError }, { status: 400 });
+    const startOrdinalError = validateTtsPlaybackSessionStartOrdinal(parsed);
+    if (startOrdinalError) return NextResponse.json({ error: startOrdinalError }, { status: 400 });
 
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).

@@ -510,6 +510,7 @@ export interface paths {
                         /** @enum {string} */
                         backgroundExtent?: "section" | "document";
                         planning: {
+                            selectedOrdinal?: number;
                             startSegmentKey?: string;
                             startText?: string;
                             maxBlockLength?: number;
@@ -629,6 +630,7 @@ export interface paths {
                         settingsHash: string;
                         settingsJson: unknown;
                         planning: {
+                            selectedOrdinal?: number;
                             startSegmentKey?: string;
                             startText?: string;
                             maxBlockLength?: number;

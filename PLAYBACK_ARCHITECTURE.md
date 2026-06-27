@@ -44,11 +44,11 @@ state, artifact layout, generation, and stream construction.
 That split is still too blurry for EPUB start/resume behavior. The worker is the
 authority for the durable plan and absolute ordinals, but the client still derives
 rendered EPUB windows, tracks a selected segment index, keeps a viewport anchor,
-and sends a start coordinate back to the worker. Those client values can
-temporarily disagree. The current code prefers a selected EPUB segment locator
-over the viewport anchor when starting playback, but the cleaner target is for
-the worker to resolve start intent to an ordinal and return that as the single
-source of truth.
+and has legacy paths that can send coordinates/text back to the worker. Those
+paths are architecture debt. Playback start must not branch across EPUB CFI,
+viewport locator, selected locator, text, and current index. The canonical worker
+plan is always the playback identity source, and starting audio requires one
+absolute worker-plan ordinal.
 
 ---
 
@@ -73,7 +73,10 @@ cursor key.
 
 The playback plan is immutable and stored in S3. It provides the ordered segment
 list, ordinals, text, locators, and segment keys used by generation, streaming,
-timeline, and sidebar readers.
+timeline, highlighting, and sidebar readers. A worker-plan ordinal is the only
+valid playback-start identity. Reader locators/CFIs can help the UI navigate and
+map visible DOM ranges, but they must not be competing playback-start inputs once
+the canonical plan exists.
 
 ### Segment Audio
 
@@ -102,23 +105,24 @@ or another worker is discovered.
 
 ## Worker Flows
 
-### Create/Start Playback Today
+### Create/Start Playback Target
 
-1. The client asks the Next proxy for a playback session.
-2. The client sends reader start hints. For EPUB, this is currently a stable
-   spine coordinate (`spineIndex`, `charOffset`) selected from the current
-   segment locator when available, falling back to the viewport anchor.
-3. The compute worker resolves or stores an immutable plan.
-4. The worker resolves the request's start hints to an absolute
-   `generationStartOrdinal`.
+1. The client ensures the canonical worker plan is loaded.
+2. The client maps the selected/highlighted UI state to exactly one worker-plan
+   ordinal from that plan.
+3. The client asks the Next proxy for a playback session with that ordinal.
+4. The compute worker validates the ordinal against the immutable plan and uses it
+   as `generationStartOrdinal`.
 5. The worker writes the session record and cursor key with plain `put`.
 6. A JetStream operation is queued for generation.
 7. The generation job patches non-cursor session fields such as status and
    generation start with plain `put`.
 
-The client then polls the seek layout until the worker-resolved
-`generationStartOrdinal` appears and aligns both the current segment index and
-the `<audio>` seek target to that ordinal.
+There is no alternate playback-start path through EPUB CFI, viewport locator,
+segment text, segment key, or page-start anchor. If the client cannot map the
+requested start to a worker-plan ordinal, it must not start audio. It must first
+load/fix the plan-backed mapping, then create the playback session from that
+ordinal.
 
 ### Generate Segments
 
@@ -180,14 +184,14 @@ For EPUB specifically, the client also still does too much:
 - It builds a rendered-page window into the EPUB chapter text.
 - It materializes client-side canonical segments for highlighting and navigation.
 - It tracks both a viewport/page-start anchor and a selected segment/index.
-- It can initiate playback from a selected segment locator, but still has
-  fallback paths through the viewport anchor.
+- It can still initiate playback through legacy locator/anchor fallback paths
+  instead of requiring a selected worker-plan ordinal.
 - It keeps worker plan rows, local current index, seek-layout rows, highlight
   state, and page navigation state in separate pieces of React state.
 
-The latest fix makes EPUB start requests prefer the selected segment's stable
-locator over the page-start anchor. That is a correctness patch, not the final
-architecture.
+The latest fix makes EPUB start requests carry a selected worker-plan ordinal
+when available. That is only a transitional patch. The final architecture must
+delete the fallback paths instead of making them slightly less wrong.
 
 ---
 
@@ -205,10 +209,13 @@ architecture.
 - Seeks are whole-document time/byte operations and do not split segments.
 - The browser projects UI state from `audio.currentTime`; highlights do not drive
   audio time.
-- If a selected worker-plan segment exists, EPUB playback start must use that
-  segment locator before falling back to the visible viewport anchor.
-- The worker-resolved `generationStartOrdinal` is the start ordinal for playback;
-  client guesses must be corrected to it before audio starts.
+- Playback start requires a canonical worker-plan ordinal.
+- EPUB CFI, viewport locator, page-start anchor, segment text, and segment key are
+  not playback-start fallbacks.
+- The worker validates the requested ordinal against the canonical plan and stores
+  it as `generationStartOrdinal`.
+- The client may use locators/CFIs only for reader navigation and visible
+  highlight mapping.
 
 ---
 
@@ -219,27 +226,35 @@ architecture.
 | Split cursor/session KV | Done | Cursor has its own key, session reads overlay it, all writes are plain `put`. |
 | Delete claims and aggregate index | Done | Sidecars are keyed by ordinal under `tts_playback_segments_v1`; readiness comes from sidecar reads plus audio existence. |
 | Stale sidecar recovery | Done | Generation validates completed sidecars against audio object existence, and the stream route retries stale sidecars whose audio object is missing. |
-| EPUB selected-segment start | Patched | Client start requests now prefer the selected segment's stable EPUB locator over the viewport/page-start anchor. |
+| EPUB selected-segment start | Done | Playback session creation now requires `startIntent.selectedOrdinal`; plan loading remains separate. |
 | Client controller extraction | Not done | `TTSContext` still contains the playback driver, projection, seek/resync, and restart behavior. |
-| Worker-authoritative start intent | Not done | The client still sends coordinates and local selection state; the worker should own resolving user intent to a start ordinal and return it explicitly. |
+| Worker-plan ordinal start | Done | Playback jobs validate the selected ordinal against the canonical plan. Coordinate/text fallback resolution has been removed from the playback-start path. |
 | Remove client-side EPUB playback planning | Not done | EPUB rendered-window planning should be reduced to view/highlight mapping; durable segment identity and ordinal selection should live with the worker plan. |
 
 ---
 
 ## Remaining Work
 
-### 1. Make Start Intent Worker-Authoritative
+### 1. Require Worker-Plan Ordinal for Audio Start
 
-The client should stop deciding which EPUB segment starts playback. It should
-send a narrow start intent, such as:
+The client should stop starting playback from EPUB coordinates, locators, text,
+segment keys, or viewport anchors. Audio start requires exactly one value:
 
-- current reader type
-- current visible locator or CFI
-- optional selected worker-plan ordinal when the user clicked a known row
+- `startIntent.selectedOrdinal`
 
-The worker should resolve that intent to one absolute ordinal and return it on
-the plan/session response. The client should not independently choose between
-`playbackSegment.ownerLocator`, `playbackAnchor.locator`, text, and current index.
+The worker validates the ordinal against the canonical plan and stores it as
+`generationStartOrdinal`. The client should not independently choose between
+`playbackSegment.ownerLocator`, `playbackAnchor.locator`, text, current index,
+CFI, or page-start anchor.
+
+Required cleanup:
+
+- Keep playback session creation gated on `startIntent.selectedOrdinal`.
+- Keep the session request rebuilt from the applied worker plan before starting
+  audio.
+- Keep worker playback-start resolution ordinal-only.
+- Continue shrinking client start-index mapping until it is only UI selection
+  mapping, not playback authority.
 
 ### 2. Reduce Client EPUB Planning to Highlight Mapping
 
@@ -248,9 +263,9 @@ highlight ranges. That should not also be a playback planning path. The target
 division is:
 
 - Worker: durable EPUB text extraction, segmentation, segment keys, locators,
-  ordinals, start ordinal resolution.
+  ordinals, and ordinal validation.
 - Client: rendered text maps, CFI/page navigation, and mapping the current
-  worker segment to a visible highlight when possible.
+  worker segment to a visible highlight.
 
 ### 3. Extract the Playback Controller
 
@@ -265,8 +280,8 @@ highlight state.
 
 ### 4. Collapse Duplicate Client State
 
-These values can currently disagree during cold starts, cache clears, and EPUB
-cursor moves:
+These values can currently disagree during cache clears, EPUB cursor moves, and
+plan/session restarts:
 
 - `playbackAnchor`
 - `playbackSegments`
@@ -276,14 +291,14 @@ cursor moves:
 - `playbackPlanRef`
 
 The target is a single worker-plan model plus a selected ordinal. Derived views
-can compute sentence text, highlight segment, and scrubber row from that model.
+compute sentence text, highlight segment, and scrubber row from that model.
 
 ### 5. Add Regression Coverage for EPUB Prefix Starts
 
 Add a test case where an EPUB chapter/page begins with prefix text such as a
-chapter number or image fallback text, then playback starts from the first real
+chapter number or image alt text, then playback starts from the first real
 sentence after the prefix. The expected behavior is:
 
-- the request start coordinate/ordinal resolves to the selected sentence
+- playback session creation sends the selected worker-plan ordinal
 - no prefix segment is synthesized or played before it
 - highlight and audio begin on the same segment before and after refresh

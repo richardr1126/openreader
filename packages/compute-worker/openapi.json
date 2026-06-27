@@ -1599,6 +1599,11 @@
                   "planning": {
                     "type": "object",
                     "properties": {
+                      "selectedOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
                       "startSegmentKey": {
                         "type": "string",
                         "minLength": 1,
@@ -1949,6 +1954,11 @@
                   "planning": {
                     "type": "object",
                     "properties": {
+                      "selectedOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
                       "startSegmentKey": {
                         "type": "string",
                         "minLength": 1,

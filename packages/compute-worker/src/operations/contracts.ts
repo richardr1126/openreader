@@ -65,6 +65,8 @@ export interface TtsPlaybackJobRequest {
    */
   backgroundExtent?: 'section' | 'document';
   planning: {
+    /** Optional absolute worker-plan ordinal selected by the UI from a known plan row. */
+    selectedOrdinal?: number;
     startSegmentKey?: string;
     startText?: string;
     maxBlockLength?: number;

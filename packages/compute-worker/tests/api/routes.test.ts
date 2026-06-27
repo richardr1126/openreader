@@ -130,6 +130,7 @@ describe('compute worker API routes', () => {
         settingsHash: 'settings-hash',
         settingsJson: { voice: 'alloy' },
         planning: {
+          selectedOrdinal: 4,
           maxBlockLength: 500,
           enforceSourceBoundaries: true,
           language: 'en',
@@ -152,6 +153,7 @@ describe('compute worker API routes', () => {
       kind: 'tts_playback',
       payload: {
         planning: {
+          selectedOrdinal: 4,
           documentSource: {
             namespace: null,
             extent: 'section',
@@ -159,6 +161,39 @@ describe('compute worker API routes', () => {
           },
         },
       },
+    });
+  });
+
+  test('rejects TTS playback operations without a worker-plan ordinal', async () => {
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/operations',
+      headers: AUTH,
+      payload: {
+        sessionId: 'playback-session-missing-ordinal',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId: 'c'.repeat(64),
+        documentVersion: 123,
+        readerType: 'pdf',
+        settingsHash: 'settings-hash',
+        settingsJson: { voice: 'alloy' },
+        planning: {
+          maxBlockLength: 500,
+          enforceSourceBoundaries: true,
+          language: 'en',
+          documentSource: {
+            namespace: null,
+            extent: 'section',
+            startPage: 12,
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: 'TTS playback operation requires a worker-plan ordinal',
     });
   });
 

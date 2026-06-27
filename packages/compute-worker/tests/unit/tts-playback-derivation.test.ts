@@ -118,28 +118,20 @@ describe('worker-owned TTS playback source derivation', () => {
     );
   }
 
-  test('resolvePlaybackStartOrdinal maps start hints to absolute ordinals in the whole-document plan', () => {
+  test('resolvePlaybackStartOrdinal maps selected worker-plan ordinal to an absolute ordinal', () => {
     const segments = wholeDocPlan();
 
-    // By start page: first segment at/after the page.
     expect(resolvePlaybackStartOrdinal(
       segments,
-      baseRequest({ documentSource: { namespace: null, extent: 'document', startPage: 2 } }),
+      baseRequest({ selectedOrdinal: 1, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
     )).toBe(1);
     expect(resolvePlaybackStartOrdinal(
       segments,
-      baseRequest({ documentSource: { namespace: null, extent: 'document', startPage: 3 } }),
+      baseRequest({ selectedOrdinal: 2 }),
     )).toBe(2);
-
-    // By exact segment key (preferred, position-independent).
-    const thirdKey = segments[2].segmentKey!;
-    expect(resolvePlaybackStartOrdinal(segments, baseRequest({ startSegmentKey: thirdKey }))).toBe(2);
-
-    // No hints → start at the document beginning.
-    expect(resolvePlaybackStartOrdinal(segments, baseRequest({}))).toBe(0);
   });
 
-  test('resolvePlaybackStartOrdinal uses EPUB spine coordinates before segment key/text hints', () => {
+  test('resolvePlaybackStartOrdinal ignores EPUB coordinate/text hints without selected ordinal', () => {
     const request = {
       ...baseRequest({
         startSegmentKey: 'client-whole-chapter-key-that-worker-will-not-match',
@@ -180,50 +172,84 @@ describe('worker-owned TTS playback source derivation', () => {
       },
     ];
 
-    expect(resolvePlaybackStartOrdinal(segments, request)).toBe(2);
+    expect(() => resolvePlaybackStartOrdinal(segments, request)).toThrow(
+      'TTS playback start requires a worker-plan ordinal',
+    );
   });
 
-  test('resolvePlaybackStartOrdinal rejects EPUB starts without a coordinate match', () => {
-    const segments = [
-      {
-        segmentIndex: 0,
-        segmentKey: 'repeated-heading',
-        text: 'Repeated heading',
-        locator: { readerType: 'epub', spineHref: 'title.xhtml', spineIndex: 0, charOffset: 0 },
-      },
-      {
-        segmentIndex: 1,
-        segmentKey: 'chapter-one',
-        text: 'Chapter one.',
-        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 1, charOffset: 120 },
-      },
-    ];
-    const withoutCoordinates = {
+  test('resolvePlaybackStartOrdinal uses selected worker-plan ordinal for EPUB prefix starts', () => {
+    const request = {
       ...baseRequest({
-        startSegmentKey: 'repeated-heading',
-        startText: 'Repeated heading',
-      }),
-      readerType: 'epub' as const,
-    } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
-    const unmatchedCoordinates = {
-      ...baseRequest({
-        startSegmentKey: 'repeated-heading',
-        startText: 'Repeated heading',
+        selectedOrdinal: 1,
         documentSource: {
           namespace: null,
           extent: 'document',
-          startSpineIndex: 99,
+          startSpineIndex: 0,
           startCharOffset: 0,
         },
       }),
       readerType: 'epub' as const,
     } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
+    const segments = [
+      {
+        segmentIndex: 0,
+        segmentKey: 'chapter-number-prefix',
+        text: '1',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 0 },
+      },
+      {
+        segmentIndex: 1,
+        segmentKey: 'first-real-sentence',
+        text: 'The first real sentence starts here.',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 84 },
+      },
+      {
+        segmentIndex: 2,
+        segmentKey: 'second-real-sentence',
+        text: 'The second sentence follows.',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 121 },
+      },
+    ];
 
-    expect(() => resolvePlaybackStartOrdinal(segments, withoutCoordinates)).toThrow(
-      'EPUB playback start requires stable spine coordinates',
-    );
-    expect(() => resolvePlaybackStartOrdinal(segments, unmatchedCoordinates)).toThrow(
-      'Unable to resolve EPUB playback start ordinal',
+    expect(resolvePlaybackStartOrdinal(segments, request)).toBe(1);
+  });
+
+  test('resolvePlaybackStartOrdinal rejects stale selected worker-plan ordinal', () => {
+    const request = {
+      ...baseRequest({
+        selectedOrdinal: 99,
+        documentSource: {
+          namespace: null,
+          extent: 'document',
+          startSpineIndex: 1,
+          startCharOffset: 500,
+        },
+      }),
+      readerType: 'epub' as const,
+    } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
+    const segments = [
+      {
+        segmentIndex: 0,
+        segmentKey: 'chapter-one',
+        text: 'Chapter one.',
+        locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 0 },
+      },
+      {
+        segmentIndex: 1,
+        segmentKey: 'chapter-two-early',
+        text: 'Chapter two early.',
+        locator: { readerType: 'epub', spineHref: 'ch2.xhtml', spineIndex: 1, charOffset: 120 },
+      },
+      {
+        segmentIndex: 2,
+        segmentKey: 'chapter-two-target',
+        text: 'Chapter two target.',
+        locator: { readerType: 'epub', spineHref: 'ch2.xhtml', spineIndex: 1, charOffset: 520 },
+      },
+    ];
+
+    expect(() => resolvePlaybackStartOrdinal(segments, request)).toThrow(
+      'TTS playback start ordinal 99 is not present in the canonical plan',
     );
   });
 

@@ -1107,6 +1107,10 @@ export function registerComputeWorkerRoutes(input: {
       reply.code(400);
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
+    if (parsed.data.planning.selectedOrdinal === undefined) {
+      reply.code(400);
+      return { error: 'TTS playback operation requires a worker-plan ordinal' };
+    }
 
     await putPlaybackSessionState(parsed.data, 'queued', null);
     const requestOp: WorkerOperationRequest = {
@@ -1161,6 +1165,7 @@ export function registerComputeWorkerRoutes(input: {
         readerType: parsed.data.readerType,
         settingsHash: parsed.data.settingsHash,
         planSignature,
+        selectedOrdinal: parsed.data.planning.selectedOrdinal,
         startSegmentKey: parsed.data.planning.startSegmentKey,
         startText: parsed.data.planning.startText,
         startPage: documentSource?.startPage,

@@ -71,6 +71,7 @@ const ttsPlaybackRequestSchema = z.object({
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
+    selectedOrdinal: z.number().int().nonnegative().optional(),
     startSegmentKey: z.string().trim().min(1).max(512).optional(),
     startText: z.string().trim().min(1).max(20_000).optional(),
     maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -372,35 +373,10 @@ export function planTtsPlaybackSegments(
   }));
 }
 
-function locatorPageNumber(locator: unknown): number | null {
-  if (!locator || typeof locator !== 'object') return null;
-  const rec = locator as { readerType?: unknown; page?: unknown };
-  if (rec.readerType !== 'pdf') return null;
-  const page = Number(rec.page);
-  return Number.isFinite(page) ? page : null;
-}
-
-function locatorSpineIndex(locator: unknown): number | null {
-  if (!locator || typeof locator !== 'object') return null;
-  const rec = locator as { readerType?: unknown; spineIndex?: unknown };
-  if (rec.readerType !== 'epub') return null;
-  const spineIndex = Number(rec.spineIndex);
-  return Number.isFinite(spineIndex) ? spineIndex : null;
-}
-
-function locatorCharOffset(locator: unknown): number | null {
-  if (!locator || typeof locator !== 'object') return null;
-  const rec = locator as { readerType?: unknown; charOffset?: unknown };
-  if (rec.readerType !== 'epub') return null;
-  const charOffset = Number(rec.charOffset);
-  return Number.isFinite(charOffset) ? charOffset : null;
-}
-
 /**
- * Resolve the absolute canonical ordinal where playback should begin, given the
- * whole-document plan and the session's start hints. EPUB is coordinate-only:
- * rendered-window text and segment keys are not unique enough to choose a start
- * ordinal, so a missing coordinate match is a hard planning error.
+ * Resolve the absolute canonical ordinal where playback should begin. Audio
+ * start is ordinal-only: reader locators/text can drive UI navigation and
+ * highlighting, but they are not fallback playback identities.
  */
 export function resolvePlaybackStartOrdinal(
   segments: TtsPlaybackSegmentInput[],
@@ -408,53 +384,15 @@ export function resolvePlaybackStartOrdinal(
 ): number {
   if (segments.length === 0) return 0;
   const planning = request.planning;
-
-  const documentSource = planning.documentSource;
-  if (request.readerType === 'epub' && documentSource?.startSpineIndex !== undefined) {
-    const startSpineIndex = Math.max(0, Math.floor(documentSource.startSpineIndex));
-    const startCharOffset = documentSource.startCharOffset === undefined
-      ? null
-      : Math.max(0, Math.floor(documentSource.startCharOffset));
-    const match = segments.find((segment) => {
-      const spineIndex = locatorSpineIndex(segment.locator);
-      if (spineIndex == null) return false;
-      if (spineIndex > startSpineIndex) return true;
-      if (spineIndex < startSpineIndex) return false;
-      if (startCharOffset == null) return true;
-      const charOffset = locatorCharOffset(segment.locator);
-      return charOffset == null || charOffset >= startCharOffset;
-    });
-    if (match) return match.segmentIndex;
-    throw new Error(`Unable to resolve EPUB playback start ordinal for spine ${startSpineIndex} at char offset ${startCharOffset ?? 0}`);
+  if (planning.selectedOrdinal === undefined) {
+    throw new Error('TTS playback start requires a worker-plan ordinal');
   }
-  if (request.readerType === 'epub') {
-    throw new Error('EPUB playback start requires stable spine coordinates');
+  const selectedOrdinal = Math.max(0, Math.floor(planning.selectedOrdinal));
+  const match = segments.find((segment) => segment.segmentIndex === selectedOrdinal);
+  if (!match) {
+    throw new Error(`TTS playback start ordinal ${selectedOrdinal} is not present in the canonical plan`);
   }
-
-  if (planning.startSegmentKey) {
-    const match = segments.find((segment) => segment.segmentKey === planning.startSegmentKey);
-    if (match) return match.segmentIndex;
-  }
-  if (planning.startText) {
-    const normalizedStartText = normalizeSegmentText(planning.startText);
-    if (normalizedStartText) {
-      const match = segments.find((segment) => normalizeSegmentText(segment.text) === normalizedStartText);
-      if (match) return match.segmentIndex;
-    }
-  }
-
-  if (documentSource) {
-    if (request.readerType === 'pdf' && documentSource.startPage !== undefined) {
-      const startPage = Math.max(1, Math.floor(documentSource.startPage));
-      const match = segments.find((segment) => {
-        const page = locatorPageNumber(segment.locator);
-        return page != null && page >= startPage;
-      });
-      if (match) return match.segmentIndex;
-    }
-  }
-
-  return segments[0].segmentIndex;
+  return match.segmentIndex;
 }
 
 /**
@@ -547,6 +485,7 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
   request: z.infer<typeof ttsPlaybackRequestSchema>;
   storage: ArtifactStorage;
   s3Prefix: string;
+  requireStartOrdinal?: boolean;
 }): Promise<{
   planObjectKey: string;
   planSignature: string;
@@ -577,7 +516,9 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
     planObjectKey,
     planSignature,
     plannedSegments,
-    startOrdinal: resolvePlaybackStartOrdinal(plannedSegments, input.request),
+    startOrdinal: input.requireStartOrdinal || input.request.planning.selectedOrdinal !== undefined
+      ? resolvePlaybackStartOrdinal(plannedSegments, input.request)
+      : 0,
   };
 }
 
@@ -1019,6 +960,7 @@ export function createJobHandlers(input: {
           request: parsed,
           storage: input.storage,
           s3Prefix: input.s3Prefix,
+          requireStartOrdinal: true,
         });
         const { planObjectKey, plannedSegments, startOrdinal } = plan;
         const isContinuationRun = Boolean(parsed.generationRunId);

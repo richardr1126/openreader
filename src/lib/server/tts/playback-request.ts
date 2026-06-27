@@ -17,6 +17,9 @@ export type ParsedTtsPlaybackRequestBody = {
   documentId: string;
   settings: TTSSegmentSettings;
   startLocation: PlaybackStartLocation;
+  startIntent?: {
+    selectedOrdinal?: number;
+  };
   maxBlockLength?: number;
   language?: string;
   startSegmentKey?: string;
@@ -114,6 +117,15 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   const skipBlockKinds = readOptionalSkipBlockKinds(planningRec);
   if (skipBlockKinds === null) return null;
 
+  const startIntentRec = rec.startIntent === undefined
+    ? {}
+    : rec.startIntent && typeof rec.startIntent === 'object'
+      ? rec.startIntent as Record<string, unknown>
+      : null;
+  if (!startIntentRec) return null;
+  const selectedOrdinal = readOptionalInt(startIntentRec, 'selectedOrdinal', 0);
+  if (selectedOrdinal === null) return null;
+
   const startSegmentKey = readOptionalString(rec, 'startSegmentKey');
   const startText = readOptionalString(rec, 'startText');
   const planObjectKey = readOptionalString(rec, 'planObjectKey');
@@ -137,6 +149,7 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
       ...(spineIndex !== undefined ? { spineIndex } : {}),
       ...(charOffset !== undefined ? { charOffset } : {}),
     },
+    ...(selectedOrdinal !== undefined ? { startIntent: { selectedOrdinal } } : {}),
     ...(maxBlockLength !== undefined ? { maxBlockLength } : {}),
     ...(planningLanguage ? { language: normalizeLanguageTag(planningLanguage) } : {}),
     ...(skipBlockKinds !== undefined ? { skipBlockKinds } : {}),
@@ -174,6 +187,14 @@ export function validateTtsPlaybackStartLocation(
     default:
       return 'Unsupported reader type for TTS playback';
   }
+}
+
+export function validateTtsPlaybackSessionStartOrdinal(
+  parsed: ParsedTtsPlaybackRequestBody,
+): string | null {
+  return typeof parsed.startIntent?.selectedOrdinal === 'number'
+    ? null
+    : 'TTS playback session requires a worker-plan ordinal';
 }
 
 export async function buildTtsPlaybackPlanningInput(
@@ -214,6 +235,7 @@ export async function buildTtsPlaybackPlanningInput(
     settingsHash,
     settingsJson,
     planning: {
+      ...(parsed.startIntent?.selectedOrdinal !== undefined ? { selectedOrdinal: parsed.startIntent.selectedOrdinal } : {}),
       ...(parsed.maxBlockLength !== undefined ? { maxBlockLength: parsed.maxBlockLength } : {}),
       ...(parsed.language ? { language: parsed.language } : {}),
       ...(scope.readerType !== 'epub' && parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
