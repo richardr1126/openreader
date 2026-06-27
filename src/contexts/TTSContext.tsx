@@ -155,20 +155,6 @@ type PlaybackStartLocation = {
   charOffset?: number;
 };
 
-// Read once per module load from SSR-injected runtime config. This sits at
-// module scope because the highlight pipeline is constructed lazily and the
-// flag rarely changes within a session — admin toggling it picks up on
-// reload, matching the SSR-injection model.
-const wordHighlightFeatureEnabled = (() => {
-  if (typeof window === 'undefined') return true;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const injected = (window as any).__RUNTIME_CONFIG__;
-  if (!injected || typeof injected !== 'object') return true;
-  return typeof injected.computeAvailable === 'boolean'
-    ? injected.computeAvailable
-    : true;
-})();
-
 // Tiny silent WAV used to unlock HTML5 audio on iOS/Safari.
 const SILENT_WAV_DATA_URI =
   'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
@@ -321,10 +307,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     updateConfigKey,
     skipBlank,
     ttsSegmentMaxBlockLength,
-    pdfHighlightEnabled,
-    pdfWordHighlightEnabled,
-    epubHighlightEnabled,
-    epubWordHighlightEnabled,
   } = useConfig();
 
   // Audio and voice management hooks
@@ -334,10 +316,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     configProviderType,
     configTTSModel,
   );
-  const {
-    refresh: refreshRateLimit,
-    triggerRateLimit,
-  } = useAuthRateLimit();
+  useAuthRateLimit();
 
   // Get document ID and reader type from URL
   const { id } = useParams();
@@ -742,9 +721,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [playbackActiveRef, playbackSessionRef, projectPlaybackTime, refreshPlaybackTimeline]);
 
   /**
-   * Stops the current audio playback and optionally clears pending requests.
+   * Stops the current audio playback.
    */
-  const abortAudio = useCallback((clearPending = false) => {
+  const abortAudio = useCallback(() => {
     // Ensure next playback attempt is not blocked by a stale in-flight guard.
     invalidatePlaybackRun();
     cancelSeekResync();
@@ -864,7 +843,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // Reset state for new content in correct order
     invalidatePlaybackRun();
-    abortAudio(true);
+    abortAudio();
     if (shouldPause) setIsPlaying(false);
     setPlaybackIndex(0);
     setSentences([]);
@@ -874,7 +853,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackAnchor(null);
     setCurrDocPage(location);
 
-  }, [abortAudio, activeReaderType, invalidatePlaybackRun, pauseActivePlayback, playbackActiveRef, setPlaybackIndex]);
+  }, [abortAudio, activeReaderType, invalidatePlaybackRun, pauseActivePlayback, setPlaybackIndex]);
 
   const prepareInitialPosition = useCallback((location: TTSLocation, sentenceIndex: number) => {
     skipToLocation(location, true);
@@ -1096,7 +1075,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // the single playback and sidebar segment source.
     invalidatePlaybackRun();
     setIsPlaying(false);
-    abortAudio(true);
+    abortAudio();
     setIsProcessing(true);
 
     try {
@@ -1147,7 +1126,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPage,
     currDocPageNumber,
     clearPendingEpubJump,
-    playbackActiveRef,
     setPlaybackIndex,
   ]);
 
@@ -1409,7 +1387,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setIsProcessing(true);
     }
     invalidatePlaybackRun();
-    abortAudio(true);
+    abortAudio();
     await advance();
   }, [currentIndex, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
@@ -1426,7 +1404,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setIsProcessing(true);
     }
     invalidatePlaybackRun();
-    abortAudio(true);
+    abortAudio();
     await advance(true);
   }, [currentIndex, seekPlaybackToSegmentIndex, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
 
@@ -1614,7 +1592,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     configProviderRef,
     configProviderType,
     currDocPageNumber,
-    currentIndex,
     documentId,
     effectiveNativeSpeed,
     playbackSegments,
@@ -1995,7 +1972,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     audioSpeed,
     buildPlaybackSessionRequest,
     createAndApplyPlaybackPlan,
-    fetchPlaybackPlanUntilReady,
     refreshPlaybackTimeline,
     isAbortLikeError,
     playbackActiveRef,
@@ -2005,6 +1981,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     publishPlaybackTimeSec,
     applyPlaybackPlan,
     resetPlaybackRefs,
+    setPlaybackIndex,
     startPlaybackForegroundSync,
     startPlaybackProjectionLoop,
     stopPlaybackProjectionLoop,
@@ -2088,7 +2065,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackSeekLayout(null);
     setPlaybackPlanSource('idle');
     setPlaybackSegments([]);
-    abortAudio(true);
+    abortAudio();
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
@@ -2246,7 +2223,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // First stop any current playback
     setIsPlaying(false);
     clearPendingEpubJump();
-    abortAudio(true); // Clear pending requests since speed changed
+    abortAudio();
     playbackPlanRef.current = null;
     setPlaybackSeekLayout(null);
     setPlaybackPlanSource('idle');
@@ -2281,7 +2258,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // First stop any current playback
     setIsPlaying(false);
     clearPendingEpubJump();
-    abortAudio(true); // Clear pending requests since voice changed
+    abortAudio();
     playbackPlanRef.current = null;
     setPlaybackSeekLayout(null);
     setPlaybackPlanSource('idle');
@@ -2316,7 +2293,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // First stop any current playback
     setIsPlaying(false);
     clearPendingEpubJump();
-    abortAudio(true); // Clear pending requests since speed changed
+    abortAudio();
 
     // Update audio speed and config
     setAudioSpeed(newSpeed);
@@ -2347,7 +2324,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (!wasPlaying) return;
     setIsProcessing(true);
     setIsPlaying(false);
-    abortAudio(true);
+    abortAudio();
     // Bridge two renders so the playback driver sees a real false→true edge.
     window.setTimeout(() => {
       setIsProcessing(false);

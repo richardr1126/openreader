@@ -91,42 +91,25 @@ const SAFE_HASH_SEGMENT_REGEX = /^[a-f0-9]{8,128}$/i;
 const SAFE_OBJECT_PATH_SEGMENT_REGEX = /^[a-zA-Z0-9._=-]{1,256}$/;
 
 /**
- * Durable generated-audio metadata for one playback segment. The object is
- * keyed by user storage scope + document/version + settings hash + segment id.
+ * Durable per-segment "sidecar": the duration + word alignment + audio key for
+ * one playback segment, keyed by user storage scope + document/version +
+ * settings hash + **plan ordinal**.
+ *
+ * Keyed by ordinal (not segment id) on purpose: it gives every segment its own
+ * immutable object that the stream reader can address directly from the plan
+ * (ordinal) without recomputing segment ids, and — crucially — it means each
+ * completion is a single `put` to a unique key. There is no shared aggregate
+ * index to read-merge-write, so there is no lost-update race and two workers can
+ * generate the same document concurrently and be correct. The segment audio
+ * itself stays content-addressed (idempotent dedup); this sidecar just points at
+ * it. See PLAYBACK_ARCHITECTURE.md (Phase 2).
  */
-export function ttsPlaybackSegmentMetadataArtifactKey(input: {
+export function ttsPlaybackSegmentSidecarArtifactKey(input: {
   storageUserHash: string;
   documentId: string;
   documentVersion: number;
   settingsHash: string;
-  segmentId: string;
-  prefix: string;
-}): string {
-  if (!SAFE_HASH_SEGMENT_REGEX.test(input.storageUserHash)) {
-    throw new Error(`Invalid playback storage user hash: ${input.storageUserHash}`);
-  }
-  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
-    throw new Error(`Invalid document id: ${input.documentId}`);
-  }
-  if (!SAFE_OBJECT_PATH_SEGMENT_REGEX.test(input.settingsHash)) {
-    throw new Error(`Invalid playback settings hash: ${input.settingsHash}`);
-  }
-  if (!SAFE_HASH_SEGMENT_REGEX.test(input.segmentId)) {
-    throw new Error(`Invalid playback segment id: ${input.segmentId}`);
-  }
-  const version = Math.max(0, Math.floor(input.documentVersion));
-  return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${input.segmentId}.json`;
-}
-
-/**
- * Compact index used by stream/sidebar readers to avoid database joins or S3
- * list operations. It points at completed per-segment metadata artifacts.
- */
-export function ttsPlaybackSegmentIndexArtifactKey(input: {
-  storageUserHash: string;
-  documentId: string;
-  documentVersion: number;
-  settingsHash: string;
+  segmentIndex: number;
   prefix: string;
 }): string {
   if (!SAFE_HASH_SEGMENT_REGEX.test(input.storageUserHash)) {
@@ -139,5 +122,6 @@ export function ttsPlaybackSegmentIndexArtifactKey(input: {
     throw new Error(`Invalid playback settings hash: ${input.settingsHash}`);
   }
   const version = Math.max(0, Math.floor(input.documentVersion));
-  return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/index.json`;
+  const ordinal = Math.max(0, Math.floor(input.segmentIndex));
+  return `${input.prefix}/tts_playback_segments_v2/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${ordinal}.json`;
 }

@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   RefObject,
-  useEffect,
 } from 'react';
 
 import type { NavItem } from 'epubjs';
@@ -108,7 +107,6 @@ export function useEpubDocument(
   const {
     providerRef,
     ttsSegmentMaxBlockLength,
-    epubTheme,
     epubHighlightEnabled,
   } = useConfig();
   // Current document state

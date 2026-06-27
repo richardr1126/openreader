@@ -3,7 +3,6 @@ import type {
   TTSAudiobookFormat,
 } from '@/types/tts';
 import type { TtsProviderType } from '@openreader/tts/provider-catalog';
-import type { TTSSentenceAlignment } from '@openreader/tts/types';
 export type {
   TTSSegmentLocator,
   TTSSegmentSettings,

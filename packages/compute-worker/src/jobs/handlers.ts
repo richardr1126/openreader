@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
@@ -584,11 +583,6 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
 
 const SEGMENT_MAX_ATTEMPTS = 2;
 
-// A segment claim marked `generating` whose `updatedAt` is older than this is treated
-// as abandoned (worker crash / lost lease) and may be re-claimed by another job.
-// Bounds how long a crashed claim blocks regeneration of a segment.
-const SEGMENT_GENERATING_STALE_MS = 120_000;
-
 type SegmentErrorInfo = {
   message: string;
   code?: 'UPSTREAM_RATE_LIMIT' | 'UPSTREAM_ERROR' | 'UPSTREAM_TIMEOUT';
@@ -630,6 +624,8 @@ async function generateExplicitTtsPlaybackSegments(input: {
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
+  /** Content-addressed existence check: the source of truth for "already generated". */
+  audioObjectExists: (key: string) => Promise<boolean>;
   playbackStorage?: TtsPlaybackStorage;
   /** Read previously-stored segment audio back (for the alignment self-heal path). */
   readAudioObject?: (key: string) => Promise<Buffer>;
@@ -724,13 +720,16 @@ async function generateExplicitTtsPlaybackSegments(input: {
     throw new Error('TTS playback storage is required for segment generation');
   }
 
-  const existingIndex = await input.playbackStorage.artifacts.readSegmentIndex({
-    storageUserId: input.request.storageUserId,
-    documentId: input.request.documentId,
-    documentVersion: input.request.documentVersion,
-    settingsHash: input.request.settingsHash,
-  });
-  const existingById = new Map((existingIndex?.segments ?? []).map((row) => [row.segmentId, row]));
+  // Read one segment's durable sidecar (duration + alignment + status) by ordinal.
+  // Replaces the old aggregate index lookup; each sidecar is its own object.
+  const readSidecar = (segment: (typeof normalized)[number]) =>
+    input.playbackStorage!.artifacts.readSegmentMetadata({
+      storageUserId: input.request.storageUserId,
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      settingsHash: input.request.settingsHash,
+      segmentIndex: segment.original.segmentIndex,
+    });
 
   // Word-level alignment from an audio buffer. Shared by the generation path and
   // the completed-but-unaligned self-heal path; returns null on any failure so a
@@ -786,17 +785,6 @@ async function generateExplicitTtsPlaybackSegments(input: {
       error: metadata.error ?? null,
       updatedAt,
     });
-    await input.playbackStorage.claims.markSegmentClaim({
-      storageUserId: input.request.storageUserId,
-      documentId: input.request.documentId,
-      documentVersion: input.request.documentVersion,
-      settingsHash: input.request.settingsHash,
-      segmentId: segment.segmentId,
-      status,
-      audioKey: metadata.audioKey,
-      ownerId: input.request.sessionId,
-      now: updatedAt,
-    }).catch(() => undefined);
   };
 
   for (const segment of normalized) {
@@ -809,37 +797,13 @@ async function generateExplicitTtsPlaybackSegments(input: {
       if (decision === 'stop') break;
     }
 
-    const existing = existingById.get(segment.segmentId);
-    if (existing?.status === 'completed' && existing.audioKey) {
-      const existingMetadata = await input.playbackStorage.artifacts.readSegmentMetadata(existing.metadataKey);
-      // Self-heal: audio exists but a prior transient Whisper failure left no
-      // alignment. Re-derive it from the stored audio without re-synthesizing,
-      // so a one-time alignment failure doesn't permanently lose word-level
-      // highlighting for this segment (best-effort; retried again next pass).
-      let alignment = existingMetadata?.alignment ?? null;
-      if (!alignment && input.readAudioObject) {
-        try {
-          const storedAudio = await input.readAudioObject(existing.audioKey);
-          alignment = await computeAlignment(storedAudio, segment, existing.audioKey);
-        } catch {
-          // Leave alignment null; a future generation pass retries the self-heal.
-        }
-      }
-      await persistSegmentMetadata(segment, 'completed', {
-        audioKey: existing.audioKey,
-        durationMs: Math.max(1, Number(existing.durationMs ?? 1000)),
-        alignment,
-        updatedAt: Date.now(),
-      }).catch(() => undefined);
-      await input.onSegmentCompleted?.(planOrdinal);
-      continue;
-    }
-    if (existing?.status === 'error') {
-      await input.onSegmentErrored?.(planOrdinal);
-      continue;
-    }
-
-    const audioKey = existing?.audioKey || buildTtsSegmentAudioKey({
+    // The segment audio is content-addressed: the same text+voice+model+settings
+    // always hashes to the same key. So the key is deterministic (no need to read
+    // a prior record to learn it) and its presence in object storage is the
+    // single source of truth for "already generated" — no claims, no locks. Two
+    // workers racing on the same segment just write identical bytes to the same
+    // key (wasteful at worst, never incorrect).
+    const audioKey = buildTtsSegmentAudioKey({
       storagePrefix: input.s3Prefix,
       namespace: null,
       userId: input.request.storageUserId,
@@ -849,32 +813,49 @@ async function generateExplicitTtsPlaybackSegments(input: {
       segmentId: segment.segmentId,
     });
 
-    // Atomic claim: only take ownership when no completed claim exists and any
-    // prior `generating` claim is stale (crashed worker). The S3 index is the
-    // source of truth for completion: completed-with-audio segments already
-    // `continue`d above, so reaching here means there is no durable completed
-    // artifact. A `completed` claim at this point is therefore stale (the user
-    // cleared cached audio, deleting S3 but not the NATS claim), so allow
-    // overwriting it and regenerating instead of skipping the segment forever.
-    const hasDurableCompletedArtifact = existing?.status === 'completed' && Boolean(existing.audioKey);
-    const claimedAt = Date.now();
-    const claimed = await input.playbackStorage.claims.claimSegment({
-      storageUserId: input.request.storageUserId,
-      documentId: input.request.documentId,
-      documentVersion: input.request.documentVersion,
-      settingsHash: input.request.settingsHash,
-      segmentId: segment.segmentId,
-      audioKey,
-      ownerId: input.request.sessionId,
-      now: claimedAt,
-      staleAfterMs: SEGMENT_GENERATING_STALE_MS,
-      allowReclaimCompleted: !hasDurableCompletedArtifact,
-    });
+    const existing = await readSidecar(segment).catch(() => null);
+    const audioExists = (existing?.status === 'completed' && existing.audioKey === audioKey)
+      ? true
+      : await input.audioObjectExists(audioKey).catch(() => false);
 
-    if (!claimed.claimed) {
-      if (claimed.claim?.status === 'completed' && claimed.claim.audioKey) {
-        await input.onSegmentCompleted?.(planOrdinal);
+    if (audioExists) {
+      // Audio is durable. Ensure the sidecar exists and carries duration +
+      // alignment; rebuild/self-heal it from the stored audio when missing (a
+      // cleared sidecar, a cross-worker write, or a prior transient Whisper
+      // failure) — all without re-synthesizing. Content-addressed audio wins
+      // over a stale `error` sidecar.
+      let durationMs = existing?.status === 'completed' ? existing.durationMs : null;
+      let alignment = existing?.alignment ?? null;
+      const needsRebuild = existing?.status !== 'completed' || durationMs == null || !alignment;
+      if (needsRebuild && input.readAudioObject) {
+        try {
+          const storedAudio = await input.readAudioObject(audioKey);
+          if (durationMs == null) {
+            durationMs = await probeAudioDurationMsFromBuffer(storedAudio).catch(() => 0);
+          }
+          if (!alignment) {
+            alignment = await computeAlignment(storedAudio, segment, audioKey);
+          }
+        } catch {
+          // Leave what we have; a future generation pass retries the self-heal.
+        }
       }
+      if (needsRebuild) {
+        await persistSegmentMetadata(segment, 'completed', {
+          audioKey,
+          durationMs: Math.max(1, Number(durationMs ?? 1000)),
+          alignment,
+          updatedAt: Date.now(),
+        }).catch(() => undefined);
+      }
+      await input.onSegmentCompleted?.(planOrdinal);
+      continue;
+    }
+
+    if (existing?.status === 'error') {
+      // Recorded terminal error and no durable audio: leave the gap (playback
+      // halts cleanly here) rather than hammering a failing provider every pass.
+      await input.onSegmentErrored?.(planOrdinal);
       continue;
     }
 
@@ -1149,6 +1130,7 @@ export function createJobHandlers(input: {
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
+          audioObjectExists: (key) => input.storage.objectExists(key),
           playbackStorage,
           readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
           synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),

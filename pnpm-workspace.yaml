@@ -17,6 +17,7 @@ allowBuilds:
 overrides:
   '@types/localforage': npm:empty-module@0.0.2
   '@xmldom/xmldom': ^0.9.8
+  kysely: 0.28.17
   lodash: ^4.17.23
 
 strictDepBuilds: false

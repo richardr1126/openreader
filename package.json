@@ -106,10 +106,5 @@
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
-  },
-  "pnpm": {
-    "overrides": {
-      "kysely": "0.28.17"
-    }
   }
 }

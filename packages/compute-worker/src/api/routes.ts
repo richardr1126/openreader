@@ -35,7 +35,7 @@ import {
 import { computePlaybackPlanSignature } from '../jobs/handlers';
 import { requireEnv } from '../infrastructure/config';
 import type { ArtifactStorage } from '../infrastructure/storage';
-import type { TtsPlaybackStorage, TtsPlaybackSessionState } from '../playback/storage';
+import type { TtsPlaybackStorage, TtsPlaybackSessionState, TtsPlaybackSegmentMetadata } from '../playback/storage';
 import { generationFloorForCursor } from '../playback/generation-window';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
@@ -184,83 +184,161 @@ export function registerComputeWorkerRoutes(input: {
     return await playbackStorage?.sessions.getSession(sessionId) ?? null;
   };
 
-  const readSegmentIndexRows = async (
+  // Segment readiness, derived from per-ordinal sidecars.
+  //
+  // There is no aggregate S3 index any more (it had a lost-update race). Each
+  // segment's duration + alignment + status lives in its own immutable sidecar
+  // keyed by plan ordinal. Completed sidecars never change (segment audio is
+  // content-addressed), so once read they are cached forever; pending/missing
+  // ordinals are always re-read so newly-generated segments (possibly from
+  // another worker) are picked up. See PLAYBACK_ARCHITECTURE.md (Phase 2).
+  const sidecarScopeCache = new Map<string, Map<number, TtsPlaybackSegmentMetadata>>();
+  const SIDECAR_SCOPE_CACHE_MAX = 8;
+  // How far past the contiguous frontier / playhead to probe for newly-generated
+  // sidecars. Generation is forward-contiguous, so a bounded band is enough to
+  // discover progress; ordinals outside it are treated as not-yet-generated
+  // (silence), which is what the byte layout would use for them anyway.
+  const SIDECAR_SCAN_AHEAD = 64;
+  const SIDECAR_FETCH_BATCH = 32;
+
+  const sidecarScopeKey = (session: PlaybackSessionRow): string =>
+    `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}`;
+
+  const getSidecarScopeCache = (session: PlaybackSessionRow): Map<number, TtsPlaybackSegmentMetadata> => {
+    const key = sidecarScopeKey(session);
+    let cache = sidecarScopeCache.get(key);
+    if (!cache) {
+      if (sidecarScopeCache.size >= SIDECAR_SCOPE_CACHE_MAX) {
+        const oldest = sidecarScopeCache.keys().next().value;
+        if (oldest !== undefined) sidecarScopeCache.delete(oldest);
+      }
+      cache = new Map();
+      sidecarScopeCache.set(key, cache);
+    }
+    return cache;
+  };
+
+  const fetchSidecar = async (
     session: PlaybackSessionRow,
-  ): Promise<PlaybackSegmentManifestRow[]> => {
-    const index = await playbackStorage?.artifacts.readSegmentIndex({
+    ordinal: number,
+  ): Promise<TtsPlaybackSegmentMetadata | null> => {
+    return await playbackStorage?.artifacts.readSegmentMetadata({
       storageUserId: session.storageUserId,
       documentId: session.documentId,
       documentVersion: session.documentVersion,
       settingsHash: session.settingsHash,
-    }).catch(() => null);
+      segmentIndex: ordinal,
+    }).catch(() => null) ?? null;
+  };
+
+  // Single-ordinal readiness (used by the stream's per-segment wait loop).
+  const readSidecarForOrdinal = async (
+    session: PlaybackSessionRow,
+    ordinal: number,
+  ): Promise<TtsPlaybackSegmentMetadata | null> => {
+    const cache = getSidecarScopeCache(session);
+    const cached = cache.get(ordinal);
+    if (cached) return cached;
+    const sidecar = await fetchSidecar(session, ordinal);
+    if (sidecar?.status === 'completed') cache.set(ordinal, sidecar);
+    return sidecar;
+  };
+
+  // Collect sidecars for the active region: every cached-completed ordinal plus a
+  // bounded band from the start of the document through the active region. The
+  // byte layout needs exact durations for the whole prefix below the playhead to
+  // place seek offsets, so the band runs [0 .. max(frontier, cursor) + ahead].
+  // Completed ordinals in the prefix are served from cache (free), so the only
+  // real reads are the not-yet-completed holes and the look-ahead frontier.
+  // Returns ordinal -> sidecar for all present (any status); reads are batched in
+  // parallel and completed results cached permanently.
+  const collectScopeSidecars = async (
+    session: PlaybackSessionRow,
+    planLength: number,
+  ): Promise<Map<number, TtsPlaybackSegmentMetadata>> => {
+    const cache = getSidecarScopeCache(session);
+    const result = new Map<number, TtsPlaybackSegmentMetadata>(cache);
+    if (planLength <= 0) return result;
+    const lastOrdinal = planLength - 1;
+    const cursor = Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)));
+    const highestCached = cache.size > 0 ? Math.max(...cache.keys()) : -1;
+    const bandEnd = Math.min(lastOrdinal, Math.max(highestCached, cursor) + SIDECAR_SCAN_AHEAD);
+    const ordinals: number[] = [];
+    for (let ordinal = 0; ordinal <= bandEnd; ordinal += 1) {
+      if (cache.get(ordinal)?.status === 'completed') continue; // already cached → skip the read
+      ordinals.push(ordinal);
+    }
+    for (let i = 0; i < ordinals.length; i += SIDECAR_FETCH_BATCH) {
+      const batch = ordinals.slice(i, i + SIDECAR_FETCH_BATCH);
+      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal)));
+      batch.forEach((ordinal, idx) => {
+        const sidecar = fetched[idx];
+        if (!sidecar) return;
+        result.set(ordinal, sidecar);
+        if (sidecar.status === 'completed') cache.set(ordinal, sidecar);
+      });
+    }
+    return result;
+  };
+
+  const readSegmentIndexRows = async (
+    session: PlaybackSessionRow,
+  ): Promise<PlaybackSegmentManifestRow[]> => {
+    if (!session.planObjectKey) return [];
+    const planSegments = await readPlanSegments(session.planObjectKey);
+    if (!planSegments || planSegments.length === 0) return [];
+    // The /segments listing is not on the hot path, so read every sidecar (cached
+    // ones are free) to return the full completed set rather than just the band.
+    const cache = getSidecarScopeCache(session);
+    const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(cache);
+    const missing = planSegments
+      .map((seg) => seg.segmentIndex)
+      .filter((ordinal) => cache.get(ordinal)?.status !== 'completed');
+    for (let i = 0; i < missing.length; i += SIDECAR_FETCH_BATCH) {
+      const batch = missing.slice(i, i + SIDECAR_FETCH_BATCH);
+      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal)));
+      batch.forEach((ordinal, idx) => {
+        const sidecar = fetched[idx];
+        if (!sidecar) return;
+        sidecars.set(ordinal, sidecar);
+        if (sidecar.status === 'completed') cache.set(ordinal, sidecar);
+      });
+    }
     const rows: PlaybackSegmentManifestRow[] = [];
-    for (const row of index?.segments ?? []) {
-      if (row.status !== 'completed' || !row.audioKey) continue;
-      const metadata = await playbackStorage?.artifacts.readSegmentMetadata(row.metadataKey).catch(() => null);
+    for (const sidecar of sidecars.values()) {
+      if (sidecar.status !== 'completed' || !sidecar.audioKey) continue;
       rows.push({
-        ordinal: row.segmentIndex,
-        sourceSegmentIndex: row.segmentIndex,
-        segmentKey: row.segmentKey,
-        segmentId: row.segmentId,
-        audioKey: row.audioKey,
-        durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
-        alignmentJson: metadata?.alignment ? JSON.stringify(metadata.alignment) : null,
-        updatedAt: row.updatedAt ?? null,
+        ordinal: sidecar.segmentIndex,
+        sourceSegmentIndex: sidecar.segmentIndex,
+        segmentKey: sidecar.segmentKey,
+        segmentId: sidecar.segmentId,
+        audioKey: sidecar.audioKey,
+        durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
+        alignmentJson: sidecar.alignment ? JSON.stringify(sidecar.alignment) : null,
+        updatedAt: sidecar.updatedAt ?? null,
       });
     }
     return rows.sort((a, b) => a.ordinal - b.ordinal);
   };
 
-  const readCompletedPlaybackSegmentFromIndex = async (
-    session: PlaybackSessionRow,
-    ordinal: number,
-  ): Promise<CompletedPlaybackSegment | null> => {
-    const index = await playbackStorage?.artifacts.readSegmentIndex({
-      storageUserId: session.storageUserId,
-      documentId: session.documentId,
-      documentVersion: session.documentVersion,
-      settingsHash: session.settingsHash,
-    }).catch(() => null);
-    const row = index?.segments.find((segment) => segment.segmentIndex === ordinal);
-    if (!row || row.status !== 'completed' || !row.audioKey) return null;
-    return {
-      ordinal: row.segmentIndex,
-      audioKey: row.audioKey,
-      durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
-    };
-  };
-
-  const readCompletedPlaybackSegment = async (
-    session: PlaybackSessionRow,
-    ordinal: number,
-  ): Promise<CompletedPlaybackSegment | null> => {
-    return readCompletedPlaybackSegmentFromIndex(session, ordinal);
-  };
-
-  const readPlaybackSegmentStateFromIndex = async (
+  const readPlaybackSegmentState = async (
     session: PlaybackSessionRow,
     ordinal: number,
   ): Promise<PlaybackSegmentState> => {
-    const index = await playbackStorage?.artifacts.readSegmentIndex({
-      storageUserId: session.storageUserId,
-      documentId: session.documentId,
-      documentVersion: session.documentVersion,
-      settingsHash: session.settingsHash,
-    }).catch(() => null);
-    const row = index?.segments.find((segment) => segment.segmentIndex === ordinal);
-    if (row?.status === 'completed' && row.audioKey) {
+    const sidecar = await readSidecarForOrdinal(session, ordinal);
+    if (sidecar?.status === 'completed' && sidecar.audioKey) {
       return {
         status: 'completed',
-        ordinal: row.segmentIndex,
-        audioKey: row.audioKey,
-        durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
+        ordinal: sidecar.segmentIndex,
+        audioKey: sidecar.audioKey,
+        durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
       };
     }
-    if (row?.status === 'error') {
+    if (sidecar?.status === 'error') {
       return {
         status: 'error',
-        ordinal: row.segmentIndex,
-        durationMs: Math.max(1, Number(row.durationMs ?? 1000)),
+        ordinal: sidecar.segmentIndex,
+        durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
       };
     }
     return { status: 'pending', ordinal };
@@ -326,6 +404,18 @@ export function registerComputeWorkerRoutes(input: {
       });
       if (current && !isTerminalStatus(current.status)) return;
     }
+
+    // DIAG (generationStartOrdinal revert): this HTTP path patches the session
+    // record (status/workerOpId) concurrently with the job. Its read-merge-put
+    // can interleave with the job's genStart write and revert it. Log the value
+    // it observed and is about to carry forward. Remove once confirmed.
+    app.log.info({
+      sessionId: session.sessionId,
+      reason,
+      status: session.status,
+      generationStartOrdinalSeen: session.generationStartOrdinal,
+      cursorOrdinal: session.cursorOrdinal,
+    }, 'tts.playback.diag.continuation_patch');
 
     const requestBody: typeof ttsPlaybackOperationCreateSchema._output = {
       sessionId: session.sessionId,
@@ -423,30 +513,21 @@ export function registerComputeWorkerRoutes(input: {
     }
   };
 
-  // Map of ordinal → exact probed durationMs for every completed segment of this
-  // session's document/version/settings (drives exact byte offsets for seeking).
-  const listCompletedDurationsFromIndex = async (
+  // Map of ordinal → exact probed durationMs for every completed segment in the
+  // active region (drives exact byte offsets for seeking). Built from per-ordinal
+  // sidecars via the bounded, cached band scan — no aggregate index.
+  const listCompletedDurations = async (
     session: PlaybackSessionRow,
+    planLength: number,
   ): Promise<Map<number, number>> => {
-    const index = await playbackStorage?.artifacts.readSegmentIndex({
-      storageUserId: session.storageUserId,
-      documentId: session.documentId,
-      documentVersion: session.documentVersion,
-      settingsHash: session.settingsHash,
-    }).catch(() => null);
+    const sidecars = await collectScopeSidecars(session, planLength);
     const map = new Map<number, number>();
-    for (const row of index?.segments ?? []) {
-      if (row.status === 'completed' && row.audioKey) {
-        map.set(Number(row.segmentIndex), Math.max(1, Number(row.durationMs ?? 1000)));
+    for (const sidecar of sidecars.values()) {
+      if (sidecar.status === 'completed' && sidecar.audioKey) {
+        map.set(Number(sidecar.segmentIndex), Math.max(1, Number(sidecar.durationMs ?? 1000)));
       }
     }
     return map;
-  };
-
-  const listCompletedDurations = async (
-    session: PlaybackSessionRow,
-  ): Promise<Map<number, number>> => {
-    return listCompletedDurationsFromIndex(session);
   };
 
   app.get('/health/live', {
@@ -490,6 +571,17 @@ export function registerComputeWorkerRoutes(input: {
       reply.code(404);
       return { error: 'Playback session not found' };
     }
+    // DIAG (generationStartOrdinal revert): this is the value the client's
+    // startup handshake reads. Only the job ever sets it to the resolved start;
+    // if a read here shows status=running with a *lower* genStart than a prior
+    // read, a concurrent record writer reverted it. Remove once confirmed.
+    app.log.info({
+      sessionId,
+      status: session.status,
+      generationStartOrdinal: session.generationStartOrdinal,
+      cursorOrdinal: session.cursorOrdinal,
+      workerOpId: session.workerOpId ?? null,
+    }, 'tts.playback.diag.session_read');
     return session;
   });
 
@@ -675,7 +767,7 @@ export function registerComputeWorkerRoutes(input: {
           const planSegments = await readPlanSegments(session.planObjectKey);
           if (planSegments) {
             const startOrdinal = 0;
-            const completed = await listCompletedDurations(session);
+            const completed = await listCompletedDurations(session, planSegments.length);
             const estimateRate = estimateRateForSession(session);
             // Size every not-yet-generated (silence) slot in WHOLE MP3 frames, with
             // its exact frame byte length, so the silence we emit decodes to exactly
@@ -820,7 +912,7 @@ export function registerComputeWorkerRoutes(input: {
           if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
             return;
           }
-          const segmentState = await readPlaybackSegmentStateFromIndex(session, ordinal);
+          const segmentState = await readPlaybackSegmentState(session, ordinal);
           if (segmentState.status === 'completed') {
             audioKey = segmentState.audioKey;
             break;
@@ -979,6 +1071,9 @@ export function registerComputeWorkerRoutes(input: {
     }
 
     await putPlaybackSessionState(parsed.data, 'queued', null);
+    // DIAG (generationStartOrdinal revert): t0 baseline — the record is created
+    // with genStart=0; the job patches it to the resolved start once it runs.
+    app.log.info({ sessionId: parsed.data.sessionId }, 'tts.playback.diag.session_created');
     const requestOp: WorkerOperationRequest = {
       kind: 'tts_playback',
       opKey: buildTtsPlaybackOperationKey(parsed.data),

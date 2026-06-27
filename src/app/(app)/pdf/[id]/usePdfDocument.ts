@@ -268,7 +268,6 @@ export function usePdfDocument(
     }
   }, [
     currDocPageNumber,
-    currDocPages,
     setDocumentPlaybackAnchor,
     currDocText,
     parsedDocument,

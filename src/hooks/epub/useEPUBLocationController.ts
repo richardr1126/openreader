@@ -88,7 +88,6 @@ export function useEPUBLocationController({
             console.warn('Unable to resolve EPUB locator to CFI:', location);
             return;
           }
-          // eslint-disable-next-line no-console
           console.log('[cursor-follow] display cfi', {
             spineIndex: location.spineIndex,
             charOffset: location.charOffset,

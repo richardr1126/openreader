@@ -98,62 +98,62 @@ describe('TTS playback storage', () => {
 
     await store.updateCursor('session-1', 42, 200);
 
+    // The cursor lives on its own key (plain put, last-write-wins) and is
+    // overlaid onto the record on read. A cursor update does NOT rewrite the
+    // worker-owned record, so the record's own `updatedAt` stays put — this is
+    // what keeps the heartbeat from contending with status writes.
     expect(await store.getSession('session-1')).toMatchObject({
       sessionId: 'session-1',
       cursorOrdinal: 42,
       cursorUpdatedAt: 200,
-      updatedAt: 200,
+      updatedAt: 100,
     });
   });
 
-  test('claims segments with CAS and permits stale takeover', async () => {
-    const kv = new MemoryKv();
+  test('cursor updates never use CAS (no wrong-last-sequence under contention)', async () => {
+    // A KV that rejects every CAS write — proving the cursor/session paths use
+    // plain puts only. If any of them reach for kv.update, this throws.
+    class NoCasKv extends MemoryKv {
+      async update(): Promise<unknown> {
+        throw new Error('wrong last sequence');
+      }
+    }
+    const kv = new NoCasKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });
-    const claimInput = {
+
+    await store.putSession({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
       storageUserId: 'storage-1',
-      documentId: 'b'.repeat(64),
-      documentVersion: 7,
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'pdf',
+      status: 'queued',
       settingsHash: 'settings-hash',
-      segmentId: 'c'.repeat(64),
-      audioKey: 'openreader/audio.mp3',
-      staleAfterMs: 1_000,
-    };
+      settingsJson: { voice: 'v' },
+      generationStartOrdinal: 0,
+      cursorOrdinal: 0,
+      cursorUpdatedAt: null,
+      planObjectKey: null,
+      expiresAt: 1234,
+      lastError: null,
+      updatedAt: 100,
+    });
 
-    await expect(store.claimSegment({ ...claimInput, ownerId: 'one', now: 1_000 }))
-      .resolves.toMatchObject({ claimed: true, claim: { ownerId: 'one' } });
-    await expect(store.claimSegment({ ...claimInput, ownerId: 'two', now: 1_500 }))
-      .resolves.toMatchObject({ claimed: false, claim: { ownerId: 'one' } });
-    await expect(store.claimSegment({ ...claimInput, ownerId: 'two', now: 2_500 }))
-      .resolves.toMatchObject({ claimed: true, claim: { ownerId: 'two' } });
+    // Many racing cursor writers + a concurrent status patch — all plain puts.
+    await Promise.all([
+      ...Array.from({ length: 25 }, (_, i) => store.updateCursor('session-1', i, 1000 + i)),
+      store.patchSession('session-1', { status: 'running', updatedAt: 1100 }),
+      store.patchSession('session-1', { cursorOrdinal: 5, cursorUpdatedAt: 1200, updatedAt: 1200 }),
+    ]);
 
-    await store.markSegmentClaim({ ...claimInput, status: 'completed', ownerId: 'two', now: 3_000 });
-    await expect(store.claimSegment({ ...claimInput, ownerId: 'three', now: 5_000 }))
-      .resolves.toMatchObject({ claimed: false, claim: { status: 'completed', ownerId: 'two' } });
+    const session = await store.getSession('session-1');
+    expect(session?.status).toBe('running');
+    expect(session?.cursorOrdinal).toBeGreaterThanOrEqual(0);
   });
 
-  test('reclaims a completed claim when the durable artifact is gone (cleared cache)', async () => {
-    const kv = new MemoryKv();
-    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
-    const claimInput = {
-      storageUserId: 'storage-1',
-      documentId: 'b'.repeat(64),
-      documentVersion: 7,
-      settingsHash: 'settings-hash',
-      segmentId: 'c'.repeat(64),
-      audioKey: 'openreader/audio.mp3',
-      staleAfterMs: 1_000,
-    };
-
-    await store.markSegmentClaim({ ...claimInput, status: 'completed', ownerId: 'one', now: 1_000 });
-    // Without the flag a completed claim is permanent (the "broken forever" path).
-    await expect(store.claimSegment({ ...claimInput, ownerId: 'two', now: 5_000 }))
-      .resolves.toMatchObject({ claimed: false, claim: { status: 'completed' } });
-    // With the flag (no S3 index entry => stale completed claim) it is reclaimed.
-    await expect(store.claimSegment({ ...claimInput, ownerId: 'two', now: 5_000, allowReclaimCompleted: true }))
-      .resolves.toMatchObject({ claimed: true, claim: { status: 'generating', ownerId: 'two' } });
-  });
-
-  test('writes segment metadata and a compact sorted index to S3 storage', async () => {
+  test('writes and reads per-ordinal segment sidecars (no aggregate index)', async () => {
     const storage = new MemoryStorage();
     const store = createTtsPlaybackSegmentArtifactStore({ storage, s3Prefix: 'openreader' });
     const scope = {
@@ -163,7 +163,7 @@ describe('TTS playback storage', () => {
       settingsHash: 'settings-hash',
     };
 
-    await store.putSegmentMetadata({
+    const key2 = await store.putSegmentMetadata({
       schemaVersion: 1,
       ...scope,
       readerType: 'pdf',
@@ -201,14 +201,21 @@ describe('TTS playback storage', () => {
       updatedAt: 10,
     });
 
-    const index = await store.readSegmentIndex(scope);
-    expect(index?.segments.map((segment) => segment.segmentIndex)).toEqual([1, 2]);
-    expect(index?.segments[0]).toMatchObject({
+    // Each segment is its own object, addressable directly by ordinal.
+    expect(key2).toBe(store.sidecarKey({ ...scope, segmentIndex: 2 }));
+    expect(store.sidecarKey({ ...scope, segmentIndex: 1 })).toContain('/segments/1.json');
+
+    const sidecar1 = await store.readSegmentMetadata({ ...scope, segmentIndex: 1 });
+    expect(sidecar1).toMatchObject({
       segmentId: 'a'.repeat(64),
-      metadataKey: expect.stringContaining('/segments/'),
+      segmentIndex: 1,
       audioKey: 'openreader/audio-1.mp3',
       durationMs: 987,
       status: 'completed',
     });
+    const sidecar2 = await store.readSegmentMetadata({ ...scope, segmentIndex: 2 });
+    expect(sidecar2?.durationMs).toBe(1234);
+    // A not-yet-generated ordinal has no sidecar.
+    expect(await store.readSegmentMetadata({ ...scope, segmentIndex: 3 })).toBeNull();
   });
 });
