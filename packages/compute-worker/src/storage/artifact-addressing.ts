@@ -123,5 +123,5 @@ export function ttsPlaybackSegmentSidecarArtifactKey(input: {
   }
   const version = Math.max(0, Math.floor(input.documentVersion));
   const ordinal = Math.max(0, Math.floor(input.segmentIndex));
-  return `${input.prefix}/tts_playback_segments_v2/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${ordinal}.json`;
+  return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${ordinal}.json`;
 }

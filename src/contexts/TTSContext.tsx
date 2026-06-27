@@ -1539,9 +1539,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     } else if (activeReaderType === 'epub') {
       const anchorLocator = isStableEpubLocator(anchor?.locator) ? anchor.locator : null;
       const segmentLocator = isStableEpubLocator(playbackSegment?.ownerLocator) ? playbackSegment.ownerLocator : null;
-      const locator = selectedIndex > 0 && segmentLocator
-        ? segmentLocator
-        : anchorLocator ?? (anchor?.hasContent ? null : segmentLocator);
+      const locator = segmentLocator ?? anchorLocator;
       if (!locator) return null;
       const spineIndex = Math.max(
         0,

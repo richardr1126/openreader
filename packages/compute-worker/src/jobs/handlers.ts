@@ -814,9 +814,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
     });
 
     const existing = await readSidecar(segment).catch(() => null);
-    const audioExists = (existing?.status === 'completed' && existing.audioKey === audioKey)
-      ? true
-      : await input.audioObjectExists(audioKey).catch(() => false);
+    const audioExists = await input.audioObjectExists(audioKey).catch(() => false);
 
     if (audioExists) {
       // Audio is durable. Ensure the sidecar exists and carries duration +

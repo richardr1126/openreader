@@ -1,8 +1,9 @@
 # TTS Playback Architecture
 
 This is the current architecture for TTS playback across the browser client,
-Next.js app, and compute worker. It reflects the cursor/session split and the
-move from the mutable segment index/claim store to per-ordinal sidecars.
+Next.js app, and compute worker. It reflects the cursor/session split, the move
+from the mutable segment index/claim store to per-ordinal sidecars, and the
+remaining client/worker ownership debt.
 
 ---
 
@@ -39,6 +40,15 @@ revision. `kv.update(...revision)` should not appear in playback storage.
 The Next.js app remains a thin authenticated proxy. Playback ownership is split:
 the client owns media/UI state, and the compute worker owns durable playback
 state, artifact layout, generation, and stream construction.
+
+That split is still too blurry for EPUB start/resume behavior. The worker is the
+authority for the durable plan and absolute ordinals, but the client still derives
+rendered EPUB windows, tracks a selected segment index, keeps a viewport anchor,
+and sends a start coordinate back to the worker. Those client values can
+temporarily disagree. The current code prefers a selected EPUB segment locator
+over the viewport anchor when starting playback, but the cleaner target is for
+the worker to resolve start intent to an ordinal and return that as the single
+source of truth.
 
 ---
 
@@ -77,7 +87,7 @@ same key; that is wasteful but correct.
 The old mutable aggregate index and KV claim store are gone. Each segment writes
 one sidecar object:
 
-`tts_playback_segments_v2/users/<userHash>/docs/<documentId>/<version>/<settingsHash>/segments/<ordinal>.json`
+`tts_playback_segments_v1/users/<userHash>/docs/<documentId>/<version>/<settingsHash>/segments/<ordinal>.json`
 
 The sidecar stores duration, alignment, audio key, status, updated time, and the
 segment identity fields. It is keyed by plan ordinal, not segment id, so readers
@@ -92,18 +102,23 @@ or another worker is discovered.
 
 ## Worker Flows
 
-### Create/Start Playback
+### Create/Start Playback Today
 
 1. The client asks the Next proxy for a playback session.
-2. The compute worker resolves or stores an immutable plan.
-3. The worker writes the session record and cursor key with plain `put`.
-4. A JetStream operation is queued for generation.
-5. The generation job patches non-cursor session fields such as status and
+2. The client sends reader start hints. For EPUB, this is currently a stable
+   spine coordinate (`spineIndex`, `charOffset`) selected from the current
+   segment locator when available, falling back to the viewport anchor.
+3. The compute worker resolves or stores an immutable plan.
+4. The worker resolves the request's start hints to an absolute
+   `generationStartOrdinal`.
+5. The worker writes the session record and cursor key with plain `put`.
+6. A JetStream operation is queued for generation.
+7. The generation job patches non-cursor session fields such as status and
    generation start with plain `put`.
 
-The routes currently include temporary `tts.playback.diag.*` log lines around
-session creation, reads, and continuation patches to verify that
-`generationStartOrdinal` is not being reverted by concurrent record writers.
+The client then polls the seek layout until the worker-resolved
+`generationStartOrdinal` appears and aligns both the current segment index and
+the `<audio>` seek target to that ordinal.
 
 ### Generate Segments
 
@@ -160,14 +175,19 @@ right behavior for "where playback probably is now".
 - EPUB cursor-follow navigation guards.
 - Restart behavior for voice, speed, provider, and segmentation changes.
 
-Recent cleanup removed unused feature/config plumbing and cleaned hook
-dependencies, but the larger client state-machine extraction has not happened
-yet.
+For EPUB specifically, the client also still does too much:
 
-The intended next step is to collapse this into a smaller `PlaybackController`
-state machine now that the backend no longer has the CAS/index races:
+- It builds a rendered-page window into the EPUB chapter text.
+- It materializes client-side canonical segments for highlighting and navigation.
+- It tracks both a viewport/page-start anchor and a selected segment/index.
+- It can initiate playback from a selected segment locator, but still has
+  fallback paths through the viewport anchor.
+- It keeps worker plan rows, local current index, seek-layout rows, highlight
+  state, and page navigation state in separate pieces of React state.
 
-`idle -> planning -> playing -> seeking -> ended/failed`
+The latest fix makes EPUB start requests prefer the selected segment's stable
+locator over the page-start anchor. That is a correctness patch, not the final
+architecture.
 
 ---
 
@@ -185,6 +205,10 @@ state machine now that the backend no longer has the CAS/index races:
 - Seeks are whole-document time/byte operations and do not split segments.
 - The browser projects UI state from `audio.currentTime`; highlights do not drive
   audio time.
+- If a selected worker-plan segment exists, EPUB playback start must use that
+  segment locator before falling back to the visible viewport anchor.
+- The worker-resolved `generationStartOrdinal` is the start ordinal for playback;
+  client guesses must be corrected to it before audio starts.
 
 ---
 
@@ -193,6 +217,73 @@ state machine now that the backend no longer has the CAS/index races:
 | Phase | Status | Notes |
 |---|---|---|
 | Split cursor/session KV | Done | Cursor has its own key, session reads overlay it, all writes are plain `put`. |
-| Delete claims and aggregate index | Done | Sidecars are keyed by ordinal under `tts_playback_segments_v2`; readiness comes from sidecar reads plus audio existence. |
+| Delete claims and aggregate index | Done | Sidecars are keyed by ordinal under `tts_playback_segments_v1`; readiness comes from sidecar reads plus audio existence. |
+| Stale sidecar recovery | Done | Generation validates completed sidecars against audio object existence, and the stream route retries stale sidecars whose audio object is missing. |
+| EPUB selected-segment start | Patched | Client start requests now prefer the selected segment's stable EPUB locator over the viewport/page-start anchor. |
 | Client controller extraction | Not done | `TTSContext` still contains the playback driver, projection, seek/resync, and restart behavior. |
+| Worker-authoritative start intent | Not done | The client still sends coordinates and local selection state; the worker should own resolving user intent to a start ordinal and return it explicitly. |
+| Remove client-side EPUB playback planning | Not done | EPUB rendered-window planning should be reduced to view/highlight mapping; durable segment identity and ordinal selection should live with the worker plan. |
 
+---
+
+## Remaining Work
+
+### 1. Make Start Intent Worker-Authoritative
+
+The client should stop deciding which EPUB segment starts playback. It should
+send a narrow start intent, such as:
+
+- current reader type
+- current visible locator or CFI
+- optional selected worker-plan ordinal when the user clicked a known row
+
+The worker should resolve that intent to one absolute ordinal and return it on
+the plan/session response. The client should not independently choose between
+`playbackSegment.ownerLocator`, `playbackAnchor.locator`, text, and current index.
+
+### 2. Reduce Client EPUB Planning to Highlight Mapping
+
+The client still builds canonical EPUB windows to bridge rendered text to
+highlight ranges. That should not also be a playback planning path. The target
+division is:
+
+- Worker: durable EPUB text extraction, segmentation, segment keys, locators,
+  ordinals, start ordinal resolution.
+- Client: rendered text maps, CFI/page navigation, and mapping the current
+  worker segment to a visible highlight when possible.
+
+### 3. Extract the Playback Controller
+
+`TTSContext` should be split so React context exposes state/actions, while a
+smaller controller owns the playback state machine:
+
+`idle -> planning -> ready -> playing -> seeking -> buffering -> ended/failed`
+
+This controller should own the audio element, session lifecycle, seek/resync, and
+projection loop. Document viewers should only provide anchors and render
+highlight state.
+
+### 4. Collapse Duplicate Client State
+
+These values can currently disagree during cold starts, cache clears, and EPUB
+cursor moves:
+
+- `playbackAnchor`
+- `playbackSegments`
+- `sentences`
+- `currentIndex`
+- `playbackSeekLayout`
+- `playbackPlanRef`
+
+The target is a single worker-plan model plus a selected ordinal. Derived views
+can compute sentence text, highlight segment, and scrubber row from that model.
+
+### 5. Add Regression Coverage for EPUB Prefix Starts
+
+Add a test case where an EPUB chapter/page begins with prefix text such as a
+chapter number or image fallback text, then playback starts from the first real
+sentence after the prefix. The expected behavior is:
+
+- the request start coordinate/ordinal resolves to the selected sentence
+- no prefix segment is synthesized or played before it
+- highlight and audio begin on the same segment before and after refresh

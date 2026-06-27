@@ -115,6 +115,24 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function errorCode(error: unknown): string | null {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : null;
+}
+
+function isMissingObjectError(error: unknown): boolean {
+  const maybe = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  const message = toErrorMessage(error).toLowerCase();
+  return maybe.$metadata?.httpStatusCode === 404
+    || maybe.name === 'NotFound'
+    || maybe.name === 'NoSuchKey'
+    || maybe.Code === 'NotFound'
+    || maybe.Code === 'NoSuchKey'
+    || message.includes('specified key does not exist')
+    || message.includes('no such key');
+}
+
 function isTerminalStatus(status: import('../operations/contracts').WorkerJobState): boolean {
   return status === 'succeeded' || status === 'failed';
 }
@@ -216,6 +234,10 @@ export function registerComputeWorkerRoutes(input: {
       sidecarScopeCache.set(key, cache);
     }
     return cache;
+  };
+
+  const forgetCachedSidecar = (session: PlaybackSessionRow, ordinal: number): void => {
+    getSidecarScopeCache(session).delete(ordinal);
   };
 
   const fetchSidecar = async (
@@ -405,18 +427,6 @@ export function registerComputeWorkerRoutes(input: {
       if (current && !isTerminalStatus(current.status)) return;
     }
 
-    // DIAG (generationStartOrdinal revert): this HTTP path patches the session
-    // record (status/workerOpId) concurrently with the job. Its read-merge-put
-    // can interleave with the job's genStart write and revert it. Log the value
-    // it observed and is about to carry forward. Remove once confirmed.
-    app.log.info({
-      sessionId: session.sessionId,
-      reason,
-      status: session.status,
-      generationStartOrdinalSeen: session.generationStartOrdinal,
-      cursorOrdinal: session.cursorOrdinal,
-    }, 'tts.playback.diag.continuation_patch');
-
     const requestBody: typeof ttsPlaybackOperationCreateSchema._output = {
       sessionId: session.sessionId,
       userId: session.userId,
@@ -571,17 +581,6 @@ export function registerComputeWorkerRoutes(input: {
       reply.code(404);
       return { error: 'Playback session not found' };
     }
-    // DIAG (generationStartOrdinal revert): this is the value the client's
-    // startup handshake reads. Only the job ever sets it to the resolved start;
-    // if a read here shows status=running with a *lower* genStart than a prior
-    // read, a concurrent record writer reverted it. Remove once confirmed.
-    app.log.info({
-      sessionId,
-      status: session.status,
-      generationStartOrdinal: session.generationStartOrdinal,
-      cursorOrdinal: session.cursorOrdinal,
-      workerOpId: session.workerOpId ?? null,
-    }, 'tts.playback.diag.session_read');
     return session;
   });
 
@@ -899,132 +898,171 @@ export function registerComputeWorkerRoutes(input: {
         }
       };
 
-      for (; slotIdx < mapLayout.slots.length && sent < need; slotIdx += 1) {
-        const slot = mapLayout.slots[slotIdx];
-        const ordinal = slot.segmentIndex;
-        let audioKey: string | null = null;
-        let paddedMissingPrefix = false;
-        let paddedErrorSegment = false;
-        for (;;) {
-          if (closed) return;
-          const session = await readPlaybackSession(sessionId);
-          if (!session || Date.now() > session.expiresAt) return;
-          if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
-            return;
-          }
-          const segmentState = await readPlaybackSegmentState(session, ordinal);
-          if (segmentState.status === 'completed') {
-            audioKey = segmentState.audioKey;
-            break;
-          }
-          if (segmentState.status === 'error') {
-            const room = need - sent;
-            const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
-            if (silenceBytes > 0) {
-              for await (const chunk of streamSilence(silenceBytes)) {
-                yield chunk;
-                sent += chunk.length;
-              }
+      try {
+        for (; slotIdx < mapLayout.slots.length && sent < need; slotIdx += 1) {
+          const slot = mapLayout.slots[slotIdx];
+          const ordinal = slot.segmentIndex;
+          let audioKey: string | null = null;
+          let paddedMissingPrefix = false;
+          let paddedErrorSegment = false;
+          for (;;) {
+            if (closed) return;
+            const session = await readPlaybackSession(sessionId);
+            if (!session || Date.now() > session.expiresAt) return;
+            if (session.status !== 'queued' && session.status !== 'running' && session.status !== 'succeeded') {
+              return;
             }
-            skipWithin = 0;
-            paddedErrorSegment = true;
-            app.log.info({ sessionId, ordinal }, 'tts.playback.audio.skipped_error_segment');
+            const segmentState = await readPlaybackSegmentState(session, ordinal);
+            if (segmentState.status === 'completed') {
+              audioKey = segmentState.audioKey;
+              break;
+            }
+            if (segmentState.status === 'error') {
+              const room = need - sent;
+              const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
+              if (silenceBytes > 0) {
+                for await (const chunk of streamSilence(silenceBytes)) {
+                  yield chunk;
+                  sent += chunk.length;
+                }
+              }
+              skipWithin = 0;
+              paddedErrorSegment = true;
+              app.log.info({ sessionId, ordinal }, 'tts.playback.audio.skipped_error_segment');
+              await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
+                app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
+              });
+              break;
+            }
+            // Scaffolding silence for the never-generated prefix below the current
+            // generation floor. The floor is shared with the worker's generation
+            // lower bound via generationFloorForCursor (so the two can never drift
+            // -> no `bytes=0-` probe hang). A seek request (rangeStartOrdinal > 0)
+            // pins the floor to its own start — race-proof, since it never serves
+            // ordinals below that anyway — so a backward seek waits for real audio
+            // at the target instead of being silenced by a stale higher cursor. The
+            // `bytes=0-` probe (rangeStartOrdinal === 0) uses the live cursor so a
+            // deep start still emits silence for [0, cursor) and completes at once.
+            const silenceFloor = generationFloorForCursor(
+              rangeStartOrdinal > 0 ? rangeStartOrdinal : session.cursorOrdinal,
+            );
+            if (ordinal < silenceFloor) {
+              // Emit the slot's whole-frame silence so it decodes to exactly its
+              // grid duration.
+              const room = need - sent;
+              const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
+              if (silenceBytes > 0) {
+                for await (const chunk of streamSilence(silenceBytes)) {
+                  yield chunk;
+                  sent += chunk.length;
+                }
+              }
+              skipWithin = 0;
+              paddedMissingPrefix = true;
+              break;
+            }
+            if (session.status === 'succeeded') {
+              // Generation finished but this ordinal has no audio (gap / end of the
+              // generated extent): stop pulling real audio and pad the rest.
+              app.log.info({ sessionId, ordinal }, 'tts.playback.audio.stopped_at_gap');
+              break;
+            }
+            // Still generating (status running): wait for this segment to finish.
+            // Forward playback self-paces — generation stays ahead of the cursor (which
+            // we advance as we serve), so the segment is on its way. A seek past the
+            // frontier issues a new range request and updates the cursor, so generation
+            // jumps there; we wait (brief buffering) rather than silencing the rest of
+            // the response, which the browser would never re-request.
+            //
+            // Re-anchor generation to the ordinal we're blocked on: this drives the
+            // cursor here and (re)enqueues a continuation. After a forward seek the
+            // prior run abandons the skipped gap (its onBeforeSegment floor check),
+            // and this re-anchor starts a fresh run AT the target the moment that run
+            // frees — so re-centering is prompt instead of waiting for the heartbeat.
             await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
-              app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
+              app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_reanchor_failed');
             });
+            markActivity('tts_playback_audio_wait');
+            await sleep(400);
+          }
+          if (!audioKey) {
+            if (paddedMissingPrefix || paddedErrorSegment) continue;
             break;
           }
-          // Scaffolding silence for the never-generated prefix below the current
-          // generation floor. The floor is shared with the worker's generation
-          // lower bound via generationFloorForCursor (so the two can never drift
-          // → no `bytes=0-` probe hang). A seek request (rangeStartOrdinal > 0)
-          // pins the floor to its own start — race-proof, since it never serves
-          // ordinals below that anyway — so a backward seek waits for real audio
-          // at the target instead of being silenced by a stale higher cursor. The
-          // `bytes=0-` probe (rangeStartOrdinal === 0) uses the live cursor so a
-          // deep start still emits silence for [0, cursor) and completes at once.
-          const silenceFloor = generationFloorForCursor(
-            rangeStartOrdinal > 0 ? rangeStartOrdinal : session.cursorOrdinal,
-          );
-          if (ordinal < silenceFloor) {
-            // Emit the slot's whole-frame silence so it decodes to exactly its
-            // grid duration.
-            const room = need - sent;
-            const silenceBytes = Math.max(0, Math.min(room, slot.byteLength - skipWithin));
-            if (silenceBytes > 0) {
-              for await (const chunk of streamSilence(silenceBytes)) {
-                yield chunk;
-                sent += chunk.length;
-              }
-            }
-            skipWithin = 0;
-            paddedMissingPrefix = true;
-            break;
-          }
-          if (session.status === 'succeeded') {
-            // Generation finished but this ordinal has no audio (gap / end of the
-            // generated extent): stop pulling real audio and pad the rest.
-            app.log.info({ sessionId, ordinal }, 'tts.playback.audio.stopped_at_gap');
-            break;
-          }
-          // Still generating (status running): wait for this segment to finish.
-          // Forward playback self-paces — generation stays ahead of the cursor (which
-          // we advance as we serve), so the segment is on its way. A seek past the
-          // frontier issues a new range request and updates the cursor, so generation
-          // jumps there; we wait (brief buffering) rather than silencing the rest of
-          // the response, which the browser would never re-request.
-          //
-          // Re-anchor generation to the ordinal we're blocked on: this drives the
-          // cursor here and (re)enqueues a continuation. After a forward seek the
-          // prior run abandons the skipped gap (its onBeforeSegment floor check),
-          // and this re-anchor starts a fresh run AT the target the moment that run
-          // frees — so re-centering is prompt instead of waiting for the heartbeat.
+
           await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
-            app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_reanchor_failed');
+            app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
           });
-          markActivity('tts_playback_audio_wait');
-          await sleep(400);
-        }
-        if (!audioKey) {
-          if (paddedMissingPrefix || paddedErrorSegment) continue;
-          break;
-        }
-
-        await updatePlaybackCursor(sessionId, ordinal).catch((error) => {
-          app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
-        });
-        // Serve the segment's real CBR audio gaplessly — each segment is a whole
-        // number of MP3 frames, so concatenation keeps the stream byte↔time linear
-        // (and live highlighting accurate). NEVER pad/trim mid-segment: a mid-frame
-        // cut drops a partial frame on decode, so playback runs slightly ahead of
-        // the byte grid and the highlight drifts behind, accumulating per segment.
-        let bytes = stripId3Tag(Buffer.from(await storage.readObject(audioKey)));
-        if (skipWithin > 0) {
-          bytes = bytes.subarray(Math.min(skipWithin, bytes.length));
-          skipWithin = 0;
-        }
-        const room = need - sent;
-        if (bytes.length > room) bytes = bytes.subarray(0, room);
-        if (bytes.length > 0) {
-          if (!wroteFirstByte) {
-            wroteFirstByte = true;
-            app.log.info({ sessionId, ordinal, firstByteMs: Date.now() - startedAt }, 'tts.playback.audio.first_byte');
+          // Serve the segment's real CBR audio gaplessly — each segment is a whole
+          // number of MP3 frames, so concatenation keeps the stream byte↔time linear
+          // (and live highlighting accurate). NEVER pad/trim mid-segment: a mid-frame
+          // cut drops a partial frame on decode, so playback runs slightly ahead of
+          // the byte grid and the highlight drifts behind, accumulating per segment.
+          let rawAudio: ArrayBuffer;
+          try {
+            rawAudio = await storage.readObject(audioKey);
+          } catch (error) {
+            if (!isMissingObjectError(error)) throw error;
+            const session = await readPlaybackSession(sessionId);
+            if (session) forgetCachedSidecar(session, ordinal);
+            app.log.warn({
+              sessionId,
+              ordinal,
+              audioKey,
+              error: toErrorMessage(error),
+            }, 'tts.playback.audio.stale_sidecar_missing_audio');
+            await updatePlaybackCursor(sessionId, ordinal).catch((cursorError) => {
+              app.log.warn({ sessionId, ordinal, error: toErrorMessage(cursorError) }, 'tts.playback.cursor_reanchor_failed');
+            });
+            markActivity('tts_playback_audio_wait_missing_audio');
+            await sleep(400);
+            slotIdx -= 1;
+            continue;
           }
-          markActivity('tts_playback_audio_segment');
-          yield bytes;
-          sent += bytes.length;
+          let bytes = stripId3Tag(Buffer.from(rawAudio));
+          if (skipWithin > 0) {
+            bytes = bytes.subarray(Math.min(skipWithin, bytes.length));
+            skipWithin = 0;
+          }
+          const room = need - sent;
+          if (bytes.length > room) bytes = bytes.subarray(0, room);
+          if (bytes.length > 0) {
+            if (!wroteFirstByte) {
+              wroteFirstByte = true;
+              app.log.info({ sessionId, ordinal, firstByteMs: Date.now() - startedAt }, 'tts.playback.audio.first_byte');
+            }
+            markActivity('tts_playback_audio_segment');
+            yield bytes;
+            sent += bytes.length;
+          }
         }
-      }
 
-      // Pad up to the advertised length with valid CBR silence — streamed in bounded
-      // chunks (reusing the cached ~1s buffer). The pad can be large for a long
-      // document (the advertised total is a whole-document estimate), so it must
-      // never be materialized as a single buffer.
-      if (sent < need && !closed) {
-        for await (const chunk of streamSilence(need - sent)) {
-          yield chunk;
-          sent += chunk.length;
+        // Pad up to the advertised length with valid CBR silence — streamed in bounded
+        // chunks (reusing the cached ~1s buffer). The pad can be large for a long
+        // document (the advertised total is a whole-document estimate), so it must
+        // never be materialized as a single buffer.
+        if (sent < need && !closed) {
+          for await (const chunk of streamSilence(need - sent)) {
+            yield chunk;
+            sent += chunk.length;
+          }
         }
+      } catch (error) {
+        if (closed || errorCode(error) === 'ERR_STREAM_PREMATURE_CLOSE') {
+          app.log.info({ sessionId, sent, need, rangeStart: range.start, rangeEnd: range.end }, 'tts.playback.audio.stream_closed');
+          return;
+        }
+        app.log.error({
+          sessionId,
+          sent,
+          need,
+          rangeStart: range.start,
+          rangeEnd: range.end,
+          slotIdx,
+          error: toErrorMessage(error),
+          code: errorCode(error),
+        }, 'tts.playback.audio.stream_error');
+        throw error;
       }
     };
 
@@ -1071,9 +1109,6 @@ export function registerComputeWorkerRoutes(input: {
     }
 
     await putPlaybackSessionState(parsed.data, 'queued', null);
-    // DIAG (generationStartOrdinal revert): t0 baseline — the record is created
-    // with genStart=0; the job patches it to the resolved start once it runs.
-    app.log.info({ sessionId: parsed.data.sessionId }, 'tts.playback.diag.session_created');
     const requestOp: WorkerOperationRequest = {
       kind: 'tts_playback',
       opKey: buildTtsPlaybackOperationKey(parsed.data),
