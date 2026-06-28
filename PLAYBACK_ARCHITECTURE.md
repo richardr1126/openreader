@@ -226,10 +226,12 @@ delete the fallback paths instead of making them slightly less wrong.
 | Split cursor/session KV | Done | Cursor has its own key, session reads overlay it, all writes are plain `put`. |
 | Delete claims and aggregate index | Done | Sidecars are keyed by ordinal under `tts_playback_segments_v1`; readiness comes from sidecar reads plus audio existence. |
 | Stale sidecar recovery | Done | Generation validates completed sidecars against audio object existence, and the stream route retries stale sidecars whose audio object is missing. |
-| EPUB selected-segment start | Done | Playback session creation now requires `startIntent.selectedOrdinal`; plan loading remains separate. |
+| EPUB selected-segment start | Done | Playback session creation now requires `startIntent.selectedOrdinal`; plan loading has no playback-start inputs. |
 | Client controller extraction | Not done | `TTSContext` still contains the playback driver, projection, seek/resync, and restart behavior. |
-| Worker-plan ordinal start | Done | Playback jobs validate the selected ordinal against the canonical plan. Coordinate/text fallback resolution has been removed from the playback-start path. |
-| Remove client-side EPUB playback planning | Not done | EPUB rendered-window planning should be reduced to view/highlight mapping; durable segment identity and ordinal selection should live with the worker plan. |
+| Worker-plan ordinal start | Done | Playback jobs validate the selected ordinal against the canonical plan. Coordinate/text/key fallback resolution has been removed from the playback-start path. |
+| Remove client-side EPUB playback planning | In progress | Plan/session payloads no longer carry reader start coordinates, text, or segment keys. Client EPUB coordinates remain only for plan-backed UI selection/highlight mapping. |
+| Clear cache as playback reset boundary | Not done | Clearing generated audio/sidecars must cancel active sessions/jobs and invalidate worker-side readiness caches before deleting objects. |
+| ID/key/schema consolidation | In progress | Plan/session payloads are now separated and legacy start key/text/coordinate inputs were removed from the worker playback operation schema. Remaining overlap: `segmentIndex`/`ordinal`, `segmentKey`/`segmentId`, and duplicated normalizers. |
 
 ---
 
@@ -247,14 +249,19 @@ The worker validates the ordinal against the canonical plan and stores it as
 `playbackSegment.ownerLocator`, `playbackAnchor.locator`, text, current index,
 CFI, or page-start anchor.
 
-Required cleanup:
+Completed cleanup:
 
-- Keep playback session creation gated on `startIntent.selectedOrdinal`.
-- Keep the session request rebuilt from the applied worker plan before starting
+- Session creation is gated on `startIntent.selectedOrdinal`.
+- The session request is rebuilt from the applied worker plan before starting
   audio.
-- Keep worker playback-start resolution ordinal-only.
-- Continue shrinking client start-index mapping until it is only UI selection
-  mapping, not playback authority.
+- Worker playback-start resolution is ordinal-only.
+- Plan/session payloads no longer send reader start coordinates, segment keys,
+  or text as playback-start inputs.
+
+Remaining cleanup:
+
+- Keep client start-index mapping scoped to UI selection/highlight mapping, not
+  playback authority.
 
 ### 2. Reduce Client EPUB Planning to Highlight Mapping
 
@@ -266,6 +273,18 @@ division is:
   ordinals, and ordinal validation.
 - Client: rendered text maps, CFI/page navigation, and mapping the current
   worker segment to a visible highlight.
+
+Completed cleanup:
+
+- Plan creation uses document/settings/segmentation input only; start page,
+  spine offset, segment key, and text no longer fork plan operation keys.
+- Playback sessions send plan identity plus selected worker-plan ordinal, not
+  reader coordinates or text/key hints.
+
+Remaining cleanup:
+
+- Remove the remaining rendered-window canonical segment ownership from
+  `TTSContext` and keep only the worker-plan row-to-highlight mapping.
 
 ### 3. Extract the Playback Controller
 
@@ -293,12 +312,73 @@ plan/session restarts:
 The target is a single worker-plan model plus a selected ordinal. Derived views
 compute sentence text, highlight segment, and scrubber row from that model.
 
-### 5. Add Regression Coverage for EPUB Prefix Starts
+### 5. Fix Clear Cache to be a Playback Reset Boundary
 
-Add a test case where an EPUB chapter/page begins with prefix text such as a
-chapter number or image alt text, then playback starts from the first real
-sentence after the prefix. The expected behavior is:
+The current clear-cache path mistakenly deletes generated audio objects and playback
+sidecars, but it does not reliably reset active playback. That is not a valid
+distributed reset boundary because running playback jobs and worker processes can
+still hold or recreate readiness state after object deletion.
 
-- playback session creation sends the selected worker-plan ordinal
-- no prefix segment is synthesized or played before it
-- highlight and audio begin on the same segment before and after refresh
+Important distinction:
+
+- Audio objects are the actual generated MP3 bytes under `tts_segments_v2`.
+- Sidecars are per-ordinal JSON metadata under `tts_playback_segments_v1`; they
+  point to audio keys and carry duration/alignment/status.
+- Worker route processes may cache completed sidecars in memory for timeline,
+  seek-layout, and stream reads. Audio bytes are not cached in memory there.
+
+The clear-cache operation must become an explicit playback reset:
+
+- Resolve the affected `(storageUserId, documentId, documentVersion,
+  settingsHash?)` scope.
+- Mark matching active playback sessions as `canceled` before deleting audio or
+  sidecars.
+- Ensure running generation jobs observe cancellation and stop before writing
+  more sidecars for the cleared scope.
+- Invalidate worker-side completed-sidecar caches for that scope across all
+  worker processes, or introduce a durable cache epoch/generation token that
+  makes old cached sidecars and late writes invalid.
+- Delete audio and sidecar objects only after the cancellation/invalidation
+  boundary is established.
+- Return the number of invalidated sessions/jobs instead of always reporting
+  `invalidatedPlaybackSessions: 0`.
+
+The preferred durable design is a cache epoch per playback artifact scope. Clear
+increments the epoch; sessions, sidecars, and generation writes include it; stream
+and timeline readers reject sidecars from older epochs. Direct worker cache
+invalidation is still useful, but without an epoch it does not fully protect
+against late writes from already-running jobs or multiple worker processes.
+
+### 6. Consolidate IDs, Keys, and Schemas
+
+The playback path still carries too many overlapping identity fields and parallel
+schema definitions. This makes the code harder to reason about and keeps
+transitional naming alive after ordinals became the playback identity.
+
+Target identity model:
+
+- `ordinal`: the canonical worker-plan position and only playback cursor/start
+  identity.
+- `segmentKey`: stable segmentation/content key from the canonical plan, used for
+  dedupe/debugging and compatibility, not for playback start.
+- `segmentId`: audio/settings-specific synthesized segment identity, used for
+  content-addressed audio and sidecar metadata.
+- `planObjectKey`: durable S3 address of the immutable canonical plan.
+- `planSignature`: segmentation-shape hash used to address/reuse the plan.
+- `settingsHash`: audio/settings hash used for generated audio and sidecars.
+
+Required cleanup:
+
+- Rename internal `segmentIndex` fields on playback plan/grid artifacts to
+  `ordinal`, keeping compatibility shims only at API boundaries if needed.
+- Remove duplicated `sourceSegmentIndex` values where they only mirror `ordinal`.
+- Keep `segmentKey` and `segmentId` separate and document where each is allowed.
+- Consolidate plan/session request schemas so plan loading and playback session
+  creation do not share one loose payload type.
+- Consolidate generated/hand-written response normalizers for plan, grid, seek
+  layout, and timeline rows.
+- Add schema-version handling helpers for playback plan artifacts and sidecars
+  instead of scattered `schemaVersion: 1` checks.
+- Add tests that reject ambiguous identity input, such as session starts without
+  `ordinal`, rows with conflicting `ordinal`/`segmentIndex`, or sidecars whose
+  ordinal does not match their object key.

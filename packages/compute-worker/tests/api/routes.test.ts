@@ -137,7 +137,6 @@ describe('compute worker API routes', () => {
           documentSource: {
             namespace: null,
             extent: 'section',
-            startPage: 12,
           },
         },
       },
@@ -157,7 +156,6 @@ describe('compute worker API routes', () => {
           documentSource: {
             namespace: null,
             extent: 'section',
-            startPage: 12,
           },
         },
       },
@@ -185,7 +183,6 @@ describe('compute worker API routes', () => {
           documentSource: {
             namespace: null,
             extent: 'section',
-            startPage: 12,
           },
         },
       },
@@ -218,7 +215,6 @@ describe('compute worker API routes', () => {
           documentSource: {
             namespace: null,
             extent: 'document',
-            startPage: 12,
           },
         },
       },
@@ -237,7 +233,6 @@ describe('compute worker API routes', () => {
           documentSource: {
             namespace: null,
             extent: 'document',
-            startPage: 12,
           },
         },
       },

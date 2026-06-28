@@ -65,23 +65,16 @@ export const createTtsPlaybackSession = async (
 export type TtsPlaybackPlanPayload = {
   documentId: string;
   settings: TTSSegmentSettings;
-  /** Current reading position; the worker derives reading text from here. */
-  startLocation?: { page?: number; spineIndex?: number; charOffset?: number };
-  /** Worker-plan start intent. Required for playback sessions; optional for plan loading. */
-  startIntent?: { selectedOrdinal?: number };
-  /** Optional exact segment hint so worker-owned playback starts at the clicked sentence. */
-  startSegmentKey?: string;
-  startText?: string;
   /** Segmentation knobs only; reading text is derived server-side. */
   planning?: { maxBlockLength?: number; language?: string; skipBlockKinds?: ParsedPdfBlockKind[] };
-  planId?: string;
-  planObjectKey?: string;
-  planSignature?: string;
 };
 
 export type TtsPlaybackSessionPayload = TtsPlaybackPlanPayload & {
+  /** Worker-plan start intent. Required for playback sessions. */
   startIntent: { selectedOrdinal: number };
+  planId?: string;
   planObjectKey: string;
+  planSignature?: string;
 };
 
 export const createTtsPlaybackPlan = async (

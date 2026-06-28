@@ -8,7 +8,6 @@ import {
   buildTtsPlaybackPlanningInput,
   parseTtsPlaybackRequestBody,
   toTtsPlaybackPlanRequest,
-  validateTtsPlaybackStartLocation,
 } from '@/lib/server/tts/playback-request';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -34,14 +33,15 @@ export async function POST(request: NextRequest) {
 
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
-    const startLocationError = validateTtsPlaybackStartLocation(parsed, scope);
-    if (startLocationError) return NextResponse.json({ error: startLocationError }, { status: 400 });
 
     const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope);
+    const planning = { ...planningInput.planning };
+    delete planning.selectedOrdinal;
     const operation = await new ComputeWorkerClient().createTtsPlaybackPlanOperation(toTtsPlaybackPlanRequest({
       parsed,
       scope,
       ...planningInput,
+      planning,
     }));
 
     const planId = operation.opId;

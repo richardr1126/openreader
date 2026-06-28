@@ -70,8 +70,6 @@ export const ttsPlaybackOperationCreateSchema = z.object({
   backgroundExtent: z.enum(['section', 'document']).optional(),
   planning: z.object({
     selectedOrdinal: z.number().int().nonnegative().optional(),
-    startSegmentKey: z.string().trim().min(1).max(512).optional(),
-    startText: z.string().trim().min(1).max(20_000).optional(),
     maxBlockLength: z.number().int().positive().max(20_000).optional(),
     enforceSourceBoundaries: z.boolean().optional(),
     language: z.string().trim().min(1).max(32).optional(),
@@ -79,9 +77,6 @@ export const ttsPlaybackOperationCreateSchema = z.object({
       namespace: z.string().trim().min(1).max(128).nullable(),
       skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
       extent: z.enum(['section', 'document']),
-      startPage: z.number().int().positive().optional(),
-      startSpineIndex: z.number().int().nonnegative().optional(),
-      startCharOffset: z.number().int().nonnegative().optional(),
       isPlainText: z.boolean().optional(),
     }).optional(),
   }),

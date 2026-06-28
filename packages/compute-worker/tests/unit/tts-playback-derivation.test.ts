@@ -68,7 +68,7 @@ describe('worker-owned TTS playback source derivation', () => {
   test('derivation returns the whole document, skipping headers', async () => {
     const storage = fakeStorage();
     const units = await resolvePlaybackSourceUnits(
-      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document', startPage: 1 } }),
+      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document' } }),
       storage,
       PREFIX,
     );
@@ -82,12 +82,12 @@ describe('worker-owned TTS playback source derivation', () => {
   test('derivation is position-independent: same whole-document units regardless of start page or extent', async () => {
     const storage = fakeStorage();
     const fromTop = await resolvePlaybackSourceUnits(
-      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document', startPage: 1 } }),
+      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'document' } }),
       storage,
       PREFIX,
     );
     const fromMid = await resolvePlaybackSourceUnits(
-      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'section', startPage: 2 } }),
+      baseRequest({ documentSource: { namespace: null, skipBlockKinds: ['header'], extent: 'section' } }),
       storage,
       PREFIX,
     );
@@ -123,7 +123,7 @@ describe('worker-owned TTS playback source derivation', () => {
 
     expect(resolvePlaybackStartOrdinal(
       segments,
-      baseRequest({ selectedOrdinal: 1, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+      baseRequest({ selectedOrdinal: 1, documentSource: { namespace: null, extent: 'document' } }),
     )).toBe(1);
     expect(resolvePlaybackStartOrdinal(
       segments,
@@ -131,16 +131,12 @@ describe('worker-owned TTS playback source derivation', () => {
     )).toBe(2);
   });
 
-  test('resolvePlaybackStartOrdinal ignores EPUB coordinate/text hints without selected ordinal', () => {
+  test('resolvePlaybackStartOrdinal rejects EPUB document-source hints without selected ordinal', () => {
     const request = {
       ...baseRequest({
-        startSegmentKey: 'client-whole-chapter-key-that-worker-will-not-match',
-        startText: 'Repeated heading',
         documentSource: {
           namespace: null,
           extent: 'document',
-          startSpineIndex: 1,
-          startCharOffset: 500,
         },
       }),
       readerType: 'epub' as const,
@@ -184,8 +180,6 @@ describe('worker-owned TTS playback source derivation', () => {
         documentSource: {
           namespace: null,
           extent: 'document',
-          startSpineIndex: 0,
-          startCharOffset: 0,
         },
       }),
       readerType: 'epub' as const,
@@ -221,8 +215,6 @@ describe('worker-owned TTS playback source derivation', () => {
         documentSource: {
           namespace: null,
           extent: 'document',
-          startSpineIndex: 1,
-          startCharOffset: 500,
         },
       }),
       readerType: 'epub' as const,
@@ -255,21 +247,21 @@ describe('worker-owned TTS playback source derivation', () => {
 
   test('plan signature ignores start position and voice/speed but varies with segmentation knobs', () => {
     const fromTop = computePlaybackPlanSignature(
-      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
     );
     const fromMid = computePlaybackPlanSignature(
-      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'section', startPage: 9 } }),
+      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'section' } }),
     );
     expect(fromMid).toBe(fromTop); // start position must not fork the plan
 
     const differentVoice = {
-      ...baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+      ...baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
       settingsJson: { voice: 'echo', providerRef: 'p', providerType: 'openai', ttsModel: 'm', nativeSpeed: 2 },
     } as Parameters<typeof computePlaybackPlanSignature>[0];
     expect(computePlaybackPlanSignature(differentVoice)).toBe(fromTop); // voice/speed don't affect the plan
 
     const biggerBlocks = computePlaybackPlanSignature(
-      baseRequest({ maxBlockLength: 400, documentSource: { namespace: null, extent: 'document', startPage: 1 } }),
+      baseRequest({ maxBlockLength: 400, documentSource: { namespace: null, extent: 'document' } }),
     );
     expect(biggerBlocks).not.toBe(fromTop); // segmentation knobs do
   });

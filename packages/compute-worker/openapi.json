@@ -1604,16 +1604,6 @@
                         "minimum": 0,
                         "maximum": 9007199254740991
                       },
-                      "startSegmentKey": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "startText": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 20000
-                      },
                       "maxBlockLength": {
                         "type": "integer",
                         "exclusiveMinimum": 0,
@@ -1657,21 +1647,6 @@
                               "section",
                               "document"
                             ]
-                          },
-                          "startPage": {
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "startSpineIndex": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "startCharOffset": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
                           },
                           "isPlainText": {
                             "type": "boolean"
@@ -1959,16 +1934,6 @@
                         "minimum": 0,
                         "maximum": 9007199254740991
                       },
-                      "startSegmentKey": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 512
-                      },
-                      "startText": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 20000
-                      },
                       "maxBlockLength": {
                         "type": "integer",
                         "exclusiveMinimum": 0,
@@ -2012,21 +1977,6 @@
                               "section",
                               "document"
                             ]
-                          },
-                          "startPage": {
-                            "type": "integer",
-                            "exclusiveMinimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "startSpineIndex": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          },
-                          "startCharOffset": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
                           },
                           "isPlainText": {
                             "type": "boolean"

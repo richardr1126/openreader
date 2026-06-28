@@ -57,7 +57,7 @@ describe.runIf(hasSample)('worker-owned EPUB spine extraction + derivation', () 
   test('document extent derives one epub source unit per block (PDF-like granularity)', async () => {
     const storage = fakeStorage();
     const units = await resolvePlaybackSourceUnits(
-      epubRequest({ namespace: null, extent: 'document', startSpineIndex: 0 }),
+      epubRequest({ namespace: null, extent: 'document' }),
       storage,
       PREFIX,
     );
@@ -88,12 +88,12 @@ describe.runIf(hasSample)('worker-owned EPUB spine extraction + derivation', () 
     const target = spine.find((s) => s.text.trim().length > 0)!;
     const storage = fakeStorage();
     const fromStart = await resolvePlaybackSourceUnits(
-      epubRequest({ namespace: null, extent: 'document', startSpineIndex: 0 }),
+      epubRequest({ namespace: null, extent: 'document' }),
       storage,
       PREFIX,
     );
     const fromMid = await resolvePlaybackSourceUnits(
-      epubRequest({ namespace: null, extent: 'section', startSpineIndex: target.index }),
+      epubRequest({ namespace: null, extent: 'section' }),
       storage,
       PREFIX,
     );

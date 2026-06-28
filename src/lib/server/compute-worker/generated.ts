@@ -511,8 +511,6 @@ export interface paths {
                         backgroundExtent?: "section" | "document";
                         planning: {
                             selectedOrdinal?: number;
-                            startSegmentKey?: string;
-                            startText?: string;
                             maxBlockLength?: number;
                             enforceSourceBoundaries?: boolean;
                             language?: string;
@@ -521,9 +519,6 @@ export interface paths {
                                 skipBlockKinds?: string[];
                                 /** @enum {string} */
                                 extent: "section" | "document";
-                                startPage?: number;
-                                startSpineIndex?: number;
-                                startCharOffset?: number;
                                 isPlainText?: boolean;
                             };
                         };
@@ -631,8 +626,6 @@ export interface paths {
                         settingsJson: unknown;
                         planning: {
                             selectedOrdinal?: number;
-                            startSegmentKey?: string;
-                            startText?: string;
                             maxBlockLength?: number;
                             enforceSourceBoundaries?: boolean;
                             language?: string;
@@ -641,9 +634,6 @@ export interface paths {
                                 skipBlockKinds?: string[];
                                 /** @enum {string} */
                                 extent: "section" | "document";
-                                startPage?: number;
-                                startSpineIndex?: number;
-                                startCharOffset?: number;
                                 isPlainText?: boolean;
                             };
                         };

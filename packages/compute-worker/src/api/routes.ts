@@ -1156,7 +1156,6 @@ export function registerComputeWorkerRoutes(input: {
       ...parsed.data,
       sessionId: `plan:${parsed.data.documentId}:${parsed.data.settingsHash}`,
     });
-    const documentSource = parsed.data.planning.documentSource;
     const requestOp: WorkerOperationRequest = {
       kind: 'tts_playback_plan',
       opKey: buildTtsPlaybackPlanOperationKey({
@@ -1165,12 +1164,6 @@ export function registerComputeWorkerRoutes(input: {
         readerType: parsed.data.readerType,
         settingsHash: parsed.data.settingsHash,
         planSignature,
-        selectedOrdinal: parsed.data.planning.selectedOrdinal,
-        startSegmentKey: parsed.data.planning.startSegmentKey,
-        startText: parsed.data.planning.startText,
-        startPage: documentSource?.startPage,
-        startSpineIndex: documentSource?.startSpineIndex,
-        startCharOffset: documentSource?.startCharOffset,
       }),
       payload: parsed.data,
     };

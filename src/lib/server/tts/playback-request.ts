@@ -22,8 +22,6 @@ export type ParsedTtsPlaybackRequestBody = {
   };
   maxBlockLength?: number;
   language?: string;
-  startSegmentKey?: string;
-  startText?: string;
   skipBlockKinds?: ParsedPdfBlockKind[];
   planObjectKey?: string;
   planSignature?: string;
@@ -126,15 +124,11 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   const selectedOrdinal = readOptionalInt(startIntentRec, 'selectedOrdinal', 0);
   if (selectedOrdinal === null) return null;
 
-  const startSegmentKey = readOptionalString(rec, 'startSegmentKey');
-  const startText = readOptionalString(rec, 'startText');
   const planObjectKey = readOptionalString(rec, 'planObjectKey');
   const planSignature = readOptionalString(rec, 'planSignature');
   const planId = readOptionalString(rec, 'planId');
   if (
-    startSegmentKey === null
-    || startText === null
-    || planObjectKey === null
+    planObjectKey === null
     || planSignature === null
     || planId === null
   ) {
@@ -153,40 +147,10 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
     ...(maxBlockLength !== undefined ? { maxBlockLength } : {}),
     ...(planningLanguage ? { language: normalizeLanguageTag(planningLanguage) } : {}),
     ...(skipBlockKinds !== undefined ? { skipBlockKinds } : {}),
-    ...(startSegmentKey ? { startSegmentKey } : {}),
-    ...(startText ? { startText } : {}),
     ...(planObjectKey ? { planObjectKey } : {}),
     ...(planSignature ? { planSignature } : {}),
     ...(planId ? { planId } : {}),
   };
-}
-
-export function validateTtsPlaybackStartLocation(
-  parsed: ParsedTtsPlaybackRequestBody,
-  scope: ResolvedSegmentDocumentScope,
-): string | null {
-  switch (scope.readerType) {
-    case 'epub':
-      if (
-        typeof parsed.startLocation.spineIndex !== 'number'
-        || typeof parsed.startLocation.charOffset !== 'number'
-      ) {
-        return 'EPUB playback start requires stable spine coordinates';
-      }
-      return null;
-    case 'pdf':
-      if (typeof parsed.startLocation.page !== 'number') {
-        return 'PDF playback start requires a stable page coordinate';
-      }
-      return null;
-    case 'html':
-      if (!parsed.startSegmentKey && !parsed.startText) {
-        return 'HTML playback start requires a stable segment key or text anchor';
-      }
-      return null;
-    default:
-      return 'Unsupported reader type for TTS playback';
-  }
 }
 
 export function validateTtsPlaybackSessionStartOrdinal(
@@ -238,18 +202,11 @@ export async function buildTtsPlaybackPlanningInput(
       ...(parsed.startIntent?.selectedOrdinal !== undefined ? { selectedOrdinal: parsed.startIntent.selectedOrdinal } : {}),
       ...(parsed.maxBlockLength !== undefined ? { maxBlockLength: parsed.maxBlockLength } : {}),
       ...(parsed.language ? { language: parsed.language } : {}),
-      ...(scope.readerType !== 'epub' && parsed.startSegmentKey ? { startSegmentKey: parsed.startSegmentKey } : {}),
-      ...(scope.readerType !== 'epub' && parsed.startText ? { startText: parsed.startText } : {}),
       enforceSourceBoundaries,
       documentSource: {
         namespace: scope.testNamespace,
         skipBlockKinds,
         extent: planExtent,
-        ...(scope.readerType === 'pdf' ? { startPage: parsed.startLocation.page ?? 1 } : {}),
-        ...(scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex } : {}),
-        ...(scope.readerType === 'epub' && parsed.startLocation.charOffset !== undefined
-          ? { startCharOffset: parsed.startLocation.charOffset }
-          : {}),
         isPlainText,
       },
     },

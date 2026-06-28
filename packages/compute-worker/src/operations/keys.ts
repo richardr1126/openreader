@@ -57,12 +57,6 @@ export function buildTtsPlaybackPlanOperationKey(input: {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   planSignature: string;
-  selectedOrdinal?: number;
-  startSegmentKey?: string;
-  startText?: string;
-  startPage?: number;
-  startSpineIndex?: number;
-  startCharOffset?: number;
 }): string {
   return [
     'tts_playback_plan',
@@ -72,12 +66,6 @@ export function buildTtsPlaybackPlanOperationKey(input: {
     input.readerType,
     input.settingsHash,
     input.planSignature,
-    input.selectedOrdinal === undefined ? '' : String(input.selectedOrdinal),
-    input.startSegmentKey?.trim() || '',
-    input.startText?.trim() || '',
-    input.startPage === undefined ? '' : String(input.startPage),
-    input.startSpineIndex === undefined ? '' : String(input.startSpineIndex),
-    input.startCharOffset === undefined ? '' : String(input.startCharOffset),
   ].join('|');
 }
 

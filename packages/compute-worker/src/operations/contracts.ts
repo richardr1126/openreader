@@ -67,8 +67,6 @@ export interface TtsPlaybackJobRequest {
   planning: {
     /** Optional absolute worker-plan ordinal selected by the UI from a known plan row. */
     selectedOrdinal?: number;
-    startSegmentKey?: string;
-    startText?: string;
     maxBlockLength?: number;
     enforceSourceBoundaries?: boolean;
     language?: string;
@@ -81,12 +79,6 @@ export interface TtsPlaybackJobRequest {
       namespace: string | null;
       skipBlockKinds?: string[];
       extent: 'section' | 'document';
-      /** PDF: 1-based page to start generating from. */
-      startPage?: number;
-      /** EPUB: 0-based spine index to start generating from. */
-      startSpineIndex?: number;
-      /** EPUB: normalized chapter-relative character offset to start at. */
-      startCharOffset?: number;
       /** HTML: parse as plain text (.txt) rather than markdown. */
       isPlainText?: boolean;
     };
