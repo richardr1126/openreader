@@ -9,7 +9,7 @@ describe('reader progress contract', () => {
     expect(parseReaderInitialPosition('pdf', '12:7')).toEqual({
       readerType: 'pdf',
       location: 12,
-      sentenceIndex: 7,
+      segmentOrdinal: 7,
     });
   });
 
@@ -17,12 +17,12 @@ describe('reader progress contract', () => {
     expect(parseReaderInitialPosition('html', 'html:section%3Aintro:4')).toEqual({
       readerType: 'html',
       location: 'section:intro',
-      sentenceIndex: 4,
+      segmentOrdinal: 4,
     });
     expect(parseReaderInitialPosition('html', '3:2')).toEqual({
       readerType: 'html',
       location: 3,
-      sentenceIndex: 2,
+      segmentOrdinal: 2,
     });
   });
 

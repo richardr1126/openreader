@@ -41,14 +41,13 @@ The Next.js app remains a thin authenticated proxy. Playback ownership is split:
 the client owns media/UI state, and the compute worker owns durable playback
 state, artifact layout, generation, and stream construction.
 
-That split is still too blurry for EPUB start/resume behavior. The worker is the
-authority for the durable plan and absolute ordinals, but the client still derives
-rendered EPUB windows, tracks a selected segment index, keeps a viewport anchor,
-and has legacy paths that can send coordinates/text back to the worker. Those
-paths are architecture debt. Playback start must not branch across EPUB CFI,
-viewport locator, selected locator, text, and current index. The canonical worker
-plan is always the playback identity source, and starting audio requires one
-absolute worker-plan ordinal.
+That split is still too blurry for EPUB rendering/highlight behavior. The worker
+is the authority for the durable plan and absolute ordinals, while the client
+still derives rendered EPUB windows and keeps a viewport anchor for navigation.
+Playback start no longer branches across EPUB CFI, viewport locator, selected
+locator, text, segment key, or current index. The canonical worker plan is always
+the playback identity source, and starting audio requires one absolute
+worker-plan ordinal.
 
 ---
 
@@ -169,29 +168,33 @@ right behavior for "where playback probably is now".
 
 ## Client State Today
 
-`TTSContext` is still the transitional media/UI controller. It currently owns:
+`TTSContext` now exposes playback state/actions and owns document/config inputs
+that are outside the media controller:
 
-- One unlocked `<audio>` element and its event handlers.
-- Playback plan/session creation through the Next proxy.
-- Timeline refresh and playback projection from `audio.currentTime`.
+- Playback plan request construction through the Next proxy.
+- Settings mutations for voice, speed, provider, language, and PDF skip kinds.
 - Segment/word highlight state and current document anchor.
-- Seek and resync logic for generated and not-yet-generated regions.
 - EPUB cursor-follow navigation guards.
-- Restart behavior for voice, speed, provider, and segmentation changes.
 
-For EPUB specifically, the client also still does too much:
+`useTtsPlayback` owns:
 
-- It builds a rendered-page window into the EPUB chapter text.
-- It materializes client-side canonical segments for highlighting and navigation.
-- It tracks both a viewport/page-start anchor and a selected segment/index.
-- It can still initiate playback through legacy locator/anchor fallback paths
-  instead of requiring a selected worker-plan ordinal.
-- It keeps worker plan rows, local current index, seek-layout rows, highlight
-  state, and page navigation state in separate pieces of React state.
+- The unlocked `<audio>` element ref.
+- Playback phase state.
+- Playback session/timeline refs.
+- Playback session creation through the Next proxy.
+- Audio event wiring.
+- Seek and resync logic for generated and not-yet-generated regions.
+- Timeline refresh and playback projection from `audio.currentTime`.
+- Foreground SSE sync, cursor heartbeat, visibility resync, and projection loop.
+- The in-flight playback guard and false-to-true playback driver edge.
 
-The latest fix makes EPUB start requests carry a selected worker-plan ordinal
-when available. That is only a transitional patch. The final architecture must
-delete the fallback paths instead of making them slightly less wrong.
+For EPUB specifically, the client owns only reader rendering/navigation concerns:
+
+- It builds rendered text maps for the visible page.
+- It records a stable spine anchor for visible highlight mapping and CFI
+  navigation.
+- It maps the current worker-plan segment to visible ranges; it does not
+  materialize client-owned playback segments.
 
 ---
 
@@ -211,7 +214,7 @@ delete the fallback paths instead of making them slightly less wrong.
   audio time.
 - Playback start requires a canonical worker-plan ordinal.
 - EPUB CFI, viewport locator, page-start anchor, segment text, and segment key are
-  not playback-start fallbacks.
+  not playback-start inputs.
 - The worker validates the requested ordinal against the canonical plan and stores
   it as `generationStartOrdinal`.
 - The client may use locators/CFIs only for reader navigation and visible
@@ -227,19 +230,20 @@ delete the fallback paths instead of making them slightly less wrong.
 | Delete claims and aggregate index | Done | Sidecars are keyed by ordinal under `tts_playback_segments_v1`; readiness comes from sidecar reads plus audio existence. |
 | Stale sidecar recovery | Done | Generation validates completed sidecars against audio object existence, and the stream route retries stale sidecars whose audio object is missing. |
 | EPUB selected-segment start | Done | Playback session creation now requires `startIntent.selectedOrdinal`; plan loading has no playback-start inputs. |
-| Client controller extraction | Not done | `TTSContext` still contains the playback driver, projection, seek/resync, and restart behavior. |
+| Client controller extraction | Done | `useTtsPlayback` owns the audio ref, playback phase, session/timeline refs, session creation, audio event wiring, seek/resync, projection loop, foreground SSE sync, cursor heartbeat, visibility resync, playback time, and in-flight guard. |
+| Collapse duplicate client state | Done | `useTtsPlaybackModel` owns worker plan, derived segments/sentences/current row, selected ordinal, and seek layout as one model. Array index is derived for display/navigation only. `playbackAnchor` is a reader viewport anchor. |
 | Worker-plan ordinal start | Done | Playback jobs validate the selected ordinal against the canonical plan. Coordinate/text/key fallback resolution has been removed from the playback-start path. |
-| Remove client-side EPUB playback planning | In progress | Plan/session payloads no longer carry reader start coordinates, text, or segment keys. Client EPUB coordinates remain only for plan-backed UI selection/highlight mapping. |
+| Remove client-side EPUB playback planning | Done | Plan/session payloads no longer carry reader start coordinates, text, or segment keys. EPUB page extraction builds rendered text maps and a stable spine anchor only; playback segments come from the worker plan. |
 | Clear cache as playback reset boundary | Not done | Clearing generated audio/sidecars must cancel active sessions/jobs and invalidate worker-side readiness caches before deleting objects. |
 | ID/key/schema consolidation | In progress | Plan/session payloads are now separated and legacy start key/text/coordinate inputs were removed from the worker playback operation schema. Remaining overlap: `segmentIndex`/`ordinal`, `segmentKey`/`segmentId`, and duplicated normalizers. |
 
 ---
 
-## Remaining Work
+## Completed Work
 
 ### 1. Require Worker-Plan Ordinal for Audio Start
 
-The client should stop starting playback from EPUB coordinates, locators, text,
+The client no longer starts playback from EPUB coordinates, locators, text,
 segment keys, or viewport anchors. Audio start requires exactly one value:
 
 - `startIntent.selectedOrdinal`
@@ -258,16 +262,10 @@ Completed cleanup:
 - Plan/session payloads no longer send reader start coordinates, segment keys,
   or text as playback-start inputs.
 
-Remaining cleanup:
-
-- Keep client start-index mapping scoped to UI selection/highlight mapping, not
-  playback authority.
-
 ### 2. Reduce Client EPUB Planning to Highlight Mapping
 
-The client still builds canonical EPUB windows to bridge rendered text to
-highlight ranges. That should not also be a playback planning path. The target
-division is:
+EPUB page extraction no longer builds client-side canonical playback windows.
+The ownership division is:
 
 - Worker: durable EPUB text extraction, segmentation, segment keys, locators,
   ordinals, and ordinal validation.
@@ -280,11 +278,10 @@ Completed cleanup:
   spine offset, segment key, and text no longer fork plan operation keys.
 - Playback sessions send plan identity plus selected worker-plan ordinal, not
   reader coordinates or text/key hints.
+- EPUB page extraction builds rendered text maps plus a stable spine anchor only;
+  worker-plan rows are mapped to those ranges for highlighting.
 
-Remaining cleanup:
-
-- Remove the remaining rendered-window canonical segment ownership from
-  `TTSContext` and keep only the worker-plan row-to-highlight mapping.
+---
 
 ### 3. Extract the Playback Controller
 
@@ -297,10 +294,25 @@ This controller should own the audio element, session lifecycle, seek/resync, an
 projection loop. Document viewers should only provide anchors and render
 highlight state.
 
+Completed cleanup:
+
+- `useTtsPlayback` now owns an explicit playback phase:
+  `idle`, `planning`, `ready`, `playing`, `seeking`, `buffering`, `ended`, and
+  `failed`.
+- `useTtsPlayback` owns the unlocked audio ref, playback session ref, timeline
+  ref, playback time, projection loop, foreground SSE sync, cursor heartbeat,
+  visibility resync, and audio-seek readiness helper.
+- Projection writes the selected worker-plan ordinal directly; it does not use a
+  segment key, text, or ordinal-to-array-index cache.
+- Stream creation, audio element event wiring, seek/resync polling, and the
+  in-flight playback driver moved out of `TTSContext` into `useTtsPlayback`.
+- `TTSContext` now passes plan-building callbacks into the controller and exposes
+  state/actions.
+
 ### 4. Collapse Duplicate Client State
 
-These values can currently disagree during cache clears, EPUB cursor moves, and
-plan/session restarts:
+These values previously could disagree during cache clears, EPUB cursor moves,
+and plan/session restarts:
 
 - `playbackAnchor`
 - `playbackSegments`
@@ -311,6 +323,32 @@ plan/session restarts:
 
 The target is a single worker-plan model plus a selected ordinal. Derived views
 compute sentence text, highlight segment, and scrubber row from that model.
+
+Completed cleanup:
+
+- Added `useTtsPlaybackModel` as the single client holder for the worker plan,
+  canonical playback segments, derived sentence strings, selected ordinal, and
+  seek layout.
+- Removed direct `TTSContext` ownership of `sentences`, `playbackSegments`,
+  `currentIndex`, `playbackSeekLayout`, and `playbackPlanRef`.
+- Context values now read `currentSentence` and `currentSegment` from the model
+  rather than indexing parallel arrays.
+- The public context/API selection value is now `currentSentenceOrdinal`, and
+  playback entrypoints take ordinals rather than array indexes or segment
+  objects.
+- Reader progress stores `segmentOrdinal`; saved positions no longer feed a
+  sentence index into initial playback selection.
+- Playback session creation uses the selected ordinal from the model. It does not
+  synthesize a start ordinal from array index, text, segment key, or saved
+  sentence position.
+
+- `playbackAnchor` is now a reader viewport anchor. It can seed plan-backed UI
+  selection after plan load, but it is not serialized into playback session
+  start requests.
+
+---
+
+## Remaining Work
 
 ### 5. Fix Clear Cache to be a Playback Reset Boundary
 
@@ -360,7 +398,7 @@ Target identity model:
 - `ordinal`: the canonical worker-plan position and only playback cursor/start
   identity.
 - `segmentKey`: stable segmentation/content key from the canonical plan, used for
-  dedupe/debugging and compatibility, not for playback start.
+  dedupe/debugging, not for playback start.
 - `segmentId`: audio/settings-specific synthesized segment identity, used for
   content-addressed audio and sidecar metadata.
 - `planObjectKey`: durable S3 address of the immutable canonical plan.
@@ -370,7 +408,7 @@ Target identity model:
 Required cleanup:
 
 - Rename internal `segmentIndex` fields on playback plan/grid artifacts to
-  `ordinal`, keeping compatibility shims only at API boundaries if needed.
+  `ordinal` without keeping parallel playback identities.
 - Remove duplicated `sourceSegmentIndex` values where they only mirror `ordinal`.
 - Keep `segmentKey` and `segmentId` separate and document where each is allowed.
 - Consolidate plan/session request schemas so plan loading and playback session

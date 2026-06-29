@@ -152,33 +152,40 @@ describe('server-state architecture', () => {
     const adminFeatures = source('src/components/admin/AdminFeaturesPanel.tsx');
     const playbackPlan = source('src/lib/client/tts/playback-plan.ts');
     const playbackGrid = source('src/lib/client/tts/playback-grid.ts');
+    const playbackModel = source('src/hooks/audio/useTtsPlaybackModel.ts');
     const ttsApi = source('src/lib/client/api/tts.ts');
     const pdfPage = source('src/app/(app)/pdf/[id]/page.tsx');
-    expect(context).toContain('createTtsPlaybackSession');
+    expect(playbackHook).toContain('createTtsPlaybackSession');
     expect(context).toContain('createTtsPlaybackPlan');
     expect(context).toContain('fetchPlaybackSeekLayoutUntilReady');
-    expect(context).toContain('fetchPlaybackSeekLayoutUntilReady(session.seekLayoutUrl');
-    expect(context.indexOf('setPlaybackSeekLayout(layout);')).toBeLessThan(
-      context.indexOf('applyPlaybackPlan(plan, request);'),
-    );
+    expect(playbackHook).toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');
+    expect(context).toContain('applyPlaybackPlan(plan)');
     expect(clientTts).toContain("fetch('/api/tts/playback/plans'");
     expect(clientTts).not.toContain('planOnly');
     expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('planOnly');
     expect(context).toContain('useTtsPlayback');
-    expect(context).toContain('resolvePlaybackStartIndex');
+    expect(context).toContain('useTtsPlaybackModel');
+    expect(context).toContain('resolvePlanBackedSelectionIndex');
+    expect(playbackModel).toContain('playbackPlanToCanonicalSegments');
+    expect(playbackModel).toContain('selectedOrdinal');
+    expect(playbackHook).toContain('TtsPlaybackPhase');
+    expect(playbackHook).toContain("'planning'");
+    expect(playbackHook).toContain("'buffering'");
     expect(playbackHook).toContain('normalizePlaybackGrid');
     expect(playbackHook).toContain('projectPlaybackGridAtTime');
-    expect(context).toContain('audio.src = session.audioUrl');
-    expect(context).toContain('const hasViewportAnchor = Boolean(playbackAnchorRef.current?.hasContent || playbackAnchorRef.current?.text.trim())');
+    expect(playbackHook).toContain('audio.src = session.audioUrl');
+    expect(context).toContain('canStartPlayback: isPlaying &&');
     expect(context).not.toContain("activeReaderType === 'epub' && sentence.trim()");
-    expect(context).toContain("activeReaderType !== 'epub' && playbackSegment?.key");
+    expect(context).not.toContain("activeReaderType !== 'epub' && playbackSegment?.key");
     expect(context).toContain("activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds }");
     expect(clientTts).toContain('skipBlockKinds?: ParsedPdfBlockKind[]');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('readOptionalSkipBlockKinds(planningRec)');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds');
-    expect(context).toContain('if (!locator) return null;');
+    expect(context).toContain('isStableEpubLocator(anchor?.locator)');
+    expect(context).not.toContain('playbackSegment?.ownerLocator');
     expect(context).toContain('charOffset,');
-    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).toContain('startLocator: viewportStartLocator');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('buildEpubCanonicalWindow');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('canonicalWindow');
     expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('startLocator: canonicalWindow.segments[0]?.ownerLocator');
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).toContain('setDocumentPlaybackAnchor(currDocPageNumber, Boolean(text.trim()))');
     expect(pdfPage).toContain('void updateDocumentSettings(nextSettings).then(() => {');
@@ -188,14 +195,16 @@ describe('server-state architecture', () => {
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setText: setTTSText');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setTTSText(currDocText)');
     expect(context).not.toContain('if (!sentences[currentIndex]) return');
-    expect(context).toContain("currentSentence: sentences[currentIndex] || ''");
+    expect(context).toContain('currentSentence,');
     expect(context).not.toContain('playbackAnchor:');
     expect(context).toContain('playbackPlanSource === \'worker\'');
-    expect(context).toContain('setPlaybackPlanSource(\'worker\')');
+    expect(context).not.toContain('setPlaybackPlanSource');
+    expect(context).not.toContain('setPlaybackSegments');
+    expect(context).not.toContain('setSentences');
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
-    expect(source('src/lib/server/tts/playback-request.ts')).toContain('startSegmentKey');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
     expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
     expect(workerRoutes).toContain("/v1/tts-playback-plans/operations");
     expect(workerRoutes).toContain('Readable.from(streamRange())');
@@ -246,7 +255,8 @@ describe('server-state architecture', () => {
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
     // The stream re-anchors generation to the ordinal it is blocked on so the
     // continuation starts promptly after a seek (not at the next heartbeat).
-    expect(workerRoutes).toContain("await updatePlaybackCursor(sessionId, ordinal).catch((error) => {\n            app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_reanchor_failed');");
+    expect(workerRoutes).toContain('await updatePlaybackCursor(sessionId, ordinal).catch((error) => {');
+    expect(workerRoutes).toContain('tts.playback.cursor_reanchor_failed');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('status: \'running\',\n          planObjectKey,\n          generationStartOrdinal');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('status: \'running\',\n        lastError: null');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('planObjectKey,\n          startOrdinal,\n          generationStartOrdinal');
@@ -257,16 +267,15 @@ describe('server-state architecture', () => {
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("typeof rec.nativeSpeed !== 'number'");
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("readOptionalInt(startRec, 'page', 1)");
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("const planExtent = 'document'");
-    expect(source('src/lib/server/tts/playback-request.ts')).toContain("scope.readerType === 'pdf' ? { startPage: parsed.startLocation.page ?? 1 }");
-    expect(source('src/lib/server/tts/playback-request.ts')).toContain("return 'EPUB playback start requires stable spine coordinates'");
-    expect(source('src/lib/server/tts/playback-request.ts')).toContain("scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex }");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('selectedOrdinal: parsed.startIntent.selectedOrdinal');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startPage:');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("return 'EPUB playback start requires stable spine coordinates'");
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex }");
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("startSpineIndex: parsed.startLocation.spineIndex ?? 0");
-    expect(source('src/lib/server/tts/playback-request.ts')).toContain("scope.readerType !== 'epub' && parsed.startSegmentKey");
-    expect(source('src/lib/server/tts/playback-request.ts')).toContain("scope.readerType !== 'epub' && parsed.startText");
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain("throw new Error('EPUB playback start requires stable spine coordinates')");
-    expect(source('packages/compute-worker/src/jobs/handlers.ts').indexOf("throw new Error('EPUB playback start requires stable spine coordinates')")).toBeLessThan(
-      source('packages/compute-worker/src/jobs/handlers.ts').indexOf('if (planning.startText)'),
-    );
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startText');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain("throw new Error('EPUB playback start requires stable spine coordinates')");
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('if (planning.startText)');
     expect(epubHighlighting).toContain('resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)');
     expect(epubHighlighting).not.toContain('segment.startAnchor.sourceKey !== resolved.map.sourceKey');
     // Single forward-generation job throttled to a client cursor; segment
@@ -274,15 +283,14 @@ describe('server-state architecture', () => {
     // extent comes from the admin ttsPlaybackBackgroundExtent setting.
     expect(streamSessionRoute).toContain('TTS_PLAYBACK_AHEAD_WINDOW');
     expect(streamSessionRoute).toContain('backgroundExtent');
-    expect(context).toContain('subscribeTtsPlaybackEvents');
-    expect(context).toContain('postTtsPlaybackCursor');
+    expect(playbackHook).toContain('subscribeTtsPlaybackEvents');
+    expect(playbackHook).toContain('postTtsPlaybackCursor');
     // The heartbeat cursor is the playhead's projected ordinal (the same value
     // that drives the highlight), held in playbackCursorOrdinalRef. It must NOT
-    // be re-derived from currentIndexRef, which various setPlaybackIndex(0)
-    // resets transiently pollute. `null` => no faithful playhead yet → skip.
-    expect(context).toContain('const cursorOrdinal = playbackCursorOrdinalRef.current');
-    expect(context).toContain('if (cursorOrdinal == null) return');
-    expect(context).toContain('const cursor = Math.max(0, cursorOrdinal)');
+    // be re-derived from derived UI indexes. `null` => no faithful playhead yet → skip.
+    expect(playbackHook).toContain('const cursorOrdinal = playbackCursorOrdinalRef.current');
+    expect(playbackHook).toContain('if (cursorOrdinal == null) return');
+    expect(playbackHook).toContain('const cursor = Math.max(0, cursorOrdinal)');
     expect(context).not.toContain('const currentSegment = playbackSegmentsRef.current[currentIndexRef.current]');
     expect(playbackHook).toContain('playbackCursorOrdinalRef.current = targetOrdinal');
     expect(context).toContain('const pdfLocatorPage = (locator: TTSSegmentLocator | null | undefined): number | null =>');
@@ -318,29 +326,35 @@ describe('server-state architecture', () => {
     expect(abortAudioBody).not.toContain('setPlaybackSeekLayout(null)');
     expect(context).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html')");
     expect(context).toContain('resolveFirstPlanIndexForDocumentAnchor(');
-    expect(context).toContain('seekPlaybackTo');
-    expect(context).toContain('audio.currentTime = targetSec');
+    expect(playbackHook).toContain('seekPlaybackTo');
+    expect(playbackHook).toContain('audio.currentTime = targetSec');
     expect(playbackHook).toContain('const targetOrdinal = projection.segment.ordinal;');
-    expect(playbackHook).toContain('ordinalIndexCacheRef');
-    expect(playbackHook).toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
+    expect(playbackHook).toContain('setSelectedOrdinal(targetOrdinal)');
+    expect(playbackHook).not.toContain('ordinalIndexCacheRef');
+    expect(playbackHook).not.toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
     expect(playbackHook).not.toContain('segment.key === segmentKey');
-    expect(playbackHook).toContain('if (nextIndex < 0) return');
     expect(playbackHook).not.toContain('projection.segment.sourceSegmentIndex ?? projection.segment.ordinal');
     expect(adminFeatures).toContain('ttsPlaybackBackgroundExtent');
     expect(adminFeatures).toContain('PLAYBACK_BACKGROUND_EXTENT_OPTIONS');
     expect(context).not.toContain('restartPlaybackSessionFromCurrentPosition');
-    expect(context).toContain('const setPlaybackIndex = useCallback((index: number) =>');
-    expect(context.match(/setCurrentIndex\(/g)?.length).toBe(1);
-    expect(context.match(/currentIndexRef\.current =/g)?.length).toBe(1);
-    expect(context).toContain("layout?.status === 'running' || layout?.status === 'succeeded'");
-    expect(context).toContain('initialSeekLayout.generationStartOrdinal');
+    expect(playbackModel).toContain('const setSelectedOrdinal = useCallback((ordinal: number | null) =>');
+    expect(playbackModel).not.toContain('setPlaybackIndex');
+    expect(playbackModel).not.toContain('currentIndexRef');
+    expect(context).not.toContain('setPlaybackIndex');
+    expect(context).toContain('stopAndPlayFromOrdinal');
+    expect(context).toContain('playFromOrdinal');
+    expect(context).not.toContain('stopAndPlayFromIndex');
+    expect(context).not.toContain('playFromSegment');
+    expect(context).toContain('currentSentenceOrdinal');
+    expect(playbackHook).toContain("layout?.status === 'running' || layout?.status === 'succeeded'");
+    expect(playbackHook).toContain('initialSeekLayout.generationStartOrdinal');
     expect(context).not.toContain('return last');
     expect(context).not.toContain('?? initialSeekLayout.segments[0]');
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('scrubberTrackBackground');
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('segment.generated ? ready : estimated');
     expect(context).toContain('playbackSyncNavigationRef');
     expect(context).toContain('syncPlaybackLocator');
-    expect(context).toContain("throw new Error('TTS playback plan did not contain the requested start segment')");
+    expect(context).toContain("throw new Error('TTS playback plan did not contain a plan-backed selection for the current anchor')");
     expect(context).not.toContain('startOrdinal: startSegment.ordinal');
     expect(source('src/lib/client/api/tts.ts')).not.toContain('startOrdinal?: number');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startOrdinal?: number');

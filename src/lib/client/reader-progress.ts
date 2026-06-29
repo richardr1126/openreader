@@ -2,17 +2,17 @@ import type { DocumentType } from '@/types/documents';
 import type { TTSLocation } from '@/types/tts';
 
 export type ReaderInitialPosition =
-  | { readerType: 'pdf'; location: number; sentenceIndex: number }
-  | { readerType: 'html'; location: TTSLocation; sentenceIndex: number }
+  | { readerType: 'pdf'; location: number; segmentOrdinal: number }
+  | { readerType: 'html'; location: TTSLocation; segmentOrdinal: number }
   | { readerType: 'epub'; location: string }
   | null;
 
-function parseLegacyPosition(location: string): { location: number; sentenceIndex: number } | null {
+function parsePositionToken(location: string): { location: number; segmentOrdinal: number } | null {
   const match = /^(\d+):(\d+)$/.exec(location);
   if (!match) return null;
   return {
     location: Math.max(1, Number(match[1])),
-    sentenceIndex: Math.max(0, Number(match[2])),
+    segmentOrdinal: Math.max(0, Number(match[2])),
   };
 }
 
@@ -29,7 +29,7 @@ export function parseReaderInitialPosition(
   }
 
   if (readerType === 'pdf') {
-    const parsed = parseLegacyPosition(location);
+    const parsed = parsePositionToken(location);
     return parsed ? { readerType, ...parsed } : null;
   }
 
@@ -49,11 +49,11 @@ export function parseReaderInitialPosition(
       return {
         readerType,
         location: resolvedLocation,
-        sentenceIndex: Math.max(0, Number(match[2])),
+        segmentOrdinal: Math.max(0, Number(match[2])),
       };
     }
 
-    const legacy = parseLegacyPosition(location);
+    const legacy = parsePositionToken(location);
     return legacy ? { readerType, ...legacy } : null;
   }
 
@@ -63,15 +63,15 @@ export function parseReaderInitialPosition(
 export function serializeReaderPosition(
   readerType: 'pdf' | 'html',
   location: TTSLocation,
-  sentenceIndex: number,
+  segmentOrdinal: number,
 ): string {
-  const safeIndex = Math.max(0, Math.floor(sentenceIndex));
+  const safeOrdinal = Math.max(0, Math.floor(segmentOrdinal));
   if (readerType === 'html') {
     // Empty strings must default to a valid token too: `html::${idx}` fails to
     // round-trip through parseReaderInitialPosition (its location group requires
     // a non-empty match), so an empty location would silently drop progress.
     const safeLocation = location == null || location === '' ? 1 : location;
-    return `html:${encodeURIComponent(String(safeLocation))}:${safeIndex}`;
+    return `html:${encodeURIComponent(String(safeLocation))}:${safeOrdinal}`;
   }
-  return `${Math.max(1, Number(location) || 1)}:${safeIndex}`;
+  return `${Math.max(1, Number(location) || 1)}:${safeOrdinal}`;
 }

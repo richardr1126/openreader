@@ -49,7 +49,7 @@ export default function HTMLPage() {
   } = htmlState;
   const {
     currDocPage,
-    currentSentenceIndex,
+    currentSentenceOrdinal,
     prepareInitialPosition,
     sentences,
     stop,
@@ -104,10 +104,7 @@ export default function HTMLPage() {
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
       if (bootstrap.initialPosition?.readerType === 'html') {
-        prepareInitialPosition(
-          bootstrap.initialPosition.location,
-          bootstrap.initialPosition.sentenceIndex,
-        );
+        prepareInitialPosition(bootstrap.initialPosition.location);
       }
       await setCurrentDocument(bootstrap.document);
       loadedDocIdRef.current = resolved;
@@ -142,11 +139,11 @@ export default function HTMLPage() {
     scheduleProgress({
       documentId: routeDocumentId,
       readerType: 'html',
-      location: serializeReaderPosition('html', currDocPage, currentSentenceIndex),
+      location: serializeReaderPosition('html', currDocPage, currentSentenceOrdinal ?? 0),
     });
   }, [
     currDocPage,
-    currentSentenceIndex,
+    currentSentenceOrdinal,
     isLoading,
     isPlaybackReady,
     routeDocumentId,

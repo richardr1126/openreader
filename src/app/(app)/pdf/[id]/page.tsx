@@ -73,7 +73,7 @@ export default function PDFViewerPage() {
     regenerateChapter: regeneratePDFChapter,
   } = pdfState;
   const {
-    currentSentenceIndex,
+    currentSentenceOrdinal,
     pause,
     prepareInitialPosition,
     sentences,
@@ -147,10 +147,7 @@ export default function PDFViewerPage() {
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
       if (bootstrap.initialPosition?.readerType === 'pdf') {
-        prepareInitialPosition(
-          bootstrap.initialPosition.location,
-          bootstrap.initialPosition.sentenceIndex,
-        );
+        prepareInitialPosition(bootstrap.initialPosition.location);
       }
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const result = await setCurrentDocument(bootstrap.document);
@@ -201,11 +198,11 @@ export default function PDFViewerPage() {
     scheduleProgress({
       documentId: routeDocumentId,
       readerType: 'pdf',
-      location: serializeReaderPosition('pdf', currDocPage, currentSentenceIndex),
+      location: serializeReaderPosition('pdf', currDocPage, currentSentenceOrdinal ?? 0),
     });
   }, [
     currDocPage,
-    currentSentenceIndex,
+    currentSentenceOrdinal,
     isLoading,
     isPlaybackReady,
     routeDocumentId,

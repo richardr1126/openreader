@@ -63,16 +63,16 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
   }, [playbackSeekLayout]);
 
   return (
-    <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface/95 backdrop-blur-sm" data-app-ttsbar>
+    <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid backdrop-blur-sm" data-app-ttsbar>
       {/* Top Edge Scrubber bar */}
       <div className="group/scrubber absolute -top-[5px] left-0 right-0 h-2.5 z-40">
         {/* Track Base Rail (Empty Track) */}
-        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-line-soft transition-all duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] rounded-full" />
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-line-soft transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] rounded-full" />
         
         {/* Generated Segments Track */}
         <div
           aria-hidden
-          className="pointer-events-none absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 transition-all duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] rounded-full"
+          className="pointer-events-none absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] rounded-full"
           style={{ background: scrubberTrackBackground }}
         />
         {/* Hidden active range slider overlay */}
@@ -98,12 +98,12 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           }}
           className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40
             [&::-webkit-slider-runnable-track]:h-[2px] [&::-webkit-slider-runnable-track]:bg-transparent
-            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-[3px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:transition-all [&::-webkit-slider-thumb]:duration-fast
+            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-[3px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-fast
             [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--background)_70%,transparent),0_1px_6px_color-mix(in_srgb,var(--accent)_55%,transparent)]
             group-hover/scrubber:[&::-webkit-slider-thumb]:scale-y-125 group-active/scrubber:[&::-webkit-slider-thumb]:scale-y-150
             
             [&::-moz-range-track]:h-[2px] [&::-moz-range-track]:bg-transparent
-            [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-[3px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:transition-all [&::-moz-range-thumb]:duration-fast
+            [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-[3px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:duration-fast
             [&::-moz-range-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--background)_70%,transparent),0_1px_6px_color-mix(in_srgb,var(--accent)_55%,transparent)]
             group-hover/scrubber:[&::-moz-range-thumb]:scale-y-125 group-active/scrubber:[&::-moz-range-thumb]:scale-y-150"
         />

@@ -12,7 +12,6 @@ import type { NavItem } from 'epubjs';
 import type { Book, Rendition } from 'epubjs';
 
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
-import { buildEpubCanonicalWindow } from '@/lib/client/epub/epub-canonical-window';
 import { useTTS } from '@/contexts/TTSContext';
 import { createRangeCfi } from '@/lib/client/epub';
 import { normalizeTtsLocationKey } from '@openreader/tts/locator';
@@ -23,7 +22,6 @@ import {
 } from '@/lib/client/epub/epub-rendered-text-maps';
 import {
   clearEpubWindowIndex,
-  registerEpubWindowIndexEntry,
   resolveEpubLocatorToCfi,
 } from '@/lib/client/epub/location-index';
 import { buildEpubChunkAnchor } from '@/lib/client/epub/spine-coordinates';
@@ -38,7 +36,7 @@ import type {
   TTSAudiobookChapter,
 } from '@/types/tts';
 import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
-import { buildSegmentKeyPrefix, type CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import { normalizeOptionalLanguageTag } from '@openreader/tts/language';
 import type { BaseDocument } from '@/types/documents';
 import type { ScheduleDocumentProgress } from '@/types/user-state';
@@ -101,12 +99,10 @@ export function useEpubDocument(
     stop,
     skipToLocation,
     setIsEPUB,
-    resolvedLanguage,
   } = useTTS();
   // Configuration context to get TTS settings
   const {
     providerRef,
-    ttsSegmentMaxBlockLength,
     epubHighlightEnabled,
   } = useConfig();
   // Current document state
@@ -219,11 +215,11 @@ export function useEpubDocument(
       const { start, end } = location;
       if (!start?.cfi || !end?.cfi || !book || !book.isOpen || !rendition) return '';
 
-      // Guard against stale async completion: this function awaits range +
-      // canonical-plan resolution, during which rapid page turns can move the
+      // Guard against stale async completion: this function awaits range and
+      // spine-coordinate resolution, during which rapid page turns can move the
       // rendition on. If the live location no longer matches the page we
       // captured, bail before writing state so we don't overwrite the active
-      // page's segments/highlights with a superseded page's.
+      // page's highlights with a superseded page's.
       const capturedStartCfi = start.cfi;
       const isStale = (): boolean => {
         const live = rendition.location?.start?.cfi;
@@ -248,82 +244,19 @@ export function useEpubDocument(
         startAnchor,
       ));
 
-      // Canonical path: derive this page's TTS segments as a window into the
-      // chapter's single, viewport-independent canonical plan. This is what
-      // keeps a block that straddles a page break identical (same key/ordinal)
-      // on both pages, so playback never repeats or wrongly pauses at the seam.
-      const keyPrefix = buildSegmentKeyPrefix(documentId, 'epub');
-      const canonicalWindow = await buildEpubCanonicalWindow(book, {
-        startCfi: start.cfi,
-        viewportText: textContent,
-        keyPrefix,
-        maxBlockLength: ttsSegmentMaxBlockLength,
-        language: resolvedLanguage,
-        // Match the rendered text map's sourceKey so the page's canonical
-        // segments resolve to highlight ranges.
-        viewportAnchorSourceKey: normalizeTtsLocationKey(start.cfi),
-      });
-
-      // The plan resolution above can load + segment a whole chapter; re-check
-      // that we're still on the captured page before committing TTS state.
-      if (isStale()) return '';
-
-      if (canonicalWindow) {
-        const viewportStartLocator = typeof canonicalWindow.viewportStartCharOffset === 'number'
+      setTTSText(textContent, {
+        shouldPause,
+        location: start.cfi,
+        startLocator: startAnchor
           ? {
-              readerType: 'epub' as const,
-              spineHref: canonicalWindow.spineHref,
-              spineIndex: canonicalWindow.spineIndex,
-              charOffset: canonicalWindow.viewportStartCharOffset,
+              readerType: 'epub',
+              spineHref: startAnchor.spineHref,
+              spineIndex: startAnchor.spineIndex,
+              charOffset: startAnchor.charOffset,
               cfi: start.cfi,
             }
-          : startAnchor
-            ? {
-                readerType: 'epub' as const,
-                spineHref: startAnchor.spineHref,
-                spineIndex: startAnchor.spineIndex,
-                charOffset: startAnchor.charOffset,
-                cfi: start.cfi,
-              }
-            : undefined;
-        if (
-          typeof canonicalWindow.viewportStartCharOffset === 'number'
-          && typeof canonicalWindow.viewportEndCharOffset === 'number'
-        ) {
-          registerEpubWindowIndexEntry(book, {
-            spineHref: canonicalWindow.spineHref,
-            spineIndex: canonicalWindow.spineIndex,
-            startCfi: start.cfi,
-            endCfi: end.cfi,
-            startCharOffset: canonicalWindow.viewportStartCharOffset,
-            endCharOffset: canonicalWindow.viewportEndCharOffset,
-            startOrdinal: canonicalWindow.windowStartOrdinal,
-            endOrdinal: canonicalWindow.windowEndOrdinal,
-          });
-        }
-        setTTSText(textContent, {
-          shouldPause,
-          location: start.cfi,
-          startLocator: viewportStartLocator,
-        });
-      } else {
-        // Visible-text-only path for spine boundaries, footnotes/nav/image pages,
-        // or text not indexable in the spine. Playback will only start if this
-        // visible text still mapped to a real spine coordinate.
-        setTTSText(textContent, {
-          shouldPause,
-          location: start.cfi,
-          startLocator: startAnchor
-            ? {
-                readerType: 'epub',
-                spineHref: startAnchor.spineHref,
-                spineIndex: startAnchor.spineIndex,
-                charOffset: startAnchor.charOffset,
-                cfi: start.cfi,
-              }
-            : undefined,
-        });
-      }
+          : undefined,
+      });
 
       setCurrDocText(textContent);
       setIsPlaybackReady(true);
@@ -333,7 +266,7 @@ export function useEpubDocument(
       console.error('Error extracting EPUB text:', error);
       return '';
     }
-  }, [setRenderedTextMaps, setTTSText, documentId, ttsSegmentMaxBlockLength, resolvedLanguage]);
+  }, [setRenderedTextMaps, setTTSText]);
 
   const { createFullAudioBook, regenerateChapter } = useEPUBAudiobook({
     bookRef,
