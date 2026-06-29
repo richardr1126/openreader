@@ -34,6 +34,7 @@ export interface TtsPlaybackSessionState {
 
 export interface TtsPlaybackSegmentMetadata {
   schemaVersion: 1;
+  cacheEpoch?: number;
   status: TtsPlaybackSegmentStatus;
   storageUserId: string;
   documentId: string;
@@ -63,11 +64,20 @@ export interface TtsPlaybackSegmentScope {
   settingsHash: string;
 }
 
+export interface TtsPlaybackResetScope {
+  storageUserId: string;
+  documentId: string;
+  documentVersion?: number;
+  settingsHash?: string;
+}
+
 export interface TtsPlaybackSessionStore {
   getSession(sessionId: string): Promise<TtsPlaybackSessionState | null>;
   putSession(state: TtsPlaybackSessionState): Promise<void>;
   patchSession(sessionId: string, patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>): Promise<void>;
   updateCursor(sessionId: string, ordinal: number, updatedAt?: number): Promise<void>;
+  listSessions(scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]>;
+  cancelSessionsForScope(scope: TtsPlaybackResetScope, updatedAt?: number): Promise<number>;
 }
 
 export interface TtsPlaybackSegmentArtifactStore {
@@ -79,6 +89,8 @@ export interface TtsPlaybackSegmentArtifactStore {
   readSegmentMetadata(
     input: TtsPlaybackSegmentScope & { segmentIndex: number },
   ): Promise<TtsPlaybackSegmentMetadata | null>;
+  getScopeEpoch(scope: TtsPlaybackResetScope): Promise<number>;
+  incrementScopeEpoch(scope: TtsPlaybackResetScope, updatedAt?: number): Promise<number>;
 }
 
 export interface TtsPlaybackStorage {
@@ -109,9 +121,38 @@ function cursorKvKey(sessionId: string): string {
   return `tts_playback.cursor.${hashScope(sessionId)}`;
 }
 
+function epochKvKey(scope: TtsPlaybackResetScope & { settingsHash?: string }): string {
+  const version = typeof scope.documentVersion === 'number' && Number.isFinite(scope.documentVersion)
+    ? Math.max(0, Math.floor(scope.documentVersion))
+    : '*';
+  const settingsHash = scope.settingsHash?.trim() || '*';
+  return `tts_playback.cache_epoch.${hashScope([
+    scope.storageUserId,
+    scope.documentId,
+    String(version),
+    settingsHash,
+  ].join('\0'))}`;
+}
+
+function sessionMatchesScope(session: TtsPlaybackSessionState, scope: TtsPlaybackResetScope): boolean {
+  return session.storageUserId === scope.storageUserId
+    && session.documentId === scope.documentId
+    && (scope.documentVersion === undefined || session.documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
+    && (scope.settingsHash === undefined || session.settingsHash === scope.settingsHash);
+}
+
+function isResettableSessionStatus(status: TtsPlaybackSessionStatus): boolean {
+  return status === 'queued' || status === 'running' || status === 'succeeded';
+}
+
 interface TtsPlaybackCursorRecord {
   cursorOrdinal: number;
   cursorUpdatedAt: number | null;
+}
+
+interface TtsPlaybackCacheEpochRecord {
+  cacheEpoch: number;
+  updatedAt: number;
 }
 
 export function createTtsPlaybackKvStore(input: {
@@ -119,6 +160,25 @@ export function createTtsPlaybackKvStore(input: {
 }): TtsPlaybackSessionStore {
   const sessionCodec = createJsonCodec<TtsPlaybackSessionState>();
   const cursorCodec = createJsonCodec<TtsPlaybackCursorRecord>();
+  const listSessions = async (scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]> => {
+    const kv = await input.getKv();
+    const keys = await kv.keys('tts_playback.session.*');
+    const sessions: TtsPlaybackSessionState[] = [];
+    for await (const key of keys) {
+      const entry = await kv.get(key);
+      if (!isKvPut(entry)) continue;
+      const session = sessionCodec.decode(entry.value);
+      if (scope && !sessionMatchesScope(session, scope)) continue;
+      const cursorEntry = await kv.get(cursorKvKey(session.sessionId));
+      if (isKvPut(cursorEntry)) {
+        const cursor = cursorCodec.decode(cursorEntry.value);
+        session.cursorOrdinal = cursor.cursorOrdinal;
+        session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+      }
+      sessions.push(session);
+    }
+    return sessions;
+  };
 
   return {
     async getSession(sessionId) {
@@ -188,13 +248,33 @@ export function createTtsPlaybackKvStore(input: {
       }));
     },
 
+    async listSessions(scope) {
+      return listSessions(scope);
+    },
+
+    async cancelSessionsForScope(scope, updatedAt = Date.now()) {
+      const sessions = await listSessions(scope);
+      let canceled = 0;
+      for (const session of sessions) {
+        if (!isResettableSessionStatus(session.status)) continue;
+        await this.patchSession(session.sessionId, {
+          status: 'canceled',
+          lastError: 'Playback cache was cleared',
+          updatedAt,
+        });
+        canceled += 1;
+      }
+      return canceled;
+    },
   };
 }
 
 export function createTtsPlaybackSegmentArtifactStore(input: {
   storage: ArtifactStorage;
   s3Prefix: string;
+  getKv?: () => Promise<KvStoreLike>;
 }): TtsPlaybackSegmentArtifactStore {
+  const epochCodec = createJsonCodec<TtsPlaybackCacheEpochRecord>();
   const metadataFromBytes = (bytes: ArrayBuffer): TtsPlaybackSegmentMetadata => (
     JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackSegmentMetadata
   );
@@ -231,6 +311,38 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
         return null;
       }
     },
+
+    async getScopeEpoch(scope) {
+      if (!input.getKv) return 0;
+      const kv = await input.getKv();
+      const keys = [
+        epochKvKey({ ...scope, documentVersion: undefined, settingsHash: undefined }),
+        ...(scope.settingsHash ? [epochKvKey({ ...scope, documentVersion: undefined })] : []),
+        ...(scope.documentVersion === undefined ? [] : [epochKvKey({ ...scope, settingsHash: undefined })]),
+        ...(scope.documentVersion !== undefined && scope.settingsHash ? [epochKvKey(scope)] : []),
+      ];
+      let epoch = 0;
+      for (const key of keys) {
+        const entry = await kv.get(key);
+        if (!isKvPut(entry)) continue;
+        const record = epochCodec.decode(entry.value);
+        epoch = Math.max(epoch, Math.max(0, Math.floor(record.cacheEpoch)));
+      }
+      return epoch;
+    },
+
+    async incrementScopeEpoch(scope, updatedAt = Date.now()) {
+      if (!input.getKv) return 0;
+      const kv = await input.getKv();
+      const key = epochKvKey(scope);
+      const currentEntry = await kv.get(key);
+      const current = isKvPut(currentEntry)
+        ? Math.max(0, Math.floor(epochCodec.decode(currentEntry.value).cacheEpoch))
+        : 0;
+      const next = current + 1;
+      await kv.put(key, epochCodec.encode({ cacheEpoch: next, updatedAt }));
+      return next;
+    },
   };
 }
 
@@ -242,6 +354,7 @@ export function createTtsPlaybackStorage(input: {
   return {
     sessions: createTtsPlaybackKvStore({ getKv: input.getKv }),
     artifacts: createTtsPlaybackSegmentArtifactStore({
+      getKv: input.getKv,
       storage: input.storage,
       s3Prefix: input.s3Prefix,
     }),

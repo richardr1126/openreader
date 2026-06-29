@@ -5,6 +5,10 @@ import {
 import { buildTtsSegmentDocumentPrefix } from '@openreader/tts/segments';
 import { getS3Config } from '@/lib/server/storage/s3';
 import type { ReaderType } from '@/types/user-state';
+import {
+  getComputeWorkerClient,
+  isComputeWorkerAvailable,
+} from '@/lib/server/compute-worker/client';
 
 type ClearTtsSegmentCacheInput = {
   userId: string;
@@ -42,6 +46,22 @@ export async function clearTtsSegmentCache(
   input: ClearTtsSegmentCacheInput,
 ): Promise<ClearTtsSegmentCacheResult> {
   const cfg = getS3Config();
+  let invalidatedPlaybackSessions = 0;
+  let warning: string | undefined;
+
+  if (isComputeWorkerAvailable()) {
+    const reset = await getComputeWorkerClient().resetTtsPlaybackScope({
+      storageUserId: input.userId,
+      documentId: input.documentId,
+      ...(typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)
+        ? { documentVersion: Math.max(0, Math.floor(input.documentVersion)) }
+        : {}),
+    });
+    invalidatedPlaybackSessions = Math.max(0, Math.floor(Number(reset.invalidatedPlaybackSessions ?? 0)));
+  } else {
+    warning = 'Compute worker is not configured; active playback sessions were not invalidated.';
+  }
+
   let deletedAudioObjects = 0;
   for (const storageVersion of ['v1', 'v2'] as const) {
     deletedAudioObjects += await deleteTtsSegmentPrefix(buildTtsSegmentDocumentPrefix({
@@ -58,7 +78,8 @@ export async function clearTtsSegmentCache(
     deletedSegments: 0,
     requestedAudioObjects: deletedAudioObjects,
     deletedAudioObjects,
-    invalidatedPlaybackSessions: 0,
+    invalidatedPlaybackSessions,
+    ...(warning ? { warning } : {}),
   };
 }
 

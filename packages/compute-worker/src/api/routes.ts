@@ -50,6 +50,7 @@ import {
   ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackOperationCreateSchema,
+  ttsPlaybackResetSchema,
 } from './schemas';
 
 const OP_EVENTS_KEEPALIVE_MS = 15_000;
@@ -219,11 +220,32 @@ export function registerComputeWorkerRoutes(input: {
   const SIDECAR_SCAN_AHEAD = 64;
   const SIDECAR_FETCH_BATCH = 32;
 
-  const sidecarScopeKey = (session: PlaybackSessionRow): string =>
-    `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}`;
+  const sidecarScopeKey = (session: PlaybackSessionRow, cacheEpoch: number): string =>
+    `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}\0${Math.max(0, Math.floor(cacheEpoch))}`;
 
-  const getSidecarScopeCache = (session: PlaybackSessionRow): Map<number, TtsPlaybackSegmentMetadata> => {
-    const key = sidecarScopeKey(session);
+  const sidecarScopeKeyPrefix = (scope: {
+    storageUserId: string;
+    documentId: string;
+    documentVersion?: number;
+    settingsHash?: string;
+  }): string => [
+    scope.storageUserId,
+    scope.documentId,
+    scope.documentVersion === undefined ? null : String(Math.max(0, Math.floor(scope.documentVersion))),
+    scope.settingsHash ?? null,
+  ].filter((part): part is string => part !== null).join('\0');
+
+  const getScopeEpoch = async (session: PlaybackSessionRow): Promise<number> => {
+    return await playbackStorage?.artifacts.getScopeEpoch({
+      storageUserId: session.storageUserId,
+      documentId: session.documentId,
+      documentVersion: session.documentVersion,
+      settingsHash: session.settingsHash,
+    }).catch(() => 0) ?? 0;
+  };
+
+  const getSidecarScopeCache = (session: PlaybackSessionRow, cacheEpoch: number): Map<number, TtsPlaybackSegmentMetadata> => {
+    const key = sidecarScopeKey(session, cacheEpoch);
     let cache = sidecarScopeCache.get(key);
     if (!cache) {
       if (sidecarScopeCache.size >= SIDECAR_SCOPE_CACHE_MAX) {
@@ -236,21 +258,42 @@ export function registerComputeWorkerRoutes(input: {
     return cache;
   };
 
-  const forgetCachedSidecar = (session: PlaybackSessionRow, ordinal: number): void => {
-    getSidecarScopeCache(session).delete(ordinal);
+  const forgetCachedSidecar = async (session: PlaybackSessionRow, ordinal: number): Promise<void> => {
+    getSidecarScopeCache(session, await getScopeEpoch(session)).delete(ordinal);
+  };
+
+  const invalidateCachedSidecarsForScope = (scope: {
+    storageUserId: string;
+    documentId: string;
+    documentVersion?: number;
+    settingsHash?: string;
+  }): number => {
+    const prefix = sidecarScopeKeyPrefix(scope);
+    let invalidated = 0;
+    for (const key of [...sidecarScopeCache.keys()]) {
+      if (key === prefix || key.startsWith(`${prefix}\0`)) {
+        sidecarScopeCache.delete(key);
+        invalidated += 1;
+      }
+    }
+    return invalidated;
   };
 
   const fetchSidecar = async (
     session: PlaybackSessionRow,
     ordinal: number,
+    cacheEpoch: number,
   ): Promise<TtsPlaybackSegmentMetadata | null> => {
-    return await playbackStorage?.artifacts.readSegmentMetadata({
+    const sidecar = await playbackStorage?.artifacts.readSegmentMetadata({
       storageUserId: session.storageUserId,
       documentId: session.documentId,
       documentVersion: session.documentVersion,
       settingsHash: session.settingsHash,
       segmentIndex: ordinal,
     }).catch(() => null) ?? null;
+    if (!sidecar) return null;
+    if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return null;
+    return sidecar;
   };
 
   // Single-ordinal readiness (used by the stream's per-segment wait loop).
@@ -258,10 +301,11 @@ export function registerComputeWorkerRoutes(input: {
     session: PlaybackSessionRow,
     ordinal: number,
   ): Promise<TtsPlaybackSegmentMetadata | null> => {
-    const cache = getSidecarScopeCache(session);
+    const cacheEpoch = await getScopeEpoch(session);
+    const cache = getSidecarScopeCache(session, cacheEpoch);
     const cached = cache.get(ordinal);
     if (cached) return cached;
-    const sidecar = await fetchSidecar(session, ordinal);
+    const sidecar = await fetchSidecar(session, ordinal, cacheEpoch);
     if (sidecar?.status === 'completed') cache.set(ordinal, sidecar);
     return sidecar;
   };
@@ -278,7 +322,8 @@ export function registerComputeWorkerRoutes(input: {
     session: PlaybackSessionRow,
     planLength: number,
   ): Promise<Map<number, TtsPlaybackSegmentMetadata>> => {
-    const cache = getSidecarScopeCache(session);
+    const cacheEpoch = await getScopeEpoch(session);
+    const cache = getSidecarScopeCache(session, cacheEpoch);
     const result = new Map<number, TtsPlaybackSegmentMetadata>(cache);
     if (planLength <= 0) return result;
     const lastOrdinal = planLength - 1;
@@ -292,7 +337,7 @@ export function registerComputeWorkerRoutes(input: {
     }
     for (let i = 0; i < ordinals.length; i += SIDECAR_FETCH_BATCH) {
       const batch = ordinals.slice(i, i + SIDECAR_FETCH_BATCH);
-      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal)));
+      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
       batch.forEach((ordinal, idx) => {
         const sidecar = fetched[idx];
         if (!sidecar) return;
@@ -311,14 +356,15 @@ export function registerComputeWorkerRoutes(input: {
     if (!planSegments || planSegments.length === 0) return [];
     // The /segments listing is not on the hot path, so read every sidecar (cached
     // ones are free) to return the full completed set rather than just the band.
-    const cache = getSidecarScopeCache(session);
+    const cacheEpoch = await getScopeEpoch(session);
+    const cache = getSidecarScopeCache(session, cacheEpoch);
     const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(cache);
     const missing = planSegments
       .map((seg) => seg.segmentIndex)
       .filter((ordinal) => cache.get(ordinal)?.status !== 'completed');
     for (let i = 0; i < missing.length; i += SIDECAR_FETCH_BATCH) {
       const batch = missing.slice(i, i + SIDECAR_FETCH_BATCH);
-      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal)));
+      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
       batch.forEach((ordinal, idx) => {
         const sidecar = fetched[idx];
         if (!sidecar) return;
@@ -672,6 +718,73 @@ export function registerComputeWorkerRoutes(input: {
     };
   });
 
+  app.post('/v1/tts-playback/reset', {
+    schema: {
+      body: jsonSchema(ttsPlaybackResetSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            storageUserId: { type: 'string' },
+            documentId: { type: 'string' },
+            documentVersion: { type: 'number', nullable: true },
+            settingsHash: { type: 'string', nullable: true },
+            cacheEpoch: { type: 'number' },
+            invalidatedPlaybackSessions: { type: 'number' },
+            invalidatedSidecarCacheScopes: { type: 'number' },
+          },
+          required: [
+            'storageUserId',
+            'documentId',
+            'documentVersion',
+            'settingsHash',
+            'cacheEpoch',
+            'invalidatedPlaybackSessions',
+            'invalidatedSidecarCacheScopes',
+          ],
+        },
+        400: errorResponseSchema,
+        503: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackResetSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    if (!playbackStorage) {
+      reply.code(503);
+      return { error: 'TTS playback storage is unavailable' };
+    }
+
+    const resetScope = parsed.data;
+    const now = Date.now();
+    const cacheEpoch = await playbackStorage.artifacts.incrementScopeEpoch(resetScope, now);
+    const invalidatedPlaybackSessions = await playbackStorage.sessions.cancelSessionsForScope(resetScope, now);
+    const invalidatedSidecarCacheScopes = invalidateCachedSidecarsForScope(resetScope);
+
+    app.log.info({
+      storageUserId: resetScope.storageUserId,
+      documentId: resetScope.documentId,
+      documentVersion: resetScope.documentVersion ?? null,
+      settingsHash: resetScope.settingsHash ?? null,
+      cacheEpoch,
+      invalidatedPlaybackSessions,
+      invalidatedSidecarCacheScopes,
+    }, 'tts.playback.cache_reset');
+
+    return {
+      storageUserId: resetScope.storageUserId,
+      documentId: resetScope.documentId,
+      documentVersion: resetScope.documentVersion ?? null,
+      settingsHash: resetScope.settingsHash ?? null,
+      cacheEpoch,
+      invalidatedPlaybackSessions,
+      invalidatedSidecarCacheScopes,
+    };
+  });
+
   app.get('/v1/tts-playback/:sessionId/audio', {
     schema: {
       security: [],
@@ -1004,7 +1117,7 @@ export function registerComputeWorkerRoutes(input: {
           } catch (error) {
             if (!isMissingObjectError(error)) throw error;
             const session = await readPlaybackSession(sessionId);
-            if (session) forgetCachedSidecar(session, ordinal);
+            if (session) await forgetCachedSidecar(session, ordinal);
             app.log.warn({
               sessionId,
               ordinal,

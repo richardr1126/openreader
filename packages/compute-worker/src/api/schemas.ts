@@ -91,6 +91,13 @@ export const ttsPlaybackCursorUpdateSchema = z.object({
   expiresAt: z.number().int().positive().optional(),
 });
 
+export const ttsPlaybackResetSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative().optional(),
+  settingsHash: z.string().trim().min(1).max(256).optional(),
+});
+
 export const pdfResolveSchema = z.object({
   documentId: documentIdSchema,
   namespace: namespaceSchema,

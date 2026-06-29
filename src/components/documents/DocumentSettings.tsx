@@ -32,6 +32,7 @@ type ClearSegmentsPayload = {
   deletedSegments?: number;
   requestedAudioObjects?: number;
   deletedAudioObjects?: number;
+  invalidatedPlaybackSessions?: number;
   warning?: string;
 };
 
@@ -192,7 +193,11 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
         toast.error(`Audio cleared, but cleanup was partial: ${payload.warning}`);
       } else if (payload) {
         const deletedAudioObjects = Number(payload.deletedAudioObjects ?? 0);
-        toast.success(`Cleared ${deletedAudioObjects} cached audio object${deletedAudioObjects === 1 ? '' : 's'}.`);
+        const invalidatedPlaybackSessions = Number(payload.invalidatedPlaybackSessions ?? 0);
+        const sessionSuffix = invalidatedPlaybackSessions > 0
+          ? ` Reset ${invalidatedPlaybackSessions} playback session${invalidatedPlaybackSessions === 1 ? '' : 's'}.`
+          : '';
+        toast.success(`Cleared ${deletedAudioObjects} cached audio object${deletedAudioObjects === 1 ? '' : 's'}.${sessionSuffix}`);
       }
     },
     onError: (error) => {

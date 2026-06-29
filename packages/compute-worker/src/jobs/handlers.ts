@@ -560,11 +560,14 @@ async function generateExplicitTtsPlaybackSegments(input: {
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
+  deleteAudioObject?: (key: string) => Promise<void>;
   /** Content-addressed existence check: the source of truth for "already generated". */
   audioObjectExists: (key: string) => Promise<boolean>;
   playbackStorage?: TtsPlaybackStorage;
   /** Read previously-stored segment audio back (for the alignment self-heal path). */
   readAudioObject?: (key: string) => Promise<Buffer>;
+  cacheEpoch?: number;
+  getCurrentCacheEpoch?: () => Promise<number>;
   synthesisTimeoutMs: number;
   /**
    * Pacing gate, called before each segment with its plan ordinal. Returns
@@ -698,9 +701,14 @@ async function generateExplicitTtsPlaybackSegments(input: {
     },
   ): Promise<void> => {
     if (!input.playbackStorage) return;
+    if (input.cacheEpoch !== undefined && input.getCurrentCacheEpoch) {
+      const currentEpoch = await input.getCurrentCacheEpoch();
+      if (currentEpoch !== input.cacheEpoch) return;
+    }
     const updatedAt = metadata.updatedAt ?? Date.now();
     await input.playbackStorage.artifacts.putSegmentMetadata({
       schemaVersion: 1,
+      ...(input.cacheEpoch === undefined ? {} : { cacheEpoch: input.cacheEpoch }),
       status,
       storageUserId: input.request.storageUserId,
       documentId: input.request.documentId,
@@ -721,6 +729,18 @@ async function generateExplicitTtsPlaybackSegments(input: {
       error: metadata.error ?? null,
       updatedAt,
     });
+  };
+
+  const shouldContinueWrites = async (planOrdinal: number): Promise<boolean> => {
+    if (input.onBeforeSegment) {
+      const decision = await input.onBeforeSegment(planOrdinal);
+      if (decision === 'stop') return false;
+    }
+    if (input.cacheEpoch !== undefined && input.getCurrentCacheEpoch) {
+      const currentEpoch = await input.getCurrentCacheEpoch();
+      if (currentEpoch !== input.cacheEpoch) return false;
+    }
+    return true;
   };
 
   for (const segment of normalized) {
@@ -749,10 +769,15 @@ async function generateExplicitTtsPlaybackSegments(input: {
       segmentId: segment.segmentId,
     });
 
-    const existing = await readSidecar(segment).catch(() => null);
+    const rawExisting = await readSidecar(segment).catch(() => null);
+    const existing = rawExisting
+      && Math.max(0, Math.floor(Number(rawExisting.cacheEpoch ?? 0))) >= Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)))
+      ? rawExisting
+      : null;
     const audioExists = await input.audioObjectExists(audioKey).catch(() => false);
 
     if (audioExists) {
+      if (!await shouldContinueWrites(planOrdinal)) break;
       // Audio is durable. Ensure the sidecar exists and carries duration +
       // alignment; rebuild/self-heal it from the stored audio when missing (a
       // cleared sidecar, a cross-worker write, or a prior transient Whisper
@@ -774,7 +799,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
           // Leave what we have; a future generation pass retries the self-heal.
         }
       }
-      if (needsRebuild) {
+      if (needsRebuild && await shouldContinueWrites(planOrdinal)) {
         await persistSegmentMetadata(segment, 'completed', {
           audioKey,
           durationMs: Math.max(1, Number(durationMs ?? 1000)),
@@ -814,10 +839,16 @@ async function generateExplicitTtsPlaybackSegments(input: {
           input.synthesisTimeoutMs,
           'tts playback segment synthesis',
         );
+        if (!await shouldContinueWrites(planOrdinal)) return;
         await input.putAudioObject(audioKey, audioBuffer);
+        if (!await shouldContinueWrites(planOrdinal)) {
+          await input.deleteAudioObject?.(audioKey).catch(() => undefined);
+          return;
+        }
         const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
         const alignment = await computeAlignment(audioBuffer, segment, audioKey);
 
+        if (!await shouldContinueWrites(planOrdinal)) return;
         await persistSegmentMetadata(segment, 'completed', {
           audioKey,
           durationMs,
@@ -847,6 +878,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
     // halts playback cleanly at this segment instead of failing the whole job.
     // The error is stored structured (code/upstreamStatus/retryAfterSeconds) so a
     // provider 429/5xx is distinguishable from an opaque failure.
+    if (!await shouldContinueWrites(planOrdinal)) break;
     await persistSegmentMetadata(segment, 'error', {
       audioKey,
       error: lastErrorInfo ?? {
@@ -1059,15 +1091,25 @@ export function createJobHandlers(input: {
           isContinuationRun ? sessionCursorOrdinal : startOrdinal,
         );
         const generationSegments = plannedSegments.filter((segment) => segment.segmentIndex >= generationFloor);
+        const readCurrentCacheEpoch = async (): Promise<number> => await playbackStorage.artifacts.getScopeEpoch({
+          storageUserId: parsed.storageUserId,
+          documentId: parsed.documentId,
+          documentVersion: parsed.documentVersion,
+          settingsHash: parsed.settingsHash,
+        });
+        const cacheEpoch = await readCurrentCacheEpoch();
 
         await generateExplicitTtsPlaybackSegments({
           request: parsed,
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
+          deleteAudioObject: (key) => input.storage.deleteObject(key),
           audioObjectExists: (key) => input.storage.objectExists(key),
           playbackStorage,
           readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
+          cacheEpoch,
+          getCurrentCacheEpoch: readCurrentCacheEpoch,
           synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
           onBeforeSegment,
           onSegmentCompleted,
@@ -1075,6 +1117,13 @@ export function createJobHandlers(input: {
             await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
           },
         });
+        const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
+        if (!finalSession || (finalSession.status !== 'queued' && finalSession.status !== 'running')) {
+          stoppedEarly = true;
+        }
+        if (await readCurrentCacheEpoch() !== cacheEpoch) {
+          stoppedEarly = true;
+        }
 
         // Only finalize (→ ENDLIST) when we generated the whole plan. On an early
         // stop the session was superseded/expired/disconnected — leave its status
@@ -1092,10 +1141,13 @@ export function createJobHandlers(input: {
           timing: { queueWaitMs, computeMs: Date.now() - startedAt },
         };
       } catch (error) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, {
-          status: 'failed',
-          lastError: error instanceof Error ? error.message : String(error),
-        }).catch(() => undefined);
+        const latest = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
+        if (latest?.status === 'queued' || latest?.status === 'running') {
+          await playbackStorage.sessions.patchSession(parsed.sessionId, {
+            status: 'failed',
+            lastError: error instanceof Error ? error.message : String(error),
+          }).catch(() => undefined);
+        }
         throw error;
       }
     },

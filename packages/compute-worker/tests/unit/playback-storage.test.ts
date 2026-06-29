@@ -3,6 +3,7 @@ import type { ArtifactStorage } from '../../src/infrastructure/storage';
 import type { KvEntryLike, KvStoreLike } from '../../src/infrastructure/nats-adapters';
 import {
   createTtsPlaybackKvStore,
+  createTtsPlaybackStorage,
   createTtsPlaybackSegmentArtifactStore,
 } from '../../src/playback/storage';
 
@@ -151,6 +152,88 @@ describe('TTS playback storage', () => {
     const session = await store.getSession('session-1');
     expect(session?.status).toBe('running');
     expect(session?.cursorOrdinal).toBeGreaterThanOrEqual(0);
+  });
+
+  test('cancels active sessions matching a playback artifact scope', async () => {
+    const kv = new MemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    const base = {
+      schemaVersion: 1 as const,
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 2,
+      readerType: 'pdf' as const,
+      settingsHash: 'settings-a',
+      settingsJson: { voice: 'v' },
+      generationStartOrdinal: 0,
+      cursorOrdinal: 0,
+      cursorUpdatedAt: null,
+      planObjectKey: null,
+      expiresAt: 1234,
+      lastError: null,
+      updatedAt: 100,
+    };
+
+    await store.putSession({ ...base, sessionId: 'queued', status: 'queued' });
+    await store.putSession({ ...base, sessionId: 'running', status: 'running' });
+    await store.putSession({ ...base, sessionId: 'succeeded', status: 'succeeded' });
+    await store.putSession({ ...base, sessionId: 'failed', status: 'failed' });
+    await store.putSession({
+      ...base,
+      sessionId: 'other-settings',
+      status: 'running',
+      settingsHash: 'settings-b',
+    });
+
+    const canceled = await store.cancelSessionsForScope({
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 2,
+      settingsHash: 'settings-a',
+    }, 500);
+
+    expect(canceled).toBe(3);
+    expect(await store.getSession('queued')).toMatchObject({ status: 'canceled', updatedAt: 500 });
+    expect(await store.getSession('running')).toMatchObject({ status: 'canceled', updatedAt: 500 });
+    expect(await store.getSession('succeeded')).toMatchObject({ status: 'canceled', updatedAt: 500 });
+    expect(await store.getSession('failed')).toMatchObject({ status: 'failed' });
+    expect(await store.getSession('other-settings')).toMatchObject({ status: 'running' });
+  });
+
+  test('increments playback artifact cache epochs by document scope', async () => {
+    const kv = new MemoryKv();
+    const storage = new MemoryStorage();
+    const store = createTtsPlaybackStorage({
+      getKv: async () => kv,
+      storage,
+      s3Prefix: 'openreader',
+    });
+    const scopeA = {
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 2,
+      settingsHash: 'settings-a',
+    };
+    const scopeB = { ...scopeA, settingsHash: 'settings-b' };
+
+    expect(await store.artifacts.getScopeEpoch(scopeA)).toBe(0);
+    expect(await store.artifacts.incrementScopeEpoch({
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 2,
+    }, 100)).toBe(1);
+    expect(await store.artifacts.getScopeEpoch(scopeA)).toBe(1);
+    expect(await store.artifacts.getScopeEpoch(scopeB)).toBe(1);
+    expect(await store.artifacts.incrementScopeEpoch(scopeA, 200)).toBe(1);
+    expect(await store.artifacts.getScopeEpoch(scopeA)).toBe(1);
+    expect(await store.artifacts.getScopeEpoch(scopeB)).toBe(1);
+    expect(await store.artifacts.incrementScopeEpoch({
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+    }, 300)).toBe(1);
+    expect(await store.artifacts.getScopeEpoch(scopeA)).toBe(1);
+    expect(await store.artifacts.getScopeEpoch({ ...scopeA, documentVersion: 9 })).toBe(1);
   });
 
   test('writes and reads per-ordinal segment sidecars (no aggregate index)', async () => {
