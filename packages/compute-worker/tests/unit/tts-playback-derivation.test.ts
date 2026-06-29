@@ -104,7 +104,7 @@ describe('worker-owned TTS playback source derivation', () => {
         { sourceKey: 'pdf:1:b3', text: 'Third PDF block.', locator: { readerType: 'pdf', page: 1, blockId: 'b3' } },
       ],
     );
-    expect(segments.map((segment) => segment.segmentIndex)).toEqual([0, 1, 2]);
+    expect(segments.map((segment) => segment.ordinal)).toEqual([0, 1, 2]);
   });
 
   function wholeDocPlan() {
@@ -143,25 +143,25 @@ describe('worker-owned TTS playback source derivation', () => {
     } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
     const segments = [
       {
-        segmentIndex: 0,
+        ordinal: 0,
         segmentKey: 'title-page',
         text: 'Repeated heading',
         locator: { readerType: 'epub', spineHref: 'title.xhtml', spineIndex: 0, charOffset: 0 },
       },
       {
-        segmentIndex: 1,
+        ordinal: 1,
         segmentKey: 'chapter-one-early',
         text: 'Repeated heading',
         locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 1, charOffset: 120 },
       },
       {
-        segmentIndex: 2,
+        ordinal: 2,
         segmentKey: 'chapter-one-target',
         text: 'Chapter one target.',
         locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 1, charOffset: 520 },
       },
       {
-        segmentIndex: 3,
+        ordinal: 3,
         segmentKey: 'chapter-two',
         text: 'Chapter two.',
         locator: { readerType: 'epub', spineHref: 'ch2.xhtml', spineIndex: 2, charOffset: 0 },
@@ -186,19 +186,19 @@ describe('worker-owned TTS playback source derivation', () => {
     } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
     const segments = [
       {
-        segmentIndex: 0,
+        ordinal: 0,
         segmentKey: 'chapter-number-prefix',
         text: '1',
         locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 0 },
       },
       {
-        segmentIndex: 1,
+        ordinal: 1,
         segmentKey: 'first-real-sentence',
         text: 'The first real sentence starts here.',
         locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 84 },
       },
       {
-        segmentIndex: 2,
+        ordinal: 2,
         segmentKey: 'second-real-sentence',
         text: 'The second sentence follows.',
         locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 121 },
@@ -221,19 +221,19 @@ describe('worker-owned TTS playback source derivation', () => {
     } as Parameters<typeof resolvePlaybackStartOrdinal>[1];
     const segments = [
       {
-        segmentIndex: 0,
+        ordinal: 0,
         segmentKey: 'chapter-one',
         text: 'Chapter one.',
         locator: { readerType: 'epub', spineHref: 'ch1.xhtml', spineIndex: 0, charOffset: 0 },
       },
       {
-        segmentIndex: 1,
+        ordinal: 1,
         segmentKey: 'chapter-two-early',
         text: 'Chapter two early.',
         locator: { readerType: 'epub', spineHref: 'ch2.xhtml', spineIndex: 1, charOffset: 120 },
       },
       {
-        segmentIndex: 2,
+        ordinal: 2,
         segmentKey: 'chapter-two-target',
         text: 'Chapter two target.',
         locator: { readerType: 'epub', spineHref: 'ch2.xhtml', spineIndex: 1, charOffset: 520 },

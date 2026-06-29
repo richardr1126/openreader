@@ -50,14 +50,14 @@ describe('duration estimation + calibration', () => {
 
 describe('buildByteLayout', () => {
   const plan: PlanSlotInput[] = [
-    { segmentIndex: 0, text: 'aaaaa', durationMs: 1000 }, // generated → exact
-    { segmentIndex: 1, text: 'bbbbb', durationMs: 2000 }, // generated → exact
-    { segmentIndex: 2, text: 'ccccc', durationMs: null }, // pending → estimated
+    { ordinal: 0, text: 'aaaaa', durationMs: 1000 }, // generated → exact
+    { ordinal: 1, text: 'bbbbb', durationMs: 2000 }, // generated → exact
+    { ordinal: 2, text: 'ccccc', durationMs: null }, // pending → estimated
   ];
 
   test('windows from startOrdinal and sizes slots from exact/estimated duration', () => {
     const layout = buildByteLayout(plan, 1, 50);
-    expect(layout.slots.map((s) => s.segmentIndex)).toEqual([1, 2]);
+    expect(layout.slots.map((s) => s.ordinal)).toEqual([1, 2]);
     // slot 1: exact 2000ms → 32000 bytes; slot 2: 5 chars * 50ms = 250ms → 4000 bytes
     expect(layout.slots[0]).toMatchObject({ startByte: 0, byteLength: 32000, generated: true });
     expect(layout.slots[1]).toMatchObject({ startByte: 32000, byteLength: 4000, generated: false });
@@ -78,9 +78,9 @@ describe('buildByteLayout', () => {
 describe('locateByte', () => {
   const layout = buildByteLayout(
     [
-      { segmentIndex: 0, text: 'x', durationMs: 1000 }, // [0, 16000)
-      { segmentIndex: 1, text: 'x', durationMs: 1000 }, // [16000, 32000)
-      { segmentIndex: 2, text: 'x', durationMs: 1000 }, // [32000, 48000)
+      { ordinal: 0, text: 'x', durationMs: 1000 }, // [0, 16000)
+      { ordinal: 1, text: 'x', durationMs: 1000 }, // [16000, 32000)
+      { ordinal: 2, text: 'x', durationMs: 1000 }, // [32000, 48000)
     ],
     0,
     50,
@@ -175,7 +175,7 @@ describe('buildByteLayout frame-quantized silence', () => {
   test('silence slots snap to whole frames in both duration and bytes', () => {
     // 40 chars * 50 ms = 2000 ms estimate → a whole number of frames.
     const frames = Math.round(2000 / frameMs);
-    const plan: PlanSlotInput[] = [{ segmentIndex: 0, text: 'x'.repeat(40), durationMs: null }];
+    const plan: PlanSlotInput[] = [{ ordinal: 0, text: 'x'.repeat(40), durationMs: null }];
     const layout = buildByteLayout(plan, 0, 50, {
       frameDurationMs: frameMs,
       silenceBytesForFrames: bytesForFrames,
@@ -190,8 +190,8 @@ describe('buildByteLayout frame-quantized silence', () => {
 
   test('generated slots keep their real duration; silence falls back to CBR bytes without a resolver', () => {
     const plan: PlanSlotInput[] = [
-      { segmentIndex: 0, text: 'a', durationMs: 1000 }, // generated
-      { segmentIndex: 1, text: 'bbbb', durationMs: null }, // silence
+      { ordinal: 0, text: 'a', durationMs: 1000 }, // generated
+      { ordinal: 1, text: 'bbbb', durationMs: null }, // silence
     ];
     const layout = buildByteLayout(plan, 0, 50, { frameDurationMs: frameMs });
     // generated slot untouched by quantization

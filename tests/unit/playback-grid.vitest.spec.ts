@@ -15,9 +15,7 @@ const grid: TtsPlaybackGrid = {
   segments: [
     {
       ordinal: 0,
-      sourceSegmentIndex: 0,
       segmentKey: 'a',
-      segmentId: 'seg-a',
       startMs: 0,
       endMs: 1000,
       durationMs: 1000,
@@ -30,9 +28,7 @@ const grid: TtsPlaybackGrid = {
     },
     {
       ordinal: 1,
-      sourceSegmentIndex: 1,
       segmentKey: 'b',
-      segmentId: 'seg-b',
       startMs: 1000,
       endMs: 3000,
       durationMs: 2000,
@@ -63,8 +59,8 @@ describe('playback grid mapping', () => {
       generationStartOrdinal: 0,
       durationMs: 2000,
       segments: [
-        { ordinal: 1, segmentKey: 'b', segmentId: 'b', startMs: 1000, endMs: 2000, durationMs: 1000, generated: true },
-        { ordinal: 0, segmentKey: 'a', segmentId: 'a', startMs: 0, endMs: 1000, durationMs: 1000, estimated: true },
+        { ordinal: 1, segmentKey: 'b', startMs: 1000, endMs: 2000, durationMs: 1000, generated: true },
+        { ordinal: 0, segmentKey: 'a', startMs: 0, endMs: 1000, durationMs: 1000, estimated: true },
       ],
     });
     expect(normalized.segments.map((segment) => segment.ordinal)).toEqual([0, 1]);

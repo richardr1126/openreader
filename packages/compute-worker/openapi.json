@@ -1655,11 +1655,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "sessionId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 128
-                  },
                   "userId": {
                     "type": "string",
                     "minLength": 1,
@@ -1693,33 +1688,6 @@
                     "maxLength": 256
                   },
                   "settingsJson": {},
-                  "planObjectKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2048
-                  },
-                  "generationRunId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 128
-                  },
-                  "expiresAt": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "aheadWindow": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 4096
-                  },
-                  "backgroundExtent": {
-                    "type": "string",
-                    "enum": [
-                      "section",
-                      "document"
-                    ]
-                  },
                   "planning": {
                     "type": "object",
                     "properties": {
@@ -1784,10 +1752,41 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "planObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "generationRunId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "aheadWindow": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 4096
+                  },
+                  "backgroundExtent": {
+                    "type": "string",
+                    "enum": [
+                      "section",
+                      "document"
+                    ]
                   }
                 },
                 "required": [
-                  "sessionId",
                   "userId",
                   "storageUserId",
                   "documentId",
@@ -1795,7 +1794,8 @@
                   "readerType",
                   "settingsHash",
                   "settingsJson",
-                  "planning"
+                  "planning",
+                  "sessionId"
                 ],
                 "additionalProperties": false
               }

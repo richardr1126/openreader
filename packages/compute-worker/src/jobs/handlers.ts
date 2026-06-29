@@ -2,9 +2,8 @@ import { z } from 'zod';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
 import {
-  buildTtsSegmentAudioKey,
-  buildTtsSegmentEntryId,
-  buildTtsSegmentId,
+  buildTtsPlaybackSegmentAudioKey,
+  buildTtsPlaybackAudioContentHash,
   buildTtsSegmentTextHash,
   computeSegmentationSignature,
   locatorFingerprint,
@@ -56,8 +55,20 @@ const pdfRequestSchema = z.object({
   documentObjectKey: z.string().trim().min(1).max(2048),
 });
 
-const ttsPlaybackRequestSchema = z.object({
-  sessionId: z.string().trim().min(1).max(128),
+const ttsPlaybackPlanningSchema = z.object({
+  selectedOrdinal: z.number().int().nonnegative().optional(),
+  maxBlockLength: z.number().int().positive().max(20_000).optional(),
+  enforceSourceBoundaries: z.boolean().optional(),
+  language: z.string().trim().min(1).max(32).optional(),
+  documentSource: z.object({
+    namespace: z.string().trim().min(1).max(128).nullable(),
+    skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+    extent: z.enum(['section', 'document']),
+    isPlainText: z.boolean().optional(),
+  }).strict().optional(),
+}).strict();
+
+const ttsPlaybackPlanRequestSchema = z.object({
   userId: z.string().trim().min(1).max(256),
   storageUserId: z.string().trim().min(1).max(256),
   documentId: z.string().trim().min(1),
@@ -65,28 +76,17 @@ const ttsPlaybackRequestSchema = z.object({
   readerType: z.enum(['pdf', 'epub', 'html']),
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
+  planning: ttsPlaybackPlanningSchema,
+}).strict();
+
+const ttsPlaybackRequestSchema = ttsPlaybackPlanRequestSchema.extend({
+  sessionId: z.string().trim().min(1).max(128),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
   generationRunId: z.string().trim().min(1).max(128).optional(),
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
-  planning: z.object({
-    selectedOrdinal: z.number().int().nonnegative().optional(),
-    maxBlockLength: z.number().int().positive().max(20_000).optional(),
-    enforceSourceBoundaries: z.boolean().optional(),
-    language: z.string().trim().min(1).max(32).optional(),
-    documentSource: z.object({
-      namespace: z.string().trim().min(1).max(128).nullable(),
-      skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
-      extent: z.enum(['section', 'document']),
-      isPlainText: z.boolean().optional(),
-    }).optional(),
-  }),
-});
-
-const ttsPlaybackPlanRequestSchema = ttsPlaybackRequestSchema
-  .omit({ sessionId: true, planObjectKey: true, generationRunId: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
-  .extend({});
+}).strict();
 
 // Sliding-window pacing constants for bounded forward-generation runs.
 const TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW = 8;
@@ -183,7 +183,7 @@ async function withAbortableTimeout<T>(
 }
 
 type TtsPlaybackSegmentInput = {
-  segmentIndex: number;
+  ordinal: number;
   segmentKey?: string | null;
   text: string;
   locator: unknown;
@@ -361,7 +361,7 @@ export function planTtsPlaybackSegments(
   });
 
   return plan.segments.map((segment, index) => ({
-    segmentIndex: index,
+    ordinal: index,
     segmentKey: segment.key,
     text: segment.text,
     locator: perSegmentLocator(segment.ownerLocator, segment.startAnchor.offset),
@@ -383,11 +383,11 @@ export function resolvePlaybackStartOrdinal(
     throw new Error('TTS playback start requires a worker-plan ordinal');
   }
   const selectedOrdinal = Math.max(0, Math.floor(planning.selectedOrdinal));
-  const match = segments.find((segment) => segment.segmentIndex === selectedOrdinal);
+  const match = segments.find((segment) => segment.ordinal === selectedOrdinal);
   if (!match) {
     throw new Error(`TTS playback start ordinal ${selectedOrdinal} is not present in the canonical plan`);
   }
-  return match.segmentIndex;
+  return match.ordinal;
 }
 
 /**
@@ -432,7 +432,7 @@ async function persistTtsPlaybackPlan(input: {
     settingsHash: input.request.settingsHash,
     settingsJson: input.request.settingsJson,
     segments: input.segments.map((segment) => ({
-      segmentIndex: segment.segmentIndex,
+      ordinal: segment.ordinal,
       segmentKey: segment.segmentKey ?? null,
       text: segment.text,
       locator: segment.locator,
@@ -452,28 +452,33 @@ async function readPersistedTtsPlaybackPlanSegments(
   storage: Pick<ArtifactStorage, 'readObject'>,
   planObjectKey: string,
 ): Promise<TtsPlaybackSegmentInput[] | null> {
+  let bytes: ArrayBuffer;
   try {
-    const bytes = await storage.readObject(planObjectKey);
-    const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as {
-      segments?: Array<{ segmentIndex?: unknown; segmentKey?: unknown; text?: unknown; locator?: unknown }>;
-    };
-    if (!Array.isArray(parsed.segments)) return null;
-    return parsed.segments
-      .map((row): TtsPlaybackSegmentInput | null => {
-        const segmentIndex = Number(row.segmentIndex);
-        const text = typeof row.text === 'string' ? row.text : '';
-        if (!Number.isFinite(segmentIndex) || !text) return null;
-        return {
-          segmentIndex: Math.max(0, Math.floor(segmentIndex)),
-          segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
-          text,
-          locator: row.locator ?? null,
-        };
-      })
-      .filter((row): row is TtsPlaybackSegmentInput => Boolean(row));
+    bytes = await storage.readObject(planObjectKey);
   } catch {
     return null;
   }
+  const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as {
+    schemaVersion?: unknown;
+    segments?: Array<{ ordinal?: unknown; segmentKey?: unknown; text?: unknown; locator?: unknown }>;
+  };
+  if (parsed.schemaVersion !== 1) {
+    throw new Error(`Unsupported TTS playback plan schema version: ${String(parsed.schemaVersion)}`);
+  }
+  if (!Array.isArray(parsed.segments)) throw new Error('TTS playback plan artifact missing segments');
+  return parsed.segments.map((row): TtsPlaybackSegmentInput => {
+    const ordinal = Number(row.ordinal);
+    const text = typeof row.text === 'string' ? row.text : '';
+    if (!Number.isFinite(ordinal) || !text) {
+      throw new Error('TTS playback plan segment requires ordinal and text');
+    }
+    return {
+      ordinal: Math.max(0, Math.floor(ordinal)),
+      segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
+      text,
+      locator: row.locator ?? null,
+    };
+  });
 }
 
 async function resolveAndPersistTtsPlaybackPlan(input: {
@@ -626,19 +631,11 @@ async function generateExplicitTtsPlaybackSegments(input: {
       ? segment.segmentKey.trim()
       : null;
     const textHash = buildTtsSegmentTextHash(text, secret);
-    const segmentEntryId = buildTtsSegmentEntryId({
-      documentId: input.request.documentId,
-      documentVersion: input.request.documentVersion,
-      segmentIndex: segment.segmentIndex,
-      segmentKey,
-      locatorIdentityKey: locatorHash,
-      textHash,
-    });
-    const segmentId = buildTtsSegmentId({
+    const audioContentHash = buildTtsPlaybackAudioContentHash({
       documentId: input.request.documentId,
       documentVersion: input.request.documentVersion,
       settingsHash: input.request.settingsHash,
-      segmentIndex: segment.segmentIndex,
+      ordinal: segment.ordinal,
       segmentKey,
       normalizedText: text,
       locatorFingerprint: locatorHash,
@@ -646,8 +643,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
     return {
       original: segment,
       text,
-      segmentEntryId,
-      segmentId,
+      audioContentHash,
       segmentKey,
       textHash,
     };
@@ -667,7 +663,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       documentId: input.request.documentId,
       documentVersion: input.request.documentVersion,
       settingsHash: input.request.settingsHash,
-      segmentIndex: segment.original.segmentIndex,
+      ordinal: segment.original.ordinal,
     });
 
   // Word-level alignment from an audio buffer. Shared by the generation path and
@@ -682,10 +678,10 @@ async function generateExplicitTtsPlaybackSegments(input: {
       audioBuffer: bufferToArrayBuffer(audio),
       text: segment.text,
       lang: effectiveSettings.language,
-      cacheKey: `${segment.segmentId}:${audioKey}`,
+      cacheKey: audioKey,
     }).then((result) => {
       const first = result.alignments[0];
-      return first ? { ...first, sentenceIndex: segment.original.segmentIndex } : null;
+      return first ? { ...first, sentenceIndex: segment.original.ordinal } : null;
     }).catch(() => null);
   };
 
@@ -716,9 +712,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       readerType: input.request.readerType,
       settingsHash: input.request.settingsHash,
       settingsJson: input.request.settingsJson,
-      segmentId: segment.segmentId,
-      segmentEntryId: segment.segmentEntryId,
-      segmentIndex: segment.original.segmentIndex,
+      ordinal: segment.original.ordinal,
       segmentKey: segment.segmentKey,
       textHash: segment.textHash,
       textLength: segment.text.length,
@@ -747,7 +741,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
     // The pacing gate is the single stop/cancel point: it reads session status +
     // cursor and returns 'stop' when the session was superseded/expired (so a
     // canceled session ends gracefully here rather than throwing → 'failed').
-    const planOrdinal = segment.original.segmentIndex;
+    const planOrdinal = segment.original.ordinal;
     if (input.onBeforeSegment) {
       const decision = await input.onBeforeSegment(planOrdinal);
       if (decision === 'stop') break;
@@ -759,14 +753,14 @@ async function generateExplicitTtsPlaybackSegments(input: {
     // single source of truth for "already generated" — no claims, no locks. Two
     // workers racing on the same segment just write identical bytes to the same
     // key (wasteful at worst, never incorrect).
-    const audioKey = buildTtsSegmentAudioKey({
+    const audioKey = buildTtsPlaybackSegmentAudioKey({
       storagePrefix: input.s3Prefix,
       namespace: null,
       userId: input.request.storageUserId,
       documentId: input.request.documentId,
       documentVersion: input.request.documentVersion,
       settingsHash: input.request.settingsHash,
-      segmentId: segment.segmentId,
+      audioContentHash: segment.audioContentHash,
     });
 
     const rawExisting = await readSidecar(segment).catch(() => null);
@@ -1004,7 +998,7 @@ export function createJobHandlers(input: {
           cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
           lastError: null,
         });
-        const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.segmentIndex), -1);
+        const lastOrdinal = plannedSegments.reduce((max, s) => Math.max(max, s.ordinal), -1);
         const plannedCount = plannedSegments.length;
         const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
         const backgroundExtent = parsed.backgroundExtent ?? 'section';
@@ -1012,9 +1006,9 @@ export function createJobHandlers(input: {
         // Section map (for background-extent bounding) + ordered ordinals.
         const sectionByOrdinal = new Map<number, string | null>();
         for (const segment of plannedSegments) {
-          sectionByOrdinal.set(segment.segmentIndex, playbackSectionKey(segment.locator, parsed.readerType));
+          sectionByOrdinal.set(segment.ordinal, playbackSectionKey(segment.locator, parsed.readerType));
         }
-        const orderedOrdinals = plannedSegments.map((s) => s.segmentIndex).sort((a, b) => a - b);
+        const orderedOrdinals = plannedSegments.map((s) => s.ordinal).sort((a, b) => a - b);
         const backgroundTargetFor = (cursorOrdinal: number): number => {
           if (backgroundExtent === 'document') return lastOrdinal;
           const section = sectionByOrdinal.get(cursorOrdinal) ?? null;
@@ -1090,7 +1084,7 @@ export function createJobHandlers(input: {
         const generationFloor = generationFloorForCursor(
           isContinuationRun ? sessionCursorOrdinal : startOrdinal,
         );
-        const generationSegments = plannedSegments.filter((segment) => segment.segmentIndex >= generationFloor);
+        const generationSegments = plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
         const readCurrentCacheEpoch = async (): Promise<number> => await playbackStorage.artifacts.getScopeEpoch({
           storageUserId: parsed.storageUserId,
           documentId: parsed.documentId,

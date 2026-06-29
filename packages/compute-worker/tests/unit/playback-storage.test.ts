@@ -252,9 +252,7 @@ describe('TTS playback storage', () => {
       readerType: 'pdf',
       settingsJson: { voice: 'v' },
       status: 'completed',
-      segmentId: 'e'.repeat(64),
-      segmentEntryId: 'entry-2',
-      segmentIndex: 2,
+      ordinal: 2,
       segmentKey: 'seg-2',
       textHash: 'f'.repeat(64),
       textLength: 10,
@@ -270,9 +268,7 @@ describe('TTS playback storage', () => {
       ...scope,
       readerType: 'pdf',
       status: 'completed',
-      segmentId: 'a'.repeat(64),
-      segmentEntryId: 'entry-1',
-      segmentIndex: 1,
+      ordinal: 1,
       segmentKey: 'seg-1',
       textHash: 'b'.repeat(64),
       textLength: 12,
@@ -285,20 +281,19 @@ describe('TTS playback storage', () => {
     });
 
     // Each segment is its own object, addressable directly by ordinal.
-    expect(key2).toBe(store.sidecarKey({ ...scope, segmentIndex: 2 }));
-    expect(store.sidecarKey({ ...scope, segmentIndex: 1 })).toContain('/segments/1.json');
+    expect(key2).toBe(store.sidecarKey({ ...scope, ordinal: 2 }));
+    expect(store.sidecarKey({ ...scope, ordinal: 1 })).toContain('/segments/1.json');
 
-    const sidecar1 = await store.readSegmentMetadata({ ...scope, segmentIndex: 1 });
+    const sidecar1 = await store.readSegmentMetadata({ ...scope, ordinal: 1 });
     expect(sidecar1).toMatchObject({
-      segmentId: 'a'.repeat(64),
-      segmentIndex: 1,
+      ordinal: 1,
       audioKey: 'openreader/audio-1.mp3',
       durationMs: 987,
       status: 'completed',
     });
-    const sidecar2 = await store.readSegmentMetadata({ ...scope, segmentIndex: 2 });
+    const sidecar2 = await store.readSegmentMetadata({ ...scope, ordinal: 2 });
     expect(sidecar2?.durationMs).toBe(1234);
     // A not-yet-generated ordinal has no sidecar.
-    expect(await store.readSegmentMetadata({ ...scope, segmentIndex: 3 })).toBeNull();
+    expect(await store.readSegmentMetadata({ ...scope, ordinal: 3 })).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ import type { TTSSegmentLocator } from '@/types/client';
  * current index) from this, with timing supplied separately by the timeline.
  */
 export type TtsPlaybackPlanSegment = {
-  segmentIndex: number;
+  ordinal: number;
   segmentKey: string | null;
   text: string;
   locator: TTSSegmentLocator | null;
@@ -37,9 +37,11 @@ export function normalizePlaybackPlan(value: unknown): TtsPlaybackPlan {
       if (!item || typeof item !== 'object') return null;
       const row = item as Record<string, unknown>;
       const text = typeof row.text === 'string' ? row.text : '';
+      const ordinal = Number(row.ordinal);
       if (!text.trim()) return null;
+      if (!Number.isFinite(ordinal)) return null;
       return {
-        segmentIndex: Number.isFinite(Number(row.segmentIndex)) ? Math.max(0, Math.floor(Number(row.segmentIndex))) : 0,
+        ordinal: Math.max(0, Math.floor(ordinal)),
         segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
         text,
         locator: row.locator && typeof row.locator === 'object'
@@ -73,10 +75,10 @@ export function normalizePlaybackPlan(value: unknown): TtsPlaybackPlan {
 export function playbackPlanToCanonicalSegments(plan: TtsPlaybackPlan): CanonicalTtsSegment[] {
   return plan.segments.map((segment) => {
     const charOffset = segment.locator?.charOffset ?? 0;
-    const sourceKey = segment.segmentKey ?? `plan:${segment.segmentIndex}`;
+    const sourceKey = segment.segmentKey ?? `plan:${segment.ordinal}`;
     return {
-      key: segment.segmentKey ?? `plan:${segment.segmentIndex}`,
-      ordinal: segment.segmentIndex,
+      key: segment.segmentKey ?? `plan:${segment.ordinal}`,
+      ordinal: segment.ordinal,
       text: segment.text,
       ownerSourceKey: sourceKey,
       ownerLocator: segment.locator,

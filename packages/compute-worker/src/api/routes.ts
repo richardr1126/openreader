@@ -179,9 +179,7 @@ export function registerComputeWorkerRoutes(input: {
     | { status: 'pending'; ordinal: number };
 
   type PlaybackSegmentManifestRow = CompletedPlaybackSegment & {
-    sourceSegmentIndex: number;
     segmentKey: string | null;
-    segmentId: string;
     alignmentJson: string | null;
     updatedAt: number | null;
   };
@@ -289,7 +287,7 @@ export function registerComputeWorkerRoutes(input: {
       documentId: session.documentId,
       documentVersion: session.documentVersion,
       settingsHash: session.settingsHash,
-      segmentIndex: ordinal,
+      ordinal: ordinal,
     }).catch(() => null) ?? null;
     if (!sidecar) return null;
     if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return null;
@@ -360,7 +358,7 @@ export function registerComputeWorkerRoutes(input: {
     const cache = getSidecarScopeCache(session, cacheEpoch);
     const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(cache);
     const missing = planSegments
-      .map((seg) => seg.segmentIndex)
+      .map((seg) => seg.ordinal)
       .filter((ordinal) => cache.get(ordinal)?.status !== 'completed');
     for (let i = 0; i < missing.length; i += SIDECAR_FETCH_BATCH) {
       const batch = missing.slice(i, i + SIDECAR_FETCH_BATCH);
@@ -376,10 +374,8 @@ export function registerComputeWorkerRoutes(input: {
     for (const sidecar of sidecars.values()) {
       if (sidecar.status !== 'completed' || !sidecar.audioKey) continue;
       rows.push({
-        ordinal: sidecar.segmentIndex,
-        sourceSegmentIndex: sidecar.segmentIndex,
+        ordinal: sidecar.ordinal,
         segmentKey: sidecar.segmentKey,
-        segmentId: sidecar.segmentId,
         audioKey: sidecar.audioKey,
         durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
         alignmentJson: sidecar.alignment ? JSON.stringify(sidecar.alignment) : null,
@@ -397,7 +393,7 @@ export function registerComputeWorkerRoutes(input: {
     if (sidecar?.status === 'completed' && sidecar.audioKey) {
       return {
         status: 'completed',
-        ordinal: sidecar.segmentIndex,
+        ordinal: sidecar.ordinal,
         audioKey: sidecar.audioKey,
         durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
       };
@@ -405,7 +401,7 @@ export function registerComputeWorkerRoutes(input: {
     if (sidecar?.status === 'error') {
       return {
         status: 'error',
-        ordinal: sidecar.segmentIndex,
+        ordinal: sidecar.ordinal,
         durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
       };
     }
@@ -535,27 +531,27 @@ export function registerComputeWorkerRoutes(input: {
   // caching avoids re-reading and re-parsing a multi-MB whole-book plan on every
   // range request (Safari issues several), which would otherwise block the event
   // loop. Bounded to the few most-recently-used plans.
-  const planSegmentsCache = new Map<string, Array<{ segmentIndex: number; text: string }>>();
+  const planSegmentsCache = new Map<string, Array<{ ordinal: number; text: string }>>();
   const PLAN_CACHE_MAX = 4;
 
   // Read the whole position-independent plan (segment index + text) from storage.
   const readPlanSegments = async (
     planObjectKey: string,
-  ): Promise<Array<{ segmentIndex: number; text: string }> | null> => {
+  ): Promise<Array<{ ordinal: number; text: string }> | null> => {
     const cached = planSegmentsCache.get(planObjectKey);
     if (cached) return cached;
     try {
       const bytes = await storage.readObject(planObjectKey);
       const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as {
-        segments?: Array<{ segmentIndex?: unknown; text?: unknown }>;
+        segments?: Array<{ ordinal?: unknown; text?: unknown }>;
       };
       if (!Array.isArray(parsed.segments)) return null;
-      const out: Array<{ segmentIndex: number; text: string }> = [];
+      const out: Array<{ ordinal: number; text: string }> = [];
       for (const row of parsed.segments) {
-        const segmentIndex = Number(row.segmentIndex);
+        const ordinal = Number(row.ordinal);
         const text = typeof row.text === 'string' ? row.text : '';
-        if (Number.isFinite(segmentIndex) && text) {
-          out.push({ segmentIndex: Math.max(0, Math.floor(segmentIndex)), text });
+        if (Number.isFinite(ordinal) && text) {
+          out.push({ ordinal: Math.max(0, Math.floor(ordinal)), text });
         }
       }
       if (planSegmentsCache.size >= PLAN_CACHE_MAX) {
@@ -580,7 +576,7 @@ export function registerComputeWorkerRoutes(input: {
     const map = new Map<number, number>();
     for (const sidecar of sidecars.values()) {
       if (sidecar.status === 'completed' && sidecar.audioKey) {
-        map.set(Number(sidecar.segmentIndex), Math.max(1, Number(sidecar.durationMs ?? 1000)));
+        map.set(Number(sidecar.ordinal), Math.max(1, Number(sidecar.durationMs ?? 1000)));
       }
     }
     return map;
@@ -897,12 +893,12 @@ export function registerComputeWorkerRoutes(input: {
             // real audio and seeking lands accurately within the generated region),
             // frame-quantized silence for the not-yet-generated tail.
             const mapSlots: PlanSlotInput[] = planSegments.map((segment) => ({
-              segmentIndex: segment.segmentIndex,
+              ordinal: segment.ordinal,
               text: segment.text,
-              durationMs: completed.get(segment.segmentIndex) ?? null,
+              durationMs: completed.get(segment.ordinal) ?? null,
             }));
             const totalSlots: PlanSlotInput[] = planSegments.map((segment) => ({
-              segmentIndex: segment.segmentIndex,
+              ordinal: segment.ordinal,
               text: segment.text,
               durationMs: null, // pure estimate → stable Content-Length across requests
             }));
@@ -980,7 +976,7 @@ export function registerComputeWorkerRoutes(input: {
       // deliberately do NOT do this for the `bytes=0-` probe (start ordinal 0):
       // that request must NOT pull generation back to 0 on a deep start, and it
       // relies on scaffolding silence to complete instantly.
-      const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].segmentIndex : 0;
+      const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].ordinal : 0;
       if (rangeStartOrdinal > 0) {
         await updatePlaybackCursor(sessionId, rangeStartOrdinal).catch((error) => {
           app.log.warn({ sessionId, ordinal: rangeStartOrdinal, error: toErrorMessage(error) }, 'tts.playback.cursor_seed_failed');
@@ -1014,7 +1010,7 @@ export function registerComputeWorkerRoutes(input: {
       try {
         for (; slotIdx < mapLayout.slots.length && sent < need; slotIdx += 1) {
           const slot = mapLayout.slots[slotIdx];
-          const ordinal = slot.segmentIndex;
+          const ordinal = slot.ordinal;
           let audioKey: string | null = null;
           let paddedMissingPrefix = false;
           let paddedErrorSegment = false;

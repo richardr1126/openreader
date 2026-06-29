@@ -42,9 +42,7 @@ export interface TtsPlaybackSegmentMetadata {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   settingsJson?: unknown;
-  segmentId: string;
-  segmentEntryId: string;
-  segmentIndex: number;
+  ordinal: number;
   segmentKey: string | null;
   textHash: string;
   textLength: number;
@@ -82,12 +80,12 @@ export interface TtsPlaybackSessionStore {
 
 export interface TtsPlaybackSegmentArtifactStore {
   /** S3 key of one segment's sidecar, addressable directly from the plan ordinal. */
-  sidecarKey(input: TtsPlaybackSegmentScope & { segmentIndex: number }): string;
+  sidecarKey(input: TtsPlaybackSegmentScope & { ordinal: number }): string;
   /** Write one segment's sidecar (plain put to its own key — race-free). */
   putSegmentMetadata(metadata: TtsPlaybackSegmentMetadata): Promise<string>;
   /** Read one segment's sidecar by ordinal. Returns null when not yet generated. */
   readSegmentMetadata(
-    input: TtsPlaybackSegmentScope & { segmentIndex: number },
+    input: TtsPlaybackSegmentScope & { ordinal: number },
   ): Promise<TtsPlaybackSegmentMetadata | null>;
   getScopeEpoch(scope: TtsPlaybackResetScope): Promise<number>;
   incrementScopeEpoch(scope: TtsPlaybackResetScope, updatedAt?: number): Promise<number>;
@@ -275,16 +273,23 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
   getKv?: () => Promise<KvStoreLike>;
 }): TtsPlaybackSegmentArtifactStore {
   const epochCodec = createJsonCodec<TtsPlaybackCacheEpochRecord>();
-  const metadataFromBytes = (bytes: ArrayBuffer): TtsPlaybackSegmentMetadata => (
-    JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackSegmentMetadata
-  );
-  const sidecarKey = (scope: TtsPlaybackSegmentScope & { segmentIndex: number }) =>
+  const metadataFromBytes = (bytes: ArrayBuffer, expectedOrdinal: number): TtsPlaybackSegmentMetadata => {
+    const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackSegmentMetadata;
+    if (parsed.schemaVersion !== 1) {
+      throw new Error(`Unsupported TTS playback segment sidecar schema version: ${String(parsed.schemaVersion)}`);
+    }
+    if (Math.max(0, Math.floor(Number(parsed.ordinal))) !== Math.max(0, Math.floor(expectedOrdinal))) {
+      throw new Error('TTS playback segment sidecar ordinal does not match object key');
+    }
+    return parsed;
+  };
+  const sidecarKey = (scope: TtsPlaybackSegmentScope & { ordinal: number }) =>
     ttsPlaybackSegmentSidecarArtifactKey({
       storageUserHash: hashScope(scope.storageUserId),
       documentId: scope.documentId,
       documentVersion: scope.documentVersion,
       settingsHash: scope.settingsHash,
-      segmentIndex: scope.segmentIndex,
+      ordinal: scope.ordinal,
       prefix: input.s3Prefix,
     });
 
@@ -306,7 +311,7 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
 
     async readSegmentMetadata(scope) {
       try {
-        return metadataFromBytes(await input.storage.readObject(sidecarKey(scope)));
+        return metadataFromBytes(await input.storage.readObject(sidecarKey(scope)), scope.ordinal);
       } catch {
         return null;
       }

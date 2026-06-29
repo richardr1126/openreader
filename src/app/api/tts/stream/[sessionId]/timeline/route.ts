@@ -41,7 +41,6 @@ export async function GET(
 
     const segments = await listCompletedTtsPlaybackSegments(session);
     const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
-      segmentId: segment.segmentId,
       alignment: parseAlignment(segment.alignmentJson),
       updatedAt: segment.updatedAt,
     }]));

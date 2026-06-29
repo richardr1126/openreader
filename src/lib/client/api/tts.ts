@@ -119,7 +119,6 @@ export const createTtsPlaybackPlan = async (
 
 export type TtsPlaybackSeekLayoutSegment = {
   ordinal: number;
-  sourceSegmentIndex?: number;
   startMs: number;
   endMs: number;
   durationMs: number;
@@ -129,7 +128,6 @@ export type TtsPlaybackSeekLayoutSegment = {
   estimated: boolean;
   locator: TTSSegmentLocator | null;
   segmentKey: string | null;
-  segmentId: string | null;
   alignment: TTSSentenceAlignment | null;
 };
 
@@ -191,9 +189,6 @@ export const getTtsPlaybackSeekLayout = async (
         if (endMs <= startMs) return null;
         return {
           ordinal: Math.max(0, Math.floor(ordinal)),
-          ...(Number.isFinite(Number(row.sourceSegmentIndex))
-            ? { sourceSegmentIndex: Math.max(0, Math.floor(Number(row.sourceSegmentIndex))) }
-            : {}),
           startMs: Math.max(0, Math.floor(startMs)),
           endMs: Math.max(0, Math.floor(endMs)),
           durationMs: Number.isFinite(durationMs) && durationMs > 0
@@ -215,7 +210,6 @@ export const getTtsPlaybackSeekLayout = async (
             ? normalizeLocator(row.locator as TTSSegmentLocator)
             : null,
           segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
-          segmentId: typeof row.segmentId === 'string' ? row.segmentId : null,
           alignment: row.alignment && typeof row.alignment === 'object' ? row.alignment as TTSSentenceAlignment : null,
         };
       })

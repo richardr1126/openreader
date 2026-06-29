@@ -178,11 +178,11 @@ export function locatorFingerprint(locator: TTSSegmentLocator | null): string {
   return createHash('sha256').update(stableStringify(locator)).digest('hex');
 }
 
-export function buildTtsSegmentId(input: {
+export function buildTtsPlaybackAudioContentHash(input: {
   documentId: string;
   documentVersion: number;
   settingsHash: string;
-  segmentIndex: number;
+  ordinal: number;
   segmentKey?: string | null;
   normalizedText: string;
   locatorFingerprint: string;
@@ -192,28 +192,9 @@ export function buildTtsSegmentId(input: {
     v: input.documentVersion,
     s: input.settingsHash,
     k: input.segmentKey || null,
-    i: input.segmentKey ? null : input.segmentIndex,
+    i: input.segmentKey ? null : input.ordinal,
     t: input.normalizedText,
     l: input.segmentKey ? null : input.locatorFingerprint,
-  });
-  return createHash('sha256').update(canonical).digest('hex');
-}
-
-export function buildTtsSegmentEntryId(input: {
-  documentId: string;
-  documentVersion: number;
-  segmentIndex: number;
-  segmentKey?: string | null;
-  locatorIdentityKey: string;
-  textHash: string;
-}): string {
-  const canonical = stableStringify({
-    d: input.documentId,
-    v: input.documentVersion,
-    i: input.segmentIndex,
-    k: input.segmentKey ? input.segmentKey : null,
-    l: input.locatorIdentityKey,
-    t: input.textHash,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -229,10 +210,23 @@ export function buildTtsSegmentAudioKey(input: {
   documentId: string;
   documentVersion: number;
   settingsHash: string;
-  segmentId: string;
+  audioContentHash: string;
 }): string {
   const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
-  return `${input.storagePrefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.segmentId}.mp3`;
+  return `${input.storagePrefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.audioContentHash}.mp3`;
+}
+
+export function buildTtsPlaybackSegmentAudioKey(input: {
+  storagePrefix: string;
+  namespace: string | null;
+  userId: string;
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  audioContentHash: string;
+}): string {
+  const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
+  return `${input.storagePrefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.audioContentHash}.mp3`;
 }
 
 export function buildTtsSegmentDocumentPrefix(input: {

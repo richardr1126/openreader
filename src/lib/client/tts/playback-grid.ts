@@ -4,9 +4,7 @@ import { normalizeLocator } from '@openreader/tts/locator';
 
 export type TtsPlaybackGridSegment = {
   ordinal: number;
-  sourceSegmentIndex?: number;
   segmentKey: string | null;
-  segmentId: string;
   startMs: number;
   endMs: number;
   durationMs: number;
@@ -30,7 +28,7 @@ export type TtsPlaybackGrid = {
 
 export type TtsPlaybackTimeProjection = {
   segment: TtsPlaybackGridSegment | null;
-  segmentIndex: number;
+  gridIndex: number;
   localTimeSec: number;
   wordIndex: number | null;
 };
@@ -61,13 +59,7 @@ export function normalizePlaybackGrid(value: unknown): TtsPlaybackGrid {
       if (endMs <= startMs) return null;
       return {
         ordinal: Math.floor(ordinal),
-        ...(Number.isFinite(Number(row.sourceSegmentIndex))
-          ? { sourceSegmentIndex: Math.max(0, Math.floor(Number(row.sourceSegmentIndex))) }
-          : {}),
         segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
-        segmentId: typeof row.segmentId === 'string' && row.segmentId
-          ? row.segmentId
-          : `ordinal:${Math.max(0, Math.floor(ordinal))}`,
         startMs: Math.max(0, Math.floor(startMs)),
         endMs: Math.max(0, Math.floor(endMs)),
         durationMs: Number.isFinite(durationMs) && durationMs > 0
@@ -164,7 +156,7 @@ export function projectPlaybackGridAtTime(
   if (!match) {
     return {
       segment: null,
-      segmentIndex: -1,
+      gridIndex: -1,
       localTimeSec: 0,
       wordIndex: null,
     };
@@ -174,7 +166,7 @@ export function projectPlaybackGridAtTime(
   const wordLocalTimeSec = Math.max(0, localTimeSec + Math.max(0, options?.wordLeadSec ?? 0));
   return {
     segment: match.segment,
-    segmentIndex: match.index,
+    gridIndex: match.index,
     localTimeSec,
     wordIndex: resolveWordIndexAtTime(match.segment.alignment, wordLocalTimeSec),
   };

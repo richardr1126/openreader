@@ -54,8 +54,20 @@ export const pdfOperationCreateSchema = z.object({
   replaceToken: z.string().trim().min(1).max(256).optional(),
 });
 
-export const ttsPlaybackOperationCreateSchema = z.object({
-  sessionId: z.string().trim().min(1).max(128),
+export const ttsPlaybackPlanningSchema = z.object({
+  selectedOrdinal: z.number().int().nonnegative().optional(),
+  maxBlockLength: z.number().int().positive().max(20_000).optional(),
+  enforceSourceBoundaries: z.boolean().optional(),
+  language: z.string().trim().min(1).max(32).optional(),
+  documentSource: z.object({
+    namespace: z.string().trim().min(1).max(128).nullable(),
+    skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+    extent: z.enum(['section', 'document']),
+    isPlainText: z.boolean().optional(),
+  }).strict().optional(),
+}).strict();
+
+export const ttsPlaybackPlanOperationCreateSchema = z.object({
   userId: z.string().trim().min(1).max(256),
   storageUserId: z.string().trim().min(1).max(256),
   documentId: documentIdSchema,
@@ -63,28 +75,17 @@ export const ttsPlaybackOperationCreateSchema = z.object({
   readerType: z.enum(['pdf', 'epub', 'html']),
   settingsHash: z.string().trim().min(1).max(256),
   settingsJson: z.unknown(),
+  planning: ttsPlaybackPlanningSchema,
+}).strict();
+
+export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSchema.extend({
+  sessionId: z.string().trim().min(1).max(128),
   planObjectKey: z.string().trim().min(1).max(2048).optional(),
   generationRunId: z.string().trim().min(1).max(128).optional(),
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
-  planning: z.object({
-    selectedOrdinal: z.number().int().nonnegative().optional(),
-    maxBlockLength: z.number().int().positive().max(20_000).optional(),
-    enforceSourceBoundaries: z.boolean().optional(),
-    language: z.string().trim().min(1).max(32).optional(),
-    documentSource: z.object({
-      namespace: z.string().trim().min(1).max(128).nullable(),
-      skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
-      extent: z.enum(['section', 'document']),
-      isPlainText: z.boolean().optional(),
-    }).optional(),
-  }),
-});
-
-export const ttsPlaybackPlanOperationCreateSchema = ttsPlaybackOperationCreateSchema
-  .omit({ sessionId: true, planObjectKey: true, generationRunId: true, expiresAt: true, aheadWindow: true, backgroundExtent: true })
-  .extend({});
+}).strict();
 
 export const ttsPlaybackCursorUpdateSchema = z.object({
   ordinal: z.number().int().nonnegative(),

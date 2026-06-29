@@ -220,7 +220,7 @@ describe('server-state architecture', () => {
     // completed-audio check must still precede the silence branch so existing
     // audio below the floor is served, never silenced.
     expect(workerRoutes).toContain('generationFloorForCursor');
-    expect(workerRoutes).toContain('const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].segmentIndex : 0');
+    expect(workerRoutes).toContain('const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].ordinal : 0');
     expect(workerRoutes).toContain('rangeStartOrdinal > 0 ? rangeStartOrdinal : session.cursorOrdinal');
     expect(workerRoutes).toContain('if (ordinal < silenceFloor)');
     expect(workerRoutes).not.toContain('if (ordinal < session.generationStartOrdinal)');
@@ -248,8 +248,8 @@ describe('server-state architecture', () => {
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain(
       'generationFloorForCursor(\n          isContinuationRun ? sessionCursorOrdinal : startOrdinal,\n        )',
     );
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('segment.segmentIndex >= generationFloor');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('segment.segmentIndex >= startOrdinal');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('segment.ordinal >= generationFloor');
+    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('segment.ordinal >= startOrdinal');
     // A run abandons ordinals that fell below the live floor (forward seek) so a
     // continuation re-anchors at the cursor instead of grinding through the gap.
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
@@ -333,7 +333,6 @@ describe('server-state architecture', () => {
     expect(playbackHook).not.toContain('ordinalIndexCacheRef');
     expect(playbackHook).not.toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
     expect(playbackHook).not.toContain('segment.key === segmentKey');
-    expect(playbackHook).not.toContain('projection.segment.sourceSegmentIndex ?? projection.segment.ordinal');
     expect(adminFeatures).toContain('ttsPlaybackBackgroundExtent');
     expect(adminFeatures).toContain('PLAYBACK_BACKGROUND_EXTENT_OPTIONS');
     expect(context).not.toContain('restartPlaybackSessionFromCurrentPosition');

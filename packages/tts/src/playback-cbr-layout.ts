@@ -44,7 +44,7 @@ export function calibrateMsPerChar(samples: Array<{ chars: number; durationMs: n
 }
 
 export interface PlanSlotInput {
-  segmentIndex: number;
+  ordinal: number;
   text: string;
   locator?: unknown;
   segmentKey?: string | null;
@@ -52,7 +52,7 @@ export interface PlanSlotInput {
 }
 
 export interface PlaybackLayoutSlot {
-  segmentIndex: number;
+  ordinal: number;
   segmentKey: string | null;
   locator: unknown;
   text: string;
@@ -97,8 +97,8 @@ export function buildPlaybackCbrLayout(
   options?: PlaybackCbrLayoutOptions,
 ): PlaybackCbrLayout {
   const ordered = plan
-    .filter((segment) => segment.segmentIndex >= startOrdinal)
-    .sort((a, b) => a.segmentIndex - b.segmentIndex);
+    .filter((segment) => segment.ordinal >= startOrdinal)
+    .sort((a, b) => a.ordinal - b.ordinal);
 
   const frameMs = options?.frameDurationMs && options.frameDurationMs > 0
     ? options.frameDurationMs
@@ -126,7 +126,7 @@ export function buildPlaybackCbrLayout(
       byteLength = bytesForDurationMs(durationMs);
     }
     slots.push({
-      segmentIndex: segment.segmentIndex,
+      ordinal: segment.ordinal,
       segmentKey: segment.segmentKey ?? null,
       locator: segment.locator ?? null,
       text: segment.text,
@@ -194,12 +194,12 @@ export function locateTime(
 
 export function ordinalAtTime(layout: Pick<PlaybackCbrLayout, 'durationMs' | 'slots'>, timeMs: number): number | null {
   const loc = locateTime(layout, timeMs);
-  return loc ? layout.slots[loc.slotIndex]?.segmentIndex ?? null : null;
+  return loc ? layout.slots[loc.slotIndex]?.ordinal ?? null : null;
 }
 
 export function ordinalAtByte(layout: Pick<PlaybackCbrLayout, 'totalBytes' | 'slots'>, byteOffset: number): number | null {
   const loc = locateByte(layout, byteOffset);
-  return loc ? layout.slots[loc.slotIndex]?.segmentIndex ?? null : null;
+  return loc ? layout.slots[loc.slotIndex]?.ordinal ?? null : null;
 }
 
 export interface ParsedRange {

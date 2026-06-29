@@ -73,9 +73,7 @@ export type TtsPlaybackSessionState = {
 
 export type TtsPlaybackCompletedSegment = {
   ordinal: number;
-  sourceSegmentIndex: number;
   segmentKey: string | null;
-  segmentId: string;
   audioKey: string;
   durationMs: number;
   alignmentJson: string | null;

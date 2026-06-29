@@ -109,7 +109,7 @@ export function ttsPlaybackSegmentSidecarArtifactKey(input: {
   documentId: string;
   documentVersion: number;
   settingsHash: string;
-  segmentIndex: number;
+  ordinal: number;
   prefix: string;
 }): string {
   if (!SAFE_HASH_SEGMENT_REGEX.test(input.storageUserHash)) {
@@ -122,6 +122,6 @@ export function ttsPlaybackSegmentSidecarArtifactKey(input: {
     throw new Error(`Invalid playback settings hash: ${input.settingsHash}`);
   }
   const version = Math.max(0, Math.floor(input.documentVersion));
-  const ordinal = Math.max(0, Math.floor(input.segmentIndex));
+  const ordinal = Math.max(0, Math.floor(input.ordinal));
   return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${ordinal}.json`;
 }

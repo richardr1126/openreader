@@ -572,7 +572,6 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        sessionId: string;
                         userId: string;
                         storageUserId: string;
                         documentId: string;
@@ -581,12 +580,6 @@ export interface paths {
                         readerType: "pdf" | "epub" | "html";
                         settingsHash: string;
                         settingsJson: unknown;
-                        planObjectKey?: string;
-                        generationRunId?: string;
-                        expiresAt?: number;
-                        aheadWindow?: number;
-                        /** @enum {string} */
-                        backgroundExtent?: "section" | "document";
                         planning: {
                             selectedOrdinal?: number;
                             maxBlockLength?: number;
@@ -600,6 +593,13 @@ export interface paths {
                                 isPlainText?: boolean;
                             };
                         };
+                        sessionId: string;
+                        planObjectKey?: string;
+                        generationRunId?: string;
+                        expiresAt?: number;
+                        aheadWindow?: number;
+                        /** @enum {string} */
+                        backgroundExtent?: "section" | "document";
                     };
                 };
             };

@@ -12,7 +12,7 @@ import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 
 export type TtsPlaybackPlanArtifactSegment = {
-  segmentIndex: number;
+  ordinal: number;
   segmentKey: string | null;
   text: string;
   locator: TTSSegmentLocator | null;
@@ -29,6 +29,18 @@ export type TtsPlaybackPlanArtifact = {
   settingsJson?: unknown;
   segments: TtsPlaybackPlanArtifactSegment[];
 };
+
+function requirePlaybackSchemaVersion(value: unknown, artifactName: string): asserts value is 1 {
+  if (value !== 1) {
+    throw new Error(`Unsupported ${artifactName} schema version: ${String(value)}`);
+  }
+}
+
+function normalizePlanOrdinal(row: Record<string, unknown>): number {
+  const ordinal = Number(row.ordinal);
+  if (!Number.isFinite(ordinal)) throw new Error('TTS playback plan segment requires ordinal');
+  return Math.max(0, Math.floor(ordinal));
+}
 
 export async function resolveTtsPlaybackPlanOperation(planId: string): Promise<ComputeOperation<TtsPlaybackPlanResult> | null> {
   const op = await getComputeWorkerClient().getOperation<TtsPlaybackPlanResult>(planId);
@@ -48,15 +60,16 @@ export async function readTtsPlaybackPlanArtifact(planObjectKey: string): Promis
   const body = await result.Body?.transformToString();
   if (!body) throw new Error('TTS playback plan artifact is empty');
   const parsed = JSON.parse(body) as Partial<TtsPlaybackPlanArtifact> & { segments?: unknown[] };
+  requirePlaybackSchemaVersion(parsed.schemaVersion, 'TTS playback plan');
   const segments = Array.isArray(parsed.segments)
     ? parsed.segments.map((item): TtsPlaybackPlanArtifactSegment | null => {
       if (!item || typeof item !== 'object') return null;
       const row = item as Record<string, unknown>;
-      const segmentIndex = Number(row.segmentIndex);
+      const ordinal = normalizePlanOrdinal(row);
       const text = typeof row.text === 'string' ? row.text : '';
-      if (!Number.isFinite(segmentIndex) || !text.trim()) return null;
+      if (!text.trim()) return null;
       return {
-        segmentIndex: Math.max(0, Math.floor(segmentIndex)),
+        ordinal,
         segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
         text,
         locator: row.locator && typeof row.locator === 'object' ? row.locator as TTSSegmentLocator : null,
@@ -81,9 +94,7 @@ export async function readTtsPlaybackPlanArtifact(planObjectKey: string): Promis
 
 export type TtsPlaybackGridSegment = {
   ordinal: number;
-  sourceSegmentIndex: number;
   segmentKey: string | null;
-  segmentId: string | null;
   startMs: number;
   endMs: number;
   durationMs: number;
@@ -107,7 +118,6 @@ export function buildPlaybackGrid(input: {
   completedDurations: Map<number, number>;
   startOrdinal: number;
   completedSegments?: Map<number, {
-    segmentId: string;
     alignment: TTSSentenceAlignment | null;
     updatedAt?: number | null;
   }>;
@@ -118,11 +128,11 @@ export function buildPlaybackGrid(input: {
   // match the gapless real audio and live highlighting stays accurate), estimate
   // for the not-yet-generated tail.
   const slots: PlanSlotInput[] = input.artifact.segments.map((segment) => ({
-    segmentIndex: segment.segmentIndex,
+    ordinal: segment.ordinal,
     segmentKey: segment.segmentKey,
     locator: segment.locator,
     text: segment.text,
-    durationMs: input.completedDurations.get(segment.segmentIndex) ?? null,
+    durationMs: input.completedDurations.get(segment.ordinal) ?? null,
   }));
   // Quantize silence slots to whole MP3 frames so the grid's startMs values match
   // the frame-accurate silence the worker emits (the byte map uses the same
@@ -134,12 +144,10 @@ export function buildPlaybackGrid(input: {
   return {
     durationMs: layout.durationMs,
     segments: layout.slots.map((slot): TtsPlaybackGridSegment => {
-      const completed = input.completedSegments?.get(slot.segmentIndex) ?? null;
+      const completed = input.completedSegments?.get(slot.ordinal) ?? null;
       return {
-        ordinal: slot.segmentIndex,
-        sourceSegmentIndex: slot.segmentIndex,
+        ordinal: slot.ordinal,
         segmentKey: slot.segmentKey,
-        segmentId: completed?.segmentId ?? null,
         startMs: slot.startMs,
         endMs: slot.endMs,
         durationMs: slot.durationMs,

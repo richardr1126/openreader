@@ -90,19 +90,19 @@ Audio is already normalized to a single **CBR** MP3 profile before storage —
 what makes the whole-document stream byte↔time linear and seekable. The encoding is
 not changing.
 
-What changes in v5 is *where playback stores it*. Today the worker reuses
-`buildTtsSegmentAudioKey` → `tts_segments_v2/`, the same audio prefix the pre-refactor
-system on `main` used (the old DB-backed TTS tables that paired with it are already
-dead code on this branch). Playback gets its own content-addressed prefix so the v5
-artifact set is self-contained and the inherited `tts_segments_v2/` prefix can be
-dropped wholesale:
+Playback stores generated stream audio in its own content-addressed prefix. It no
+longer writes the inherited `tts_segments_v2/` prefix used by the pre-refactor
+system, so the v5 artifact set is self-contained and `tts_segments_v2/` can be
+dropped wholesale during decommission:
 
-`tts_playback_segments_audio_v1/[ns/<ns>/]users/<userId>/docs/<documentId>/<version>/<settingsHash>/<segmentId>.mp3`
+`tts_playback_segments_audio_v1/[ns/<ns>/]users/<userId>/docs/<documentId>/<version>/<settingsHash>/<audioContentHash>.mp3`
 
-This sits beside the sidecar prefix rather than inside it on purpose: audio is keyed
-by content (`settingsHash + segmentId`) for cross-ordinal/session dedup, while
-sidecars are keyed per ordinal. Both are v5-owned and are cleared together as one
-document/settings scope on clear-cache.
+This sits beside the sidecar prefix rather than inside it on purpose: audio is
+keyed by content (`settingsHash + audioContentHash`) for cross-ordinal/session
+dedup, while sidecars are keyed per ordinal. The audio content hash is a worker
+implementation detail, not a playback cursor/start identity and not a persisted
+sidecar or client row field. Both prefixes are v5-owned and are cleared together
+as one document/settings scope on clear-cache.
 
 ### Segment Sidecars
 
@@ -255,8 +255,8 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | Worker-plan ordinal start | Done | Playback jobs validate the selected ordinal against the canonical plan. Coordinate/text/key fallback resolution has been removed from the playback-start path. |
 | Remove client-side EPUB playback planning | Done | Plan/session payloads no longer carry reader start coordinates, text, or segment keys. EPUB page extraction builds rendered text maps and a stable spine anchor only; playback segments come from the worker plan. |
 | Clear cache as playback reset boundary | Done | Clear calls the worker reset endpoint before deleting objects; the worker bumps a scope epoch, cancels matching sessions, invalidates local sidecar caches, and epoch-aware readers/writers reject stale sidecars/late writes. |
-| ID/key/schema consolidation | In progress | Plan/session payloads are now separated and legacy start key/text/coordinate inputs were removed from the worker playback operation schema. Remaining overlap: `segmentIndex`/`ordinal`, `segmentKey`/`segmentId`, and duplicated normalizers. |
-| (7) Move playback audio to a dedicated prefix | Not done | Audio is **already** CBR (`normalizeToMp3`/`STREAM_AUDIO_PROFILE`) — encoding unchanged. Add a key builder writing a new content-addressed prefix `tts_playback_segments_audio_v1/`; point generation + sidecar `audioKey` at it; stop writing `tts_segments_v2/`. Accepted cost: cached audio re-synthesizes once into the new prefix. Unblocks v2 retirement (9), so it lands first. |
+| ID/key/schema consolidation | Done | Playback plan/grid/sidecar artifacts use `ordinal`; mirrored `sourceSegmentIndex` values are gone; plan/session request schemas are separated and strict; schema-version handling is centralized for playback plan artifacts and sidecars. |
+| (7) Move playback audio to a dedicated prefix | Done | Generation writes audio through `buildTtsPlaybackSegmentAudioKey` under `tts_playback_segments_audio_v1/`, and sidecars point at that key. Playback no longer writes `tts_segments_v2/`. |
 | (8) Retire legacy audiobook pipeline; download from worker loop | Not done | Remove the client/server audiobook pipeline, routes, and blobstore, and stop all reads/writes of the audiobook DB tables. Download drives the worker full-document loop (`extent: 'document'`), tracks progress over playback SSE, and fetches the worker-assembled audio (already CBR) from S3 — **MP3 only**, m4b+chapters deferred; no second ffmpeg stitch or blobstore. Independent of step 7. (Table DROP itself happens in step 9.) |
 | (9) v5 decommission: drop legacy TTS + audiobook storage | Not done | (A) Remove the five table defs (`tts_playback_sessions`, `tts_segment_entries`, `tts_segment_variants`, `audiobooks`, `audiobook_chapters`; keep `user_tts_chars`) and `drizzle-kit generate` a `DROP TABLE` migration per dialect (+ hand-add `DELETE FROM scheduled_tasks WHERE key='cleanup-legacy-tts-playback-cache'`). (B) **Delete** the recurring `cleanup-legacy-tts-playback-cache` task + handler; add an idempotent `runV4Decommission(env)` that prefix-purges `tts_segments_v1/` + `tts_segments_v2/` + `audiobooks_v1/` (never `tts_playback_*`), run both inline at self-hosted boot (`cli.mjs`) and as `pnpm migrate-decommission` for Vercel/CI. (C) Remove the dead `migrate-fs` FS→S3 migrator; the decommission takes its boot slot. Gated on steps 7 + 8. |
 
@@ -386,76 +386,40 @@ Clear-cache is now an explicit playback reset before object deletion:
   endpoint drops local cache entries for the reset scope.
 - The clear response reports the actual number of invalidated playback sessions.
 
----
-
-## Remaining Work
-
 ### 6. Consolidate IDs, Keys, and Schemas
 
-The playback path still carries too many overlapping identity fields and parallel
-schema definitions. This makes the code harder to reason about and keeps
-transitional naming alive after ordinals became the playback identity.
+Playback identity is now ordinal-only across plan/grid/sidecar artifacts:
 
-Target identity model:
-
-- `ordinal`: the canonical worker-plan position and only playback cursor/start
-  identity.
-- `segmentKey`: stable segmentation/content key from the canonical plan, used for
-  dedupe/debugging, not for playback start.
-- `segmentId`: audio/settings-specific synthesized segment identity, used for
-  content-addressed audio and sidecar metadata.
-- `planObjectKey`: durable S3 address of the immutable canonical plan.
-- `planSignature`: segmentation-shape hash used to address/reuse the plan.
-- `settingsHash`: audio/settings hash used for generated audio and sidecars.
-
-Required cleanup:
-
-- Rename internal `segmentIndex` fields on playback plan/grid artifacts to
-  `ordinal` without keeping parallel playback identities.
-- Remove duplicated `sourceSegmentIndex` values where they only mirror `ordinal`.
-- Keep `segmentKey` and `segmentId` separate and document where each is allowed.
-- Consolidate plan/session request schemas so plan loading and playback session
-  creation do not share one loose payload type.
-- Consolidate generated/hand-written response normalizers for plan, grid, seek
-  layout, and timeline rows.
-- Add schema-version handling helpers for playback plan artifacts and sidecars
-  instead of scattered `schemaVersion: 1` checks.
-- Add tests that reject ambiguous identity input, such as session starts without
-  `ordinal`, rows with conflicting `ordinal`/`segmentIndex`, or sidecars whose
-  ordinal does not match their object key.
+- Worker plan segments persist `ordinal`, `segmentKey`, text, and locator.
+- Playback CBR layout inputs/slots use `ordinal`.
+- Segment sidecars store `ordinal`, `segmentKey`, and `audioKey`; the sidecar
+  reader validates schema version and the sidecar ordinal against the object key.
+- `segmentEntryId` and persisted/client-facing `segmentId` fields were removed
+  from playback entirely.
+- Completed segment, timeline, and seek-layout rows expose `ordinal`; duplicated
+  `sourceSegmentIndex` fields were removed.
+- Plan-operation and playback-session request schemas are separate strict
+  schemas instead of one loose shared payload shape.
+- `segmentKey` remains the segmentation/content key from the canonical plan, and
+  `audioContentHash` is only the worker-local audio/settings-specific hash used
+  to build the content-addressed audio key.
 
 ### 7. Move Playback Audio to a Dedicated Playback-Owned Prefix
 
-The encoding is *not* the issue here — segment audio is already CBR. Every segment
-is run through `normalizeToMp3` → `STREAM_AUDIO_PROFILE` (44.1 kHz mono, 128 kbps
-CBR, Xing stripped) in `packages/tts/src/audio-format.ts` before storage, which is
-what makes the whole-document stream byte↔time linear and seekable. This step does
-not change that profile.
+Playback generation now writes segment audio through
+`buildTtsPlaybackSegmentAudioKey`:
 
-The problem is *location*: the worker (`handlers.ts`, its only writer on this branch)
-reuses `buildTtsSegmentAudioKey` (`packages/tts/src/segments.ts`) → `tts_segments_v2/`,
-the same prefix the pre-refactor system on `main` used. Because v5 playback audio
-lands in that inherited prefix, `tts_segments_v2/` cannot be dropped without taking
-live playback audio with it. Give playback its own content-addressed prefix so its
-artifacts are self-contained, then v2 becomes purgeable. This unblocks step 9, so it
-lands first.
+`tts_playback_segments_audio_v1/[ns/<ns>/]users/<userId>/docs/<documentId>/<version>/<settingsHash>/<audioContentHash>.mp3`
 
-- Add a dedicated key builder (e.g. `buildTtsPlaybackSegmentAudioKey`) writing the
-  content-addressed key
-  `tts_playback_segments_audio_v1/[ns/<ns>/]users/<userId>/docs/<documentId>/<version>/<settingsHash>/<segmentId>.mp3`.
-  Keep the existing content-addressing (`settingsHash + segmentId`) and the existing
-  `normalizeToMp3` CBR encoding unchanged — only the prefix moves.
-- Point the generation flow ("Generate Segments") and the sidecar `audioKey` at the
-  new builder. Stream/seek-layout readers consume audio only via the sidecar
-  `audioKey`, so they need no prefix knowledge.
-- Stop writing `tts_segments_v2/` from the playback path entirely.
+The encoding is unchanged: generated audio still runs through `normalizeToMp3`
+and `STREAM_AUDIO_PROFILE`. Only the object location moved. Existing
+`tts_segments_v2/` playback cache objects are not copied; the first playback
+after upgrade re-synthesizes into the playback-owned prefix as the accepted
+hard-cut cost.
 
-Accepted cost: existing `v2` objects are **not** copied/migrated. They hold
-identical CBR bytes, but content-addressing keys them under the old prefix, so the
-first playback after upgrade re-synthesizes each segment into the new prefix — a
-one-time re-encode that incurs real TTS-provider cost across the cached library.
-This churn is the deliberate price for a clean ownership/decommission boundary
-(chosen over keeping `tts_segments_v2` as the audio store).
+---
+
+## Remaining Work
 
 ### 8. Retire the Legacy Audiobook Pipeline; Download from the Worker Loop
 

@@ -133,7 +133,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const playbackTimeSecRef = useRef(0);
   const lastPlaybackTimePublishedAtRef = useRef(0);
   const lastProjectionRef = useRef<{
-    segmentId: string;
     ordinal: number;
     wordIndex: number | null;
     alignment: TTSSentenceAlignment | null | undefined;
@@ -230,11 +229,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
     const locatorKey = locatorProjectionKey(locator);
     const previous = lastProjectionRef.current;
-    const segmentId = projection.segment.segmentId;
     const alignment = projection.segment.alignment ?? undefined;
     if (
       previous
-      && previous.segmentId === segmentId
       && previous.ordinal === targetOrdinal
       && previous.wordIndex === projection.wordIndex
       && previous.alignment === alignment
@@ -243,7 +240,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       return;
     }
     lastProjectionRef.current = {
-      segmentId,
       ordinal: targetOrdinal,
       wordIndex: projection.wordIndex,
       alignment,

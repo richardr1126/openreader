@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
+  buildTtsPlaybackSegmentAudioKey,
   buildTtsSegmentDocumentPrefix,
   buildTtsPlaybackSettingsHash,
   buildProportionalAlignment,
-  buildTtsSegmentEntryId,
-  buildTtsSegmentId,
+  buildTtsPlaybackAudioContentHash,
   buildTtsSegmentSettingsJson,
   buildTtsSegmentSettingsHash,
   buildTtsSegmentTextHash,
@@ -22,6 +22,18 @@ describe('tts segment helpers', () => {
       userId: 'user/name',
       documentId: 'doc-id',
     })).toBe('openreader/tts_segments_v2/ns/test namespace/users/user%2Fname/docs/doc-id/');
+  });
+
+  test('builds playback-owned segment audio key', () => {
+    expect(buildTtsPlaybackSegmentAudioKey({
+      storagePrefix: 'openreader',
+      namespace: 'test-ns',
+      userId: 'user/name',
+      documentId: 'doc-id',
+      documentVersion: 7,
+      settingsHash: 'settings',
+      audioContentHash: 'content-hash',
+    })).toBe('openreader/tts_playback_segments_audio_v1/ns/test-ns/users/user%2Fname/docs/doc-id/7/settings/content-hash.mp3');
   });
 
   test('builds stable settings hash', () => {
@@ -109,28 +121,28 @@ describe('tts segment helpers', () => {
     }
   });
 
-  test('builds deterministic segment id', () => {
-    const id1 = buildTtsSegmentId({
+  test('builds deterministic playback audio content hash', () => {
+    const id1 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       normalizedText: 'hello world',
       locatorFingerprint: 'loc',
     });
-    const id2 = buildTtsSegmentId({
+    const id2 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       normalizedText: 'hello world',
       locatorFingerprint: 'loc',
     });
-    const id3 = buildTtsSegmentId({
+    const id3 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 3,
+      ordinal: 3,
       normalizedText: 'hello world',
       locatorFingerprint: 'loc',
     });
@@ -138,59 +150,30 @@ describe('tts segment helpers', () => {
     expect(id1).not.toBe(id3);
   });
 
-  test('builds deterministic segment entry id independent of settings', () => {
-    const entry1 = buildTtsSegmentEntryId({
-      documentId: 'doc',
-      documentVersion: 1,
-      segmentIndex: 2,
-      segmentKey: 'doc:v1:segment-a',
-      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
-      textHash: 'abc123',
-    });
-    const entry2 = buildTtsSegmentEntryId({
-      documentId: 'doc',
-      documentVersion: 1,
-      segmentIndex: 2,
-      segmentKey: 'doc:v1:segment-a',
-      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
-      textHash: 'abc123',
-    });
-    const entry3 = buildTtsSegmentEntryId({
-      documentId: 'doc',
-      documentVersion: 1,
-      segmentIndex: 2,
-      segmentKey: 'doc:v1:segment-b',
-      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
-      textHash: 'abc123',
-    });
-    expect(entry1).toBe(entry2);
-    expect(entry1).not.toBe(entry3);
-  });
-
-  test('canonical segment key makes id independent of locator and index', () => {
-    const id1 = buildTtsSegmentId({
+  test('canonical segment key makes playback audio content hash independent of locator and ordinal', () => {
+    const id1 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       segmentKey: 'doc:v1:segment-a',
       normalizedText: 'hello world',
       locatorFingerprint: 'loc-a',
     });
-    const id2 = buildTtsSegmentId({
+    const id2 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 99,
+      ordinal: 99,
       segmentKey: 'doc:v1:segment-a',
       normalizedText: 'hello world',
       locatorFingerprint: 'loc-b',
     });
-    const id3 = buildTtsSegmentId({
+    const id3 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       segmentKey: 'doc:v1:segment-b',
       normalizedText: 'hello world',
       locatorFingerprint: 'loc-a',
