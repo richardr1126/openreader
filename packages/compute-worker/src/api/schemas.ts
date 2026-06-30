@@ -134,6 +134,12 @@ export const pdfLayoutProgressSchema = z.object({
   phase: z.enum(['infer', 'merge']),
 });
 
+export const ttsPlaybackProgressSchema = z.object({
+  completedThroughOrdinal: z.number(),
+  completedCount: z.number(),
+  plannedCount: z.number(),
+});
+
 export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
@@ -165,7 +171,7 @@ export const computeOperationSchema = z.object({
     s3FetchMs: z.number().optional(),
     computeMs: z.number().optional(),
   }).optional(),
-  progress: pdfLayoutProgressSchema.optional(),
+  progress: z.union([pdfLayoutProgressSchema, ttsPlaybackProgressSchema]).optional(),
 });
 
 export const computeOperationEventSchema = z.object({

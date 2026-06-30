@@ -29,7 +29,6 @@ export const createTtsPlaybackSession = async (
   audioUrl: string;
   downloadUrl: string;
   timelineUrl: string;
-  planUrl: string;
   eventsUrl: string;
   seekLayoutUrl: string;
   expiresAt: number;
@@ -88,7 +87,6 @@ export const createTtsPlaybackPlan = async (
   operation: unknown;
   planUrl: string;
   seekLayoutUrl: string;
-  eventsUrl: string;
 }> => {
   const response = await fetch('/api/tts/playback/plans', {
     method: 'POST',
@@ -222,6 +220,7 @@ export const getTtsPlaybackSeekLayout = async (
 export type TtsPlaybackEventSnapshot = {
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   completedThroughOrdinal: number | null;
+  completedCount: number | null;
   plannedCount: number | null;
 };
 
@@ -244,7 +243,11 @@ export const subscribeTtsPlaybackEvents = (
       const payload = JSON.parse(event.data) as {
         snapshot?: {
           status?: 'queued' | 'running' | 'succeeded' | 'failed';
-          progress?: { completedThroughOrdinal?: number; plannedCount?: number } | null;
+          progress?: {
+            completedThroughOrdinal?: number;
+            completedCount?: number;
+            plannedCount?: number;
+          } | null;
         };
       };
       const snapshot = payload?.snapshot;
@@ -254,6 +257,9 @@ export const subscribeTtsPlaybackEvents = (
         status: snapshot.status,
         completedThroughOrdinal: progress && Number.isFinite(Number(progress.completedThroughOrdinal))
           ? Number(progress.completedThroughOrdinal)
+          : null,
+        completedCount: progress && Number.isFinite(Number(progress.completedCount))
+          ? Number(progress.completedCount)
           : null,
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)

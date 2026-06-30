@@ -118,7 +118,6 @@ export async function POST(request: NextRequest) {
       sessionId,
       operation,
       timelineUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/timeline`,
-      planUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/plan`,
       eventsUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/events`,
       downloadUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/audio`,
       seekLayoutUrl: parsed.planId

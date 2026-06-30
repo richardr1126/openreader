@@ -412,31 +412,55 @@
             "additionalProperties": false
           },
           "progress": {
-            "type": "object",
-            "properties": {
-              "totalPages": {
-                "type": "number"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "totalPages": {
+                    "type": "number"
+                  },
+                  "pagesParsed": {
+                    "type": "number"
+                  },
+                  "currentPage": {
+                    "type": "number"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "infer",
+                      "merge"
+                    ]
+                  }
+                },
+                "required": [
+                  "totalPages",
+                  "pagesParsed",
+                  "phase"
+                ],
+                "additionalProperties": false
               },
-              "pagesParsed": {
-                "type": "number"
-              },
-              "currentPage": {
-                "type": "number"
-              },
-              "phase": {
-                "type": "string",
-                "enum": [
-                  "infer",
-                  "merge"
-                ]
+              {
+                "type": "object",
+                "properties": {
+                  "completedThroughOrdinal": {
+                    "type": "number"
+                  },
+                  "completedCount": {
+                    "type": "number"
+                  },
+                  "plannedCount": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "completedThroughOrdinal",
+                  "completedCount",
+                  "plannedCount"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "totalPages",
-              "pagesParsed",
-              "phase"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "required": [
@@ -594,31 +618,55 @@
                 "additionalProperties": false
               },
               "progress": {
-                "type": "object",
-                "properties": {
-                  "totalPages": {
-                    "type": "number"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "totalPages": {
+                        "type": "number"
+                      },
+                      "pagesParsed": {
+                        "type": "number"
+                      },
+                      "currentPage": {
+                        "type": "number"
+                      },
+                      "phase": {
+                        "type": "string",
+                        "enum": [
+                          "infer",
+                          "merge"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "totalPages",
+                      "pagesParsed",
+                      "phase"
+                    ],
+                    "additionalProperties": false
                   },
-                  "pagesParsed": {
-                    "type": "number"
-                  },
-                  "currentPage": {
-                    "type": "number"
-                  },
-                  "phase": {
-                    "type": "string",
-                    "enum": [
-                      "infer",
-                      "merge"
-                    ]
+                  {
+                    "type": "object",
+                    "properties": {
+                      "completedThroughOrdinal": {
+                        "type": "number"
+                      },
+                      "completedCount": {
+                        "type": "number"
+                      },
+                      "plannedCount": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "completedThroughOrdinal",
+                      "completedCount",
+                      "plannedCount"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "totalPages",
-                  "pagesParsed",
-                  "phase"
-                ],
-                "additionalProperties": false
+                ]
               }
             },
             "required": [
@@ -801,31 +849,55 @@
                     "additionalProperties": false
                   },
                   "progress": {
-                    "type": "object",
-                    "properties": {
-                      "totalPages": {
-                        "type": "number"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "totalPages": {
+                            "type": "number"
+                          },
+                          "pagesParsed": {
+                            "type": "number"
+                          },
+                          "currentPage": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "infer",
+                              "merge"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "totalPages",
+                          "pagesParsed",
+                          "phase"
+                        ],
+                        "additionalProperties": false
                       },
-                      "pagesParsed": {
-                        "type": "number"
-                      },
-                      "currentPage": {
-                        "type": "number"
-                      },
-                      "phase": {
-                        "type": "string",
-                        "enum": [
-                          "infer",
-                          "merge"
-                        ]
+                      {
+                        "type": "object",
+                        "properties": {
+                          "completedThroughOrdinal": {
+                            "type": "number"
+                          },
+                          "completedCount": {
+                            "type": "number"
+                          },
+                          "plannedCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "completedThroughOrdinal",
+                          "completedCount",
+                          "plannedCount"
+                        ],
+                        "additionalProperties": false
                       }
-                    },
-                    "required": [
-                      "totalPages",
-                      "pagesParsed",
-                      "phase"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 },
                 "required": [
@@ -1585,31 +1657,55 @@
                       "additionalProperties": false
                     },
                     "progress": {
-                      "type": "object",
-                      "properties": {
-                        "totalPages": {
-                          "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
                         },
-                        "pagesParsed": {
-                          "type": "number"
-                        },
-                        "currentPage": {
-                          "type": "number"
-                        },
-                        "phase": {
-                          "type": "string",
-                          "enum": [
-                            "infer",
-                            "merge"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "totalPages",
-                        "pagesParsed",
-                        "phase"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [
@@ -1954,31 +2050,55 @@
                       "additionalProperties": false
                     },
                     "progress": {
-                      "type": "object",
-                      "properties": {
-                        "totalPages": {
-                          "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
                         },
-                        "pagesParsed": {
-                          "type": "number"
-                        },
-                        "currentPage": {
-                          "type": "number"
-                        },
-                        "phase": {
-                          "type": "string",
-                          "enum": [
-                            "infer",
-                            "merge"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "totalPages",
-                        "pagesParsed",
-                        "phase"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [
@@ -2283,31 +2403,55 @@
                       "additionalProperties": false
                     },
                     "progress": {
-                      "type": "object",
-                      "properties": {
-                        "totalPages": {
-                          "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
                         },
-                        "pagesParsed": {
-                          "type": "number"
-                        },
-                        "currentPage": {
-                          "type": "number"
-                        },
-                        "phase": {
-                          "type": "string",
-                          "enum": [
-                            "infer",
-                            "merge"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "totalPages",
-                        "pagesParsed",
-                        "phase"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [
@@ -2553,31 +2697,55 @@
                               "additionalProperties": false
                             },
                             "progress": {
-                              "type": "object",
-                              "properties": {
-                                "totalPages": {
-                                  "type": "number"
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "totalPages": {
+                                      "type": "number"
+                                    },
+                                    "pagesParsed": {
+                                      "type": "number"
+                                    },
+                                    "currentPage": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "infer",
+                                        "merge"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "totalPages",
+                                    "pagesParsed",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
                                 },
-                                "pagesParsed": {
-                                  "type": "number"
-                                },
-                                "currentPage": {
-                                  "type": "number"
-                                },
-                                "phase": {
-                                  "type": "string",
-                                  "enum": [
-                                    "infer",
-                                    "merge"
-                                  ]
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "completedThroughOrdinal": {
+                                      "type": "number"
+                                    },
+                                    "completedCount": {
+                                      "type": "number"
+                                    },
+                                    "plannedCount": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "completedThroughOrdinal",
+                                    "completedCount",
+                                    "plannedCount"
+                                  ],
+                                  "additionalProperties": false
                                 }
-                              },
-                              "required": [
-                                "totalPages",
-                                "pagesParsed",
-                                "phase"
-                              ],
-                              "additionalProperties": false
+                              ]
                             }
                           },
                           "required": [
@@ -2784,31 +2952,55 @@
                       "additionalProperties": false
                     },
                     "progress": {
-                      "type": "object",
-                      "properties": {
-                        "totalPages": {
-                          "type": "number"
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
                         },
-                        "pagesParsed": {
-                          "type": "number"
-                        },
-                        "currentPage": {
-                          "type": "number"
-                        },
-                        "phase": {
-                          "type": "string",
-                          "enum": [
-                            "infer",
-                            "merge"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "totalPages",
-                        "pagesParsed",
-                        "phase"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "required": [

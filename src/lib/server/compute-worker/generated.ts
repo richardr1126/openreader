@@ -528,6 +528,10 @@ export interface paths {
                                 currentPage?: number;
                                 /** @enum {string} */
                                 phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
                             };
                         };
                     };
@@ -652,6 +656,10 @@ export interface paths {
                                 currentPage?: number;
                                 /** @enum {string} */
                                 phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
                             };
                         };
                     };
@@ -767,6 +775,10 @@ export interface paths {
                                 currentPage?: number;
                                 /** @enum {string} */
                                 phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
                             };
                         };
                     };
@@ -868,6 +880,10 @@ export interface paths {
                                     currentPage?: number;
                                     /** @enum {string} */
                                     phase: "infer" | "merge";
+                                } | {
+                                    completedThroughOrdinal: number;
+                                    completedCount: number;
+                                    plannedCount: number;
                                 };
                             } | null;
                         };
@@ -958,6 +974,10 @@ export interface paths {
                                 currentPage?: number;
                                 /** @enum {string} */
                                 phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
                             };
                         };
                     };
@@ -1168,6 +1188,10 @@ export interface components {
                 currentPage?: number;
                 /** @enum {string} */
                 phase: "infer" | "merge";
+            } | {
+                completedThroughOrdinal: number;
+                completedCount: number;
+                plannedCount: number;
             };
         };
         ComputeOperationEvent: {
@@ -1212,6 +1236,10 @@ export interface components {
                     currentPage?: number;
                     /** @enum {string} */
                     phase: "infer" | "merge";
+                } | {
+                    completedThroughOrdinal: number;
+                    completedCount: number;
+                    plannedCount: number;
                 };
             };
         };
@@ -1259,6 +1287,10 @@ export interface components {
                     currentPage?: number;
                     /** @enum {string} */
                     phase: "infer" | "merge";
+                } | {
+                    completedThroughOrdinal: number;
+                    completedCount: number;
+                    plannedCount: number;
                 };
             } | null;
         };

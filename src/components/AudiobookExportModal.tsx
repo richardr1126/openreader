@@ -12,7 +12,7 @@ import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { Button, Card, RangeInput } from '@/components/ui';
-import { getTtsPlaybackSeekLayout, subscribeTtsPlaybackEvents } from '@/lib/client/api/tts';
+import { subscribeTtsPlaybackEvents } from '@/lib/client/api/tts';
 
 interface AudiobookExportModalProps {
   isOpen: boolean;
@@ -30,6 +30,17 @@ function formatSpeed(speed: number): string {
 function clampProgress(completed: number, total: number): number {
   if (total <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+}
+
+function withDownloadSpeed(url: string, speed: number): string {
+  const safeSpeed = Math.max(0.5, Math.min(3, Number.isFinite(speed) ? speed : 1));
+  if (Math.abs(safeSpeed - 1) < 0.01) return url;
+  const parsed = new URL(url, window.location.href);
+  parsed.searchParams.set('speed', safeSpeed.toFixed(2));
+  if (parsed.origin === window.location.origin) {
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  }
+  return parsed.toString();
 }
 
 export function AudiobookExportModal({
@@ -61,17 +72,20 @@ export function AudiobookExportModal({
   const [plannedSegments, setPlannedSegments] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [localAudioPlayerSpeed, setLocalAudioPlayerSpeed] = useState(audioPlayerSpeed);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
-  const progressTimerRef = useRef<number | null>(null);
-  const progressRequestRef = useRef<Promise<void> | null>(null);
-  const progressSessionRef = useRef<{ seekLayoutUrl: string; plannedCount: number } | null>(null);
+  const progressCompleteRef = useRef(false);
   const statusRef = useRef<ExportStatus>('idle');
 
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    setLocalAudioPlayerSpeed(audioPlayerSpeed);
+  }, [audioPlayerSpeed]);
 
   const providerModelPolicy = useMemo(
     () => resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel }),
@@ -95,13 +109,6 @@ export function AudiobookExportModal({
     unsubscribeRef.current = null;
   }, []);
 
-  const cleanupProgressTimer = useCallback(() => {
-    if (progressTimerRef.current !== null) {
-      window.clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-  }, []);
-
   const applyProgressSnapshot = useCallback((completed: number, total: number) => {
     const safeTotal = Math.max(0, Math.floor(total));
     const safeCompleted = safeTotal > 0
@@ -111,43 +118,29 @@ export function AudiobookExportModal({
     setCompletedSegments(safeCompleted);
     setProgress(clampProgress(safeCompleted, safeTotal));
     if (safeTotal > 0 && safeCompleted >= safeTotal) {
+      progressCompleteRef.current = true;
       cleanupSubscription();
-      cleanupProgressTimer();
       abortControllerRef.current = null;
       setStatus('ready');
       setProgress(100);
     }
-  }, [cleanupProgressTimer, cleanupSubscription]);
-
-  const refreshProgressFromLayout = useCallback(async () => {
-    const progressSession = progressSessionRef.current;
-    if (!progressSession?.seekLayoutUrl) return;
-    if (progressRequestRef.current) {
-      await progressRequestRef.current;
-      return;
-    }
-    const request = (async () => {
-      const layout = await getTtsPlaybackSeekLayout(progressSession.seekLayoutUrl);
-      const total = layout.segments.length || progressSession.plannedCount;
-      const completed = layout.segments.filter((segment) => segment.generated || segment.audioState === 'ready').length;
-      applyProgressSnapshot(completed, total);
-    })().finally(() => {
-      progressRequestRef.current = null;
-    });
-    progressRequestRef.current = request;
-    await request;
-  }, [applyProgressSnapshot]);
+  }, [cleanupSubscription]);
 
   const stopTracking = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     cleanupSubscription();
-    cleanupProgressTimer();
-    progressSessionRef.current = null;
+    progressCompleteRef.current = true;
     if (statusRef.current === 'generating') {
       setStatus('idle');
     }
-  }, [cleanupProgressTimer, cleanupSubscription]);
+  }, [cleanupSubscription]);
+
+  const commitAudioPlayerSpeed = useCallback(() => {
+    if (localAudioPlayerSpeed !== audioPlayerSpeed) {
+      setAudioPlayerSpeedAndRestart(localAudioPlayerSpeed);
+    }
+  }, [audioPlayerSpeed, localAudioPlayerSpeed, setAudioPlayerSpeedAndRestart]);
 
   useEffect(() => {
     const onPageHide = () => stopTracking();
@@ -162,11 +155,10 @@ export function AudiobookExportModal({
 
   const handleStartGeneration = useCallback(async () => {
     cleanupSubscription();
-    cleanupProgressTimer();
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    progressSessionRef.current = null;
+    progressCompleteRef.current = false;
     setStatus('generating');
     setProgress(0);
     setCompletedSegments(0);
@@ -181,52 +173,37 @@ export function AudiobookExportModal({
       setAudioUrl(session.audioUrl);
       setDownloadUrl(session.downloadUrl);
       setPlannedSegments(session.plannedCount);
-      progressSessionRef.current = {
-        seekLayoutUrl: session.seekLayoutUrl,
-        plannedCount: session.plannedCount,
-      };
-      if (session.seekLayoutUrl) {
-        void refreshProgressFromLayout().catch(() => undefined);
-        progressTimerRef.current = window.setInterval(() => {
-          void refreshProgressFromLayout().catch(() => undefined);
-        }, 1500);
-      }
       unsubscribeRef.current = subscribeTtsPlaybackEvents(session.sessionId, {
         onSnapshot: (snapshot) => {
           const total = snapshot.plannedCount ?? session.plannedCount;
           if (snapshot.status === 'failed') {
+            progressCompleteRef.current = true;
             cleanupSubscription();
-            cleanupProgressTimer();
             abortControllerRef.current = null;
             setStatus('idle');
             setErrorMessage('Audio export failed.');
             return;
           }
 
-          if (progressSessionRef.current?.seekLayoutUrl) {
-            setPlannedSegments((current) => current > 0 ? current : total);
-            void refreshProgressFromLayout().catch(() => undefined);
-            return;
-          }
-
           const completed = snapshot.status === 'succeeded'
             ? total
-            : snapshot.completedThroughOrdinal === null
-              ? 0
-              : Math.min(total, snapshot.completedThroughOrdinal + 1);
+            : snapshot.completedCount !== null
+              ? snapshot.completedCount
+              : snapshot.completedThroughOrdinal === null
+                ? 0
+                : Math.min(total, snapshot.completedThroughOrdinal + 1);
           applyProgressSnapshot(completed, total);
           if (snapshot.status === 'succeeded' || (total > 0 && completed >= total)) {
+            progressCompleteRef.current = true;
             cleanupSubscription();
-            cleanupProgressTimer();
             abortControllerRef.current = null;
             setStatus('ready');
             setProgress(100);
           }
         },
         onError: () => {
-          if (!controller.signal.aborted) {
-            setErrorMessage('Audio export progress disconnected.');
-          }
+          // EventSource reconnects automatically. Progress comes from operation
+          // snapshots, so a transient disconnect is not a user-facing failure.
         },
       });
     } catch (error) {
@@ -236,14 +213,12 @@ export function AudiobookExportModal({
     }
   }, [
     applyProgressSnapshot,
-    cleanupProgressTimer,
     cleanupSubscription,
-    refreshProgressFromLayout,
     startDocumentAudioExport,
   ]);
 
   const handleDownload = useCallback(() => {
-    const urlToDownload = downloadUrl || audioUrl;
+    const urlToDownload = downloadUrl ? withDownloadSpeed(downloadUrl, localAudioPlayerSpeed) : audioUrl;
     if (!urlToDownload) return;
     setStatus('downloading');
     try {
@@ -258,7 +233,7 @@ export function AudiobookExportModal({
       setStatus('ready');
       setErrorMessage(error instanceof Error ? error.message : 'Download failed.');
     }
-  }, [audioUrl, documentId, documentType, downloadUrl]);
+  }, [audioUrl, documentId, documentType, downloadUrl, localAudioPlayerSpeed]);
 
   if (isLoading) {
     return null;
@@ -341,15 +316,18 @@ export function AudiobookExportModal({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Audio player speed</label>
-                    <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(audioPlayerSpeed)}x</span>
+                    <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Audiobook speed</label>
+                    <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(localAudioPlayerSpeed)}x</span>
                   </div>
                   <RangeInput
                     min="0.5"
                     max="3"
                     step="0.1"
-                    value={audioPlayerSpeed}
-                    onChange={(event) => setAudioPlayerSpeedAndRestart(parseFloat(event.target.value))}
+                    value={localAudioPlayerSpeed}
+                    onChange={(event) => setLocalAudioPlayerSpeed(parseFloat(event.target.value))}
+                    onMouseUp={commitAudioPlayerSpeed}
+                    onKeyUp={commitAudioPlayerSpeed}
+                    onTouchEnd={commitAudioPlayerSpeed}
                     disabled={isGenerating}
                   />
                 </div>

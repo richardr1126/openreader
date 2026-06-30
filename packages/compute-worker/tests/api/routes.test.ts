@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createComputeWorkerApp } from '../../src/api/app';
+import { buildTtsPlaybackOperationKey } from '../../src/operations/keys';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
 
 const AUTH = { authorization: 'Bearer test-token' };
@@ -338,6 +339,40 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('event: snapshot');
     expect(stream.body).toContain('id: 7');
     expect(stream.body).toContain('"status":"succeeded"');
+  });
+
+  test('streams TTS playback completed-count progress in SSE snapshots', async () => {
+    const now = Date.now();
+    fake.seedState({
+      opId: 'op-tts-progress',
+      opKey: buildTtsPlaybackOperationKey({
+        sessionId: 'playback-session-progress',
+        documentId: 'doc-progress',
+        documentVersion: 1,
+        settingsHash: 'settings-progress',
+      }),
+      kind: 'tts_playback',
+      jobId: 'job-op-tts-progress',
+      status: 'succeeded',
+      queuedAt: now,
+      updatedAt: now,
+      progress: {
+        completedThroughOrdinal: 8,
+        completedCount: 7,
+        plannedCount: 14,
+      },
+    });
+
+    const stream = await runtime.app.inject({
+      method: 'GET',
+      url: '/v1/operations/op-tts-progress/events',
+      headers: AUTH,
+    });
+
+    expect(stream.statusCode).toBe(200);
+    expect(stream.body).toContain('"completedThroughOrdinal":8');
+    expect(stream.body).toContain('"completedCount":7');
+    expect(stream.body).toContain('"plannedCount":14');
   });
 
   test('marks stale running playback and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {

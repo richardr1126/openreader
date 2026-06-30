@@ -1,5 +1,5 @@
 import type { PdfLayoutResult, ComputeOperation } from '@/lib/server/compute-worker/protocol';
-import type { PdfParseStatus } from '@/types/parsed-pdf';
+import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { PdfParseSnapshot } from '@/lib/server/pdf-parse/types';
 
 function mapWorkerStatusToParseStatus(status: ComputeOperation['status']): PdfParseStatus {
@@ -29,13 +29,22 @@ export function parsedObjectKeyFromWorkerState(
   return normalized || null;
 }
 
+function isPdfParseProgress(value: unknown): value is PdfParseProgress {
+  if (!value || typeof value !== 'object') return false;
+  const rec = value as Record<string, unknown>;
+  return Number.isFinite(Number(rec.totalPages))
+    && Number.isFinite(Number(rec.pagesParsed))
+    && (rec.phase === 'infer' || rec.phase === 'merge');
+}
+
 export function pdfParseSnapshotFromWorkerState(
   state: ComputeOperation<PdfLayoutResult>,
 ): PdfParseSnapshot {
   const parseStatus = mapWorkerStatusToParseStatus(state.status);
+  const progress = isPdfParseProgress(state.progress) ? state.progress : null;
   return {
     parseStatus,
-    parseProgress: parseStatus === 'running' ? (state.progress ?? null) : null,
+    parseProgress: parseStatus === 'running' ? progress : null,
     opId: state.opId?.trim() || null,
     ...(parseStatus === 'failed' && state.error?.message ? { error: state.error.message } : {}),
   };

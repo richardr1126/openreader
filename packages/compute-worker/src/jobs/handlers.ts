@@ -1004,6 +1004,32 @@ export function createJobHandlers(input: {
         const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
         const backgroundExtent = parsed.backgroundExtent ?? 'section';
         const forceDocumentExtent = parsed.generationExtent === 'document';
+        const readCurrentCacheEpoch = async (): Promise<number> => await playbackStorage.artifacts.getScopeEpoch({
+          storageUserId: parsed.storageUserId,
+          documentId: parsed.documentId,
+          documentVersion: parsed.documentVersion,
+          settingsHash: parsed.settingsHash,
+        });
+        const cacheEpoch = await readCurrentCacheEpoch();
+        const completedOrdinals = new Set<number>();
+        const scanCompletedSidecars = async (): Promise<void> => {
+          const batchSize = 32;
+          for (let i = 0; i < plannedSegments.length; i += batchSize) {
+            const batch = plannedSegments.slice(i, i + batchSize);
+            const sidecars = await Promise.all(batch.map((segment) => playbackStorage.artifacts.readSegmentMetadata({
+              storageUserId: parsed.storageUserId,
+              documentId: parsed.documentId,
+              documentVersion: parsed.documentVersion,
+              settingsHash: parsed.settingsHash,
+              ordinal: segment.ordinal,
+            }).catch(() => null)));
+            sidecars.forEach((sidecar) => {
+              if (sidecar?.status !== 'completed' || !sidecar.audioKey) return;
+              if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return;
+              completedOrdinals.add(sidecar.ordinal);
+            });
+          }
+        };
 
         // Section map (for background-extent bounding) + ordered ordinals.
         const sectionByOrdinal = new Map<number, string | null>();
@@ -1027,6 +1053,18 @@ export function createJobHandlers(input: {
         // target, the job exits successfully instead of idling in the worker slot.
         let stoppedEarly = false;
         let lastCompletedThrough = -1;
+        const emitProgress = async (): Promise<void> => {
+          await hooks?.onProgress?.({
+            completedThroughOrdinal: lastCompletedThrough,
+            completedCount: completedOrdinals.size,
+            plannedCount,
+          });
+        };
+        await scanCompletedSidecars();
+        if (completedOrdinals.size > 0) {
+          lastCompletedThrough = Math.max(...completedOrdinals);
+        }
+        await emitProgress();
 
         const onBeforeSegment = async (planOrdinal: number): Promise<'continue' | 'stop'> => {
           const kvCursor = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
@@ -1075,8 +1113,9 @@ export function createJobHandlers(input: {
         };
 
         const onSegmentCompleted = async (planOrdinal: number): Promise<void> => {
+          completedOrdinals.add(planOrdinal);
           if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
-          await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
+          await emitProgress();
         };
 
         // Generate forward from the generation floor. The floor follows the cursor:
@@ -1090,13 +1129,6 @@ export function createJobHandlers(input: {
           isContinuationRun ? sessionCursorOrdinal : startOrdinal,
         );
         const generationSegments = plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
-        const readCurrentCacheEpoch = async (): Promise<number> => await playbackStorage.artifacts.getScopeEpoch({
-          storageUserId: parsed.storageUserId,
-          documentId: parsed.documentId,
-          documentVersion: parsed.documentVersion,
-          settingsHash: parsed.settingsHash,
-        });
-        const cacheEpoch = await readCurrentCacheEpoch();
 
         await generateExplicitTtsPlaybackSegments({
           request: parsed,
@@ -1113,7 +1145,7 @@ export function createJobHandlers(input: {
           onBeforeSegment,
           onSegmentCompleted,
           onSegmentErrored: async () => {
-            await hooks?.onProgress?.({ completedThroughOrdinal: lastCompletedThrough, plannedCount });
+            await emitProgress();
           },
         });
         const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);

@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
       operation,
       planUrl: `/api/tts/playback/plans/${encodeURIComponent(planId)}/plan`,
       seekLayoutUrl: `/api/tts/playback/plans/${encodeURIComponent(planId)}/seek-layout`,
-      eventsUrl: `/api/tts/playback/plans/${encodeURIComponent(planId)}/events`,
     }, { status: 202 });
   } catch (error) {
     return errorResponse(error, {

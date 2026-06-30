@@ -103,12 +103,16 @@ describe('server-state architecture', () => {
     const modal = source('src/components/AudiobookExportModal.tsx');
     expect(modal).toContain('startDocumentAudioExport');
     expect(modal).toContain('subscribeTtsPlaybackEvents');
-    expect(modal).toContain('getTtsPlaybackSeekLayout(progressSession.seekLayoutUrl)');
-    expect(modal).toContain('const urlToDownload = downloadUrl || audioUrl');
+    expect(modal).toContain('snapshot.completedCount');
+    expect(modal).toContain('withDownloadSpeed(downloadUrl, localAudioPlayerSpeed)');
     expect(modal).toContain('setAudioPlayerSpeedAndRestart');
+    expect(modal).toContain('progressCompleteRef.current');
     expect(modal).not.toContain('useAudiobookStatus');
     expect(modal).not.toContain('/api/audiobook');
+    expect(modal).not.toContain('getTtsPlaybackSeekLayout');
+    expect(modal).not.toContain('setInterval');
     expect(modal).not.toContain('await fetch(urlToDownload');
+    expect(modal).not.toContain('Audio export progress disconnected');
     expect(modal).not.toContain('setChapters');
     expect(modal).not.toContain('setBookId');
   });
@@ -212,6 +216,8 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('downloadUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/audio`');
     expect(streamAudioRoute).toContain('resolveTtsPlaybackSession(request, sessionId)');
     expect(streamAudioRoute).toContain('Content-Disposition');
+    expect(streamAudioRoute).toContain('readDownloadSpeed(request)');
+    expect(streamAudioRoute).toContain('buildAtempoFilter(input.speed)');
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
@@ -382,6 +388,8 @@ describe('server-state architecture', () => {
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/media.m3u8/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/lib/client/tts/hls-audio-controller.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/extend/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/tts/playback/plans/[planId]/events/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/plan/route.ts'))).toBe(false);
     expect(streamSessions).toContain('Math.floor(options?.minOrdinal ?? 0)');
     expect(streamSessions).toContain('Math.floor(options?.limit ?? 500), 10000');
     expect(streamSessions).not.toContain('Math.max(session.startOrdinal');
