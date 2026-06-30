@@ -1,7 +1,6 @@
 import type { Archiver } from 'archiver';
 import { Readable } from 'stream';
 import type { ReadableStream as NodeReadableStream } from 'stream/web';
-import { decodeChapterFileName } from '@/lib/server/audiobooks/chapters';
 
 export type ExportBlobBody =
   | NodeJS.ReadableStream
@@ -11,7 +10,7 @@ export type ExportBlobBody =
   | ArrayBufferView
   | { transformToByteArray: () => Promise<Uint8Array> };
 
-type ExportIssueScope = 'document' | 'audiobook' | 'audiobook_list';
+type ExportIssueScope = 'document';
 
 type ExportIssue = {
   scope: ExportIssueScope;
@@ -23,21 +22,6 @@ type ExportIssue = {
 type ExportDocument = {
   id: string;
   name: string;
-  [key: string]: unknown;
-};
-
-type ExportAudiobook = {
-  id: string;
-  [key: string]: unknown;
-};
-
-type ExportAudiobookChapter = {
-  bookId: string;
-  [key: string]: unknown;
-};
-
-type ExportAudiobookObject = {
-  fileName: string;
   [key: string]: unknown;
 };
 
@@ -56,12 +40,8 @@ export type AppendUserExportArchiveInput = {
   authSessions: unknown[];
   linkedAccounts: unknown[];
   documents: ExportDocument[];
-  audiobooks: ExportAudiobook[];
-  audiobookChapters: ExportAudiobookChapter[];
   storageEnabled: boolean;
   getDocumentBlobStream: (documentId: string) => Promise<ExportBlobBody>;
-  listAudiobookObjects: (bookId: string, userId: string) => Promise<ExportAudiobookObject[]>;
-  getAudiobookObjectStream: (bookId: string, userId: string, fileName: string) => Promise<ExportBlobBody>;
 };
 
 function isNodeReadableStream(value: unknown): value is Readable {
@@ -115,13 +95,6 @@ async function bodyToNodeReadable(body: ExportBlobBody): Promise<Readable> {
   throw new Error('Unsupported blob body type');
 }
 
-export function isPersistedAudiobookExportFileName(fileName: string): boolean {
-  if (fileName === 'audiobook.meta.json') return true;
-  if (fileName === 'complete.mp3' || fileName === 'complete.m4b') return true;
-  if (/^complete\.(mp3|m4b)\.manifest\.json$/i.test(fileName)) return true;
-  return decodeChapterFileName(fileName) !== null;
-}
-
 export async function appendUserExportArchive(input: AppendUserExportArchiveInput): Promise<void> {
   const {
     archive,
@@ -138,17 +111,12 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     authSessions,
     linkedAccounts,
     documents,
-    audiobooks,
-    audiobookChapters,
     storageEnabled,
     getDocumentBlobStream,
-    listAudiobookObjects,
-    getAudiobookObjectStream,
   } = input;
 
   const issues: ExportIssue[] = [];
   let documentFilesExported = 0;
-  let audiobookFilesExported = 0;
 
   appendJson(archive, 'profile.json', profileData);
   if (preferences) {
@@ -163,19 +131,6 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
   appendJson(archive, 'auth_sessions.json', authSessions);
   appendJson(archive, 'linked_accounts.json', linkedAccounts);
   appendJson(archive, 'library_documents.json', documents);
-
-  const chaptersByBookId = new Map<string, ExportAudiobookChapter[]>();
-  for (const chapter of audiobookChapters) {
-    const existing = chaptersByBookId.get(chapter.bookId) ?? [];
-    existing.push(chapter);
-    chaptersByBookId.set(chapter.bookId, existing);
-  }
-
-  const audiobooksWithChapters = audiobooks.map((book) => ({
-    ...book,
-    chapters: chaptersByBookId.get(book.id) ?? [],
-  }));
-  appendJson(archive, 'library_audiobooks.json', audiobooksWithChapters);
 
   for (const doc of storageEnabled ? documents : []) {
     const documentId = toSafePathSegment(doc.id, 'document');
@@ -197,44 +152,6 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     }
   }
 
-  for (const book of storageEnabled ? audiobooks : []) {
-    let objects: ExportAudiobookObject[] = [];
-    try {
-      objects = await listAudiobookObjects(book.id, userId);
-    } catch (error) {
-      issues.push({
-        scope: 'audiobook_list',
-        id: book.id,
-        message: normalizeErrorMessage(error),
-      });
-      continue;
-    }
-
-    const persisted = objects
-      .filter((object) => typeof object.fileName === 'string' && isPersistedAudiobookExportFileName(object.fileName))
-      .sort((a, b) => String(a.fileName).localeCompare(String(b.fileName)));
-
-    for (const object of persisted) {
-      const safeBookId = toSafePathSegment(book.id, 'book');
-      const safeFileName = toSafePathSegment(object.fileName, 'file.bin');
-      const entryName = `files/audiobooks/${safeBookId}/${safeFileName}`;
-
-      try {
-        const body = await getAudiobookObjectStream(book.id, userId, object.fileName);
-        const stream = await bodyToNodeReadable(body);
-        archive.append(stream, { name: entryName });
-        audiobookFilesExported += 1;
-      } catch (error) {
-        issues.push({
-          scope: 'audiobook',
-          id: book.id,
-          fileName: object.fileName,
-          message: normalizeErrorMessage(error),
-        });
-      }
-    }
-  }
-
   const manifest = {
     formatVersion: 3,
     exportedAtMs,
@@ -242,20 +159,16 @@ export async function appendUserExportArchive(input: AppendUserExportArchiveInpu
     scope: 'owned',
     counts: {
       documentsMetadata: documents.length,
-      audiobooksMetadata: audiobooks.length,
-      audiobookChaptersMetadata: audiobookChapters.length,
       documentSettingsMetadata: documentSettings.length,
       authSessionsMetadata: authSessions.length,
       linkedAccountsMetadata: linkedAccounts.length,
       jobEventsMetadata: jobEvents.length,
       documentFiles: documentFilesExported,
-      audiobookFiles: audiobookFilesExported,
       issues: issues.length,
     },
     includes: {
       metadata: true,
       documentFiles: storageEnabled,
-      audiobookFiles: storageEnabled,
       credentialSecrets: false,
       temporaryUploads: false,
       derivedDocumentPreviews: false,

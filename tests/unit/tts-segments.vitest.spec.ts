@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
   buildTtsPlaybackSegmentAudioKey,
-  buildTtsSegmentDocumentPrefix,
   buildTtsPlaybackSettingsHash,
   buildProportionalAlignment,
   buildTtsPlaybackAudioContentHash,
@@ -15,15 +14,6 @@ import {
 } from '@openreader/tts/segments';
 
 describe('tts segment helpers', () => {
-  test('builds a user/document-scoped audio prefix across every version and settings identity', () => {
-    expect(buildTtsSegmentDocumentPrefix({
-      storagePrefix: 'openreader',
-      namespace: 'test namespace',
-      userId: 'user/name',
-      documentId: 'doc-id',
-    })).toBe('openreader/tts_segments_v2/ns/test namespace/users/user%2Fname/docs/doc-id/');
-  });
-
   test('builds playback-owned segment audio key', () => {
     expect(buildTtsPlaybackSegmentAudioKey({
       storagePrefix: 'openreader',

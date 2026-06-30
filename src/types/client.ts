@@ -1,8 +1,3 @@
-import type {
-  TTSAudiobookChapter,
-  TTSAudiobookFormat,
-} from '@/types/tts';
-import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 export type {
   TTSSegmentLocator,
   TTSSegmentSettings,
@@ -35,46 +30,14 @@ export interface TTSRequestError extends Error {
   detail?: string;
 }
 
-// --- Audiobook API Types ---
-
-export interface AudiobookStatusResponse {
-  exists: boolean;
-  chapters: TTSAudiobookChapter[];
-  bookId: string | null;
-  hasComplete: boolean;
-  settings?: AudiobookGenerationSettings | null;
-}
-
 export type ClaimableCounts = {
   documents: number;
-  audiobooks: number;
   preferences: number;
   progress: number;
   documentSettings: number;
   folders: number;
   onboarding: number;
 };
-
-export interface AudiobookGenerationSettings {
-  providerRef: string;
-  providerType: TtsProviderType;
-  ttsModel: string;
-  voice: string;
-  nativeSpeed: number;
-  postSpeed: number;
-  format: TTSAudiobookFormat;
-  ttsInstructions?: string;
-  language?: string;
-}
-
-export interface CreateChapterPayload {
-  chapterTitle: string;
-  text: string;
-  bookId: string;
-  format: TTSAudiobookFormat;
-  chapterIndex: number;
-  settings?: AudiobookGenerationSettings;
-}
 
 export interface VoicesResponse {
   voices: string[];

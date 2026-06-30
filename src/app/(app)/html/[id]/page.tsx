@@ -21,8 +21,6 @@ import { ButtonLink } from '@/components/ui';
 import { serializeReaderPosition } from '@/lib/client/reader-progress';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
-import type { TTSAudiobookChapter } from '@/types/tts';
-import type { AudiobookGenerationSettings } from '@/types/client';
 import { useHtmlDocument } from './useHtmlDocument';
 
 export default function HTMLPage() {
@@ -44,8 +42,6 @@ export default function HTMLPage() {
     blocks,
     isTxt,
     clearCurrDoc,
-    createFullAudioBook,
-    regenerateChapter,
   } = htmlState;
   const {
     currDocPage,
@@ -186,24 +182,6 @@ export default function HTMLPage() {
     };
   }, [isLoading, activeSidebar]);
 
-  const handleGenerateAudiobook = useCallback(async (
-    onProgress: (progress: number) => void,
-    signal: AbortSignal,
-    onChapterComplete: (chapter: TTSAudiobookChapter) => void,
-    settings: AudiobookGenerationSettings,
-  ) => {
-    return createFullAudioBook(onProgress, signal, onChapterComplete, id as string, settings.format, settings);
-  }, [createFullAudioBook, id]);
-
-  const handleRegenerateChapter = useCallback(async (
-    chapterIndex: number,
-    bookId: string,
-    settings: AudiobookGenerationSettings,
-    signal: AbortSignal,
-  ) => {
-    return regenerateChapter(chapterIndex, bookId, settings.format, signal, settings);
-  }, [regenerateChapter]);
-
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -269,8 +247,6 @@ export default function HTMLPage() {
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
           documentType="html"
           documentId={id as string}
-          onGenerateAudiobook={handleGenerateAudiobook}
-          onRegenerateChapter={handleRegenerateChapter}
         />
       )}
       {isAtLimit ? (

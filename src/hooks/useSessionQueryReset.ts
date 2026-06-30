@@ -18,7 +18,6 @@ const USER_SCOPED_DOMAINS = new Set([
   'document-settings',
   'onboarding',
   'folders',
-  'audiobook',
   'tts-shared-providers',
   'tts-voices',
   'tts-manifest',

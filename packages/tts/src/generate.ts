@@ -753,7 +753,7 @@ async function runProviderRequest(
       : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;
-  // normalize to mp3 so the cache, storage, and audiobook pipeline stay mp3-only.
+  // Normalize to MP3 so playback storage and document export stay MP3-only.
   return normalizeToMp3(raw, signal);
 }
 

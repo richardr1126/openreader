@@ -34,6 +34,7 @@ import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import {
+  createTtsPlaybackSession,
   createTtsPlaybackPlan,
   getTtsPlaybackSeekLayout,
   type TtsPlaybackPlanPayload,
@@ -85,6 +86,12 @@ interface TTSContextType extends TTSPlaybackState {
   playbackTimeSec: number;
   playbackDurationSec: number;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
+  startDocumentAudioExport: (signal?: AbortSignal) => Promise<{
+    sessionId: string;
+    audioUrl: string;
+    eventsUrl: string;
+    plannedCount: number;
+  }>;
 
   // Alignment metadata for the current sentence
   currentSentenceAlignment?: TTSSentenceAlignment;
@@ -1127,6 +1134,59 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackSeekLayout,
   ]);
 
+  const startDocumentAudioExport = useCallback(async (signal?: AbortSignal) => {
+    const request = buildPlaybackPlanRequest();
+    if (!request) {
+      throw new Error('No document is ready for audio export.');
+    }
+
+    let plan = playbackPlanRef.current;
+    if (!plan?.planObjectKey || plan.segments.length === 0) {
+      const planHandle = await createTtsPlaybackPlan(request.payload, request.headers, signal);
+      plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
+      if (!signal?.aborted) {
+        const layout = await fetchPlaybackSeekLayoutUntilReady(planHandle.seekLayoutUrl, signal);
+        if (layout) setPlaybackSeekLayout(layout);
+      }
+    }
+
+    if (!plan?.planObjectKey || plan.segments.length === 0) {
+      throw new Error('The worker playback plan was not ready for export.');
+    }
+
+    const canonicalPlan = applyWorkerPlan(plan);
+    const selected = selectedOrdinalRef.current;
+    const selectedExists = selected !== null && canonicalPlan.some((segment) => segment.ordinal === selected);
+    setSelectedOrdinal(selectedExists ? selected : 0);
+
+    const session = await createTtsPlaybackSession({
+      documentId: request.payload.documentId,
+      settings: request.payload.settings,
+      ...(request.payload.planning ? { planning: request.payload.planning } : {}),
+      startIntent: { selectedOrdinal: 0 },
+      ...(plan.planId ? { planId: plan.planId } : {}),
+      planObjectKey: plan.planObjectKey,
+      ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
+      generationExtent: 'document',
+    }, request.headers, signal);
+
+    return {
+      sessionId: session.sessionId,
+      audioUrl: session.audioUrl,
+      eventsUrl: session.eventsUrl,
+      plannedCount: plan.plannedCount ?? plan.segments.length,
+    };
+  }, [
+    applyWorkerPlan,
+    buildPlaybackPlanRequest,
+    fetchPlaybackPlanUntilReady,
+    fetchPlaybackSeekLayoutUntilReady,
+    playbackPlanRef,
+    selectedOrdinalRef,
+    setPlaybackSeekLayout,
+    setSelectedOrdinal,
+  ]);
+
   buildPlaybackPlanRequestRef.current = buildPlaybackPlanRequest;
   buildPlaybackSessionRequestRef.current = buildPlaybackSessionRequest;
   createAndApplyPlaybackPlanRef.current = createAndApplyPlaybackPlan;
@@ -1474,6 +1534,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackTimeSec,
     playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
     playbackSeekLayout,
+    startDocumentAudioExport,
     currentSentenceAlignment,
     currentWordIndex,
     currDocPage,
@@ -1516,6 +1577,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanSource,
     playbackSeekLayout,
     playbackTimeSec,
+    startDocumentAudioExport,
     selectedOrdinal,
     currDocPage,
     currDocPageNumber,

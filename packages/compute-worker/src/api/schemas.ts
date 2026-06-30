@@ -85,6 +85,7 @@ export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSc
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
+  generationExtent: z.enum(['window', 'document']).optional(),
 }).strict();
 
 export const ttsPlaybackCursorUpdateSchema = z.object({

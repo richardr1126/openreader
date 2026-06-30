@@ -99,10 +99,12 @@ describe('server-state architecture', () => {
     expect(offenders).toEqual([]);
   });
 
-  test('keeps audiobook status and chapter mutations in the audiobook query hook', () => {
+  test('keeps audiobook export on worker playback state instead of legacy status rows', () => {
     const modal = source('src/components/AudiobookExportModal.tsx');
-    expect(modal).toContain('useAudiobookStatus(documentId');
-    expect(modal).not.toContain('getAudiobookStatus');
+    expect(modal).toContain('startDocumentAudioExport');
+    expect(modal).toContain('subscribeTtsPlaybackEvents');
+    expect(modal).not.toContain('useAudiobookStatus');
+    expect(modal).not.toContain('/api/audiobook');
     expect(modal).not.toContain('setChapters');
     expect(modal).not.toContain('setBookId');
   });

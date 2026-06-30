@@ -76,7 +76,10 @@ export async function POST(request: NextRequest) {
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
     const runtimeConfig = await getRuntimeConfig();
-    const { ttsPlaybackBackgroundExtent: backgroundExtent } = runtimeConfig;
+    const { ttsPlaybackBackgroundExtent } = runtimeConfig;
+    const backgroundExtent = parsed.generationExtent === 'document'
+      ? 'document'
+      : ttsPlaybackBackgroundExtent;
 
     const now = Date.now();
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
@@ -107,6 +110,7 @@ export async function POST(request: NextRequest) {
       // playback cursor; cursor heartbeats enqueue follow-up runs as needed.
       aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
       backgroundExtent,
+      ...(parsed.generationExtent === 'document' ? { generationExtent: 'document' as const } : {}),
       planning,
     });
 

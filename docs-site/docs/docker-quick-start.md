@@ -121,7 +121,7 @@ What this command enables:
 - Set `ADMIN_EMAILS` to your email if you want the **Admin** tab in Settings.
 - TTS credentials are configured only through **Settings → Admin → Shared providers**.
 - Use a `/app/docstore` mount if you want data to survive container/image replacement.
-- Startup automatically runs DB/storage migrations via the shared entrypoint.
+- Startup automatically runs DB migrations and the v4 legacy storage decommission via the shared entrypoint.
 - Scheduled maintenance tasks run in-process and can be managed from **Settings → Admin → Scheduled tasks**; Docker/self-hosted deployments do not need `CRON_SECRET`.
 :::
 

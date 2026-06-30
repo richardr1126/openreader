@@ -29,13 +29,10 @@ import {
   useEPUBHighlighting,
 } from '@/hooks/epub/useEPUBHighlighting';
 import { useEPUBLocationController } from '@/hooks/epub/useEPUBLocationController';
-import { useEPUBAudiobook } from '@/hooks/epub/useEPUBAudiobook';
 import type {
   TTSSentenceAlignment,
-  TTSAudiobookFormat,
-  TTSAudiobookChapter,
 } from '@/types/tts';
-import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
+import type { TTSSegmentLocator } from '@/types/client';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import { normalizeOptionalLanguageTag } from '@openreader/tts/language';
 import type { BaseDocument } from '@/types/documents';
@@ -52,28 +49,12 @@ export interface EpubDocumentState {
   setCurrentDocument: (metadata: BaseDocument, initialLocation?: string) => Promise<void>;
   clearCurrDoc: () => void;
   extractPageText: (book: Book, rendition: Rendition, shouldPause?: boolean) => Promise<string>;
-  createFullAudioBook: (
-    onProgress: (progress: number) => void,
-    signal?: AbortSignal,
-    onChapterComplete?: (chapter: TTSAudiobookChapter) => void,
-    bookId?: string,
-    format?: TTSAudiobookFormat,
-    settings?: AudiobookGenerationSettings
-  ) => Promise<string>;
-  regenerateChapter: (
-    chapterIndex: number,
-    bookId: string,
-    format: TTSAudiobookFormat,
-    signal: AbortSignal,
-    settings?: AudiobookGenerationSettings
-  ) => Promise<TTSAudiobookChapter>;
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
   tocRef: RefObject<NavItem[]>;
   locationRef: RefObject<string | number>;
   handleLocationChanged: (location: string | number | TTSSegmentLocator) => void;
   setRendition: (rendition: Rendition) => void;
-  isAudioCombining: boolean;
   highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => void;
   clearHighlights: () => void;
   highlightWordIndex: (
@@ -100,9 +81,7 @@ export function useEpubDocument(
     skipToLocation,
     setIsEPUB,
   } = useTTS();
-  // Configuration context to get TTS settings
   const {
-    providerRef,
     epubHighlightEnabled,
   } = useConfig();
   // Current document state
@@ -111,7 +90,6 @@ export function useEpubDocument(
   const [currDocText, setCurrDocText] = useState<string>();
   const [metadataLanguage, setMetadataLanguage] = useState<string | null>(null);
   const [isPlaybackReady, setIsPlaybackReady] = useState(false);
-  const [isAudioCombining] = useState(false);
 
   // Add new refs
   const bookRef = useRef<Book | null>(null);
@@ -268,12 +246,6 @@ export function useEpubDocument(
     }
   }, [setRenderedTextMaps, setTTSText]);
 
-  const { createFullAudioBook, regenerateChapter } = useEPUBAudiobook({
-    bookRef,
-    tocRef,
-    providerRef,
-  });
-
   const setRendition = useCallback((rendition: Rendition) => {
     renditionEventsCleanupRef.current?.();
     const book = rendition.book;
@@ -339,15 +311,12 @@ export function useEpubDocument(
       isPlaybackReady,
       clearCurrDoc,
       extractPageText,
-      createFullAudioBook,
-      regenerateChapter,
       bookRef,
       renditionRef,
       tocRef,
       locationRef,
       handleLocationChanged,
       setRendition,
-      isAudioCombining,
       highlightSegment,
       clearHighlights,
       highlightWordIndex,
@@ -364,11 +333,8 @@ export function useEpubDocument(
       isPlaybackReady,
       clearCurrDoc,
       extractPageText,
-      createFullAudioBook,
-      regenerateChapter,
       handleLocationChanged,
       setRendition,
-      isAudioCombining,
       highlightSegment,
       clearHighlights,
       highlightWordIndex,

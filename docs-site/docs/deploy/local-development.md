@@ -344,5 +344,5 @@ pnpm migrate
 ```
 
 :::info
-If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_FS_MIGRATIONS=false`. You can run storage migration manually with `pnpm migrate-fs`.
+If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the v4 legacy storage decommission manually with `pnpm migrate-decommission`.
 :::

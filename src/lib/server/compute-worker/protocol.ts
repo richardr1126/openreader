@@ -25,9 +25,10 @@ export type ComputeOperationEvent<Result = unknown> = {
 export type PdfLayoutRequest =
   paths['/v1/pdf-layout/operations']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackRequest =
-  paths['/v1/tts-playback/operations']['post']['requestBody']['content']['application/json'];
+  paths['/v1/tts-playback/operations']['post']['requestBody']['content']['application/json']
+  & { generationExtent?: 'window' | 'document' };
 export type TtsPlaybackPlanRequest =
-  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent'>;
+  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent'>;
 export type PdfLayoutResolveRequest =
   paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
 
@@ -62,6 +63,10 @@ export type TtsPlaybackSessionState = {
   workerOpId?: string | null;
   settingsHash: string;
   settingsJson: unknown;
+  aheadWindow?: number | null;
+  backgroundExtent?: 'section' | 'document' | null;
+  generationExtent?: 'window' | 'document' | null;
+  planning?: unknown;
   generationStartOrdinal: number;
   cursorOrdinal: number;
   cursorUpdatedAt: number | null;

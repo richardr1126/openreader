@@ -600,6 +600,8 @@ export interface paths {
                         aheadWindow?: number;
                         /** @enum {string} */
                         backgroundExtent?: "section" | "document";
+                        /** @enum {string} */
+                        generationExtent?: "window" | "document";
                     };
                 };
             };

@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   deleteDocumentPrefix: vi.fn(async () => 0),
   deleteDocumentPreviewArtifacts: vi.fn(async () => 0),
   deleteDocumentPreviewRows: vi.fn(async () => undefined),
-  deleteAudiobookPrefix: vi.fn(async () => 0),
   deleteTtsSegmentPrefix: vi.fn(async () => 0),
 }));
 
@@ -57,11 +56,6 @@ vi.mock('@/lib/server/documents/previews', () => ({
   deleteDocumentPreviewRows: mocks.deleteDocumentPreviewRows,
 }));
 
-vi.mock('@/lib/server/audiobooks/blobstore', () => ({
-  audiobookPrefix: () => 'audiobooks/user/',
-  deleteAudiobookPrefix: mocks.deleteAudiobookPrefix,
-}));
-
 vi.mock('@/lib/server/tts/segments-blobstore', () => ({
   deleteTtsSegmentPrefix: mocks.deleteTtsSegmentPrefix,
 }));
@@ -90,13 +84,10 @@ describe('user data cleanup', () => {
     mocks.deleteDocumentPrefix.mockResolvedValue(0);
     mocks.deleteDocumentPreviewArtifacts.mockResolvedValue(0);
     mocks.deleteDocumentPreviewRows.mockResolvedValue(undefined);
-    mocks.deleteAudiobookPrefix.mockResolvedValue(0);
     mocks.deleteTtsSegmentPrefix.mockResolvedValue(0);
   });
 
   test('defers document blobs/previews to the reaper on the canonical pass', async () => {
-    mocks.selectResults = [[]]; // no audiobooks
-
     await deleteUserStorageData('user-1', null);
 
     // Shared document storage is reclaimed by the reap-orphaned-blobs task, not here.
@@ -108,7 +99,6 @@ describe('user data cleanup', () => {
   });
 
   test('blocks database cleanup when storage cleanup fails', async () => {
-    mocks.selectResults = [[]]; // no audiobooks
     mocks.deleteDocumentPrefix.mockRejectedValueOnce(new Error('storage unavailable'));
 
     await expect(deleteUserStorageData('user-1', null)).rejects.toThrow(
@@ -120,7 +110,6 @@ describe('user data cleanup', () => {
   test('deletes namespaced document storage inline and skips global DB rows', async () => {
     mocks.selectResults = [
       [{ id: 'doc-1' }], // userDocs (namespaced pass)
-      [], // audiobooks
     ];
 
     await deleteUserStorageData('user-1', 'test-ns');

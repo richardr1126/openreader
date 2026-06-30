@@ -2,7 +2,6 @@ import { createHash } from 'crypto';
 import {
   deleteTtsSegmentPrefix,
 } from '@/lib/server/tts/segments-blobstore';
-import { buildTtsSegmentDocumentPrefix } from '@openreader/tts/segments';
 import { getS3Config } from '@/lib/server/storage/s3';
 import type { ReaderType } from '@/types/user-state';
 import {
@@ -29,23 +28,32 @@ function storageUserHash(userId: string): string {
   return createHash('sha256').update(userId).digest('hex');
 }
 
-async function deletePlaybackSegmentArtifactPrefix(input: {
+async function deletePlaybackSegmentArtifactPrefixes(input: {
   userId: string;
   documentId: string;
   documentVersion?: number;
+  namespace?: string | null;
 }): Promise<number> {
   const cfg = getS3Config();
-  const base = `${cfg.prefix}/tts_playback_segments_v1/users/${storageUserHash(input.userId)}/docs/${input.documentId}/`;
-  const prefix = typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)
-    ? `${base}${Math.floor(input.documentVersion)}/`
-    : base;
-  return deleteTtsSegmentPrefix(prefix);
+  const version = typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)
+    ? Math.floor(input.documentVersion)
+    : null;
+  const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
+  const audioBase = `${cfg.prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/`;
+  const sidecarBase = `${cfg.prefix}/tts_playback_segments_v1/users/${storageUserHash(input.userId)}/docs/${input.documentId}/`;
+  const audioPrefix = version === null ? audioBase : `${audioBase}${version}/`;
+  const sidecarPrefix = version === null ? sidecarBase : `${sidecarBase}${version}/`;
+
+  return (
+    await deleteTtsSegmentPrefix(audioPrefix)
+  ) + (
+    await deleteTtsSegmentPrefix(sidecarPrefix)
+  );
 }
 
 export async function clearTtsSegmentCache(
   input: ClearTtsSegmentCacheInput,
 ): Promise<ClearTtsSegmentCacheResult> {
-  const cfg = getS3Config();
   let invalidatedPlaybackSessions = 0;
   let warning: string | undefined;
 
@@ -62,17 +70,7 @@ export async function clearTtsSegmentCache(
     warning = 'Compute worker is not configured; active playback sessions were not invalidated.';
   }
 
-  let deletedAudioObjects = 0;
-  for (const storageVersion of ['v1', 'v2'] as const) {
-    deletedAudioObjects += await deleteTtsSegmentPrefix(buildTtsSegmentDocumentPrefix({
-      storagePrefix: cfg.prefix,
-      namespace: null,
-      userId: input.userId,
-      documentId: input.documentId,
-      storageVersion,
-    }));
-  }
-  deletedAudioObjects += await deletePlaybackSegmentArtifactPrefix(input);
+  const deletedAudioObjects = await deletePlaybackSegmentArtifactPrefixes(input);
 
   return {
     deletedSegments: 0,
@@ -88,15 +86,5 @@ export async function deleteDocumentTtsSegmentCache(input: {
   documentId: string;
   namespace: string | null;
 }): Promise<void> {
-  const cfg = getS3Config();
-  for (const storageVersion of ['v1', 'v2'] as const) {
-    await deleteTtsSegmentPrefix(buildTtsSegmentDocumentPrefix({
-      storagePrefix: cfg.prefix,
-      namespace: input.namespace,
-      userId: input.userId,
-      documentId: input.documentId,
-      storageVersion,
-    }));
-  }
-  await deletePlaybackSegmentArtifactPrefix(input);
+  await deletePlaybackSegmentArtifactPrefixes(input);
 }

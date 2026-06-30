@@ -21,7 +21,7 @@ export type SniffedAudioFormat = 'mp3' | 'wav' | 'ogg' | 'flac' | 'aac' | 'unkno
  *
  * 44.1 kHz mono @ 128 kbps CBR keeps speech clean (the prior VBR q2 profile guarded
  * against low-bitrate high-frequency fatigue; 128k CBR stays comfortably above that)
- * while making the stream seekable. The audiobook export re-encodes to 64k for size.
+ * while making the stream seekable. Document export serves this same CBR MP3.
  */
 export const STREAM_AUDIO_PROFILE = {
   sampleRateHz: 44100,
@@ -332,7 +332,7 @@ export function getCbrSilenceSecond(signal?: AbortSignal): Promise<Buffer> {
  * single seekable stream and a provider's own mp3 (VBR, or a different bitrate /
  * sample rate / channel count) would break the byte↔time linearity that seeking and
  * post-generation `playbackRate` depend on. Segment audio is cached, so this one-time
- * transcode cost is amortized across every playback and the audiobook export.
+ * transcode cost is amortized across every playback and MP3 export.
  */
 export async function normalizeToMp3(buffer: Buffer, signal?: AbortSignal): Promise<Buffer> {
   if (buffer.length === 0) return buffer;

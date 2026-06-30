@@ -75,6 +75,7 @@ export type TtsPlaybackSessionPayload = TtsPlaybackPlanPayload & {
   planId?: string;
   planObjectKey: string;
   planSignature?: string;
+  generationExtent?: 'window' | 'document';
 };
 
 export const createTtsPlaybackPlan = async (

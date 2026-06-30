@@ -58,7 +58,7 @@ describe('TTS segment cache cleanup', () => {
     });
   });
 
-  test('deletes legacy and playback artifact prefixes', async () => {
+  test('deletes playback audio and sidecar prefixes', async () => {
     const result = await clearTtsSegmentCache({
       userId: 'user-1',
       documentId: 'doc-1',
@@ -67,13 +67,12 @@ describe('TTS segment cache cleanup', () => {
 
     expect(result).toMatchObject({
       deletedSegments: 0,
-      requestedAudioObjects: 6,
-      deletedAudioObjects: 6,
+      requestedAudioObjects: 4,
+      deletedAudioObjects: 4,
       invalidatedPlaybackSessions: 0,
     });
     const userHash = createHash('sha256').update('user-1').digest('hex');
-    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith('openreader-test/tts_segments_v1/users/user-1/docs/doc-1/');
-    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith('openreader-test/tts_segments_v2/users/user-1/docs/doc-1/');
+    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith('openreader-test/tts_playback_segments_audio_v1/users/user-1/docs/doc-1/3/');
     expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith(`openreader-test/tts_playback_segments_v1/users/${userHash}/docs/doc-1/3/`);
   });
 

@@ -28,7 +28,6 @@ export default function ClaimDataModal({
       const claimed = await claimMutation.mutateAsync();
       toast.success(
         `Successfully claimed ${claimed.documents} documents, `
-        + `${claimed.audiobooks} audiobooks, `
         + `${claimed.preferences} preference set(s), `
         + `${claimed.progress} reading progress record(s), and `
         + `${claimed.documentSettings} document setting(s)!`,
@@ -53,7 +52,6 @@ export default function ClaimDataModal({
         <div className="text-xs font-semibold uppercase tracking-wide text-soft">Claimable data</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-soft">
           <li>{claimableCounts.documents} document(s)</li>
-          <li>{claimableCounts.audiobooks} audiobook(s)</li>
           <li>{claimableCounts.preferences} preference set(s)</li>
           <li>{claimableCounts.progress} reading progress record(s)</li>
           <li>{claimableCounts.documentSettings} document setting(s)</li>

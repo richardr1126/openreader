@@ -4,8 +4,6 @@ import { auth } from '@/lib/server/auth/auth';
 import { db } from '@openreader/database';
 import {
   documents,
-  audiobooks,
-  audiobookChapters,
   documentSettings,
   userDocumentProgress,
   userJobEvents,
@@ -16,11 +14,10 @@ import {
 } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import archiver from 'archiver';
 import { appendUserExportArchive } from '@/lib/server/user/data-export';
 import { getDocumentBlobStream } from '@/lib/server/documents/blobstore';
-import { getAudiobookObjectStream, listAudiobookObjects } from '@/lib/server/audiobooks/blobstore';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
@@ -61,7 +58,6 @@ export async function GET(req: NextRequest) {
     jobEvents,
     perDocumentSettings,
     userDocs,
-    userAudiobooks,
     folders,
     onboarding,
   ] = await Promise.all([
@@ -91,11 +87,6 @@ export async function GET(req: NextRequest) {
       .from(documents)
       .where(eq(documents.userId, userId))
       .orderBy(desc(documents.lastModified)),
-    db
-      .select()
-      .from(audiobooks)
-      .where(eq(audiobooks.userId, userId))
-      .orderBy(desc(audiobooks.createdAt)),
     db.select().from(userFolders).where(eq(userFolders.userId, userId)).orderBy(userFolders.position),
     db.select().from(userOnboarding).where(eq(userOnboarding.userId, userId)).limit(1),
   ]);
@@ -153,14 +144,6 @@ export async function GET(req: NextRequest) {
     output.destroy(error);
   });
 
-  const bookIds = userAudiobooks.map((book: typeof audiobooks.$inferSelect) => book.id);
-  const allChapters = bookIds.length > 0
-    ? await db
-      .select()
-      .from(audiobookChapters)
-      .where(and(eq(audiobookChapters.userId, userId), inArray(audiobookChapters.bookId, bookIds)))
-    : [];
-
   const onAbort = () => {
     archive.abort();
     output.destroy(new Error('Export request aborted'));
@@ -190,20 +173,10 @@ export async function GET(req: NextRequest) {
         authSessions,
         linkedAccounts,
         documents: userDocs,
-        audiobooks: userAudiobooks,
-        audiobookChapters: allChapters,
         storageEnabled,
         getDocumentBlobStream: async (documentId: string) => {
           requireStorage();
           return getDocumentBlobStream(documentId, testNamespace);
-        },
-        listAudiobookObjects: async (bookId: string, ownerId: string) => {
-          requireStorage();
-          return listAudiobookObjects(bookId, ownerId, testNamespace);
-        },
-        getAudiobookObjectStream: async (bookId: string, ownerId: string, fileName: string) => {
-          requireStorage();
-          return getAudiobookObjectStream(bookId, ownerId, fileName, testNamespace);
         },
       });
 

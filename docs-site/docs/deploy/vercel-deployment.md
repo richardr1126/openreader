@@ -7,7 +7,7 @@ This guide covers deploying OpenReader to Vercel with external Postgres and S3-c
 ## What works on Vercel
 
 - Documents (PDF/EPUB/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
-- Audiobook routes work on Node.js serverless functions using `ffmpeg-static`.
+- Audiobook export downloads the worker-owned playback MP3 stream; there are no audiobook-specific serverless routes.
 - Heavy compute features (Whisper alignment + PDF layout parsing) run through an external compute worker service.
 - For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
 
@@ -113,7 +113,7 @@ For all variables and defaults, see [Environment Variables](../reference/environ
 Vercel deployments do not run the `@openreader/bootstrap` process, so automatic startup migrations do not run there.
 
 - Run `pnpm migrate` in a controlled environment to apply Drizzle schema migrations to your Postgres DB.
-- Run `pnpm migrate-fs` only when migrating legacy local filesystem data (`docstore/documents_v1`, `docstore/audiobooks_v1`) into object storage + DB rows. Fresh Vercel deployments usually do not need this.
+- Run `pnpm migrate-decommission` once during the v5 rollout to purge retired object prefixes (`tts_segments_v1/`, `tts_segments_v2/`, `audiobooks_v1/`).
 
 ## 5. Scheduled maintenance tasks
 
@@ -123,44 +123,15 @@ The checked-in Hobby-compatible schedule invokes the route once daily. The admin
 
 Each due task is claimed with a database-backed lease, due tasks start independently, and individual runs are aborted and marked failed after four minutes. Review failures and run tasks manually from **Settings → Admin → Scheduled tasks**.
 
-## 6. FFmpeg packaging in Vercel functions
+## 6. Runtime expectations and caveats
 
-`ffmpeg-static` binaries must be included in function traces. This repo already does that in `next.config.ts` via `outputFileTracingIncludes` for:
-
-- `/api/audiobook`
-- `/api/audiobook/chapter`
-
-:::info
-`serverExternalPackages` should include `ffmpeg-static` so package paths resolve at runtime instead of being bundled into route output.
-:::
-
-If you change route paths or split handlers, update `outputFileTracingIncludes` accordingly.
-
-## 7. Function memory sizing
-
-FFmpeg workloads benefit from more memory/CPU. This repo includes:
-
-```json
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app/api/audiobook/route.ts": { "memory": 3009 },
-    "app/api/audiobook/chapter/route.ts": { "memory": 3009 }
-  }
-}
-```
-
-Adjust memory per route if your files are larger or your plan differs.
-
-## 8. Runtime expectations and caveats
-
-- Audiobook APIs require S3 configuration; otherwise they return `503`.
+- Audiobook export requires the external compute worker and S3-compatible object storage because it downloads the worker-owned playback MP3 stream.
 - For production Vercel deploys, use `POSTGRES_URL` instead of SQLite.
 
-## 9. Smoke test after deploy
+## 7. Smoke test after deploy
 
 1. Upload and read a PDF/EPUB document.
 2. Confirm sync/blob fetch works across refreshes/devices.
-3. Generate at least one audiobook chapter and play/download it.
+3. Start TTS playback and download an audiobook MP3 export.
 4. Verify worker-backed word highlighting and PDF parsing.
 5. Open **Settings → Admin → Scheduled tasks**, run one task manually, and confirm the next daily cron invocation succeeds.

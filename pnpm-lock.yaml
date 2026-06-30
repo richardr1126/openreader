@@ -228,9 +228,6 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
-      ffmpeg-static:
-        specifier: ^5.3.0
-        version: 5.3.0(supports-color@10.2.2)
       pg:
         specifier: ^8.21.0
         version: 8.21.0

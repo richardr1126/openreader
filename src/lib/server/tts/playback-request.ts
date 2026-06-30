@@ -20,6 +20,7 @@ export type ParsedTtsPlaybackRequestBody = {
   startIntent?: {
     selectedOrdinal?: number;
   };
+  generationExtent?: 'window' | 'document';
   maxBlockLength?: number;
   language?: string;
   skipBlockKinds?: ParsedPdfBlockKind[];
@@ -124,6 +125,14 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   const selectedOrdinal = readOptionalInt(startIntentRec, 'selectedOrdinal', 0);
   if (selectedOrdinal === null) return null;
 
+  const generationExtent = (() => {
+    if (!('generationExtent' in rec)) return undefined;
+    return rec.generationExtent === 'window' || rec.generationExtent === 'document'
+      ? rec.generationExtent
+      : null;
+  })();
+  if (generationExtent === null) return null;
+
   const planObjectKey = readOptionalString(rec, 'planObjectKey');
   const planSignature = readOptionalString(rec, 'planSignature');
   const planId = readOptionalString(rec, 'planId');
@@ -144,6 +153,7 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
       ...(charOffset !== undefined ? { charOffset } : {}),
     },
     ...(selectedOrdinal !== undefined ? { startIntent: { selectedOrdinal } } : {}),
+    ...(generationExtent ? { generationExtent } : {}),
     ...(maxBlockLength !== undefined ? { maxBlockLength } : {}),
     ...(planningLanguage ? { language: normalizeLanguageTag(planningLanguage) } : {}),
     ...(skipBlockKinds !== undefined ? { skipBlockKinds } : {}),

@@ -86,6 +86,7 @@ const ttsPlaybackRequestSchema = ttsPlaybackPlanRequestSchema.extend({
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
+  generationExtent: z.enum(['window', 'document']).optional(),
 }).strict();
 
 // Sliding-window pacing constants for bounded forward-generation runs.
@@ -1002,6 +1003,7 @@ export function createJobHandlers(input: {
         const plannedCount = plannedSegments.length;
         const aheadWindow = parsed.aheadWindow ?? TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW;
         const backgroundExtent = parsed.backgroundExtent ?? 'section';
+        const forceDocumentExtent = parsed.generationExtent === 'document';
 
         // Section map (for background-extent bounding) + ordered ordinals.
         const sectionByOrdinal = new Map<number, string | null>();
@@ -1057,6 +1059,9 @@ export function createJobHandlers(input: {
           }
           const fresh = cursor.cursorUpdatedAt != null
             && (now - cursor.cursorUpdatedAt) <= TTS_PLAYBACK_CURSOR_STALE_MS;
+          if (forceDocumentExtent) {
+            return planOrdinal <= backgroundTargetFor(cursor.cursorOrdinal) ? 'continue' : 'stop';
+          }
           if (fresh) {
             if (planOrdinal <= cursor.cursorOrdinal + aheadWindow) return 'continue';
             stoppedEarly = true;

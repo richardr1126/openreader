@@ -32,16 +32,3 @@ export interface TTSPlaybackState {
   currDocPageNumber: number;
   currDocPages?: number;
 }
-
-// Supported output formats for generated audiobooks
-export type TTSAudiobookFormat = 'mp3' | 'm4b';
-
-// Metadata for an audiobook chapter
-export interface TTSAudiobookChapter {
-  index: number;
-  title: string;
-  duration?: number;
-  status: 'pending' | 'generating' | 'completed' | 'error';
-  bookId?: string;
-  format?: TTSAudiobookFormat;
-}

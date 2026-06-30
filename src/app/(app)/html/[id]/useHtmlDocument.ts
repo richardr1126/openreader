@@ -3,19 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTTS } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { buildHtmlDocumentText, parseHtmlBlocks, type HtmlBlock } from '@openreader/tts/html-blocks';
-import { createHtmlAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/html';
-import { regenerateAudiobookChapter, runAudiobookGeneration } from '@/lib/client/audiobooks/pipeline';
-import type {
-  AudiobookGenerationSettings,
-  TTSRetryOptions,
-} from '@/types/client';
-import type {
-  TTSAudiobookChapter,
-  TTSAudiobookFormat,
-} from '@/types/tts';
 import type { BaseDocument } from '@/types/documents';
 
 export interface HtmlDocumentState {
@@ -27,23 +16,6 @@ export interface HtmlDocumentState {
   isTxt: boolean;
   setCurrentDocument: (metadata: BaseDocument) => Promise<void>;
   clearCurrDoc: () => void;
-  createFullAudioBook: (
-    onProgress: (progress: number) => void,
-    signal?: AbortSignal,
-    onChapterComplete?: (chapter: TTSAudiobookChapter) => void,
-    providedBookId?: string,
-    format?: TTSAudiobookFormat,
-    settings?: AudiobookGenerationSettings,
-    retryOptions?: TTSRetryOptions,
-  ) => Promise<string>;
-  regenerateChapter: (
-    chapterIndex: number,
-    bookId: string,
-    format: TTSAudiobookFormat,
-    signal: AbortSignal,
-    settings?: AudiobookGenerationSettings,
-    retryOptions?: TTSRetryOptions,
-  ) => Promise<TTSAudiobookChapter>;
 }
 
 function isTxtName(name: string | undefined | null): boolean {
@@ -52,10 +24,6 @@ function isTxtName(name: string | undefined | null): boolean {
 
 export function useHtmlDocument(): HtmlDocumentState {
   const { setDocumentPlaybackAnchor, stop, setIsEPUB } = useTTS();
-  const {
-    providerRef,
-    ttsSegmentMaxBlockLength,
-  } = useConfig();
 
   const [currDocData, setCurrDocData] = useState<string>();
   const [currDocName, setCurrDocName] = useState<string>();
@@ -131,77 +99,6 @@ export function useHtmlDocument(): HtmlDocumentState {
     }
   }, [clearCurrDoc, setDocumentPlaybackAnchor]);
 
-  const audiobookAdapter = useMemo(
-    () =>
-      createHtmlAudiobookSourceAdapter({
-        blocks,
-        isTxt,
-        maxBlockLength: ttsSegmentMaxBlockLength,
-      }),
-    [blocks, isTxt, ttsSegmentMaxBlockLength],
-  );
-
-  const createFullAudioBook = useCallback(
-    async (
-      onProgress: (progress: number) => void,
-      signal?: AbortSignal,
-      onChapterComplete?: (chapter: TTSAudiobookChapter) => void,
-      providedBookId?: string,
-      format: TTSAudiobookFormat = 'mp3',
-      settings?: AudiobookGenerationSettings,
-      retryOptions?: TTSRetryOptions,
-    ): Promise<string> => {
-      try {
-        return await runAudiobookGeneration({
-          adapter: audiobookAdapter,
-          defaultProvider: providerRef,
-          onProgress,
-          signal,
-          onChapterComplete,
-          providedBookId,
-          format,
-          settings,
-          retryOptions,
-        });
-      } catch (error) {
-        console.error('Error creating audiobook:', error);
-        throw error;
-      }
-    },
-    [audiobookAdapter, providerRef],
-  );
-
-  const regenerateChapter = useCallback(
-    async (
-      chapterIndex: number,
-      bookId: string,
-      format: TTSAudiobookFormat,
-      signal: AbortSignal,
-      settings?: AudiobookGenerationSettings,
-      retryOptions?: TTSRetryOptions,
-    ): Promise<TTSAudiobookChapter> => {
-      try {
-        return await regenerateAudiobookChapter({
-          adapter: audiobookAdapter,
-          chapterIndex,
-          bookId,
-          format,
-          signal,
-          defaultProvider: providerRef,
-          settings,
-          retryOptions,
-        });
-      } catch (error) {
-        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('cancelled'))) {
-          throw new Error('Chapter regeneration cancelled');
-        }
-        console.error('Error regenerating chapter:', error);
-        throw error;
-      }
-    },
-    [audiobookAdapter, providerRef],
-  );
-
   return useMemo(
     () => ({
       currDocData,
@@ -212,8 +109,6 @@ export function useHtmlDocument(): HtmlDocumentState {
       isTxt,
       setCurrentDocument,
       clearCurrDoc,
-      createFullAudioBook,
-      regenerateChapter,
     }),
     [
       currDocData,
@@ -224,8 +119,6 @@ export function useHtmlDocument(): HtmlDocumentState {
       isTxt,
       setCurrentDocument,
       clearCurrDoc,
-      createFullAudioBook,
-      regenerateChapter,
     ],
   );
 }

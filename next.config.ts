@@ -49,15 +49,6 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@openreader/database'],
   serverExternalPackages,
   outputFileTracingIncludes: {
-    '/api/audiobook': [
-      './node_modules/ffmpeg-static/ffmpeg',
-    ],
-    '/api/audiobook/chapter': [
-      './node_modules/ffmpeg-static/ffmpeg',
-    ],
-    '/api/tts/segments/ensure': [
-      './node_modules/ffmpeg-static/ffmpeg',
-    ],
     '/api/documents/blob/preview/ensure': [
       // pdf.js runtime assets are resolved through filesystem paths at runtime,
       // so trace them explicitly for Vercel/standalone serverless bundles.

@@ -25,12 +25,8 @@ describe('user data export archive', () => {
       authSessions: [{ id: 'session-1', ipAddress: null }],
       linkedAccounts: [{ id: 'account-1', providerId: 'credential' }],
       documents: [],
-      audiobooks: [],
-      audiobookChapters: [],
       storageEnabled: true,
       getDocumentBlobStream: async () => new Uint8Array(),
-      listAudiobookObjects: async () => [],
-      getAudiobookObjectStream: async () => new Uint8Array(),
     });
 
     expect(entries.has('document_settings.json')).toBe(true);
@@ -72,22 +68,16 @@ describe('user data export archive', () => {
       authSessions: [],
       linkedAccounts: [],
       documents: [{ id: 'doc-1', name: 'doc.pdf' }],
-      audiobooks: [],
-      audiobookChapters: [],
       storageEnabled: false,
       getDocumentBlobStream,
-      listAudiobookObjects: async () => [],
-      getAudiobookObjectStream: async () => new Uint8Array(),
     });
 
     const manifest = JSON.parse(String(entries.get('export_manifest.json')));
     expect(manifest.includes).toMatchObject({
       documentFiles: false,
-      audiobookFiles: false,
     });
     expect(manifest.counts).toMatchObject({
       documentFiles: 0,
-      audiobookFiles: 0,
     });
     expect(getDocumentBlobStream).not.toHaveBeenCalled();
   });

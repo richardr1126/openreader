@@ -13,7 +13,6 @@ describe('query keys', () => {
     expect(queryKeys.preferences('user')).toEqual(['preferences', 'user']);
     expect(queryKeys.onboarding('user')).toEqual(['onboarding', 'user']);
     expect(queryKeys.folders('user')).toEqual(['folders', 'user']);
-    expect(queryKeys.audiobook('user', 'book')).toEqual(['audiobook', 'user', 'book']);
     expect(queryKeys.sharedProviders('user')).toEqual(['tts-shared-providers', 'user']);
     expect(queryKeys.ttsVoices('user', 'shared', 'model')).toEqual(['tts-voices', 'user', 'shared', 'model']);
     expect(queryKeys.parsedDocument('user', 'doc')).toEqual(['parsed-document', 'user', 'doc']);

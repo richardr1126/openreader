@@ -186,17 +186,30 @@ right behavior for "where playback probably is now".
 
 ---
 
-## Client State Today
+## Client State
 
-`TTSContext` now exposes playback state/actions and owns document/config inputs
-that are outside the media controller:
+Client playback state is split across three owners.
+
+`TTSContext` is the app-level coordinator. It exposes playback state/actions and
+owns document/config inputs that are outside the media controller:
 
 - Playback plan request construction through the Next proxy.
 - Settings mutations for voice, speed, provider, language, and PDF skip kinds.
 - Segment/word highlight state and current document anchor.
 - EPUB cursor-follow navigation guards.
 
-`useTtsPlayback` owns:
+`useTtsPlaybackModel` is the single client model for worker-plan state:
+
+- The normalized worker playback plan.
+- Canonical playback segments derived from that plan.
+- Derived sentence strings and current row.
+- The selected worker-plan ordinal.
+- The seek layout returned by the worker.
+
+Array indexes are derived display/navigation values only. They are not playback
+identity and are not serialized into worker requests.
+
+`useTtsPlayback` is the media controller. It owns:
 
 - The unlocked `<audio>` element ref.
 - Playback phase state.
@@ -215,6 +228,8 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
   navigation.
 - It maps the current worker-plan segment to visible ranges; it does not
   materialize client-owned playback segments.
+- It does not use CFI, viewport locator, page-start anchor, text, segment key, or
+  array index as playback-start identity.
 
 ---
 
@@ -257,8 +272,8 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | Clear cache as playback reset boundary | Done | Clear calls the worker reset endpoint before deleting objects; the worker bumps a scope epoch, cancels matching sessions, invalidates local sidecar caches, and epoch-aware readers/writers reject stale sidecars/late writes. |
 | ID/key/schema consolidation | Done | Playback plan/grid/sidecar artifacts use `ordinal`; mirrored `sourceSegmentIndex` values are gone; plan/session request schemas are separated and strict; schema-version handling is centralized for playback plan artifacts and sidecars. |
 | (7) Move playback audio to a dedicated prefix | Done | Generation writes audio through `buildTtsPlaybackSegmentAudioKey` under `tts_playback_segments_audio_v1/`, and sidecars point at that key. Playback no longer writes `tts_segments_v2/`. |
-| (8) Retire legacy audiobook pipeline; download from worker loop | Not done | Remove the client/server audiobook pipeline, routes, and blobstore, and stop all reads/writes of the audiobook DB tables. Download drives the worker full-document loop (`extent: 'document'`), tracks progress over playback SSE, and fetches the worker-assembled audio (already CBR) from S3 — **MP3 only**, m4b+chapters deferred; no second ffmpeg stitch or blobstore. Independent of step 7. (Table DROP itself happens in step 9.) |
-| (9) v5 decommission: drop legacy TTS + audiobook storage | Not done | (A) Remove the five table defs (`tts_playback_sessions`, `tts_segment_entries`, `tts_segment_variants`, `audiobooks`, `audiobook_chapters`; keep `user_tts_chars`) and `drizzle-kit generate` a `DROP TABLE` migration per dialect (+ hand-add `DELETE FROM scheduled_tasks WHERE key='cleanup-legacy-tts-playback-cache'`). (B) **Delete** the recurring `cleanup-legacy-tts-playback-cache` task + handler; add an idempotent `runV4Decommission(env)` that prefix-purges `tts_segments_v1/` + `tts_segments_v2/` + `audiobooks_v1/` (never `tts_playback_*`), run both inline at self-hosted boot (`cli.mjs`) and as `pnpm migrate-decommission` for Vercel/CI. (C) Remove the dead `migrate-fs` FS→S3 migrator; the decommission takes its boot slot. Gated on steps 7 + 8. |
+| (8) Retire legacy audiobook pipeline; download from worker loop | Done | Client/server audiobook pipeline, routes, hooks, blobstore, DB reads/writes, data export/claim/cleanup paths, and legacy tests are removed. Export now creates a document-extent playback session, tracks playback SSE progress, and downloads the worker MP3 stream. **MP3 only**; no m4b, chapters, second ffmpeg stitch, or audiobook blobstore. (Table DROP itself happens in step 9.) |
+| (9) v5 decommission: drop legacy TTS + audiobook storage | Done | Dropped legacy table defs and generated per-dialect `DROP TABLE` migrations with the retired scheduled-task row delete. Deleted the recurring cleanup task, added idempotent `runV4Decommission(env)` for `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`, wired it into bootstrap and `pnpm migrate-decommission`, removed the FS→S3 migrator, and updated current docs/config. |
 
 ---
 
@@ -417,71 +432,38 @@ and `STREAM_AUDIO_PROFILE`. Only the object location moved. Existing
 after upgrade re-synthesizes into the playback-owned prefix as the accepted
 hard-cut cost.
 
----
-
-## Remaining Work
-
 ### 8. Retire the Legacy Audiobook Pipeline; Download from the Worker Loop
 
-There are currently two unrelated generation systems. The new playback system
-(plan + content-addressed segment audio + per-ordinal sidecars + SSE) already owns
-whole-document generation: the worker background loop is bounded by `extent`
-(`'section'` | `'document'`, admin setting `ttsPlaybackBackgroundExtent`), and the
-audio route already assembles a whole-document MP3 from the plan plus completed
-sidecars. The legacy "audiobook" path is a separate, client-driven pipeline that
-duplicates all of this with its own storage, schema, and ffmpeg stitching:
+The legacy audiobook implementation is retired. Download/export now uses the
+same canonical worker playback system as live playback:
 
-- `src/lib/client/audiobooks/` (`pipeline.ts` + `adapters/{epub,pdf,html}.ts`) and
-  `src/lib/client/api/audiobooks.ts`.
-- `src/app/api/audiobook/route.ts`, `.../audiobook/chapter/route.ts`,
-  `.../audiobook/status/route.ts`.
-- `src/lib/server/audiobooks/` (`blobstore.ts`, `chapters.ts`, `ffmpeg-bin.ts`,
-  `prune.ts`, `settings.ts`) and the separate audiobook blob prefix.
-- DB tables `audiobooks` / `audiobookChapters`.
-- `AudiobookExportModal.tsx`, `useAudiobookStatus`, `useEPUBAudiobook`, and the
-  audiobook-specific query keys / client types.
+- `AudiobookExportModal` creates a document-extent playback session through
+  `TTSContext.startDocumentAudioExport`.
+- Session creation sends `generationExtent: 'document'`, and the Next session
+  route forces worker background extent to `document` for that export run.
+- The worker persists `generationExtent` in playback session state and continues
+  generation through the full forward plan even while the playback cursor is
+  fresh. Normal listening sessions keep the sliding ahead-window behavior.
+- Progress is the existing playback SSE stream (`completedThroughOrdinal` /
+  `plannedCount`), not a separate audiobook status table or polling route.
+- Download fetches the worker whole-document MP3 stream from the playback session
+  audio route. Output is a single CBR MP3 (`audio/mpeg`) assembled from completed
+  playback sidecars/audio; there is no second ffmpeg stitch, chapter assembly, or
+  separate audiobook blobstore.
 
-This path re-segments the document on the client, generates TTS per chapter into a
-separate blobstore, and stitches with server-side ffmpeg. None of it shares the
-canonical worker plan, content-addressed dedup, or sidecar readiness, so audio
-generated for playback is regenerated again for download.
-
-Target: "download" is just the worker full-document loop plus a fetch.
-
-- Reuse the canonical plan. Download must not re-extract or re-segment on the
-  client; it operates on the same worker-plan ordinals as playback.
-- Drive generation by requesting `extent: 'document'` for the document/settings
-  scope. This is independent of the admin background-extent default, which only
-  bounds *background* reach during playback; a download forces full-document reach.
-- Track progress via the existing playback SSE events stream — the worker already
-  emits `TtsPlaybackProgress` (`completedThroughOrdinal` / `plannedCount`) — not a
-  separate audiobook status table/poll.
-- Download the assembled audio from S3 via the worker whole-document audio route
-  once the document scope is fully generated. Segments are already CBR MP3
-  (`STREAM_AUDIO_PROFILE`), so the audio route frames/concats them into one
-  byte↔time-linear file with no second ffmpeg stitching stage and no second
-  blobstore. Readers reach audio via the sidecar `audioKey`, so this works
-  regardless of which prefix step 7 lands on — step 8 does not depend on step 7.
-- Download output is a single CBR MP3 (`audio/mpeg`) — the exact bytes the worker
-  audio route already serves. No chapter markers (MP3 has no portable chapter
-  container) and no client-side section assembly.
-
-Required cleanup:
+Removed runtime surface:
 
 - Remove `src/lib/client/audiobooks/`, `src/lib/server/audiobooks/`, the
   `src/app/api/audiobook/*` routes, `src/lib/client/api/audiobooks.ts`, and the
-  audiobook-specific hooks (`useAudiobookStatus`, `useEPUBAudiobook`).
-- Rebuild `AudiobookExportModal` as a thin download UI over the playback model:
-  request document-extent generation, render SSE progress, then offer the
-  worker-assembled file.
-- Stop all reads/writes of the `audiobooks` / `audiobookChapters` tables and the
-  separate audiobook blob prefix; fold prune/cleanup into the playback artifact
-  lifecycle (and the clear-cache reset boundary). The actual table DROP and object
-  purge happen in the decommission (step 9), not here — this step just makes them
-  dead.
-- Remove audiobook entries from query keys, client types, data export/cleanup, and
-  the legacy audiobook tests, replacing coverage with whole-document
-  generation/download tests against the worker loop.
+  audiobook-specific hooks (`useAudiobookStatus`, `useEPUBAudiobook`): done.
+- Remove all app/runtime reads and writes of the `audiobooks` /
+  `audiobookChapters` tables from claim, account export, account cleanup, query
+  keys, client types, and test teardown: done.
+- Delete the legacy audiobook tests and replace coverage with playback-export
+  contract checks: done.
+- Table definitions and migration history remain only for the step-9 DROP
+  migration. The separate `audiobooks_v1/` object prefix is now dead runtime
+  storage and is purged in step 9.
 
 Decided:
 
@@ -496,6 +478,10 @@ Decided:
   / completed sidecar), so it only fills missing ordinals. "Done" = every plan
   ordinal has a completed sidecar. There is no separate eager-vs-reuse mode.
 
+---
+
+## Remaining Work
+
 ### 9. v5 Decommission: One-Shot Drop of Legacy TTS + Audiobook Storage
 
 Two independent jobs with clean ownership: **the Drizzle migration drops the tables;
@@ -504,7 +490,8 @@ other and must not be merged into one "cleanup" path. The recurring
 `cleanup-legacy-tts-playback-cache` task is **deleted outright** — no metadata-free
 survivor, no permanent no-op sweep.
 
-Today both responsibilities are tangled inside that recurring task
+Before the step-9 decommission, both responsibilities remain tangled inside that
+recurring task
 (`src/lib/server/tasks/registry.ts` → `handlers/cleanup-legacy-tts-playback-cache.ts`):
 it `db.delete(...)`s `tts_segment_variants`, `tts_segment_entries`, and
 `tts_playback_sessions`, and it deletes the `tts_segments_v1/` and `tts_segments_v2/`

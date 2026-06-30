@@ -1,8 +1,6 @@
 import { db } from '@openreader/database';
 import {
   documents,
-  audiobooks,
-  audiobookChapters,
   documentSettings,
   userPreferences,
   userDocumentProgress,
@@ -12,37 +10,8 @@ import {
 import { eq, and, inArray } from 'drizzle-orm';
 import { UNCLAIMED_USER_ID } from '../storage/docstore-legacy';
 import { cleanupClaimedLegacyFsSources } from './legacy-fs-claim-cleanup';
-import {
-  deleteAudiobookObject,
-  getAudiobookObjectBuffer,
-  listAudiobookObjects,
-  putAudiobookObject,
-} from '../audiobooks/blobstore';
-import { isS3Configured } from '../storage/s3';
 import { logDegraded } from '../errors/logging';
 import { hashForLog, serverLogger } from '../logger';
-
-type AudiobookRow = {
-  id: string;
-  userId: string;
-  title: string;
-  author: string | null;
-  description: string | null;
-  coverPath: string | null;
-  duration: number | null;
-  createdAt: number;
-};
-
-type AudiobookChapterRow = {
-  id: string;
-  bookId: string;
-  userId: string;
-  chapterIndex: number;
-  title: string;
-  duration: number | null;
-  filePath: string;
-  format: string;
-};
 
 type UserPreferenceRow = {
   userId: string;
@@ -63,48 +32,6 @@ type UserDocumentProgressRow = {
   updatedAt: number;
 };
 
-function contentTypeForAudiobookObject(fileName: string): string {
-  if (fileName.endsWith('.mp3')) return 'audio/mpeg';
-  if (fileName.endsWith('.m4b')) return 'audio/mp4';
-  if (fileName.endsWith('.json')) return 'application/json; charset=utf-8';
-  return 'application/octet-stream';
-}
-
-async function copyAudiobookBlobScope(
-  bookId: string,
-  fromUserId: string,
-  toUserId: string,
-  namespace: string | null,
-): Promise<void> {
-  if (fromUserId === toUserId) return;
-
-  const objects = await listAudiobookObjects(bookId, fromUserId, namespace);
-  if (objects.length === 0) return;
-
-  for (const object of objects) {
-    const bytes = await getAudiobookObjectBuffer(bookId, fromUserId, object.fileName, namespace);
-    await putAudiobookObject(
-      bookId,
-      toUserId,
-      object.fileName,
-      bytes,
-      contentTypeForAudiobookObject(object.fileName),
-      namespace,
-    );
-  }
-}
-
-async function deleteAudiobookBlobScope(
-  bookId: string,
-  userId: string,
-  namespace: string | null,
-): Promise<void> {
-  const objects = await listAudiobookObjects(bookId, userId, namespace);
-  for (const object of objects) {
-    await deleteAudiobookObject(bookId, userId, object.fileName, namespace);
-  }
-}
-
 export async function claimAnonymousData(
   userId: string,
   unclaimedUserId: string = UNCLAIMED_USER_ID,
@@ -112,24 +39,17 @@ export async function claimAnonymousData(
   options?: { cleanupLegacySources?: boolean },
 ) {
   if (!userId) {
-    return { documents: 0, audiobooks: 0, preferences: 0, progress: 0, documentSettings: 0, folders: 0, onboarding: 0 };
+    return { documents: 0, preferences: 0, progress: 0, documentSettings: 0, folders: 0, onboarding: 0 };
   }
 
-  const [claimableDocumentRows, claimableAudiobookRows] = await Promise.all([
-    db
-      .select({ id: documents.id })
-      .from(documents)
-      .where(eq(documents.userId, unclaimedUserId)) as Promise<Array<{ id: string }>>,
-    db
-      .select({ id: audiobooks.id })
-      .from(audiobooks)
-      .where(eq(audiobooks.userId, unclaimedUserId)) as Promise<Array<{ id: string }>>,
-  ]);
+  const claimableDocumentRows = await db
+    .select({ id: documents.id })
+    .from(documents)
+    .where(eq(documents.userId, unclaimedUserId)) as Array<{ id: string }>;
 
   const foldersClaimed = await transferUserFolders(unclaimedUserId, userId);
-  const [documentsClaimed, audiobooksClaimed, preferencesClaimed, progressClaimed, documentSettingsClaimed, onboardingClaimed] = await Promise.all([
+  const [documentsClaimed, preferencesClaimed, progressClaimed, documentSettingsClaimed, onboardingClaimed] = await Promise.all([
     transferUserDocuments(unclaimedUserId, userId, { namespace }),
-    transferUserAudiobooks(unclaimedUserId, userId, namespace),
     transferUserPreferences(unclaimedUserId, userId),
     transferUserProgress(unclaimedUserId, userId),
     transferUserDocumentSettings(unclaimedUserId, userId),
@@ -139,11 +59,10 @@ export async function claimAnonymousData(
 
   if (
     options?.cleanupLegacySources !== false
-    && (claimableDocumentRows.length > 0 || claimableAudiobookRows.length > 0)
+    && claimableDocumentRows.length > 0
   ) {
     await cleanupClaimedLegacyFsSources({
       documentIds: claimableDocumentRows.map((row) => row.id),
-      audiobookIds: claimableAudiobookRows.map((row) => row.id),
       namespace,
     }).catch((error) => {
       logDegraded(serverLogger, {
@@ -154,7 +73,6 @@ export async function claimAnonymousData(
           claimedUserIdHash: hashForLog(userId),
           unclaimedUserIdHash: hashForLog(unclaimedUserId),
           documentCount: claimableDocumentRows.length,
-          audiobookCount: claimableAudiobookRows.length,
           namespace,
         },
         error,
@@ -164,7 +82,6 @@ export async function claimAnonymousData(
 
   return {
     documents: documentsClaimed,
-    audiobooks: audiobooksClaimed,
     preferences: preferencesClaimed,
     progress: progressClaimed,
     documentSettings: documentSettingsClaimed,
@@ -225,59 +142,6 @@ export async function transferUserDocuments(
     ));
   }
   return rows.length;
-}
-
-/**
- * Transfer audiobooks from one user to another.
- * Used when an anonymous user creates a real account.
- * @returns number of audiobooks transferred
- */
-export async function transferUserAudiobooks(
-  fromUserId: string,
-  toUserId: string,
-  namespace: string | null = null,
-): Promise<number> {
-  if (!fromUserId || !toUserId) return 0;
-  if (fromUserId === toUserId) return 0;
-
-  const books = (await db
-    .select()
-    .from(audiobooks)
-    .where(eq(audiobooks.userId, fromUserId))) as AudiobookRow[];
-  if (books.length === 0) return 0;
-
-  if (isS3Configured()) {
-    for (const book of books) {
-      await copyAudiobookBlobScope(book.id, fromUserId, toUserId, namespace);
-    }
-  }
-
-  await db
-    .insert(audiobooks)
-    .values(books.map((book) => ({ ...book, userId: toUserId })))
-    .onConflictDoNothing();
-
-  const chapters = (await db
-    .select()
-    .from(audiobookChapters)
-    .where(eq(audiobookChapters.userId, fromUserId))) as AudiobookChapterRow[];
-  if (chapters.length > 0) {
-    await db
-      .insert(audiobookChapters)
-      .values(chapters.map((chapter) => ({ ...chapter, userId: toUserId })))
-      .onConflictDoNothing();
-  }
-
-  if (isS3Configured()) {
-    for (const book of books) {
-      await deleteAudiobookBlobScope(book.id, fromUserId, namespace);
-    }
-  }
-
-  await db.delete(audiobookChapters).where(eq(audiobookChapters.userId, fromUserId));
-  await db.delete(audiobooks).where(eq(audiobooks.userId, fromUserId));
-
-  return books.length;
 }
 
 export async function transferUserPreferences(fromUserId: string, toUserId: string): Promise<number> {

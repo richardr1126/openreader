@@ -61,7 +61,7 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
 | `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor `x-openreader-test-namespace` header in production builds |
 | `RUN_DRIZZLE_MIGRATIONS` | DB migrations | `true` | Set `false` to skip startup Drizzle migrations |
-| `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
+| `RUN_V4_DECOMMISSION` | Storage decommission | `true` | Set `false` to skip startup v4 legacy object-prefix purge |
 | `RUNTIME_SEED_JSON_PATH` | Runtime JSON seed | unset | Absolute path to first-boot JSON seed document |
 | `RUNTIME_SEED_JSON` | Runtime JSON seed | unset | Inline first-boot JSON seed document |
 
@@ -359,7 +359,7 @@ Secret used to sign short-lived browser-facing TTS playback URLs.
 
 Override ffmpeg binary path used for audio processing.
 
-- Used by audiobook processing routes and compute worker Whisper audio decode.
+- Used by TTS audio normalization/probing and compute worker Whisper audio decode.
 
 ## Testing and CI
 
@@ -382,12 +382,12 @@ Controls startup Drizzle schema migrations.
 - Default: `true`
 - Set `false` to skip startup migration run
 
-### RUN_FS_MIGRATIONS
+### RUN_V4_DECOMMISSION
 
-Controls startup filesystem-to-S3/DB migration pass.
+Controls startup v4 legacy object-prefix purge.
 
 - Default: `true`
-- Set `false` to skip startup storage migration run
+- Set `false` to skip deleting retired `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` object prefixes
 
 ## Runtime JSON Seed (v4)
 

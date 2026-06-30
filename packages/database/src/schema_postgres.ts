@@ -41,36 +41,6 @@ export const documents = pgTable('documents', {
   index('idx_documents_user_id_recently_opened').on(table.userId, table.recentlyOpenedAt),
 ]);
 
-export const audiobooks = pgTable('audiobooks', {
-  id: text('id').notNull(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  title: text('title').notNull(),
-  author: text('author'),
-  description: text('description'),
-  coverPath: text('cover_path'),
-  duration: real('duration').default(0),
-  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
-}, (table) => [
-  primaryKey({ columns: [table.id, table.userId] }),
-]);
-
-export const audiobookChapters = pgTable('audiobook_chapters', {
-  id: text('id').notNull(),
-  bookId: text('book_id').notNull(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  chapterIndex: integer('chapter_index').notNull(),
-  title: text('title').notNull(),
-  duration: real('duration').default(0),
-  filePath: text('file_path').notNull(),
-  format: text('format').notNull(), // mp3, m4b
-}, (table) => [
-  primaryKey({ columns: [table.id, table.userId] }),
-  foreignKey({
-    columns: [table.bookId, table.userId],
-    foreignColumns: [audiobooks.id, audiobooks.userId],
-  }).onDelete('cascade'),
-]);
-
 // Auth tables (user, session, account, verification) are managed by Better Auth.
 // They are created/migrated via `@better-auth/cli migrate` and should NOT be
 // defined here. Only application-specific tables belong in this file.
@@ -168,55 +138,6 @@ export const documentPreviews = pgTable('document_previews', {
   index('idx_document_previews_status_lease').on(table.status, table.leaseUntilMs),
 ]);
 
-export const ttsSegmentEntries = pgTable('tts_segment_entries', {
-  segmentEntryId: text('segment_entry_id').notNull(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  documentId: text('document_id').notNull(),
-  readerType: text('reader_type').notNull(),
-  documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
-  segmentIndex: integer('segment_index').notNull(),
-  segmentKey: text('segment_key'),
-  locatorReaderRank: integer('locator_reader_rank').notNull(),
-  locatorReaderType: text('locator_reader_type').notNull(),
-  locatorPage: integer('locator_page').notNull(),
-  locatorSpineIndex: integer('locator_spine_index').notNull(),
-  locatorSpineHref: text('locator_spine_href').notNull(),
-  locatorCharOffset: integer('locator_char_offset').notNull(),
-  locatorLocation: text('locator_location').notNull(),
-  locatorIdentityKey: text('locator_identity_key').notNull(),
-  textHash: text('text_hash').notNull(),
-  textLength: integer('text_length').notNull().default(0),
-  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
-  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
-}, (table) => [
-  primaryKey({ columns: [table.segmentEntryId, table.userId] }),
-  index('idx_tts_segment_entries_manifest_sort').on(
-    table.userId,
-    table.documentId,
-    table.documentVersion,
-    table.locatorReaderRank,
-    table.locatorSpineIndex,
-    table.locatorCharOffset,
-    table.locatorSpineHref,
-    table.locatorPage,
-    table.locatorLocation,
-    table.segmentIndex,
-    table.locatorIdentityKey,
-  ),
-  index('idx_tts_segment_entries_manifest_group').on(
-    table.userId,
-    table.documentId,
-    table.documentVersion,
-    table.segmentIndex,
-    table.locatorIdentityKey,
-  ),
-  index('idx_tts_segment_entries_scope').on(
-    table.userId,
-    table.documentId,
-    table.documentVersion,
-  ),
-]);
-
 export const adminProviders = pgTable('admin_providers', {
   id: text('id').primaryKey(),
   slug: text('slug').notNull().unique(),
@@ -263,59 +184,3 @@ export const documentBlobLeases = pgTable('document_blob_leases', {
   leaseOwner: text('lease_owner').notNull(),
   leaseUntilMs: bigint('lease_until_ms', { mode: 'number' }).notNull(),
 });
-
-export const ttsPlaybackSessions = pgTable('tts_playback_sessions', {
-  sessionId: text('session_id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  storageUserId: text('storage_user_id').notNull(),
-  documentId: text('document_id').notNull(),
-  documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
-  readerType: text('reader_type').notNull(),
-  status: text('status').notNull().default('queued'),
-  workerOpId: text('worker_op_id'),
-  settingsHash: text('settings_hash').notNull(),
-  settingsJson: jsonb('settings_json').notNull(),
-  startOrdinal: integer('start_ordinal').notNull().default(0),
-  generationStartOrdinal: integer('generation_start_ordinal').notNull().default(0),
-  cursorOrdinal: integer('cursor_ordinal').notNull().default(0),
-  cursorUpdatedAt: bigint('cursor_updated_at', { mode: 'number' }),
-  planObjectKey: text('plan_object_key'),
-  expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
-  lastError: text('last_error'),
-  createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
-  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
-}, (table) => [
-  index('idx_tts_playback_sessions_user_doc_settings').on(
-    table.userId,
-    table.documentId,
-    table.documentVersion,
-    table.settingsHash,
-    table.startOrdinal,
-  ),
-  index('idx_tts_playback_sessions_expiry').on(table.expiresAt),
-]);
-
-export const ttsSegmentVariants = pgTable('tts_segment_variants', {
-  segmentId: text('segment_id').notNull(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  segmentEntryId: text('segment_entry_id').notNull(),
-  settingsHash: text('settings_hash').notNull(),
-  settingsJson: jsonb('settings_json').notNull(),
-  audioKey: text('audio_key'),
-  audioFormat: text('audio_format').notNull().default('mp3'),
-  durationMs: integer('duration_ms'),
-  alignmentJson: text('alignment_json'),
-  status: text('status').notNull().default('pending'),
-  error: text('error'),
-  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
-  updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
-}, (table) => [
-  primaryKey({ columns: [table.segmentId, table.userId] }),
-  foreignKey({
-    columns: [table.segmentEntryId, table.userId],
-    foreignColumns: [ttsSegmentEntries.segmentEntryId, ttsSegmentEntries.userId],
-  }).onDelete('cascade'),
-  index('idx_tts_segment_variants_entry').on(table.userId, table.segmentEntryId, table.updatedAt),
-  index('idx_tts_segment_variants_status').on(table.userId, table.status),
-  index('idx_tts_segment_variants_unique_settings').on(table.userId, table.segmentEntryId, table.settingsHash),
-]);

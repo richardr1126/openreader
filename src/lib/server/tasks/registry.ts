@@ -3,7 +3,6 @@ import { reapOrphanedBlobs } from './handlers/reap-orphaned-blobs';
 import { cleanupTempUploads } from './handlers/cleanup-temp-uploads';
 import { pruneJobEvents } from './handlers/prune-job-events';
 import { pruneTtsUsage } from './handlers/prune-tts-usage';
-import { cleanupLegacyTtsPlaybackCache } from './handlers/cleanup-legacy-tts-playback-cache';
 
 /**
  * The catalog of scheduled tasks. Each key is the stable task id stored in the
@@ -34,11 +33,5 @@ export const TASK_REGISTRY: TaskRegistry = {
     description: 'Delete TTS usage rows (user_tts_chars) older than 30 days.',
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     run: pruneTtsUsage,
-  },
-  'cleanup-legacy-tts-playback-cache': {
-    name: 'Clean up legacy TTS playback cache',
-    description: 'Delete DB-backed playback cache rows and old tts_segments_v1/v2 objects.',
-    defaultIntervalMs: 24 * 60 * 60 * 1000,
-    run: cleanupLegacyTtsPlaybackCache,
   },
 };

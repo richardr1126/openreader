@@ -36,4 +36,24 @@ describe('TTS playback request parsing', () => {
       },
     })).toBeNull();
   });
+
+  test('accepts document-extent generation for worker-backed MP3 export', () => {
+    const parsed = parseTtsPlaybackRequestBody({
+      ...basePayload,
+      startIntent: { selectedOrdinal: 0 },
+      planObjectKey: 'tts_playback_plan_v1/doc/0/pdf/signature.json',
+      generationExtent: 'document',
+    });
+
+    expect(parsed?.generationExtent).toBe('document');
+  });
+
+  test('rejects unknown generation extents', () => {
+    expect(parseTtsPlaybackRequestBody({
+      ...basePayload,
+      startIntent: { selectedOrdinal: 0 },
+      planObjectKey: 'tts_playback_plan_v1/doc/0/pdf/signature.json',
+      generationExtent: 'chapter',
+    })).toBeNull();
+  });
 });

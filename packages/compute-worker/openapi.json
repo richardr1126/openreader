@@ -1784,6 +1784,13 @@
                       "section",
                       "document"
                     ]
+                  },
+                  "generationExtent": {
+                    "type": "string",
+                    "enum": [
+                      "window",
+                      "document"
+                    ]
                   }
                 },
                 "required": [

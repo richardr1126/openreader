@@ -64,6 +64,11 @@ export interface TtsPlaybackJobRequest {
    * EPUB chapter; 'document' = generate to the end of the forward plan.
    */
   backgroundExtent?: 'section' | 'document';
+  /**
+   * Export/download runs are not playback-window bounded. They fill the whole
+   * forward plan even while the cursor is fresh.
+   */
+  generationExtent?: 'window' | 'document';
   planning: {
     /** Optional absolute worker-plan ordinal selected by the UI from a known plan row. */
     selectedOrdinal?: number;

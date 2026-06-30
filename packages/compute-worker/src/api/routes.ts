@@ -439,6 +439,7 @@ export function registerComputeWorkerRoutes(input: {
       settingsJson: requestBody.settingsJson,
       aheadWindow: requestBody.aheadWindow ?? null,
       backgroundExtent: requestBody.backgroundExtent ?? null,
+      generationExtent: requestBody.generationExtent ?? null,
       planning: requestBody.planning,
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
@@ -483,6 +484,7 @@ export function registerComputeWorkerRoutes(input: {
       expiresAt: session.expiresAt,
       ...(session.aheadWindow == null ? {} : { aheadWindow: session.aheadWindow }),
       ...(session.backgroundExtent == null ? {} : { backgroundExtent: session.backgroundExtent }),
+      ...(session.generationExtent == null ? {} : { generationExtent: session.generationExtent }),
       planning: session.planning && typeof session.planning === 'object'
         ? session.planning as typeof ttsPlaybackOperationCreateSchema._output['planning']
         : {},

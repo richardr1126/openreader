@@ -24,7 +24,7 @@ It supports multiple TTS providers including OpenAI, Replicate, DeepInfra, and c
 - 🌐 **Multilingual Support**
   - Choose a document language for language-aware narration and highlighting
   - Available languages depend on the configured provider, model, and voice
-- 🎧 **Audiobook Export** in `m4b`/`mp3` with resumable chapter generation
+- 🎧 **Audiobook Export** as a worker-generated CBR MP3 stream
 - 🗂️ **Flexible Backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync
 - 🔐 **Auth and User Isolation** — auth is required in v4+, with optional anonymous auth sessions for guest flows
 - 🎨 **Customizable** — 13 built-in themes (light and dark palettes), per-user TTS settings, and document handling controls

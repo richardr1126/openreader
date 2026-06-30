@@ -41,21 +41,6 @@ describe('route error mapping contract', () => {
       },
     },
     {
-      name: 'audiobook upstream failures map to retryable 502',
-      thrown: new Error('provider overloaded'),
-      apiErrorMessage: 'Failed to process audio chapter',
-      normalize: makeServerErrorContext({
-        code: 'AUDIOBOOK_CHAPTER_PROCESS_FAILED',
-        errorClass: 'upstream',
-      }),
-      expectedStatus: 502,
-      expectedBody: {
-        error: 'Failed to process audio chapter',
-        errorCode: 'AUDIOBOOK_CHAPTER_PROCESS_FAILED',
-        retryable: true,
-      },
-    },
-    {
       name: 'user export auth initialization failure maps to 500 auth classification',
       thrown: new Error('Auth not initialized'),
       apiErrorMessage: 'Auth not initialized',

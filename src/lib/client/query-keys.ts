@@ -7,7 +7,6 @@ export const queryKeys = {
   documentSettings: (sessionId: string, documentId: string) => ['document-settings', sessionId, documentId] as const,
   onboarding: (sessionId: string) => ['onboarding', sessionId] as const,
   folders: (sessionId: string) => ['folders', sessionId] as const,
-  audiobook: (sessionId: string, bookId: string) => ['audiobook', sessionId, bookId] as const,
   sharedProviders: (sessionId: string) => ['tts-shared-providers', sessionId] as const,
   ttsVoices: (sessionId: string, providerRef: string, model: string) => ['tts-voices', sessionId, providerRef, model] as const,
   parsedDocument: (sessionId: string, documentId: string) => ['parsed-document', sessionId, documentId] as const,

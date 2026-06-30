@@ -9,8 +9,6 @@ import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import type { TTSAudiobookChapter } from '@/types/tts';
-import type { AudiobookGenerationSettings } from '@/types/client';
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
@@ -69,8 +67,6 @@ export default function PDFViewerPage() {
     parsedOverlayEnabled,
     setParsedOverlayEnabled,
     forceReparseParsedPdf,
-    createFullAudioBook: createPDFAudioBook,
-    regenerateChapter: regeneratePDFChapter,
   } = pdfState;
   const {
     currentSentenceOrdinal,
@@ -279,30 +275,6 @@ export default function PDFViewerPage() {
     setShowForceReparseConfirm(false);
     void forceReparseParsedPdf();
   }, [forceReparseParsedPdf]);
-
-  const handleGenerateAudiobook = useCallback(async (
-    onProgress: (progress: number) => void,
-    signal: AbortSignal,
-    onChapterComplete: (chapter: TTSAudiobookChapter) => void,
-    settings: AudiobookGenerationSettings
-  ) => {
-    if (!isParseReady) {
-      throw new Error('PDF parsing is not ready yet.');
-    }
-    return createPDFAudioBook(onProgress, signal, onChapterComplete, id as string, settings.format, settings);
-  }, [createPDFAudioBook, id, isParseReady]);
-
-  const handleRegenerateChapter = useCallback(async (
-    chapterIndex: number,
-    bookId: string,
-    settings: AudiobookGenerationSettings,
-    signal: AbortSignal
-  ) => {
-    if (!isParseReady) {
-      throw new Error('PDF parsing is not ready yet.');
-    }
-    return regeneratePDFChapter(chapterIndex, bookId, settings.format, signal, settings);
-  }, [regeneratePDFChapter, isParseReady]);
 
   if (error) {
     return (
@@ -528,8 +500,6 @@ export default function PDFViewerPage() {
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
           documentType="pdf"
           documentId={id as string}
-          onGenerateAudiobook={handleGenerateAudiobook}
-          onRegenerateChapter={handleRegenerateChapter}
         />
       )}
       {isAtLimit ? (

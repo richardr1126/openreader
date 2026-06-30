@@ -76,7 +76,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       }
       claimCounts = claimResult.data ?? EMPTY_CLAIM_COUNTS;
       const total = claimCounts.documents
-        + claimCounts.audiobooks
         + claimCounts.preferences
         + claimCounts.progress
         + claimCounts.documentSettings

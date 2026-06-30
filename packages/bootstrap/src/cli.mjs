@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
 import { runMigrations } from '@openreader/database/migrate';
+import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
   detectHostForDefaultEndpoint,
@@ -129,23 +129,6 @@ function spawnMainCommand(command, env) {
 async function runDbMigrations(env) {
   console.log('Running database migrations...');
   await runMigrations({ cwd: workspaceRoot, env });
-}
-
-function runStorageMigrations(env) {
-  const migrateScript = fileURLToPath(new URL('./storage-migration.mjs', import.meta.url));
-
-  console.log('Running storage migrations (v2)...');
-  const migration = spawnSync(process.execPath, [migrateScript, '--dry-run', 'false', '--delete-local', 'false'], {
-    env,
-    stdio: 'inherit',
-  });
-
-  if (migration.error) {
-    throw migration.error;
-  }
-  if (typeof migration.status === 'number' && migration.status !== 0) {
-    throw new Error(`Storage migrations failed with exit code ${migration.status}.`);
-  }
 }
 
 function hasS3Config(env) {
@@ -353,16 +336,16 @@ async function main() {
       console.log(`Embedded SeaweedFS is ready at ${runtimeEnv.S3_ENDPOINT}`);
     }
 
-    const shouldRunStorageMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_FS_MIGRATIONS', true);
-    if (shouldRunStorageMigrations) {
+    const shouldRunV4Decommission = resolveBooleanEnv(runtimeEnv, 'RUN_V4_DECOMMISSION', true);
+    if (shouldRunV4Decommission) {
       if (hasS3Config(runtimeEnv)) {
-        const migrationEnv = { ...runtimeEnv };
-        if (useEmbeddedWeed && migrationEnv.S3_ENDPOINT?.trim()) {
-          migrationEnv.S3_ENDPOINT = loopbackS3Endpoint(migrationEnv.S3_ENDPOINT);
+        const decommissionEnv = { ...runtimeEnv };
+        if (useEmbeddedWeed && decommissionEnv.S3_ENDPOINT?.trim()) {
+          decommissionEnv.S3_ENDPOINT = loopbackS3Endpoint(decommissionEnv.S3_ENDPOINT);
         }
-        runStorageMigrations(migrationEnv);
+        await runV4Decommission(decommissionEnv);
       } else {
-        console.warn('Skipping storage migrations: S3 configuration is incomplete.');
+        console.warn('Skipping v4 legacy storage decommission: S3 configuration is incomplete.');
       }
     }
 

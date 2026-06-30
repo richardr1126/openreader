@@ -11,8 +11,6 @@ import TTSPlayer from '@/components/player/TTSPlayer';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
-import type { TTSAudiobookChapter } from '@/types/tts';
-import type { AudiobookGenerationSettings } from '@/types/client';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -40,8 +38,6 @@ export default function EPUBPage() {
     currDocName,
     isPlaybackReady,
     clearCurrDoc,
-    createFullAudioBook: createEPUBAudioBook,
-    regenerateChapter: regenerateEPUBChapter,
     metadataLanguage,
   } = epubState;
   const { stop, setDocumentLanguage } = useTTS();
@@ -173,24 +169,6 @@ export default function EPUBPage() {
     window.dispatchEvent(new Event('resize'));
   }, [padPct]);
 
-  const handleGenerateAudiobook = useCallback(async (
-    onProgress: (progress: number) => void,
-    signal: AbortSignal,
-    onChapterComplete: (chapter: TTSAudiobookChapter) => void,
-    settings: AudiobookGenerationSettings
-  ) => {
-    return createEPUBAudioBook(onProgress, signal, onChapterComplete, routeDocumentId, settings.format, settings);
-  }, [createEPUBAudioBook, routeDocumentId]);
-
-  const handleRegenerateChapter = useCallback(async (
-    chapterIndex: number,
-    bookId: string,
-    settings: AudiobookGenerationSettings,
-    signal: AbortSignal
-  ) => {
-    return regenerateEPUBChapter(chapterIndex, bookId, settings.format, signal, settings);
-  }, [regenerateEPUBChapter]);
-
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -252,8 +230,6 @@ export default function EPUBPage() {
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
           documentType="epub"
           documentId={routeDocumentId || ''}
-          onGenerateAudiobook={handleGenerateAudiobook}
-          onRegenerateChapter={handleRegenerateChapter}
         />
       )}
       {isAtLimit ? (

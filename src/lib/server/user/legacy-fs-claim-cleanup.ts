@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {
-  AUDIOBOOKS_V1_DIR,
   DOCSTORE_DIR,
   DOCUMENTS_V1_DIR,
 } from '@/lib/server/storage/docstore-legacy';
@@ -88,46 +87,14 @@ async function collectLegacyDocumentPaths(input: {
   return matches;
 }
 
-async function collectLegacyAudiobookDirs(input: {
-  audiobookIds: Set<string>;
-  namespace: string | null;
-}): Promise<Set<string>> {
-  const matches = new Set<string>();
-  if (input.audiobookIds.size === 0) return matches;
-
-  const roots = [
-    applyNamespacePath(AUDIOBOOKS_V1_DIR, input.namespace),
-    applyNamespacePath(DOCSTORE_DIR, input.namespace),
-  ];
-
-  for (const root of roots) {
-    if (!fs.existsSync(root)) continue;
-    const entries = await fsp.readdir(root, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !entry.name.endsWith('-audiobook')) continue;
-      const bookId = entry.name.slice(0, -'-audiobook'.length);
-      if (input.audiobookIds.has(bookId)) {
-        matches.add(path.join(root, entry.name));
-      }
-    }
-  }
-
-  return matches;
-}
-
 export async function cleanupClaimedLegacyFsSources(input: {
   documentIds: string[];
-  audiobookIds: string[];
   namespace?: string | null;
-}): Promise<{ deletedDocumentPaths: number; deletedAudiobookDirs: number }> {
+}): Promise<{ deletedDocumentPaths: number }> {
   const documentIds = new Set(input.documentIds.map((id) => id.trim().toLowerCase()).filter(Boolean));
-  const audiobookIds = new Set(input.audiobookIds.map((id) => id.trim()).filter(Boolean));
   const namespace = input.namespace ?? null;
 
-  const [documentPaths, audiobookDirs] = await Promise.all([
-    collectLegacyDocumentPaths({ documentIds, namespace }),
-    collectLegacyAudiobookDirs({ audiobookIds, namespace }),
-  ]);
+  const documentPaths = await collectLegacyDocumentPaths({ documentIds, namespace });
 
   let deletedDocumentPaths = 0;
   for (const filePath of documentPaths) {
@@ -135,15 +102,7 @@ export async function cleanupClaimedLegacyFsSources(input: {
     if (removed) deletedDocumentPaths += 1;
   }
 
-  let deletedAudiobookDirs = 0;
-  for (const dirPath of audiobookDirs) {
-    const existed = fs.existsSync(dirPath);
-    await fsp.rm(dirPath, { recursive: true, force: true }).catch(() => {});
-    if (existed && !fs.existsSync(dirPath)) deletedAudiobookDirs += 1;
-  }
-
   return {
     deletedDocumentPaths,
-    deletedAudiobookDirs,
   };
 }

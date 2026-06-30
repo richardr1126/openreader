@@ -2,7 +2,7 @@
  * Route-local PDF document hook.
  *
  * This module owns PDF document loading, text extraction, highlighting, and
- * audiobook integration for the `/pdf/[id]` route.
+ * playback anchors for the `/pdf/[id]` route.
  */
 
 'use client';
@@ -18,11 +18,8 @@ import {
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
-import { createPdfAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/pdf';
-import { regenerateAudiobookChapter, runAudiobookGeneration } from '@/lib/client/audiobooks/pipeline';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
 import {
   highlightPattern,
   clearHighlights,
@@ -40,10 +37,8 @@ import { useParsedPdfDocument } from '@/hooks/useParsedPdfDocument';
 
 import type {
   TTSSentenceAlignment,
-  TTSAudiobookFormat,
-  TTSAudiobookChapter,
 } from '@/types/tts';
-import type { AudiobookGenerationSettings, TTSSegmentLocator } from '@/types/client';
+import type { TTSSegmentLocator } from '@/types/client';
 import type { BaseDocument } from '@/types/documents';
 
 /**
@@ -100,22 +95,6 @@ export interface PdfDocumentState {
     sentence: string | null | undefined,
     containerRef: RefObject<HTMLDivElement>
   ) => void;
-  createFullAudioBook: (
-    onProgress: (progress: number) => void,
-    signal?: AbortSignal,
-    onChapterComplete?: (chapter: TTSAudiobookChapter) => void,
-    bookId?: string,
-    format?: TTSAudiobookFormat,
-    settings?: AudiobookGenerationSettings
-  ) => Promise<string>;
-  regenerateChapter: (
-    chapterIndex: number,
-    bookId: string,
-    format: TTSAudiobookFormat,
-    signal: AbortSignal,
-    settings?: AudiobookGenerationSettings
-  ) => Promise<TTSAudiobookChapter>;
-  isAudioCombining: boolean;
 }
 
 /**
@@ -135,10 +114,6 @@ export function usePdfDocument(
     setIsEPUB,
     setDocumentLanguage,
   } = useTTS();
-  const {
-    providerRef,
-    ttsSegmentMaxBlockLength,
-  } = useConfig();
   const parsedPdf = useParsedPdfDocument(documentId);
 
   // Current document state
@@ -161,12 +136,6 @@ export function usePdfDocument(
     lastPreparedPlaybackPageRef.current = null;
   }, [documentSettings.language, setDocumentLanguage]);
   const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
-  const [isAudioCombining] = useState(false);
-  const audiobookAdapter = useMemo(() => createPdfAudiobookSourceAdapter({
-    parsed: parsedDocument ?? undefined,
-    settings: documentSettings,
-    maxBlockLength: ttsSegmentMaxBlockLength,
-  }), [parsedDocument, documentSettings, ttsSegmentMaxBlockLength]);
   const [currDocPage, setCurrDocPage] = useState<number>(currDocPageNumber);
 
   // Used to cancel/ignore in-flight text extraction when the document changes
@@ -405,67 +374,6 @@ export function usePdfDocument(
   }, [setCurrDocId, setCurrDocName, setCurrDocData, setCurrDocPages, setCurrDocText, setPdfDocument, stop]);
 
   /**
-   * Creates a complete audiobook by processing all PDF pages through NLP and TTS
-   * @param {Function} onProgress - Callback for progress updates
-   * @param {AbortSignal} signal - Optional signal for cancellation
-   * @param {Function} onChapterComplete - Optional callback for when a chapter completes
-   * @returns {Promise<string>} The bookId for the generated audiobook
-   */
-  const createFullAudioBook = useCallback(async (
-    onProgress: (progress: number) => void,
-    signal?: AbortSignal,
-    onChapterComplete?: (chapter: TTSAudiobookChapter) => void,
-    providedBookId?: string,
-    format: TTSAudiobookFormat = 'mp3',
-    settings?: AudiobookGenerationSettings
-  ): Promise<string> => {
-    try {
-      return await runAudiobookGeneration({
-        adapter: audiobookAdapter,
-        defaultProvider: providerRef,
-        onProgress,
-        signal,
-        onChapterComplete,
-        providedBookId,
-        format,
-        settings,
-      });
-    } catch (error) {
-      console.error('Error creating audiobook:', error);
-      throw error;
-    }
-  }, [audiobookAdapter, providerRef]);
-
-  /**
-   * Regenerates a specific chapter (page) of the PDF audiobook
-   */
-  const regenerateChapter = useCallback(async (
-    chapterIndex: number,
-    bookId: string,
-    format: TTSAudiobookFormat,
-    signal: AbortSignal,
-    settings?: AudiobookGenerationSettings
-  ): Promise<TTSAudiobookChapter> => {
-    try {
-      return await regenerateAudiobookChapter({
-        adapter: audiobookAdapter,
-        chapterIndex,
-        bookId,
-        format,
-        signal,
-        defaultProvider: providerRef,
-        settings,
-      });
-    } catch (error) {
-      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('cancelled'))) {
-        throw new Error('Page regeneration cancelled');
-      }
-      console.error('Error regenerating page:', error);
-      throw error;
-    }
-  }, [audiobookAdapter, providerRef]);
-
-  /**
    * Effect hook to initialize TTS as non-EPUB mode
    */
   useEffect(() => {
@@ -503,9 +411,6 @@ export function usePdfDocument(
       clearWordHighlights,
       highlightWordIndex,
       pdfDocument,
-      createFullAudioBook,
-      regenerateChapter,
-      isAudioCombining,
     }),
     [
       onDocumentLoadSuccess,
@@ -527,9 +432,6 @@ export function usePdfDocument(
       forceReparseParsedPdf,
       clearCurrDoc,
       pdfDocument,
-      createFullAudioBook,
-      regenerateChapter,
-      isAudioCombining,
     ]
   );
 }

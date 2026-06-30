@@ -213,7 +213,7 @@ export default async function LandingPage() {
               <p>
                 Follow word-level highlighting right on the original page as it
                 plays, pick up where you left off on any device, and export a
-                chaptered m4b or mp3 audiobook for the road.
+                CBR MP3 audiobook for the road.
               </p>
             </li>
           </ol>

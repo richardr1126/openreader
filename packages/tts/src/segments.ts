@@ -203,19 +203,6 @@ export function buildTtsSegmentTextHash(text: string, secret: string): string {
   return createHmac('sha256', secret).update(text).digest('hex');
 }
 
-export function buildTtsSegmentAudioKey(input: {
-  storagePrefix: string;
-  namespace: string | null;
-  userId: string;
-  documentId: string;
-  documentVersion: number;
-  settingsHash: string;
-  audioContentHash: string;
-}): string {
-  const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
-  return `${input.storagePrefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.audioContentHash}.mp3`;
-}
-
 export function buildTtsPlaybackSegmentAudioKey(input: {
   storagePrefix: string;
   namespace: string | null;
@@ -227,17 +214,6 @@ export function buildTtsPlaybackSegmentAudioKey(input: {
 }): string {
   const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
   return `${input.storagePrefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/${input.documentVersion}/${input.settingsHash}/${input.audioContentHash}.mp3`;
-}
-
-export function buildTtsSegmentDocumentPrefix(input: {
-  storagePrefix: string;
-  namespace: string | null;
-  userId: string;
-  documentId: string;
-  storageVersion?: 'v1' | 'v2';
-}): string {
-  const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
-  return `${input.storagePrefix}/tts_segments_${input.storageVersion ?? 'v2'}/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/`;
 }
 
 export async function probeAudioDurationMsFromBuffer(buffer: Buffer, signal?: AbortSignal): Promise<number> {

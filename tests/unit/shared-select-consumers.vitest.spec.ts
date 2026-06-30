@@ -7,7 +7,6 @@ const STANDARD_SELECT_CONSUMERS = [
   'src/components/documents/DocumentSettings.tsx',
   'src/components/admin/AdminFeaturesPanel.tsx',
   'src/components/admin/AdminProvidersPanel.tsx',
-  'src/components/AudiobookExportModal.tsx',
 ];
 
 describe('shared Select consumers', () => {
@@ -27,5 +26,14 @@ describe('shared Select consumers', () => {
     expect(source).toContain('ChevronUpDownIcon');
     expect(source).toContain('CheckIcon');
     expect(source).toContain('<Transition');
+  });
+
+  test('audiobook export delegates voice dropdown rendering', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/AudiobookExportModal.tsx'), 'utf8');
+    expect(source).toContain('<VoicesControlBase');
+    expect(source).not.toContain('<Listbox');
+    expect(source).not.toContain('<SharedListboxButton');
+    expect(source).not.toContain('<SharedListboxOptions');
+    expect(source).not.toContain('<SharedListboxOption');
   });
 });
