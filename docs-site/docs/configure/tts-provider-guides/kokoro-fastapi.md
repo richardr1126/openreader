@@ -47,17 +47,17 @@ docker run --name kokoro-tts \
 **Recommended (auth + admin): Settings → Admin → Shared providers**
 
 1. Add a shared provider with type `custom-openai`.
-2. Set base URL to your Kokoro endpoint (e.g. `http://kokoro-tts:8880/v1`).
+2. Set base URL to `http://host.docker.internal:8880/v1`.
 3. Leave API key blank unless required by your deployment.
 4. Set default model to `Kokoro`.
 
 **Legacy bootstrap seed (optional, first boot only):**
 
 ```env
-API_BASE=http://kokoro-tts:8880/v1
+API_BASE=http://host.docker.internal:8880/v1
 ```
 
-> Use `kokoro-tts` if that's the container name, or `host.docker.internal` if not.
+> Use `host.docker.internal` so the OpenReader container reaches Kokoro's published port on your host. The container name (`kokoro-tts`) only resolves if OpenReader and Kokoro share a Docker network, i.e. you started them with Docker Compose, `--link kokoro-tts`, or a shared `--network`. On native Linux Docker, `host.docker.internal` needs `--add-host=host.docker.internal:host-gateway` on the OpenReader container. Note that `localhost`/`127.0.0.1` will not work, since inside the container that points at the container itself.
 
 Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
