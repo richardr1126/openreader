@@ -101,8 +101,10 @@ This sits beside the sidecar prefix rather than inside it on purpose: audio is
 keyed by content (`settingsHash + audioContentHash`) for cross-ordinal/session
 dedup, while sidecars are keyed per ordinal. The audio content hash is a worker
 implementation detail, not a playback cursor/start identity and not a persisted
-sidecar or client row field. Both prefixes are v5-owned and are cleared together
-as one document/settings scope on clear-cache.
+sidecar or client row field. The playback plan, audio, and sidecar prefixes are
+v5-owned derived artifacts and are cleared together on clear-cache so a stale or
+malformed immutable plan cannot survive while regenerated audio uses a new view
+of the document.
 
 ### Segment Sidecars
 
@@ -272,8 +274,9 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | Clear cache as playback reset boundary | Done | Clear calls the worker reset endpoint before deleting objects; the worker bumps a scope epoch, cancels matching sessions, invalidates local sidecar caches, and epoch-aware readers/writers reject stale sidecars/late writes. |
 | ID/key/schema consolidation | Done | Playback plan/grid/sidecar artifacts use `ordinal`; mirrored `sourceSegmentIndex` values are gone; plan/session request schemas are separated and strict; schema-version handling is centralized for playback plan artifacts and sidecars. |
 | (7) Move playback audio to a dedicated prefix | Done | Generation writes audio through `buildTtsPlaybackSegmentAudioKey` under `tts_playback_segments_audio_v1/`, and sidecars point at that key. Playback no longer writes `tts_segments_v2/`. |
-| (8) Retire legacy audiobook pipeline; download from worker loop | Done | Client/server audiobook pipeline, routes, hooks, blobstore, DB reads/writes, data export/claim/cleanup paths, and legacy tests are removed. Export now creates a document-extent playback session, tracks playback SSE progress, and downloads the worker MP3 stream. **MP3 only**; no m4b, chapters, second ffmpeg stitch, or audiobook blobstore. (Table DROP itself happens in step 9.) |
+| (8) Retire legacy audiobook pipeline; download from worker loop | Done | Client/server audiobook pipeline, routes, hooks, blobstore, DB reads/writes, data export/claim/cleanup paths, and legacy tests are removed. Export now creates a document-extent playback session, tracks playback SSE progress, and downloads the worker MP3 stream. **MP3 only**; no m4b, chapters, second ffmpeg stitch, or audiobook blobstore. Legacy table DROP is complete in step 9. |
 | (9) v5 decommission: drop legacy TTS + audiobook storage | Done | Dropped legacy table defs and generated per-dialect `DROP TABLE` migrations with the retired scheduled-task row delete. Deleted the recurring cleanup task, added idempotent `runV4Decommission(env)` for `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`, wired it into bootstrap and `pnpm migrate-decommission`, removed the FS→S3 migrator, and updated current docs/config. |
+| (10) Audiobook export hardening | Done | Export settings now expose audio-player speed, progress is derived from generated sidecar/seek-layout state, and MP3 download uses a same-origin Next proxy route. |
 
 ---
 
@@ -461,9 +464,10 @@ Removed runtime surface:
   keys, client types, and test teardown: done.
 - Delete the legacy audiobook tests and replace coverage with playback-export
   contract checks: done.
-- Table definitions and migration history remain only for the step-9 DROP
-  migration. The separate `audiobooks_v1/` object prefix is now dead runtime
-  storage and is purged in step 9.
+- Table definitions are removed from the live schema. Migration history remains
+  only so older installs can apply the step-9 DROP migration. The separate
+  `audiobooks_v1/` object prefix is dead runtime storage and is purged by the
+  v4 decommission routine.
 
 Decided:
 
@@ -480,135 +484,80 @@ Decided:
 
 ---
 
+### 9. v5 Decommission: Drop Legacy TTS + Audiobook Storage
+
+The v5 decommission is complete. The table drop and object purge remain separate
+ownership domains:
+
+- Drizzle migration `0015_cleanup_pre_v5` drops `tts_playback_sessions`,
+  `tts_segment_entries`, `tts_segment_variants`, `audiobooks`, and
+  `audiobook_chapters`, and deletes the retired
+  `cleanup-legacy-tts-playback-cache` scheduled-task row.
+- The recurring `cleanup-legacy-tts-playback-cache` task and handler are gone.
+- `packages/bootstrap/src/decommission-v4.mjs` exports idempotent
+  `runV4Decommission(env)`, which prefix-purges only `tts_segments_v1/`,
+  `tts_segments_v2/`, and `audiobooks_v1/`.
+- Self-hosted startup runs the decommission inline after DB migrations when S3 is
+  configured; serverless/manual deploys can run `pnpm migrate-decommission`.
+- The old FS→S3 migrator (`storage-migration.mjs`, `migrate-fs`, and
+  `openreader-migrate-storage`) is removed.
+- Clear-cache and account-delete cleanup now target v5 playback audio/sidecar
+  prefixes, not retired `tts_segments_v*` roots.
+
+Verified during implementation:
+
+- `pnpm migrate` succeeds after the corrected SQLite statement split/string
+  literal in `0015_cleanup_pre_v5`.
+- `pnpm dev` reaches Next "Ready" after migrations and the v4 decommission.
+- Full unit suite passes.
+
+---
+
+### 10. Audiobook Export Hardening
+
+The worker-backed audiobook export hardening pass is complete:
+
+- `AudiobookExportModal` now exposes the shared audio-player speed control in
+  the export settings alongside native model speed.
+- Export progress no longer relies on the SSE ordinal watermark for the visible
+  count. SSE wakes the UI, but the count comes from the worker seek-layout and
+  generated sidecar state, so segments generated by prior live playback sessions
+  appear immediately.
+- The seek-layout route asks the worker for the full completed segment set for
+  the plan instead of the default slice, and the worker `/segments` cap is high
+  enough for large audiobook plans.
+- Session creation returns a same-origin download URL at
+  `/api/tts/stream/[sessionId]/audio`.
+- The new Next audio route resolves/authenticates the playback session, mints the
+  worker playback token server-side, proxies the MP3 stream, forwards range/audio
+  headers, and sets `Content-Disposition`.
+- The modal downloads through that same-origin route by clicking a link instead
+  of fetching the entire MP3 into a browser Blob, avoiding CORS/public-worker URL
+  reachability and large-Blob failure modes.
+
+Verified during implementation:
+
+- `pnpm exec tsc --noEmit`
+- Focused UI/architecture tests for audiobook export, shared controls, and route
+  error contracts.
+- Focused playback/worker tests for request parsing, tokens, playback grids,
+  compute-worker client contracts, worker routes, derivation, audio layout, and
+  playback storage.
+
+---
+
 ## Remaining Work
 
-### 9. v5 Decommission: One-Shot Drop of Legacy TTS + Audiobook Storage
+### 11. Final Cleanup Pass Before Merge
 
-Two independent jobs with clean ownership: **the Drizzle migration drops the tables;
-a one-shot operator-run CLI purges the object storage.** They do not depend on each
-other and must not be merged into one "cleanup" path. The recurring
-`cleanup-legacy-tts-playback-cache` task is **deleted outright** — no metadata-free
-survivor, no permanent no-op sweep.
+After step 10 is verified, the last pass is release hygiene:
 
-Before the step-9 decommission, both responsibilities remain tangled inside that
-recurring task
-(`src/lib/server/tasks/registry.ts` → `handlers/cleanup-legacy-tts-playback-cache.ts`):
-it `db.delete(...)`s `tts_segment_variants`, `tts_segment_entries`, and
-`tts_playback_sessions`, and it deletes the `tts_segments_v1/` and `tts_segments_v2/`
-object prefixes, on a 24h schedule. Because the handler imports the Drizzle table
-defs, those tables can never be removed from the schema while it exists.
-
-#### A. Table drop = a generated Drizzle migration
-
-The schema migration is the only thing that removes tables. Do not delete rows from
-application/task code.
-
-- Remove the table definitions from `packages/database/src/schema_postgres.ts` and
-  `packages/database/src/schema_sqlite.ts` (re-exported via `schema.ts`):
-  `ttsPlaybackSessions`, `ttsSegmentEntries`, `ttsSegmentVariants`, `audiobooks`,
-  `audiobookChapters`. Keep `userTtsChars` — it backs live usage counters via
-  `prune-tts-usage`.
-- Generate the migration with `drizzle-kit generate` for both dialects
-  (`drizzle.config.pg.ts`, `drizzle.config.sqlite.ts`), producing matching
-  `DROP TABLE` migrations under `packages/database/migrations/postgres/` and
-  `packages/database/migrations/sqlite/`. Review the generated SQL — these must be
-  `DROP TABLE` only, with no unintended drops from concurrent schema edits.
-- These migrations apply through the normal runner (`pnpm --filter
-  @openreader/database migrate` → `bin/migrate.mjs` → `runMigrations` → drizzle
-  `migrate()`), so v4→v5 drops the tables exactly once as part of the standard
-  upgrade. Drizzle's forward-only journal is what makes "keep the tables for older
-  upgraders" unnecessary: an instance only reaches v5 by applying this migration,
-  so no v5 build ever sees the tables.
-
-Fold one data statement into this migration: `DELETE FROM scheduled_tasks WHERE key
-= 'cleanup-legacy-tts-playback-cache'`, so retiring the task leaves no orphan row.
-(`drizzle-kit generate` only emits schema DDL, so add this line to the generated
-migration by hand.)
-
-#### B. Object purge = an idempotent decommission step (boot + CLI)
-
-S3 objects cannot be deleted by a SQL migration, and after step A the row keys are
-gone anyway — so the object purge is a standalone idempotent routine that works
-purely by prefix and never reads the dropped tables. It takes the boot slot the
-legacy `migrate-fs` step used to occupy (see C) and replaces the recurring task.
-
-Once v5 playback writes its audio under its own prefix
-`tts_playback_segments_audio_v1/` (step 7), `tts_segments_v2/` becomes legacy along
-with `tts_segments_v1/`. Both `tts_segments_v{1,2}/` are purged; the new playback
-audio + sidecar + plan prefixes are kept. (The bytes in `v2` are CBR and fine — they
-are deleted because nothing references that prefix anymore, not because of any
-encoding problem.)
-
-**Sequencing precondition:** the worker is currently the *only* writer of
-`tts_segments_v2/` (the old DB-backed TTS path is already dead code), so the single
-gate is step 7: once playback synthesis writes the new prefix instead, nothing reads
-`v2` and it can be purged. Until that prefix move lands, deleting `v2` would wipe
-live playback audio. So this purge is gated on step 7, not the audiobook retirement
-(step 8).
-
-Exact prefixes (all relative to `${getS3Config().prefix}/`):
-
-- DELETE `tts_segments_v1/` — legacy audio format, no longer written.
-- DELETE `tts_segments_v2/` — CBR audio prefix inherited from the pre-v5 system; the
-  worker stops writing it after the step-7 prefix move, so nothing references it.
-- DELETE the audiobook prefix `audiobooks_v1/` (`audiobookPrefix` in
-  `src/lib/server/audiobooks/blobstore.ts` →
-  `${prefix}/audiobooks_v1/[ns/<ns>/]users/<userId>/<bookId>-audiobook/`); deleting
-  at the `audiobooks_v1/` root covers every namespace/user/book.
-- KEEP `tts_playback_segments_audio_v1/` (new CBR playback audio),
-  `tts_playback_segments_v1/` (sidecars), `tts_playback_plan_v1/` (plans), and
-  `tts_playback_v1/` (session plan/timeline). None of these are legacy.
-
-Spec:
-
-- New bootstrap module `packages/bootstrap/src/decommission-v4.mjs` exporting an
-  idempotent `runV4Decommission(env)`. Prefix purge (relative to
-  `${getS3Config().prefix}/`): list + batch-delete under `tts_segments_v1/`,
-  `tts_segments_v2/`, and `audiobooks_v1/`. Empty prefixes ⇒ no-op (3 cheap `LIST`s),
-  so it is safe to run on every boot. Do **not** touch any `tts_playback_*` prefix.
-- **Two triggers, one routine — exactly mirroring how DB migrations run today:**
-  - **Self-hosted = automatic in bootstrap:** `cli.mjs` calls `runV4Decommission(env)`
-    inline (an imported function, not a `spawnSync` subprocess like the old migrator),
-    right after `runDbMigrations` and behind the same S3-configured guard the storage
-    migration used. The operator does nothing extra — same as `pnpm migrate` already
-    runs automatically here.
-  - **Serverless (Vercel) = run manually:** `cli.mjs` does not run there, so the
-    routine is also exposed as `pnpm migrate-decommission` (root `package.json`) + a
-    bin (`openreader-decommission-v4`), which the operator runs once at the v5 deploy
-    — the same manual step they already do for `pnpm migrate`.
-- Idempotency is the run-once mechanism: no marker/state needed. The routine lists
-  each prefix and deletes what is there; once the prefixes are empty every later boot
-  is a no-op (3 empty `LIST`s, zero deletes), so running it on every boot is safe.
-- Delete the recurring task: remove `cleanup-legacy-tts-playback-cache` from
-  `TASK_REGISTRY` and delete `handlers/cleanup-legacy-tts-playback-cache.ts`. The
-  `scheduled_tasks` row is removed by the step-A migration.
-
-#### C. Also remove the legacy `migrate-fs` FS→S3 migration
-
-The filesystem storage backend is long retired, so its one-time migrator is dead
-weight and is removed in the same change — the decommission routine takes its boot
-slot:
-
-- Delete `packages/bootstrap/src/storage-migration.mjs`.
-- In `packages/bootstrap/src/cli.mjs`, replace the `runStorageMigrations()`
-  `spawnSync` step (the `Running storage migrations (v2)…` block, kept behind the
-  same `S3 configuration is incomplete` guard) with an inline
-  `await runV4Decommission(env)` call from the new module. DB migrations still run
-  first, then the decommission.
-- Drop the `openreader-migrate-storage` bin and `migrate-storage` script from
-  `packages/bootstrap/package.json`, and the `migrate-fs` / `migrate-fs:dry-run`
-  scripts from root `package.json`. Prune now-unused bootstrap deps (`ffmpeg-static`;
-  keep `pg`/`better-sqlite3`/`@aws-sdk/client-s3` for the decommission CLI).
-- Update the current (non-versioned) docs that mention `migrate-fs`:
-  `docs-site/docs/configure/migrations.md`,
-  `docs-site/docs/deploy/vercel-deployment.md`,
-  `docs-site/docs/deploy/local-development.md`. Leave `versioned_docs/*` frozen.
-
-Sequencing:
-
-- Must land *after* step 7 (playback writes audio to the new prefix so
-  `tts_segments_v2/` is no longer referenced) and *after* step 8 (nothing writes
-  audiobook tables/blobs) — otherwise the purge deletes live data.
-- v4→v5 is a one-way decommission: the Drizzle migrator applies migrations forward
-  in journal order, so any supported v4 schema upgrades cleanly; there is no down
-  migration and the dropped tables are not recreated.
+- Run a final repo scan for runtime references to dropped symbols and routes:
+  `ttsPlaybackSessions`, `ttsSegmentEntries`, `ttsSegmentVariants`,
+  `audiobookChapters`, `/api/audiobook`, `cleanup-legacy-tts-playback-cache`,
+  `migrate-fs`, and `openreader-migrate-storage`. Migration history, frozen
+  versioned docs, and decommission docs are allowed exceptions.
+- Run final validation from a clean local state: `pnpm migrate`, `pnpm test:unit`,
+  `pnpm exec tsc --noEmit`, and a `pnpm dev` startup smoke test.
+- Optionally run the highest-value Playwright smoke path for upload/open/playback
+  and audiobook MP3 export if the local worker/TTS provider is available.

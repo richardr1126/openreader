@@ -58,7 +58,12 @@ export function shouldReuseExistingOperation(input: {
   opStaleMs: number;
 }): boolean {
   if (input.current.kind !== input.requestKind) return false;
-  if (input.current.status === 'succeeded') return true;
+  if (input.current.status === 'succeeded') {
+    // The playback plan artifact is the reusable cache. Replacing terminal plan
+    // operation state lets a deleted/corrupt plan object be regenerated while
+    // still allowing the worker to return quickly when the artifact exists.
+    return input.requestKind !== 'tts_playback_plan';
+  }
   if (!isInflightStatus(input.current.status)) return false;
   const ageMs = input.now - input.current.updatedAt;
   return ageMs <= input.opStaleMs;

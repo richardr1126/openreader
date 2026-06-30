@@ -48,7 +48,12 @@ export async function GET(
     if (session instanceof Response) return session;
     const startOrdinal = 0;
     const settingsJson = session?.settingsJson ?? artifact.settingsJson;
-    const completedSegments = session ? await listCompletedTtsPlaybackSegments(session) : [];
+    const completedSegments = session
+      ? await listCompletedTtsPlaybackSegments(
+        session,
+        artifact.segments.length > 0 ? { limit: artifact.segments.length } : undefined,
+      )
+      : [];
     const completedDurations = new Map(completedSegments.map((segment) => [segment.ordinal, segment.durationMs]));
     const layout = buildPlaybackGrid({
       artifact,

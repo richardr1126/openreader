@@ -89,7 +89,9 @@ interface TTSContextType extends TTSPlaybackState {
   startDocumentAudioExport: (signal?: AbortSignal) => Promise<{
     sessionId: string;
     audioUrl: string;
+    downloadUrl: string;
     eventsUrl: string;
+    seekLayoutUrl: string;
     plannedCount: number;
   }>;
 
@@ -1173,7 +1175,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     return {
       sessionId: session.sessionId,
       audioUrl: session.audioUrl,
+      downloadUrl: session.downloadUrl,
       eventsUrl: session.eventsUrl,
+      seekLayoutUrl: session.seekLayoutUrl,
       plannedCount: plan.plannedCount ?? plan.segments.length,
     };
   }, [

@@ -20,6 +20,8 @@ export type ClearTtsSegmentCacheResult = {
   deletedSegments: number;
   requestedAudioObjects: number;
   deletedAudioObjects: number;
+  deletedPlanObjects: number;
+  deletedPlaybackObjects: number;
   invalidatedPlaybackSessions: number;
   warning?: string;
 };
@@ -32,8 +34,13 @@ async function deletePlaybackSegmentArtifactPrefixes(input: {
   userId: string;
   documentId: string;
   documentVersion?: number;
+  readerType?: ReaderType;
   namespace?: string | null;
-}): Promise<number> {
+}): Promise<{
+  deletedAudioObjects: number;
+  deletedSidecarObjects: number;
+  deletedPlanObjects: number;
+}> {
   const cfg = getS3Config();
   const version = typeof input.documentVersion === 'number' && Number.isFinite(input.documentVersion)
     ? Math.floor(input.documentVersion)
@@ -41,14 +48,24 @@ async function deletePlaybackSegmentArtifactPrefixes(input: {
   const nsSegment = input.namespace ? `ns/${input.namespace}/` : '';
   const audioBase = `${cfg.prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(input.userId)}/docs/${input.documentId}/`;
   const sidecarBase = `${cfg.prefix}/tts_playback_segments_v1/users/${storageUserHash(input.userId)}/docs/${input.documentId}/`;
+  const planBase = `${cfg.prefix}/tts_playback_plan_v1/${input.documentId}/`;
   const audioPrefix = version === null ? audioBase : `${audioBase}${version}/`;
   const sidecarPrefix = version === null ? sidecarBase : `${sidecarBase}${version}/`;
+  const planPrefix = version === null
+    ? planBase
+    : input.readerType
+      ? `${planBase}${version}/${input.readerType}/`
+      : `${planBase}${version}/`;
 
-  return (
-    await deleteTtsSegmentPrefix(audioPrefix)
-  ) + (
-    await deleteTtsSegmentPrefix(sidecarPrefix)
-  );
+  const deletedAudioObjects = await deleteTtsSegmentPrefix(audioPrefix);
+  const deletedSidecarObjects = await deleteTtsSegmentPrefix(sidecarPrefix);
+  const deletedPlanObjects = await deleteTtsSegmentPrefix(planPrefix);
+
+  return {
+    deletedAudioObjects,
+    deletedSidecarObjects,
+    deletedPlanObjects,
+  };
 }
 
 export async function clearTtsSegmentCache(
@@ -70,12 +87,16 @@ export async function clearTtsSegmentCache(
     warning = 'Compute worker is not configured; active playback sessions were not invalidated.';
   }
 
-  const deletedAudioObjects = await deletePlaybackSegmentArtifactPrefixes(input);
+  const deleted = await deletePlaybackSegmentArtifactPrefixes(input);
+  const deletedAudioAndSidecarObjects = deleted.deletedAudioObjects + deleted.deletedSidecarObjects;
+  const deletedPlaybackObjects = deletedAudioAndSidecarObjects + deleted.deletedPlanObjects;
 
   return {
     deletedSegments: 0,
-    requestedAudioObjects: deletedAudioObjects,
-    deletedAudioObjects,
+    requestedAudioObjects: deletedAudioAndSidecarObjects,
+    deletedAudioObjects: deletedAudioAndSidecarObjects,
+    deletedPlanObjects: deleted.deletedPlanObjects,
+    deletedPlaybackObjects,
     invalidatedPlaybackSessions,
     ...(warning ? { warning } : {}),
   };

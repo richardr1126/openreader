@@ -73,4 +73,18 @@ describe('state-machine decisions', () => {
       opStaleMs: 10_000,
     })).toBe('kind_mismatch');
   });
+
+  test('does not reuse terminal playback plan operations', () => {
+    const current = runningState({
+      kind: 'tts_playback_plan',
+      status: 'succeeded',
+    });
+
+    expect(shouldReuseExistingOperation({
+      current,
+      requestKind: 'tts_playback_plan',
+      now: 2_100,
+      opStaleMs: 10_000,
+    })).toBe(false);
+  });
 });

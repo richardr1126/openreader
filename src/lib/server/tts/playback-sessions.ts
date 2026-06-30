@@ -62,7 +62,7 @@ export async function listCompletedTtsPlaybackSegments(
   const result = await getComputeWorkerClient().listTtsPlaybackSegments({
     sessionId: session.sessionId,
     minOrdinal: Math.max(0, Math.floor(options?.minOrdinal ?? 0)),
-    limit: Math.max(1, Math.min(Math.floor(options?.limit ?? 500), 1000)),
+    limit: Math.max(1, Math.min(Math.floor(options?.limit ?? 500), 10000)),
   });
   return result.segments.map((segment) => ({
     ...segment,

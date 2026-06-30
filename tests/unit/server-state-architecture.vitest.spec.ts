@@ -103,8 +103,12 @@ describe('server-state architecture', () => {
     const modal = source('src/components/AudiobookExportModal.tsx');
     expect(modal).toContain('startDocumentAudioExport');
     expect(modal).toContain('subscribeTtsPlaybackEvents');
+    expect(modal).toContain('getTtsPlaybackSeekLayout(progressSession.seekLayoutUrl)');
+    expect(modal).toContain('const urlToDownload = downloadUrl || audioUrl');
+    expect(modal).toContain('setAudioPlayerSpeedAndRestart');
     expect(modal).not.toContain('useAudiobookStatus');
     expect(modal).not.toContain('/api/audiobook');
+    expect(modal).not.toContain('await fetch(urlToDownload');
     expect(modal).not.toContain('setChapters');
     expect(modal).not.toContain('setBookId');
   });
@@ -145,6 +149,7 @@ describe('server-state architecture', () => {
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const streamTimelineRoute = source('src/app/api/tts/stream/[sessionId]/timeline/route.ts');
+    const streamAudioRoute = source('src/app/api/tts/stream/[sessionId]/audio/route.ts');
     const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
     const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
@@ -204,6 +209,9 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('setPlaybackSegments');
     expect(context).not.toContain('setSentences');
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
+    expect(streamSessionRoute).toContain('downloadUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/audio`');
+    expect(streamAudioRoute).toContain('resolveTtsPlaybackSession(request, sessionId)');
+    expect(streamAudioRoute).toContain('Content-Disposition');
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
@@ -364,6 +372,7 @@ describe('server-state architecture', () => {
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('openOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('buildPlaybackGrid');
+    expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('artifact.segments.length > 0 ? { limit: artifact.segments.length }');
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');
     expect(streamTimelineRoute).toContain("throw new Error('TTS playback timeline requires a canonical plan artifact')");
     expect(streamTimelineRoute).toContain('segments: layout.segments');
@@ -374,6 +383,7 @@ describe('server-state architecture', () => {
     expect(existsSync(path.join(root, 'src/lib/client/tts/hls-audio-controller.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/extend/route.ts'))).toBe(false);
     expect(streamSessions).toContain('Math.floor(options?.minOrdinal ?? 0)');
+    expect(streamSessions).toContain('Math.floor(options?.limit ?? 500), 10000');
     expect(streamSessions).not.toContain('Math.max(session.startOrdinal');
     expect(streamSessions).not.toContain('readStreamPlanSegments(session)');
     expect(streamSessions).not.toContain('locatorIdentityKey(plan.locator)');
