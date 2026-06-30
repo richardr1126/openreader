@@ -34,7 +34,7 @@ API_BASE=http://your-tts-server/v1
 Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
 :::warning TTS requests are server-side
-`API_BASE` must be reachable from the **Next.js server**, not just the browser. In Docker, use container names or `host.docker.internal`.
+`API_BASE` must be reachable from the **Next.js server**, not just the browser. In Docker, use `http://host.docker.internal:<port>/v1` so OpenReader reaches the service's published port on your host. A container name only resolves if OpenReader and the TTS service share a Docker network (Docker Compose, `--link`, or a shared `--network`). `localhost`/`127.0.0.1` will not work, since inside the container that points at the container itself.
 :::
 
 ## Troubleshooting

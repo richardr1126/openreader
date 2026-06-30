@@ -37,7 +37,7 @@ Self-hosted or custom providers only need an OpenAI-compatible speech endpoint:
 The speech endpoint may return any common audio format — `mp3`, `wav`, `ogg`, or `flac`. OpenReader detects the format and transcodes non-mp3 audio to mp3 automatically, so your server does not need to honor `response_format: mp3`. An API key is optional; keyless servers work.
 
 :::warning TTS requests are server-side
-TTS requests originate from the **Next.js server**, not the browser. `API_BASE` must be reachable from the server runtime. In Docker, use container names or `host.docker.internal` rather than `localhost`.
+TTS requests originate from the **Next.js server**, not the browser. The base URL must be reachable from the server runtime. In Docker, use `http://host.docker.internal:<port>/v1` so OpenReader reaches the service's published port on your host. A container name only resolves if OpenReader and the TTS service share a Docker network (Docker Compose, `--link`, or a shared `--network`). `localhost`/`127.0.0.1` will not work, since inside the container that points at the container itself.
 :::
 
 ## Provider guides
