@@ -264,7 +264,7 @@ export default async function LandingPage() {
               <span className="public-feature-kicker">Export</span>
               <h3>Audiobook output</h3>
               <p>
-                Render chaptered m4b and mp3 files with resumable processing,
+                Render m4b and mp3 files with resumable processing,
                 ready for any offline player you already use.
               </p>
             </article>

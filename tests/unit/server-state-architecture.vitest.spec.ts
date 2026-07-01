@@ -104,7 +104,9 @@ describe('server-state architecture', () => {
     expect(modal).toContain('startDocumentAudioExport');
     expect(modal).toContain('subscribeTtsPlaybackEvents');
     expect(modal).toContain('snapshot.completedCount');
-    expect(modal).toContain('withDownloadSpeed(downloadUrl, localAudioPlayerSpeed)');
+    expect(modal).toContain('withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat)');
+    expect(modal).toContain("type ExportFormat = 'mp3' | 'm4b'");
+    expect(modal).toContain('Audiobook export format');
     expect(modal).toContain('setAudioPlayerSpeedAndRestart');
     expect(modal).toContain('progressCompleteRef.current');
     expect(modal).not.toContain('useAudiobookStatus');
@@ -218,6 +220,16 @@ describe('server-state architecture', () => {
     expect(streamAudioRoute).toContain('Content-Disposition');
     expect(streamAudioRoute).toContain('readDownloadSpeed(request)');
     expect(streamAudioRoute).toContain('buildAtempoFilter(input.speed)');
+    expect(streamAudioRoute).toContain('readDownloadFormat(request)');
+    expect(streamAudioRoute).toContain("request.nextUrl.searchParams.get('format') === 'm4b'");
+    expect(streamAudioRoute).toContain("contentTypeForFormat(downloadFormat)");
+    expect(streamAudioRoute).toContain("'aac'");
+    expect(streamAudioRoute).toContain('transcodeM4bExport');
+    expect(streamAudioRoute).toContain("'M4B '");
+    expect(streamAudioRoute).toContain("'+faststart'");
+    expect(streamAudioRoute).toContain('buildM4bChapters');
+    expect(streamAudioRoute).toContain("'-f',\n    'ffmetadata'");
+    expect(streamAudioRoute).toContain("'-map_chapters',\n    '1'");
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');

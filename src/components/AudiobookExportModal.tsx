@@ -11,7 +11,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
-import { Button, Card, RangeInput } from '@/components/ui';
+import { Button, Card, RangeInput, SegmentedControl } from '@/components/ui';
 import { subscribeTtsPlaybackEvents } from '@/lib/client/api/tts';
 
 interface AudiobookExportModalProps {
@@ -22,6 +22,12 @@ interface AudiobookExportModalProps {
 }
 
 type ExportStatus = 'idle' | 'generating' | 'ready' | 'downloading' | 'complete';
+type ExportFormat = 'mp3' | 'm4b';
+
+const EXPORT_FORMAT_OPTIONS: Array<{ value: ExportFormat; label: string }> = [
+  { value: 'mp3', label: 'MP3' },
+  { value: 'm4b', label: 'M4B' },
+];
 
 function formatSpeed(speed: number): string {
   return Number.isInteger(speed) ? speed.toString() : speed.toFixed(1);
@@ -32,11 +38,19 @@ function clampProgress(completed: number, total: number): number {
   return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
 }
 
-function withDownloadSpeed(url: string, speed: number): string {
+function formatLabel(format: ExportFormat): string {
+  return format.toUpperCase();
+}
+
+function withDownloadOptions(url: string, speed: number, format: ExportFormat): string {
   const safeSpeed = Math.max(0.5, Math.min(3, Number.isFinite(speed) ? speed : 1));
-  if (Math.abs(safeSpeed - 1) < 0.01) return url;
   const parsed = new URL(url, window.location.href);
-  parsed.searchParams.set('speed', safeSpeed.toFixed(2));
+  if (Math.abs(safeSpeed - 1) >= 0.01) {
+    parsed.searchParams.set('speed', safeSpeed.toFixed(2));
+  } else {
+    parsed.searchParams.delete('speed');
+  }
+  parsed.searchParams.set('format', format);
   if (parsed.origin === window.location.origin) {
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   }
@@ -72,6 +86,7 @@ export function AudiobookExportModal({
   const [plannedSegments, setPlannedSegments] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
   const [localAudioPlayerSpeed, setLocalAudioPlayerSpeed] = useState(audioPlayerSpeed);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -100,6 +115,7 @@ export function AudiobookExportModal({
 
   const isGenerating = status === 'generating';
   const canDownload = status === 'ready' || status === 'complete';
+  const exportFormatLabel = formatLabel(exportFormat);
   const progressStatusMessage = plannedSegments > 0
     ? `${completedSegments}/${plannedSegments} segments ready`
     : 'Preparing segments';
@@ -218,13 +234,13 @@ export function AudiobookExportModal({
   ]);
 
   const handleDownload = useCallback(() => {
-    const urlToDownload = downloadUrl ? withDownloadSpeed(downloadUrl, localAudioPlayerSpeed) : audioUrl;
+    const urlToDownload = downloadUrl ? withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat) : audioUrl;
     if (!urlToDownload) return;
     setStatus('downloading');
     try {
       const link = document.createElement('a');
       link.href = urlToDownload;
-      link.download = `openreader-${documentType}-${documentId.slice(0, 12)}.mp3`;
+      link.download = `openreader-${documentType}-${documentId.slice(0, 12)}.${exportFormat}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -233,7 +249,7 @@ export function AudiobookExportModal({
       setStatus('ready');
       setErrorMessage(error instanceof Error ? error.message : 'Download failed.');
     }
-  }, [audioUrl, documentId, documentType, downloadUrl, localAudioPlayerSpeed]);
+  }, [audioUrl, documentId, documentType, downloadUrl, exportFormat, localAudioPlayerSpeed]);
 
   if (isLoading) {
     return null;
@@ -248,7 +264,7 @@ export function AudiobookExportModal({
         cancelText="Dismiss"
         operationType="audiobook"
         onClick={() => setIsOpen(true)}
-        currentChapter="Preparing MP3"
+        currentChapter={`Preparing ${exportFormatLabel}`}
         statusMessage={progressStatusMessage}
       />
 
@@ -257,13 +273,13 @@ export function AudiobookExportModal({
         onClose={() => setIsOpen(false)}
         ariaLabel="Export audiobook"
         title="Export Audiobook"
-        subtitle="MP3"
+        subtitle={exportFormatLabel}
       >
         <div className="space-y-4">
           <div className="rounded-lg border border-line bg-background">
             <div className="flex items-center justify-between border-b border-line-soft bg-surface px-4 py-3">
               <h4 className="text-sm font-medium text-foreground tracking-tight">Export settings</h4>
-              <span className="text-[11px] font-medium uppercase tracking-wider text-soft">MP3</span>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-soft">{exportFormatLabel}</span>
             </div>
 
             <div className="space-y-4 p-4">
@@ -287,6 +303,19 @@ export function AudiobookExportModal({
               ))}
 
               <Card className="p-3 space-y-3">
+                <div className="space-y-2">
+                  <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Format</label>
+                  <SegmentedControl<ExportFormat>
+                    value={exportFormat}
+                    options={EXPORT_FORMAT_OPTIONS}
+                    onChange={setExportFormat}
+                    ariaLabel="Audiobook export format"
+                    className="grid-cols-2"
+                  />
+                </div>
+
+                <div className="border-t border-line-soft" />
+
                 {!nativeSpeedSupported && (
                   <div className="rounded-md border border-line bg-background px-2 py-1.5 text-[11px] text-soft">
                     Native model speed is not available for this model.
@@ -361,7 +390,7 @@ export function AudiobookExportModal({
                   progress={progress}
                   onCancel={stopTracking}
                   operationType="audiobook"
-                  currentChapter="Preparing MP3"
+                  currentChapter={`Preparing ${exportFormatLabel}`}
                   statusMessage={progressStatusMessage}
                   cancelText="Dismiss"
                 />
