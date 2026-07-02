@@ -11,6 +11,7 @@ export * from './language';
 export * from './segment-plan';
 export * from './locator';
 export * from './instructions';
+export * from './playback-scope';
 export * from './playback-cbr-layout';
 export * from './types';
 export * from './upstream-response';

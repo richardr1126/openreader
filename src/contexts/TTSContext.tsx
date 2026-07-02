@@ -1157,9 +1157,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
 
     const canonicalPlan = applyWorkerPlan(plan);
-    const selected = selectedOrdinalRef.current;
-    const selectedExists = selected !== null && canonicalPlan.some((segment) => segment.ordinal === selected);
-    setSelectedOrdinal(selectedExists ? selected : 0);
+    if (canonicalPlan.length === 0) {
+      throw new Error('The worker playback plan was empty for export.');
+    }
 
     const session = await createTtsPlaybackSession({
       documentId: request.payload.documentId,
@@ -1186,9 +1186,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     fetchPlaybackPlanUntilReady,
     fetchPlaybackSeekLayoutUntilReady,
     playbackPlanRef,
-    selectedOrdinalRef,
     setPlaybackSeekLayout,
-    setSelectedOrdinal,
   ]);
 
   buildPlaybackPlanRequestRef.current = buildPlaybackPlanRequest;

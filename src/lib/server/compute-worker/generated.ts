@@ -598,7 +598,7 @@ export interface paths {
                             };
                         };
                         sessionId: string;
-                        planObjectKey?: string;
+                        planObjectKey: string;
                         generationRunId?: string;
                         expiresAt?: number;
                         aheadWindow?: number;

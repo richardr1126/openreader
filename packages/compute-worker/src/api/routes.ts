@@ -425,6 +425,7 @@ export function registerComputeWorkerRoutes(input: {
     workerOpId: string | null,
   ): Promise<void> => {
     const now = Date.now();
+    const startOrdinal = Math.max(0, Math.floor(Number(requestBody.planning.selectedOrdinal)));
     await playbackStorage?.sessions.putSession({
       schemaVersion: 1,
       sessionId: requestBody.sessionId,
@@ -441,10 +442,10 @@ export function registerComputeWorkerRoutes(input: {
       backgroundExtent: requestBody.backgroundExtent ?? null,
       generationExtent: requestBody.generationExtent ?? null,
       planning: requestBody.planning,
-      generationStartOrdinal: 0,
-      cursorOrdinal: 0,
+      generationStartOrdinal: startOrdinal,
+      cursorOrdinal: startOrdinal,
       cursorUpdatedAt: now,
-      planObjectKey: requestBody.planObjectKey ?? null,
+      planObjectKey: requestBody.planObjectKey,
       expiresAt: requestBody.expiresAt ?? now + DEFAULT_TTS_PLAYBACK_SESSION_TTL_MS,
       lastError: null,
       updatedAt: now,
@@ -461,6 +462,7 @@ export function registerComputeWorkerRoutes(input: {
     if (!playbackStorage) return;
     if (session.status !== 'queued' && session.status !== 'running') return;
     if (now > session.expiresAt) return;
+    if (!session.planObjectKey) return;
 
     if (session.workerOpId) {
       const current = await getOpState(session.workerOpId).catch((error) => {
@@ -479,8 +481,8 @@ export function registerComputeWorkerRoutes(input: {
       readerType: session.readerType,
       settingsHash: session.settingsHash,
       settingsJson: session.settingsJson,
-      ...(session.planObjectKey ? { planObjectKey: session.planObjectKey } : {}),
-      generationRunId: `${reason}:${now}:${Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)))}`,
+      planObjectKey: session.planObjectKey,
+      generationRunId: `${reason}:${Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)))}`,
       expiresAt: session.expiresAt,
       ...(session.aheadWindow == null ? {} : { aheadWindow: session.aheadWindow }),
       ...(session.backgroundExtent == null ? {} : { backgroundExtent: session.backgroundExtent }),
@@ -498,7 +500,7 @@ export function registerComputeWorkerRoutes(input: {
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
     await playbackStorage.sessions.patchSession(session.sessionId, {
-      status: op.status === 'failed' ? 'failed' : 'running',
+      status: op.status === 'failed' ? 'failed' : op.status === 'succeeded' ? 'succeeded' : 'running',
       workerOpId: op.opId,
       lastError: op.status === 'failed' ? (op.error?.message ?? 'Failed to enqueue playback continuation') : null,
       updatedAt: now,
@@ -1233,9 +1235,8 @@ export function registerComputeWorkerRoutes(input: {
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
     await playbackStorage?.sessions.patchSession(parsed.data.sessionId, {
       workerOpId: op.opId,
-      ...(op.status === 'failed'
-        ? { status: 'failed' as const, lastError: op.error?.message ?? 'Failed to enqueue playback operation' }
-        : {}),
+      status: op.status === 'failed' ? 'failed' : op.status === 'succeeded' ? 'succeeded' : 'running',
+      lastError: op.status === 'failed' ? op.error?.message ?? 'Failed to enqueue playback operation' : null,
       updatedAt: Date.now(),
     }).catch((error) => {
       app.log.warn({ sessionId: parsed.data.sessionId, opId: op.opId, error: toErrorMessage(error) }, 'tts.playback.session_worker_op_patch_failed');

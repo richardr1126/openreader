@@ -53,9 +53,12 @@ describe('compute worker helpers', () => {
   test('playback resume run id rotates session operation identity', () => {
     const request = {
       sessionId: 'session-1',
+      storageUserId: 'storage-user-1',
       documentId: 'doc-1',
       documentVersion: 3,
+      readerType: 'epub' as const,
       settingsHash: 'settings-1',
+      planObjectKey: 'plans/doc-1/settings-1.json',
     };
 
     expect(buildTtsPlaybackOperationKey(request))

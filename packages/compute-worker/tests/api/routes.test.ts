@@ -130,6 +130,7 @@ describe('compute worker API routes', () => {
         readerType: 'pdf',
         settingsHash: 'settings-hash',
         settingsJson: { voice: 'alloy' },
+        planObjectKey: 'plans/playback-session-1.json',
         planning: {
           selectedOrdinal: 4,
           maxBlockLength: 500,
@@ -177,6 +178,7 @@ describe('compute worker API routes', () => {
         readerType: 'pdf',
         settingsHash: 'settings-hash',
         settingsJson: { voice: 'alloy' },
+        planObjectKey: 'plans/playback-session-missing-ordinal.json',
         planning: {
           maxBlockLength: 500,
           enforceSourceBoundaries: true,
@@ -347,9 +349,12 @@ describe('compute worker API routes', () => {
       opId: 'op-tts-progress',
       opKey: buildTtsPlaybackOperationKey({
         sessionId: 'playback-session-progress',
+        storageUserId: 'storage-progress',
         documentId: 'doc-progress',
         documentVersion: 1,
+        readerType: 'epub',
         settingsHash: 'settings-progress',
+        planObjectKey: 'plans/doc-progress/settings-progress.json',
       }),
       kind: 'tts_playback',
       jobId: 'job-op-tts-progress',

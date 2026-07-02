@@ -21,6 +21,7 @@
     "./locator": "./src/locator.ts",
     "./instructions": "./src/instructions.ts",
     "./playback-token": "./src/playback-token.ts",
+    "./playback-scope": "./src/playback-scope.ts",
     "./playback-cbr-layout": "./src/playback-cbr-layout.ts",
     "./types": "./src/types.ts",
     "./upstream-response": "./src/upstream-response.ts",

@@ -81,7 +81,7 @@ const ttsPlaybackPlanRequestSchema = z.object({
 
 const ttsPlaybackRequestSchema = ttsPlaybackPlanRequestSchema.extend({
   sessionId: z.string().trim().min(1).max(128),
-  planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  planObjectKey: z.string().trim().min(1).max(2048),
   generationRunId: z.string().trim().min(1).max(128).optional(),
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),
@@ -89,12 +89,19 @@ const ttsPlaybackRequestSchema = ttsPlaybackPlanRequestSchema.extend({
   generationExtent: z.enum(['window', 'document']).optional(),
 }).strict();
 
+type TtsPlaybackPlanCapableRequest = z.infer<typeof ttsPlaybackPlanRequestSchema> & {
+  sessionId: string;
+  planObjectKey?: string;
+};
+
 // Sliding-window pacing constants for bounded forward-generation runs.
 const TTS_PLAYBACK_DEFAULT_AHEAD_WINDOW = 8;
 // How long after the client's last cursor write we still treat it as connected.
 // Past this the client is assumed disconnected (JS suspended / tab closed) and
 // generation switches to "background" mode bounded by `backgroundExtent`.
 const TTS_PLAYBACK_CURSOR_STALE_MS = 15_000;
+const TTS_PLAYBACK_GENERATION_LEASE_MIN_MS = 60_000;
+const TTS_PLAYBACK_GENERATION_LEASE_GRACE_MS = 30_000;
 
 class TtsPlaybackSegmentTimeoutError extends Error {
   readonly code = 'UPSTREAM_TIMEOUT';
@@ -196,7 +203,7 @@ type TtsPlaybackSegmentInput = {
  * continue independently of the client.
  */
 export async function resolvePlaybackSourceUnits(
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  request: TtsPlaybackPlanCapableRequest,
   storage: Pick<ArtifactStorage, 'readObject'>,
   s3Prefix: string,
 ): Promise<CanonicalTtsSourceUnit[]> {
@@ -214,8 +221,8 @@ export async function resolvePlaybackSourceUnits(
 }
 
 async function deriveHtmlSourceUnits(
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
-  documentSource: NonNullable<z.infer<typeof ttsPlaybackRequestSchema>['planning']['documentSource']>,
+  request: TtsPlaybackPlanCapableRequest,
+  documentSource: NonNullable<TtsPlaybackPlanCapableRequest['planning']['documentSource']>,
   storage: Pick<ArtifactStorage, 'readObject'>,
   s3Prefix: string,
 ): Promise<CanonicalTtsSourceUnit[]> {
@@ -240,8 +247,8 @@ async function deriveHtmlSourceUnits(
 }
 
 async function deriveEpubSourceUnits(
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
-  documentSource: NonNullable<z.infer<typeof ttsPlaybackRequestSchema>['planning']['documentSource']>,
+  request: TtsPlaybackPlanCapableRequest,
+  documentSource: NonNullable<TtsPlaybackPlanCapableRequest['planning']['documentSource']>,
   storage: Pick<ArtifactStorage, 'readObject'>,
   s3Prefix: string,
 ): Promise<CanonicalTtsSourceUnit[]> {
@@ -292,8 +299,8 @@ async function deriveEpubSourceUnits(
 }
 
 async function derivePdfSourceUnits(
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
-  documentSource: NonNullable<z.infer<typeof ttsPlaybackRequestSchema>['planning']['documentSource']>,
+  request: TtsPlaybackPlanCapableRequest,
+  documentSource: NonNullable<TtsPlaybackPlanCapableRequest['planning']['documentSource']>,
   storage: Pick<ArtifactStorage, 'readObject'>,
   s3Prefix: string,
 ): Promise<CanonicalTtsSourceUnit[]> {
@@ -347,7 +354,7 @@ function perSegmentLocator(
  * absolute `startOrdinal` (see {@link resolvePlaybackStartOrdinal}).
  */
 export function planTtsPlaybackSegments(
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  request: TtsPlaybackPlanCapableRequest,
   sourceUnits: CanonicalTtsSourceUnit[],
 ): TtsPlaybackSegmentInput[] {
   const planning = request.planning;
@@ -376,7 +383,7 @@ export function planTtsPlaybackSegments(
  */
 export function resolvePlaybackStartOrdinal(
   segments: TtsPlaybackSegmentInput[],
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  request: TtsPlaybackPlanCapableRequest,
 ): number {
   if (segments.length === 0) return 0;
   const planning = request.planning;
@@ -397,7 +404,7 @@ export function resolvePlaybackStartOrdinal(
  * version + reader type with the same knobs share one cached canonical plan.
  */
 export function computePlaybackPlanSignature(
-  request: z.infer<typeof ttsPlaybackRequestSchema>,
+  request: TtsPlaybackPlanCapableRequest,
 ): string {
   const planning = request.planning;
   const documentSource = planning.documentSource;
@@ -419,7 +426,7 @@ export function computePlaybackPlanSignature(
 async function persistTtsPlaybackPlan(input: {
   storage: Pick<ArtifactStorage, 'putObject'>;
   planObjectKey: string;
-  request: z.infer<typeof ttsPlaybackRequestSchema>;
+  request: TtsPlaybackPlanCapableRequest;
   segments: TtsPlaybackSegmentInput[];
 }): Promise<string> {
   const key = input.planObjectKey;
@@ -483,7 +490,7 @@ async function readPersistedTtsPlaybackPlanSegments(
 }
 
 async function resolveAndPersistTtsPlaybackPlan(input: {
-  request: z.infer<typeof ttsPlaybackRequestSchema>;
+  request: TtsPlaybackPlanCapableRequest;
   storage: ArtifactStorage;
   s3Prefix: string;
   requireStartOrdinal?: boolean;
@@ -524,6 +531,7 @@ async function resolveAndPersistTtsPlaybackPlan(input: {
 }
 
 const SEGMENT_MAX_ATTEMPTS = 2;
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 type SegmentErrorInfo = {
   message: string;
@@ -694,6 +702,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       durationMs?: number | null;
       alignment?: Awaited<ReturnType<typeof computeAlignment>> | null;
       error?: unknown | null;
+      leaseOwnerId?: string | null;
       updatedAt?: number;
     },
   ): Promise<void> => {
@@ -722,6 +731,8 @@ async function generateExplicitTtsPlaybackSegments(input: {
       durationMs: metadata.durationMs ?? null,
       alignment: metadata.alignment ?? null,
       error: metadata.error ?? null,
+      leaseOwnerId: metadata.leaseOwnerId ?? null,
+      leaseUpdatedAt: status === 'generating' ? updatedAt : null,
       updatedAt,
     });
   };
@@ -738,6 +749,33 @@ async function generateExplicitTtsPlaybackSegments(input: {
     return true;
   };
 
+  const leaseOwnerId = [
+    input.request.sessionId,
+    input.request.generationExtent ?? 'window',
+    input.request.generationRunId ?? 'initial',
+  ].join(':');
+  const leaseStaleMs = Math.max(
+    TTS_PLAYBACK_GENERATION_LEASE_MIN_MS,
+    input.synthesisTimeoutMs + TTS_PLAYBACK_GENERATION_LEASE_GRACE_MS,
+  );
+  const minCacheEpoch = Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)));
+  const freshSidecar = async (segment: (typeof normalized)[number]) => {
+    const raw = await readSidecar(segment).catch(() => null);
+    return raw && Math.max(0, Math.floor(Number(raw.cacheEpoch ?? 0))) >= minCacheEpoch ? raw : null;
+  };
+  const isFreshForeignLease = (
+    sidecar: Awaited<ReturnType<typeof freshSidecar>>,
+    audioKey: string,
+    now = Date.now(),
+  ): boolean => {
+    if (!sidecar || sidecar.status !== 'generating') return false;
+    if (sidecar.audioKey !== audioKey) return false;
+    if (!sidecar.leaseOwnerId || sidecar.leaseOwnerId === leaseOwnerId) return false;
+    const leaseUpdatedAt = Number(sidecar.leaseUpdatedAt ?? sidecar.updatedAt ?? 0);
+    return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
+  };
+
+  segmentLoop:
   for (const segment of normalized) {
     // The pacing gate is the single stop/cancel point: it reads session status +
     // cursor and returns 'stop' when the session was superseded/expired (so a
@@ -749,11 +787,9 @@ async function generateExplicitTtsPlaybackSegments(input: {
     }
 
     // The segment audio is content-addressed: the same text+voice+model+settings
-    // always hashes to the same key. So the key is deterministic (no need to read
-    // a prior record to learn it) and its presence in object storage is the
-    // single source of truth for "already generated" — no claims, no locks. Two
-    // workers racing on the same segment just write identical bytes to the same
-    // key (wasteful at worst, never incorrect).
+    // always hashes to the same key. The audio object remains the source of
+    // truth for completed work; a `generating` sidecar is only an in-progress
+    // lease to avoid duplicate cold synthesis.
     const audioKey = buildTtsPlaybackSegmentAudioKey({
       storagePrefix: input.s3Prefix,
       namespace: null,
@@ -764,11 +800,7 @@ async function generateExplicitTtsPlaybackSegments(input: {
       audioContentHash: segment.audioContentHash,
     });
 
-    const rawExisting = await readSidecar(segment).catch(() => null);
-    const existing = rawExisting
-      && Math.max(0, Math.floor(Number(rawExisting.cacheEpoch ?? 0))) >= Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)))
-      ? rawExisting
-      : null;
+    let existing = await freshSidecar(segment);
     const audioExists = await input.audioObjectExists(audioKey).catch(() => false);
 
     if (audioExists) {
@@ -811,6 +843,41 @@ async function generateExplicitTtsPlaybackSegments(input: {
       // halts cleanly here) rather than hammering a failing provider every pass.
       await input.onSegmentErrored?.(planOrdinal);
       continue;
+    }
+
+    while (isFreshForeignLease(existing, audioKey)) {
+      if (!await shouldContinueWrites(planOrdinal)) break segmentLoop;
+      await sleep(1_000);
+      existing = await freshSidecar(segment);
+      if (existing?.status === 'completed') {
+        await input.onSegmentCompleted?.(planOrdinal);
+        continue segmentLoop;
+      }
+      if (existing?.status === 'error') {
+        await input.onSegmentErrored?.(planOrdinal);
+        continue segmentLoop;
+      }
+    }
+
+    if (!await shouldContinueWrites(planOrdinal)) break;
+    await persistSegmentMetadata(segment, 'generating', {
+      audioKey,
+      leaseOwnerId,
+      updatedAt: Date.now(),
+    }).catch(() => undefined);
+    existing = await freshSidecar(segment);
+    while (isFreshForeignLease(existing, audioKey)) {
+      if (!await shouldContinueWrites(planOrdinal)) break segmentLoop;
+      await sleep(1_000);
+      existing = await freshSidecar(segment);
+      if (existing?.status === 'completed') {
+        await input.onSegmentCompleted?.(planOrdinal);
+        continue segmentLoop;
+      }
+      if (existing?.status === 'error') {
+        await input.onSegmentErrored?.(planOrdinal);
+        continue segmentLoop;
+      }
     }
 
     let lastError: unknown = null;
@@ -1085,6 +1152,9 @@ export function createJobHandlers(input: {
             stoppedEarly = true;
             return 'stop';
           }
+          if (forceDocumentExtent) {
+            return 'continue';
+          }
           // Abandon a run that has fallen BELOW the current generation floor: the
           // cursor moved ahead (a forward seek, or playback outran us), so the
           // ordinals between here and the cursor are skipped. Stopping lets a
@@ -1097,9 +1167,6 @@ export function createJobHandlers(input: {
           }
           const fresh = cursor.cursorUpdatedAt != null
             && (now - cursor.cursorUpdatedAt) <= TTS_PLAYBACK_CURSOR_STALE_MS;
-          if (forceDocumentExtent) {
-            return planOrdinal <= backgroundTargetFor(cursor.cursorOrdinal) ? 'continue' : 'stop';
-          }
           if (fresh) {
             if (planOrdinal <= cursor.cursorOrdinal + aheadWindow) return 'continue';
             stoppedEarly = true;
@@ -1128,7 +1195,9 @@ export function createJobHandlers(input: {
         const generationFloor = generationFloorForCursor(
           isContinuationRun ? sessionCursorOrdinal : startOrdinal,
         );
-        const generationSegments = plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
+        const generationSegments = forceDocumentExtent
+          ? plannedSegments
+          : plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
 
         await generateExplicitTtsPlaybackSegments({
           request: parsed,
@@ -1189,7 +1258,7 @@ export function createJobHandlers(input: {
       const planRequest = {
         ...parsed,
         sessionId: `plan:${parsed.documentId}:${parsed.settingsHash}`,
-      } satisfies z.infer<typeof ttsPlaybackRequestSchema>;
+      } satisfies TtsPlaybackPlanCapableRequest;
       const plan = await resolveAndPersistTtsPlaybackPlan({
         request: planRequest,
         storage: input.storage,

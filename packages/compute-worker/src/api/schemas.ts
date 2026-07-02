@@ -80,7 +80,7 @@ export const ttsPlaybackPlanOperationCreateSchema = z.object({
 
 export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSchema.extend({
   sessionId: z.string().trim().min(1).max(128),
-  planObjectKey: z.string().trim().min(1).max(2048).optional(),
+  planObjectKey: z.string().trim().min(1).max(2048),
   generationRunId: z.string().trim().min(1).max(128).optional(),
   expiresAt: z.number().int().positive().optional(),
   aheadWindow: z.number().int().positive().max(4096).optional(),

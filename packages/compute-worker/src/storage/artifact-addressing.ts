@@ -96,13 +96,12 @@ const SAFE_OBJECT_PATH_SEGMENT_REGEX = /^[a-zA-Z0-9._=-]{1,256}$/;
  * settings hash + **plan ordinal**.
  *
  * Keyed by ordinal (not segment id) on purpose: it gives every segment its own
- * immutable object that the stream reader can address directly from the plan
- * (ordinal) without recomputing segment ids, and — crucially — it means each
- * completion is a single `put` to a unique key. There is no shared aggregate
- * index to read-merge-write, so there is no lost-update race and two workers can
- * generate the same document concurrently and be correct. The segment audio
- * itself stays content-addressed (idempotent dedup); this sidecar just points at
- * it. See PLAYBACK_ARCHITECTURE.md (Phase 2).
+ * object that the stream reader can address directly from the plan (ordinal)
+ * without recomputing segment ids. It is also the per-ordinal coordination
+ * record: `generating` is a short-lived lease, while `completed` points at
+ * content-addressed audio. There is no shared aggregate index to read-merge-
+ * write, so progress cannot lose unrelated segment completions. See
+ * PLAYBACK_ARCHITECTURE.md.
  */
 export function ttsPlaybackSegmentSidecarArtifactKey(input: {
   storageUserHash: string;

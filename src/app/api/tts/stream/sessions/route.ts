@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   ComputeWorkerClient,
@@ -6,6 +5,7 @@ import {
   isComputeWorkerAvailable,
 } from '@/lib/server/compute-worker/client';
 import { createTtsPlaybackToken } from '@openreader/tts/playback-token';
+import { buildTtsPlaybackCanonicalSessionId } from '@openreader/tts/playback-scope';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import {
   buildTtsPlaybackPlanningInput,
@@ -72,6 +72,14 @@ export async function POST(request: NextRequest) {
     if (scope instanceof Response) return scope;
     const startOrdinalError = validateTtsPlaybackSessionStartOrdinal(parsed);
     if (startOrdinalError) return NextResponse.json({ error: startOrdinalError }, { status: 400 });
+    const selectedOrdinal = parsed.startIntent?.selectedOrdinal;
+    if (typeof selectedOrdinal !== 'number') {
+      return NextResponse.json({ error: 'TTS playback session requires a worker-plan ordinal' }, { status: 400 });
+    }
+    if (!parsed.planObjectKey) {
+      return NextResponse.json({ error: 'TTS playback session requires a canonical planObjectKey' }, { status: 400 });
+    }
+    const planObjectKey = parsed.planObjectKey;
 
     // How far the worker keeps generating after the client disconnects, so
     // background playback survives JS suspending (admin-tunable).
@@ -89,12 +97,20 @@ export async function POST(request: NextRequest) {
       scope,
       documentId: parsed.documentId,
       settingsHash,
-      planObjectKey: parsed.planObjectKey,
+      planObjectKey,
       runtimeConfig,
     });
     if (quotaResponse) return quotaResponse;
 
-    const sessionId = randomUUID();
+    const sessionId = buildTtsPlaybackCanonicalSessionId({
+      storageUserId: scope.storageUserId,
+      documentId: parsed.documentId,
+      documentVersion: scope.documentVersion,
+      readerType: scope.readerType,
+      settingsHash,
+      planObjectKey,
+      purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live',
+    });
     const operation = await new ComputeWorkerClient().createTtsPlaybackOperation({
       sessionId,
       userId: scope.userId,
@@ -104,12 +120,15 @@ export async function POST(request: NextRequest) {
       readerType: scope.readerType,
       settingsHash,
       settingsJson,
-      ...(parsed.planObjectKey ? { planObjectKey: parsed.planObjectKey } : {}),
+      planObjectKey,
       expiresAt,
       // Bounded forward-generation runs fill a window ahead of the client's
       // playback cursor; cursor heartbeats enqueue follow-up runs as needed.
       aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
       backgroundExtent,
+      ...(parsed.generationExtent === 'document'
+        ? {}
+        : { generationRunId: `initial:${selectedOrdinal}` }),
       ...(parsed.generationExtent === 'document' ? { generationExtent: 'document' as const } : {}),
       planning,
     });

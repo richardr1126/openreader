@@ -267,6 +267,9 @@ describe('server-state architecture', () => {
     expect(workerKeys).not.toContain('String(input.startOrdinal)');
     expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planObjectKey?: string;');
     expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planning:');
+    expect(workerRoutes).toContain('const startOrdinal = Math.max(0, Math.floor(Number(requestBody.planning.selectedOrdinal)))');
+    expect(workerRoutes).toContain('generationStartOrdinal: startOrdinal');
+    expect(workerRoutes).toContain('cursorOrdinal: startOrdinal');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('const isContinuationRun = Boolean(parsed.generationRunId)');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal');
     // Generation centers on the cursor via the same shared floor helper as the
@@ -414,6 +417,43 @@ describe('server-state architecture', () => {
     expect(existsSync(path.join(root, 'src/lib/client/cache/audio.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/lib/client/tts/audio-warm-cache.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/lib/client/pdf-tts-planning.ts'))).toBe(false);
+  });
+
+  test('keeps playback generation as idempotent jobs over a shared segment cache', () => {
+    const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
+    const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
+    const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
+    const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
+    const workerStateMachine = source('packages/compute-worker/src/operations/state-machine.ts');
+    const playbackScope = source('packages/tts/src/playback-scope.ts');
+    const playbackStorage = source('packages/compute-worker/src/playback/storage.ts');
+    const context = source('src/contexts/TTSContext.tsx');
+
+    expect(streamSessionRoute).toContain('buildTtsPlaybackCanonicalSessionId');
+    expect(streamSessionRoute).toContain("purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live'");
+    expect(streamSessionRoute).toContain("return NextResponse.json({ error: 'TTS playback session requires a canonical planObjectKey' }");
+    expect(streamSessionRoute).not.toContain('randomUUID()');
+    expect(context).toContain('startIntent: { selectedOrdinal: 0 }');
+    expect(context).not.toContain('setSelectedOrdinal(selectedExists ? selected : 0)');
+
+    expect(playbackScope).toContain("export type TtsPlaybackSessionPurpose = 'live' | 'export-document'");
+    expect(playbackScope).toContain('return `tts-${input.purpose}-${scopeHash}`');
+    expect(workerKeys).toContain("'tts_playback',\n    'v1',");
+    expect(workerKeys).toContain('scopeHash');
+    expect(workerKeys).toContain("const intent = input.generationExtent === 'document'");
+    expect(workerKeys).not.toContain("'v2'");
+    expect(workerSchemas).toContain('planObjectKey: z.string().trim().min(1).max(2048),');
+
+    expect(playbackStorage).toContain('leaseOwnerId?: string | null;');
+    expect(playbackStorage).toContain('leaseUpdatedAt?: number | null;');
+    expect(workerHandlers).toContain("persistSegmentMetadata(segment, 'generating'");
+    expect(workerHandlers).toContain('isFreshForeignLease');
+    expect(workerHandlers).toContain('leaseStaleMs');
+    expect(workerHandlers).toContain('forceDocumentExtent\n          ? plannedSegments');
+    expect(workerHandlers.indexOf('if (forceDocumentExtent)')).toBeLessThan(
+      workerHandlers.indexOf('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))'),
+    );
+    expect(workerStateMachine).toContain("input.requestKind !== 'tts_playback'");
   });
 
   test('keeps Cache Storage best-effort and admits only successful full responses', () => {

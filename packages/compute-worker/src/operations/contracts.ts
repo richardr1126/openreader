@@ -41,7 +41,7 @@ export interface TtsPlaybackJobRequest {
   readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
   settingsJson: unknown;
-  planObjectKey?: string;
+  planObjectKey: string;
   /**
    * Distinguishes bounded generation runs for the same session. Initial session
    * creation may omit this; cursor-driven continuations set a fresh token so the

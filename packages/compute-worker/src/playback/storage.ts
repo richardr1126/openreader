@@ -52,6 +52,8 @@ export interface TtsPlaybackSegmentMetadata {
   durationMs: number | null;
   alignment: TTSSentenceAlignment | null;
   error: unknown | null;
+  leaseOwnerId?: string | null;
+  leaseUpdatedAt?: number | null;
   updatedAt: number;
 }
 

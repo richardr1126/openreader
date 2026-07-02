@@ -1898,7 +1898,8 @@
                   "settingsHash",
                   "settingsJson",
                   "planning",
-                  "sessionId"
+                  "sessionId",
+                  "planObjectKey"
                 ],
                 "additionalProperties": false
               }

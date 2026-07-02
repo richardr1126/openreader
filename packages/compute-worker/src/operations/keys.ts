@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { buildTtsPlaybackCanonicalScopeKey } from '@openreader/tts/playback-scope';
 import { PDF_PARSER_VERSION } from './contracts';
 
 export function buildPdfOperationKey(input: {
@@ -33,21 +35,35 @@ export function pdfSubjectFromOperationKey(opKey: string): {
 
 export function buildTtsPlaybackOperationKey(input: {
   sessionId: string;
+  storageUserId: string;
   documentId: string;
   documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
   settingsHash: string;
+  planObjectKey: string;
   generationRunId?: string;
+  generationExtent?: 'window' | 'document';
 }): string {
-  // One active generation job per session/run. Cursor-driven continuations pass
-  // a fresh generationRunId so a terminal bounded run does not get reused.
+  const scopeHash = createHash('sha256').update(buildTtsPlaybackCanonicalScopeKey({
+    storageUserId: input.storageUserId,
+    documentId: input.documentId,
+    documentVersion: input.documentVersion,
+    readerType: input.readerType,
+    settingsHash: input.settingsHash,
+    planObjectKey: input.planObjectKey,
+  })).digest('hex');
+  const intent = input.generationExtent === 'document'
+    ? 'document'
+    : `live:${input.generationRunId?.trim() || 'initial'}`;
   return [
     'tts_playback',
     'v1',
     input.documentId,
     String(input.documentVersion),
     input.settingsHash,
+    scopeHash,
     input.sessionId,
-    input.generationRunId?.trim() || '',
+    intent,
   ].join('|');
 }
 
@@ -74,10 +90,10 @@ export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   documentId: string;
   sessionId: string;
 } | null {
-  // tts_playback | v1 | documentId | version | settingsHash | sessionId
   const parts = opKey.split('|');
   const [kind, version, documentId] = parts;
-  const sessionId = parts[5];
+  // tts_playback | v1 | documentId | version | settingsHash | scopeHash | sessionId | intent
+  const sessionId = parts[6];
   if (kind !== 'tts_playback' || version !== 'v1' || !documentId || !sessionId) return null;
   return { kind: 'tts_playback', documentId, sessionId };
 }

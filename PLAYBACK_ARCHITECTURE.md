@@ -563,88 +563,92 @@ Verified during implementation:
 
 ## Remaining Work
 
-### 11. Canonical Playback Session and Generation Reuse
+### 11. Idempotent Playback Jobs and Shared Generation Cache
 
-The current playback/export session model is too ephemeral. A browser click
-creates a new session id, and playback operation identity includes that session
-id, so `enqueueOrReuse` can only reuse work inside one UI attempt. That is wrong
-for both audiobook export and live playback expectations: generated artifacts are
-owned by the document/settings scope, so active generation should be coordinated
-at that same scope.
+Status: done. This is a hard cut for the unmerged playback v1 branch: there is
+no random playback-session fallback, no legacy playback operation-key shape, and
+no compatibility shim for generation without a canonical plan artifact.
+
+The playback/export cache is durable and document-scoped, but live playback and
+audiobook export are different UX/job concerns. They must reuse the same segment
+audio without sharing one mutable session record for cursor state, export state,
+and active operation ownership.
 
 Target model:
 
-- A canonical playback session is keyed by stable artifact identity:
-  `user/storage scope + documentId + documentVersion + readerType + settingsHash
-  + planObjectKey/planSignature`.
-- For a given document + voice/model/settings/language/segmentation plan, there
-  should be one active session record. Re-entering the page, clicking Generate
-  again, or starting live playback against the same scope attaches to that
-  session instead of minting an unrelated one.
-- Session state remains split from cursor state. There may still be viewer-local
-  playhead/cursor updates, but they must not fork the generation session.
-- Operation identity is derived from generation intent and artifact scope, not a
-  random UI session id:
-  - `window` generation may enqueue cursor/run-specific continuations, but those
-    continuations still write into the canonical scope.
-  - `document` audiobook export uses one active document-extent operation per
-    canonical scope and should be reusable across page reloads and repeated
-    Generate clicks.
-- Active generation must not duplicate provider calls for the same missing
-  segment. The existing completed-sidecar/audio-object checks are enough for
-  finished work, but not for in-progress work. Add a lightweight in-progress
-  sidecar/lease state per ordinal so a second worker can wait/re-read instead of
-  synthesizing the same segment concurrently. The lease must be short-lived and
-  recoverable so a crashed worker does not block generation forever.
-- Audiobook export progress is derived from the canonical operation/session
-  state. Reopening the modal should subscribe to the existing operation and show
-  current progress from completed sidecars plus operation snapshots.
-- Live playback and audiobook export share the same artifact scope. If live
-  playback generated segments, export skips them. If export is running, live
-  playback attaches to the same completed/in-progress sidecars instead of
-  starting duplicate synthesis for overlapping ordinals.
+- Sessions are UX state. A live playback session owns live cursor/playback
+  state. An audiobook export session owns export progress/download state. They
+  are separate deterministic session ids for the same document/settings scope.
+- Jobs are idempotent work requests. Repeating the same export Generate click
+  reuses the same document-extent operation. Live cursor continuations reuse a
+  stable operation key for the same cursor/run intent instead of minting a new
+  random job every time.
+- The segment cache is shared. Both live and export read/write sidecars under
+  `storageUserId + documentId + documentVersion + settingsHash + ordinal`, so
+  previously generated live audio is skipped by export and vice versa.
+- The cache write boundary is per ordinal. A `generating` sidecar is only a
+  short-lived lease for one missing segment. It is not the session model and it
+  does not make live playback and export share cursor state.
+- Live playback may use admin background extent (`section` or `document`) within
+  the live session. Audiobook export is always a separate document-extent job
+  whose final output begins at ordinal `0`.
+- Export progress is the true completed segment count across the whole plan,
+  not a contiguous prefix and not only what one browser tab has streamed.
 
 Implementation plan:
 
-1. Define a canonical playback scope key helper shared by Next and worker tests.
-   Include every input that changes generated audio or segmentation, and exclude
-   cursor/playhead/UI-attempt state.
-2. Change Next session creation so it asks for or deterministically derives the
-   canonical session id for that scope instead of always using `randomUUID()`.
-   Preserve response shape (`sessionId`, `eventsUrl`, `downloadUrl`, etc.) so the
-   client surface does not need a broad rewrite.
-3. Change worker operation keys so document-extent export uses canonical
-   scope/plan identity. Keep continuation run ids only where they represent a
-   real cursor/window continuation, not a new export click.
-4. Update worker session creation to reuse an existing non-expired session for
-   the same canonical scope. Refresh expiry and attach the current `workerOpId`
-   instead of overwriting useful state.
+1. Define a shared canonical playback scope helper. It includes every input that
+   changes generated audio or segmentation (`storageUserId`, document identity,
+   reader type, `settingsHash`, and `planObjectKey`) and excludes cursor/UI
+   attempt state.
+2. Derive deterministic session ids from that scope plus `purpose`:
+   `live` for playback and `export-document` for audiobook export. Do not use one
+   shared session for both.
+3. Change playback operation keys to include canonical scope + generation intent.
+   Document export uses one stable operation key per export session/scope. Live
+   continuations keep a run id only for actual cursor/window continuations.
+4. Keep session creation idempotent by overwriting/refreshing the deterministic
+   session record for that purpose while preserving the split cursor key behavior.
 5. Add ordinal-level generation leases using the sidecar object as the durable
-   coordination point. A lease records owner op/session, cache epoch, updated
-   time, and expected audio key. Completed sidecars remain immutable; stale
-   leases are safely stealable after a timeout.
+   coordination point. A lease records owner id, cache epoch, updated time, and
+   expected audio key. Completed sidecars remain immutable; stale leases are
+   safely stealable after a timeout.
 6. In generation, before synthesis:
    - If audio exists, self-heal sidecar and continue.
    - If completed sidecar exists, continue.
-   - If fresh generating lease exists for the expected audio key, wait/backoff
-     and re-read until completed, errored, stale, or canceled.
+   - If a fresh foreign `generating` lease exists for the expected audio key,
+     wait/backoff and re-read until completed, terminal, canceled, or stale.
    - If no fresh lease exists, write/refresh the lease and synthesize.
 7. Make document export completion session-agnostic: a document-extent operation
    succeeds when every plan ordinal is completed or terminally errored for the
-   canonical scope, not when one browser session remains open.
-8. Update SSE/progress paths so a newly attached session can immediately emit the
-   current completed count and continue streaming the reused operation.
-9. Add regression coverage:
-   - repeated audiobook Generate with same scope reuses the same active op;
-   - leaving/reopening the page attaches to existing progress;
+   shared cache scope.
+8. Add regression coverage:
+   - repeated audiobook Generate with the same scope returns the same session/op;
+   - live and export use different session ids for the same cache scope;
    - live playback then export skips completed segments;
    - export and live playback overlapping on a missing ordinal do not duplicate
      synthesis when a fresh lease exists;
    - stale lease recovery still regenerates.
-10. Update `PLAYBACK_ARCHITECTURE.md` invariants after implementation to remove
-    the old "two workers racing is wasteful but correct" allowance from normal
-    operation. The fallback can remain true only for pathological lease races,
-    not as the intended concurrency model.
+9. Update `PLAYBACK_ARCHITECTURE.md` invariants after implementation to remove
+   the old "two workers racing is wasteful but correct" allowance from normal
+   operation. The fallback can remain true only for pathological lease races,
+   not as the intended concurrency model.
+
+Implemented notes:
+
+- Next session creation requires `planObjectKey` and derives deterministic
+  session ids from canonical scope plus purpose: `live` or `export-document`.
+- Worker session creation writes `generationStartOrdinal` and cursor state from
+  the required `planning.selectedOrdinal`; live playback must never initialize
+  from ordinal `0` unless the selected plan ordinal is actually `0`.
+- Worker playback operation keys remain `tts_playback|v1` but now use canonical
+  scope hash + session id + generation intent. Active jobs dedupe; terminal
+  playback jobs are replaceable so a fresh request verifies current cache state.
+- Audiobook export does not mutate the live selected ordinal/cursor. Its session
+  starts output at ordinal `0` and runs document extent over the whole plan.
+- Segment sidecars now carry optional lease owner/update fields. Fresh foreign
+  `generating` leases are waited on; stale leases are stealable.
+- Full-document generation is not stopped by live cursor floor logic.
 
 ### 12. Final Cleanup Pass Before Merge
 
