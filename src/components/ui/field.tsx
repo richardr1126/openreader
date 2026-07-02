@@ -1,7 +1,8 @@
 'use client';
 
-import { useId, type ReactNode } from 'react';
+import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
 import { cn } from './cn';
+import { RangeInput } from './range';
 import { Switch } from './switch';
 
 export function Field({
@@ -70,6 +71,51 @@ export function ToggleRow({
           ariaDescribedBy={descId}
         />
       </div>
+    </div>
+  );
+}
+
+type RangeFieldProps = {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  description?: string;
+  valueWidth?: string;
+  formatter?: (value: number) => string;
+  onChange: (value: number) => void;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'min' | 'max' | 'step' | 'type' | 'className'>;
+
+export function RangeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  description,
+  valueWidth = 'w-10',
+  formatter = (next) => String(next),
+  onChange,
+  ...inputProps
+}: RangeFieldProps) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <label className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</label>
+        <span className={cn(valueWidth, 'text-xs font-semibold text-right text-foreground tabular-nums')}>
+          {formatter(value)}
+        </span>
+      </div>
+      <RangeInput
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        {...inputProps}
+      />
+      {description ? <p className="text-xs text-faint">{description}</p> : null}
     </div>
   );
 }

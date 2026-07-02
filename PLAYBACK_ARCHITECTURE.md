@@ -561,20 +561,14 @@ Verified during implementation:
 
 ---
 
-## Remaining Work
-
 ### 11. Idempotent Playback Jobs and Shared Generation Cache
 
-Status: done. This is a hard cut for the unmerged playback v1 branch: there is
-no random playback-session fallback, no legacy playback operation-key shape, and
-no compatibility shim for generation without a canonical plan artifact.
-
 The playback/export cache is durable and document-scoped, but live playback and
-audiobook export are different UX/job concerns. They must reuse the same segment
-audio without sharing one mutable session record for cursor state, export state,
-and active operation ownership.
+audiobook export are different UX/job concerns. They reuse the same segment audio
+without sharing one mutable session record for cursor state, export state, and
+active operation ownership.
 
-Target model:
+Completed model:
 
 - Sessions are UX state. A live playback session owns live cursor/playback
   state. An audiobook export session owns export progress/download state. They
@@ -595,45 +589,6 @@ Target model:
 - Export progress is the true completed segment count across the whole plan,
   not a contiguous prefix and not only what one browser tab has streamed.
 
-Implementation plan:
-
-1. Define a shared canonical playback scope helper. It includes every input that
-   changes generated audio or segmentation (`storageUserId`, document identity,
-   reader type, `settingsHash`, and `planObjectKey`) and excludes cursor/UI
-   attempt state.
-2. Derive deterministic session ids from that scope plus `purpose`:
-   `live` for playback and `export-document` for audiobook export. Do not use one
-   shared session for both.
-3. Change playback operation keys to include canonical scope + generation intent.
-   Document export uses one stable operation key per export session/scope. Live
-   continuations keep a run id only for actual cursor/window continuations.
-4. Keep session creation idempotent by overwriting/refreshing the deterministic
-   session record for that purpose while preserving the split cursor key behavior.
-5. Add ordinal-level generation leases using the sidecar object as the durable
-   coordination point. A lease records owner id, cache epoch, updated time, and
-   expected audio key. Completed sidecars remain immutable; stale leases are
-   safely stealable after a timeout.
-6. In generation, before synthesis:
-   - If audio exists, self-heal sidecar and continue.
-   - If completed sidecar exists, continue.
-   - If a fresh foreign `generating` lease exists for the expected audio key,
-     wait/backoff and re-read until completed, terminal, canceled, or stale.
-   - If no fresh lease exists, write/refresh the lease and synthesize.
-7. Make document export completion session-agnostic: a document-extent operation
-   succeeds when every plan ordinal is completed or terminally errored for the
-   shared cache scope.
-8. Add regression coverage:
-   - repeated audiobook Generate with the same scope returns the same session/op;
-   - live and export use different session ids for the same cache scope;
-   - live playback then export skips completed segments;
-   - export and live playback overlapping on a missing ordinal do not duplicate
-     synthesis when a fresh lease exists;
-   - stale lease recovery still regenerates.
-9. Update `PLAYBACK_ARCHITECTURE.md` invariants after implementation to remove
-   the old "two workers racing is wasteful but correct" allowance from normal
-   operation. The fallback can remain true only for pathological lease races,
-   not as the intended concurrency model.
-
 Implemented notes:
 
 - Next session creation requires `planObjectKey` and derives deterministic
@@ -650,7 +605,142 @@ Implemented notes:
   `generating` leases are waited on; stale leases are stealable.
 - Full-document generation is not stopped by live cursor floor logic.
 
-### 12. Final Cleanup Pass Before Merge
+Verified during implementation:
+
+- `pnpm exec vitest run packages/compute-worker/tests/unit/key-and-progress.test.ts packages/compute-worker/tests/api/routes.test.ts tests/unit/server-state-architecture.vitest.spec.ts`
+- `pnpm exec tsc --noEmit`
+- `pnpm test:unit`
+
+---
+
+## Remaining Work
+
+### 12. Audiobook Export Reconnect
+
+Status: planned. Hard cut only; do not add polling fallbacks, legacy audiobook
+status rows, random export sessions, or client-only progress reconstruction.
+
+The audiobook export UI should reconnect like PDF parse progress:
+
+1. Resolve current export state for the current document/settings/plan before
+   starting a new job.
+2. Use the deterministic `export-document` session id derived from canonical
+   playback scope.
+3. Load the worker session and `workerOpId`.
+4. Return a snapshot with session id, operation status, completed count,
+   planned count, events URL, download URL, and failure message when present.
+5. On modal open/page load, if the snapshot is `queued` or `running`, subscribe
+   to the existing operation SSE immediately.
+6. If the snapshot is `succeeded`, show ready/download state or let Generate
+   complete from cache without creating unrelated state.
+7. If the snapshot is `failed`, show failed/retry state.
+
+Implementation plan:
+
+1. Add a Next resolve endpoint for export state, analogous to
+   `GET /api/documents/:id/parsed`:
+   - require a loaded canonical playback plan and `planObjectKey`;
+   - compute the deterministic `export-document` session id;
+   - read the worker playback session;
+   - read the worker operation if `workerOpId` exists;
+   - scan authoritative sidecars for completed count when needed.
+2. Add a client query/hook for the modal that calls the resolve endpoint on open
+   and when the document/settings/plan changes.
+3. Reuse the existing `/api/tts/stream/:sessionId/events` SSE route for
+   reconnecting to active export operations.
+4. Keep Generate as create-or-reuse for the same deterministic export session,
+   not as the only way to discover progress.
+5. Add regression coverage:
+   - page refresh/modal reopen resolves an active export session without clicking
+     Generate;
+   - active export reconnect uses the existing `workerOpId`;
+   - succeeded export resolves from sidecars/cache;
+   - live playback session is never used for export reconnect;
+   - missing plan key fails hard instead of falling back to random state.
+
+### 13. Compute Worker API Surface Hard Cut
+
+Status: planned. Audit before adding more worker endpoints. Hard cut only; do
+not add one-off compatibility routes, alias routes, random-session lookups, or
+new legacy audiobook/PDF status APIs.
+
+Current compute-worker route inventory:
+
+- Health:
+  - `GET /health/live`
+  - `GET /health/ready`
+- Generic operation observation:
+  - `GET /v1/operations/:opId`
+  - `GET /v1/operations/:opId/events`
+- PDF layout:
+  - `POST /v1/pdf-layout/operations`
+  - `POST /v1/pdf-layout/resolve`
+- Playback planning/generation:
+  - `POST /v1/tts-playback-plans/operations`
+  - `POST /v1/tts-playback/operations`
+- Playback sessions/cache:
+  - `GET /v1/tts-playback/:sessionId/session`
+  - `GET /v1/tts-playback/:sessionId/segments`
+  - `POST /v1/tts-playback/:sessionId/cursor`
+  - `GET /v1/tts-playback/:sessionId/audio`
+  - `POST /v1/tts-playback/reset`
+
+Problems to resolve:
+
+- Route names mix resource style and operation style
+  (`/tts-playback-plans/operations` vs `/tts-playback/:sessionId/session`).
+- PDF has a first-class `resolve` route, but playback export reconnect is
+  currently expected to be composed from session/operation/segment routes.
+- Playback session subresources are path-shaped inconsistently; `session` is
+  redundant when the path already identifies a session.
+- Adding an export reconnect route before choosing the worker API shape risks
+  another one-off endpoint.
+
+Target route structure:
+
+- Keep health unchanged:
+  - `GET /health/live`
+  - `GET /health/ready`
+- Keep generic operation observation unchanged:
+  - `GET /v1/operations/:opId`
+  - `GET /v1/operations/:opId/events`
+- Use one resource namespace for PDF layout:
+  - `POST /v1/pdf-layout/jobs` creates/reuses the deterministic layout job.
+  - `POST /v1/pdf-layout/resolve` resolves current artifact + current job.
+- Use one resource namespace for playback plans:
+  - `POST /v1/tts-playback/plans/jobs` creates/reuses the deterministic plan
+    job.
+  - Add `POST /v1/tts-playback/plans/resolve` only if a current-plan resolver
+    is needed outside the Next proxy.
+- Use one resource namespace for playback sessions:
+  - `POST /v1/tts-playback/sessions/jobs` creates/reuses live or export
+    playback generation for a deterministic session id.
+  - `POST /v1/tts-playback/sessions/resolve` resolves deterministic session +
+    operation + progress by canonical scope and purpose (`live` or
+    `export-document`).
+  - `GET /v1/tts-playback/sessions/:sessionId` reads session state.
+  - `GET /v1/tts-playback/sessions/:sessionId/segments` lists completed segment
+    sidecars.
+  - `PUT /v1/tts-playback/sessions/:sessionId/cursor` updates live cursor.
+  - `GET /v1/tts-playback/sessions/:sessionId/audio` streams MP3 bytes.
+  - `POST /v1/tts-playback/cache/reset` bumps cache epoch and cancels sessions.
+
+Implementation plan:
+
+1. Decide whether Step 12 export reconnect can be implemented entirely in Next
+   by composing existing worker routes. If yes, do not add a worker route yet.
+2. If worker support is needed, add only
+   `POST /v1/tts-playback/sessions/resolve`; do not add an export-specific
+   worker endpoint.
+3. Rename old worker routes to the target shape in one hard cut, updating
+   OpenAPI, generated client types, Next proxy callers, and tests together.
+4. Delete old route names in the same change. No aliases.
+5. Keep generic operation event URLs as the single SSE primitive; domain routes
+   should resolve the correct op id, not create separate event systems.
+6. Add regression coverage for the complete route map so no new ad hoc worker
+   endpoint lands without updating this section.
+
+### 14. Final Cleanup Pass Before Merge
 
 After step 10 is verified, the last pass is release hygiene:
 

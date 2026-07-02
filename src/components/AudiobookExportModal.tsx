@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
-import { DownloadIcon, CheckCircleIcon, ClockIcon } from '@/components/icons/Icons';
+import { DownloadIcon } from '@/components/icons/Icons';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
@@ -11,7 +11,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
-import { Button, Card, RangeInput, SegmentedControl } from '@/components/ui';
+import { Badge, Button, RangeField, Section, SegmentedControl } from '@/components/ui';
 import { subscribeTtsPlaybackEvents } from '@/lib/client/api/tts';
 
 interface AudiobookExportModalProps {
@@ -273,152 +273,122 @@ export function AudiobookExportModal({
         onClose={() => setIsOpen(false)}
         ariaLabel="Export audiobook"
         title="Export Audiobook"
-        subtitle={exportFormatLabel}
+        subtitle="Render this document to a downloadable audio file."
+        bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
       >
         <div className="space-y-4">
-          <div className="rounded-lg border border-line bg-background">
-            <div className="flex items-center justify-between border-b border-line-soft bg-surface px-4 py-3">
-              <h4 className="text-sm font-medium text-foreground tracking-tight">Export settings</h4>
-              <span className="text-[11px] font-medium uppercase tracking-wider text-soft">{exportFormatLabel}</span>
+          <Section title="Voice" subtitle="Narration used for this export." variant="flat">
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-faint">Voice</span>
+              <VoicesControlBase
+                availableVoices={availableVoices}
+                voice={voice}
+                onChangeVoice={setVoiceAndRestart}
+                providerType={providerType}
+                ttsModel={ttsModel}
+                dropdownDirection="down"
+                variant="field"
+              />
+            </div>
+            {languageWarnings.map((warning) => (
+              <p key={warning} className="text-xs text-warning">
+                {warning}
+              </p>
+            ))}
+          </Section>
+
+          <Section title="Format & Speed" subtitle="File type and playback pace." variant="flat">
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-faint">File format</span>
+              <SegmentedControl<ExportFormat>
+                value={exportFormat}
+                options={EXPORT_FORMAT_OPTIONS}
+                onChange={setExportFormat}
+                ariaLabel="Audiobook export format"
+                className="grid-cols-2"
+              />
             </div>
 
-            <div className="space-y-4 p-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Voice</label>
-                <VoicesControlBase
-                  availableVoices={availableVoices}
-                  voice={voice}
-                  onChangeVoice={setVoiceAndRestart}
-                  providerType={providerType}
-                  ttsModel={ttsModel}
-                  dropdownDirection="down"
-                  variant="field"
-                />
-              </div>
+            {nativeSpeedSupported ? (
+              <RangeField
+                label="Native model speed"
+                value={voiceSpeed}
+                min={0.5}
+                max={3}
+                step={0.1}
+                formatter={(value) => `${formatSpeed(value)}x`}
+                onChange={(value) => setSpeedAndRestart(value)}
+                disabled={isGenerating}
+              />
+            ) : (
+              <p className="text-xs text-faint">Native model speed is not available for this model.</p>
+            )}
 
-              {languageWarnings.map((warning) => (
-                <p key={warning} className="text-xs text-warning">
-                  {warning}
-                </p>
-              ))}
+            <RangeField
+              label="Audiobook speed"
+              value={localAudioPlayerSpeed}
+              min={0.5}
+              max={3}
+              step={0.1}
+              formatter={(value) => `${formatSpeed(value)}x`}
+              onChange={setLocalAudioPlayerSpeed}
+              onMouseUp={commitAudioPlayerSpeed}
+              onKeyUp={commitAudioPlayerSpeed}
+              onTouchEnd={commitAudioPlayerSpeed}
+              disabled={isGenerating}
+            />
+          </Section>
 
-              <Card className="p-3 space-y-3">
-                <div className="space-y-2">
-                  <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Format</label>
-                  <SegmentedControl<ExportFormat>
-                    value={exportFormat}
-                    options={EXPORT_FORMAT_OPTIONS}
-                    onChange={setExportFormat}
-                    ariaLabel="Audiobook export format"
-                    className="grid-cols-2"
-                  />
-                </div>
-
-                <div className="border-t border-line-soft" />
-
-                {!nativeSpeedSupported && (
-                  <div className="rounded-md border border-line bg-background px-2 py-1.5 text-[11px] text-soft">
-                    Native model speed is not available for this model.
-                  </div>
-                )}
-
-                {nativeSpeedSupported && (
-                  <>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Native model speed</label>
-                        <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(voiceSpeed)}x</span>
-                      </div>
-                      <RangeInput
-                        min="0.5"
-                        max="3"
-                        step="0.1"
-                        value={voiceSpeed}
-                        onChange={(event) => setSpeedAndRestart(parseFloat(event.target.value))}
-                        disabled={isGenerating}
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div className={nativeSpeedSupported ? 'border-t border-line-soft' : ''} />
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Audiobook speed</label>
-                    <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(localAudioPlayerSpeed)}x</span>
-                  </div>
-                  <RangeInput
-                    min="0.5"
-                    max="3"
-                    step="0.1"
-                    value={localAudioPlayerSpeed}
-                    onChange={(event) => setLocalAudioPlayerSpeed(parseFloat(event.target.value))}
-                    onMouseUp={commitAudioPlayerSpeed}
-                    onKeyUp={commitAudioPlayerSpeed}
-                    onTouchEnd={commitAudioPlayerSpeed}
-                    disabled={isGenerating}
-                  />
-                </div>
-
-              </Card>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Card className="p-3">
-                  <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Segments</div>
-                  <div className="text-sm font-medium text-foreground tabular-nums">
-                    {plannedSegments > 0 ? `${completedSegments}/${plannedSegments}` : '--'}
-                  </div>
-                </Card>
-                <Card className="p-3">
-                  <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Status</div>
-                  <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                    {canDownload ? (
-                      <CheckCircleIcon className="h-4 w-4 text-accent" />
-                    ) : isGenerating ? (
-                      <ClockIcon className="h-4 w-4 text-soft animate-spin" />
-                    ) : (
-                      <ClockIcon className="h-4 w-4 text-soft" />
-                    )}
-                    <span>{canDownload ? 'Ready' : isGenerating ? 'Generating' : 'Idle'}</span>
-                  </div>
-                </Card>
-              </div>
-
-              {isGenerating && (
-                <ProgressCard
-                  progress={progress}
-                  onCancel={stopTracking}
-                  operationType="audiobook"
-                  currentChapter={`Preparing ${exportFormatLabel}`}
-                  statusMessage={progressStatusMessage}
-                  cancelText="Dismiss"
-                />
-              )}
-
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleStartGeneration}
-                  disabled={isGenerating || status === 'downloading' || !voice}
-                  variant="primary"
-                  size="md"
-                  className="flex-1"
-                >
-                  {canDownload ? 'Regenerate' : 'Generate'}
-                </Button>
-                <Button
-                  onClick={handleDownload}
-                  disabled={!canDownload}
-                  variant="secondary"
-                  size="md"
-                  className="flex-1 gap-2"
-                >
-                  <DownloadIcon className="h-4 w-4" />
-                  <span>{status === 'downloading' ? 'Downloading...' : 'Download'}</span>
-                </Button>
-              </div>
+          <Section
+            title="Export"
+            subtitle="Generate audio, then download."
+            variant="flat"
+            action={
+              <Badge tone={canDownload ? 'accent' : isGenerating ? 'foreground' : 'muted'}>
+                {canDownload ? 'Ready' : isGenerating ? 'Generating' : 'Idle'}
+              </Badge>
+            }
+          >
+            <div className="flex items-center justify-between text-xs text-faint">
+              <span>Segments</span>
+              <span className="font-semibold text-foreground tabular-nums">
+                {plannedSegments > 0 ? `${completedSegments}/${plannedSegments}` : '—'}
+              </span>
             </div>
-          </div>
+
+            {isGenerating && (
+              <ProgressCard
+                progress={progress}
+                onCancel={stopTracking}
+                operationType="audiobook"
+                currentChapter={`Preparing ${exportFormatLabel}`}
+                statusMessage={progressStatusMessage}
+                cancelText="Dismiss"
+              />
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                onClick={handleStartGeneration}
+                disabled={isGenerating || status === 'downloading' || !voice}
+                variant="primary"
+                size="md"
+                className="flex-1"
+              >
+                {canDownload ? 'Regenerate' : 'Generate'}
+              </Button>
+              <Button
+                onClick={handleDownload}
+                disabled={!canDownload}
+                variant="secondary"
+                size="md"
+                className="flex-1 gap-2"
+              >
+                <DownloadIcon className="h-4 w-4" />
+                <span>{status === 'downloading' ? 'Downloading...' : 'Download'}</span>
+              </Button>
+            </div>
+          </Section>
         </div>
       </ReaderSidebarShell>
 

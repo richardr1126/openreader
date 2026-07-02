@@ -14,7 +14,7 @@ import {
 } from '@/types/config';
 import {
   IconButton,
-  RangeInput,
+  RangeField,
   Section,
   ToggleRow,
   CheckItem,
@@ -81,48 +81,6 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'ar', label: 'Arabic' },
   { value: 'th', label: 'Thai' },
 ];
-
-type RangeSettingProps = {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  description: string;
-  valueWidth?: string;
-  formatter?: (value: number) => string;
-  onChange: (value: number) => void;
-};
-
-function RangeSetting({
-  label,
-  value,
-  min,
-  max,
-  step,
-  description,
-  valueWidth = 'w-10',
-  formatter = (next) => String(next),
-  onChange,
-}: RangeSettingProps) {
-  return (
-    <div className="space-y-1.5">
-      <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label>
-      <div className="flex items-center gap-3">
-        <RangeInput
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="flex-1"
-        />
-        <span className={`${valueWidth} text-xs font-semibold text-right text-foreground`}>{formatter(value)}</span>
-      </div>
-      <p className="text-xs text-muted">{description}</p>
-    </div>
-  );
-}
 
 export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
   isOpen: boolean,
@@ -359,8 +317,8 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           )}
 
 
-          <div className="space-y-3 pt-1">
-            <RangeSetting
+          <div className="pt-1">
+            <RangeField
               label="TTS segment max block length"
               value={localMaxBlockLength}
               min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN}
@@ -368,7 +326,6 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
               step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
               description="Max characters per TTS segment block."
               valueWidth="w-14"
-              formatter={(value) => String(value)}
               onChange={(value) => {
                 const next = clampTtsSegmentMaxBlockLength(value);
                 setLocalMaxBlockLength(next);
