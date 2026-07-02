@@ -99,7 +99,7 @@ Notes:
 - App and worker must share the same object storage.
 - Embedded `weed mini` is not supported for external worker mode.
 - Protect `COMPUTE_WORKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`.
-- The public `/v1/tts-playback/:sessionId/audio` route is intentionally browser-reachable, but it requires a signed playback token. Other worker routes remain protected by `COMPUTE_WORKER_TOKEN`.
+- The public `/v1/tts-playback/sessions/:sessionId/audio` route is intentionally browser-reachable, but it requires a signed playback token. Other worker routes remain protected by `COMPUTE_WORKER_TOKEN`.
 - The worker connects to NATS lazily and disconnects after 120 seconds of full idle time. That allows platforms like Railway to sleep the service, but the first request after a cold start will be slower.
 
 ## Health endpoints

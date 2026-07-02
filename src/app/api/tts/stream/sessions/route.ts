@@ -43,7 +43,7 @@ function buildWorkerAudioUrl(input: {
     exp: input.expiresAt,
   }, getPlaybackTokenSecret());
   const url = new URL(
-    `/v1/tts-playback/${encodeURIComponent(input.sessionId)}/audio`,
+    `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/audio`,
     getComputeWorkerPublicBaseUrl(),
   );
   url.searchParams.set('token', token);

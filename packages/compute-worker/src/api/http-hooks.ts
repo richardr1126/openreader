@@ -12,7 +12,7 @@ function isHealthPath(path: string): boolean {
 }
 
 function isPublicPlaybackPath(path: string): boolean {
-  return /^\/v1\/tts-playback\/[^/]+\/audio$/.test(path);
+  return /^\/v1\/tts-playback\/sessions\/[^/]+\/audio$/.test(path);
 }
 
 function isAuthed(request: FastifyRequest, expectedToken: string): boolean {

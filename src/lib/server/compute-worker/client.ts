@@ -7,6 +7,8 @@ import type {
   TtsPlaybackSessionState,
   TtsPlaybackCompletedSegment,
   TtsPlaybackResetResult,
+  TtsPlaybackSessionResolution,
+  TtsPlaybackSessionResolveRequest,
   ComputeOperation,
 } from './protocol';
 
@@ -79,7 +81,7 @@ export class ComputeWorkerClient {
   }
 
   createPdfLayoutOperation(input: PdfLayoutRequest): Promise<ComputeOperation<PdfLayoutResult>> {
-    return this.requestJson('POST', '/v1/pdf-layout/operations', input);
+    return this.requestJson('POST', '/v1/pdf-layout/jobs', input);
   }
 
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
@@ -91,16 +93,20 @@ export class ComputeWorkerClient {
   }
 
   createTtsPlaybackOperation(input: TtsPlaybackRequest): Promise<ComputeOperation> {
-    return this.requestJson('POST', '/v1/tts-playback/operations', input);
+    return this.requestJson('POST', '/v1/tts-playback/sessions/jobs', input);
   }
 
   createTtsPlaybackPlanOperation(input: TtsPlaybackPlanRequest): Promise<ComputeOperation> {
-    return this.requestJson('POST', '/v1/tts-playback-plans/operations', input);
+    return this.requestJson('POST', '/v1/tts-playback/plans/jobs', input);
+  }
+
+  resolveTtsPlaybackSession(input: TtsPlaybackSessionResolveRequest): Promise<TtsPlaybackSessionResolution> {
+    return this.requestJson('POST', '/v1/tts-playback/sessions/resolve', input);
   }
 
   async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {
     try {
-      return await this.requestJson('GET', `/v1/tts-playback/${encodeURIComponent(sessionId)}/session`);
+      return await this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}`);
     } catch (error) {
       if (error instanceof WorkerHttpError && error.status === 404) return null;
       throw error;
@@ -116,7 +122,7 @@ export class ComputeWorkerClient {
     if (input.minOrdinal !== undefined) search.set('minOrdinal', String(input.minOrdinal));
     if (input.limit !== undefined) search.set('limit', String(input.limit));
     const suffix = search.size > 0 ? `?${search.toString()}` : '';
-    return this.requestJson('GET', `/v1/tts-playback/${encodeURIComponent(input.sessionId)}/segments${suffix}`);
+    return this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/segments${suffix}`);
   }
 
   updateTtsPlaybackCursor(input: {
@@ -124,7 +130,7 @@ export class ComputeWorkerClient {
     ordinal: number;
     expiresAt?: number;
   }): Promise<{ sessionId: string; cursorOrdinal: number; expiresAt: number }> {
-    return this.requestJson('POST', `/v1/tts-playback/${encodeURIComponent(input.sessionId)}/cursor`, {
+    return this.requestJson('PUT', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/cursor`, {
       ordinal: input.ordinal,
       ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
     });
@@ -136,7 +142,7 @@ export class ComputeWorkerClient {
     documentVersion?: number;
     settingsHash?: string;
   }): Promise<TtsPlaybackResetResult> {
-    return this.requestJson('POST', '/v1/tts-playback/reset', input);
+    return this.requestJson('POST', '/v1/tts-playback/cache/reset', input);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {
@@ -167,15 +173,15 @@ export class ComputeWorkerClient {
     });
   }
 
-  private async requestJson<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: 'application/json',
-        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+        ...(method === 'POST' || method === 'PUT' ? { 'Content-Type': 'application/json' } : {}),
       },
-      ...(method === 'POST' ? { body: JSON.stringify(body ?? {}) } : {}),
+      ...(method === 'POST' || method === 'PUT' ? { body: JSON.stringify(body ?? {}) } : {}),
       cache: 'no-store',
     });
     if (!response.ok) {

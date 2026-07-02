@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { Readable } from 'node:stream';
 import { verifyTtsPlaybackToken } from '@openreader/tts/playback-token';
+import { buildTtsPlaybackCanonicalSessionId } from '@openreader/tts/playback-scope';
 import { encodeSseFrame } from '../operations';
 import type {
   PdfLayoutJobResult,
@@ -51,6 +52,8 @@ import {
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackOperationCreateSchema,
   ttsPlaybackResetSchema,
+  ttsPlaybackSessionResolutionSchema,
+  ttsPlaybackSessionResolveSchema,
 } from './schemas';
 
 const OP_EVENTS_KEEPALIVE_MS = 15_000;
@@ -606,7 +609,47 @@ export function registerComputeWorkerRoutes(input: {
     },
   }, async () => ({ ok: true, natsConnected: getNatsConnected() }));
 
-  app.get('/v1/tts-playback/:sessionId/session', {
+  app.post('/v1/tts-playback/sessions/resolve', {
+    schema: {
+      body: jsonSchema(ttsPlaybackSessionResolveSchema),
+      response: {
+        200: jsonSchema(ttsPlaybackSessionResolutionSchema),
+        400: errorResponseSchema,
+        503: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackSessionResolveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    if (!playbackStorage) {
+      reply.code(503);
+      return { error: 'TTS playback storage is unavailable' };
+    }
+
+    const sessionId = buildTtsPlaybackCanonicalSessionId(parsed.data);
+    const session = await readPlaybackSession(sessionId);
+    const operation = session?.workerOpId
+      ? await getOpState(session.workerOpId).catch((error) => {
+        app.log.warn({ sessionId, opId: session.workerOpId, error: toErrorMessage(error) }, 'tts.playback.resolve_state_read_failed');
+        return null;
+      })
+      : null;
+    const progress = operation?.kind === 'tts_playback' && operation.progress && 'completedCount' in operation.progress
+      ? operation.progress
+      : null;
+
+    return {
+      sessionId,
+      session,
+      operation: operation ? toComputeOperation(operation) : null,
+      progress,
+    };
+  });
+
+  app.get('/v1/tts-playback/sessions/:sessionId', {
     schema: {
       params: {
         type: 'object',
@@ -630,7 +673,7 @@ export function registerComputeWorkerRoutes(input: {
     return session;
   });
 
-  app.get('/v1/tts-playback/:sessionId/segments', {
+  app.get('/v1/tts-playback/sessions/:sessionId/segments', {
     schema: {
       params: {
         type: 'object',
@@ -670,7 +713,7 @@ export function registerComputeWorkerRoutes(input: {
     };
   });
 
-  app.post('/v1/tts-playback/:sessionId/cursor', {
+  app.put('/v1/tts-playback/sessions/:sessionId/cursor', {
     schema: {
       params: {
         type: 'object',
@@ -718,7 +761,7 @@ export function registerComputeWorkerRoutes(input: {
     };
   });
 
-  app.post('/v1/tts-playback/reset', {
+  app.post('/v1/tts-playback/cache/reset', {
     schema: {
       body: jsonSchema(ttsPlaybackResetSchema),
       response: {
@@ -785,7 +828,7 @@ export function registerComputeWorkerRoutes(input: {
     };
   });
 
-  app.get('/v1/tts-playback/:sessionId/audio', {
+  app.get('/v1/tts-playback/sessions/:sessionId/audio', {
     schema: {
       security: [],
       params: {
@@ -1182,7 +1225,7 @@ export function registerComputeWorkerRoutes(input: {
     return Readable.from(streamRange());
   });
 
-  app.post('/v1/pdf-layout/operations', {
+  app.post('/v1/pdf-layout/jobs', {
     schema: {
       body: jsonSchema(pdfOperationCreateSchema),
       response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
@@ -1209,7 +1252,7 @@ export function registerComputeWorkerRoutes(input: {
     return toComputeOperation(op);
   });
 
-  app.post('/v1/tts-playback/operations', {
+  app.post('/v1/tts-playback/sessions/jobs', {
     schema: {
       body: jsonSchema(ttsPlaybackOperationCreateSchema),
       response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
@@ -1252,7 +1295,7 @@ export function registerComputeWorkerRoutes(input: {
     return toComputeOperation(op);
   });
 
-  app.post('/v1/tts-playback-plans/operations', {
+  app.post('/v1/tts-playback/plans/jobs', {
     schema: {
       body: jsonSchema(ttsPlaybackPlanOperationCreateSchema),
       response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },

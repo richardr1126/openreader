@@ -33,13 +33,13 @@ describe('compute worker API routes', () => {
   test('allows public playback audio route through bearer auth but requires a signed playback token', async () => {
     const missing = await runtime.app.inject({
       method: 'GET',
-      url: '/v1/tts-playback/session-1/audio',
+      url: '/v1/tts-playback/sessions/session-1/audio',
     });
     expect(missing.statusCode).toBe(400);
 
     const invalid = await runtime.app.inject({
       method: 'GET',
-      url: '/v1/tts-playback/session-1/audio?token=not-a-token',
+      url: '/v1/tts-playback/sessions/session-1/audio?token=not-a-token',
     });
     expect(invalid.statusCode).toBe(403);
   });
@@ -47,7 +47,7 @@ describe('compute worker API routes', () => {
   test('validates operation creation body and returns 400 for invalid payload', async () => {
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: {
         documentId: '',
@@ -64,7 +64,7 @@ describe('compute worker API routes', () => {
     const documentId = 'c'.repeat(64);
     const create = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: {
         documentId,
@@ -101,7 +101,7 @@ describe('compute worker API routes', () => {
     };
     const create = (body: typeof payload & { replaceToken?: string }) => runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: body,
     });
@@ -119,7 +119,7 @@ describe('compute worker API routes', () => {
     const documentId = 'b'.repeat(64);
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/tts-playback/operations',
+      url: '/v1/tts-playback/sessions/jobs',
       headers: AUTH,
       payload: {
         sessionId: 'playback-session-1',
@@ -167,7 +167,7 @@ describe('compute worker API routes', () => {
   test('rejects TTS playback operations without a worker-plan ordinal', async () => {
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/tts-playback/operations',
+      url: '/v1/tts-playback/sessions/jobs',
       headers: AUTH,
       payload: {
         sessionId: 'playback-session-missing-ordinal',
@@ -201,7 +201,7 @@ describe('compute worker API routes', () => {
     const documentId = 'f'.repeat(64);
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/tts-playback-plans/operations',
+      url: '/v1/tts-playback/plans/jobs',
       headers: AUTH,
       payload: {
         userId: 'user-1',
@@ -246,7 +246,7 @@ describe('compute worker API routes', () => {
     const documentId = 'a'.repeat(64);
     const create = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: {
         documentId,

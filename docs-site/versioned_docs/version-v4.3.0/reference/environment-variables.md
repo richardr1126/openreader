@@ -334,7 +334,7 @@ Browser-reachable compute worker URL for worker-owned TTS playback audio.
 
 - Default: `COMPUTE_WORKER_URL`
 - Set this when `COMPUTE_WORKER_URL` points at an internal hostname that browsers cannot reach.
-- The browser loads signed progressive MP3 playback directly from `${COMPUTE_WORKER_PUBLIC_URL}/v1/tts-playback/:sessionId/audio`.
+- The browser loads signed progressive MP3 playback directly from `${COMPUTE_WORKER_PUBLIC_URL}/v1/tts-playback/sessions/:sessionId/audio`.
 - Do not include `COMPUTE_WORKER_TOKEN` in this URL. Browser playback uses `TTS_PLAYBACK_TOKEN_SECRET`-signed short-lived URLs instead.
 
 ### COMPUTE_WORKER_TOKEN

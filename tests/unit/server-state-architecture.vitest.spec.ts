@@ -136,6 +136,29 @@ describe('server-state architecture', () => {
     expect(source('src/contexts/OnboardingFlowContext.tsx')).toContain('useClaimData(');
   });
 
+  test('keeps the compute worker API surface on the hard-cut route map', () => {
+    const routes = Array.from(source('packages/compute-worker/src/api/routes.ts').matchAll(/app\.(get|post|put|delete)\('([^']+)'/g))
+      .map((match) => `${match[1].toUpperCase()} ${match[2]}`)
+      .sort();
+
+    expect(routes).toEqual([
+      'GET /health/live',
+      'GET /health/ready',
+      'GET /v1/operations/:opId',
+      'GET /v1/operations/:opId/events',
+      'GET /v1/tts-playback/sessions/:sessionId',
+      'GET /v1/tts-playback/sessions/:sessionId/audio',
+      'GET /v1/tts-playback/sessions/:sessionId/segments',
+      'POST /v1/pdf-layout/jobs',
+      'POST /v1/pdf-layout/resolve',
+      'POST /v1/tts-playback/cache/reset',
+      'POST /v1/tts-playback/plans/jobs',
+      'POST /v1/tts-playback/sessions/jobs',
+      'POST /v1/tts-playback/sessions/resolve',
+      'PUT /v1/tts-playback/sessions/:sessionId/cursor',
+    ].sort());
+  });
+
   test('keeps legacy TTS manifest queries removed while centralizing other server state', () => {
     // The segments sidebar (the last legacy-manifest consumer) was removed; its
     // only surviving capability — clearing cached audio — moved to reader settings.
@@ -233,8 +256,11 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
-    expect(workerRoutes).toContain("/v1/tts-playback/:sessionId/audio");
-    expect(workerRoutes).toContain("/v1/tts-playback-plans/operations");
+    expect(workerRoutes).toContain("/v1/tts-playback/sessions/:sessionId/audio");
+    expect(workerRoutes).toContain("/v1/tts-playback/plans/jobs");
+    expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");
+    expect(workerRoutes).not.toContain("/v1/tts-playback/:sessionId/audio");
+    expect(workerRoutes).not.toContain("/v1/tts-playback-plans/operations");
     expect(workerRoutes).toContain('Readable.from(streamRange())');
     // The audio stream is seekable (range-capable + finite Content-Length) so the
     // browser honors post-generation playbackRate, including on Safari.

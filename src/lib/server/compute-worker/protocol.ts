@@ -23,14 +23,18 @@ export type ComputeOperationEvent<Result = unknown> = {
 };
 
 export type PdfLayoutRequest =
-  paths['/v1/pdf-layout/operations']['post']['requestBody']['content']['application/json'];
+  paths['/v1/pdf-layout/jobs']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackRequest =
-  paths['/v1/tts-playback/operations']['post']['requestBody']['content']['application/json']
+  paths['/v1/tts-playback/sessions/jobs']['post']['requestBody']['content']['application/json']
   & { generationExtent?: 'window' | 'document' };
 export type TtsPlaybackPlanRequest =
   Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent'>;
 export type PdfLayoutResolveRequest =
   paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackSessionResolveRequest =
+  paths['/v1/tts-playback/sessions/resolve']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackSessionResolution =
+  paths['/v1/tts-playback/sessions/resolve']['post']['responses'][200]['content']['application/json'];
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;

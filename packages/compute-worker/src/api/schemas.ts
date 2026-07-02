@@ -100,6 +100,16 @@ export const ttsPlaybackResetSchema = z.object({
   settingsHash: z.string().trim().min(1).max(256).optional(),
 });
 
+export const ttsPlaybackSessionResolveSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative(),
+  readerType: z.enum(['pdf', 'epub', 'html']),
+  settingsHash: z.string().trim().min(1).max(256),
+  planObjectKey: z.string().trim().min(1).max(2048),
+  purpose: z.enum(['live', 'export-document']),
+}).strict();
+
 export const pdfResolveSchema = z.object({
   documentId: documentIdSchema,
   namespace: namespaceSchema,
@@ -182,6 +192,13 @@ export const computeOperationEventSchema = z.object({
 export const pdfLayoutResolutionSchema = z.object({
   artifact: artifactReferenceSchema.nullable(),
   operation: computeOperationSchema.nullable(),
+});
+
+export const ttsPlaybackSessionResolutionSchema = z.object({
+  sessionId: z.string(),
+  session: z.unknown().nullable(),
+  operation: computeOperationSchema.nullable(),
+  progress: ttsPlaybackProgressSchema.nullable(),
 });
 
 export function jsonSchema(schema: z.ZodType): Record<string, unknown> {
