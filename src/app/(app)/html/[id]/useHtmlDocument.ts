@@ -6,6 +6,7 @@ import { useTTS } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { parseHtmlBlocks, type HtmlBlock } from '@/lib/client/html/blocks';
+import type { CanonicalTtsSourceUnit } from '@/lib/shared/tts-segment-plan';
 import { createHtmlAudiobookSourceAdapter } from '@/lib/client/audiobooks/adapters/html';
 import { regenerateAudiobookChapter, runAudiobookGeneration } from '@/lib/client/audiobooks/pipeline';
 import type {
@@ -51,16 +52,33 @@ function isTxtName(name: string | undefined | null): boolean {
 }
 
 /**
- * Concatenate every block's plain text into one TTS source. We treat the
- * entire HTML/TXT/MD document as a single "page" with a flat sequence of
- * segments (sentence indices), so playback advances naturally through the
- * doc without any per-block locator bookkeeping.
+ * Concatenate every block's plain text into one TTS source string. Kept for the
+ * playback-ready / change-detection key and blank-doc checks.
  */
 function buildFullDocumentText(blocks: HtmlBlock[]): string {
   return blocks
     .map((b) => b.plainText)
     .filter((t) => t && t.trim())
     .join('\n\n');
+}
+
+/**
+ * Feed one TTS source unit per top-level block (heading, paragraph, list, ...)
+ * so segment planning respects block boundaries: each block becomes its own
+ * segment(s) with an `{ readerType: 'html', location: anchorId }` locator for
+ * scoped highlighting. Previously the whole document was fed as a single
+ * concatenated string, which collapsed the `\n\n` block separators during
+ * audio-text normalization and let the block packer merge unrelated paragraphs
+ * (and headings) into one run-on segment — the cause of "skipped" paragraphs.
+ */
+function buildBlockSourceUnits(blocks: HtmlBlock[]): CanonicalTtsSourceUnit[] {
+  return blocks
+    .filter((b) => b.plainText && b.plainText.trim())
+    .map((b) => ({
+      sourceKey: b.anchorId,
+      text: b.plainText,
+      locator: { readerType: 'html' as const, location: b.anchorId },
+    }));
 }
 
 export function useHtmlDocument(): HtmlDocumentState {
@@ -81,6 +99,7 @@ export function useHtmlDocument(): HtmlDocumentState {
   );
 
   const currDocText = useMemo(() => buildFullDocumentText(blocks), [blocks]);
+  const blockSourceUnits = useMemo(() => buildBlockSourceUnits(blocks), [blocks]);
 
   // HTML reader is not an EPUB reader.
   useEffect(() => {
@@ -110,9 +129,10 @@ export function useHtmlDocument(): HtmlDocumentState {
     }
     setIsPlaybackReady(false);
     lastFedDocRef.current = key;
-    setTTSText(currDocText);
+    // Feed one source unit per block so segment planning keeps block boundaries.
+    setTTSText(currDocText, blockSourceUnits.length > 0 ? { sourceUnits: blockSourceUnits } : undefined);
     setIsPlaybackReady(true);
-  }, [currDocName, currDocText, currDocData, setTTSText]);
+  }, [currDocName, currDocText, currDocData, blockSourceUnits, blocks.length, setTTSText]);
 
   const clearCurrDoc = useCallback(() => {
     setCurrDocData(undefined);
