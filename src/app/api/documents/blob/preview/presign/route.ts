@@ -4,6 +4,7 @@ import { ensureDocumentPreview } from '@/lib/server/documents/previews';
 import { validatePreviewRequest } from '../utils';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import { isLoopbackS3Endpoint } from '@/lib/server/storage/s3';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const directUrl = await presignDocumentPreviewGet(doc.id, testNamespace).catch(() => null);
+    // Loopback S3 endpoints yield presigned URLs unreachable from a remote
+    // browser; serve through the same-origin proxy fallback instead.
+    const directUrl = isLoopbackS3Endpoint()
+      ? null
+      : await presignDocumentPreviewGet(doc.id, testNamespace).catch(() => null);
     if (!directUrl) {
       serverLogger.warn({
         event: 'documents.preview.presign.unavailable',

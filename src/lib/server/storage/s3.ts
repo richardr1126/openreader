@@ -44,6 +44,28 @@ function loopbackEndpoint(endpoint: string | undefined): string | undefined {
   }
 }
 
+/**
+ * Returns true when the configured S3 endpoint is a loopback/localhost address.
+ *
+ * Presigned direct-to-storage URLs are signed against S3_ENDPOINT and handed to
+ * the browser. When S3_ENDPOINT is a loopback address they only resolve if the
+ * browser runs on the same host as the server. The recommended embedded
+ * SeaweedFS deployment behind a reverse proxy sets `S3_ENDPOINT=http://127.0.0.1:8333`
+ * (the internal proxy client also rewrites to loopback), so those presigned URLs
+ * are unreachable from a remote browser. In that case callers should serve blobs
+ * through the same-origin `/api/.../fallback` proxy routes instead of presigning.
+ */
+export function isLoopbackS3Endpoint(): boolean {
+  const config = loadS3ConfigFromEnv();
+  if (!config?.endpoint) return false;
+  try {
+    const host = new URL(config.endpoint).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '0.0.0.0';
+  } catch {
+    return false;
+  }
+}
+
 function loadS3ConfigFromEnv(): S3Config | null {
   const bucket = process.env.S3_BUCKET?.trim();
   const region = process.env.S3_REGION?.trim();

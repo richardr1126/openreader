@@ -1,4 +1,5 @@
 import { presignTtsSegmentAudioGet } from '@/lib/server/tts/segments-blobstore';
+import { isLoopbackS3Endpoint } from '@/lib/server/storage/s3';
 
 export type TTSSegmentAudioUrls = {
   audioPresignUrl: string | null;
@@ -30,10 +31,16 @@ export async function resolveSegmentAudioUrls(
     };
   }
 
+  // A loopback S3 endpoint (the embedded-SeaweedFS-behind-a-reverse-proxy default,
+  // S3_ENDPOINT=http://127.0.0.1:8333) produces presigned URLs that a remote
+  // browser cannot reach. Serve audio through the same-origin fallback proxy in
+  // that case instead of handing out an unreachable direct URL.
   const presignResolver = options.presignResolver ?? presignTtsSegmentAudioGet;
-  const directUrl = await presignResolver(options.audioKey, {
-    expiresInSeconds: options.expiresInSeconds,
-  }).catch(() => null);
+  const directUrl = isLoopbackS3Endpoint()
+    ? null
+    : await presignResolver(options.audioKey, {
+        expiresInSeconds: options.expiresInSeconds,
+      }).catch(() => null);
 
   return {
     audioPresignUrl: directUrl ?? fallbackUrl,
