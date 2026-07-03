@@ -124,3 +124,24 @@ export function ttsPlaybackSegmentSidecarArtifactKey(input: {
   const ordinal = Math.max(0, Math.floor(input.ordinal));
   return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${ordinal}.json`;
 }
+
+export function ttsPlaybackExportArtifactKey(input: {
+  artifactId: string;
+  format: 'mp3' | 'm4b';
+  prefix: string;
+}): string {
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.artifactId)) {
+    throw new Error(`Invalid playback export artifact id: ${input.artifactId}`);
+  }
+  return `${input.prefix}/tts_playback_exports_v1/${input.artifactId}/artifact.${input.format}`;
+}
+
+export function ttsPlaybackExportMetadataArtifactKey(input: {
+  artifactId: string;
+  prefix: string;
+}): string {
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.artifactId)) {
+    throw new Error(`Invalid playback export artifact id: ${input.artifactId}`);
+  }
+  return `${input.prefix}/tts_playback_exports_v1/${input.artifactId}/metadata.json`;
+}

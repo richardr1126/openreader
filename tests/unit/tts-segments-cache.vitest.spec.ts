@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   deleteTtsSegmentPrefix: vi.fn(async () => 0),
+  s3Send: vi.fn(async (_command?: unknown): Promise<unknown> => ({ Contents: [] })),
   isComputeWorkerAvailable: vi.fn(() => false),
   resetTtsPlaybackScope: vi.fn(async () => ({
     storageUserId: 'user-1',
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     cacheEpoch: 1,
     invalidatedPlaybackSessions: 0,
     invalidatedSidecarCacheScopes: 0,
+    invalidatedJobOperations: 0,
   })),
 }));
 
@@ -20,7 +22,8 @@ vi.mock('@/lib/server/tts/segments-blobstore', () => ({
 }));
 
 vi.mock('@/lib/server/storage/s3', () => ({
-  getS3Config: () => ({ prefix: 'openreader-test' }),
+  getS3Config: () => ({ bucket: 'bucket', prefix: 'openreader-test' }),
+  getS3ProxyClient: () => ({ send: mocks.s3Send }),
 }));
 
 vi.mock('@/lib/server/logger', () => ({
@@ -44,6 +47,8 @@ describe('TTS segment cache cleanup', () => {
   beforeEach(() => {
     mocks.deleteTtsSegmentPrefix.mockReset();
     mocks.deleteTtsSegmentPrefix.mockResolvedValue(2);
+    mocks.s3Send.mockReset();
+    mocks.s3Send.mockResolvedValue({ Contents: [] });
     mocks.isComputeWorkerAvailable.mockReset();
     mocks.isComputeWorkerAvailable.mockReturnValue(false);
     mocks.resetTtsPlaybackScope.mockClear();
@@ -55,6 +60,7 @@ describe('TTS segment cache cleanup', () => {
       cacheEpoch: 1,
       invalidatedPlaybackSessions: 0,
       invalidatedSidecarCacheScopes: 0,
+      invalidatedJobOperations: 0,
     });
   });
 
@@ -90,6 +96,7 @@ describe('TTS segment cache cleanup', () => {
       cacheEpoch: 4,
       invalidatedPlaybackSessions: 2,
       invalidatedSidecarCacheScopes: 1,
+      invalidatedJobOperations: 3,
     });
 
     const result = await clearTtsSegmentCache({
@@ -104,8 +111,48 @@ describe('TTS segment cache cleanup', () => {
       documentVersion: 3,
     });
     expect(result.invalidatedPlaybackSessions).toBe(2);
+    expect(result.invalidatedJobOperations).toBe(3);
     expect(mocks.resetTtsPlaybackScope.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.deleteTtsSegmentPrefix.mock.invocationCallOrder[0],
     );
+  });
+
+  test('deletes worker export artifacts whose metadata matches the cleared scope', async () => {
+    mocks.s3Send.mockImplementation(async (rawCommand: unknown) => {
+      const command = rawCommand as { input?: Record<string, unknown>; constructor?: { name?: string } };
+      if (command.constructor?.name === 'ListObjectsV2Command') {
+        return {
+          Contents: [
+            { Key: 'openreader-test/tts_playback_exports_v1/artifact-a/metadata.json' },
+            { Key: 'openreader-test/tts_playback_exports_v1/artifact-b/metadata.json' },
+          ],
+        };
+      }
+      if (command.constructor?.name === 'GetObjectCommand') {
+        const key = command.input?.Key;
+        return {
+          Body: {
+            transformToByteArray: async () => Buffer.from(JSON.stringify({
+              storageUserId: key === 'openreader-test/tts_playback_exports_v1/artifact-a/metadata.json' ? 'user-1' : 'other-user',
+              documentId: 'doc-1',
+              documentVersion: 3,
+            })),
+          },
+        };
+      }
+      return {};
+    });
+
+    const result = await clearTtsSegmentCache({
+      userId: 'user-1',
+      documentId: 'doc-1',
+      documentVersion: 3,
+      readerType: 'pdf',
+    });
+
+    expect(mocks.deleteTtsSegmentPrefix).toHaveBeenCalledWith('openreader-test/tts_playback_exports_v1/artifact-a/');
+    expect(mocks.deleteTtsSegmentPrefix).not.toHaveBeenCalledWith('openreader-test/tts_playback_exports_v1/artifact-b/');
+    expect(result.deletedExportObjects).toBe(2);
+    expect(result.deletedPlaybackObjects).toBe(8);
   });
 });

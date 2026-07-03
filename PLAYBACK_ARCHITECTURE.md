@@ -105,17 +105,18 @@ patterns require it:
   JSON byte proxying is compatibility/small-artifact behavior, not the primary
   data plane.
 - TTS live playback audio should use the signed Railway worker URL directly.
-  Same-origin Next audio routes are acceptable only for authenticated downloads
-  and legacy compatibility while the worker lacks a first-class download/export
-  artifact route.
+  Same-origin Next audio routes are narrow compatibility/control-plane bridges;
+  normal audiobook downloads use worker-owned export artifacts.
 - Scheduled tasks may remain in Next while they are bounded maintenance work
   below Vercel's limit. They must not grow into parse/TTS/render/transcode/export
   jobs.
 
 Current known ownership debt:
 
-- `/api/tts/stream/[sessionId]/audio` still does same-origin download proxying,
-  speed transcodes, and M4B packaging in Next.
+- `/api/tts/stream/[sessionId]/audio` still exists as a narrow same-origin MP3
+  compatibility proxy for authenticated playback/download cases, but it does
+  not own audiobook speed transcodes or M4B packaging. Export variants are
+  worker-owned artifacts.
 - `/api/documents/[id]/parsed` still can return completed parsed PDF JSON bytes
   through Next instead of making signed object delivery the primary artifact
   path.
@@ -340,12 +341,12 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 |---|---|---|
 | 1-6 Playback state/model cleanup | Done | Cursor/session split, sidecar-only readiness, ordinal-only playback start, client controller/model extraction, cache reset epochs, and schema/key consolidation are complete. |
 | 7 Playback-owned audio prefix | Done | Generated audio now lives under `tts_playback_segments_audio_v1/`; playback no longer writes `tts_segments_v2/`. |
-| 8 Legacy audiobook retirement | Done | Legacy audiobook routes/hooks/blobstore/tables/runtime reads were removed. Export now reuses worker playback generation, with current download/transcode debt tracked in Step 13. |
+| 8 Legacy audiobook retirement | Done | Legacy audiobook routes/hooks/blobstore/tables/runtime reads were removed. Export now reuses worker playback generation; Step 13 moved durable export artifacts to the worker. |
 | 9 v5 decommission | Done | Legacy TTS/audiobook tables and object prefixes are dropped/purged through migration/bootstrap tooling. |
-| 10 Audiobook export hardening | Done | Export speed/format, authoritative `completedCount` progress, and same-origin download bridge are implemented. The bridge is temporary until Step 13 moves artifacts to worker ownership. |
+| 10 Audiobook export hardening | Done | Export speed/format and authoritative `completedCount` progress were implemented. The temporary same-origin download bridge was superseded by Step 13 worker-owned artifacts. |
 | 11 Idempotent playback jobs | Done | Live and export sessions are deterministic and separate; both share per-ordinal segment cache without sharing cursor/session state. |
 | 12 Compute worker API hard cut | Done | Worker routes use the finalized resource/job shape with no old aliases. |
-| 13 Audiobook export reconnect + worker-owned artifacts | Planned | Merge reconnect with final artifact ownership; move speed transcode, M4B packaging, chapter metadata embedding, and large download assembly out of Next. |
+| 13 Audiobook export reconnect + worker-owned artifacts | Done | Export resolve now reconnects deterministic generation/artifact operations; speed transcode, M4B packaging, chapter metadata, artifact storage, and download serving are worker-owned. |
 | 14 Worker-owned document preview jobs | Planned | Move PDF first-page rendering and EPUB cover/preview extraction out of Next request handlers. |
 | 15 Worker-owned DOCX conversion | Planned | Move LibreOffice DOCX->PDF conversion to Railway worker jobs; keep non-DOCX finalize short in Next. |
 | 16 Worker-owned account export artifacts | Planned | Next remains the SQL/control plane, but large ZIP assembly and document-blob streaming move to worker-owned durable artifacts. |
@@ -414,9 +415,9 @@ were not copied; first playback after upgrade re-synthesizes into the new prefix
 The old audiobook implementation is retired. Export now creates a deterministic
 document-extent playback session using `generationExtent: 'document'` and tracks
 progress through the existing playback SSE snapshots (`completedCount` /
-`plannedCount`). MP3 and M4B remain supported, but current M4B/non-`1x` MP3
-output still uses the temporary same-origin Next audio proxy and ffmpeg bridge.
-Step 13 replaces that bridge with worker-owned export artifacts.
+`plannedCount`). This was the interim bridge before Step 13. MP3 and M4B are now
+served as worker-owned export artifacts; non-`1x` MP3 and M4B packaging no
+longer run inside the Next audio response.
 
 Removed runtime surface: `src/lib/client/audiobooks/`,
 `src/lib/server/audiobooks/`, `src/app/api/audiobook/*`,
@@ -444,10 +445,9 @@ Verified: `pnpm migrate`, `pnpm dev` startup smoke, and full unit suite.
 
 The export modal exposes audiobook speed and output format. Progress is driven
 by authoritative worker `completedCount` snapshots instead of seek-layout
-polling. The current same-origin audio route authenticates the session, mints a
-worker playback token, proxies MP3 range/audio headers, runs ffmpeg tempo/M4B
-transcodes when needed, derives chapters from worker plan/grid, and sets
-`Content-Disposition`. This route is now documented as temporary ownership debt.
+polling. This originally used a same-origin audio bridge for download variants;
+Step 13 superseded that bridge with durable worker-owned export artifacts and
+download URLs.
 
 Verified: `pnpm exec tsc --noEmit`, focused audiobook export/UI route tests, and
 focused playback/worker route/storage/audio-layout tests.
@@ -524,10 +524,9 @@ tsc --noEmit`, and `pnpm test:unit`.
 
 ### 13. Audiobook Export Reconnect and Worker-Owned Artifacts
 
-Status: planned after Step 12. These should be implemented together. Reconnect
-without worker-owned export artifacts would harden the current same-origin
-download proxy just before removing it; worker-owned artifacts without reconnect
-would leave refresh/reopen behavior incomplete.
+Status: implemented. Reconnect and worker-owned export artifacts were implemented
+together, so refresh/reopen resolves deterministic generation and artifact
+preparation state instead of hardening the old same-origin ffmpeg bridge.
 
 Hard cut only; do not add polling fallbacks, legacy audiobook status rows,
 random export sessions, client-only progress reconstruction, `/api/audiobook/*`,
@@ -563,61 +562,67 @@ Target ownership:
 Final flow:
 
 1. Next resolves current export state for the current document/settings/plan
-   before starting new work.
+   before starting new work. The modal calls the read-only resolver on open so a
+   browser refresh can rediscover a running or completed export without a
+   second generate click.
 2. The playback generation phase uses the deterministic `export-document`
    session id derived from canonical playback scope.
-3. If generation is `queued` or `running`, the modal subscribes to the existing
-   playback operation SSE and shows completed/planned sidecar progress.
+3. If generation is `queued` or `running`, the modal subscribes to the
+   generation operation SSE by operation id through the export events proxy and
+   shows completed/planned sidecar progress. It does not depend on a transient
+   Next-side session lookup after refresh.
 4. If generation is complete but the requested `format + speed` artifact is not
    ready, Next creates or resolves a separate deterministic worker
    artifact-preparation job for that file variant.
 5. If artifact preparation is `queued` or `running`, the modal subscribes to
-   that operation SSE.
+   that artifact operation SSE by operation id.
 6. If the artifact is ready, Next returns or redirects to a signed worker or
-   object-storage download URL. This is not a queued job.
+   object-storage download URL. This is not a queued job, and the modal marks
+   segment progress as fully complete from the canonical plan count.
 7. If either phase fails, the modal shows failed/retry state for the same
    deterministic generation or artifact-preparation job.
 
-Implementation plan:
+Implemented:
 
-1. Add a Next export resolve endpoint, analogous to
+1. Added a Next export resolve endpoint, analogous to
    `GET /api/documents/:id/parsed`, that returns one snapshot for both phases:
    generation session/op state plus artifact-preparation state for the
    requested format and speed.
-2. Use the Step 12 generic playback session resolve route for generation state.
+2. Uses the Step 12 generic playback session resolve route for generation state.
    Require a loaded canonical playback plan and `planObjectKey`; do not fall
    back to random sessions or client-reconstructed progress.
-3. Add a new worker operation kind for export-artifact preparation under the
+3. Added a new worker operation kind for export-artifact preparation under the
    finalized playback namespace. Store the op index/state in JetStream KV and
    keep the generic `/v1/operations/:opId/events` SSE primitive.
-4. Derive a deterministic export artifact id from canonical playback scope plus
+4. Derives a deterministic export artifact id from canonical playback scope plus
    `format` and export `speed`.
-5. Move MP3 `atempo`, M4B packaging, chapter ffmetadata generation, temp-file
+5. Moved MP3 `atempo`, M4B packaging, chapter ffmetadata generation, temp-file
    finalization, and object upload into the Railway worker.
-6. Store artifact metadata with content type, byte length when known,
+6. Stores artifact metadata with content type, byte length,
    disposition filename, source plan key, source session id, and generation
    status.
-7. Add a client query/hook for the modal that calls the resolve endpoint on open
-   and when document/settings/plan/format/speed changes.
-8. Change the Next download path to require a ready artifact and return or
-   redirect to a signed worker or object-storage URL. If the artifact is not
-   ready, return the same pending snapshot as the resolve endpoint instead of
-   doing background work inside the download response. The route may keep a
-   legacy redirect/compatibility shim only while callers migrate.
-9. Remove `ffmpeg` execution from
+7. Added modal/client resolve handling for the two-phase generation/artifact
+   workflow, including read-only hydration on open, generation operation SSE
+   reconnect, artifact operation SSE reconnect, and completed-artifact progress
+   hydration.
+8. Changed the ready download path to use a signed worker artifact URL. The old
+   same-origin audio route rejects speed/M4B export requests instead of doing
+   background work inside the download response.
+9. Removed `ffmpeg` execution from
    `/api/tts/stream/[sessionId]/audio` once worker artifacts are live.
-10. Add regression coverage:
-   - page refresh/modal reopen resolves active generation and active artifact
-     preparation without clicking Generate;
-   - active export reconnect uses the existing `workerOpId`;
-   - succeeded generation resolves from sidecars/cache;
-   - live playback session is never used for export reconnect;
-   - non-`1x` MP3 export creates/reuses a worker-prepared artifact and does not
-     transcode in Next;
-   - M4B export returns a durable artifact with chapters;
-   - live playback stream stays independent of export artifact generation;
-   - missing/stale plan keys fail hard instead of generating against unknown
-     scope.
+10. Updated regression coverage to pin the new worker route surface, export
+    operation ownership, artifact SSE path, and the absence of Next-side ffmpeg
+    packaging/transcoding.
+11. Updated cache clearing so it bumps the worker playback cache epoch, cancels
+    matching sessions, invalidates matching playback/plan/export operation
+    records, deletes segment audio/sidecars/plans, and deletes matching durable
+    export artifacts. Export operation invalidation is best-effort when an
+    in-flight operation has no artifact metadata yet; once metadata exists,
+    storage-user/document/version/settings matching gates artifact deletion.
+
+Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
+server-state architecture tests, cache-clear tests, worker route tests, and
+worker-loop tests.
 
 ### 14. Worker-Owned Document Preview Jobs
 

@@ -11,11 +11,16 @@ import type {
   WorkerOperationState,
   TtsPlaybackJobResult,
   TtsPlaybackPlanJobResult,
+  TtsPlaybackExportArtifactMetadata,
+  TtsPlaybackExportArtifactResult,
 } from '../operations/contracts';
 import { hashOpKey } from '../infrastructure/nats-adapters';
 import type { StreamedOperationState } from '../operations/recovery';
 import type { ReconciliationStateStore } from '../operations/reconciliation';
-import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
+import {
+  parsedPdfArtifactKey,
+  ttsPlaybackExportMetadataArtifactKey,
+} from '../storage/artifact-addressing';
 import {
   cumulativeCbrFrameBytes,
   getCbrSilenceFrameLengths,
@@ -30,6 +35,7 @@ import {
 } from './playback-audio-layout';
 import {
   buildPdfOperationKey,
+  buildTtsPlaybackExportOperationKey,
   buildTtsPlaybackOperationKey,
   buildTtsPlaybackPlanOperationKey,
 } from '../operations/keys';
@@ -54,6 +60,9 @@ import {
   ttsPlaybackResetSchema,
   ttsPlaybackSessionResolutionSchema,
   ttsPlaybackSessionResolveSchema,
+  ttsPlaybackExportArtifactCreateSchema,
+  ttsPlaybackExportArtifactResolveSchema,
+  ttsPlaybackExportArtifactResolutionSchema,
 } from './schemas';
 
 const OP_EVENTS_KEEPALIVE_MS = 15_000;
@@ -65,7 +74,7 @@ interface OperationEventStreamLike {
   subscribe(input: {
     opId: string;
     sinceEventId?: number;
-    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>) => void | Promise<void>;
+    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult>) => void | Promise<void>;
     onError?: (error: unknown) => void;
   }): Promise<() => void>;
 }
@@ -141,6 +150,42 @@ function isTerminalStatus(status: import('../operations/contracts').WorkerJobSta
   return status === 'succeeded' || status === 'failed';
 }
 
+function operationMatchesTtsResetScope(
+  state: StreamedOperationState,
+  scope: {
+    documentId: string;
+    documentVersion?: number;
+    settingsHash?: string;
+  },
+): boolean {
+  const parts = state.opKey.split('|');
+  if (state.kind === 'tts_playback') {
+    const documentId = parts[2];
+    const documentVersion = Number(parts[3]);
+    const settingsHash = parts[4];
+    return documentId === scope.documentId
+      && (scope.documentVersion === undefined || documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
+      && (scope.settingsHash === undefined || settingsHash === scope.settingsHash);
+  }
+  if (state.kind === 'tts_playback_plan') {
+    const documentId = parts[2];
+    const documentVersion = Number(parts[3]);
+    const settingsHash = parts[5];
+    return documentId === scope.documentId
+      && (scope.documentVersion === undefined || documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
+      && (scope.settingsHash === undefined || settingsHash === scope.settingsHash);
+  }
+  if (state.kind === 'tts_playback_export') {
+    const documentId = parts[2];
+    const documentVersion = Number(parts[3]);
+    const settingsHash = parts[4];
+    return documentId === scope.documentId
+      && (scope.documentVersion === undefined || documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
+      && (scope.settingsHash === undefined || settingsHash === scope.settingsHash);
+  }
+  return false;
+}
+
 export function registerComputeWorkerRoutes(input: {
   app: FastifyInstance;
   deps: ComputeWorkerRouteDeps;
@@ -202,6 +247,77 @@ export function registerComputeWorkerRoutes(input: {
 
   const readPlaybackSession = async (sessionId: string): Promise<PlaybackSessionRow | null> => {
     return await playbackStorage?.sessions.getSession(sessionId) ?? null;
+  };
+
+  const readExportArtifactMetadata = async (artifactId: string): Promise<TtsPlaybackExportArtifactMetadata | null> => {
+    const key = ttsPlaybackExportMetadataArtifactKey({ artifactId, prefix: s3Prefix });
+    try {
+      const bytes = await storage.readObject(key);
+      const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata;
+      if (parsed.schemaVersion !== 1 || parsed.artifactId !== artifactId || parsed.status !== 'ready') return null;
+      if (!await storage.objectExists(parsed.objectKey).catch(() => false)) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const invalidateTtsJobOperationsForScope = async (scope: {
+    storageUserId: string;
+    documentId: string;
+    documentVersion?: number;
+    settingsHash?: string;
+  }, now: number): Promise<number> => {
+    if (
+      typeof deps.operationStateStore.listOpStates !== 'function'
+      || typeof deps.operationStateStore.getOpStateRecord !== 'function'
+      || typeof deps.orchestrator.markFailedIfUnchanged !== 'function'
+    ) {
+      return 0;
+    }
+    const states = await deps.operationStateStore.listOpStates();
+    let invalidated = 0;
+    for (const state of states) {
+      if (state.kind === 'tts_playback') {
+        const sessionId = state.opKey.split('|')[6];
+        if (!sessionId) continue;
+        const session = await readPlaybackSession(sessionId).catch(() => null);
+        if (!session || session.storageUserId !== scope.storageUserId) continue;
+      } else if (state.kind === 'tts_playback_export') {
+        const artifactId = state.opKey.split('|')[5];
+        const metadata = artifactId ? await readExportArtifactMetadata(artifactId) : null;
+        if (metadata && metadata.storageUserId !== scope.storageUserId) continue;
+        if (!operationMatchesTtsResetScope(state, scope)) continue;
+      } else if (!operationMatchesTtsResetScope(state, scope)) {
+        continue;
+      }
+      const record = await deps.operationStateStore.getOpStateRecord(state.opId);
+      if (!record) continue;
+      if (record.state.kind === 'tts_playback') {
+        const sessionId = record.state.opKey.split('|')[6];
+        if (!sessionId) continue;
+        const session = await readPlaybackSession(sessionId).catch(() => null);
+        if (!session || session.storageUserId !== scope.storageUserId) continue;
+      } else if (record.state.kind === 'tts_playback_export') {
+        const artifactId = record.state.opKey.split('|')[5];
+        const metadata = artifactId ? await readExportArtifactMetadata(artifactId) : null;
+        if (metadata && metadata.storageUserId !== scope.storageUserId) continue;
+        if (!operationMatchesTtsResetScope(record.state, scope)) continue;
+      } else if (!operationMatchesTtsResetScope(record.state, scope)) {
+        continue;
+      }
+      const updated = await deps.orchestrator.markFailedIfUnchanged({
+        current: record.state,
+        expectedRevision: record.revision,
+        error: {
+          message: 'TTS playback cache was cleared',
+          code: 'TTS_PLAYBACK_CACHE_CLEARED',
+        },
+        updatedAt: now,
+      });
+      if (updated) invalidated += 1;
+    }
+    return invalidated;
   };
 
   // Segment readiness, derived from per-ordinal sidecars.
@@ -609,6 +725,54 @@ export function registerComputeWorkerRoutes(input: {
     },
   }, async () => ({ ok: true, natsConnected: getNatsConnected() }));
 
+  app.get('/v1/tts-playback/exports/:artifactId/download', {
+    schema: {
+      security: [],
+      params: {
+        type: 'object',
+        properties: { artifactId: { type: 'string' } },
+        required: ['artifactId'],
+      },
+      response: { 400: errorResponseSchema, 401: errorResponseSchema, 404: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const params = request.params as { artifactId?: string };
+    const artifactId = params.artifactId?.trim() ?? '';
+    const token = (request.query as { token?: string }).token?.trim() ?? '';
+    if (!artifactId || !token) {
+      reply.code(400);
+      return { error: 'Missing export artifact id or token' };
+    }
+    const artifact = await readExportArtifactMetadata(artifactId);
+    if (!artifact) {
+      reply.code(404);
+      return { error: 'Export artifact not found' };
+    }
+    const secret = requireEnv('TTS_PLAYBACK_TOKEN_SECRET');
+    let verified: ReturnType<typeof verifyTtsPlaybackToken>;
+    try {
+      verified = verifyTtsPlaybackToken(token, secret);
+    } catch {
+      reply.code(401);
+      return { error: 'Invalid export download token' };
+    }
+    if (
+      verified.sessionId !== artifact.sessionId
+      || verified.storageUserId !== artifact.storageUserId
+      || verified.documentId !== artifact.documentId
+      || verified.exp <= Date.now()
+    ) {
+      reply.code(401);
+      return { error: 'Invalid export download token' };
+    }
+    const bytes = Buffer.from(await storage.readObject(artifact.objectKey));
+    reply.header('Content-Type', artifact.contentType);
+    reply.header('Content-Length', String(bytes.byteLength));
+    reply.header('Content-Disposition', `attachment; filename="${artifact.dispositionFilename}"`);
+    reply.header('Cache-Control', 'private, no-store');
+    return bytes;
+  });
+
   app.post('/v1/tts-playback/sessions/resolve', {
     schema: {
       body: jsonSchema(ttsPlaybackSessionResolveSchema),
@@ -775,6 +939,7 @@ export function registerComputeWorkerRoutes(input: {
             cacheEpoch: { type: 'number' },
             invalidatedPlaybackSessions: { type: 'number' },
             invalidatedSidecarCacheScopes: { type: 'number' },
+            invalidatedJobOperations: { type: 'number' },
           },
           required: [
             'storageUserId',
@@ -784,6 +949,7 @@ export function registerComputeWorkerRoutes(input: {
             'cacheEpoch',
             'invalidatedPlaybackSessions',
             'invalidatedSidecarCacheScopes',
+            'invalidatedJobOperations',
           ],
         },
         400: errorResponseSchema,
@@ -806,6 +972,7 @@ export function registerComputeWorkerRoutes(input: {
     const cacheEpoch = await playbackStorage.artifacts.incrementScopeEpoch(resetScope, now);
     const invalidatedPlaybackSessions = await playbackStorage.sessions.cancelSessionsForScope(resetScope, now);
     const invalidatedSidecarCacheScopes = invalidateCachedSidecarsForScope(resetScope);
+    const invalidatedJobOperations = await invalidateTtsJobOperationsForScope(resetScope, now);
 
     app.log.info({
       storageUserId: resetScope.storageUserId,
@@ -815,6 +982,7 @@ export function registerComputeWorkerRoutes(input: {
       cacheEpoch,
       invalidatedPlaybackSessions,
       invalidatedSidecarCacheScopes,
+      invalidatedJobOperations,
     }, 'tts.playback.cache_reset');
 
     return {
@@ -825,6 +993,7 @@ export function registerComputeWorkerRoutes(input: {
       cacheEpoch,
       invalidatedPlaybackSessions,
       invalidatedSidecarCacheScopes,
+      invalidatedJobOperations,
     };
   });
 
@@ -1335,6 +1504,58 @@ export function registerComputeWorkerRoutes(input: {
     return toComputeOperation(op);
   });
 
+  app.post('/v1/tts-playback/exports/jobs', {
+    schema: {
+      body: jsonSchema(ttsPlaybackExportArtifactCreateSchema),
+      response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackExportArtifactCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+
+    const requestOp: WorkerOperationRequest = {
+      kind: 'tts_playback_export',
+      opKey: buildTtsPlaybackExportOperationKey(parsed.data),
+      payload: parsed.data,
+    };
+    await ensureOrphanedOpRecovery();
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    app.log.info({
+      kind: requestOp.kind,
+      opId: op.opId,
+      jobId: op.jobId,
+      status: op.status,
+      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
+    }, 'op.accepted');
+    reply.code(202);
+    return toComputeOperation(op);
+  });
+
+  app.post('/v1/tts-playback/exports/resolve', {
+    schema: {
+      body: jsonSchema(ttsPlaybackExportArtifactResolveSchema),
+      response: { 200: jsonSchema(ttsPlaybackExportArtifactResolutionSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackExportArtifactResolveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    await ensureOrphanedOpRecovery();
+    const artifact = await readExportArtifactMetadata(parsed.data.artifactId);
+    const opKey = buildTtsPlaybackExportOperationKey(parsed.data);
+    const index = await deps.operationStateStore.getOpIndex?.(opKey);
+    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    return {
+      artifact,
+      operation: operation ? toComputeOperation(operation) : null,
+    };
+  });
+
   app.post('/v1/pdf-layout/resolve', {
     schema: {
       body: jsonSchema(pdfResolveSchema),
@@ -1433,7 +1654,9 @@ export function registerComputeWorkerRoutes(input: {
 
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
-      const frameEvent: ComputeOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult> = {
+      const frameEvent: ComputeOperationEvent<
+        PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult
+      > = {
         eventId,
         snapshot: toComputeOperation(snapshot),
       };

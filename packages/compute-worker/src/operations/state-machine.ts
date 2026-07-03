@@ -62,7 +62,9 @@ export function shouldReuseExistingOperation(input: {
     // Playback artifacts are the reusable cache, not terminal playback job
     // records. Replacing terminal playback jobs lets live/export requests verify
     // the current sidecar state while still deduping active work.
-    return input.requestKind !== 'tts_playback_plan' && input.requestKind !== 'tts_playback';
+    return input.requestKind !== 'tts_playback_plan'
+      && input.requestKind !== 'tts_playback'
+      && input.requestKind !== 'tts_playback_export';
   }
   if (!isInflightStatus(input.current.status)) return false;
   const ageMs = input.now - input.current.updatedAt;

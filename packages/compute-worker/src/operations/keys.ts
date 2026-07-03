@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import { buildTtsPlaybackCanonicalScopeKey } from '@openreader/tts/playback-scope';
+import {
+  buildTtsPlaybackCanonicalScopeKey,
+  buildTtsPlaybackExportArtifactId,
+} from '@openreader/tts/playback-scope';
 import { PDF_PARSER_VERSION } from './contracts';
 
 export function buildPdfOperationKey(input: {
@@ -85,6 +88,29 @@ export function buildTtsPlaybackPlanOperationKey(input: {
   ].join('|');
 }
 
+export { buildTtsPlaybackExportArtifactId };
+
+export function buildTtsPlaybackExportOperationKey(input: {
+  artifactId: string;
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  format: 'mp3' | 'm4b';
+  speed: number;
+}): string {
+  const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
+  return [
+    'tts_playback_export',
+    'v1',
+    input.documentId,
+    String(input.documentVersion),
+    input.settingsHash,
+    input.artifactId,
+    input.format,
+    speed.toFixed(2),
+  ].join('|');
+}
+
 export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   kind: 'tts_playback';
   documentId: string;
@@ -96,6 +122,28 @@ export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   const sessionId = parts[6];
   if (kind !== 'tts_playback' || version !== 'v1' || !documentId || !sessionId) return null;
   return { kind: 'tts_playback', documentId, sessionId };
+}
+
+export function ttsPlaybackExportSubjectFromOperationKey(opKey: string): {
+  kind: 'tts_playback_export';
+  documentId: string;
+  artifactId: string;
+  format: 'mp3' | 'm4b';
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  const artifactId = parts[5];
+  const format = parts[6];
+  if (
+    kind !== 'tts_playback_export'
+    || version !== 'v1'
+    || !documentId
+    || !artifactId
+    || (format !== 'mp3' && format !== 'm4b')
+  ) {
+    return null;
+  }
+  return { kind: 'tts_playback_export', documentId, artifactId, format };
 }
 
 export function ttsPlaybackPlanSubjectFromOperationKey(opKey: string): {

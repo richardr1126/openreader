@@ -24,6 +24,8 @@ import type {
   PdfLayoutJobResult,
   TtsPlaybackPlanJobRequest,
   TtsPlaybackPlanJobResult,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResult,
   TtsPlaybackJobRequest,
   TtsPlaybackJobResult,
 } from '../operations/contracts';
@@ -49,6 +51,7 @@ import {
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
+  TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
   TTS_PLAYBACK_JOBS_SUBJECT,
 } from '../infrastructure/nats';
 import { registerHttpHooks } from './http-hooks';
@@ -66,6 +69,9 @@ import {
   pdfLayoutResolutionSchema,
   computeOperationEventSchema,
   computeOperationSchema,
+  ttsPlaybackExportArtifactMetadataSchema,
+  ttsPlaybackExportProgressSchema,
+  ttsPlaybackExportArtifactResolutionSchema,
   ttsSentenceAlignmentSchema,
 } from './schemas';
 
@@ -190,9 +196,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
           ErrorResponse: jsonSchema(apiErrorResponseSchema),
           OperationError: jsonSchema(operationErrorSchema),
           PdfLayoutProgress: jsonSchema(pdfLayoutProgressSchema),
+          TtsPlaybackExportProgress: jsonSchema(ttsPlaybackExportProgressSchema),
+          TtsPlaybackExportArtifact: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
           ComputeOperation: jsonSchema(computeOperationSchema),
           ComputeOperationEvent: jsonSchema(computeOperationEventSchema),
           PdfLayoutResolution: jsonSchema(pdfLayoutResolutionSchema),
+          TtsPlaybackExportArtifactResolution: jsonSchema(ttsPlaybackExportArtifactResolutionSchema),
         },
       },
       security: [{ bearerAuth: [] }],
@@ -215,12 +224,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
   const ttsPlaybackJobCodec = createJsonCodec<QueuedJob<TtsPlaybackJobRequest>>();
   const ttsPlaybackPlanJobCodec = createJsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>();
+  const ttsPlaybackExportJobCodec = createJsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -236,6 +246,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     layoutSubject: LAYOUT_JOBS_SUBJECT,
     ttsPlaybackSubject: TTS_PLAYBACK_JOBS_SUBJECT,
     ttsPlaybackPlanSubject: TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
+    ttsPlaybackExportSubject: TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -312,6 +323,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     pdfCodec: layoutJobCodec,
     ttsPlaybackCodec: ttsPlaybackJobCodec,
     ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
+    ttsPlaybackExportCodec: ttsPlaybackExportJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -345,6 +357,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         pdfLayout: session.layoutConsumer,
         ttsPlayback: session.ttsPlaybackConsumer,
         ttsPlaybackPlan: session.ttsPlaybackPlanConsumer,
+        ttsPlaybackExport: session.ttsPlaybackExportConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

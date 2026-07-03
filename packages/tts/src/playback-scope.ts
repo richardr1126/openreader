@@ -34,3 +34,19 @@ export function buildTtsPlaybackCanonicalSessionId(
   const scopeHash = stableHash(buildTtsPlaybackCanonicalScopeKey(input)).slice(0, 48);
   return `tts-${input.purpose}-${scopeHash}`;
 }
+
+export function buildTtsPlaybackExportArtifactId(
+  input: TtsPlaybackCanonicalScopeInput & {
+    format: 'mp3' | 'm4b';
+    speed: number;
+  },
+): string {
+  const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
+  return createHash('sha256')
+    .update(buildTtsPlaybackCanonicalScopeKey(input))
+    .update('\0')
+    .update(input.format)
+    .update('\0')
+    .update(speed.toFixed(2))
+    .digest('hex');
+}

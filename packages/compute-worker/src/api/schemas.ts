@@ -110,6 +110,32 @@ export const ttsPlaybackSessionResolveSchema = z.object({
   purpose: z.enum(['live', 'export-document']),
 }).strict();
 
+export const ttsPlaybackExportFormatSchema = z.enum(['mp3', 'm4b']);
+
+export const ttsPlaybackExportArtifactCreateSchema = z.object({
+  artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
+  sessionId: z.string().trim().min(1).max(128),
+  userId: z.string().trim().min(1).max(256),
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative(),
+  readerType: z.enum(['pdf', 'epub', 'html']),
+  settingsHash: z.string().trim().min(1).max(256),
+  settingsJson: z.unknown(),
+  planObjectKey: z.string().trim().min(1).max(2048),
+  format: ttsPlaybackExportFormatSchema,
+  speed: z.number().min(0.5).max(3),
+}).strict();
+
+export const ttsPlaybackExportArtifactResolveSchema = z.object({
+  artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative(),
+  settingsHash: z.string().trim().min(1).max(256),
+  format: ttsPlaybackExportFormatSchema,
+  speed: z.number().min(0.5).max(3),
+}).strict();
+
 export const pdfResolveSchema = z.object({
   documentId: documentIdSchema,
   namespace: namespaceSchema,
@@ -150,6 +176,34 @@ export const ttsPlaybackProgressSchema = z.object({
   plannedCount: z.number(),
 });
 
+export const ttsPlaybackExportProgressSchema = z.object({
+  phase: z.enum(['assembling', 'transcoding', 'uploading']),
+  completedSegments: z.number(),
+  plannedSegments: z.number(),
+});
+
+export const ttsPlaybackExportArtifactMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  artifactId: z.string(),
+  sessionId: z.string(),
+  storageUserId: z.string(),
+  documentId: z.string(),
+  documentVersion: z.number(),
+  readerType: z.enum(['pdf', 'epub', 'html']),
+  settingsHash: z.string(),
+  planObjectKey: z.string(),
+  format: ttsPlaybackExportFormatSchema,
+  speed: z.number(),
+  objectKey: z.string(),
+  contentType: z.string(),
+  byteLength: z.number(),
+  dispositionFilename: z.string(),
+  sourceSessionId: z.string(),
+  sourcePlanObjectKey: z.string(),
+  status: z.literal('ready'),
+  createdAt: z.number(),
+});
+
 export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
@@ -169,6 +223,12 @@ export const computeOperationSchema = z.object({
       settingsHash: z.string(),
       planSignature: z.string(),
     }),
+    z.object({
+      kind: z.literal('tts_playback_export'),
+      documentId: z.string(),
+      artifactId: z.string(),
+      format: ttsPlaybackExportFormatSchema,
+    }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
   queuedAt: z.number(),
@@ -181,7 +241,7 @@ export const computeOperationSchema = z.object({
     s3FetchMs: z.number().optional(),
     computeMs: z.number().optional(),
   }).optional(),
-  progress: z.union([pdfLayoutProgressSchema, ttsPlaybackProgressSchema]).optional(),
+  progress: z.union([pdfLayoutProgressSchema, ttsPlaybackProgressSchema, ttsPlaybackExportProgressSchema]).optional(),
 });
 
 export const computeOperationEventSchema = z.object({
@@ -199,6 +259,11 @@ export const ttsPlaybackSessionResolutionSchema = z.object({
   session: z.unknown().nullable(),
   operation: computeOperationSchema.nullable(),
   progress: ttsPlaybackProgressSchema.nullable(),
+});
+
+export const ttsPlaybackExportArtifactResolutionSchema = z.object({
+  artifact: ttsPlaybackExportArtifactMetadataSchema.nullable(),
+  operation: computeOperationSchema.nullable(),
 });
 
 export function jsonSchema(schema: z.ZodType): Record<string, unknown> {

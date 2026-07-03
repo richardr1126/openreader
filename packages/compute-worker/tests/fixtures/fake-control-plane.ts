@@ -1,5 +1,6 @@
 import type {
   PdfLayoutJobResult,
+  TtsPlaybackExportArtifactResult,
   TtsPlaybackPlanJobResult,
   TtsPlaybackJobResult,
   WorkerOperationEvent,
@@ -8,7 +9,7 @@ import type {
 } from '../../src/operations/contracts';
 import type { ComputeWorkerRouteDeps } from '../../src/api/app';
 
-type ComputeResult = PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult;
+type ComputeResult = PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult;
 type ComputeState = WorkerOperationState<ComputeResult>;
 type ComputeEvent = WorkerOperationEvent<ComputeResult>;
 

@@ -3,6 +3,8 @@ import type {
   PdfLayoutResolution,
   PdfLayoutResult,
   TtsPlaybackRequest,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResolution,
   TtsPlaybackPlanRequest,
   TtsPlaybackSessionState,
   TtsPlaybackCompletedSegment,
@@ -100,8 +102,23 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/plans/jobs', input);
   }
 
+  createTtsPlaybackExportArtifactOperation(input: TtsPlaybackExportArtifactRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/jobs', input);
+  }
+
   resolveTtsPlaybackSession(input: TtsPlaybackSessionResolveRequest): Promise<TtsPlaybackSessionResolution> {
     return this.requestJson('POST', '/v1/tts-playback/sessions/resolve', input);
+  }
+
+  resolveTtsPlaybackExportArtifact(input: {
+    artifactId: string;
+    documentId: string;
+    documentVersion: number;
+    settingsHash: string;
+    format: 'mp3' | 'm4b';
+    speed: number;
+  }): Promise<TtsPlaybackExportArtifactResolution> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/resolve', input);
   }
 
   async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {

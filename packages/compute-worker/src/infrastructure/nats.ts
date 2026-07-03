@@ -13,9 +13,11 @@ export const JOBS_STREAM_NAME = 'compute_jobs';
 export const LAYOUT_JOBS_SUBJECT = 'jobs.layout';
 export const TTS_PLAYBACK_JOBS_SUBJECT = 'jobs.tts_playback';
 export const TTS_PLAYBACK_PLAN_JOBS_SUBJECT = 'jobs.tts_playback_plan';
+export const TTS_PLAYBACK_EXPORT_JOBS_SUBJECT = 'jobs.tts_playback_export';
 export const LAYOUT_CONSUMER_NAME = 'compute_layout';
 export const TTS_PLAYBACK_CONSUMER_NAME = 'compute_tts_playback';
 export const TTS_PLAYBACK_PLAN_CONSUMER_NAME = 'compute_tts_playback_plan';
+export const TTS_PLAYBACK_EXPORT_CONSUMER_NAME = 'compute_tts_playback_export';
 export const EVENTS_STREAM_NAME = 'compute_events';
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -37,7 +39,7 @@ export async function ensureJetStreamResources(input: {
 }): Promise<void> {
   const streamConfig = {
     name: JOBS_STREAM_NAME,
-    subjects: [LAYOUT_JOBS_SUBJECT, TTS_PLAYBACK_JOBS_SUBJECT, TTS_PLAYBACK_PLAN_JOBS_SUBJECT],
+    subjects: [LAYOUT_JOBS_SUBJECT, TTS_PLAYBACK_JOBS_SUBJECT, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT],
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
     max_bytes: input.jobsMaxBytes,
@@ -101,5 +103,6 @@ export async function ensureJetStreamResources(input: {
     ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
     ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
+    ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
   ]);
 }

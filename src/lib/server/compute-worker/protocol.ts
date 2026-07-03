@@ -35,6 +35,14 @@ export type TtsPlaybackSessionResolveRequest =
   paths['/v1/tts-playback/sessions/resolve']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionResolution =
   paths['/v1/tts-playback/sessions/resolve']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackExportArtifactRequest =
+  paths['/v1/tts-playback/exports/jobs']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackExportArtifactResolveRequest =
+  paths['/v1/tts-playback/exports/resolve']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackExportArtifactResolution =
+  paths['/v1/tts-playback/exports/resolve']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackExportArtifactMetadata =
+  NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;
@@ -52,6 +60,11 @@ export type TtsPlaybackPlanResult = {
   planSignature: string;
   startOrdinal: number;
   plannedCount: number;
+  timing?: components['schemas']['ComputeOperation']['timing'];
+};
+
+export type TtsPlaybackExportArtifactResult = {
+  artifact: TtsPlaybackExportArtifactMetadata;
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
@@ -97,6 +110,7 @@ export type TtsPlaybackResetResult = {
   cacheEpoch: number;
   invalidatedPlaybackSessions: number;
   invalidatedSidecarCacheScopes: number;
+  invalidatedJobOperations: number;
 };
 
 export type PdfLayoutResolution = {

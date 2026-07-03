@@ -272,6 +272,130 @@
         ],
         "additionalProperties": false
       },
+      "TtsPlaybackExportProgress": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "assembling",
+              "transcoding",
+              "uploading"
+            ]
+          },
+          "completedSegments": {
+            "type": "number"
+          },
+          "plannedSegments": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "phase",
+          "completedSegments",
+          "plannedSegments"
+        ],
+        "additionalProperties": false
+      },
+      "TtsPlaybackExportArtifact": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "artifactId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "storageUserId": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "documentVersion": {
+            "type": "number"
+          },
+          "readerType": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "epub",
+              "html"
+            ]
+          },
+          "settingsHash": {
+            "type": "string"
+          },
+          "planObjectKey": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "mp3",
+              "m4b"
+            ]
+          },
+          "speed": {
+            "type": "number"
+          },
+          "objectKey": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "byteLength": {
+            "type": "number"
+          },
+          "dispositionFilename": {
+            "type": "string"
+          },
+          "sourceSessionId": {
+            "type": "string"
+          },
+          "sourcePlanObjectKey": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "artifactId",
+          "sessionId",
+          "storageUserId",
+          "documentId",
+          "documentVersion",
+          "readerType",
+          "settingsHash",
+          "planObjectKey",
+          "format",
+          "speed",
+          "objectKey",
+          "contentType",
+          "byteLength",
+          "dispositionFilename",
+          "sourceSessionId",
+          "sourcePlanObjectKey",
+          "status",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "ComputeOperation": {
         "type": "object",
         "properties": {
@@ -357,6 +481,37 @@
                   "documentId",
                   "settingsHash",
                   "planSignature"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "tts_playback_export"
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "artifactId": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "m4b"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "documentId",
+                  "artifactId",
+                  "format"
                 ],
                 "additionalProperties": false
               }
@@ -457,6 +612,31 @@
                   "completedThroughOrdinal",
                   "completedCount",
                   "plannedCount"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "assembling",
+                      "transcoding",
+                      "uploading"
+                    ]
+                  },
+                  "completedSegments": {
+                    "type": "number"
+                  },
+                  "plannedSegments": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "phase",
+                  "completedSegments",
+                  "plannedSegments"
                 ],
                 "additionalProperties": false
               }
@@ -565,6 +745,37 @@
                       "planSignature"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "tts_playback_export"
+                        ]
+                      },
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "artifactId": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "mp3",
+                          "m4b"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "documentId",
+                      "artifactId",
+                      "format"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -663,6 +874,31 @@
                       "completedThroughOrdinal",
                       "completedCount",
                       "plannedCount"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string",
+                        "enum": [
+                          "assembling",
+                          "transcoding",
+                          "uploading"
+                        ]
+                      },
+                      "completedSegments": {
+                        "type": "number"
+                      },
+                      "plannedSegments": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completedSegments",
+                      "plannedSegments"
                     ],
                     "additionalProperties": false
                   }
@@ -796,6 +1032,37 @@
                           "planSignature"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_export"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "artifactId": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "mp3",
+                              "m4b"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "artifactId",
+                          "format"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -896,6 +1163,410 @@
                           "plannedCount"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "assembling",
+                              "transcoding",
+                              "uploading"
+                            ]
+                          },
+                          "completedSegments": {
+                            "type": "number"
+                          },
+                          "plannedSegments": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "phase",
+                          "completedSegments",
+                          "plannedSegments"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "opId",
+                  "subject",
+                  "status",
+                  "queuedAt",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifact",
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "TtsPlaybackExportArtifactResolution": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "enum": [
+                      1
+                    ]
+                  },
+                  "artifactId": {
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "storageUserId": {
+                    "type": "string"
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "documentVersion": {
+                    "type": "number"
+                  },
+                  "readerType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub",
+                      "html"
+                    ]
+                  },
+                  "settingsHash": {
+                    "type": "string"
+                  },
+                  "planObjectKey": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "m4b"
+                    ]
+                  },
+                  "speed": {
+                    "type": "number"
+                  },
+                  "objectKey": {
+                    "type": "string"
+                  },
+                  "contentType": {
+                    "type": "string"
+                  },
+                  "byteLength": {
+                    "type": "number"
+                  },
+                  "dispositionFilename": {
+                    "type": "string"
+                  },
+                  "sourceSessionId": {
+                    "type": "string"
+                  },
+                  "sourcePlanObjectKey": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ready"
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "artifactId",
+                  "sessionId",
+                  "storageUserId",
+                  "documentId",
+                  "documentVersion",
+                  "readerType",
+                  "settingsHash",
+                  "planObjectKey",
+                  "format",
+                  "speed",
+                  "objectKey",
+                  "contentType",
+                  "byteLength",
+                  "dispositionFilename",
+                  "sourceSessionId",
+                  "sourcePlanObjectKey",
+                  "status",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "opId": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pdf_layout"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "sessionId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_plan"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "settingsHash": {
+                            "type": "string"
+                          },
+                          "planSignature": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "settingsHash",
+                          "planSignature"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_export"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "artifactId": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "mp3",
+                              "m4b"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "artifactId",
+                          "format"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "queuedAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "startedAt": {
+                    "type": "number"
+                  },
+                  "result": {},
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "message"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "timing": {
+                    "type": "object",
+                    "properties": {
+                      "queueWaitMs": {
+                        "type": "number"
+                      },
+                      "s3FetchMs": {
+                        "type": "number"
+                      },
+                      "computeMs": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "totalPages": {
+                            "type": "number"
+                          },
+                          "pagesParsed": {
+                            "type": "number"
+                          },
+                          "currentPage": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "infer",
+                              "merge"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "totalPages",
+                          "pagesParsed",
+                          "phase"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "completedThroughOrdinal": {
+                            "type": "number"
+                          },
+                          "completedCount": {
+                            "type": "number"
+                          },
+                          "plannedCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "completedThroughOrdinal",
+                          "completedCount",
+                          "plannedCount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "assembling",
+                              "transcoding",
+                              "uploading"
+                            ]
+                          },
+                          "completedSegments": {
+                            "type": "number"
+                          },
+                          "plannedSegments": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "phase",
+                          "completedSegments",
+                          "plannedSegments"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   }
@@ -971,6 +1642,80 @@
                     "ok",
                     "natsConnected"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/exports/{artifactId}/download": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
                 }
               }
             }
@@ -1149,6 +1894,37 @@
                                     "planSignature"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_export"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "mp3",
+                                        "m4b"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "artifactId",
+                                    "format"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -1247,6 +2023,31 @@
                                     "completedThroughOrdinal",
                                     "completedCount",
                                     "plannedCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "transcoding",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedSegments": {
+                                      "type": "number"
+                                    },
+                                    "plannedSegments": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedSegments",
+                                    "plannedSegments"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -1619,6 +2420,9 @@
                     },
                     "invalidatedSidecarCacheScopes": {
                       "type": "number"
+                    },
+                    "invalidatedJobOperations": {
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -1628,7 +2432,8 @@
                     "settingsHash",
                     "cacheEpoch",
                     "invalidatedPlaybackSessions",
-                    "invalidatedSidecarCacheScopes"
+                    "invalidatedSidecarCacheScopes",
+                    "invalidatedJobOperations"
                   ]
                 }
               }
@@ -1973,6 +2778,37 @@
                             "planSignature"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -2071,6 +2907,31 @@
                             "completedThroughOrdinal",
                             "completedCount",
                             "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
                           ],
                           "additionalProperties": false
                         }
@@ -2367,6 +3228,37 @@
                             "planSignature"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -2465,6 +3357,31 @@
                             "completedThroughOrdinal",
                             "completedCount",
                             "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
                           ],
                           "additionalProperties": false
                         }
@@ -2720,6 +3637,37 @@
                             "planSignature"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -2820,6 +3768,31 @@
                             "plannedCount"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     }
@@ -2830,6 +3803,842 @@
                     "status",
                     "queuedAt",
                     "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/exports/jobs": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8,128}$"
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "readerType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub",
+                      "html"
+                    ]
+                  },
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "settingsJson": {},
+                  "planObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "m4b"
+                    ]
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 3
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "sessionId",
+                  "userId",
+                  "storageUserId",
+                  "documentId",
+                  "documentVersion",
+                  "readerType",
+                  "settingsHash",
+                  "settingsJson",
+                  "planObjectKey",
+                  "format",
+                  "speed"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_plan"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "settingsHash": {
+                              "type": "string"
+                            },
+                            "planSignature": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "settingsHash",
+                            "planSignature"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/exports/resolve": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8,128}$"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "m4b"
+                    ]
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 3
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "documentId",
+                  "documentVersion",
+                  "settingsHash",
+                  "format",
+                  "speed"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "artifact": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            },
+                            "storageUserId": {
+                              "type": "string"
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "documentVersion": {
+                              "type": "number"
+                            },
+                            "readerType": {
+                              "type": "string",
+                              "enum": [
+                                "pdf",
+                                "epub",
+                                "html"
+                              ]
+                            },
+                            "settingsHash": {
+                              "type": "string"
+                            },
+                            "planObjectKey": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            },
+                            "speed": {
+                              "type": "number"
+                            },
+                            "objectKey": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "type": "string"
+                            },
+                            "byteLength": {
+                              "type": "number"
+                            },
+                            "dispositionFilename": {
+                              "type": "string"
+                            },
+                            "sourceSessionId": {
+                              "type": "string"
+                            },
+                            "sourcePlanObjectKey": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ready"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "artifactId",
+                            "sessionId",
+                            "storageUserId",
+                            "documentId",
+                            "documentVersion",
+                            "readerType",
+                            "settingsHash",
+                            "planObjectKey",
+                            "format",
+                            "speed",
+                            "objectKey",
+                            "contentType",
+                            "byteLength",
+                            "dispositionFilename",
+                            "sourceSessionId",
+                            "sourcePlanObjectKey",
+                            "status",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "operation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "opId": {
+                              "type": "string"
+                            },
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf_layout"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "sessionId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "sessionId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_plan"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "settingsHash": {
+                                      "type": "string"
+                                    },
+                                    "planSignature": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "settingsHash",
+                                    "planSignature"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_export"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "mp3",
+                                        "m4b"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "artifactId",
+                                    "format"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "failed"
+                              ]
+                            },
+                            "queuedAt": {
+                              "type": "number"
+                            },
+                            "updatedAt": {
+                              "type": "number"
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            },
+                            "result": {},
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "message": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "message"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "timing": {
+                              "type": "object",
+                              "properties": {
+                                "queueWaitMs": {
+                                  "type": "number"
+                                },
+                                "s3FetchMs": {
+                                  "type": "number"
+                                },
+                                "computeMs": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "progress": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "totalPages": {
+                                      "type": "number"
+                                    },
+                                    "pagesParsed": {
+                                      "type": "number"
+                                    },
+                                    "currentPage": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "infer",
+                                        "merge"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "totalPages",
+                                    "pagesParsed",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "completedThroughOrdinal": {
+                                      "type": "number"
+                                    },
+                                    "completedCount": {
+                                      "type": "number"
+                                    },
+                                    "plannedCount": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "completedThroughOrdinal",
+                                    "completedCount",
+                                    "plannedCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "transcoding",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedSegments": {
+                                      "type": "number"
+                                    },
+                                    "plannedSegments": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedSegments",
+                                    "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "opId",
+                            "subject",
+                            "status",
+                            "queuedAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "artifact",
+                    "operation"
                   ],
                   "additionalProperties": false
                 }
@@ -3014,6 +4823,37 @@
                                     "planSignature"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_export"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "mp3",
+                                        "m4b"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "artifactId",
+                                    "format"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -3112,6 +4952,31 @@
                                     "completedThroughOrdinal",
                                     "completedCount",
                                     "plannedCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "transcoding",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedSegments": {
+                                      "type": "number"
+                                    },
+                                    "plannedSegments": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedSegments",
+                                    "plannedSegments"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -3269,6 +5134,37 @@
                             "planSignature"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -3367,6 +5263,31 @@
                             "completedThroughOrdinal",
                             "completedCount",
                             "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
                           ],
                           "additionalProperties": false
                         }

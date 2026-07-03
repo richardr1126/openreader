@@ -79,6 +79,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tts-playback/exports/{artifactId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    artifactId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tts-playback/sessions/resolve": {
         parameters: {
             query?: never;
@@ -138,6 +205,13 @@ export interface paths {
                                     documentId: string;
                                     settingsHash: string;
                                     planSignature: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_export";
+                                    documentId: string;
+                                    artifactId: string;
+                                    /** @enum {string} */
+                                    format: "mp3" | "m4b";
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -164,6 +238,11 @@ export interface paths {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "transcoding" | "uploading";
+                                    completedSegments: number;
+                                    plannedSegments: number;
                                 };
                             } | null;
                             progress: {
@@ -421,6 +500,7 @@ export interface paths {
                             cacheEpoch: number;
                             invalidatedPlaybackSessions: number;
                             invalidatedSidecarCacheScopes: number;
+                            invalidatedJobOperations: number;
                         };
                     };
                 };
@@ -635,6 +715,13 @@ export interface paths {
                                 documentId: string;
                                 settingsHash: string;
                                 planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -661,6 +748,11 @@ export interface paths {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
                             };
                         };
                     };
@@ -763,6 +855,13 @@ export interface paths {
                                 documentId: string;
                                 settingsHash: string;
                                 planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -789,6 +888,11 @@ export interface paths {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
                             };
                         };
                     };
@@ -882,6 +986,13 @@ export interface paths {
                                 documentId: string;
                                 settingsHash: string;
                                 planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -908,7 +1019,280 @@ export interface paths {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
                             };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback/exports/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        artifactId: string;
+                        sessionId: string;
+                        userId: string;
+                        storageUserId: string;
+                        documentId: string;
+                        documentVersion: number;
+                        /** @enum {string} */
+                        readerType: "pdf" | "epub" | "html";
+                        settingsHash: string;
+                        settingsJson: unknown;
+                        planObjectKey: string;
+                        /** @enum {string} */
+                        format: "mp3" | "m4b";
+                        speed: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            opId: string;
+                            subject: {
+                                /** @enum {string} */
+                                kind: "pdf_layout";
+                                documentId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
+                            };
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed";
+                            queuedAt: number;
+                            updatedAt: number;
+                            startedAt?: number;
+                            result?: unknown;
+                            error?: {
+                                message: string;
+                                code?: string;
+                            };
+                            timing?: {
+                                queueWaitMs?: number;
+                                s3FetchMs?: number;
+                                computeMs?: number;
+                            };
+                            progress?: {
+                                totalPages: number;
+                                pagesParsed: number;
+                                currentPage?: number;
+                                /** @enum {string} */
+                                phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback/exports/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        artifactId: string;
+                        documentId: string;
+                        documentVersion: number;
+                        settingsHash: string;
+                        /** @enum {string} */
+                        format: "mp3" | "m4b";
+                        speed: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            artifact: {
+                                /** @enum {number} */
+                                schemaVersion: 1;
+                                artifactId: string;
+                                sessionId: string;
+                                storageUserId: string;
+                                documentId: string;
+                                documentVersion: number;
+                                /** @enum {string} */
+                                readerType: "pdf" | "epub" | "html";
+                                settingsHash: string;
+                                planObjectKey: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
+                                speed: number;
+                                objectKey: string;
+                                contentType: string;
+                                byteLength: number;
+                                dispositionFilename: string;
+                                sourceSessionId: string;
+                                sourcePlanObjectKey: string;
+                                /** @enum {string} */
+                                status: "ready";
+                                createdAt: number;
+                            } | null;
+                            operation: {
+                                opId: string;
+                                subject: {
+                                    /** @enum {string} */
+                                    kind: "pdf_layout";
+                                    documentId: string;
+                                    namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback";
+                                    documentId: string;
+                                    sessionId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_plan";
+                                    documentId: string;
+                                    settingsHash: string;
+                                    planSignature: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_export";
+                                    documentId: string;
+                                    artifactId: string;
+                                    /** @enum {string} */
+                                    format: "mp3" | "m4b";
+                                };
+                                /** @enum {string} */
+                                status: "queued" | "running" | "succeeded" | "failed";
+                                queuedAt: number;
+                                updatedAt: number;
+                                startedAt?: number;
+                                result?: unknown;
+                                error?: {
+                                    message: string;
+                                    code?: string;
+                                };
+                                timing?: {
+                                    queueWaitMs?: number;
+                                    s3FetchMs?: number;
+                                    computeMs?: number;
+                                };
+                                progress?: {
+                                    totalPages: number;
+                                    pagesParsed: number;
+                                    currentPage?: number;
+                                    /** @enum {string} */
+                                    phase: "infer" | "merge";
+                                } | {
+                                    completedThroughOrdinal: number;
+                                    completedCount: number;
+                                    plannedCount: number;
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "transcoding" | "uploading";
+                                    completedSegments: number;
+                                    plannedSegments: number;
+                                };
+                            } | null;
                         };
                     };
                 };
@@ -987,6 +1371,13 @@ export interface paths {
                                     documentId: string;
                                     settingsHash: string;
                                     planSignature: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_export";
+                                    documentId: string;
+                                    artifactId: string;
+                                    /** @enum {string} */
+                                    format: "mp3" | "m4b";
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1013,6 +1404,11 @@ export interface paths {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "transcoding" | "uploading";
+                                    completedSegments: number;
+                                    plannedSegments: number;
                                 };
                             } | null;
                         };
@@ -1081,6 +1477,13 @@ export interface paths {
                                 documentId: string;
                                 settingsHash: string;
                                 planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1107,6 +1510,11 @@ export interface paths {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
                             };
                         };
                     };
@@ -1277,6 +1685,37 @@ export interface components {
             /** @enum {string} */
             phase: "infer" | "merge";
         };
+        TtsPlaybackExportProgress: {
+            /** @enum {string} */
+            phase: "assembling" | "transcoding" | "uploading";
+            completedSegments: number;
+            plannedSegments: number;
+        };
+        TtsPlaybackExportArtifact: {
+            /** @enum {number} */
+            schemaVersion: 1;
+            artifactId: string;
+            sessionId: string;
+            storageUserId: string;
+            documentId: string;
+            documentVersion: number;
+            /** @enum {string} */
+            readerType: "pdf" | "epub" | "html";
+            settingsHash: string;
+            planObjectKey: string;
+            /** @enum {string} */
+            format: "mp3" | "m4b";
+            speed: number;
+            objectKey: string;
+            contentType: string;
+            byteLength: number;
+            dispositionFilename: string;
+            sourceSessionId: string;
+            sourcePlanObjectKey: string;
+            /** @enum {string} */
+            status: "ready";
+            createdAt: number;
+        };
         ComputeOperation: {
             opId: string;
             subject: {
@@ -1295,6 +1734,13 @@ export interface components {
                 documentId: string;
                 settingsHash: string;
                 planSignature: string;
+            } | {
+                /** @enum {string} */
+                kind: "tts_playback_export";
+                documentId: string;
+                artifactId: string;
+                /** @enum {string} */
+                format: "mp3" | "m4b";
             };
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -1321,6 +1767,11 @@ export interface components {
                 completedThroughOrdinal: number;
                 completedCount: number;
                 plannedCount: number;
+            } | {
+                /** @enum {string} */
+                phase: "assembling" | "transcoding" | "uploading";
+                completedSegments: number;
+                plannedSegments: number;
             };
         };
         ComputeOperationEvent: {
@@ -1343,6 +1794,13 @@ export interface components {
                     documentId: string;
                     settingsHash: string;
                     planSignature: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_export";
+                    documentId: string;
+                    artifactId: string;
+                    /** @enum {string} */
+                    format: "mp3" | "m4b";
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1369,6 +1827,11 @@ export interface components {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "transcoding" | "uploading";
+                    completedSegments: number;
+                    plannedSegments: number;
                 };
             };
         };
@@ -1394,6 +1857,13 @@ export interface components {
                     documentId: string;
                     settingsHash: string;
                     planSignature: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_export";
+                    documentId: string;
+                    artifactId: string;
+                    /** @enum {string} */
+                    format: "mp3" | "m4b";
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1420,6 +1890,96 @@ export interface components {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "transcoding" | "uploading";
+                    completedSegments: number;
+                    plannedSegments: number;
+                };
+            } | null;
+        };
+        TtsPlaybackExportArtifactResolution: {
+            artifact: {
+                /** @enum {number} */
+                schemaVersion: 1;
+                artifactId: string;
+                sessionId: string;
+                storageUserId: string;
+                documentId: string;
+                documentVersion: number;
+                /** @enum {string} */
+                readerType: "pdf" | "epub" | "html";
+                settingsHash: string;
+                planObjectKey: string;
+                /** @enum {string} */
+                format: "mp3" | "m4b";
+                speed: number;
+                objectKey: string;
+                contentType: string;
+                byteLength: number;
+                dispositionFilename: string;
+                sourceSessionId: string;
+                sourcePlanObjectKey: string;
+                /** @enum {string} */
+                status: "ready";
+                createdAt: number;
+            } | null;
+            operation: {
+                opId: string;
+                subject: {
+                    /** @enum {string} */
+                    kind: "pdf_layout";
+                    documentId: string;
+                    namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback";
+                    documentId: string;
+                    sessionId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_plan";
+                    documentId: string;
+                    settingsHash: string;
+                    planSignature: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_export";
+                    documentId: string;
+                    artifactId: string;
+                    /** @enum {string} */
+                    format: "mp3" | "m4b";
+                };
+                /** @enum {string} */
+                status: "queued" | "running" | "succeeded" | "failed";
+                queuedAt: number;
+                updatedAt: number;
+                startedAt?: number;
+                result?: unknown;
+                error?: {
+                    message: string;
+                    code?: string;
+                };
+                timing?: {
+                    queueWaitMs?: number;
+                    s3FetchMs?: number;
+                    computeMs?: number;
+                };
+                progress?: {
+                    totalPages: number;
+                    pagesParsed: number;
+                    currentPage?: number;
+                    /** @enum {string} */
+                    phase: "infer" | "merge";
+                } | {
+                    completedThroughOrdinal: number;
+                    completedCount: number;
+                    plannedCount: number;
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "transcoding" | "uploading";
+                    completedSegments: number;
+                    plannedSegments: number;
                 };
             } | null;
         };

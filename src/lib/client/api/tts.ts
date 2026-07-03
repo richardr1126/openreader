@@ -62,6 +62,85 @@ export const createTtsPlaybackSession = async (
   return await response.json();
 };
 
+export type TtsExportResolvePayload = TtsPlaybackSessionPayload & {
+  format: 'mp3' | 'm4b';
+  speed: number;
+  start?: boolean;
+};
+
+export type TtsExportResolveSnapshot = {
+  sessionId: string;
+  artifactId: string;
+  generation: {
+    session: { status?: string } | null;
+    operation: {
+      opId?: string;
+      status?: 'queued' | 'running' | 'succeeded' | 'failed';
+      progress?: {
+        completedThroughOrdinal?: number;
+        completedCount?: number;
+        plannedCount?: number;
+      } | null;
+      error?: { message?: string } | null;
+    } | null;
+    progress?: {
+      completedThroughOrdinal?: number;
+      completedCount?: number;
+      plannedCount?: number;
+    } | null;
+  };
+  artifact: {
+    artifact: {
+      artifactId: string;
+      objectKey: string;
+      contentType: string;
+      byteLength: number;
+      dispositionFilename: string;
+      format: 'mp3' | 'm4b';
+      speed: number;
+    } | null;
+    operation: {
+      opId?: string;
+      status?: 'queued' | 'running' | 'succeeded' | 'failed';
+      progress?: {
+        phase?: 'assembling' | 'transcoding' | 'uploading';
+        completedSegments?: number;
+        plannedSegments?: number;
+      } | null;
+      error?: { message?: string } | null;
+    } | null;
+  };
+  downloadUrl: string | null;
+};
+
+export const resolveTtsExport = async (
+  payload: TtsExportResolvePayload,
+  headers: TTSRequestHeaders,
+  signal?: AbortSignal,
+): Promise<TtsExportResolveSnapshot> => {
+  const response = await fetch('/api/tts/export/resolve', {
+    method: 'POST',
+    headers: headers as HeadersInit,
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!response.ok) {
+    let problem: unknown = null;
+    try {
+      problem = await response.json();
+    } catch {
+      problem = null;
+    }
+    const detail = problem && typeof problem === 'object' && typeof (problem as Record<string, unknown>).detail === 'string'
+      ? (problem as Record<string, string>).detail
+      : null;
+    throw new Error(detail || `Audiobook export resolve failed with status ${response.status}`);
+  }
+
+  return await response.json();
+};
+
 export type TtsPlaybackPlanPayload = {
   documentId: string;
   settings: TTSSegmentSettings;
@@ -267,6 +346,109 @@ export const subscribeTtsPlaybackEvents = (
       });
     } catch {
       // Ignore malformed frames so a single bad payload can't break the stream.
+    }
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(event);
+  });
+  return () => {
+    source.close();
+  };
+};
+
+export const subscribeTtsExportGenerationEvents = (
+  input: { opId: string; documentId: string },
+  handlers: {
+    onSnapshot: (snapshot: TtsPlaybackEventSnapshot) => void;
+    onError?: (error: Event) => void;
+  },
+): (() => void) => {
+  const source = new EventSource(
+    `/api/tts/export/events?opId=${encodeURIComponent(input.opId)}&documentId=${encodeURIComponent(input.documentId)}`,
+  );
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const payload = JSON.parse(event.data) as {
+        snapshot?: {
+          status?: 'queued' | 'running' | 'succeeded' | 'failed';
+          progress?: {
+            completedThroughOrdinal?: number;
+            completedCount?: number;
+            plannedCount?: number;
+          } | null;
+        };
+      };
+      const snapshot = payload?.snapshot;
+      if (!snapshot?.status) return;
+      const progress = snapshot.progress ?? null;
+      handlers.onSnapshot({
+        status: snapshot.status,
+        completedThroughOrdinal: progress && Number.isFinite(Number(progress.completedThroughOrdinal))
+          ? Number(progress.completedThroughOrdinal)
+          : null,
+        completedCount: progress && Number.isFinite(Number(progress.completedCount))
+          ? Number(progress.completedCount)
+          : null,
+        plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
+          ? Number(progress.plannedCount)
+          : null,
+      });
+    } catch {
+      // Ignore malformed frames so EventSource can continue.
+    }
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(event);
+  });
+  return () => {
+    source.close();
+  };
+};
+
+export const subscribeTtsExportArtifactEvents = (
+  input: { opId: string; documentId: string },
+  handlers: {
+    onSnapshot: (snapshot: {
+      status: 'queued' | 'running' | 'succeeded' | 'failed';
+      phase: 'assembling' | 'transcoding' | 'uploading' | null;
+      completedSegments: number | null;
+      plannedSegments: number | null;
+    }) => void;
+    onError?: (error: Event) => void;
+  },
+): (() => void) => {
+  const source = new EventSource(
+    `/api/tts/export/events?opId=${encodeURIComponent(input.opId)}&documentId=${encodeURIComponent(input.documentId)}`,
+  );
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const payload = JSON.parse(event.data) as {
+        snapshot?: {
+          status?: 'queued' | 'running' | 'succeeded' | 'failed';
+          progress?: {
+            phase?: 'assembling' | 'transcoding' | 'uploading';
+            completedSegments?: number;
+            plannedSegments?: number;
+          } | null;
+        };
+      };
+      const snapshot = payload?.snapshot;
+      if (!snapshot?.status) return;
+      const progress = snapshot.progress ?? null;
+      handlers.onSnapshot({
+        status: snapshot.status,
+        phase: progress?.phase ?? null,
+        completedSegments: progress && Number.isFinite(Number(progress.completedSegments))
+          ? Number(progress.completedSegments)
+          : null,
+        plannedSegments: progress && Number.isFinite(Number(progress.plannedSegments))
+          ? Number(progress.plannedSegments)
+          : null,
+      });
+    } catch {
+      // Ignore malformed frames so EventSource can continue.
     }
   });
   source.addEventListener('error', (event) => {

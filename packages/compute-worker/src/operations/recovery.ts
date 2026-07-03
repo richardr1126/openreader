@@ -1,5 +1,6 @@
 import type {
   PdfLayoutJobResult,
+  TtsPlaybackExportArtifactResult,
   TtsPlaybackPlanJobResult,
   TtsPlaybackJobResult,
   WorkerJobTiming,
@@ -7,7 +8,9 @@ import type {
   WorkerOperationState,
 } from '../operations/contracts';
 
-export type StreamedOperationState = WorkerOperationState<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult>;
+export type StreamedOperationState = WorkerOperationState<
+  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult
+>;
 
 export interface OrphanRecoveryStateStore {
   getOpStateRecord(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
@@ -45,7 +48,9 @@ export function getOrphanRecoveryThresholdMs(input: {
 }): number | null {
   if (!isInflightStatus(input.state.status)) return null;
   if (input.state.status === 'running') {
-    return input.state.kind === 'pdf_layout' ? input.pdfTimeoutMs : input.whisperTimeoutMs;
+    return input.state.kind === 'pdf_layout' || input.state.kind === 'tts_playback_export'
+      ? input.pdfTimeoutMs
+      : input.whisperTimeoutMs;
   }
   return input.state.kind === 'pdf_layout' ? input.opStaleMs : null;
 }

@@ -17,6 +17,7 @@ export type {
 export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
 export const TTS_PLAYBACK_QUEUE_NAME = 'tts-playback';
 export const TTS_PLAYBACK_PLAN_QUEUE_NAME = 'tts-playback-plan';
+export const TTS_PLAYBACK_EXPORT_QUEUE_NAME = 'tts-playback-export';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
 
 export function encodeParserVersion(parserVersion: string, defaultVersion = PDF_PARSER_VERSION): string {
@@ -115,6 +116,50 @@ export interface TtsPlaybackPlanJobResult {
   timing?: WorkerJobTiming;
 }
 
+export type TtsPlaybackExportFormat = 'mp3' | 'm4b';
+
+export interface TtsPlaybackExportArtifactRequest {
+  artifactId: string;
+  sessionId: string;
+  userId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  settingsJson: unknown;
+  planObjectKey: string;
+  format: TtsPlaybackExportFormat;
+  speed: number;
+}
+
+export interface TtsPlaybackExportArtifactMetadata {
+  schemaVersion: 1;
+  artifactId: string;
+  sessionId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  planObjectKey: string;
+  format: TtsPlaybackExportFormat;
+  speed: number;
+  objectKey: string;
+  contentType: string;
+  byteLength: number;
+  dispositionFilename: string;
+  sourceSessionId: string;
+  sourcePlanObjectKey: string;
+  status: 'ready';
+  createdAt: number;
+}
+
+export interface TtsPlaybackExportArtifactResult {
+  artifact: TtsPlaybackExportArtifactMetadata;
+  timing?: WorkerJobTiming;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -162,7 +207,13 @@ export interface TtsPlaybackProgress {
   plannedCount: number;
 }
 
-export type WorkerOperationProgress = PdfLayoutProgress | TtsPlaybackProgress;
+export interface TtsPlaybackExportProgress {
+  phase: 'assembling' | 'transcoding' | 'uploading';
+  completedSegments: number;
+  plannedSegments: number;
+}
+
+export type WorkerOperationProgress = PdfLayoutProgress | TtsPlaybackProgress | TtsPlaybackExportProgress;
 
 export interface WorkerJobStatusResponse<Result> {
   status: WorkerJobState;
@@ -171,7 +222,7 @@ export interface WorkerJobStatusResponse<Result> {
   timing?: WorkerJobTiming;
 }
 
-export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan';
+export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export';
 
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
@@ -191,10 +242,17 @@ export interface TtsPlaybackPlanOperationRequest {
   payload: TtsPlaybackPlanJobRequest;
 }
 
+export interface TtsPlaybackExportArtifactOperationRequest {
+  kind: 'tts_playback_export';
+  opKey: string;
+  payload: TtsPlaybackExportArtifactRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
-  | TtsPlaybackPlanOperationRequest;
+  | TtsPlaybackPlanOperationRequest
+  | TtsPlaybackExportArtifactOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

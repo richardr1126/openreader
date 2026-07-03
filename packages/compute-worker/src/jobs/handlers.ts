@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import ffmpegPath from 'ffmpeg-static';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
 import {
@@ -11,7 +16,9 @@ import {
   normalizeSegmentText,
   probeAudioDurationMsFromBuffer,
 } from '@openreader/tts/segments';
-import type { TTSSegmentSettings } from '@openreader/tts/types';
+import type { TTSSegmentLocator, TTSSegmentSettings } from '@openreader/tts/types';
+import { isHtmlLocator, isPdfLocator, isStableEpubLocator } from '@openreader/tts/types';
+import { locatorGroupKey } from '@openreader/tts/locator';
 import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
 import { isBuiltInTtsProviderId, isTtsProviderType } from '@openreader/tts/provider-catalog';
 import { resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
@@ -24,7 +31,13 @@ import {
 } from '@openreader/tts/segment-plan';
 import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
 import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
-import { documentSourceKey, parsedPdfArtifactKey, ttsPlaybackPlanArtifactKey } from '../storage/artifact-addressing';
+import {
+  documentSourceKey,
+  parsedPdfArtifactKey,
+  ttsPlaybackExportArtifactKey,
+  ttsPlaybackExportMetadataArtifactKey,
+  ttsPlaybackPlanArtifactKey,
+} from '../storage/artifact-addressing';
 import { extractEpubSpine } from '../inference/epub/spine-text';
 import type { ParsedPdfDocument } from '../operations/contracts';
 import {
@@ -40,6 +53,10 @@ import type {
   TtsPlaybackJobResult,
   TtsPlaybackPlanJobRequest,
   TtsPlaybackPlanJobResult,
+  TtsPlaybackExportArtifactMetadata,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResult,
+  TtsPlaybackExportProgress,
   TtsPlaybackProgress,
 } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
@@ -87,6 +104,21 @@ const ttsPlaybackRequestSchema = ttsPlaybackPlanRequestSchema.extend({
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   generationExtent: z.enum(['window', 'document']).optional(),
+}).strict();
+
+const ttsPlaybackExportArtifactRequestSchema = z.object({
+  artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
+  sessionId: z.string().trim().min(1).max(128),
+  userId: z.string().trim().min(1).max(256),
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: z.string().trim().min(1),
+  documentVersion: z.number().int().nonnegative(),
+  readerType: z.enum(['pdf', 'epub', 'html']),
+  settingsHash: z.string().trim().min(1).max(256),
+  settingsJson: z.unknown(),
+  planObjectKey: z.string().trim().min(1).max(2048),
+  format: z.enum(['mp3', 'm4b']),
+  speed: z.number().min(0.5).max(3),
 }).strict();
 
 type TtsPlaybackPlanCapableRequest = z.infer<typeof ttsPlaybackPlanRequestSchema> & {
@@ -952,6 +984,230 @@ async function generateExplicitTtsPlaybackSegments(input: {
   }
 }
 
+type ExportChapter = {
+  title: string;
+  startMs: number;
+  endMs: number;
+};
+
+function speedNeedsTranscode(speed: number): boolean {
+  return Math.abs(speed - 1) >= 0.01;
+}
+
+function formatSpeedForFilename(speed: number): string {
+  return Number.isInteger(speed) ? speed.toString() : speed.toFixed(1);
+}
+
+function contentTypeForExportFormat(format: 'mp3' | 'm4b'): string {
+  return format === 'm4b' ? 'audio/mp4' : 'audio/mpeg';
+}
+
+function buildExportFilename(input: {
+  documentId: string;
+  speed: number;
+  format: 'mp3' | 'm4b';
+}): string {
+  const speedSuffix = speedNeedsTranscode(input.speed) ? `-${formatSpeedForFilename(input.speed)}x` : '';
+  return `openreader-${input.documentId.slice(0, 12)}${speedSuffix}.${input.format}`;
+}
+
+function stripId3Tag(bytes: Buffer): Buffer {
+  if (bytes.length < 10 || bytes.subarray(0, 3).toString('ascii') !== 'ID3') return bytes;
+  const size =
+    ((bytes[6] & 0x7f) << 21)
+    | ((bytes[7] & 0x7f) << 14)
+    | ((bytes[8] & 0x7f) << 7)
+    | (bytes[9] & 0x7f);
+  const end = 10 + size;
+  return end > 0 && end < bytes.length ? bytes.subarray(end) : bytes;
+}
+
+function buildAtempoFilter(speed: number): string {
+  const filters: string[] = [];
+  let remaining = speed;
+  while (remaining > 2) {
+    filters.push('atempo=2');
+    remaining /= 2;
+  }
+  while (remaining < 0.5) {
+    filters.push('atempo=0.5');
+    remaining /= 0.5;
+  }
+  filters.push(`atempo=${remaining.toFixed(6)}`);
+  return filters.join(',');
+}
+
+function escapeFfmetadataValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '')
+    .replace(/=/g, '\\=')
+    .replace(/;/g, '\\;')
+    .replace(/#/g, '\\#');
+}
+
+function fallbackChapterTitle(locator: TTSSegmentLocator | null, index: number): string {
+  if (isPdfLocator(locator)) return `Page ${Math.max(1, Math.floor(locator.page))}`;
+  if (isStableEpubLocator(locator)) return `Chapter ${index}`;
+  if (isHtmlLocator(locator)) return index === 1 ? 'Document' : `Section ${index}`;
+  return `Chapter ${index}`;
+}
+
+function buildExportChapters(input: {
+  segments: TtsPlaybackSegmentInput[];
+  durationsByOrdinal: Map<number, number>;
+  speed: number;
+}): ExportChapter[] {
+  const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
+  const chapters: ExportChapter[] = [];
+  let activeGroup: string | null = null;
+  let activeLocator: TTSSegmentLocator | null = null;
+  let activeStartMs = 0;
+  let cursorMs = 0;
+
+  for (const segment of input.segments) {
+    const group = locatorGroupKey(normalizeLocator(segment.locator as never));
+    if (activeGroup === null) {
+      activeGroup = group;
+      activeLocator = normalizeLocator(segment.locator as never);
+      activeStartMs = cursorMs;
+    } else if (group !== activeGroup) {
+      const chapterIndex = chapters.length + 1;
+      chapters.push({
+        title: fallbackChapterTitle(activeLocator, chapterIndex),
+        startMs: Math.max(0, Math.floor(activeStartMs / speed)),
+        endMs: Math.max(0, Math.floor(cursorMs / speed)),
+      });
+      activeGroup = group;
+      activeLocator = normalizeLocator(segment.locator as never);
+      activeStartMs = cursorMs;
+    }
+    cursorMs += Math.max(1, Math.floor(input.durationsByOrdinal.get(segment.ordinal) ?? 1000));
+  }
+
+  if (activeGroup !== null) {
+    const chapterIndex = chapters.length + 1;
+    chapters.push({
+      title: fallbackChapterTitle(activeLocator, chapterIndex),
+      startMs: Math.max(0, Math.floor(activeStartMs / speed)),
+      endMs: Math.max(0, Math.ceil(cursorMs / speed)),
+    });
+  }
+
+  return chapters
+    .map((chapter, index, all) => ({
+      ...chapter,
+      endMs: Math.max(chapter.startMs + 1, Math.min(chapter.endMs, all[index + 1]?.startMs ?? chapter.endMs)),
+    }))
+    .filter((chapter) => chapter.endMs > chapter.startMs);
+}
+
+function buildFfmetadata(input: {
+  title: string;
+  chapters: ExportChapter[];
+}): string {
+  const lines = [
+    ';FFMETADATA1',
+    `title=${escapeFfmetadataValue(input.title)}`,
+  ];
+  for (const chapter of input.chapters) {
+    lines.push(
+      '[CHAPTER]',
+      'TIMEBASE=1/1000',
+      `START=${Math.max(0, Math.floor(chapter.startMs))}`,
+      `END=${Math.max(0, Math.floor(chapter.endMs))}`,
+      `title=${escapeFfmetadataValue(chapter.title)}`,
+    );
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+async function runFfmpegExport(input: {
+  source: Buffer;
+  format: 'mp3' | 'm4b';
+  speed: number;
+  title: string;
+  chapters: ExportChapter[];
+}): Promise<Buffer> {
+  const executable = ffmpegPath;
+  if (!executable) {
+    throw new Error('ffmpeg-static did not provide an executable path');
+  }
+  const workDir = await mkdtemp(join(tmpdir(), 'openreader-audiobook-export-'));
+  const inputPath = join(workDir, 'input.mp3');
+  const outputPath = join(workDir, input.format === 'm4b' ? 'audiobook.m4b' : 'audiobook.mp3');
+  const metadataPath = join(workDir, 'chapters.ffmetadata');
+  await writeFile(inputPath, input.source);
+  const args = [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-i',
+    inputPath,
+  ];
+
+  if (input.format === 'm4b') {
+    await writeFile(metadataPath, buildFfmetadata({
+      title: input.title,
+      chapters: input.chapters,
+    }), 'utf8');
+    args.push('-f', 'ffmetadata', '-i', metadataPath);
+  }
+
+  if (speedNeedsTranscode(input.speed)) {
+    args.push('-filter:a', buildAtempoFilter(input.speed));
+  }
+
+  if (input.format === 'm4b') {
+    args.push(
+      '-vn',
+      '-map',
+      '0:a:0',
+      '-codec:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-map_metadata',
+      '1',
+      '-map_chapters',
+      '1',
+      '-f',
+      'mp4',
+      '-brand',
+      'M4B ',
+      '-movflags',
+      '+faststart',
+      outputPath,
+    );
+  } else {
+    args.push('-vn', '-codec:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', outputPath);
+  }
+
+  try {
+    const stderr: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr.push(Buffer.from(chunk));
+        if (stderr.length > 16) stderr.shift();
+      });
+      child.on('error', reject);
+      child.on('close', (code: number | null) => {
+        if (code) {
+          const detail = Buffer.concat(stderr).toString('utf8').slice(-500);
+          reject(new Error(`ffmpeg audiobook export failed with code ${code}: ${detail}`));
+          return;
+        }
+        resolve();
+      });
+    });
+    return await readFile(outputPath);
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export interface JobHandlers {
   runPdfLayout(
     payload: PdfLayoutJobRequest,
@@ -967,6 +1223,11 @@ export interface JobHandlers {
     payload: TtsPlaybackPlanJobRequest,
     queueWaitMs: number,
   ): Promise<TtsPlaybackPlanJobResult>;
+  runTtsPlaybackExportArtifact(
+    payload: TtsPlaybackExportArtifactRequest,
+    queueWaitMs: number,
+    hooks?: { onProgress?: (progress: TtsPlaybackExportProgress) => Promise<void> },
+  ): Promise<TtsPlaybackExportArtifactResult>;
 }
 
 export function createJobHandlers(input: {
@@ -1269,6 +1530,145 @@ export function createJobHandlers(input: {
         planSignature: plan.planSignature,
         startOrdinal: plan.startOrdinal,
         plannedCount: plan.plannedSegments.length,
+        timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+      };
+    },
+
+    async runTtsPlaybackExportArtifact(payload, queueWaitMs, hooks) {
+      const parsed = ttsPlaybackExportArtifactRequestSchema.parse(payload);
+      const startedAt = Date.now();
+      if (!input.playbackStorage) {
+        throw new Error('TTS playback storage is required');
+      }
+
+      const metadataKey = ttsPlaybackExportMetadataArtifactKey({
+        artifactId: parsed.artifactId,
+        prefix: input.s3Prefix,
+      });
+      const existingMetadata = await input.storage.readObject(metadataKey)
+        .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata)
+        .catch(() => null);
+      if (
+        existingMetadata?.schemaVersion === 1
+        && existingMetadata.status === 'ready'
+        && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)
+      ) {
+        return {
+          artifact: existingMetadata,
+          timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+        };
+      }
+
+      const session = await input.playbackStorage.sessions.getSession(parsed.sessionId);
+      if (!session) throw new Error('TTS playback export session was not found');
+      if (session.storageUserId !== parsed.storageUserId || session.documentId !== parsed.documentId) {
+        throw new Error('TTS playback export session scope mismatch');
+      }
+      if (session.status !== 'succeeded') {
+        throw new Error(`TTS playback export session is not complete: ${session.status}`);
+      }
+      if (session.planObjectKey !== parsed.planObjectKey) {
+        throw new Error('TTS playback export session plan key mismatch');
+      }
+
+      const plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, parsed.planObjectKey);
+      if (!plannedSegments || plannedSegments.length === 0) {
+        throw new Error('TTS playback export requires a loaded canonical plan');
+      }
+
+      const durationsByOrdinal = new Map<number, number>();
+      const audioKeysByOrdinal = new Map<number, string>();
+      for (const segment of plannedSegments) {
+        const sidecar = await input.playbackStorage.artifacts.readSegmentMetadata({
+          storageUserId: parsed.storageUserId,
+          documentId: parsed.documentId,
+          documentVersion: parsed.documentVersion,
+          settingsHash: parsed.settingsHash,
+          ordinal: segment.ordinal,
+        });
+        if (sidecar?.status !== 'completed' || !sidecar.audioKey) {
+          throw new Error(`TTS playback export is missing completed audio for ordinal ${segment.ordinal}`);
+        }
+        durationsByOrdinal.set(segment.ordinal, Math.max(1, Number(sidecar.durationMs ?? 1000)));
+        audioKeysByOrdinal.set(segment.ordinal, sidecar.audioKey);
+      }
+
+      const chunks: Buffer[] = [];
+      for (let index = 0; index < plannedSegments.length; index += 1) {
+        const segment = plannedSegments[index]!;
+        const audioKey = audioKeysByOrdinal.get(segment.ordinal);
+        if (!audioKey) throw new Error(`TTS playback export is missing audio key for ordinal ${segment.ordinal}`);
+        const raw = Buffer.from(await input.storage.readObject(audioKey));
+        chunks.push(stripId3Tag(raw));
+        await hooks?.onProgress?.({
+          phase: 'assembling',
+          completedSegments: index + 1,
+          plannedSegments: plannedSegments.length,
+        });
+      }
+
+      const baseMp3 = Buffer.concat(chunks);
+      const chapters = buildExportChapters({
+        segments: plannedSegments,
+        durationsByOrdinal,
+        speed: parsed.speed,
+      });
+      const needsFfmpeg = parsed.format === 'm4b' || speedNeedsTranscode(parsed.speed);
+      await hooks?.onProgress?.({
+        phase: needsFfmpeg ? 'transcoding' : 'uploading',
+        completedSegments: plannedSegments.length,
+        plannedSegments: plannedSegments.length,
+      });
+      const output = needsFfmpeg
+        ? await runFfmpegExport({
+          source: baseMp3,
+          format: parsed.format,
+          speed: parsed.speed,
+          title: `OpenReader ${parsed.documentId.slice(0, 12)}`,
+          chapters,
+        })
+        : baseMp3;
+
+      const objectKey = ttsPlaybackExportArtifactKey({
+        artifactId: parsed.artifactId,
+        format: parsed.format,
+        prefix: input.s3Prefix,
+      });
+      await input.storage.putObject(objectKey, output, contentTypeForExportFormat(parsed.format));
+      const metadata: TtsPlaybackExportArtifactMetadata = {
+        schemaVersion: 1,
+        artifactId: parsed.artifactId,
+        sessionId: parsed.sessionId,
+        storageUserId: parsed.storageUserId,
+        documentId: parsed.documentId,
+        documentVersion: parsed.documentVersion,
+        readerType: parsed.readerType,
+        settingsHash: parsed.settingsHash,
+        planObjectKey: parsed.planObjectKey,
+        format: parsed.format,
+        speed: parsed.speed,
+        objectKey,
+        contentType: contentTypeForExportFormat(parsed.format),
+        byteLength: output.byteLength,
+        dispositionFilename: buildExportFilename({
+          documentId: parsed.documentId,
+          speed: parsed.speed,
+          format: parsed.format,
+        }),
+        sourceSessionId: parsed.sessionId,
+        sourcePlanObjectKey: parsed.planObjectKey,
+        status: 'ready',
+        createdAt: Date.now(),
+      };
+      await input.storage.putObject(metadataKey, Buffer.from(JSON.stringify(metadata)), 'application/json');
+      await hooks?.onProgress?.({
+        phase: 'uploading',
+        completedSegments: plannedSegments.length,
+        plannedSegments: plannedSegments.length,
+      });
+
+      return {
+        artifact: metadata,
         timing: { queueWaitMs, computeMs: Date.now() - startedAt },
       };
     },

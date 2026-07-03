@@ -4,6 +4,8 @@ import type {
   PdfLayoutJobResult,
   TtsPlaybackPlanJobRequest,
   TtsPlaybackPlanJobResult,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResult,
   TtsPlaybackJobRequest,
   TtsPlaybackJobResult,
   WorkerJobTiming,
@@ -21,6 +23,7 @@ const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
   pdf_layout: 120_000,
   tts_playback: 30_000,
   tts_playback_plan: 30_000,
+  tts_playback_export: 120_000,
 };
 
 export interface QueuedJob<TPayload> {
@@ -123,6 +126,7 @@ export function createWorkerLoopController(input: {
   pdfCodec: JsonCodec<QueuedJob<PdfLayoutJobRequest>>;
   ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
   ttsPlaybackPlanCodec?: JsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>;
+  ttsPlaybackExportCodec?: JsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -322,7 +326,12 @@ export function createWorkerLoopController(input: {
   };
 
   return {
-    start(owner: object, consumers: { pdfLayout: Consumer; ttsPlayback?: Consumer; ttsPlaybackPlan?: Consumer }): void {
+    start(owner: object, consumers: {
+      pdfLayout: Consumer;
+      ttsPlayback?: Consumer;
+      ttsPlaybackPlan?: Consumer;
+      ttsPlaybackExport?: Consumer;
+    }): void {
       stopRequested = false;
       loops = [];
       const pdfWork: WorkDefinition<PdfLayoutJobRequest, PdfLayoutJobResult> = {
@@ -346,6 +355,14 @@ export function createWorkerLoopController(input: {
             gate: planGate,
           }
           : null;
+      const ttsPlaybackExportWork: WorkDefinition<TtsPlaybackExportArtifactRequest, TtsPlaybackExportArtifactResult> | null =
+        input.ttsPlaybackExportCodec && consumers.ttsPlaybackExport
+          ? {
+            codec: input.ttsPlaybackExportCodec,
+            run: input.handlers.runTtsPlaybackExportArtifact,
+            gate: playbackGate,
+          }
+          : null;
       for (let i = 0; i < input.jobConcurrency; i += 1) {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
         if (ttsPlaybackWork && consumers.ttsPlayback) {
@@ -353,6 +370,9 @@ export function createWorkerLoopController(input: {
         }
         if (ttsPlaybackPlanWork && consumers.ttsPlaybackPlan) {
           loops.push(runLoop({ owner, consumer: consumers.ttsPlaybackPlan, ...ttsPlaybackPlanWork, workerLabel: `tts-playback-plan-${i + 1}` }));
+        }
+        if (ttsPlaybackExportWork && consumers.ttsPlaybackExport) {
+          loops.push(runLoop({ owner, consumer: consumers.ttsPlaybackExport, ...ttsPlaybackExportWork, workerLabel: `tts-playback-export-${i + 1}` }));
         }
       }
     },

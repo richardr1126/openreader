@@ -12,7 +12,7 @@ import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { Badge, Button, RangeField, Section, SegmentedControl } from '@/components/ui';
-import { subscribeTtsPlaybackEvents } from '@/lib/client/api/tts';
+import { subscribeTtsExportArtifactEvents, subscribeTtsExportGenerationEvents } from '@/lib/client/api/tts';
 
 interface AudiobookExportModalProps {
   isOpen: boolean;
@@ -79,12 +79,12 @@ export function AudiobookExportModal({
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     startDocumentAudioExport,
+    resolveDocumentAudioExport,
   } = useTTS();
   const [status, setStatus] = useState<ExportStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [completedSegments, setCompletedSegments] = useState(0);
   const [plannedSegments, setPlannedSegments] = useState(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
   const [localAudioPlayerSpeed, setLocalAudioPlayerSpeed] = useState(audioPlayerSpeed);
@@ -93,6 +93,7 @@ export function AudiobookExportModal({
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const progressCompleteRef = useRef(false);
   const statusRef = useRef<ExportStatus>('idle');
+  const hydrateRunIdRef = useRef(0);
 
   useEffect(() => {
     statusRef.current = status;
@@ -114,7 +115,7 @@ export function AudiobookExportModal({
   }), [documentLanguage, ttsModel, voice]);
 
   const isGenerating = status === 'generating';
-  const canDownload = status === 'ready' || status === 'complete';
+  const canDownload = (status === 'ready' || status === 'complete') && Boolean(downloadUrl);
   const exportFormatLabel = formatLabel(exportFormat);
   const progressStatusMessage = plannedSegments > 0
     ? `${completedSegments}/${plannedSegments} segments ready`
@@ -140,6 +141,19 @@ export function AudiobookExportModal({
       setStatus('ready');
       setProgress(100);
     }
+  }, [cleanupSubscription]);
+
+  const markReady = useCallback((total?: number | null) => {
+    const safeTotal = Math.max(0, Math.floor(total ?? 0));
+    if (safeTotal > 0) {
+      setPlannedSegments(safeTotal);
+      setCompletedSegments(safeTotal);
+    }
+    cleanupSubscription();
+    abortControllerRef.current = null;
+    progressCompleteRef.current = true;
+    setStatus('ready');
+    setProgress(100);
   }, [cleanupSubscription]);
 
   const stopTracking = useCallback(() => {
@@ -169,6 +183,127 @@ export function AudiobookExportModal({
     };
   }, [stopTracking]);
 
+  const attachArtifact = useCallback((artifactOpId: string, controller: AbortController, fallbackTotal?: number | null) => {
+    cleanupSubscription();
+    setStatus('generating');
+    unsubscribeRef.current = subscribeTtsExportArtifactEvents({
+      opId: artifactOpId,
+      documentId,
+    }, {
+      onSnapshot: async (snapshot) => {
+        if (snapshot.status === 'failed') {
+          progressCompleteRef.current = true;
+          cleanupSubscription();
+          abortControllerRef.current = null;
+          setStatus('idle');
+          setErrorMessage('Audiobook artifact preparation failed.');
+          return;
+        }
+
+        const total = snapshot.plannedSegments !== null
+          ? Math.max(0, Math.floor(snapshot.plannedSegments))
+          : Math.max(0, Math.floor(fallbackTotal ?? 0));
+        if (total > 0) {
+          const completed = Math.max(0, Math.min(total, Math.floor(snapshot.completedSegments ?? 0)));
+          setPlannedSegments(total);
+          setCompletedSegments(completed);
+          setProgress(clampProgress(completed, total));
+        }
+
+        if (snapshot.status === 'succeeded') {
+          cleanupSubscription();
+          const refreshed = await startDocumentAudioExport({
+            format: exportFormat,
+            speed: localAudioPlayerSpeed,
+          }, controller.signal);
+          if (controller.signal.aborted) return;
+          setDownloadUrl(refreshed.downloadUrl);
+          markReady(refreshed.plannedCount || total);
+        }
+      },
+      onError: () => {},
+    });
+  }, [
+    cleanupSubscription,
+    documentId,
+    exportFormat,
+    localAudioPlayerSpeed,
+    markReady,
+    startDocumentAudioExport,
+  ]);
+
+  const beginArtifactPreparation = useCallback(async (controller: AbortController, fallbackTotal?: number | null) => {
+    const refreshed = await startDocumentAudioExport({
+      format: exportFormat,
+      speed: localAudioPlayerSpeed,
+    }, controller.signal);
+    if (controller.signal.aborted) return;
+    setDownloadUrl(refreshed.downloadUrl);
+    const total = refreshed.plannedCount || fallbackTotal || 0;
+    if (refreshed.downloadUrl || refreshed.artifactStatus === 'succeeded') {
+      markReady(total);
+      return;
+    }
+    if (refreshed.artifactOperationId) {
+      attachArtifact(refreshed.artifactOperationId, controller, total);
+    }
+  }, [
+    attachArtifact,
+    exportFormat,
+    localAudioPlayerSpeed,
+    markReady,
+    startDocumentAudioExport,
+  ]);
+
+  const attachGeneration = useCallback((input: {
+    generationOperationId: string;
+    controller: AbortController;
+    plannedCount: number;
+  }) => {
+    cleanupSubscription();
+    setStatus('generating');
+    unsubscribeRef.current = subscribeTtsExportGenerationEvents({
+      opId: input.generationOperationId,
+      documentId,
+    }, {
+      onSnapshot: (snapshot) => {
+        const total = snapshot.plannedCount ?? input.plannedCount;
+        if (snapshot.status === 'failed') {
+          progressCompleteRef.current = true;
+          cleanupSubscription();
+          abortControllerRef.current = null;
+          setStatus('idle');
+          setErrorMessage('Audio export failed.');
+          return;
+        }
+
+        const completed = snapshot.status === 'succeeded'
+          ? total
+          : snapshot.completedCount !== null
+            ? snapshot.completedCount
+            : snapshot.completedThroughOrdinal === null
+              ? 0
+              : Math.min(total, snapshot.completedThroughOrdinal + 1);
+        applyProgressSnapshot(completed, total);
+        if (snapshot.status === 'succeeded' || (total > 0 && completed >= total)) {
+          progressCompleteRef.current = true;
+          cleanupSubscription();
+          setProgress(100);
+          void beginArtifactPreparation(input.controller, total);
+        }
+      },
+      onError: () => {
+        // EventSource reconnects automatically. Progress comes from operation
+        // snapshots, so a transient disconnect is not a user-facing failure.
+      },
+    });
+  }, [
+    applyProgressSnapshot,
+    beginArtifactPreparation,
+    cleanupSubscription,
+    documentId,
+  ]);
+
   const handleStartGeneration = useCallback(async () => {
     cleanupSubscription();
     abortControllerRef.current?.abort();
@@ -179,62 +314,143 @@ export function AudiobookExportModal({
     setProgress(0);
     setCompletedSegments(0);
     setPlannedSegments(0);
-    setAudioUrl(null);
     setDownloadUrl(null);
     setErrorMessage(null);
 
     try {
-      const session = await startDocumentAudioExport(controller.signal);
+      const session = await startDocumentAudioExport({
+        format: exportFormat,
+        speed: localAudioPlayerSpeed,
+      }, controller.signal);
       if (controller.signal.aborted) return;
-      setAudioUrl(session.audioUrl);
       setDownloadUrl(session.downloadUrl);
       setPlannedSegments(session.plannedCount);
-      unsubscribeRef.current = subscribeTtsPlaybackEvents(session.sessionId, {
-        onSnapshot: (snapshot) => {
-          const total = snapshot.plannedCount ?? session.plannedCount;
-          if (snapshot.status === 'failed') {
-            progressCompleteRef.current = true;
-            cleanupSubscription();
-            abortControllerRef.current = null;
-            setStatus('idle');
-            setErrorMessage('Audio export failed.');
-            return;
-          }
-
-          const completed = snapshot.status === 'succeeded'
-            ? total
-            : snapshot.completedCount !== null
-              ? snapshot.completedCount
-              : snapshot.completedThroughOrdinal === null
-                ? 0
-                : Math.min(total, snapshot.completedThroughOrdinal + 1);
-          applyProgressSnapshot(completed, total);
-          if (snapshot.status === 'succeeded' || (total > 0 && completed >= total)) {
-            progressCompleteRef.current = true;
-            cleanupSubscription();
-            abortControllerRef.current = null;
-            setStatus('ready');
-            setProgress(100);
-          }
-        },
-        onError: () => {
-          // EventSource reconnects automatically. Progress comes from operation
-          // snapshots, so a transient disconnect is not a user-facing failure.
-        },
-      });
+      if (session.completedCount !== null) {
+        setCompletedSegments(Math.max(0, Math.min(session.plannedCount, session.completedCount)));
+        setProgress(clampProgress(session.completedCount, session.plannedCount));
+      }
+      if (session.downloadUrl || session.artifactStatus === 'succeeded') {
+        markReady(session.plannedCount);
+        return;
+      }
+      if (session.generationStatus === 'succeeded' && session.artifactOperationId) {
+        attachArtifact(session.artifactOperationId, controller, session.plannedCount);
+        return;
+      }
+      if (session.artifactOperationId) {
+        attachArtifact(session.artifactOperationId, controller, session.plannedCount);
+        return;
+      }
+      if (session.generationOperationId) {
+        attachGeneration({
+          generationOperationId: session.generationOperationId,
+          controller,
+          plannedCount: session.plannedCount,
+        });
+      }
     } catch (error) {
       if (controller.signal.aborted) return;
       setStatus('idle');
       setErrorMessage(error instanceof Error ? error.message : 'Audio export failed.');
     }
   }, [
-    applyProgressSnapshot,
+    attachArtifact,
+    attachGeneration,
     cleanupSubscription,
+    exportFormat,
+    localAudioPlayerSpeed,
+    markReady,
     startDocumentAudioExport,
   ]);
 
+  useEffect(() => {
+    if (!isOpen || isLoading || !voice) return;
+    if (statusRef.current === 'generating' || statusRef.current === 'downloading') return;
+
+    const controller = new AbortController();
+    const runId = ++hydrateRunIdRef.current;
+    let attachedSubscription = false;
+
+    void (async () => {
+      try {
+        const snapshot = await resolveDocumentAudioExport({
+          format: exportFormat,
+          speed: localAudioPlayerSpeed,
+        }, controller.signal);
+        if (controller.signal.aborted || runId !== hydrateRunIdRef.current) return;
+
+        const total = Math.max(0, Math.floor(snapshot.plannedCount));
+        const completed = snapshot.completedCount !== null
+          ? Math.max(0, Math.min(total, Math.floor(snapshot.completedCount)))
+          : 0;
+        setDownloadUrl(snapshot.downloadUrl);
+        setPlannedSegments(total);
+        setCompletedSegments(completed);
+        setProgress(clampProgress(completed, total));
+        setErrorMessage(null);
+
+        if (snapshot.downloadUrl || snapshot.artifactStatus === 'succeeded') {
+          markReady(total);
+          return;
+        }
+
+        if (
+          snapshot.artifactOperationId
+          && (snapshot.artifactStatus === 'queued' || snapshot.artifactStatus === 'running')
+        ) {
+          attachedSubscription = true;
+          attachArtifact(snapshot.artifactOperationId, controller, total);
+          return;
+        }
+
+        if (snapshot.generationStatus === 'succeeded') {
+          attachedSubscription = true;
+          await beginArtifactPreparation(controller, total);
+          return;
+        }
+
+        if (
+          snapshot.generationOperationId
+          && (snapshot.generationStatus === 'queued' || snapshot.generationStatus === 'running')
+        ) {
+          attachedSubscription = true;
+          attachGeneration({
+            generationOperationId: snapshot.generationOperationId,
+            controller,
+            plannedCount: total,
+          });
+          return;
+        }
+
+        setStatus('idle');
+      } catch (error) {
+        if (controller.signal.aborted || runId !== hydrateRunIdRef.current) return;
+        setStatus('idle');
+        setErrorMessage(error instanceof Error ? error.message : 'Audio export lookup failed.');
+      }
+    })();
+
+    return () => {
+      if (!attachedSubscription) {
+        controller.abort();
+        hydrateRunIdRef.current += 1;
+      }
+    };
+  }, [
+    attachArtifact,
+    attachGeneration,
+    beginArtifactPreparation,
+    exportFormat,
+    isLoading,
+    isOpen,
+    localAudioPlayerSpeed,
+    markReady,
+    resolveDocumentAudioExport,
+    voice,
+  ]);
+
   const handleDownload = useCallback(() => {
-    const urlToDownload = downloadUrl ? withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat) : audioUrl;
+    const urlToDownload = downloadUrl ? withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat) : null;
     if (!urlToDownload) return;
     setStatus('downloading');
     try {
@@ -249,7 +465,7 @@ export function AudiobookExportModal({
       setStatus('ready');
       setErrorMessage(error instanceof Error ? error.message : 'Download failed.');
     }
-  }, [audioUrl, documentId, documentType, downloadUrl, exportFormat, localAudioPlayerSpeed]);
+  }, [documentId, documentType, downloadUrl, exportFormat, localAudioPlayerSpeed]);
 
   if (isLoading) {
     return null;

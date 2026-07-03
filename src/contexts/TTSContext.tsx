@@ -37,6 +37,7 @@ import {
   createTtsPlaybackSession,
   createTtsPlaybackPlan,
   getTtsPlaybackSeekLayout,
+  resolveTtsExport,
   type TtsPlaybackPlanPayload,
   type TtsPlaybackSeekLayout,
 } from '@/lib/client/api/tts';
@@ -86,14 +87,8 @@ interface TTSContextType extends TTSPlaybackState {
   playbackTimeSec: number;
   playbackDurationSec: number;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
-  startDocumentAudioExport: (signal?: AbortSignal) => Promise<{
-    sessionId: string;
-    audioUrl: string;
-    downloadUrl: string;
-    eventsUrl: string;
-    seekLayoutUrl: string;
-    plannedCount: number;
-  }>;
+  resolveDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
+  startDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
 
   // Alignment metadata for the current sentence
   currentSentenceAlignment?: TTSSentenceAlignment;
@@ -128,6 +123,19 @@ interface TTSContextType extends TTSPlaybackState {
   /** Effective reader type used for worker playback/session scoping. */
   activeReaderType: ReaderType;
 }
+
+type TtsDocumentAudioExportResolution = {
+  sessionId: string;
+  artifactId: string;
+  downloadUrl: string | null;
+  generationOperationId: string | null;
+  artifactOperationId: string | null;
+  generationStatus: string | null;
+  artifactStatus: string | null;
+  seekLayoutUrl: string;
+  plannedCount: number;
+  completedCount: number | null;
+};
 
 interface SetTextOptions {
   shouldPause?: boolean;
@@ -1136,7 +1144,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackSeekLayout,
   ]);
 
-  const startDocumentAudioExport = useCallback(async (signal?: AbortSignal) => {
+  const resolveDocumentAudioExportInternal = useCallback(async (
+    options: { format: 'mp3' | 'm4b'; speed: number },
+    start: boolean,
+    signal?: AbortSignal,
+  ): Promise<TtsDocumentAudioExportResolution> => {
     const request = buildPlaybackPlanRequest();
     if (!request) {
       throw new Error('No document is ready for audio export.');
@@ -1161,7 +1173,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       throw new Error('The worker playback plan was empty for export.');
     }
 
-    const session = await createTtsPlaybackSession({
+    const snapshot = await resolveTtsExport({
       documentId: request.payload.documentId,
       settings: request.payload.settings,
       ...(request.payload.planning ? { planning: request.payload.planning } : {}),
@@ -1170,15 +1182,39 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       planObjectKey: plan.planObjectKey,
       ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
       generationExtent: 'document',
+      format: options.format,
+      speed: options.speed,
+      start,
     }, request.headers, signal);
 
+    const plannedCount = plan.plannedCount ?? plan.segments.length;
+    const generationProgress = snapshot.generation.progress ?? snapshot.generation.operation?.progress ?? null;
+    const progressCompletedCount = generationProgress && Number.isFinite(Number(generationProgress.completedCount))
+      ? Math.max(0, Math.floor(Number(generationProgress.completedCount)))
+      : generationProgress && Number.isFinite(Number(generationProgress.completedThroughOrdinal))
+        ? Math.max(0, Math.floor(Number(generationProgress.completedThroughOrdinal)) + 1)
+        : null;
+    const generationStatus = snapshot.generation.operation?.status ?? snapshot.generation.session?.status ?? null;
+    const artifactStatus = snapshot.artifact.artifact ? 'succeeded' : snapshot.artifact.operation?.status ?? null;
+    const completedCount = snapshot.downloadUrl || artifactStatus === 'succeeded' || generationStatus === 'succeeded'
+      ? plannedCount
+      : progressCompletedCount === null
+        ? null
+        : Math.min(plannedCount, progressCompletedCount);
+
     return {
-      sessionId: session.sessionId,
-      audioUrl: session.audioUrl,
-      downloadUrl: session.downloadUrl,
-      eventsUrl: session.eventsUrl,
-      seekLayoutUrl: session.seekLayoutUrl,
-      plannedCount: plan.plannedCount ?? plan.segments.length,
+      sessionId: snapshot.sessionId,
+      artifactId: snapshot.artifactId,
+      downloadUrl: snapshot.downloadUrl,
+      generationOperationId: snapshot.generation.operation?.opId ?? null,
+      artifactOperationId: snapshot.artifact.operation?.opId ?? null,
+      generationStatus,
+      artifactStatus,
+      seekLayoutUrl: plan.planId
+        ? `/api/tts/playback/plans/${encodeURIComponent(plan.planId)}/seek-layout?sessionId=${encodeURIComponent(snapshot.sessionId)}`
+        : '',
+      plannedCount,
+      completedCount,
     };
   }, [
     applyWorkerPlan,
@@ -1188,6 +1224,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef,
     setPlaybackSeekLayout,
   ]);
+
+  const resolveDocumentAudioExport = useCallback((
+    options: { format: 'mp3' | 'm4b'; speed: number },
+    signal?: AbortSignal,
+  ) => resolveDocumentAudioExportInternal(options, false, signal), [resolveDocumentAudioExportInternal]);
+
+  const startDocumentAudioExport = useCallback((
+    options: { format: 'mp3' | 'm4b'; speed: number },
+    signal?: AbortSignal,
+  ) => resolveDocumentAudioExportInternal(options, true, signal), [resolveDocumentAudioExportInternal]);
 
   buildPlaybackPlanRequestRef.current = buildPlaybackPlanRequest;
   buildPlaybackSessionRequestRef.current = buildPlaybackSessionRequest;
@@ -1536,6 +1582,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackTimeSec,
     playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
     playbackSeekLayout,
+    resolveDocumentAudioExport,
     startDocumentAudioExport,
     currentSentenceAlignment,
     currentWordIndex,
@@ -1579,6 +1626,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanSource,
     playbackSeekLayout,
     playbackTimeSec,
+    resolveDocumentAudioExport,
     startDocumentAudioExport,
     selectedOrdinal,
     currDocPage,

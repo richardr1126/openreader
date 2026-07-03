@@ -102,7 +102,9 @@ describe('server-state architecture', () => {
   test('keeps audiobook export on worker playback state instead of legacy status rows', () => {
     const modal = source('src/components/AudiobookExportModal.tsx');
     expect(modal).toContain('startDocumentAudioExport');
-    expect(modal).toContain('subscribeTtsPlaybackEvents');
+    expect(modal).toContain('resolveDocumentAudioExport');
+    expect(modal).toContain('subscribeTtsExportGenerationEvents');
+    expect(modal).toContain('subscribeTtsExportArtifactEvents');
     expect(modal).toContain('snapshot.completedCount');
     expect(modal).toContain('withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat)');
     expect(modal).toContain("type ExportFormat = 'mp3' | 'm4b'");
@@ -146,12 +148,15 @@ describe('server-state architecture', () => {
       'GET /health/ready',
       'GET /v1/operations/:opId',
       'GET /v1/operations/:opId/events',
+      'GET /v1/tts-playback/exports/:artifactId/download',
       'GET /v1/tts-playback/sessions/:sessionId',
       'GET /v1/tts-playback/sessions/:sessionId/audio',
       'GET /v1/tts-playback/sessions/:sessionId/segments',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
       'POST /v1/tts-playback/cache/reset',
+      'POST /v1/tts-playback/exports/jobs',
+      'POST /v1/tts-playback/exports/resolve',
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/resolve',
@@ -179,8 +184,11 @@ describe('server-state architecture', () => {
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const streamTimelineRoute = source('src/app/api/tts/stream/[sessionId]/timeline/route.ts');
     const streamAudioRoute = source('src/app/api/tts/stream/[sessionId]/audio/route.ts');
+    const exportResolveRoute = source('src/app/api/tts/export/resolve/route.ts');
+    const exportEventsRoute = source('src/app/api/tts/export/events/route.ts');
     const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
+    const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
     const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
     const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
@@ -242,21 +250,29 @@ describe('server-state architecture', () => {
     expect(streamAudioRoute).toContain('resolveTtsPlaybackSession(request, sessionId)');
     expect(streamAudioRoute).toContain('Content-Disposition');
     expect(streamAudioRoute).toContain('readDownloadSpeed(request)');
-    expect(streamAudioRoute).toContain('buildAtempoFilter(input.speed)');
     expect(streamAudioRoute).toContain('readDownloadFormat(request)');
     expect(streamAudioRoute).toContain("request.nextUrl.searchParams.get('format') === 'm4b'");
-    expect(streamAudioRoute).toContain("contentTypeForFormat(downloadFormat)");
-    expect(streamAudioRoute).toContain("'aac'");
-    expect(streamAudioRoute).toContain('transcodeM4bExport');
-    expect(streamAudioRoute).toContain("'M4B '");
-    expect(streamAudioRoute).toContain("'+faststart'");
-    expect(streamAudioRoute).toContain('buildM4bChapters');
-    expect(streamAudioRoute).toContain("'-f',\n    'ffmetadata'");
-    expect(streamAudioRoute).toContain("'-map_chapters',\n    '1'");
+    expect(streamAudioRoute).toContain('worker export artifacts');
+    expect(streamAudioRoute).not.toContain('spawn(');
+    expect(streamAudioRoute).not.toContain('ffmpeg');
+    expect(clientTts).toContain("fetch('/api/tts/export/resolve'");
+    expect(exportResolveRoute).toContain('buildTtsPlaybackExportArtifactId');
+    expect(exportResolveRoute).toContain('createTtsPlaybackExportArtifactOperation');
+    expect(exportResolveRoute).toContain('buildWorkerExportDownloadUrl');
+    expect(exportEventsRoute).toContain('openOperationEvents(opId');
+    expect(workerHandlers).toContain('runTtsPlaybackExportArtifact');
+    expect(workerHandlers).toContain('buildAtempoFilter');
+    expect(workerHandlers).toContain("'aac'");
+    expect(workerHandlers).toContain("'M4B '");
+    expect(workerHandlers).toContain("'+faststart'");
+    expect(workerHandlers).toContain("'-map_chapters'");
     expect(streamSessionRoute).not.toContain('planOnly');
     expect(streamSessionRoute).toContain('planObjectKey');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/:sessionId/audio");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/jobs");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/resolve");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/:artifactId/download");
     expect(workerRoutes).toContain("/v1/tts-playback/plans/jobs");
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");
     expect(workerRoutes).not.toContain("/v1/tts-playback/:sessionId/audio");
