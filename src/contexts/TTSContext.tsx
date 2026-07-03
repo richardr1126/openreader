@@ -1345,7 +1345,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
         readerType: activeReaderType,
         maxBlockLength: ttsSegmentMaxBlockLength,
         keyPrefix: buildSegmentKeyPrefix(documentId, activeReaderType),
-        enforceSourceBoundaries: activeReaderType === 'pdf' && currentUnits !== null && currentUnits.length > 0,
+        // PDF and HTML/MD both feed one source unit per block; enforce boundaries
+        // so blocks (headings, paragraphs) never merge into one run-on segment.
+        enforceSourceBoundaries:
+          (activeReaderType === 'pdf' || activeReaderType === 'html')
+          && currentUnits !== null && currentUnits.length > 0,
         language: resolvedLanguage,
       });
       currentSegments = plan.segments.filter((segment) => currentSourceKeySet.has(segment.ownerSourceKey));
