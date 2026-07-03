@@ -5,7 +5,7 @@ import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignGet } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
-import { isS3Configured } from '@/lib/server/storage/s3';
+import { isLoopbackS3Endpoint, isS3Configured } from '@/lib/server/storage/s3';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -50,7 +50,11 @@ export async function GET(req: NextRequest) {
     }
 
     const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(doc.id)}`;
-    const directUrl = await presignGet(doc.id, testNamespace).catch(() => null);
+    // Loopback S3 endpoints yield presigned URLs unreachable from a remote
+    // browser; serve through the same-origin proxy fallback instead.
+    const directUrl = isLoopbackS3Endpoint()
+      ? null
+      : await presignGet(doc.id, testNamespace).catch(() => null);
     if (!directUrl) {
       serverLogger.warn({
         event: 'documents.blob.get.presign.unavailable',
