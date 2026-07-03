@@ -177,16 +177,56 @@ export async function transcodeToMp3(buffer: Buffer, signal?: AbortSignal): Prom
 }
 
 /**
+ * Detects an mp3 whose leading Xing/Info VBR header under-reports the stream
+ * size — the fingerprint of concatenated mp3 chunks. Some OpenAI-compatible TTS
+ * servers (e.g. DeepInfra's Kokoro) stream audio as several independent mp3
+ * segments glued together but keep only the *first* chunk's Xing header. The
+ * HTML5 <audio> element trusts that header for VBR duration, so it plays only the
+ * first chunk (~2s) and fires `ended` early — the rest of the segment is silently
+ * skipped. We compare the Xing-declared byte count to the real buffer length.
+ */
+function hasUnderreportingXingHeader(buffer: Buffer): boolean {
+  const searchEnd = Math.min(buffer.length, 4096);
+  let tagPos = -1;
+  for (const tag of ['Xing', 'Info']) {
+    const p = buffer.indexOf(tag, 0, 'latin1');
+    if (p >= 0 && p < searchEnd) { tagPos = p; break; }
+  }
+  if (tagPos < 0 || tagPos + 8 > buffer.length) return false;
+  const flags = buffer.readUInt32BE(tagPos + 4);
+  let cursor = tagPos + 8;
+  if (flags & 0x1) cursor += 4; // frames field present — skip it
+  if (!(flags & 0x2)) return false; // no byte-count field to validate against
+  if (cursor + 4 > buffer.length) return false;
+  const declaredBytes = buffer.readUInt32BE(cursor);
+  if (declaredBytes <= 0) return false;
+  // A well-formed Xing describes ~the whole file; a concatenated file's header
+  // describes only the first chunk, far below the real size.
+  return declaredBytes < buffer.length * 0.7;
+}
+
+/**
  * Ensure a TTS buffer is mp3. OpenAI-compatible servers vary in which audio
  * formats they emit (some default to or only support wav), so we sniff the bytes
  * and transcode anything that isn't already mp3. Real-mp3 responses pass through
- * untouched, so the common path adds zero cost.
+ * untouched, so the common path adds zero cost — except concatenated-chunk mp3
+ * with a broken Xing header, which is re-encoded so its duration is accurate and
+ * HTML5 playback doesn't truncate mid-segment.
  */
 export async function normalizeToMp3(buffer: Buffer, signal?: AbortSignal): Promise<Buffer> {
   if (buffer.length === 0) return buffer;
 
   const format = sniffAudioFormat(buffer);
-  if (format === 'mp3') return buffer;
+  if (format === 'mp3') {
+    if (!hasUnderreportingXingHeader(buffer)) return buffer;
+    const repaired = await transcodeToMp3(buffer, signal);
+    serverLogger.info({
+      event: 'tts.audio_format.repaired_mp3_xing',
+      sourceBytes: buffer.length,
+      outputBytes: repaired.length,
+    }, 'Repaired concatenated mp3 with under-reporting Xing header');
+    return repaired;
+  }
 
   const transcoded = await transcodeToMp3(buffer, signal);
   serverLogger.info({
