@@ -212,6 +212,13 @@ export interface paths {
                                     artifactId: string;
                                     /** @enum {string} */
                                     format: "mp3" | "m4b";
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "document_preview";
+                                    documentId: string;
+                                    namespace: string | null;
+                                    /** @enum {string} */
+                                    previewKind: "card";
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -722,6 +729,140 @@ export interface paths {
                                 artifactId: string;
                                 /** @enum {string} */
                                 format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
+                            };
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed";
+                            queuedAt: number;
+                            updatedAt: number;
+                            startedAt?: number;
+                            result?: unknown;
+                            error?: {
+                                message: string;
+                                code?: string;
+                            };
+                            timing?: {
+                                queueWaitMs?: number;
+                                s3FetchMs?: number;
+                                computeMs?: number;
+                            };
+                            progress?: {
+                                totalPages: number;
+                                pagesParsed: number;
+                                currentPage?: number;
+                                /** @enum {string} */
+                                phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/document-previews/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        documentId: string;
+                        namespace: string | null;
+                        /** @enum {string} */
+                        documentType: "pdf" | "epub";
+                        sourceObjectKey: string;
+                        sourceLastModifiedMs: number;
+                        /** @enum {string} */
+                        previewKind: "card";
+                        rendererVersion?: string;
+                        targetWidth?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            opId: string;
+                            subject: {
+                                /** @enum {string} */
+                                kind: "pdf_layout";
+                                documentId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -862,6 +1003,13 @@ export interface paths {
                                 artifactId: string;
                                 /** @enum {string} */
                                 format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -993,6 +1141,13 @@ export interface paths {
                                 artifactId: string;
                                 /** @enum {string} */
                                 format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1117,6 +1272,13 @@ export interface paths {
                                 artifactId: string;
                                 /** @enum {string} */
                                 format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1260,6 +1422,13 @@ export interface paths {
                                     artifactId: string;
                                     /** @enum {string} */
                                     format: "mp3" | "m4b";
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "document_preview";
+                                    documentId: string;
+                                    namespace: string | null;
+                                    /** @enum {string} */
+                                    previewKind: "card";
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1378,6 +1547,165 @@ export interface paths {
                                     artifactId: string;
                                     /** @enum {string} */
                                     format: "mp3" | "m4b";
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "document_preview";
+                                    documentId: string;
+                                    namespace: string | null;
+                                    /** @enum {string} */
+                                    previewKind: "card";
+                                };
+                                /** @enum {string} */
+                                status: "queued" | "running" | "succeeded" | "failed";
+                                queuedAt: number;
+                                updatedAt: number;
+                                startedAt?: number;
+                                result?: unknown;
+                                error?: {
+                                    message: string;
+                                    code?: string;
+                                };
+                                timing?: {
+                                    queueWaitMs?: number;
+                                    s3FetchMs?: number;
+                                    computeMs?: number;
+                                };
+                                progress?: {
+                                    totalPages: number;
+                                    pagesParsed: number;
+                                    currentPage?: number;
+                                    /** @enum {string} */
+                                    phase: "infer" | "merge";
+                                } | {
+                                    completedThroughOrdinal: number;
+                                    completedCount: number;
+                                    plannedCount: number;
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "transcoding" | "uploading";
+                                    completedSegments: number;
+                                    plannedSegments: number;
+                                };
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/document-previews/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        documentId: string;
+                        namespace: string | null;
+                        /** @enum {string} */
+                        documentType: "pdf" | "epub";
+                        sourceObjectKey: string;
+                        sourceLastModifiedMs: number;
+                        /** @enum {string} */
+                        previewKind: "card";
+                        rendererVersion?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            artifact: {
+                                /** @enum {number} */
+                                schemaVersion: 1;
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                documentType: "pdf" | "epub";
+                                sourceObjectKey: string;
+                                sourceLastModifiedMs: number;
+                                /** @enum {string} */
+                                previewKind: "card";
+                                rendererVersion: string;
+                                objectKey: string;
+                                metadataObjectKey: string;
+                                /** @enum {string} */
+                                contentType: "image/jpeg";
+                                width: number;
+                                height: number | null;
+                                byteLength: number;
+                                eTag: string | null;
+                                /** @enum {string} */
+                                status: "ready";
+                                createdAt: number;
+                            } | null;
+                            operation: {
+                                opId: string;
+                                subject: {
+                                    /** @enum {string} */
+                                    kind: "pdf_layout";
+                                    documentId: string;
+                                    namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback";
+                                    documentId: string;
+                                    sessionId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_plan";
+                                    documentId: string;
+                                    settingsHash: string;
+                                    planSignature: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_export";
+                                    documentId: string;
+                                    artifactId: string;
+                                    /** @enum {string} */
+                                    format: "mp3" | "m4b";
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "document_preview";
+                                    documentId: string;
+                                    namespace: string | null;
+                                    /** @enum {string} */
+                                    previewKind: "card";
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1484,6 +1812,13 @@ export interface paths {
                                 artifactId: string;
                                 /** @enum {string} */
                                 format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1716,6 +2051,30 @@ export interface components {
             status: "ready";
             createdAt: number;
         };
+        DocumentPreviewArtifact: {
+            /** @enum {number} */
+            schemaVersion: 1;
+            documentId: string;
+            namespace: string | null;
+            /** @enum {string} */
+            documentType: "pdf" | "epub";
+            sourceObjectKey: string;
+            sourceLastModifiedMs: number;
+            /** @enum {string} */
+            previewKind: "card";
+            rendererVersion: string;
+            objectKey: string;
+            metadataObjectKey: string;
+            /** @enum {string} */
+            contentType: "image/jpeg";
+            width: number;
+            height: number | null;
+            byteLength: number;
+            eTag: string | null;
+            /** @enum {string} */
+            status: "ready";
+            createdAt: number;
+        };
         ComputeOperation: {
             opId: string;
             subject: {
@@ -1741,6 +2100,13 @@ export interface components {
                 artifactId: string;
                 /** @enum {string} */
                 format: "mp3" | "m4b";
+            } | {
+                /** @enum {string} */
+                kind: "document_preview";
+                documentId: string;
+                namespace: string | null;
+                /** @enum {string} */
+                previewKind: "card";
             };
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -1801,6 +2167,13 @@ export interface components {
                     artifactId: string;
                     /** @enum {string} */
                     format: "mp3" | "m4b";
+                } | {
+                    /** @enum {string} */
+                    kind: "document_preview";
+                    documentId: string;
+                    namespace: string | null;
+                    /** @enum {string} */
+                    previewKind: "card";
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1864,6 +2237,13 @@ export interface components {
                     artifactId: string;
                     /** @enum {string} */
                     format: "mp3" | "m4b";
+                } | {
+                    /** @enum {string} */
+                    kind: "document_preview";
+                    documentId: string;
+                    namespace: string | null;
+                    /** @enum {string} */
+                    previewKind: "card";
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1949,6 +2329,104 @@ export interface components {
                     artifactId: string;
                     /** @enum {string} */
                     format: "mp3" | "m4b";
+                } | {
+                    /** @enum {string} */
+                    kind: "document_preview";
+                    documentId: string;
+                    namespace: string | null;
+                    /** @enum {string} */
+                    previewKind: "card";
+                };
+                /** @enum {string} */
+                status: "queued" | "running" | "succeeded" | "failed";
+                queuedAt: number;
+                updatedAt: number;
+                startedAt?: number;
+                result?: unknown;
+                error?: {
+                    message: string;
+                    code?: string;
+                };
+                timing?: {
+                    queueWaitMs?: number;
+                    s3FetchMs?: number;
+                    computeMs?: number;
+                };
+                progress?: {
+                    totalPages: number;
+                    pagesParsed: number;
+                    currentPage?: number;
+                    /** @enum {string} */
+                    phase: "infer" | "merge";
+                } | {
+                    completedThroughOrdinal: number;
+                    completedCount: number;
+                    plannedCount: number;
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "transcoding" | "uploading";
+                    completedSegments: number;
+                    plannedSegments: number;
+                };
+            } | null;
+        };
+        DocumentPreviewResolution: {
+            artifact: {
+                /** @enum {number} */
+                schemaVersion: 1;
+                documentId: string;
+                namespace: string | null;
+                /** @enum {string} */
+                documentType: "pdf" | "epub";
+                sourceObjectKey: string;
+                sourceLastModifiedMs: number;
+                /** @enum {string} */
+                previewKind: "card";
+                rendererVersion: string;
+                objectKey: string;
+                metadataObjectKey: string;
+                /** @enum {string} */
+                contentType: "image/jpeg";
+                width: number;
+                height: number | null;
+                byteLength: number;
+                eTag: string | null;
+                /** @enum {string} */
+                status: "ready";
+                createdAt: number;
+            } | null;
+            operation: {
+                opId: string;
+                subject: {
+                    /** @enum {string} */
+                    kind: "pdf_layout";
+                    documentId: string;
+                    namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback";
+                    documentId: string;
+                    sessionId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_plan";
+                    documentId: string;
+                    settingsHash: string;
+                    planSignature: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_export";
+                    documentId: string;
+                    artifactId: string;
+                    /** @enum {string} */
+                    format: "mp3" | "m4b";
+                } | {
+                    /** @enum {string} */
+                    kind: "document_preview";
+                    documentId: string;
+                    namespace: string | null;
+                    /** @enum {string} */
+                    previewKind: "card";
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";

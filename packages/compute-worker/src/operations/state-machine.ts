@@ -64,7 +64,8 @@ export function shouldReuseExistingOperation(input: {
     // the current sidecar state while still deduping active work.
     return input.requestKind !== 'tts_playback_plan'
       && input.requestKind !== 'tts_playback'
-      && input.requestKind !== 'tts_playback_export';
+      && input.requestKind !== 'tts_playback_export'
+      && input.requestKind !== 'document_preview';
   }
   if (!isInflightStatus(input.current.status)) return false;
   const ageMs = input.now - input.current.updatedAt;

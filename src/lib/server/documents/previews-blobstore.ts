@@ -1,7 +1,6 @@
 import {
   GetObjectCommand,
   HeadObjectCommand,
-  PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { deleteDocumentPrefix, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
@@ -100,27 +99,6 @@ export async function getDocumentPreviewBuffer(documentId: string, namespace: st
   const key = documentPreviewKey(documentId, namespace);
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return bodyToBuffer(res.Body);
-}
-
-export async function putDocumentPreviewBuffer(
-  documentId: string,
-  bytes: Buffer,
-  namespace: string | null,
-  options?: { ifNoneMatch?: boolean },
-): Promise<void> {
-  const cfg = getS3Config();
-  const client = getS3ProxyClient();
-  const key = documentPreviewKey(documentId, namespace);
-  await client.send(
-    new PutObjectCommand({
-      Bucket: cfg.bucket,
-      Key: key,
-      Body: bytes,
-      ContentType: DOCUMENT_PREVIEW_CONTENT_TYPE,
-      ServerSideEncryption: 'AES256',
-      ...(options?.ifNoneMatch ? { IfNoneMatch: '*' } : {}),
-    }),
-  );
 }
 
 export async function presignDocumentPreviewGet(

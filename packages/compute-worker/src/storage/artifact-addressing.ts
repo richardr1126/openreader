@@ -58,6 +58,7 @@ export function ttsPlaybackArtifactKey(input: {
 }
 
 const SAFE_PLAN_SIGNATURE_REGEX = /^[a-f0-9]{8,64}$/i;
+const SAFE_NAMESPACE_REGEX_WITH_DEFAULT = /^[a-zA-Z0-9._-]{1,128}$/;
 
 /**
  * Object key for a document's reusable, position-independent canonical TTS plan.
@@ -144,4 +145,35 @@ export function ttsPlaybackExportMetadataArtifactKey(input: {
     throw new Error(`Invalid playback export artifact id: ${input.artifactId}`);
   }
   return `${input.prefix}/tts_playback_exports_v1/${input.artifactId}/metadata.json`;
+}
+
+function previewNamespaceSegment(namespace: string | null): string {
+  return namespace && SAFE_NAMESPACE_REGEX_WITH_DEFAULT.test(namespace) ? namespace : '_default';
+}
+
+export function documentPreviewArtifactPrefix(input: {
+  documentId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
+    throw new Error(`Invalid document id: ${input.documentId}`);
+  }
+  return `${input.prefix}/document_previews_v1/ns/${previewNamespaceSegment(input.namespace)}/${input.documentId}/`;
+}
+
+export function documentPreviewArtifactKey(input: {
+  documentId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  return `${documentPreviewArtifactPrefix(input)}card-400.jpg`;
+}
+
+export function documentPreviewMetadataArtifactKey(input: {
+  documentId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  return `${documentPreviewArtifactPrefix(input)}metadata.json`;
 }

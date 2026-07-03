@@ -1,5 +1,6 @@
 import type { WorkerOperationState } from '../operations/contracts';
 import {
+  documentPreviewSubjectFromOperationKey,
   pdfSubjectFromOperationKey,
   ttsPlaybackExportSubjectFromOperationKey,
   ttsPlaybackPlanSubjectFromOperationKey,
@@ -10,7 +11,8 @@ export type ComputeOperationSubject =
   | { kind: 'pdf_layout'; documentId: string; namespace: string | null }
   | { kind: 'tts_playback'; documentId: string; sessionId: string }
   | { kind: 'tts_playback_plan'; documentId: string; settingsHash: string; planSignature: string }
-  | { kind: 'tts_playback_export'; documentId: string; artifactId: string; format: 'mp3' | 'm4b' };
+  | { kind: 'tts_playback_export'; documentId: string; artifactId: string; format: 'mp3' | 'm4b' }
+  | { kind: 'document_preview'; documentId: string; namespace: string | null; previewKind: 'card' };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -49,7 +51,14 @@ export function toComputeOperation<Result>(
           artifactId: '',
           format: 'mp3',
         })
-        : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
+        : state.kind === 'document_preview'
+          ? (documentPreviewSubjectFromOperationKey(state.opKey) ?? {
+            kind: 'document_preview',
+            documentId: '',
+            namespace: null,
+            previewKind: 'card',
+          })
+          : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,
     subject,

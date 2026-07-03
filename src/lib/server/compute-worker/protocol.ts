@@ -43,6 +43,14 @@ export type TtsPlaybackExportArtifactResolution =
   paths['/v1/tts-playback/exports/resolve']['post']['responses'][200]['content']['application/json'];
 export type TtsPlaybackExportArtifactMetadata =
   NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
+export type DocumentPreviewRequest =
+  paths['/v1/document-previews/jobs']['post']['requestBody']['content']['application/json'];
+export type DocumentPreviewResolveRequest =
+  paths['/v1/document-previews/resolve']['post']['requestBody']['content']['application/json'];
+export type DocumentPreviewResolution =
+  paths['/v1/document-previews/resolve']['post']['responses'][200]['content']['application/json'];
+export type DocumentPreviewArtifactMetadata =
+  NonNullable<DocumentPreviewResolution['artifact']>;
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;

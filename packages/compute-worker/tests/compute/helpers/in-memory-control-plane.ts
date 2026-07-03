@@ -26,6 +26,8 @@ export class InMemoryOperationQueue implements OperationQueue {
     this.byKind.set('pdf_layout', []);
     this.byKind.set('tts_playback', []);
     this.byKind.set('tts_playback_plan', []);
+    this.byKind.set('tts_playback_export', []);
+    this.byKind.set('document_preview', []);
   }
 
   async enqueue(job: QueuedOperation): Promise<void> {

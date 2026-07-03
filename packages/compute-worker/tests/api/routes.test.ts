@@ -92,6 +92,39 @@ describe('compute worker API routes', () => {
     expect(fetch.json()).toMatchObject({ opId: created.opId, status: 'queued' });
   });
 
+  test('creates document preview operations without exposing internal keys', async () => {
+    const documentId = '9'.repeat(64);
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/document-previews/jobs',
+      headers: AUTH,
+      payload: {
+        documentId,
+        namespace: null,
+        documentType: 'pdf',
+        sourceObjectKey: `openreader/documents_v1/${documentId}`,
+        sourceLastModifiedMs: 12345,
+        previewKind: 'card',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      subject: { kind: 'document_preview', documentId, namespace: null, previewKind: 'card' },
+      status: 'queued',
+    });
+    expect(response.json()).not.toHaveProperty('opKey');
+    expect(response.json()).not.toHaveProperty('jobId');
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'document_preview',
+      payload: {
+        documentId,
+        sourceObjectKey: `openreader/documents_v1/${documentId}`,
+        previewKind: 'card',
+      },
+    });
+  });
+
   test('reuses idempotent PDF requests and replaces them only with an explicit token', async () => {
     const documentId = 'e'.repeat(64);
     const payload = {

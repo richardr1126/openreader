@@ -1,5 +1,7 @@
 import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
+  DocumentPreviewJobRequest,
+  DocumentPreviewJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   TtsPlaybackPlanJobRequest,
@@ -24,6 +26,7 @@ const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
   tts_playback: 30_000,
   tts_playback_plan: 30_000,
   tts_playback_export: 120_000,
+  document_preview: 120_000,
 };
 
 export interface QueuedJob<TPayload> {
@@ -127,6 +130,7 @@ export function createWorkerLoopController(input: {
   ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
   ttsPlaybackPlanCodec?: JsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>;
   ttsPlaybackExportCodec?: JsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>;
+  documentPreviewCodec?: JsonCodec<QueuedJob<DocumentPreviewJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -331,6 +335,7 @@ export function createWorkerLoopController(input: {
       ttsPlayback?: Consumer;
       ttsPlaybackPlan?: Consumer;
       ttsPlaybackExport?: Consumer;
+      documentPreview?: Consumer;
     }): void {
       stopRequested = false;
       loops = [];
@@ -363,6 +368,14 @@ export function createWorkerLoopController(input: {
             gate: playbackGate,
           }
           : null;
+      const documentPreviewWork: WorkDefinition<DocumentPreviewJobRequest, DocumentPreviewJobResult> | null =
+        input.documentPreviewCodec && consumers.documentPreview
+          ? {
+            codec: input.documentPreviewCodec,
+            run: input.handlers.runDocumentPreview,
+            gate: layoutGate,
+          }
+          : null;
       for (let i = 0; i < input.jobConcurrency; i += 1) {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
         if (ttsPlaybackWork && consumers.ttsPlayback) {
@@ -373,6 +386,9 @@ export function createWorkerLoopController(input: {
         }
         if (ttsPlaybackExportWork && consumers.ttsPlaybackExport) {
           loops.push(runLoop({ owner, consumer: consumers.ttsPlaybackExport, ...ttsPlaybackExportWork, workerLabel: `tts-playback-export-${i + 1}` }));
+        }
+        if (documentPreviewWork && consumers.documentPreview) {
+          loops.push(runLoop({ owner, consumer: consumers.documentPreview, ...documentPreviewWork, workerLabel: `document-preview-${i + 1}` }));
         }
       }
     },

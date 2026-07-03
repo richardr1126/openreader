@@ -1,8 +1,8 @@
-import path from 'path';
+import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
-import { renderPage } from '@/lib/server/documents/pdf-preview-renderer';
+import { renderPage } from '../inference/pdf/render';
 
 export type RenderedDocumentPreview = {
   bytes: Buffer;
@@ -13,7 +13,7 @@ export type RenderedDocumentPreview = {
 const PREVIEW_JPEG_QUALITY = 82;
 
 function normalizeTargetWidth(targetWidth: number): number {
-  if (!Number.isFinite(targetWidth) || targetWidth <= 0) return 240;
+  if (!Number.isFinite(targetWidth) || targetWidth <= 0) return 400;
   return Math.max(64, Math.min(2048, Math.round(targetWidth)));
 }
 
@@ -38,10 +38,7 @@ function findBestEpubCoverPath(opfPath: string, opfXml: string): string | null {
     .filter((item) => typeof item === 'object' && item !== null);
 
   const coverMetaId = asArray((metadata?.meta as Record<string, unknown> | Array<Record<string, unknown>> | undefined))
-    .find((meta) => {
-      const name = String(meta?.['@_name'] ?? '').trim().toLowerCase();
-      return name === 'cover';
-    })?.['@_content'];
+    .find((meta) => String(meta?.['@_name'] ?? '').trim().toLowerCase() === 'cover')?.['@_content'];
 
   const byCoverProperty = items.find((item) =>
     String(item['@_properties'] ?? '')
@@ -67,36 +64,33 @@ function findBestEpubCoverPath(opfPath: string, opfXml: string): string | null {
 
 async function renderImageBytesToJpeg(imageBytes: Buffer, targetWidth: number): Promise<RenderedDocumentPreview> {
   const bitmap = await loadImage(imageBytes);
-  const width = bitmap.width;
-  const height = bitmap.height;
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+  const sourceWidth = bitmap.width;
+  const sourceHeight = bitmap.height;
+  if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
     throw new Error('Invalid source image dimensions');
   }
 
-  const target = normalizeTargetWidth(targetWidth);
-  const scale = target / width;
-  const outWidth = Math.max(1, Math.round(width * scale));
-  const outHeight = Math.max(1, Math.round(height * scale));
-  const canvas = createCanvas(outWidth, outHeight);
+  const width = normalizeTargetWidth(targetWidth);
+  const scale = width / sourceWidth;
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, outWidth, outHeight);
+  ctx.fillRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, 0, 0, outWidth, outHeight);
+  ctx.drawImage(bitmap, 0, 0, width, height);
   return {
     bytes: canvas.toBuffer('image/jpeg', PREVIEW_JPEG_QUALITY),
-    width: outWidth,
-    height: outHeight,
+    width,
+    height,
   };
 }
 
 export async function renderEpubCoverToJpeg(sourceBytes: Buffer, targetWidth: number): Promise<RenderedDocumentPreview> {
   const zip = await JSZip.loadAsync(sourceBytes);
   const containerFile = zip.file('META-INF/container.xml');
-  if (!containerFile) {
-    throw new Error('EPUB container.xml not found');
-  }
+  if (!containerFile) throw new Error('EPUB container.xml not found');
 
   const containerXml = await containerFile.async('string');
   const parser = new XMLParser({
@@ -110,27 +104,18 @@ export async function renderEpubCoverToJpeg(sourceBytes: Buffer, targetWidth: nu
     | undefined;
   const rootfiles = asArray(rootfilesNode?.rootfile as Record<string, unknown> | Array<Record<string, unknown>> | undefined);
   const rootfilePath = String(rootfiles[0]?.['@_full-path'] ?? '').trim();
-  if (!rootfilePath) {
-    throw new Error('EPUB OPF rootfile path missing');
-  }
+  if (!rootfilePath) throw new Error('EPUB OPF rootfile path missing');
 
   const opfFile = zip.file(rootfilePath) ?? zip.file(decodeURI(rootfilePath));
-  if (!opfFile) {
-    throw new Error(`EPUB OPF not found at ${rootfilePath}`);
-  }
-  const opfXml = await opfFile.async('string');
-  const coverPath = findBestEpubCoverPath(rootfilePath, opfXml);
-  if (!coverPath) {
-    throw new Error('EPUB cover image not found');
-  }
+  if (!opfFile) throw new Error(`EPUB OPF not found at ${rootfilePath}`);
+
+  const coverPath = findBestEpubCoverPath(rootfilePath, await opfFile.async('string'));
+  if (!coverPath) throw new Error('EPUB cover image not found');
 
   const coverFile = zip.file(coverPath) ?? zip.file(decodeURI(coverPath));
-  if (!coverFile) {
-    throw new Error(`EPUB cover file missing at ${coverPath}`);
-  }
+  if (!coverFile) throw new Error(`EPUB cover file missing at ${coverPath}`);
 
-  const coverBytes = await coverFile.async('nodebuffer');
-  return renderImageBytesToJpeg(coverBytes, targetWidth);
+  return renderImageBytesToJpeg(await coverFile.async('nodebuffer'), targetWidth);
 }
 
 export async function renderPdfFirstPageToJpeg(sourceBytes: Buffer, targetWidth: number): Promise<RenderedDocumentPreview> {

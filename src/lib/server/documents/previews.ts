@@ -1,9 +1,9 @@
-import { randomUUID } from 'crypto';
-import { and, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documentPreviews } from '@openreader/database/schema';
-import { serverLogger } from '@/lib/server/logger';
-import { logServerError } from '@/lib/server/errors/logging';
+import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import type { ComputeOperation } from '@/lib/server/compute-worker/protocol';
+import { documentKey } from '@/lib/server/documents/blobstore';
 import {
   DOCUMENT_PREVIEW_CONTENT_TYPE,
   DOCUMENT_PREVIEW_VARIANT,
@@ -11,21 +11,14 @@ import {
   documentPreviewKey,
   headDocumentPreview,
   isMissingBlobError,
-  putDocumentPreviewBuffer,
 } from '@/lib/server/documents/previews-blobstore';
-import { getDocumentBlob } from '@/lib/server/documents/blobstore';
-import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from '@/lib/server/documents/previews-render';
 
-const LEASE_MS = 45_000;
 const RETRY_AFTER_MS = 1_500;
 const FAILED_RETRY_AFTER_MS = 15_000;
 
 type PreviewStatus = 'queued' | 'processing' | 'ready' | 'failed';
 
 type PreviewRow = {
-  documentId: string;
-  namespace: string;
-  variant: string;
   status: PreviewStatus;
   sourceLastModifiedMs: number;
   objectKey: string;
@@ -34,12 +27,7 @@ type PreviewRow = {
   height: number | null;
   byteSize: number | null;
   eTag: string | null;
-  leaseOwner: string | null;
-  leaseUntilMs: number;
-  attemptCount: number;
   lastError: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
 };
 
 export type PreviewableDocumentType = 'pdf' | 'epub';
@@ -67,6 +55,16 @@ export type EnsureDocumentPreviewResult =
       lastError: string | null;
     };
 
+type DocumentPreviewArtifact = {
+  objectKey: string;
+  contentType: string;
+  width: number;
+  height: number | null;
+  byteLength: number;
+  eTag: string | null;
+  sourceLastModifiedMs: number;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function safeDb(): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,14 +73,6 @@ function safeDb(): any {
 
 function nowMs(): number {
   return Date.now();
-}
-
-function rowsAffected(result: unknown): number {
-  if (!result || typeof result !== 'object') return 0;
-  const rec = result as Record<string, unknown>;
-  if (typeof rec.rowCount === 'number') return rec.rowCount;
-  if (typeof rec.changes === 'number') return rec.changes;
-  return 0;
 }
 
 function toNamespaceKey(namespace: string | null): string {
@@ -100,9 +90,6 @@ function asPreviewStatus(status: string | null | undefined): PreviewStatus {
 
 function toPreviewRow(raw: Record<string, unknown>): PreviewRow {
   return {
-    documentId: String(raw.documentId ?? ''),
-    namespace: String(raw.namespace ?? ''),
-    variant: String(raw.variant ?? ''),
     status: asPreviewStatus(String(raw.status ?? 'queued')),
     sourceLastModifiedMs: Number(raw.sourceLastModifiedMs ?? 0),
     objectKey: String(raw.objectKey ?? ''),
@@ -111,12 +98,7 @@ function toPreviewRow(raw: Record<string, unknown>): PreviewRow {
     height: raw.height == null ? null : Number(raw.height),
     byteSize: raw.byteSize == null ? null : Number(raw.byteSize),
     eTag: raw.eTag == null ? null : String(raw.eTag),
-    leaseOwner: raw.leaseOwner == null ? null : String(raw.leaseOwner),
-    leaseUntilMs: Number(raw.leaseUntilMs ?? 0),
-    attemptCount: Number(raw.attemptCount ?? 0),
     lastError: raw.lastError == null ? null : String(raw.lastError),
-    createdAtMs: Number(raw.createdAtMs ?? 0),
-    updatedAtMs: Number(raw.updatedAtMs ?? 0),
   };
 }
 
@@ -160,16 +142,17 @@ async function ensurePreviewRowExists(doc: PreviewSourceDocument, namespaceKey: 
     .onConflictDoNothing();
 }
 
-async function markPreviewRowQueued(
+async function markPreviewPending(
   doc: PreviewSourceDocument,
   namespaceKey: string,
   namespace: string | null,
+  status: 'queued' | 'processing',
 ): Promise<void> {
   const now = nowMs();
   await safeDb()
     .update(documentPreviews)
     .set({
-      status: 'queued',
+      status,
       sourceLastModifiedMs: doc.lastModified,
       objectKey: previewObjectKey(doc.id, namespace),
       contentType: DOCUMENT_PREVIEW_CONTENT_TYPE,
@@ -191,7 +174,62 @@ async function markPreviewRowQueued(
     );
 }
 
-function needsRequeue(row: PreviewRow, doc: PreviewSourceDocument, namespace: string | null): boolean {
+async function markPreviewReady(
+  doc: PreviewSourceDocument,
+  namespaceKey: string,
+  artifact: DocumentPreviewArtifact,
+): Promise<void> {
+  const now = nowMs();
+  await safeDb()
+    .update(documentPreviews)
+    .set({
+      status: 'ready',
+      sourceLastModifiedMs: artifact.sourceLastModifiedMs,
+      objectKey: artifact.objectKey,
+      contentType: artifact.contentType || DOCUMENT_PREVIEW_CONTENT_TYPE,
+      width: artifact.width || DOCUMENT_PREVIEW_WIDTH,
+      height: artifact.height,
+      byteSize: artifact.byteLength,
+      eTag: artifact.eTag,
+      leaseOwner: null,
+      leaseUntilMs: 0,
+      lastError: null,
+      updatedAtMs: now,
+    })
+    .where(
+      and(
+        eq(documentPreviews.documentId, doc.id),
+        eq(documentPreviews.namespace, namespaceKey),
+        eq(documentPreviews.variant, DOCUMENT_PREVIEW_VARIANT),
+      ),
+    );
+}
+
+async function markPreviewFailed(
+  doc: PreviewSourceDocument,
+  namespaceKey: string,
+  message: string,
+): Promise<void> {
+  const now = nowMs();
+  await safeDb()
+    .update(documentPreviews)
+    .set({
+      status: 'failed',
+      leaseOwner: null,
+      leaseUntilMs: 0,
+      lastError: message.slice(0, 1000),
+      updatedAtMs: now,
+    })
+    .where(
+      and(
+        eq(documentPreviews.documentId, doc.id),
+        eq(documentPreviews.namespace, namespaceKey),
+        eq(documentPreviews.variant, DOCUMENT_PREVIEW_VARIANT),
+      ),
+    );
+}
+
+function needsRefresh(row: PreviewRow, doc: PreviewSourceDocument, namespace: string | null): boolean {
   if (row.sourceLastModifiedMs !== doc.lastModified) return true;
   if (row.objectKey !== previewObjectKey(doc.id, namespace)) return true;
   return false;
@@ -207,100 +245,6 @@ async function isReadyBlobMissing(docId: string, namespace: string | null): Prom
   }
 }
 
-async function tryClaimPreviewLease(docId: string, namespaceKey: string, owner: string): Promise<boolean> {
-  const now = nowMs();
-  const result = await safeDb()
-    .update(documentPreviews)
-    .set({
-      status: 'processing',
-      leaseOwner: owner,
-      leaseUntilMs: now + LEASE_MS,
-      attemptCount: sql`${documentPreviews.attemptCount} + 1`,
-      lastError: null,
-      updatedAtMs: now,
-    })
-    .where(
-      and(
-        eq(documentPreviews.documentId, docId),
-        eq(documentPreviews.namespace, namespaceKey),
-        eq(documentPreviews.variant, DOCUMENT_PREVIEW_VARIANT),
-        or(
-          inArray(documentPreviews.status, ['queued', 'failed']),
-          and(
-            eq(documentPreviews.status, 'processing'),
-            lt(documentPreviews.leaseUntilMs, now),
-          ),
-        ),
-      ),
-    );
-  return rowsAffected(result) > 0;
-}
-
-async function markPreviewReady(
-  doc: PreviewSourceDocument,
-  namespaceKey: string,
-  content: { width: number; height: number | null; byteSize: number; eTag: string | null },
-): Promise<void> {
-  const now = nowMs();
-  await safeDb()
-    .update(documentPreviews)
-    .set({
-      status: 'ready',
-      sourceLastModifiedMs: doc.lastModified,
-      contentType: DOCUMENT_PREVIEW_CONTENT_TYPE,
-      width: content.width,
-      height: content.height,
-      byteSize: content.byteSize,
-      eTag: content.eTag,
-      leaseOwner: null,
-      leaseUntilMs: 0,
-      lastError: null,
-      updatedAtMs: now,
-    })
-    .where(
-      and(
-        eq(documentPreviews.documentId, doc.id),
-        eq(documentPreviews.namespace, namespaceKey),
-        eq(documentPreviews.variant, DOCUMENT_PREVIEW_VARIANT),
-      ),
-    );
-}
-
-async function markPreviewFailed(docId: string, namespaceKey: string, error: unknown): Promise<void> {
-  const now = nowMs();
-  const message = error instanceof Error ? error.message : String(error ?? 'Preview generation failed');
-  await safeDb()
-    .update(documentPreviews)
-    .set({
-      status: 'failed',
-      leaseOwner: null,
-      leaseUntilMs: 0,
-      lastError: message.slice(0, 1000),
-      updatedAtMs: now,
-    })
-    .where(
-      and(
-        eq(documentPreviews.documentId, docId),
-        eq(documentPreviews.namespace, namespaceKey),
-        eq(documentPreviews.variant, DOCUMENT_PREVIEW_VARIANT),
-      ),
-    );
-}
-
-async function generateAndStorePreview(doc: PreviewSourceDocument, namespace: string | null): Promise<void> {
-  const sourceBytes = await getDocumentBlob(doc.id, namespace);
-  let rendered;
-  if (doc.type === 'pdf') {
-    rendered = await renderPdfFirstPageToJpeg(sourceBytes, DOCUMENT_PREVIEW_WIDTH);
-  } else if (doc.type === 'epub') {
-    rendered = await renderEpubCoverToJpeg(sourceBytes, DOCUMENT_PREVIEW_WIDTH);
-  } else {
-    throw new Error(`Unsupported preview type: ${doc.type}`);
-  }
-  // Hot path: overwrite current variant key directly to avoid prefix list/delete latency.
-  await putDocumentPreviewBuffer(doc.id, rendered.bytes, namespace);
-}
-
 function pendingResult(status: PreviewStatus, lastError: string | null): EnsureDocumentPreviewResult {
   return {
     state: 'pending',
@@ -310,13 +254,57 @@ function pendingResult(status: PreviewStatus, lastError: string | null): EnsureD
   };
 }
 
+function statusFromOperation(operation: ComputeOperation | null | undefined): 'queued' | 'processing' | 'failed' | null {
+  if (!operation) return null;
+  if (operation.status === 'queued') return 'queued';
+  if (operation.status === 'running') return 'processing';
+  if (operation.status === 'failed') return 'failed';
+  if (operation.status === 'succeeded') return 'processing';
+  return null;
+}
+
+async function resolveWorkerPreview(
+  doc: PreviewSourceDocument & { type: PreviewableDocumentType },
+  namespace: string | null,
+) {
+  const client = getComputeWorkerClient();
+  const base = {
+    documentId: doc.id,
+    namespace,
+    documentType: doc.type,
+    sourceObjectKey: documentKey(doc.id, namespace),
+    sourceLastModifiedMs: Number(doc.lastModified),
+    previewKind: 'card' as const,
+  };
+  const resolved = await client.resolveDocumentPreview(base);
+  if (resolved.artifact) return resolved;
+  if (resolved.operation && (resolved.operation.status === 'queued' || resolved.operation.status === 'running')) return resolved;
+  const operation = await client.createDocumentPreviewOperation({
+    ...base,
+    targetWidth: DOCUMENT_PREVIEW_WIDTH,
+  });
+  return {
+    artifact: null,
+    operation,
+  };
+}
+
 export async function enqueueDocumentPreview(doc: PreviewSourceDocument, namespace: string | null): Promise<void> {
   if (!isPreviewableDocumentType(doc.type)) return;
   const namespaceKey = toNamespaceKey(namespace);
   await ensurePreviewRowExists(doc, namespaceKey, namespace);
-  const row = await getPreviewRow(doc.id, namespaceKey);
-  if (!row || needsRequeue(row, doc, namespace) || row.status === 'failed') {
-    await markPreviewRowQueued(doc, namespaceKey, namespace);
+  if (!isComputeWorkerAvailable()) {
+    await markPreviewFailed(doc, namespaceKey, 'Compute worker is required for document preview generation');
+    return;
+  }
+  const resolved = await resolveWorkerPreview({ ...doc, type: doc.type }, namespace);
+  const status = statusFromOperation(resolved.operation);
+  if (resolved.artifact) {
+    await markPreviewReady(doc, namespaceKey, resolved.artifact);
+  } else if (status === 'failed') {
+    await markPreviewFailed(doc, namespaceKey, resolved.operation?.error?.message ?? 'Document preview generation failed');
+  } else {
+    await markPreviewPending(doc, namespaceKey, namespace, status ?? 'queued');
   }
 }
 
@@ -329,87 +317,47 @@ export async function ensureDocumentPreview(doc: PreviewSourceDocument, namespac
   await ensurePreviewRowExists(doc, namespaceKey, namespace);
 
   let row = await getPreviewRow(doc.id, namespaceKey);
-  if (!row) {
-    return pendingResult('queued', null);
+  if (row?.status === 'ready' && !needsRefresh(row, doc, namespace) && !await isReadyBlobMissing(doc.id, namespace)) {
+    return {
+      state: 'ready',
+      status: 'ready',
+      contentType: row.contentType || DOCUMENT_PREVIEW_CONTENT_TYPE,
+      width: row.width || DOCUMENT_PREVIEW_WIDTH,
+      height: row.height,
+      byteSize: row.byteSize,
+      eTag: row.eTag,
+    };
   }
 
-  if (needsRequeue(row, doc, namespace)) {
-    await markPreviewRowQueued(doc, namespaceKey, namespace);
+  if (!isComputeWorkerAvailable()) {
+    await markPreviewFailed(doc, namespaceKey, 'Compute worker is required for document preview generation');
+    return pendingResult('failed', 'Compute worker is required for document preview generation');
+  }
+
+  const resolved = await resolveWorkerPreview({ ...doc, type: doc.type }, namespace);
+  if (resolved.artifact) {
+    await markPreviewReady(doc, namespaceKey, resolved.artifact);
     row = await getPreviewRow(doc.id, namespaceKey);
-    if (!row) return pendingResult('queued', null);
+    return {
+      state: 'ready',
+      status: 'ready',
+      contentType: row?.contentType || DOCUMENT_PREVIEW_CONTENT_TYPE,
+      width: row?.width || DOCUMENT_PREVIEW_WIDTH,
+      height: row?.height ?? resolved.artifact.height,
+      byteSize: row?.byteSize ?? resolved.artifact.byteLength,
+      eTag: row?.eTag ?? resolved.artifact.eTag,
+    };
   }
 
-  if (row.status === 'ready') {
-    const missing = await isReadyBlobMissing(doc.id, namespace);
-    if (!missing) {
-      return {
-        state: 'ready',
-        status: 'ready',
-        contentType: row.contentType || DOCUMENT_PREVIEW_CONTENT_TYPE,
-        width: row.width || DOCUMENT_PREVIEW_WIDTH,
-        height: row.height,
-        byteSize: row.byteSize,
-        eTag: row.eTag,
-      };
-    }
-    await markPreviewRowQueued(doc, namespaceKey, namespace);
-    row = await getPreviewRow(doc.id, namespaceKey);
-    if (!row) return pendingResult('queued', null);
+  const operationStatus = statusFromOperation(resolved.operation);
+  if (operationStatus === 'failed') {
+    const message = resolved.operation?.error?.message ?? 'Document preview generation failed';
+    await markPreviewFailed(doc, namespaceKey, message);
+    return pendingResult('failed', message);
   }
 
-  const now = nowMs();
-  if (row.status === 'processing' && row.leaseUntilMs > now) {
-    return pendingResult('processing', row.lastError);
-  }
-
-  const owner = `req-${randomUUID()}`;
-  const claimed = await tryClaimPreviewLease(doc.id, namespaceKey, owner);
-  if (claimed) {
-    try {
-      await generateAndStorePreview(doc, namespace);
-      const head = await headDocumentPreview(doc.id, namespace);
-      await markPreviewReady(doc, namespaceKey, {
-        width: DOCUMENT_PREVIEW_WIDTH,
-        height: null,
-        byteSize: head.contentLength,
-        eTag: head.eTag,
-      });
-    } catch (error) {
-      logServerError(serverLogger, {
-        event: 'documents.preview.generate.failed',
-        msg: 'Preview generation failed',
-        error,
-        context: {
-          documentId: doc.id,
-          documentType: doc.type,
-        },
-        normalize: { code: 'DOCUMENT_PREVIEW_GENERATE_FAILED', errorClass: 'storage' },
-      });
-      await markPreviewFailed(doc.id, namespaceKey, error);
-    }
-  }
-
-  row = await getPreviewRow(doc.id, namespaceKey);
-  if (!row) return pendingResult('queued', null);
-
-  if (row.status === 'ready') {
-    const missing = await isReadyBlobMissing(doc.id, namespace);
-    if (!missing) {
-      return {
-        state: 'ready',
-        status: 'ready',
-        contentType: row.contentType || DOCUMENT_PREVIEW_CONTENT_TYPE,
-        width: row.width || DOCUMENT_PREVIEW_WIDTH,
-        height: row.height,
-        byteSize: row.byteSize,
-        eTag: row.eTag,
-      };
-    }
-    await markPreviewRowQueued(doc, namespaceKey, namespace);
-    return pendingResult('queued', null);
-  }
-
-  return pendingResult(row.status, row.lastError);
+  await markPreviewPending(doc, namespaceKey, namespace, operationStatus ?? 'queued');
+  return pendingResult(operationStatus ?? 'queued', null);
 }
 
 export async function deleteDocumentPreviewRows(documentId: string, namespace: string | null): Promise<void> {

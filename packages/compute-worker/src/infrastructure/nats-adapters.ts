@@ -10,6 +10,7 @@ import type {
   QueuedOperation,
 } from '../operations';
 import type {
+  DocumentPreviewJobRequest,
   PdfLayoutJobRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackPlanJobRequest,
@@ -311,6 +312,7 @@ export interface JetStreamOperationQueueDeps<TPayload> {
   ttsPlaybackSubject: string;
   ttsPlaybackPlanSubject?: string;
   ttsPlaybackExportSubject?: string;
+  documentPreviewSubject?: string;
   onEnqueued?: (job: QueuedOperation<TPayload>) => Promise<void> | void;
 }
 
@@ -318,7 +320,8 @@ type JetStreamQueuedPayload =
   | PdfLayoutJobRequest
   | TtsPlaybackJobRequest
   | TtsPlaybackPlanJobRequest
-  | TtsPlaybackExportArtifactRequest;
+  | TtsPlaybackExportArtifactRequest
+  | DocumentPreviewJobRequest;
 
 export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPayload> {
   private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
@@ -326,11 +329,13 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
   private readonly ttsPlaybackSubject: string;
   private readonly ttsPlaybackPlanSubject: string;
   private readonly ttsPlaybackExportSubject: string;
+  private readonly documentPreviewSubject: string;
   private readonly onEnqueued?: (job: QueuedOperation<JetStreamQueuedPayload>) => Promise<void> | void;
   private readonly layoutCodec = createJsonCodec<QueuedOperation<PdfLayoutJobRequest>>();
   private readonly ttsPlaybackCodec = createJsonCodec<QueuedOperation<TtsPlaybackJobRequest>>();
   private readonly ttsPlaybackPlanCodec = createJsonCodec<QueuedOperation<TtsPlaybackPlanJobRequest>>();
   private readonly ttsPlaybackExportCodec = createJsonCodec<QueuedOperation<TtsPlaybackExportArtifactRequest>>();
+  private readonly documentPreviewCodec = createJsonCodec<QueuedOperation<DocumentPreviewJobRequest>>();
 
   constructor(deps: JetStreamOperationQueueDeps<JetStreamQueuedPayload>) {
     this.getJs = deps.getJs;
@@ -338,6 +343,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
     this.ttsPlaybackSubject = deps.ttsPlaybackSubject;
     this.ttsPlaybackPlanSubject = deps.ttsPlaybackPlanSubject ?? 'jobs.tts_playback_plan';
     this.ttsPlaybackExportSubject = deps.ttsPlaybackExportSubject ?? 'jobs.tts_playback_export';
+    this.documentPreviewSubject = deps.documentPreviewSubject ?? 'jobs.document_preview';
     this.onEnqueued = deps.onEnqueued;
   }
 
@@ -362,6 +368,11 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
       await js.publish(
         this.ttsPlaybackExportSubject,
         this.ttsPlaybackExportCodec.encode(job as QueuedOperation<TtsPlaybackExportArtifactRequest>),
+      );
+    } else if (job.kind === 'document_preview') {
+      await js.publish(
+        this.documentPreviewSubject,
+        this.documentPreviewCodec.encode(job as QueuedOperation<DocumentPreviewJobRequest>),
       );
     } else {
       const exhaustive: never = job.kind;

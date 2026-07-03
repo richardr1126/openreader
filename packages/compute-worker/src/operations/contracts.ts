@@ -18,7 +18,9 @@ export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
 export const TTS_PLAYBACK_QUEUE_NAME = 'tts-playback';
 export const TTS_PLAYBACK_PLAN_QUEUE_NAME = 'tts-playback-plan';
 export const TTS_PLAYBACK_EXPORT_QUEUE_NAME = 'tts-playback-export';
+export const DOCUMENT_PREVIEW_QUEUE_NAME = 'document-preview';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
+export const DOCUMENT_PREVIEW_RENDERER_VERSION = 'document-preview@pdfjs-4.8.69+epub-cover-v1';
 
 export function encodeParserVersion(parserVersion: string, defaultVersion = PDF_PARSER_VERSION): string {
   return encodeURIComponent(parserVersion.trim() || defaultVersion);
@@ -160,6 +162,44 @@ export interface TtsPlaybackExportArtifactResult {
   timing?: WorkerJobTiming;
 }
 
+export type DocumentPreviewKind = 'card';
+
+export interface DocumentPreviewJobRequest {
+  documentId: string;
+  namespace: string | null;
+  documentType: 'pdf' | 'epub';
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  previewKind: DocumentPreviewKind;
+  rendererVersion?: string;
+  targetWidth?: number;
+}
+
+export interface DocumentPreviewArtifactMetadata {
+  schemaVersion: 1;
+  documentId: string;
+  namespace: string | null;
+  documentType: 'pdf' | 'epub';
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  previewKind: DocumentPreviewKind;
+  rendererVersion: string;
+  objectKey: string;
+  metadataObjectKey: string;
+  contentType: 'image/jpeg';
+  width: number;
+  height: number | null;
+  byteLength: number;
+  eTag: string | null;
+  status: 'ready';
+  createdAt: number;
+}
+
+export interface DocumentPreviewJobResult {
+  artifact: DocumentPreviewArtifactMetadata;
+  timing?: WorkerJobTiming;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -222,7 +262,7 @@ export interface WorkerJobStatusResponse<Result> {
   timing?: WorkerJobTiming;
 }
 
-export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export';
+export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export' | 'document_preview';
 
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
@@ -248,11 +288,18 @@ export interface TtsPlaybackExportArtifactOperationRequest {
   payload: TtsPlaybackExportArtifactRequest;
 }
 
+export interface DocumentPreviewOperationRequest {
+  kind: 'document_preview';
+  opKey: string;
+  payload: DocumentPreviewJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
   | TtsPlaybackPlanOperationRequest
-  | TtsPlaybackExportArtifactOperationRequest;
+  | TtsPlaybackExportArtifactOperationRequest
+  | DocumentPreviewOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

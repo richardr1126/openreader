@@ -20,6 +20,8 @@ import {
 } from '../infrastructure/config';
 import { OperationOrchestrator } from '../operations';
 import type {
+  DocumentPreviewJobRequest,
+  DocumentPreviewJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   TtsPlaybackPlanJobRequest,
@@ -48,6 +50,7 @@ import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop'
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
   EVENTS_STREAM_NAME,
+  DOCUMENT_PREVIEW_JOBS_SUBJECT,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
@@ -69,6 +72,8 @@ import {
   pdfLayoutResolutionSchema,
   computeOperationEventSchema,
   computeOperationSchema,
+  documentPreviewArtifactMetadataSchema,
+  documentPreviewResolutionSchema,
   ttsPlaybackExportArtifactMetadataSchema,
   ttsPlaybackExportProgressSchema,
   ttsPlaybackExportArtifactResolutionSchema,
@@ -198,10 +203,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
           PdfLayoutProgress: jsonSchema(pdfLayoutProgressSchema),
           TtsPlaybackExportProgress: jsonSchema(ttsPlaybackExportProgressSchema),
           TtsPlaybackExportArtifact: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
+          DocumentPreviewArtifact: jsonSchema(documentPreviewArtifactMetadataSchema),
           ComputeOperation: jsonSchema(computeOperationSchema),
           ComputeOperationEvent: jsonSchema(computeOperationEventSchema),
           PdfLayoutResolution: jsonSchema(pdfLayoutResolutionSchema),
           TtsPlaybackExportArtifactResolution: jsonSchema(ttsPlaybackExportArtifactResolutionSchema),
+          DocumentPreviewResolution: jsonSchema(documentPreviewResolutionSchema),
         },
       },
       security: [{ bearerAuth: [] }],
@@ -225,12 +232,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const ttsPlaybackJobCodec = createJsonCodec<QueuedJob<TtsPlaybackJobRequest>>();
   const ttsPlaybackPlanJobCodec = createJsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>();
   const ttsPlaybackExportJobCodec = createJsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>();
+  const documentPreviewJobCodec = createJsonCodec<QueuedJob<DocumentPreviewJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -247,6 +255,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     ttsPlaybackSubject: TTS_PLAYBACK_JOBS_SUBJECT,
     ttsPlaybackPlanSubject: TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
     ttsPlaybackExportSubject: TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
+    documentPreviewSubject: DOCUMENT_PREVIEW_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -324,6 +333,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     ttsPlaybackCodec: ttsPlaybackJobCodec,
     ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
     ttsPlaybackExportCodec: ttsPlaybackExportJobCodec,
+    documentPreviewCodec: documentPreviewJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -358,6 +368,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         ttsPlayback: session.ttsPlaybackConsumer,
         ttsPlaybackPlan: session.ttsPlaybackPlanConsumer,
         ttsPlaybackExport: session.ttsPlaybackExportConsumer,
+        documentPreview: session.documentPreviewConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

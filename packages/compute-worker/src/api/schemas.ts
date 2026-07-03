@@ -54,6 +54,21 @@ export const pdfOperationCreateSchema = z.object({
   replaceToken: z.string().trim().min(1).max(256).optional(),
 });
 
+export const documentPreviewOperationCreateSchema = z.object({
+  documentId: documentIdSchema,
+  namespace: namespaceSchema,
+  documentType: z.enum(['pdf', 'epub']),
+  sourceObjectKey: z.string().trim().min(1).max(2048),
+  sourceLastModifiedMs: z.number().int().nonnegative(),
+  previewKind: z.literal('card'),
+  rendererVersion: z.string().trim().min(1).max(256).optional(),
+  targetWidth: z.number().int().positive().max(2048).optional(),
+}).strict();
+
+export const documentPreviewResolveSchema = documentPreviewOperationCreateSchema.omit({
+  targetWidth: true,
+});
+
 export const ttsPlaybackPlanningSchema = z.object({
   selectedOrdinal: z.number().int().nonnegative().optional(),
   maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -204,6 +219,26 @@ export const ttsPlaybackExportArtifactMetadataSchema = z.object({
   createdAt: z.number(),
 });
 
+export const documentPreviewArtifactMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  documentId: z.string(),
+  namespace: z.string().nullable(),
+  documentType: z.enum(['pdf', 'epub']),
+  sourceObjectKey: z.string(),
+  sourceLastModifiedMs: z.number(),
+  previewKind: z.literal('card'),
+  rendererVersion: z.string(),
+  objectKey: z.string(),
+  metadataObjectKey: z.string(),
+  contentType: z.literal('image/jpeg'),
+  width: z.number(),
+  height: z.number().nullable(),
+  byteLength: z.number(),
+  eTag: z.string().nullable(),
+  status: z.literal('ready'),
+  createdAt: z.number(),
+});
+
 export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
@@ -228,6 +263,12 @@ export const computeOperationSchema = z.object({
       documentId: z.string(),
       artifactId: z.string(),
       format: ttsPlaybackExportFormatSchema,
+    }),
+    z.object({
+      kind: z.literal('document_preview'),
+      documentId: z.string(),
+      namespace: z.string().nullable(),
+      previewKind: z.literal('card'),
     }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
@@ -263,6 +304,11 @@ export const ttsPlaybackSessionResolutionSchema = z.object({
 
 export const ttsPlaybackExportArtifactResolutionSchema = z.object({
   artifact: ttsPlaybackExportArtifactMetadataSchema.nullable(),
+  operation: computeOperationSchema.nullable(),
+});
+
+export const documentPreviewResolutionSchema = z.object({
+  artifact: documentPreviewArtifactMetadataSchema.nullable(),
   operation: computeOperationSchema.nullable(),
 });
 

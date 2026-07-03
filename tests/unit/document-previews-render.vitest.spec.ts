@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import {
   renderEpubCoverToJpeg,
   renderPdfFirstPageToJpeg,
-} from '../../src/lib/server/documents/previews-render';
+} from '../../packages/compute-worker/src/jobs/document-preview-render';
 
 describe('document-previews-render', () => {
   test('renders first PDF page to JPEG preview', async () => {

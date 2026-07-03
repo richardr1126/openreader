@@ -2,6 +2,8 @@ import type {
   PdfLayoutRequest,
   PdfLayoutResolution,
   PdfLayoutResult,
+  DocumentPreviewRequest,
+  DocumentPreviewResolution,
   TtsPlaybackRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
@@ -86,12 +88,20 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/pdf-layout/jobs', input);
   }
 
+  createDocumentPreviewOperation(input: DocumentPreviewRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/document-previews/jobs', input);
+  }
+
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
     return this.requestJson('POST', '/v1/pdf-layout/resolve', {
       documentId: input.documentId,
       namespace: input.namespace,
       documentObjectKey: input.documentObjectKey,
     });
+  }
+
+  resolveDocumentPreview(input: Omit<DocumentPreviewRequest, 'targetWidth'>): Promise<DocumentPreviewResolution> {
+    return this.requestJson('POST', '/v1/document-previews/resolve', input);
   }
 
   createTtsPlaybackOperation(input: TtsPlaybackRequest): Promise<ComputeOperation> {

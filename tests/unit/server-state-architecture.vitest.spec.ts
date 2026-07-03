@@ -152,6 +152,8 @@ describe('server-state architecture', () => {
       'GET /v1/tts-playback/sessions/:sessionId',
       'GET /v1/tts-playback/sessions/:sessionId/audio',
       'GET /v1/tts-playback/sessions/:sessionId/segments',
+      'POST /v1/document-previews/jobs',
+      'POST /v1/document-previews/resolve',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
       'POST /v1/tts-playback/cache/reset',

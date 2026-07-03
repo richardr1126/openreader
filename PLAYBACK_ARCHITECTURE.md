@@ -520,8 +520,6 @@ tsc --noEmit`, and `pnpm test:unit`.
 
 ---
 
-## Remaining Work
-
 ### 13. Audiobook Export Reconnect and Worker-Owned Artifacts
 
 Status: implemented. Reconnect and worker-owned export artifacts were implemented
@@ -624,18 +622,20 @@ Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
 server-state architecture tests, cache-clear tests, worker route tests, and
 worker-loop tests.
 
+---
+
+## Remaining Work
+
 ### 14. Worker-Owned Document Preview Jobs
 
-Status: planned. Preview image generation is derived-media compute and should
-not happen inside a Vercel request.
+Status: implemented. Preview image generation is worker-owned derived-media
+compute and no longer happens inside a Vercel request.
 
 Current ownership debt:
 
-- Preview ensure/presign/fallback routes can call server preview helpers that
-  claim work, read document blobs, render PDF first pages, extract EPUB covers,
-  and write preview images during a Next request.
-- Presigned object URLs are the right primary delivery path, but the generation
-  side belongs with the worker.
+- Fallback preview proxy routes remain as degraded compatibility paths for
+  reading completed preview bytes and text snippets. They do not claim or render
+  new previews in request.
 
 Target ownership:
 
@@ -652,26 +652,26 @@ Target ownership:
 
 Implementation plan:
 
-1. Add a worker preview job resource, for example
-   `/v1/document-previews/jobs` and `/v1/document-previews/resolve`, or the
-   closest resource shape consistent with the final worker API.
-2. Key jobs by canonical storage scope, document id/version, source blob key,
-   preview kind, and renderer version.
-3. Pass source blob keys and bounded renderer options in the job payload; do not
-   have the worker query SQL for document rows.
-4. Move PDF first-page rendering and EPUB cover/preview extraction into worker
-   job handlers.
-5. Refactor Next preview ensure routes to resolve/create jobs and return
-   `pending`, `running`, `failed`, or completed presigned URL snapshots.
-6. Keep preview delivery through presigned S3 URLs whenever possible; fallback
-   object proxying should be a compatibility branch only.
-7. Add regression coverage:
-   - preview ensure does not invoke render/extract code in Next;
-   - preview worker code does not import SQL/database modules;
-   - completed preview returns a presigned URL without worker job creation;
-   - running preview reconnects through operation state;
-   - failed preview surfaces retryable failure state;
-   - fallback proxying cannot become the primary generation path.
+Implemented:
+
+1. Added worker preview job resources:
+   `POST /v1/document-previews/jobs` and
+   `POST /v1/document-previews/resolve`.
+2. Jobs are keyed by document id, namespace, source blob key, source modified
+   time, preview kind, and renderer version.
+3. Job payloads carry source object keys and bounded renderer options; the
+   worker does not query SQL for document rows.
+4. PDF first-page rendering and EPUB cover extraction live in the compute
+   worker.
+5. Next preview ensure/presign/fallback routes now resolve/create worker jobs
+   and return pending/failed/ready snapshots; they do not render previews.
+6. Completed preview delivery still prefers presigned S3 URLs, with the fallback
+   proxy limited to compatibility reads.
+
+Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`,
+focused preview render tests, worker route tests, worker-loop tests,
+JetStream adapter tests, worker-loop policy tests, and
+`pnpm run check:compute-boundary`.
 
 ### 15. Worker-Owned DOCX Conversion
 

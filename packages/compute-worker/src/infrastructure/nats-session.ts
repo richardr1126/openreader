@@ -5,6 +5,7 @@ import { connect, type ConnectionOptions, type NatsConnection } from '@nats-io/t
 import {
   COMPUTE_STATE_BUCKET,
   COMPUTE_STATE_TTL_MS,
+  DOCUMENT_PREVIEW_CONSUMER_NAME,
   JOBS_STREAM_NAME,
   LAYOUT_CONSUMER_NAME,
   NATS_API_TIMEOUT_MS,
@@ -28,6 +29,7 @@ export interface NatsSession {
   ttsPlaybackConsumer: Consumer;
   ttsPlaybackPlanConsumer: Consumer;
   ttsPlaybackExportConsumer: Consumer;
+  documentPreviewConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -165,6 +167,7 @@ export function createNatsSessionManager(input: {
         ttsPlaybackConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_CONSUMER_NAME),
         ttsPlaybackPlanConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_PLAN_CONSUMER_NAME),
         ttsPlaybackExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_EXPORT_CONSUMER_NAME),
+        documentPreviewConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_PREVIEW_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

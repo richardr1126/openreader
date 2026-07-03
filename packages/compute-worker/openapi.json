@@ -396,6 +396,119 @@
         ],
         "additionalProperties": false
       },
+      "DocumentPreviewArtifact": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "epub"
+            ]
+          },
+          "sourceObjectKey": {
+            "type": "string"
+          },
+          "sourceLastModifiedMs": {
+            "type": "number"
+          },
+          "previewKind": {
+            "type": "string",
+            "enum": [
+              "card"
+            ]
+          },
+          "rendererVersion": {
+            "type": "string"
+          },
+          "objectKey": {
+            "type": "string"
+          },
+          "metadataObjectKey": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "image/jpeg"
+            ]
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "byteLength": {
+            "type": "number"
+          },
+          "eTag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "documentId",
+          "namespace",
+          "documentType",
+          "sourceObjectKey",
+          "sourceLastModifiedMs",
+          "previewKind",
+          "rendererVersion",
+          "objectKey",
+          "metadataObjectKey",
+          "contentType",
+          "width",
+          "height",
+          "byteLength",
+          "eTag",
+          "status",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "ComputeOperation": {
         "type": "object",
         "properties": {
@@ -512,6 +625,43 @@
                   "documentId",
                   "artifactId",
                   "format"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "document_preview"
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "previewKind": {
+                    "type": "string",
+                    "enum": [
+                      "card"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "documentId",
+                  "namespace",
+                  "previewKind"
                 ],
                 "additionalProperties": false
               }
@@ -774,6 +924,43 @@
                       "documentId",
                       "artifactId",
                       "format"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "document_preview"
+                        ]
+                      },
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "previewKind": {
+                        "type": "string",
+                        "enum": [
+                          "card"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "documentId",
+                      "namespace",
+                      "previewKind"
                     ],
                     "additionalProperties": false
                   }
@@ -1061,6 +1248,43 @@
                           "documentId",
                           "artifactId",
                           "format"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_preview"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "previewKind": {
+                            "type": "string",
+                            "enum": [
+                              "card"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace",
+                          "previewKind"
                         ],
                         "additionalProperties": false
                       }
@@ -1440,6 +1664,473 @@
                           "documentId",
                           "artifactId",
                           "format"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_preview"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "previewKind": {
+                            "type": "string",
+                            "enum": [
+                              "card"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace",
+                          "previewKind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "queuedAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "startedAt": {
+                    "type": "number"
+                  },
+                  "result": {},
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "message"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "timing": {
+                    "type": "object",
+                    "properties": {
+                      "queueWaitMs": {
+                        "type": "number"
+                      },
+                      "s3FetchMs": {
+                        "type": "number"
+                      },
+                      "computeMs": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "totalPages": {
+                            "type": "number"
+                          },
+                          "pagesParsed": {
+                            "type": "number"
+                          },
+                          "currentPage": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "infer",
+                              "merge"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "totalPages",
+                          "pagesParsed",
+                          "phase"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "completedThroughOrdinal": {
+                            "type": "number"
+                          },
+                          "completedCount": {
+                            "type": "number"
+                          },
+                          "plannedCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "completedThroughOrdinal",
+                          "completedCount",
+                          "plannedCount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "assembling",
+                              "transcoding",
+                              "uploading"
+                            ]
+                          },
+                          "completedSegments": {
+                            "type": "number"
+                          },
+                          "plannedSegments": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "phase",
+                          "completedSegments",
+                          "plannedSegments"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "opId",
+                  "subject",
+                  "status",
+                  "queuedAt",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifact",
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentPreviewResolution": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "enum": [
+                      1
+                    ]
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "documentType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub"
+                    ]
+                  },
+                  "sourceObjectKey": {
+                    "type": "string"
+                  },
+                  "sourceLastModifiedMs": {
+                    "type": "number"
+                  },
+                  "previewKind": {
+                    "type": "string",
+                    "enum": [
+                      "card"
+                    ]
+                  },
+                  "rendererVersion": {
+                    "type": "string"
+                  },
+                  "objectKey": {
+                    "type": "string"
+                  },
+                  "metadataObjectKey": {
+                    "type": "string"
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "enum": [
+                      "image/jpeg"
+                    ]
+                  },
+                  "width": {
+                    "type": "number"
+                  },
+                  "height": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "byteLength": {
+                    "type": "number"
+                  },
+                  "eTag": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ready"
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "documentId",
+                  "namespace",
+                  "documentType",
+                  "sourceObjectKey",
+                  "sourceLastModifiedMs",
+                  "previewKind",
+                  "rendererVersion",
+                  "objectKey",
+                  "metadataObjectKey",
+                  "contentType",
+                  "width",
+                  "height",
+                  "byteLength",
+                  "eTag",
+                  "status",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "opId": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pdf_layout"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "sessionId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_plan"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "settingsHash": {
+                            "type": "string"
+                          },
+                          "planSignature": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "settingsHash",
+                          "planSignature"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_export"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "artifactId": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "mp3",
+                              "m4b"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "artifactId",
+                          "format"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_preview"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "previewKind": {
+                            "type": "string",
+                            "enum": [
+                              "card"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace",
+                          "previewKind"
                         ],
                         "additionalProperties": false
                       }
@@ -1923,6 +2614,43 @@
                                     "documentId",
                                     "artifactId",
                                     "format"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_preview"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "previewKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "card"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace",
+                                    "previewKind"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -2809,6 +3537,437 @@
                             "format"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/document-previews/jobs": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "documentType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub"
+                    ]
+                  },
+                  "sourceObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "sourceLastModifiedMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "previewKind": {
+                    "type": "string",
+                    "enum": [
+                      "card"
+                    ]
+                  },
+                  "rendererVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "targetWidth": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 2048
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "namespace",
+                  "documentType",
+                  "sourceObjectKey",
+                  "sourceLastModifiedMs",
+                  "previewKind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_plan"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "settingsHash": {
+                              "type": "string"
+                            },
+                            "planSignature": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "settingsHash",
+                            "planSignature"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -3259,6 +4418,43 @@
                             "format"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -3668,6 +4864,43 @@
                             "format"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -4040,6 +5273,43 @@
                             "documentId",
                             "artifactId",
                             "format"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
                           ],
                           "additionalProperties": false
                         }
@@ -4492,6 +5762,43 @@
                                     "format"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_preview"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "previewKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "card"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace",
+                                    "previewKind"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -4854,6 +6161,569 @@
                                     "format"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_preview"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "previewKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "card"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace",
+                                    "previewKind"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "failed"
+                              ]
+                            },
+                            "queuedAt": {
+                              "type": "number"
+                            },
+                            "updatedAt": {
+                              "type": "number"
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            },
+                            "result": {},
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "message": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "message"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "timing": {
+                              "type": "object",
+                              "properties": {
+                                "queueWaitMs": {
+                                  "type": "number"
+                                },
+                                "s3FetchMs": {
+                                  "type": "number"
+                                },
+                                "computeMs": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "progress": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "totalPages": {
+                                      "type": "number"
+                                    },
+                                    "pagesParsed": {
+                                      "type": "number"
+                                    },
+                                    "currentPage": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "infer",
+                                        "merge"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "totalPages",
+                                    "pagesParsed",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "completedThroughOrdinal": {
+                                      "type": "number"
+                                    },
+                                    "completedCount": {
+                                      "type": "number"
+                                    },
+                                    "plannedCount": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "completedThroughOrdinal",
+                                    "completedCount",
+                                    "plannedCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "transcoding",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedSegments": {
+                                      "type": "number"
+                                    },
+                                    "plannedSegments": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedSegments",
+                                    "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "opId",
+                            "subject",
+                            "status",
+                            "queuedAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "artifact",
+                    "operation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/document-previews/resolve": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "documentType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub"
+                    ]
+                  },
+                  "sourceObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "sourceLastModifiedMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "previewKind": {
+                    "type": "string",
+                    "enum": [
+                      "card"
+                    ]
+                  },
+                  "rendererVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "namespace",
+                  "documentType",
+                  "sourceObjectKey",
+                  "sourceLastModifiedMs",
+                  "previewKind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "artifact": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "documentType": {
+                              "type": "string",
+                              "enum": [
+                                "pdf",
+                                "epub"
+                              ]
+                            },
+                            "sourceObjectKey": {
+                              "type": "string"
+                            },
+                            "sourceLastModifiedMs": {
+                              "type": "number"
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            },
+                            "rendererVersion": {
+                              "type": "string"
+                            },
+                            "objectKey": {
+                              "type": "string"
+                            },
+                            "metadataObjectKey": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "type": "string",
+                              "enum": [
+                                "image/jpeg"
+                              ]
+                            },
+                            "width": {
+                              "type": "number"
+                            },
+                            "height": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "byteLength": {
+                              "type": "number"
+                            },
+                            "eTag": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ready"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "documentId",
+                            "namespace",
+                            "documentType",
+                            "sourceObjectKey",
+                            "sourceLastModifiedMs",
+                            "previewKind",
+                            "rendererVersion",
+                            "objectKey",
+                            "metadataObjectKey",
+                            "contentType",
+                            "width",
+                            "height",
+                            "byteLength",
+                            "eTag",
+                            "status",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "operation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "opId": {
+                              "type": "string"
+                            },
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf_layout"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "sessionId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "sessionId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_plan"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "settingsHash": {
+                                      "type": "string"
+                                    },
+                                    "planSignature": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "settingsHash",
+                                    "planSignature"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_export"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "mp3",
+                                        "m4b"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "artifactId",
+                                    "format"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_preview"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "previewKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "card"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace",
+                                    "previewKind"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -5163,6 +7033,43 @@
                             "documentId",
                             "artifactId",
                             "format"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
                           ],
                           "additionalProperties": false
                         }

@@ -32,6 +32,8 @@ import {
 import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
 import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
 import {
+  documentPreviewArtifactKey,
+  documentPreviewMetadataArtifactKey,
   documentSourceKey,
   parsedPdfArtifactKey,
   ttsPlaybackExportArtifactKey,
@@ -39,13 +41,16 @@ import {
   ttsPlaybackPlanArtifactKey,
 } from '../storage/artifact-addressing';
 import { extractEpubSpine } from '../inference/epub/spine-text';
-import type { ParsedPdfDocument } from '../operations/contracts';
+import { DOCUMENT_PREVIEW_RENDERER_VERSION, type ParsedPdfDocument } from '../operations/contracts';
 import {
   runPdfLayoutFromPdfBuffer,
   runWhisperAlignmentFromAudioBuffer,
 } from '../inference/runtime';
 import { withIdleTimeoutAndHardCap, withTimeout } from '../infrastructure/config';
 import type {
+  DocumentPreviewArtifactMetadata,
+  DocumentPreviewJobRequest,
+  DocumentPreviewJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   PdfLayoutProgress,
@@ -65,12 +70,24 @@ import { generationFloorForCursor } from '../playback/generation-window';
 import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
 import { resolveTtsCredentials } from './tts-credentials';
+import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from './document-preview-render';
 
 const pdfRequestSchema = z.object({
   documentId: z.string().trim().min(1),
   namespace: z.string().trim().min(1).max(128).nullable(),
   documentObjectKey: z.string().trim().min(1).max(2048),
 });
+
+const documentPreviewRequestSchema = z.object({
+  documentId: z.string().trim().min(1),
+  namespace: z.string().trim().min(1).max(128).nullable(),
+  documentType: z.enum(['pdf', 'epub']),
+  sourceObjectKey: z.string().trim().min(1).max(2048),
+  sourceLastModifiedMs: z.number().int().nonnegative(),
+  previewKind: z.literal('card'),
+  rendererVersion: z.string().trim().min(1).max(256).optional(),
+  targetWidth: z.number().int().positive().max(2048).optional(),
+}).strict();
 
 const ttsPlaybackPlanningSchema = z.object({
   selectedOrdinal: z.number().int().nonnegative().optional(),
@@ -1228,6 +1245,10 @@ export interface JobHandlers {
     queueWaitMs: number,
     hooks?: { onProgress?: (progress: TtsPlaybackExportProgress) => Promise<void> },
   ): Promise<TtsPlaybackExportArtifactResult>;
+  runDocumentPreview(
+    payload: DocumentPreviewJobRequest,
+    queueWaitMs: number,
+  ): Promise<DocumentPreviewJobResult>;
 }
 
 export function createJobHandlers(input: {
@@ -1289,6 +1310,59 @@ export function createJobHandlers(input: {
       });
       return {
         parsedObjectKey,
+        timing: { queueWaitMs, s3FetchMs, computeMs },
+      };
+    },
+
+    async runDocumentPreview(payload, queueWaitMs) {
+      const parsed = documentPreviewRequestSchema.parse(payload);
+      const s3FetchStartedAt = Date.now();
+      const sourceBytes = Buffer.from(await withTimeout(
+        input.storage.readObject(parsed.sourceObjectKey),
+        Math.max(input.pdfTimeoutMs, 1_000),
+        'document preview source fetch',
+      ));
+      const s3FetchMs = Date.now() - s3FetchStartedAt;
+
+      const computeStartedAt = Date.now();
+      const rendered = parsed.documentType === 'pdf'
+        ? await renderPdfFirstPageToJpeg(sourceBytes, parsed.targetWidth ?? 400)
+        : await renderEpubCoverToJpeg(sourceBytes, parsed.targetWidth ?? 400);
+      const computeMs = Date.now() - computeStartedAt;
+
+      const objectKey = documentPreviewArtifactKey({
+        documentId: parsed.documentId,
+        namespace: parsed.namespace,
+        prefix: input.s3Prefix,
+      });
+      const metadataObjectKey = documentPreviewMetadataArtifactKey({
+        documentId: parsed.documentId,
+        namespace: parsed.namespace,
+        prefix: input.s3Prefix,
+      });
+      await input.storage.putObject(objectKey, rendered.bytes, 'image/jpeg');
+      const artifact: DocumentPreviewArtifactMetadata = {
+        schemaVersion: 1,
+        documentId: parsed.documentId,
+        namespace: parsed.namespace,
+        documentType: parsed.documentType,
+        sourceObjectKey: parsed.sourceObjectKey,
+        sourceLastModifiedMs: parsed.sourceLastModifiedMs,
+        previewKind: parsed.previewKind,
+        rendererVersion: parsed.rendererVersion?.trim() || DOCUMENT_PREVIEW_RENDERER_VERSION,
+        objectKey,
+        metadataObjectKey,
+        contentType: 'image/jpeg',
+        width: rendered.width,
+        height: rendered.height,
+        byteLength: rendered.bytes.byteLength,
+        eTag: null,
+        status: 'ready',
+        createdAt: Date.now(),
+      };
+      await input.storage.putObject(metadataObjectKey, Buffer.from(JSON.stringify(artifact)), 'application/json');
+      return {
+        artifact,
         timing: { queueWaitMs, s3FetchMs, computeMs },
       };
     },

@@ -3,7 +3,7 @@ import {
   buildTtsPlaybackCanonicalScopeKey,
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
-import { PDF_PARSER_VERSION } from './contracts';
+import { DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION } from './contracts';
 
 export function buildPdfOperationKey(input: {
   documentId: string;
@@ -20,6 +20,45 @@ export function buildPdfOperationKey(input: {
     input.documentObjectKey,
     input.replaceToken?.trim() || '',
   ].join('|');
+}
+
+export function buildDocumentPreviewOperationKey(input: {
+  documentId: string;
+  namespace: string | null;
+  documentType: 'pdf' | 'epub';
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  previewKind: 'card';
+  rendererVersion?: string;
+}): string {
+  return [
+    'document_preview',
+    'v1',
+    input.rendererVersion?.trim() || DOCUMENT_PREVIEW_RENDERER_VERSION,
+    input.documentId,
+    input.namespace ?? '',
+    input.documentType,
+    input.previewKind,
+    input.sourceObjectKey,
+    String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
+  ].join('|');
+}
+
+export function documentPreviewSubjectFromOperationKey(opKey: string): {
+  kind: 'document_preview';
+  documentId: string;
+  namespace: string | null;
+  previewKind: 'card';
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, , documentId, namespace, , previewKind] = parts;
+  if (kind !== 'document_preview' || version !== 'v1' || !documentId || previewKind !== 'card') return null;
+  return {
+    kind: 'document_preview',
+    documentId,
+    namespace: namespace || null,
+    previewKind,
+  };
 }
 
 export function pdfSubjectFromOperationKey(opKey: string): {

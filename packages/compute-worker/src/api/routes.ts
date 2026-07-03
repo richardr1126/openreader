@@ -9,6 +9,8 @@ import type {
   WorkerOperationEvent,
   WorkerOperationRequest,
   WorkerOperationState,
+  DocumentPreviewArtifactMetadata,
+  DocumentPreviewJobResult,
   TtsPlaybackJobResult,
   TtsPlaybackPlanJobResult,
   TtsPlaybackExportArtifactMetadata,
@@ -18,6 +20,7 @@ import { hashOpKey } from '../infrastructure/nats-adapters';
 import type { StreamedOperationState } from '../operations/recovery';
 import type { ReconciliationStateStore } from '../operations/reconciliation';
 import {
+  documentPreviewMetadataArtifactKey,
   parsedPdfArtifactKey,
   ttsPlaybackExportMetadataArtifactKey,
 } from '../storage/artifact-addressing';
@@ -35,6 +38,7 @@ import {
 } from './playback-audio-layout';
 import {
   buildPdfOperationKey,
+  buildDocumentPreviewOperationKey,
   buildTtsPlaybackExportOperationKey,
   buildTtsPlaybackOperationKey,
   buildTtsPlaybackPlanOperationKey,
@@ -54,6 +58,9 @@ import {
   pdfOperationCreateSchema,
   pdfResolveSchema,
   computeOperationSchema,
+  documentPreviewOperationCreateSchema,
+  documentPreviewResolveSchema,
+  documentPreviewResolutionSchema,
   ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackOperationCreateSchema,
@@ -74,7 +81,7 @@ interface OperationEventStreamLike {
   subscribe(input: {
     opId: string;
     sinceEventId?: number;
-    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult>) => void | Promise<void>;
+    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult>) => void | Promise<void>;
     onError?: (error: unknown) => void;
   }): Promise<() => void>;
 }
@@ -255,6 +262,41 @@ export function registerComputeWorkerRoutes(input: {
       const bytes = await storage.readObject(key);
       const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata;
       if (parsed.schemaVersion !== 1 || parsed.artifactId !== artifactId || parsed.status !== 'ready') return null;
+      if (!await storage.objectExists(parsed.objectKey).catch(() => false)) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const readDocumentPreviewArtifactMetadata = async (input: {
+    documentId: string;
+    namespace: string | null;
+    documentType: 'pdf' | 'epub';
+    sourceObjectKey: string;
+    sourceLastModifiedMs: number;
+    previewKind: 'card';
+  }): Promise<DocumentPreviewArtifactMetadata | null> => {
+    const key = documentPreviewMetadataArtifactKey({
+      documentId: input.documentId,
+      namespace: input.namespace,
+      prefix: s3Prefix,
+    });
+    try {
+      const bytes = await storage.readObject(key);
+      const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as DocumentPreviewArtifactMetadata;
+      if (
+        parsed.schemaVersion !== 1
+        || parsed.documentId !== input.documentId
+        || parsed.namespace !== input.namespace
+        || parsed.documentType !== input.documentType
+        || parsed.sourceObjectKey !== input.sourceObjectKey
+        || parsed.sourceLastModifiedMs !== input.sourceLastModifiedMs
+        || parsed.previewKind !== input.previewKind
+        || parsed.status !== 'ready'
+      ) {
+        return null;
+      }
       if (!await storage.objectExists(parsed.objectKey).catch(() => false)) return null;
       return parsed;
     } catch {
@@ -1421,6 +1463,36 @@ export function registerComputeWorkerRoutes(input: {
     return toComputeOperation(op);
   });
 
+  app.post('/v1/document-previews/jobs', {
+    schema: {
+      body: jsonSchema(documentPreviewOperationCreateSchema),
+      response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = documentPreviewOperationCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+
+    const requestOp: WorkerOperationRequest = {
+      kind: 'document_preview',
+      opKey: buildDocumentPreviewOperationKey(parsed.data),
+      payload: parsed.data,
+    };
+    await ensureOrphanedOpRecovery();
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    app.log.info({
+      kind: requestOp.kind,
+      opId: op.opId,
+      jobId: op.jobId,
+      status: op.status,
+      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
+    }, 'op.accepted');
+    reply.code(202);
+    return toComputeOperation(op);
+  });
+
   app.post('/v1/tts-playback/sessions/jobs', {
     schema: {
       body: jsonSchema(ttsPlaybackOperationCreateSchema),
@@ -1583,6 +1655,28 @@ export function registerComputeWorkerRoutes(input: {
     };
   });
 
+  app.post('/v1/document-previews/resolve', {
+    schema: {
+      body: jsonSchema(documentPreviewResolveSchema),
+      response: { 200: jsonSchema(documentPreviewResolutionSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = documentPreviewResolveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    await ensureOrphanedOpRecovery();
+    const artifact = await readDocumentPreviewArtifactMetadata(parsed.data);
+    const opKey = buildDocumentPreviewOperationKey(parsed.data);
+    const index = await deps.operationStateStore.getOpIndex?.(opKey);
+    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    return {
+      artifact,
+      operation: operation ? toComputeOperation(operation) : null,
+    };
+  });
+
   app.get('/v1/operations/:opId', {
     schema: {
       params: jsonSchema(operationParamsSchema),
@@ -1655,7 +1749,7 @@ export function registerComputeWorkerRoutes(input: {
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
       const frameEvent: ComputeOperationEvent<
-        PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult
+        PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult
       > = {
         eventId,
         snapshot: toComputeOperation(snapshot),
