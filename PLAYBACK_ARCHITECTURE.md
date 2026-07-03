@@ -1,13 +1,14 @@
-# TTS Playback Architecture
+# Playback and Derived Media Architecture
 
-This is the current architecture for TTS playback across the browser client,
-Next.js app, and compute worker. It reflects the cursor/session split, the move
-from the mutable segment index/claim store to per-ordinal sidecars, and the
-remaining client/worker ownership debt.
+This is the current architecture for TTS playback and adjacent derived-media
+work across the browser client, Next.js app on Vercel, and compute worker on the
+Railway container. It reflects the cursor/session split, the move from the
+mutable segment index/claim store to per-ordinal sidecars, the compute-worker API
+hard cut, and the remaining Next/worker ownership debt.
 
 ---
 
-## Core rule
+## Core Rules
 
 Classify playback state by `durability x write-frequency`, and do not use CAS in
 the playback path.
@@ -19,12 +20,35 @@ the playback path.
 | Segment duration/alignment/status | S3, one sidecar per plan ordinal | put to unique key |
 | Session record | JetStream KV, `tts_playback.session.*` | plain `put` |
 | Cursor/playhead | JetStream KV, `tts_playback.cursor.*` | plain `put`, last-write-wins |
-| Jobs, op state, SSE events | JetStream streams | durable queue/events |
+| Job queue | JetStream stream, `compute_jobs` subjects | small durable work messages |
+| Operation index/state | JetStream KV, `op_index.*` / `op_state.*` | CAS only for op claiming/state machine |
+| SSE events | JetStream stream, `compute_events` subjects | replayable operation snapshots |
+| Large manifests/artifacts | S3/object storage | write once or idempotent put |
 
 The important invariant is that hot cursor updates never rewrite the worker-owned
 session record. Cursor writes happen on their own KV key, so a per-second browser
 heartbeat, audio-range re-anchor, and worker status update cannot collide on one
 revision. `kv.update(...revision)` should not appear in playback storage.
+
+Classify API ownership by `request duration x compute/memory/streaming cost`.
+Next.js routes run under Vercel's request-duration model and should own
+authentication, scope resolution, quota/rate checks, database metadata,
+presigned URL issuance, short worker job creation/resolution, and short JSON
+snapshots. The Railway compute worker should own any work that can stream for
+minutes, wait on provider/model generation, transcode, render, parse, convert,
+package archives, or scan large object sets.
+
+The worker should not become a SQL application server. SQL remains the Next.js
+control-plane database for users, auth, document metadata, folders, admin UI,
+quotas, rate/concurrency ledgers, and account records. Worker-owned jobs should
+persist job identity, operation state, session state, and progress in
+NATS/JetStream, and persist large inputs/outputs/manifests in object storage.
+Job messages should carry canonical scope, object keys, settings hashes,
+operation ids, and small options; they should not carry large blobs or require
+the worker to query app tables. The current narrow exception is read-only worker
+access to `admin_providers` for server-managed TTS provider credentials. Do not
+expand that exception for previews, conversion, exports, document metadata, or
+user/account data.
 
 ---
 
@@ -32,14 +56,27 @@ revision. `kv.update(...revision)` should not appear in playback storage.
 
 ```
 [Browser client] --HTTP--> [Next.js API routes] --HTTP--> [Compute worker]
-  <audio> element             auth + proxy              Fastify routes
-  projection loop                                      JetStream KV/streams
-  scrubber/seek                                        S3 artifacts
+  <audio> element             auth + control plane      Fastify routes
+  projection loop             presigned URLs            JetStream KV/streams
+  scrubber/seek               bounded SSE proxies       S3 artifacts
 ```
 
-The Next.js app remains a thin authenticated proxy. Playback ownership is split:
-the client owns media/UI state, and the compute worker owns durable playback
-state, artifact layout, generation, and stream construction.
+The Next.js app is not the durable media worker. It remains the authenticated
+control plane for browser-owned requests: it validates users, resolves document
+and storage scope, applies quota/rate policy, mints signed worker/public object
+URLs, creates or resolves worker jobs, and returns short snapshots. Bounded SSE
+proxies are acceptable because the browser reconnects with event ids and the
+worker owns the long-lived stream source.
+
+The compute worker owns durable playback state, artifact layout, generation, and
+stream construction. It also owns the target home for long-running derived media
+jobs that currently still leak into Next routes: audiobook packaging/transcoding,
+document preview rendering, DOCX conversion, and large account export packaging.
+Those remaining Next routes should become resolve/create/download control-plane
+routes, not Vercel-hosted compute routes. Moving a job to the worker means its
+queue/progress/state moves to NATS/JetStream and its durable files move to object
+storage; it does not mean the worker starts reading or writing SQL ownership
+tables.
 
 That split is still too blurry for EPUB rendering/highlight behavior. The worker
 is the authority for the durable plan and absolute ordinals, while the client
@@ -48,6 +85,44 @@ Playback start no longer branches across EPUB CFI, viewport locator, selected
 locator, text, segment key, or current index. The canonical worker plan is always
 the playback identity source, and starting audio requires one absolute
 worker-plan ordinal.
+
+### Next API Surface
+
+Current Next route ownership is intentionally mixed only where Vercel hosting
+patterns require it:
+
+- Auth, account, admin, user-state, document metadata, folders, runtime config,
+  TTS provider metadata, and rate-limit status are ordinary short JSON routes and
+  stay in Next.
+- Document upload/download/preview primary paths should use S3 presigned URLs.
+  Fallback proxy routes may remain as degraded compatibility paths, but they
+  must not become the primary data plane because they buffer request or object
+  bodies inside Vercel functions.
+- PDF parse and TTS playback generation are worker-owned jobs. Next creates or
+  resolves deterministic jobs, returns short snapshots, and proxies operation
+  SSE only as a bounded reconnectable stream. Completed parsed PDF artifacts
+  should be delivered primarily through signed object URLs; same-origin parsed
+  JSON byte proxying is compatibility/small-artifact behavior, not the primary
+  data plane.
+- TTS live playback audio should use the signed Railway worker URL directly.
+  Same-origin Next audio routes are acceptable only for authenticated downloads
+  and legacy compatibility while the worker lacks a first-class download/export
+  artifact route.
+- Scheduled tasks may remain in Next while they are bounded maintenance work
+  below Vercel's limit. They must not grow into parse/TTS/render/transcode/export
+  jobs.
+
+Current known ownership debt:
+
+- `/api/tts/stream/[sessionId]/audio` still does same-origin download proxying,
+  speed transcodes, and M4B packaging in Next.
+- `/api/documents/[id]/parsed` still can return completed parsed PDF JSON bytes
+  through Next instead of making signed object delivery the primary artifact
+  path.
+- Document preview ensure/presign/fallback routes can claim and render PDF/EPUB
+  preview images inside a Next request.
+- Document upload finalize converts DOCX to PDF with LibreOffice in Next.
+- User data export streams a ZIP archive and document blobs from Next.
 
 ---
 
@@ -263,20 +338,17 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 
 | Phase | Status | Notes |
 |---|---|---|
-| Split cursor/session KV | Done | Cursor has its own key, session reads overlay it, all writes are plain `put`. |
-| Delete claims and aggregate index | Done | Sidecars are keyed by ordinal under `tts_playback_segments_v1`; readiness comes from sidecar reads plus audio existence. |
-| Stale sidecar recovery | Done | Generation validates completed sidecars against audio object existence, and the stream route retries stale sidecars whose audio object is missing. |
-| EPUB selected-segment start | Done | Playback session creation now requires `startIntent.selectedOrdinal`; plan loading has no playback-start inputs. |
-| Client controller extraction | Done | `useTtsPlayback` owns the audio ref, playback phase, session/timeline refs, session creation, audio event wiring, seek/resync, projection loop, foreground SSE sync, cursor heartbeat, visibility resync, playback time, and in-flight guard. |
-| Collapse duplicate client state | Done | `useTtsPlaybackModel` owns worker plan, derived segments/sentences/current row, selected ordinal, and seek layout as one model. Array index is derived for display/navigation only. `playbackAnchor` is a reader viewport anchor. |
-| Worker-plan ordinal start | Done | Playback jobs validate the selected ordinal against the canonical plan. Coordinate/text/key fallback resolution has been removed from the playback-start path. |
-| Remove client-side EPUB playback planning | Done | Plan/session payloads no longer carry reader start coordinates, text, or segment keys. EPUB page extraction builds rendered text maps and a stable spine anchor only; playback segments come from the worker plan. |
-| Clear cache as playback reset boundary | Done | Clear calls the worker reset endpoint before deleting objects; the worker bumps a scope epoch, cancels matching sessions, invalidates local sidecar caches, and epoch-aware readers/writers reject stale sidecars/late writes. |
-| ID/key/schema consolidation | Done | Playback plan/grid/sidecar artifacts use `ordinal`; mirrored `sourceSegmentIndex` values are gone; plan/session request schemas are separated and strict; schema-version handling is centralized for playback plan artifacts and sidecars. |
-| (7) Move playback audio to a dedicated prefix | Done | Generation writes audio through `buildTtsPlaybackSegmentAudioKey` under `tts_playback_segments_audio_v1/`, and sidecars point at that key. Playback no longer writes `tts_segments_v2/`. |
-| (8) Retire legacy audiobook pipeline; download from worker loop | Done | Client/server audiobook pipeline, routes, hooks, blobstore, DB reads/writes, data export/claim/cleanup paths, and legacy tests are removed. Export now creates a document-extent playback session, tracks playback SSE progress, and downloads from the worker stream through the Next proxy. MP3 uses the worker stream directly when possible; M4B is a proxy-side AAC/MP4 transcode with chapter metadata derived from the worker plan/timeline. No audiobook blobstore. Legacy table DROP is complete in step 9. |
-| (9) v5 decommission: drop legacy TTS + audiobook storage | Done | Dropped legacy table defs and generated per-dialect `DROP TABLE` migrations with the retired scheduled-task row delete. Deleted the recurring cleanup task, added idempotent `runV4Decommission(env)` for `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`, wired it into bootstrap and `pnpm migrate-decommission`, removed the FS→S3 migrator, and updated current docs/config. |
-| (10) Audiobook export hardening | Done | Export settings now expose audiobook speed and format, progress is driven by authoritative SSE `completedCount` snapshots, and MP3/M4B downloads use a same-origin Next proxy route. |
+| 1-6 Playback state/model cleanup | Done | Cursor/session split, sidecar-only readiness, ordinal-only playback start, client controller/model extraction, cache reset epochs, and schema/key consolidation are complete. |
+| 7 Playback-owned audio prefix | Done | Generated audio now lives under `tts_playback_segments_audio_v1/`; playback no longer writes `tts_segments_v2/`. |
+| 8 Legacy audiobook retirement | Done | Legacy audiobook routes/hooks/blobstore/tables/runtime reads were removed. Export now reuses worker playback generation, with current download/transcode debt tracked in Step 13. |
+| 9 v5 decommission | Done | Legacy TTS/audiobook tables and object prefixes are dropped/purged through migration/bootstrap tooling. |
+| 10 Audiobook export hardening | Done | Export speed/format, authoritative `completedCount` progress, and same-origin download bridge are implemented. The bridge is temporary until Step 13 moves artifacts to worker ownership. |
+| 11 Idempotent playback jobs | Done | Live and export sessions are deterministic and separate; both share per-ordinal segment cache without sharing cursor/session state. |
+| 12 Compute worker API hard cut | Done | Worker routes use the finalized resource/job shape with no old aliases. |
+| 13 Audiobook export reconnect + worker-owned artifacts | Planned | Merge reconnect with final artifact ownership; move speed transcode, M4B packaging, chapter metadata embedding, and large download assembly out of Next. |
+| 14 Worker-owned document preview jobs | Planned | Move PDF first-page rendering and EPUB cover/preview extraction out of Next request handlers. |
+| 15 Worker-owned DOCX conversion | Planned | Move LibreOffice DOCX->PDF conversion to Railway worker jobs; keep non-DOCX finalize short in Next. |
+| 16 Worker-owned account export artifacts | Planned | Next remains the SQL/control plane, but large ZIP assembly and document-blob streaming move to worker-owned durable artifacts. |
 
 ---
 
@@ -284,143 +356,47 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 
 ### 1. Require Worker-Plan Ordinal for Audio Start
 
-The client no longer starts playback from EPUB coordinates, locators, text,
-segment keys, or viewport anchors. Audio start requires exactly one value:
-
-- `startIntent.selectedOrdinal`
-
-The worker validates the ordinal against the canonical plan and stores it as
-`generationStartOrdinal`. The client should not independently choose between
-`playbackSegment.ownerLocator`, `playbackAnchor.locator`, text, current index,
-CFI, or page-start anchor.
-
-Completed cleanup:
-
-- Session creation is gated on `startIntent.selectedOrdinal`.
-- The session request is rebuilt from the applied worker plan before starting
-  audio.
-- Worker playback-start resolution is ordinal-only.
-- Plan/session payloads no longer send reader start coordinates, segment keys,
-  or text as playback-start inputs.
+Playback start is ordinal-only. The client sends `startIntent.selectedOrdinal`,
+and the worker validates it against the canonical plan before storing it as
+`generationStartOrdinal`. EPUB CFI, viewport locator, page-start anchor, text,
+segment key, and array index are no longer playback-start inputs.
 
 ### 2. Reduce Client EPUB Planning to Highlight Mapping
 
-EPUB page extraction no longer builds client-side canonical playback windows.
-The ownership division is:
-
-- Worker: durable EPUB text extraction, segmentation, segment keys, locators,
-  ordinals, and ordinal validation.
-- Client: rendered text maps, CFI/page navigation, and mapping the current
-  worker segment to a visible highlight.
-
-Completed cleanup:
-
-- Plan creation uses document/settings/segmentation input only; start page,
-  spine offset, segment key, and text no longer fork plan operation keys.
-- Playback sessions send plan identity plus selected worker-plan ordinal, not
-  reader coordinates or text/key hints.
-- EPUB page extraction builds rendered text maps plus a stable spine anchor only;
-  worker-plan rows are mapped to those ranges for highlighting.
+The worker owns durable EPUB extraction, segmentation, locators, ordinals, and
+ordinal validation. The client owns only rendered text maps, CFI/page navigation,
+stable spine anchors, and visible highlight mapping. Plan/session payloads no
+longer send reader coordinates or text/key hints.
 
 ### 3. Extract the Playback Controller
 
-`TTSContext` should be split so React context exposes state/actions, while a
-smaller controller owns the playback state machine:
-
-`idle -> planning -> ready -> playing -> seeking -> buffering -> ended/failed`
-
-This controller should own the audio element, session lifecycle, seek/resync, and
-projection loop. Document viewers should only provide anchors and render
-highlight state.
-
-Completed cleanup:
-
-- `useTtsPlayback` now owns an explicit playback phase:
-  `idle`, `planning`, `ready`, `playing`, `seeking`, `buffering`, `ended`, and
-  `failed`.
-- `useTtsPlayback` owns the unlocked audio ref, playback session ref, timeline
-  ref, playback time, projection loop, foreground SSE sync, cursor heartbeat,
-  visibility resync, and audio-seek readiness helper.
-- Projection writes the selected worker-plan ordinal directly; it does not use a
-  segment key, text, or ordinal-to-array-index cache.
-- Stream creation, audio element event wiring, seek/resync polling, and the
-  in-flight playback driver moved out of `TTSContext` into `useTtsPlayback`.
-- `TTSContext` now passes plan-building callbacks into the controller and exposes
-  state/actions.
+`useTtsPlayback` owns the media controller: phase, unlocked audio ref, session
+and timeline refs, playback time, stream creation, audio events, seek/resync,
+foreground SSE sync, cursor heartbeat, visibility resync, projection loop, and
+the in-flight driver. `TTSContext` remains the app-level state/actions facade.
 
 ### 4. Collapse Duplicate Client State
 
-These values previously could disagree during cache clears, EPUB cursor moves,
-and plan/session restarts:
-
-- `playbackAnchor`
-- `playbackSegments`
-- `sentences`
-- `currentIndex`
-- `playbackSeekLayout`
-- `playbackPlanRef`
-
-The target is a single worker-plan model plus a selected ordinal. Derived views
-compute sentence text, highlight segment, and scrubber row from that model.
-
-Completed cleanup:
-
-- Added `useTtsPlaybackModel` as the single client holder for the worker plan,
-  canonical playback segments, derived sentence strings, selected ordinal, and
-  seek layout.
-- Removed direct `TTSContext` ownership of `sentences`, `playbackSegments`,
-  `currentIndex`, `playbackSeekLayout`, and `playbackPlanRef`.
-- Context values now read `currentSentence` and `currentSegment` from the model
-  rather than indexing parallel arrays.
-- The public context/API selection value is now `currentSentenceOrdinal`, and
-  playback entrypoints take ordinals rather than array indexes or segment
-  objects.
-- Reader progress stores `segmentOrdinal`; saved positions no longer feed a
-  sentence index into initial playback selection.
-- Playback session creation uses the selected ordinal from the model. It does not
-  synthesize a start ordinal from array index, text, segment key, or saved
-  sentence position.
-
-- `playbackAnchor` is now a reader viewport anchor. It can seed plan-backed UI
-  selection after plan load, but it is not serialized into playback session
-  start requests.
+`useTtsPlaybackModel` is the single client holder for worker plan, canonical
+segments, derived sentence strings, selected ordinal, and seek layout. Public
+selection is `currentSentenceOrdinal`; playback entrypoints take ordinals.
+`playbackAnchor` is only a reader viewport anchor and is not serialized into
+playback session start requests.
 
 ### 5. Fix Clear Cache to be a Playback Reset Boundary
 
-Clear-cache is now an explicit playback reset before object deletion:
-
-- The Next clear-cache path resolves the affected document/version scope and
-  calls the compute worker reset endpoint before deleting audio or sidecar
-  objects.
-- The worker increments a durable cache epoch for the playback artifact scope.
-  Sidecars, stream/timeline readers, and generation writes use that epoch to
-  distinguish current artifacts from stale pre-clear artifacts.
-- Matching `queued`, `running`, and `succeeded` playback sessions are marked
-  `canceled` so active streams stop and running generation jobs observe
-  cancellation at the existing pacing gate.
-- Generation jobs capture their start epoch and re-check it before writing audio
-  or sidecars, preventing late writes from recreating cleared artifacts.
-- Worker route-side completed-sidecar caches are keyed by epoch and the reset
-  endpoint drops local cache entries for the reset scope.
-- The clear response reports the actual number of invalidated playback sessions.
+Clear cache now calls the worker reset endpoint before object deletion. The
+worker bumps a durable cache epoch, cancels matching sessions, invalidates local
+sidecar caches, and makes epoch-aware readers/writers reject stale sidecars and
+late writes.
 
 ### 6. Consolidate IDs, Keys, and Schemas
 
-Playback identity is now ordinal-only across plan/grid/sidecar artifacts:
-
-- Worker plan segments persist `ordinal`, `segmentKey`, text, and locator.
-- Playback CBR layout inputs/slots use `ordinal`.
-- Segment sidecars store `ordinal`, `segmentKey`, and `audioKey`; the sidecar
-  reader validates schema version and the sidecar ordinal against the object key.
-- `segmentEntryId` and persisted/client-facing `segmentId` fields were removed
-  from playback entirely.
-- Completed segment, timeline, and seek-layout rows expose `ordinal`; duplicated
-  `sourceSegmentIndex` fields were removed.
-- Plan-operation and playback-session request schemas are separate strict
-  schemas instead of one loose shared payload shape.
-- `segmentKey` remains the segmentation/content key from the canonical plan, and
-  `audioContentHash` is only the worker-local audio/settings-specific hash used
-  to build the content-addressed audio key.
+Playback identity is ordinal-only across plan/grid/sidecar artifacts.
+`segmentEntryId`, persisted/client-facing `segmentId`, and mirrored
+`sourceSegmentIndex` are gone. Plan-operation and playback-session schemas are
+separate and strict. `segmentKey` remains the canonical segmentation/content key;
+`audioContentHash` is only the worker-local content-addressed audio key input.
 
 ### 7. Move Playback Audio to a Dedicated Playback-Owned Prefix
 
@@ -430,227 +406,71 @@ Playback generation now writes segment audio through
 `tts_playback_segments_audio_v1/[ns/<ns>/]users/<userId>/docs/<documentId>/<version>/<settingsHash>/<audioContentHash>.mp3`
 
 The encoding is unchanged: generated audio still runs through `normalizeToMp3`
-and `STREAM_AUDIO_PROFILE`. Only the object location moved. Existing
-`tts_segments_v2/` playback cache objects are not copied; the first playback
-after upgrade re-synthesizes into the playback-owned prefix as the accepted
-hard-cut cost.
+and `STREAM_AUDIO_PROFILE`. Existing `tts_segments_v2/` playback cache objects
+were not copied; first playback after upgrade re-synthesizes into the new prefix.
 
 ### 8. Retire the Legacy Audiobook Pipeline; Download from the Worker Loop
 
-The legacy audiobook implementation is retired. Download/export now uses the
-same canonical worker playback system as live playback:
+The old audiobook implementation is retired. Export now creates a deterministic
+document-extent playback session using `generationExtent: 'document'` and tracks
+progress through the existing playback SSE snapshots (`completedCount` /
+`plannedCount`). MP3 and M4B remain supported, but current M4B/non-`1x` MP3
+output still uses the temporary same-origin Next audio proxy and ffmpeg bridge.
+Step 13 replaces that bridge with worker-owned export artifacts.
 
-- `AudiobookExportModal` creates a document-extent playback session through
-  `TTSContext.startDocumentAudioExport`.
-- Session creation sends `generationExtent: 'document'`, and the Next session
-  route forces worker background extent to `document` for that export run.
-- The worker persists `generationExtent` in playback session state and continues
-  generation through the full forward plan even while the playback cursor is
-  fresh. Normal listening sessions keep the sliding ahead-window behavior.
-- Progress is the existing playback SSE stream. Audiobook export reads the
-  authoritative `completedCount` / `plannedCount` snapshot; live playback can
-  still use `completedThroughOrdinal` as a lightweight timeline wake-up.
-- Download fetches the worker whole-document MP3 stream from the playback session
-  audio route. MP3 output is a single CBR MP3 (`audio/mpeg`) assembled from
-  completed playback sidecars/audio. M4B output is generated by the same Next
-  proxy route as an AAC-in-MP4 (`audio/mp4`) transcode of that worker MP3 stream.
-  The proxy derives chapter metadata from the canonical worker plan and playback
-  grid, scaling chapter timestamps when audiobook speed changes. It finalizes a
-  temporary `M4B`-branded MP4 before returning it so audiobook players do not
-  receive a fragmented generic MP4. There is no separate audiobook blobstore.
-
-Removed runtime surface:
-
-- Remove `src/lib/client/audiobooks/`, `src/lib/server/audiobooks/`, the
-  `src/app/api/audiobook/*` routes, `src/lib/client/api/audiobooks.ts`, and the
-  audiobook-specific hooks (`useAudiobookStatus`, `useEPUBAudiobook`): done.
-- Remove all app/runtime reads and writes of the `audiobooks` /
-  `audiobookChapters` tables from claim, account export, account cleanup, query
-  keys, client types, and test teardown: done.
-- Delete the legacy audiobook tests and replace coverage with playback-export
-  contract checks: done.
-- Table definitions are removed from the live schema. Migration history remains
-  only so older installs can apply the step-9 DROP migration. The separate
-  `audiobooks_v1/` object prefix is dead runtime storage and is purged by the
-  v4 decommission routine.
-
-Decided:
-
-- **Formats: MP3 and M4B.** Download serves the worker's existing CBR-MP3
-  whole-document route for MP3 when possible. M4B is supported by the same
-  same-origin download proxy as an MP3->AAC/MP4 transcode using `ffmpeg-static`,
-  finalized in temporary storage with `M4B` branding and chapter atoms before
-  download. The legacy m4b export job remains dropped: no durable second stored
-  artifact and no `audiobooks_v1/` runtime storage. Richer chapter titles remain
-  feasible later if the playback plan starts persisting source titles, but that
-  would be a plan-artifact enhancement rather than a fallback to the retired
-  pipeline.
-- **No eager/gap-fill fork.** Download requests `extent: 'document'`; generation is
-  idempotent (the "Generate Segments" flow short-circuits on `objectExists(audioKey)`
-  / completed sidecar), so it only fills missing ordinals. "Done" = every plan
-  ordinal has a completed sidecar. There is no separate eager-vs-reuse mode.
+Removed runtime surface: `src/lib/client/audiobooks/`,
+`src/lib/server/audiobooks/`, `src/app/api/audiobook/*`,
+`src/lib/client/api/audiobooks.ts`, audiobook-specific hooks, live-schema
+`audiobooks` / `audiobookChapters` tables, app/runtime reads and writes of those
+tables, legacy audiobook tests, and the separate `audiobooks_v1/` runtime
+storage prefix.
 
 ---
 
 ### 9. v5 Decommission: Drop Legacy TTS + Audiobook Storage
 
-The v5 decommission is complete. The table drop and object purge remain separate
-ownership domains:
+`0015_cleanup_pre_v5` drops legacy TTS/audiobook tables and deletes the retired
+scheduled-task row. The recurring legacy cleanup task is gone. Bootstrap exports
+idempotent `runV4Decommission(env)` for `tts_segments_v1/`, `tts_segments_v2/`,
+and `audiobooks_v1/`; self-hosted startup runs it when S3 is configured, and
+serverless/manual deploys can run `pnpm migrate-decommission`. The old FS->S3
+migrator commands are removed.
 
-- Drizzle migration `0015_cleanup_pre_v5` drops `tts_playback_sessions`,
-  `tts_segment_entries`, `tts_segment_variants`, `audiobooks`, and
-  `audiobook_chapters`, and deletes the retired
-  `cleanup-legacy-tts-playback-cache` scheduled-task row.
-- The recurring `cleanup-legacy-tts-playback-cache` task and handler are gone.
-- `packages/bootstrap/src/decommission-v4.mjs` exports idempotent
-  `runV4Decommission(env)`, which prefix-purges only `tts_segments_v1/`,
-  `tts_segments_v2/`, and `audiobooks_v1/`.
-- Self-hosted startup runs the decommission inline after DB migrations when S3 is
-  configured; serverless/manual deploys can run `pnpm migrate-decommission`.
-- The old FS→S3 migrator (`storage-migration.mjs`, `migrate-fs`, and
-  `openreader-migrate-storage`) is removed.
-- Clear-cache and account-delete cleanup now target v5 playback audio/sidecar
-  prefixes, not retired `tts_segments_v*` roots.
-
-Verified during implementation:
-
-- `pnpm migrate` succeeds after the corrected SQLite statement split/string
-  literal in `0015_cleanup_pre_v5`.
-- `pnpm dev` reaches Next "Ready" after migrations and the v4 decommission.
-- Full unit suite passes.
+Verified: `pnpm migrate`, `pnpm dev` startup smoke, and full unit suite.
 
 ---
 
 ### 10. Audiobook Export Hardening
 
-The worker-backed audiobook export hardening pass is complete:
+The export modal exposes audiobook speed and output format. Progress is driven
+by authoritative worker `completedCount` snapshots instead of seek-layout
+polling. The current same-origin audio route authenticates the session, mints a
+worker playback token, proxies MP3 range/audio headers, runs ffmpeg tempo/M4B
+transcodes when needed, derives chapters from worker plan/grid, and sets
+`Content-Disposition`. This route is now documented as temporary ownership debt.
 
-- `AudiobookExportModal` now exposes audiobook speed and output format in the
-  export settings alongside native model speed. For `1x` MP3 downloads the proxy
-  streams the worker MP3 unchanged; for other MP3 speeds it applies an ffmpeg
-  `atempo` transform during download so the exported MP3 itself changes speed.
-  M4B downloads always transcode the worker MP3 stream to a finalized
-  M4B-branded AAC/MP4 file with chapter metadata and apply the same tempo
-  transform when needed.
-- Export progress no longer relies on the SSE ordinal watermark for the visible
-  count and no longer polls seek-layout. The worker emits `completedCount` from
-  generated sidecar state, including segments generated by prior live playback
-  sessions, so the modal can render progress directly from SSE snapshots.
-- The seek-layout route remains the playback grid API for live playback,
-  scrubber/seek state, and generated-region timing. Audiobook progress does not
-  depend on it.
-- Session creation returns a same-origin download URL at
-  `/api/tts/stream/[sessionId]/audio`.
-- The new Next audio route resolves/authenticates the playback session, mints the
-  worker playback token server-side, proxies the MP3 stream, forwards range/audio
-  headers for raw MP3 downloads, optionally transcodes tempo for non-`1x`
-  audiobook speed, derives M4B chapters from the worker plan/grid, transcodes M4B
-  as AAC/MP4 with ffmetadata chapters, and sets `Content-Disposition`.
-- The modal downloads through that same-origin route by clicking a link instead
-  of fetching the entire MP3 into a browser Blob, avoiding CORS/public-worker URL
-  reachability and large-Blob failure modes.
-
-Verified during implementation:
-
-- `pnpm exec tsc --noEmit`
-- Focused UI/architecture tests for audiobook export, shared controls, and route
-  error contracts.
-- Focused playback/worker tests for request parsing, tokens, playback grids,
-  compute-worker client contracts, worker routes, derivation, audio layout, and
-  playback storage.
+Verified: `pnpm exec tsc --noEmit`, focused audiobook export/UI route tests, and
+focused playback/worker route/storage/audio-layout tests.
 
 ---
 
 ### 11. Idempotent Playback Jobs and Shared Generation Cache
 
-The playback/export cache is durable and document-scoped, but live playback and
-audiobook export are different UX/job concerns. They reuse the same segment audio
-without sharing one mutable session record for cursor state, export state, and
-active operation ownership.
+Live playback and audiobook export use separate deterministic sessions for the
+same document/settings scope: `live` and `export-document`. Jobs are idempotent,
+terminal jobs are replaceable, and both sessions share the per-ordinal segment
+cache at `storageUserId + documentId + documentVersion + settingsHash + ordinal`.
+Export starts output at ordinal `0`, runs document extent, and reports true
+completed count across the plan. Sidecars carry short-lived generating leases;
+fresh foreign leases are waited on and stale leases are stealable.
 
-Completed model:
-
-- Sessions are UX state. A live playback session owns live cursor/playback
-  state. An audiobook export session owns export progress/download state. They
-  are separate deterministic session ids for the same document/settings scope.
-- Jobs are idempotent work requests. Repeating the same export Generate click
-  reuses the same document-extent operation. Live cursor continuations reuse a
-  stable operation key for the same cursor/run intent instead of minting a new
-  random job every time.
-- The segment cache is shared. Both live and export read/write sidecars under
-  `storageUserId + documentId + documentVersion + settingsHash + ordinal`, so
-  previously generated live audio is skipped by export and vice versa.
-- The cache write boundary is per ordinal. A `generating` sidecar is only a
-  short-lived lease for one missing segment. It is not the session model and it
-  does not make live playback and export share cursor state.
-- Live playback may use admin background extent (`section` or `document`) within
-  the live session. Audiobook export is always a separate document-extent job
-  whose final output begins at ordinal `0`.
-- Export progress is the true completed segment count across the whole plan,
-  not a contiguous prefix and not only what one browser tab has streamed.
-
-Implemented notes:
-
-- Next session creation requires `planObjectKey` and derives deterministic
-  session ids from canonical scope plus purpose: `live` or `export-document`.
-- Worker session creation writes `generationStartOrdinal` and cursor state from
-  the required `planning.selectedOrdinal`; live playback must never initialize
-  from ordinal `0` unless the selected plan ordinal is actually `0`.
-- Worker playback operation keys remain `tts_playback|v1` but now use canonical
-  scope hash + session id + generation intent. Active jobs dedupe; terminal
-  playback jobs are replaceable so a fresh request verifies current cache state.
-- Audiobook export does not mutate the live selected ordinal/cursor. Its session
-  starts output at ordinal `0` and runs document extent over the whole plan.
-- Segment sidecars now carry optional lease owner/update fields. Fresh foreign
-  `generating` leases are waited on; stale leases are stealable.
-- Full-document generation is not stopped by live cursor floor logic.
-
-Verified during implementation:
-
-- `pnpm exec vitest run packages/compute-worker/tests/unit/key-and-progress.test.ts packages/compute-worker/tests/api/routes.test.ts tests/unit/server-state-architecture.vitest.spec.ts`
-- `pnpm exec tsc --noEmit`
-- `pnpm test:unit`
-
----
-
-## Remaining Work
+Verified: focused key/progress, route, and server-state tests; `pnpm exec tsc
+--noEmit`; `pnpm test:unit`.
 
 ### 12. Compute Worker API Surface Hard Cut
 
 Status: implemented. Hard cut only; do not add one-off compatibility routes,
 alias routes, random-session lookups, or new legacy audiobook/PDF status APIs.
-
-Previous compute-worker route inventory before the hard cut:
-
-- Health:
-  - `GET /health/live`
-  - `GET /health/ready`
-- Generic operation observation:
-  - `GET /v1/operations/:opId`
-  - `GET /v1/operations/:opId/events`
-- PDF layout:
-  - `POST /v1/pdf-layout/operations`
-  - `POST /v1/pdf-layout/resolve`
-- Playback planning/generation:
-  - `POST /v1/tts-playback-plans/operations`
-  - `POST /v1/tts-playback/operations`
-- Playback sessions/cache:
-  - `GET /v1/tts-playback/:sessionId/session`
-  - `GET /v1/tts-playback/:sessionId/segments`
-  - `POST /v1/tts-playback/:sessionId/cursor`
-  - `GET /v1/tts-playback/:sessionId/audio`
-  - `POST /v1/tts-playback/reset`
-
-Problems to resolve:
-
-- Route names mix resource style and operation style
-  (`/tts-playback-plans/operations` vs `/tts-playback/:sessionId/session`).
-- PDF has a first-class `resolve` route, but playback export reconnect is
-  currently expected to be composed from session/operation/segment routes.
-- Playback session subresources are path-shaped inconsistently; `session` is
-  redundant when the path already identifies a session.
-- Adding an export reconnect route before choosing the worker API shape risks
-  another one-off endpoint.
 
 Implemented route structure:
 
@@ -695,70 +515,292 @@ Implemented notes:
 5. Added regression coverage for the complete route map so no new ad hoc worker
    endpoint lands without updating this section.
 
-Verified during implementation:
+Verified: `pnpm compute:openapi:generate`, route/server-state tests, `pnpm exec
+tsc --noEmit`, and `pnpm test:unit`.
 
-- `pnpm compute:openapi:generate`
-- `pnpm exec vitest run packages/compute-worker/tests/api/routes.test.ts tests/unit/server-state-architecture.vitest.spec.ts`
-- `pnpm exec tsc --noEmit`
-- `pnpm test:unit`
+---
 
-### 13. Audiobook Export Reconnect
+## Remaining Work
 
-Status: planned after Step 12. Hard cut only; do not add polling fallbacks,
-legacy audiobook status rows, random export sessions, or client-only progress
-reconstruction.
+### 13. Audiobook Export Reconnect and Worker-Owned Artifacts
 
-The audiobook export UI should reconnect like PDF parse progress, using the
-finalized Step 12 route shape:
+Status: planned after Step 12. These should be implemented together. Reconnect
+without worker-owned export artifacts would harden the current same-origin
+download proxy just before removing it; worker-owned artifacts without reconnect
+would leave refresh/reopen behavior incomplete.
 
-1. Resolve current export state for the current document/settings/plan before
-   starting a new job.
-2. Use the deterministic `export-document` session id derived from canonical
-   playback scope.
-3. Load the worker session and `workerOpId`.
-4. Return a snapshot with session id, operation status, completed count,
-   planned count, events URL, download URL, and failure message when present.
-5. On modal open/page load, if the snapshot is `queued` or `running`, subscribe
-   to the existing operation SSE immediately.
-6. If the snapshot is `succeeded`, show ready/download state or let Generate
-   complete from cache without creating unrelated state.
-7. If the snapshot is `failed`, show failed/retry state.
+Hard cut only; do not add polling fallbacks, legacy audiobook status rows,
+random export sessions, client-only progress reconstruction, `/api/audiobook/*`,
+client Blob downloads, or Next-hosted ffmpeg packaging.
+
+Target ownership:
+
+- Worker owns audiobook export artifacts for a deterministic playback scope:
+  canonical user/storage scope, document id/version, settings hash, output
+  format, export speed, and plan object key.
+- Worker builds MP3 speed variants and M4B/AAC-in-MP4 artifacts as background
+  jobs, stores them as durable derived media, and emits progress through the
+  existing operation event stream.
+- Artifact preparation is a new worker job kind, not part of the existing
+  `tts_playback` generation job. The existing `tts_playback` job with
+  `generationExtent: 'document'` remains responsible for filling the canonical
+  per-ordinal segment cache. The artifact-preparation job consumes that cache
+  plus the plan/grid and produces one requested file variant.
+- NATS/JetStream owns export job queueing, operation state, progress snapshots,
+  and reconnect state. S3 owns the final audio artifact and any small artifact
+  metadata sidecar. SQL is not used for export job state.
+- Next owns authentication, scope resolution, plan/job resolution, and signed
+  download URL issuance. It should not pipe the full worker audio stream through
+  Vercel for normal downloads.
+- Live playback audio remains the worker's streaming MP3 route. Export/download
+  artifacts are separate job outputs so range streaming, retries, browser
+  refreshes, and large libraries do not depend on one Vercel request.
+- There is no separate "download job". The background work is export artifact
+  preparation: assembling or transforming bytes into a reusable artifact. The
+  actual download is a short control-plane action that returns or redirects to a
+  signed URL for an already-ready artifact.
+
+Final flow:
+
+1. Next resolves current export state for the current document/settings/plan
+   before starting new work.
+2. The playback generation phase uses the deterministic `export-document`
+   session id derived from canonical playback scope.
+3. If generation is `queued` or `running`, the modal subscribes to the existing
+   playback operation SSE and shows completed/planned sidecar progress.
+4. If generation is complete but the requested `format + speed` artifact is not
+   ready, Next creates or resolves a separate deterministic worker
+   artifact-preparation job for that file variant.
+5. If artifact preparation is `queued` or `running`, the modal subscribes to
+   that operation SSE.
+6. If the artifact is ready, Next returns or redirects to a signed worker or
+   object-storage download URL. This is not a queued job.
+7. If either phase fails, the modal shows failed/retry state for the same
+   deterministic generation or artifact-preparation job.
 
 Implementation plan:
 
-1. Use the Step 12 generic session resolve route when worker-side resolution is
-   needed. Otherwise compose the finalized worker session/operation/segment
-   routes in Next.
-2. Add a Next resolve endpoint for export state, analogous to
-   `GET /api/documents/:id/parsed`:
-   - require a loaded canonical playback plan and `planObjectKey`;
-   - compute the deterministic `export-document` session id;
-   - read the worker playback session;
-   - read the worker operation if `workerOpId` exists;
-   - scan authoritative sidecars for completed count when needed.
-3. Add a client query/hook for the modal that calls the resolve endpoint on open
-   and when the document/settings/plan changes.
-4. Reuse the existing operation SSE primitive through the finalized playback
-   session events route; do not create export-specific SSE.
-5. Keep Generate as create-or-reuse for the same deterministic export session,
-   not as the only way to discover progress.
-6. Add regression coverage:
-   - page refresh/modal reopen resolves an active export session without clicking
-     Generate;
+1. Add a Next export resolve endpoint, analogous to
+   `GET /api/documents/:id/parsed`, that returns one snapshot for both phases:
+   generation session/op state plus artifact-preparation state for the
+   requested format and speed.
+2. Use the Step 12 generic playback session resolve route for generation state.
+   Require a loaded canonical playback plan and `planObjectKey`; do not fall
+   back to random sessions or client-reconstructed progress.
+3. Add a new worker operation kind for export-artifact preparation under the
+   finalized playback namespace. Store the op index/state in JetStream KV and
+   keep the generic `/v1/operations/:opId/events` SSE primitive.
+4. Derive a deterministic export artifact id from canonical playback scope plus
+   `format` and export `speed`.
+5. Move MP3 `atempo`, M4B packaging, chapter ffmetadata generation, temp-file
+   finalization, and object upload into the Railway worker.
+6. Store artifact metadata with content type, byte length when known,
+   disposition filename, source plan key, source session id, and generation
+   status.
+7. Add a client query/hook for the modal that calls the resolve endpoint on open
+   and when document/settings/plan/format/speed changes.
+8. Change the Next download path to require a ready artifact and return or
+   redirect to a signed worker or object-storage URL. If the artifact is not
+   ready, return the same pending snapshot as the resolve endpoint instead of
+   doing background work inside the download response. The route may keep a
+   legacy redirect/compatibility shim only while callers migrate.
+9. Remove `ffmpeg` execution from
+   `/api/tts/stream/[sessionId]/audio` once worker artifacts are live.
+10. Add regression coverage:
+   - page refresh/modal reopen resolves active generation and active artifact
+     preparation without clicking Generate;
    - active export reconnect uses the existing `workerOpId`;
-   - succeeded export resolves from sidecars/cache;
+   - succeeded generation resolves from sidecars/cache;
    - live playback session is never used for export reconnect;
-   - missing plan key fails hard instead of falling back to random state.
+   - non-`1x` MP3 export creates/reuses a worker-prepared artifact and does not
+     transcode in Next;
+   - M4B export returns a durable artifact with chapters;
+   - live playback stream stays independent of export artifact generation;
+   - missing/stale plan keys fail hard instead of generating against unknown
+     scope.
 
-### 14. Final Cleanup Pass Before Merge
+### 14. Worker-Owned Document Preview Jobs
 
-After step 10 is verified, the last pass is release hygiene:
+Status: planned. Preview image generation is derived-media compute and should
+not happen inside a Vercel request.
+
+Current ownership debt:
+
+- Preview ensure/presign/fallback routes can call server preview helpers that
+  claim work, read document blobs, render PDF first pages, extract EPUB covers,
+  and write preview images during a Next request.
+- Presigned object URLs are the right primary delivery path, but the generation
+  side belongs with the worker.
+
+Target ownership:
+
+- Next owns auth, document metadata/scope checks, preview job creation or
+  resolution, and presigned URL issuance for completed preview images.
+- Worker owns preview generation for PDF, EPUB, and future document-derived
+  preview formats. It reads source blobs, renders/extracts images, normalizes
+  output, and writes preview artifacts under the existing preview object prefix.
+- NATS/JetStream owns preview job queueing, operation state, progress, and retry
+  state. S3 owns source blobs, preview images, and preview metadata. SQL remains
+  a Next-owned document metadata source only.
+- Fallback preview proxy routes may remain only as degraded compatibility paths
+  and must not claim or render new previews in request.
+
+Implementation plan:
+
+1. Add a worker preview job resource, for example
+   `/v1/document-previews/jobs` and `/v1/document-previews/resolve`, or the
+   closest resource shape consistent with the final worker API.
+2. Key jobs by canonical storage scope, document id/version, source blob key,
+   preview kind, and renderer version.
+3. Pass source blob keys and bounded renderer options in the job payload; do not
+   have the worker query SQL for document rows.
+4. Move PDF first-page rendering and EPUB cover/preview extraction into worker
+   job handlers.
+5. Refactor Next preview ensure routes to resolve/create jobs and return
+   `pending`, `running`, `failed`, or completed presigned URL snapshots.
+6. Keep preview delivery through presigned S3 URLs whenever possible; fallback
+   object proxying should be a compatibility branch only.
+7. Add regression coverage:
+   - preview ensure does not invoke render/extract code in Next;
+   - preview worker code does not import SQL/database modules;
+   - completed preview returns a presigned URL without worker job creation;
+   - running preview reconnects through operation state;
+   - failed preview surfaces retryable failure state;
+   - fallback proxying cannot become the primary generation path.
+
+### 15. Worker-Owned DOCX Conversion
+
+Status: planned. Upload finalize should stay a short metadata/control route.
+DOCX conversion is long-running native-process compute and belongs on Railway.
+
+Target ownership:
+
+- Non-DOCX upload finalize can remain synchronous in Next when it only validates
+  metadata, records blob keys, and returns document state.
+- DOCX finalize should create or resolve a deterministic conversion job and
+  return async state. The worker runs LibreOffice, writes the converted PDF
+  artifact, and reports completion through operation state.
+- Next registers the final document/PDF artifact after worker completion or via
+  a short resolve/finalize step that does not run `soffice`.
+- NATS/JetStream owns conversion job queueing and operation state. S3 owns the
+  original upload blob, converted PDF, and conversion metadata sidecar. SQL
+  document rows remain Next-owned and are updated only by Next routes after the
+  worker artifact is complete.
+
+Implementation plan:
+
+1. Add a worker conversion job keyed by canonical storage scope, original blob
+   key, document id/version, source MIME/type, and converter version.
+2. Pass the original blob key and conversion options through the job payload; do
+   not have the worker query SQL for upload/document rows.
+3. Move LibreOffice invocation and temp-file handling out of
+   `src/lib/server/documents/docx-convert.ts` request paths and into the worker.
+4. Change DOCX upload finalize to return `202`/pending state with operation id
+   when conversion is not complete.
+5. Add a Next resolve/finalize endpoint that checks conversion status, registers
+   the converted PDF artifact, and returns the normal document metadata snapshot.
+6. Ensure upload UI can show conversion progress/failure and retry the same
+   deterministic job without creating duplicate documents.
+7. Add regression coverage:
+   - DOCX finalize never spawns LibreOffice in Next;
+   - conversion worker code does not import SQL/database modules;
+   - duplicate finalize calls reuse the same worker conversion job;
+   - conversion success registers exactly one PDF artifact/document version;
+   - failed conversion is surfaced with retry state;
+   - non-DOCX finalize behavior stays short and synchronous.
+
+### 16. Worker-Owned Account Export Artifacts
+
+Status: planned. This is worker-owned for artifact assembly, not worker-owned
+for account metadata. Next remains the SQL/control plane; the worker owns the
+long-running archive build.
+
+Target ownership:
+
+- Next owns auth, account scope, export request validation, job
+  creation/resolution, SQL reads, manifest creation, and signed URL issuance.
+- Worker owns large export ZIP assembly, document blob reads from object
+  storage, compression, progress, and durable artifact upload.
+- The user-facing export route should return a snapshot or redirect to a
+  completed artifact. It should not keep a Vercel response open while streaming
+  every document blob into an archive.
+- NATS/JetStream owns account export job queueing and operation state. S3 owns
+  the export input manifest and output ZIP artifact. SQL account/document data
+  remains Next-owned; Next materializes the export manifest from SQL before
+  enqueueing the worker job.
+
+Final flow:
+
+1. Client asks Next to resolve/create an account export.
+2. Next authenticates, checks account scope, applies policy, reads the required
+   SQL metadata, and writes a bounded export manifest to object storage.
+3. Next enqueues or resolves a deterministic worker export job keyed by user
+   scope, export schema version, selected scopes/options, and manifest key.
+4. Worker reads the manifest and referenced document blobs from object storage,
+   builds the ZIP, writes the durable export artifact and metadata, and updates
+   operation progress in NATS/JetStream.
+5. Next returns short snapshots while the job is pending/running. When complete,
+   Next returns or redirects to a signed object URL for the ZIP.
+
+Manifest/artifact reuse policy:
+
+- Treat manifests as immutable export snapshots, not one permanent blob per user.
+- Reuse an existing `queued` or `running` job when the same user, scope,
+  options, schema version, and manifest content hash are already active.
+- Reuse a completed artifact while it is still fresh and its manifest hash still
+  represents the requested account snapshot.
+- A "Generate new export" action or changed account/document data creates a new
+  manifest content hash, a new manifest object, and a new ZIP artifact.
+- Expire old manifests and ZIP artifacts through bounded cleanup.
+
+Implementation plan:
+
+1. Define account export job identity by user id/storage namespace, export
+   schema version, selected scopes, request options, and manifest content hash.
+2. Have Next create a bounded export manifest in object storage. The manifest
+   should contain only the metadata and object keys needed to build the archive,
+   not secret credentials or unbounded inline blobs.
+3. Move ZIP streaming and document blob inclusion into a worker job that reads
+   the manifest and writes one durable export artifact.
+4. If the manifest would be too large to build inside a Vercel request, split
+   manifest creation into bounded Next-owned pages or add a separate
+   Next-owned metadata snapshot job. Do not solve that by giving the worker
+   broad SQL access.
+5. Return export snapshots from Next with operation status, progress if
+   available, failure message, and signed artifact URL when complete.
+6. Expire old account export artifacts through bounded maintenance, not by
+   blocking the export request.
+7. Add regression coverage:
+   - large export requests do not stream ZIP bodies from Next;
+   - export worker code does not import SQL/database modules;
+   - repeated export clicks reuse or supersede deterministic jobs according to
+     explicit policy;
+   - completed export resolves after refresh;
+   - account deletion/cleanup handles pending and completed export artifacts;
+   - small metadata-only exports, if kept, remain bounded and documented.
+
+### 17. Final Cleanup Pass Before Merge
+
+After the worker ownership steps are verified, the last pass is release hygiene:
 
 - Run a final repo scan for runtime references to dropped symbols and routes:
   `ttsPlaybackSessions`, `ttsSegmentEntries`, `ttsSegmentVariants`,
   `audiobookChapters`, `/api/audiobook`, `cleanup-legacy-tts-playback-cache`,
-  `migrate-fs`, and `openreader-migrate-storage`. Migration history, frozen
-  versioned docs, and decommission docs are allowed exceptions.
+  `migrate-fs`, `openreader-migrate-storage`, Next-side `ffmpeg` execution in
+  playback audio routes, request-path `convertDocxBufferToPdfBuffer` usage, and
+  request-path `ensureDocumentPreview` generation. Also verify completed parsed
+  PDF artifacts are primarily delivered by signed object URL rather than a
+  Vercel byte proxy. Migration history, frozen versioned docs, and decommission
+  docs are allowed exceptions.
+- Re-scan Next API route ownership against the rule in this document: Vercel
+  routes may authenticate, authorize, presign, enqueue, resolve, redirect, and
+  return short JSON snapshots; Railway worker owns long-running stream,
+  provider/model, render, parse, transcode, convert, archive, and large object
+  scan work.
+- Re-scan worker SQL boundaries. New worker-owned preview, conversion, export,
+  and audiobook artifact code must not import database/schema modules or query
+  app SQL tables. The only allowed current SQL exception is read-only
+  `admin_providers` credential resolution for TTS provider keys.
 - Run final validation from a clean local state: `pnpm migrate`, `pnpm test:unit`,
   `pnpm exec tsc --noEmit`, and a `pnpm dev` startup smoke test.
 - Optionally run the highest-value Playwright smoke path for upload/open/playback
