@@ -562,7 +562,7 @@ export async function getDocumentContentSnippet(
 export type DocumentPreviewPending = {
   kind: 'pending';
   status: 'queued' | 'processing' | 'failed';
-  retryAfterMs: number;
+  opId: string | null;
   fallbackUrl: string;
   presignUrl: string;
   directUrl?: string;
@@ -590,6 +590,13 @@ export function documentPreviewFallbackUrl(id: string): string {
   return `/api/documents/blob/preview/fallback?id=${encodeURIComponent(id)}`;
 }
 
+function documentPreviewEventsUrl(id: string, opId: string): string {
+  const params = new URLSearchParams();
+  params.set('id', id);
+  params.set('opId', opId);
+  return `/api/documents/blob/preview/events?${params.toString()}`;
+}
+
 export async function getDocumentPreviewStatus(
   id: string,
   options?: { signal?: AbortSignal },
@@ -602,7 +609,7 @@ export async function getDocumentPreviewStatus(
   if (res.status === 202) {
     const data = (await res.json().catch(() => null)) as {
       status?: 'queued' | 'processing' | 'failed';
-      retryAfterMs?: number;
+      opId?: string | null;
       fallbackUrl?: string;
       presignUrl?: string;
       directUrl?: string;
@@ -610,7 +617,7 @@ export async function getDocumentPreviewStatus(
     return {
       kind: 'pending',
       status: data?.status ?? 'queued',
-      retryAfterMs: Number.isFinite(data?.retryAfterMs) ? Number(data?.retryAfterMs) : 1500,
+      opId: data?.opId || null,
       fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
@@ -645,7 +652,7 @@ export async function getDocumentPreviewStatus(
       return {
         kind: 'pending',
         status: 'failed',
-        retryAfterMs: 0,
+        opId: null,
         fallbackUrl: documentPreviewFallbackUrl(id),
         presignUrl: documentPreviewPresignUrl(id),
       };
@@ -654,6 +661,56 @@ export async function getDocumentPreviewStatus(
   }
 
   throw new Error(`Failed to load preview status (status ${res.status})`);
+}
+
+export function subscribeDocumentPreviewEvents(
+  id: string,
+  options: {
+    opId: string;
+  },
+  handlers: {
+    onSnapshot: (snapshot: {
+      status: 'queued' | 'processing' | 'ready' | 'failed';
+      opId: string;
+      error?: string | null;
+    }) => void;
+    onError?: (error: Event) => void;
+  },
+): () => void {
+  const source = new EventSource(documentPreviewEventsUrl(id, options.opId));
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const payload = JSON.parse(event.data) as {
+        snapshot?: {
+          opId: string;
+          status: 'queued' | 'running' | 'succeeded' | 'failed';
+          error?: { message?: string } | null;
+        };
+      };
+      const snapshot = payload?.snapshot;
+      if (!snapshot?.opId || !snapshot.status) return;
+      handlers.onSnapshot({
+        status: snapshot.status === 'running'
+          ? 'processing'
+          : snapshot.status === 'succeeded'
+            ? 'ready'
+            : snapshot.status,
+        opId: snapshot.opId,
+        ...(snapshot.status === 'failed' && snapshot.error?.message
+          ? { error: snapshot.error.message }
+          : {}),
+      });
+    } catch {
+      // Ignore malformed payloads so EventSource can continue.
+    }
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(event);
+  });
+  return () => {
+    source.close();
+  };
 }
 
 export async function importUrl(

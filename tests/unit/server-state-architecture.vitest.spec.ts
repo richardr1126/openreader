@@ -130,6 +130,20 @@ describe('server-state architecture', () => {
     expect(parsedDocumentHook).toContain('queryClient.setQueryData<ParsedPdfQueryState>');
   });
 
+  test('keeps document preview completion on operation SSE instead of polling', () => {
+    const preview = source('src/components/doclist/DocumentPreview.tsx');
+    const documentsApi = source('src/lib/client/api/documents.ts');
+    const previewEventsRoute = source('src/app/api/documents/blob/preview/events/route.ts');
+    expect(preview).toContain('subscribeDocumentPreviewEvents');
+    expect(preview).not.toContain('setTimeout');
+    expect(preview).not.toContain('retryAfterMs');
+    expect(documentsApi).toContain('subscribeDocumentPreviewEvents');
+    expect(documentsApi).toContain('/api/documents/blob/preview/events');
+    expect(documentsApi).not.toContain('retryAfterMs');
+    expect(previewEventsRoute).toContain("operation.subject.kind !== 'document_preview'");
+    expect(previewEventsRoute).toContain('openOperationEvents');
+  });
+
   test('loads TTS voice metadata and claims through centralized query hooks', () => {
     const voiceHook = source('src/hooks/audio/useVoiceManagement.ts');
     expect(voiceHook).toContain('queryKeys.ttsVoices');

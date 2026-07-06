@@ -13,9 +13,6 @@ import {
   isMissingBlobError,
 } from '@/lib/server/documents/previews-blobstore';
 
-const RETRY_AFTER_MS = 1_500;
-const FAILED_RETRY_AFTER_MS = 15_000;
-
 type PreviewStatus = 'queued' | 'processing' | 'ready' | 'failed';
 
 type PreviewRow = {
@@ -51,7 +48,7 @@ export type EnsureDocumentPreviewResult =
   | {
       state: 'pending';
       status: Exclude<PreviewStatus, 'ready'>;
-      retryAfterMs: number;
+      opId: string | null;
       lastError: string | null;
     };
 
@@ -245,11 +242,11 @@ async function isReadyBlobMissing(docId: string, namespace: string | null): Prom
   }
 }
 
-function pendingResult(status: PreviewStatus, lastError: string | null): EnsureDocumentPreviewResult {
+function pendingResult(status: PreviewStatus, lastError: string | null, opId: string | null = null): EnsureDocumentPreviewResult {
   return {
     state: 'pending',
     status: status === 'ready' ? 'processing' : status,
-    retryAfterMs: status === 'failed' ? FAILED_RETRY_AFTER_MS : RETRY_AFTER_MS,
+    opId,
     lastError,
   };
 }
@@ -353,11 +350,11 @@ export async function ensureDocumentPreview(doc: PreviewSourceDocument, namespac
   if (operationStatus === 'failed') {
     const message = resolved.operation?.error?.message ?? 'Document preview generation failed';
     await markPreviewFailed(doc, namespaceKey, message);
-    return pendingResult('failed', message);
+    return pendingResult('failed', message, resolved.operation?.opId ?? null);
   }
 
   await markPreviewPending(doc, namespaceKey, namespace, operationStatus ?? 'queued');
-  return pendingResult(operationStatus ?? 'queued', null);
+  return pendingResult(operationStatus ?? 'queued', null, resolved.operation?.opId ?? null);
 }
 
 export async function deleteDocumentPreviewRows(documentId: string, namespace: string | null): Promise<void> {

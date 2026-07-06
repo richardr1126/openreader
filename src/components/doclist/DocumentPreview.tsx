@@ -5,6 +5,8 @@ import {
   documentPreviewFallbackUrl,
   getDocumentContentSnippet,
   getDocumentPreviewStatus,
+  subscribeDocumentPreviewEvents,
+  type DocumentPreviewReady,
 } from '@/lib/client/api/documents';
 import {
   getInMemoryDocumentPreviewUrl,
@@ -108,9 +110,32 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
 
     let cancelled = false;
     const controller = new AbortController();
+    let closePreviewEvents: (() => void) | null = null;
+
+    const applyReadyPreview = async (status: DocumentPreviewReady) => {
+      const primedUrl = await primeDocumentPreviewCache(
+        doc.id,
+        status.previewVersion || Number(doc.lastModified),
+        previewKey,
+        { signal: controller.signal },
+      ).catch(() => null);
+      if (cancelled) return;
+
+      if (primedUrl) {
+        setImagePreview(primedUrl);
+        setTextPreview(null);
+        return;
+      }
+
+      const fallbackUrl = status.fallbackUrl || documentPreviewFallbackUrl(doc.id);
+      setInMemoryDocumentPreviewUrl(previewKey, fallbackUrl);
+      setImagePreview(fallbackUrl);
+      setTextPreview(null);
+    };
 
     const run = async () => {
       setIsGenerating(true);
+      let keepGeneratingForEvents = false;
       try {
         if (doc.type === 'pdf' || doc.type === 'epub') {
           const persistedUrl = await getPersistedDocumentPreviewUrl(
@@ -124,54 +149,53 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             return;
           }
 
-          let attempt = 0;
-          while (!cancelled && attempt < 12) {
-            const status = await getDocumentPreviewStatus(doc.id, { signal: controller.signal });
-            if (cancelled) return;
+          const status = await getDocumentPreviewStatus(doc.id, { signal: controller.signal });
+          if (cancelled) return;
 
-            if (status.kind === 'ready') {
-              const primedUrl = await primeDocumentPreviewCache(
-                doc.id,
-                status.previewVersion || Number(doc.lastModified),
-                previewKey,
-                { signal: controller.signal },
-              ).catch(() => null);
-              if (cancelled) return;
-
-              if (primedUrl) {
-                setImagePreview(primedUrl);
-                setTextPreview(null);
-                return;
-              }
-
-              const fallbackUrl = status.fallbackUrl || documentPreviewFallbackUrl(doc.id);
-              setInMemoryDocumentPreviewUrl(previewKey, fallbackUrl);
-              setImagePreview(fallbackUrl);
-              setTextPreview(null);
-              return;
-            }
-
-            if (status.status === 'failed') {
-              return;
-            }
-
-            const waitMs = Math.max(
-              400,
-              Math.min(6000, Number.isFinite(status.retryAfterMs) ? status.retryAfterMs : 1500),
-            );
-            await new Promise<void>((resolve) => {
-              const timer = setTimeout(resolve, waitMs);
-              controller.signal.addEventListener(
-                'abort',
-                () => {
-                  clearTimeout(timer);
-                  resolve();
-                },
-                { once: true },
-              );
-            });
-            attempt += 1;
+          if (status.kind === 'ready') {
+            await applyReadyPreview(status);
+            return;
           }
+
+          if (status.status === 'failed' || !status.opId) {
+            return;
+          }
+
+          closePreviewEvents = subscribeDocumentPreviewEvents(
+            doc.id,
+            { opId: status.opId },
+            {
+              onSnapshot: (snapshot) => {
+                if (cancelled) return;
+                if (snapshot.status === 'failed') {
+                  closePreviewEvents?.();
+                  closePreviewEvents = null;
+                  setIsGenerating(false);
+                  return;
+                }
+                if (snapshot.status !== 'ready') return;
+
+                closePreviewEvents?.();
+                closePreviewEvents = null;
+                void (async () => {
+                  try {
+                    const refreshed = await getDocumentPreviewStatus(doc.id, { signal: controller.signal });
+                    if (cancelled) return;
+                    if (refreshed.kind === 'ready') {
+                      await applyReadyPreview(refreshed);
+                    }
+                  } catch {
+                    // fall back to icon
+                  } finally {
+                    if (!cancelled) {
+                      setIsGenerating(false);
+                    }
+                  }
+                })();
+              },
+            },
+          );
+          keepGeneratingForEvents = true;
           return;
         }
 
@@ -190,7 +214,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       } catch {
         // fall back to icon
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !keepGeneratingForEvents) {
           setIsGenerating(false);
         }
       }
@@ -199,6 +223,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     run();
     return () => {
       cancelled = true;
+      closePreviewEvents?.();
       controller.abort();
     };
   }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey]);

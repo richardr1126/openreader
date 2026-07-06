@@ -120,9 +120,6 @@ Current known ownership debt:
 - `/api/documents/[id]/parsed` still can return completed parsed PDF JSON bytes
   through Next instead of making signed object delivery the primary artifact
   path.
-- Document preview generation is worker-owned, but preview thumbnails still use
-  bounded client polling instead of operation SSE.
-- Document upload finalize converts DOCX to PDF with LibreOffice in Next.
 - User data export streams a ZIP archive and document blobs from Next.
 
 ---
@@ -622,6 +619,66 @@ Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
 server-state architecture tests, cache-clear tests, worker route tests, and
 worker-loop tests.
 
+### 14. Worker-Owned Document Preview Jobs
+
+Status: implemented. Preview image generation is worker-owned derived-media
+compute, and thumbnail readiness now follows operation SSE instead of polling.
+
+Target ownership:
+
+- Next owns auth, document metadata/scope checks, preview job creation or
+  resolution, operation SSE proxy authorization, and presigned URL issuance for
+  completed preview images.
+- Worker owns preview generation for PDF, EPUB, and future document-derived
+  preview formats. It reads source blobs, renders/extracts images, normalizes
+  output, and writes preview artifacts under the existing preview object prefix.
+- NATS/JetStream owns preview job queueing, operation state, progress, and retry
+  state. S3 owns source blobs, preview images, and preview metadata. SQL remains
+  a Next-owned document metadata source only.
+- Fallback preview proxy routes remain only as degraded compatibility paths for
+  reading completed preview bytes and text snippets; they do not claim or render
+  new previews in request.
+
+Implemented:
+
+1. Added worker preview job resources:
+   `POST /v1/document-previews/jobs` and
+   `POST /v1/document-previews/resolve`.
+2. Jobs are keyed by document id, namespace, source blob key, source modified
+   time, preview kind, and renderer version.
+3. Job payloads carry source object keys and bounded renderer options; the
+   worker does not query SQL for document rows.
+4. PDF first-page rendering and EPUB cover extraction live in the compute
+   worker.
+5. Next preview ensure/presign/fallback routes now resolve/create worker jobs
+   and return pending/failed/ready snapshots with the current worker `opId`;
+   they do not render previews.
+6. Thumbnail readiness uses a bounded authenticated Next SSE proxy over the
+   existing worker `/v1/operations/:opId/events` primitive. The proxy validates
+   document ownership and `document_preview` subject scope before forwarding.
+7. The `DocumentPreview` client removed the `retryAfterMs`/timer loop. It does
+   one ensure call, subscribes to operation SSE when pending, and performs one
+   final ensure/presign/cache-prime fetch after a succeeded snapshot.
+8. Completed preview delivery still prefers presigned S3 URLs, with the fallback
+   proxy limited to compatibility reads.
+9. Regression coverage pins the no-polling component path, pending `opId`
+   contract, preview SSE proxy authorization, worker route surface, worker-loop
+   handling, and compute-worker SQL boundary.
+
+Hard cuts and cleanups:
+
+- No client polling for worker preview completion.
+- No Next-side PDF/EPUB preview rendering fallback.
+- No new worker event primitive; keep `/v1/operations/:opId/events`.
+- No worker SQL access for preview jobs.
+- No preview-specific status table beyond the existing short metadata row used
+  for ready/queued/failed library state.
+
+Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
+preview render tests, worker route tests, worker-loop tests, JetStream adapter
+tests, worker-loop policy tests, server-state architecture tests,
+`pnpm run check:compute-boundary`, and preview SSE proxy tests.
+
 ### 15. Worker-Owned DOCX Conversion
 
 Status: implemented. Upload finalize stays a short metadata/control route.
@@ -657,78 +714,6 @@ contract tests, worker route tests, and worker-loop tests.
 
 ## Remaining Work
 
-### 14. Worker-Owned Document Preview Jobs
-
-Status: remaining cleanup. Preview image generation is worker-owned
-derived-media compute and no longer happens inside a Vercel request, but the
-client still polls the preview ensure route while waiting for thumbnails.
-
-Target ownership:
-
-- Next owns auth, document metadata/scope checks, preview job creation or
-  resolution, and presigned URL issuance for completed preview images.
-- Worker owns preview generation for PDF, EPUB, and future document-derived
-  preview formats. It reads source blobs, renders/extracts images, normalizes
-  output, and writes preview artifacts under the existing preview object prefix.
-- NATS/JetStream owns preview job queueing, operation state, progress, and retry
-  state. S3 owns source blobs, preview images, and preview metadata. SQL remains
-  a Next-owned document metadata source only.
-- Fallback preview proxy routes remain only as degraded compatibility paths for
-  reading completed preview bytes and text snippets; they do not claim or render
-  new previews in request.
-
-Implemented so far:
-
-1. Added worker preview job resources:
-   `POST /v1/document-previews/jobs` and
-   `POST /v1/document-previews/resolve`.
-2. Jobs are keyed by document id, namespace, source blob key, source modified
-   time, preview kind, and renderer version.
-3. Job payloads carry source object keys and bounded renderer options; the
-   worker does not query SQL for document rows.
-4. PDF first-page rendering and EPUB cover extraction live in the compute
-   worker.
-5. Next preview ensure/presign/fallback routes now resolve/create worker jobs
-   and return pending/failed/ready snapshots; they do not render previews.
-6. Completed preview delivery still prefers presigned S3 URLs, with the fallback
-   proxy limited to compatibility reads.
-
-Remaining hard cut:
-
-1. Pending preview snapshots must include the current worker `opId` when a
-   queued/running preview job exists. Use the existing preview ensure/presign
-   route shape for short snapshots; do not add a preview-specific polling
-   fallback.
-2. Replace the `DocumentPreview` retry loop with operation-event subscription.
-   The client should listen to the existing operation SSE proxy for the preview
-   `opId`, then perform one final preview ensure/presign fetch after a
-   `succeeded` snapshot.
-3. Failed operation snapshots should move the thumbnail to failed state without
-   retry loops. User-initiated refresh/retry can create or resolve the same
-   deterministic preview job through the existing ensure route.
-4. Keep preview byte delivery unchanged: ready previews should still prefer
-   presigned S3 URLs, with fallback proxy routes limited to compatibility reads.
-5. Delete `retryAfterMs`-driven preview polling from client/server contracts
-   once SSE progress is wired. Do not preserve a hidden timer fallback.
-6. Add regression coverage that pending preview responses expose `opId`, the
-   thumbnail component subscribes to SSE instead of looping on ensure, completed
-   SSE snapshots trigger one final preview fetch, and failed SSE snapshots do
-   not schedule another poll.
-
-Hard cuts and cleanups:
-
-- No client polling for worker preview completion.
-- No Next-side PDF/EPUB preview rendering fallback.
-- No new worker event primitive; keep `/v1/operations/:opId/events`.
-- No worker SQL access for preview jobs.
-- No preview-specific status table beyond the existing short metadata row used
-  for ready/queued/failed library state.
-
-Previously verified worker-ownership work: `pnpm compute:openapi:generate`,
-`pnpm exec tsc --noEmit`, focused preview render tests, worker route tests,
-worker-loop tests, JetStream adapter tests, worker-loop policy tests,
-server-state architecture tests, and `pnpm run check:compute-boundary`.
-
 ### 16. Worker-Owned Account Export Artifacts
 
 Status: planned. This is worker-owned for artifact assembly, not worker-owned
@@ -738,12 +723,18 @@ long-running archive build.
 Target ownership:
 
 - Next owns auth, account scope, export request validation, job
-  creation/resolution, SQL reads, manifest creation, and signed URL issuance.
+  creation/resolution, SQL reads, manifest creation, operation SSE proxy
+  authorization, and signed URL issuance.
 - Worker owns large export ZIP assembly, document blob reads from object
   storage, compression, progress, and durable artifact upload.
 - The user-facing export route should return a snapshot or redirect to a
   completed artifact. It should not keep a Vercel response open while streaming
   every document blob into an archive.
+- The Next app must not poll for worker-owned export completion. Pending export
+  snapshots must include the worker `opId`, and the browser should subscribe
+  through a narrow authenticated Next SSE proxy that forwards the existing
+  worker `/v1/operations/:opId/events` stream after validating account/export
+  scope.
 - NATS/JetStream owns account export job queueing and operation state. S3 owns
   the export input manifest and output ZIP artifact. SQL account/document data
   remains Next-owned; Next materializes the export manifest from SQL before
@@ -759,8 +750,11 @@ Final flow:
 4. Worker reads the manifest and referenced document blobs from object storage,
    builds the ZIP, writes the durable export artifact and metadata, and updates
    operation progress in NATS/JetStream.
-5. Next returns short snapshots while the job is pending/running. When complete,
-   Next returns or redirects to a signed object URL for the ZIP.
+5. Next returns short snapshots with the current `opId` while the job is
+   pending/running, and exposes a same-origin export-events proxy to the generic
+   worker operation event stream. The client does not use timers or
+   `retryAfterMs` loops.
+6. When complete, Next returns or redirects to a signed object URL for the ZIP.
 
 Manifest/artifact reuse policy:
 
@@ -788,11 +782,23 @@ Implementation plan:
    broad SQL access.
 5. Return export snapshots from Next with operation status, progress if
    available, failure message, and signed artifact URL when complete.
-6. Expire old account export artifacts through bounded maintenance, not by
+6. Add a narrow account-export SSE proxy in Next that validates the authenticated
+   account/export scope and forwards the worker's generic
+   `/v1/operations/:opId/events` stream. Do not add a worker export-specific
+   events primitive.
+7. Remove or avoid any Next-side polling for account export completion. Pending
+   UI state should be driven by the initial resolve/create snapshot plus SSE
+   snapshots, with one final resolve/download action after success.
+8. Expire old account export artifacts through bounded maintenance, not by
    blocking the export request.
-7. Add regression coverage:
+9. Add regression coverage:
    - large export requests do not stream ZIP bodies from Next;
    - export worker code does not import SQL/database modules;
+   - pending export snapshots expose `opId`;
+   - the export UI subscribes to the account-export SSE proxy instead of
+     polling resolve/status routes;
+   - the SSE proxy validates account/export scope before forwarding generic
+     worker operation events;
    - repeated export clicks reuse or supersede deterministic jobs according to
      explicit policy;
    - completed export resolves after refresh;
@@ -817,6 +823,12 @@ After the worker ownership steps are verified, the last pass is release hygiene:
   return short JSON snapshots; Railway worker owns long-running stream,
   provider/model, render, parse, transcode, convert, archive, and large object
   scan work.
+- Re-scan every worker-owned operation integration for Next-side polling. A
+  pending worker operation exposed to the browser must return an `opId` and use
+  a same-origin, domain-scoped Next SSE proxy to the generic worker
+  `/v1/operations/:opId/events` stream. The proxy must validate authenticated
+  ownership/scope before forwarding. Do not add `retryAfterMs` loops, hidden
+  timers, or worker operation-specific event primitives.
 - Re-scan worker SQL boundaries. New worker-owned preview, conversion, export,
   and audiobook artifact code must not import database/schema modules or query
   app SQL tables. The only allowed current SQL exception is read-only

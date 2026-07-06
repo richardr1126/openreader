@@ -16,7 +16,6 @@ import {
 } from '@/lib/server/documents/previews-blobstore';
 import {
   ensureDocumentPreview,
-  enqueueDocumentPreview,
   isPreviewableDocumentType,
 } from '@/lib/server/documents/previews';
 import { extractRawTextSnippet } from '@/lib/server/documents/text-snippets';
@@ -137,7 +136,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           status: preview.status,
-          retryAfterMs: preview.retryAfterMs,
+          opId: preview.opId,
           presignUrl,
           fallbackUrl,
         },
@@ -159,18 +158,18 @@ export async function GET(req: NextRequest) {
       });
     } catch (error) {
       if (isMissingPreviewBlobError(error)) {
-        await enqueueDocumentPreview(
+        const refreshed = await ensureDocumentPreview(
           {
             id: doc.id,
             type: doc.type,
             lastModified: Number(doc.lastModified),
           },
           testNamespace,
-        ).catch(() => {});
+        );
         return NextResponse.json(
           {
-            status: 'queued',
-            retryAfterMs: 1500,
+            status: refreshed.state === 'ready' ? 'processing' : refreshed.status,
+            opId: refreshed.state === 'ready' ? null : refreshed.opId,
             presignUrl,
             fallbackUrl,
           },
