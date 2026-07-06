@@ -51,6 +51,14 @@ export type DocumentPreviewResolution =
   paths['/v1/document-previews/resolve']['post']['responses'][200]['content']['application/json'];
 export type DocumentPreviewArtifactMetadata =
   NonNullable<DocumentPreviewResolution['artifact']>;
+export type DocumentConversionRequest =
+  paths['/v1/document-conversions/docx/jobs']['post']['requestBody']['content']['application/json'];
+export type DocumentConversionResolveRequest =
+  paths['/v1/document-conversions/docx/resolve']['post']['requestBody']['content']['application/json'];
+export type DocumentConversionResolution =
+  paths['/v1/document-conversions/docx/resolve']['post']['responses'][200]['content']['application/json'];
+export type DocumentConversionArtifactMetadata =
+  NonNullable<DocumentConversionResolution['artifact']>;
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;

@@ -3,7 +3,7 @@ import {
   buildTtsPlaybackCanonicalScopeKey,
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
-import { DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION } from './contracts';
+import { DOCX_CONVERTER_VERSION, DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION } from './contracts';
 
 export function buildPdfOperationKey(input: {
   documentId: string;
@@ -42,6 +42,43 @@ export function buildDocumentPreviewOperationKey(input: {
     input.sourceObjectKey,
     String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
   ].join('|');
+}
+
+export function buildDocumentConversionOperationKey(input: {
+  conversionId: string;
+  namespace: string | null;
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  sourceContentType: string;
+  sourceEtag?: string | null;
+  converterVersion?: string;
+}): string {
+  return [
+    'document_conversion',
+    'v1',
+    input.converterVersion?.trim() || DOCX_CONVERTER_VERSION,
+    input.conversionId,
+    input.namespace ?? '',
+    input.sourceObjectKey,
+    String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
+    input.sourceContentType.trim().toLowerCase() || 'application/octet-stream',
+    input.sourceEtag?.trim() || '',
+  ].join('|');
+}
+
+export function documentConversionSubjectFromOperationKey(opKey: string): {
+  kind: 'document_conversion';
+  conversionId: string;
+  namespace: string | null;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, , conversionId, namespace] = parts;
+  if (kind !== 'document_conversion' || version !== 'v1' || !conversionId) return null;
+  return {
+    kind: 'document_conversion',
+    conversionId,
+    namespace: namespace || null,
+  };
 }
 
 export function documentPreviewSubjectFromOperationKey(opKey: string): {

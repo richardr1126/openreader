@@ -22,6 +22,8 @@ import { OperationOrchestrator } from '../operations';
 import type {
   DocumentPreviewJobRequest,
   DocumentPreviewJobResult,
+  DocumentConversionJobRequest,
+  DocumentConversionJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   TtsPlaybackPlanJobRequest,
@@ -51,6 +53,7 @@ import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
   EVENTS_STREAM_NAME,
   DOCUMENT_PREVIEW_JOBS_SUBJECT,
+  DOCUMENT_CONVERSION_JOBS_SUBJECT,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
@@ -73,6 +76,9 @@ import {
   computeOperationEventSchema,
   computeOperationSchema,
   documentPreviewArtifactMetadataSchema,
+  documentConversionArtifactMetadataSchema,
+  documentConversionProgressSchema,
+  documentConversionResolutionSchema,
   documentPreviewResolutionSchema,
   ttsPlaybackExportArtifactMetadataSchema,
   ttsPlaybackExportProgressSchema,
@@ -202,13 +208,16 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
           OperationError: jsonSchema(operationErrorSchema),
           PdfLayoutProgress: jsonSchema(pdfLayoutProgressSchema),
           TtsPlaybackExportProgress: jsonSchema(ttsPlaybackExportProgressSchema),
+          DocumentConversionProgress: jsonSchema(documentConversionProgressSchema),
           TtsPlaybackExportArtifact: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
           DocumentPreviewArtifact: jsonSchema(documentPreviewArtifactMetadataSchema),
+          DocumentConversionArtifact: jsonSchema(documentConversionArtifactMetadataSchema),
           ComputeOperation: jsonSchema(computeOperationSchema),
           ComputeOperationEvent: jsonSchema(computeOperationEventSchema),
           PdfLayoutResolution: jsonSchema(pdfLayoutResolutionSchema),
           TtsPlaybackExportArtifactResolution: jsonSchema(ttsPlaybackExportArtifactResolutionSchema),
           DocumentPreviewResolution: jsonSchema(documentPreviewResolutionSchema),
+          DocumentConversionResolution: jsonSchema(documentConversionResolutionSchema),
         },
       },
       security: [{ bearerAuth: [] }],
@@ -233,12 +242,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const ttsPlaybackPlanJobCodec = createJsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>();
   const ttsPlaybackExportJobCodec = createJsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>();
   const documentPreviewJobCodec = createJsonCodec<QueuedJob<DocumentPreviewJobRequest>>();
+  const documentConversionJobCodec = createJsonCodec<QueuedJob<DocumentConversionJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -256,6 +266,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     ttsPlaybackPlanSubject: TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
     ttsPlaybackExportSubject: TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
     documentPreviewSubject: DOCUMENT_PREVIEW_JOBS_SUBJECT,
+    documentConversionSubject: DOCUMENT_CONVERSION_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -334,6 +345,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
     ttsPlaybackExportCodec: ttsPlaybackExportJobCodec,
     documentPreviewCodec: documentPreviewJobCodec,
+    documentConversionCodec: documentConversionJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -369,6 +381,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         ttsPlaybackPlan: session.ttsPlaybackPlanConsumer,
         ttsPlaybackExport: session.ttsPlaybackExportConsumer,
         documentPreview: session.documentPreviewConsumer,
+        documentConversion: session.documentConversionConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

@@ -19,8 +19,10 @@ export const TTS_PLAYBACK_QUEUE_NAME = 'tts-playback';
 export const TTS_PLAYBACK_PLAN_QUEUE_NAME = 'tts-playback-plan';
 export const TTS_PLAYBACK_EXPORT_QUEUE_NAME = 'tts-playback-export';
 export const DOCUMENT_PREVIEW_QUEUE_NAME = 'document-preview';
+export const DOCUMENT_CONVERSION_QUEUE_NAME = 'document-conversion';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
 export const DOCUMENT_PREVIEW_RENDERER_VERSION = 'document-preview@pdfjs-4.8.69+epub-cover-v1';
+export const DOCX_CONVERTER_VERSION = 'docx-to-pdf@libreoffice-v1';
 
 export function encodeParserVersion(parserVersion: string, defaultVersion = PDF_PARSER_VERSION): string {
   return encodeURIComponent(parserVersion.trim() || defaultVersion);
@@ -200,6 +202,39 @@ export interface DocumentPreviewJobResult {
   timing?: WorkerJobTiming;
 }
 
+export interface DocumentConversionJobRequest {
+  conversionId: string;
+  namespace: string | null;
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  sourceContentType: string;
+  sourceEtag?: string | null;
+  converterVersion?: string;
+}
+
+export interface DocumentConversionArtifactMetadata {
+  schemaVersion: 1;
+  conversionId: string;
+  namespace: string | null;
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  sourceContentType: string;
+  sourceEtag: string | null;
+  converterVersion: string;
+  objectKey: string;
+  metadataObjectKey: string;
+  contentType: 'application/pdf';
+  byteLength: number;
+  documentId: string;
+  status: 'ready';
+  createdAt: number;
+}
+
+export interface DocumentConversionJobResult {
+  artifact: DocumentConversionArtifactMetadata;
+  timing?: WorkerJobTiming;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -253,7 +288,11 @@ export interface TtsPlaybackExportProgress {
   plannedSegments: number;
 }
 
-export type WorkerOperationProgress = PdfLayoutProgress | TtsPlaybackProgress | TtsPlaybackExportProgress;
+export interface DocumentConversionProgress {
+  phase: 'fetching' | 'converting' | 'uploading';
+}
+
+export type WorkerOperationProgress = PdfLayoutProgress | TtsPlaybackProgress | TtsPlaybackExportProgress | DocumentConversionProgress;
 
 export interface WorkerJobStatusResponse<Result> {
   status: WorkerJobState;
@@ -262,7 +301,7 @@ export interface WorkerJobStatusResponse<Result> {
   timing?: WorkerJobTiming;
 }
 
-export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export' | 'document_preview';
+export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export' | 'document_preview' | 'document_conversion';
 
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
@@ -294,12 +333,19 @@ export interface DocumentPreviewOperationRequest {
   payload: DocumentPreviewJobRequest;
 }
 
+export interface DocumentConversionOperationRequest {
+  kind: 'document_conversion';
+  opKey: string;
+  payload: DocumentConversionJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
   | TtsPlaybackPlanOperationRequest
   | TtsPlaybackExportArtifactOperationRequest
-  | DocumentPreviewOperationRequest;
+  | DocumentPreviewOperationRequest
+  | DocumentConversionOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

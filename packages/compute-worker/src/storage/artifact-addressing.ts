@@ -177,3 +177,34 @@ export function documentPreviewMetadataArtifactKey(input: {
 }): string {
   return `${documentPreviewArtifactPrefix(input)}metadata.json`;
 }
+
+function conversionNamespaceSegment(namespace: string | null): string {
+  return namespace && SAFE_NAMESPACE_REGEX_WITH_DEFAULT.test(namespace) ? namespace : '_default';
+}
+
+export function documentConversionArtifactPrefix(input: {
+  conversionId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.conversionId)) {
+    throw new Error(`Invalid document conversion id: ${input.conversionId}`);
+  }
+  return `${input.prefix}/document_conversions_v1/docx/ns/${conversionNamespaceSegment(input.namespace)}/${input.conversionId}/`;
+}
+
+export function documentConversionArtifactKey(input: {
+  conversionId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  return `${documentConversionArtifactPrefix(input)}artifact.pdf`;
+}
+
+export function documentConversionMetadataArtifactKey(input: {
+  conversionId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  return `${documentConversionArtifactPrefix(input)}metadata.json`;
+}

@@ -1,6 +1,7 @@
 import type {
   PdfLayoutJobResult,
   DocumentPreviewJobResult,
+  DocumentConversionJobResult,
   TtsPlaybackExportArtifactResult,
   TtsPlaybackPlanJobResult,
   TtsPlaybackJobResult,
@@ -10,7 +11,7 @@ import type {
 } from '../operations/contracts';
 
 export type StreamedOperationState = WorkerOperationState<
-  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult
+  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult
 >;
 
 export interface OrphanRecoveryStateStore {
@@ -49,11 +50,16 @@ export function getOrphanRecoveryThresholdMs(input: {
 }): number | null {
   if (!isInflightStatus(input.state.status)) return null;
   if (input.state.status === 'running') {
-    return input.state.kind === 'pdf_layout' || input.state.kind === 'tts_playback_export' || input.state.kind === 'document_preview'
+    return input.state.kind === 'pdf_layout'
+      || input.state.kind === 'tts_playback_export'
+      || input.state.kind === 'document_preview'
+      || input.state.kind === 'document_conversion'
       ? input.pdfTimeoutMs
       : input.whisperTimeoutMs;
   }
-  return input.state.kind === 'pdf_layout' || input.state.kind === 'document_preview' ? input.opStaleMs : null;
+  return input.state.kind === 'pdf_layout' || input.state.kind === 'document_preview' || input.state.kind === 'document_conversion'
+    ? input.opStaleMs
+    : null;
 }
 
 export async function recoverOrphanedOperations(

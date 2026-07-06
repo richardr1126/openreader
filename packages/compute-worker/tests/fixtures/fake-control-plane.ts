@@ -1,5 +1,6 @@
 import type {
   DocumentPreviewJobResult,
+  DocumentConversionJobResult,
   PdfLayoutJobResult,
   TtsPlaybackExportArtifactResult,
   TtsPlaybackPlanJobResult,
@@ -15,7 +16,8 @@ type ComputeResult =
   | TtsPlaybackJobResult
   | TtsPlaybackPlanJobResult
   | TtsPlaybackExportArtifactResult
-  | DocumentPreviewJobResult;
+  | DocumentPreviewJobResult
+  | DocumentConversionJobResult;
 type ComputeState = WorkerOperationState<ComputeResult>;
 type ComputeEvent = WorkerOperationEvent<ComputeResult>;
 

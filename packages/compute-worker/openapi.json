@@ -297,6 +297,23 @@
         ],
         "additionalProperties": false
       },
+      "DocumentConversionProgress": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "fetching",
+              "converting",
+              "uploading"
+            ]
+          }
+        },
+        "required": [
+          "phase"
+        ],
+        "additionalProperties": false
+      },
       "TtsPlaybackExportArtifact": {
         "type": "object",
         "properties": {
@@ -509,6 +526,97 @@
         ],
         "additionalProperties": false
       },
+      "DocumentConversionArtifact": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "conversionId": {
+            "type": "string"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceObjectKey": {
+            "type": "string"
+          },
+          "sourceLastModifiedMs": {
+            "type": "number"
+          },
+          "sourceContentType": {
+            "type": "string"
+          },
+          "sourceEtag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "converterVersion": {
+            "type": "string"
+          },
+          "objectKey": {
+            "type": "string"
+          },
+          "metadataObjectKey": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf"
+            ]
+          },
+          "byteLength": {
+            "type": "number"
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "conversionId",
+          "namespace",
+          "sourceObjectKey",
+          "sourceLastModifiedMs",
+          "sourceContentType",
+          "sourceEtag",
+          "converterVersion",
+          "objectKey",
+          "metadataObjectKey",
+          "contentType",
+          "byteLength",
+          "documentId",
+          "status",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "ComputeOperation": {
         "type": "object",
         "properties": {
@@ -664,6 +772,36 @@
                   "previewKind"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "document_conversion"
+                    ]
+                  },
+                  "conversionId": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "conversionId",
+                  "namespace"
+                ],
+                "additionalProperties": false
               }
             ]
           },
@@ -787,6 +925,23 @@
                   "phase",
                   "completedSegments",
                   "plannedSegments"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "fetching",
+                      "converting",
+                      "uploading"
+                    ]
+                  }
+                },
+                "required": [
+                  "phase"
                 ],
                 "additionalProperties": false
               }
@@ -963,6 +1118,36 @@
                       "previewKind"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "document_conversion"
+                        ]
+                      },
+                      "conversionId": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "conversionId",
+                      "namespace"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -1086,6 +1271,23 @@
                       "phase",
                       "completedSegments",
                       "plannedSegments"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string",
+                        "enum": [
+                          "fetching",
+                          "converting",
+                          "uploading"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "phase"
                     ],
                     "additionalProperties": false
                   }
@@ -1287,6 +1489,36 @@
                           "previewKind"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_conversion"
+                            ]
+                          },
+                          "conversionId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "conversionId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -1410,6 +1642,23 @@
                           "phase",
                           "completedSegments",
                           "plannedSegments"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "fetching",
+                              "converting",
+                              "uploading"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "phase"
                         ],
                         "additionalProperties": false
                       }
@@ -1703,6 +1952,36 @@
                           "previewKind"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_conversion"
+                            ]
+                          },
+                          "conversionId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "conversionId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -1826,6 +2105,23 @@
                           "phase",
                           "completedSegments",
                           "plannedSegments"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "fetching",
+                              "converting",
+                              "uploading"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "phase"
                         ],
                         "additionalProperties": false
                       }
@@ -2133,6 +2429,36 @@
                           "previewKind"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_conversion"
+                            ]
+                          },
+                          "conversionId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "conversionId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -2256,6 +2582,478 @@
                           "phase",
                           "completedSegments",
                           "plannedSegments"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "fetching",
+                              "converting",
+                              "uploading"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "phase"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "opId",
+                  "subject",
+                  "status",
+                  "queuedAt",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifact",
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "DocumentConversionResolution": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "enum": [
+                      1
+                    ]
+                  },
+                  "conversionId": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceObjectKey": {
+                    "type": "string"
+                  },
+                  "sourceLastModifiedMs": {
+                    "type": "number"
+                  },
+                  "sourceContentType": {
+                    "type": "string"
+                  },
+                  "sourceEtag": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "converterVersion": {
+                    "type": "string"
+                  },
+                  "objectKey": {
+                    "type": "string"
+                  },
+                  "metadataObjectKey": {
+                    "type": "string"
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "enum": [
+                      "application/pdf"
+                    ]
+                  },
+                  "byteLength": {
+                    "type": "number"
+                  },
+                  "documentId": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ready"
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "conversionId",
+                  "namespace",
+                  "sourceObjectKey",
+                  "sourceLastModifiedMs",
+                  "sourceContentType",
+                  "sourceEtag",
+                  "converterVersion",
+                  "objectKey",
+                  "metadataObjectKey",
+                  "contentType",
+                  "byteLength",
+                  "documentId",
+                  "status",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "opId": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pdf_layout"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "sessionId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_plan"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "settingsHash": {
+                            "type": "string"
+                          },
+                          "planSignature": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "settingsHash",
+                          "planSignature"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tts_playback_export"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "artifactId": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "mp3",
+                              "m4b"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "artifactId",
+                          "format"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_preview"
+                            ]
+                          },
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "previewKind": {
+                            "type": "string",
+                            "enum": [
+                              "card"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "namespace",
+                          "previewKind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document_conversion"
+                            ]
+                          },
+                          "conversionId": {
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "conversionId",
+                          "namespace"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "queuedAt": {
+                    "type": "number"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  },
+                  "startedAt": {
+                    "type": "number"
+                  },
+                  "result": {},
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "message"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "timing": {
+                    "type": "object",
+                    "properties": {
+                      "queueWaitMs": {
+                        "type": "number"
+                      },
+                      "s3FetchMs": {
+                        "type": "number"
+                      },
+                      "computeMs": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "totalPages": {
+                            "type": "number"
+                          },
+                          "pagesParsed": {
+                            "type": "number"
+                          },
+                          "currentPage": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "infer",
+                              "merge"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "totalPages",
+                          "pagesParsed",
+                          "phase"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "completedThroughOrdinal": {
+                            "type": "number"
+                          },
+                          "completedCount": {
+                            "type": "number"
+                          },
+                          "plannedCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "completedThroughOrdinal",
+                          "completedCount",
+                          "plannedCount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "assembling",
+                              "transcoding",
+                              "uploading"
+                            ]
+                          },
+                          "completedSegments": {
+                            "type": "number"
+                          },
+                          "plannedSegments": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "phase",
+                          "completedSegments",
+                          "plannedSegments"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "fetching",
+                              "converting",
+                              "uploading"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "phase"
                         ],
                         "additionalProperties": false
                       }
@@ -2653,6 +3451,36 @@
                                     "previewKind"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_conversion"
+                                      ]
+                                    },
+                                    "conversionId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "conversionId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -2776,6 +3604,23 @@
                                     "phase",
                                     "completedSegments",
                                     "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fetching",
+                                        "converting",
+                                        "uploading"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "phase"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -3574,6 +4419,36 @@
                             "previewKind"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -3697,6 +4572,23 @@
                             "phase",
                             "completedSegments",
                             "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
                           ],
                           "additionalProperties": false
                         }
@@ -3968,6 +4860,36 @@
                             "previewKind"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -4091,6 +5013,462 @@
                             "phase",
                             "completedSegments",
                             "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/document-conversions/docx/jobs": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "conversionId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8,128}$"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "sourceLastModifiedMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sourceContentType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sourceEtag": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "converterVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "conversionId",
+                  "namespace",
+                  "sourceObjectKey",
+                  "sourceLastModifiedMs",
+                  "sourceContentType"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_plan"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "settingsHash": {
+                              "type": "string"
+                            },
+                            "planSignature": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "settingsHash",
+                            "planSignature"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "infer",
+                                "merge"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
                           ],
                           "additionalProperties": false
                         }
@@ -4455,6 +5833,36 @@
                             "previewKind"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -4578,6 +5986,23 @@
                             "phase",
                             "completedSegments",
                             "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
                           ],
                           "additionalProperties": false
                         }
@@ -4901,6 +6326,36 @@
                             "previewKind"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -5024,6 +6479,23 @@
                             "phase",
                             "completedSegments",
                             "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
                           ],
                           "additionalProperties": false
                         }
@@ -5312,6 +6784,36 @@
                             "previewKind"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -5435,6 +6937,23 @@
                             "phase",
                             "completedSegments",
                             "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
                           ],
                           "additionalProperties": false
                         }
@@ -5799,6 +7318,36 @@
                                     "previewKind"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_conversion"
+                                      ]
+                                    },
+                                    "conversionId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "conversionId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -5922,6 +7471,23 @@
                                     "phase",
                                     "completedSegments",
                                     "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fetching",
+                                        "converting",
+                                        "uploading"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "phase"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -6198,6 +7764,36 @@
                                     "previewKind"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_conversion"
+                                      ]
+                                    },
+                                    "conversionId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "conversionId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -6321,6 +7917,23 @@
                                     "phase",
                                     "completedSegments",
                                     "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fetching",
+                                        "converting",
+                                        "uploading"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "phase"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -6724,6 +8337,36 @@
                                     "previewKind"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_conversion"
+                                      ]
+                                    },
+                                    "conversionId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "conversionId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -6847,6 +8490,577 @@
                                     "phase",
                                     "completedSegments",
                                     "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fetching",
+                                        "converting",
+                                        "uploading"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "opId",
+                            "subject",
+                            "status",
+                            "queuedAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "artifact",
+                    "operation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/document-conversions/docx/resolve": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "conversionId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8,128}$"
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sourceObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "sourceLastModifiedMs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sourceContentType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sourceEtag": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "converterVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "conversionId",
+                  "namespace",
+                  "sourceObjectKey",
+                  "sourceLastModifiedMs",
+                  "sourceContentType"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "artifact": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "sourceObjectKey": {
+                              "type": "string"
+                            },
+                            "sourceLastModifiedMs": {
+                              "type": "number"
+                            },
+                            "sourceContentType": {
+                              "type": "string"
+                            },
+                            "sourceEtag": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "converterVersion": {
+                              "type": "string"
+                            },
+                            "objectKey": {
+                              "type": "string"
+                            },
+                            "metadataObjectKey": {
+                              "type": "string"
+                            },
+                            "contentType": {
+                              "type": "string",
+                              "enum": [
+                                "application/pdf"
+                              ]
+                            },
+                            "byteLength": {
+                              "type": "number"
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ready"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "conversionId",
+                            "namespace",
+                            "sourceObjectKey",
+                            "sourceLastModifiedMs",
+                            "sourceContentType",
+                            "sourceEtag",
+                            "converterVersion",
+                            "objectKey",
+                            "metadataObjectKey",
+                            "contentType",
+                            "byteLength",
+                            "documentId",
+                            "status",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "operation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "opId": {
+                              "type": "string"
+                            },
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf_layout"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "sessionId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "sessionId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_plan"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "settingsHash": {
+                                      "type": "string"
+                                    },
+                                    "planSignature": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "settingsHash",
+                                    "planSignature"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_export"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "mp3",
+                                        "m4b"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "artifactId",
+                                    "format"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_preview"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "previewKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "card"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace",
+                                    "previewKind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_conversion"
+                                      ]
+                                    },
+                                    "conversionId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "conversionId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "failed"
+                              ]
+                            },
+                            "queuedAt": {
+                              "type": "number"
+                            },
+                            "updatedAt": {
+                              "type": "number"
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            },
+                            "result": {},
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "message": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "message"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "timing": {
+                              "type": "object",
+                              "properties": {
+                                "queueWaitMs": {
+                                  "type": "number"
+                                },
+                                "s3FetchMs": {
+                                  "type": "number"
+                                },
+                                "computeMs": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "progress": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "totalPages": {
+                                      "type": "number"
+                                    },
+                                    "pagesParsed": {
+                                      "type": "number"
+                                    },
+                                    "currentPage": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "infer",
+                                        "merge"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "totalPages",
+                                    "pagesParsed",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "completedThroughOrdinal": {
+                                      "type": "number"
+                                    },
+                                    "completedCount": {
+                                      "type": "number"
+                                    },
+                                    "plannedCount": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "completedThroughOrdinal",
+                                    "completedCount",
+                                    "plannedCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "transcoding",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedSegments": {
+                                      "type": "number"
+                                    },
+                                    "plannedSegments": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedSegments",
+                                    "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fetching",
+                                        "converting",
+                                        "uploading"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "phase"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -7072,6 +9286,36 @@
                             "previewKind"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -7195,6 +9439,23 @@
                             "phase",
                             "completedSegments",
                             "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
                           ],
                           "additionalProperties": false
                         }

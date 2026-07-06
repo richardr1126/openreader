@@ -16,10 +16,72 @@ type UploadOptions = {
   signal?: AbortSignal;
 };
 
+type FinalizeUploadPayload = {
+  token: string | undefined;
+  name: string;
+  type: DocumentType;
+  lastModified: number;
+};
+
+type FinalizeResponse = {
+  stored?: BaseDocument[];
+  conversions?: Array<{
+    token: string;
+    name: string;
+    conversionId: string;
+    opId: string | null;
+    status: 'queued' | 'running' | 'failed';
+    error?: string;
+  }>;
+  error?: string;
+};
+
+export class DocumentConversionPendingError extends Error {
+  readonly conversions: NonNullable<FinalizeResponse['conversions']>;
+  readonly stored: BaseDocument[];
+
+  constructor(input: {
+    conversions: NonNullable<FinalizeResponse['conversions']>;
+    stored: BaseDocument[];
+  }) {
+    super('DOCX conversion is still running');
+    this.name = 'DocumentConversionPendingError';
+    this.conversions = input.conversions;
+    this.stored = input.stored;
+  }
+}
+
 function toUploadBody(body: UploadSource['body']): BodyInit {
   if (body instanceof Blob) return body;
   if (body instanceof ArrayBuffer) return body;
   return body as unknown as BodyInit;
+}
+
+async function finalizeUploadedSources(
+  uploads: FinalizeUploadPayload[],
+  options?: UploadOptions,
+): Promise<BaseDocument[]> {
+  const finalizeRes = await fetch('/api/documents/blob/upload/finalize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploads }),
+    signal: options?.signal,
+  });
+  const data = (await finalizeRes.json().catch(() => null)) as FinalizeResponse | null;
+
+  if (finalizeRes.status === 202) {
+    throw new DocumentConversionPendingError({
+      conversions: data?.conversions ?? [],
+      stored: data?.stored ?? [],
+    });
+  }
+
+  if (finalizeRes.ok) {
+    return data?.stored || [];
+  }
+
+  const failed = data?.conversions?.find((conversion) => conversion.status === 'failed');
+  throw new Error(failed?.error || data?.error || 'Failed to finalize uploaded documents');
 }
 
 async function uploadDocumentSourceViaProxy(
@@ -389,27 +451,15 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     }
   }
 
-  const finalizeRes = await fetch('/api/documents/blob/upload/finalize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      uploads: sources.map((source, index) => ({
-        token: uploads[index]?.token,
-        name: source.name,
-        type: source.type,
-        lastModified: source.lastModified,
-      })),
-    }),
-    signal: options?.signal,
-  });
-
-  if (!finalizeRes.ok) {
-    const data = (await finalizeRes.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to finalize uploaded documents');
-  }
-
-  const data = (await finalizeRes.json()) as { stored: BaseDocument[] };
-  return data.stored || [];
+  return finalizeUploadedSources(
+    sources.map((source, index) => ({
+      token: uploads[index]?.token,
+      name: source.name,
+      type: source.type,
+      lastModified: source.lastModified,
+    })),
+    options,
+  );
 }
 
 export async function uploadDocuments(files: File[], options?: UploadOptions): Promise<BaseDocument[]> {

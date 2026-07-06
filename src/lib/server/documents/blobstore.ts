@@ -441,6 +441,32 @@ export async function copyTempDocumentBlobToDocument(
   );
 }
 
+export async function copyObjectKeyToDocument(
+  sourceKey: string,
+  documentId: string,
+  namespace: string | null,
+  contentType: string,
+  options?: { ifNoneMatch?: boolean },
+): Promise<void> {
+  const cfg = getS3Config();
+  const client = getS3ProxyClient();
+  const normalizedSourceKey = sourceKey.trim();
+  if (!normalizedSourceKey.startsWith(`${cfg.prefix}/`)) {
+    throw new Error('Source object key is outside the configured storage prefix');
+  }
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: cfg.bucket,
+      Key: documentKey(documentId, namespace),
+      CopySource: `${cfg.bucket}/${encodeURIComponent(normalizedSourceKey).replace(/%2F/g, '/')}`,
+      ContentType: contentType,
+      MetadataDirective: 'REPLACE',
+      ServerSideEncryption: 'AES256',
+      ...(options?.ifNoneMatch ? { IfNoneMatch: '*' } : {}),
+    }),
+  );
+}
+
 export async function deleteDocumentBlob(id: string, namespace: string | null): Promise<void> {
   const cfg = getS3Config();
   const client = getS3ProxyClient();

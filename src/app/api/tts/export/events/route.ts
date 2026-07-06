@@ -32,9 +32,13 @@ export async function GET(request: NextRequest) {
 
     const operation = await getComputeWorkerClient().getOperation(opId);
     if (!operation) return NextResponse.json({ error: 'Operation not found' }, { status: 404 });
-    const isExportOperation = operation.subject.kind === 'tts_playback_export';
-    const isGenerationOperation = operation.subject.kind === 'tts_playback';
-    if ((!isExportOperation && !isGenerationOperation) || operation.subject.documentId !== documentId) {
+    if (
+      operation.subject.kind !== 'tts_playback_export'
+      && operation.subject.kind !== 'tts_playback'
+    ) {
+      return NextResponse.json({ error: 'Operation does not belong to this export' }, { status: 403 });
+    }
+    if (operation.subject.documentId !== documentId) {
       return NextResponse.json({ error: 'Operation does not belong to this export' }, { status: 403 });
     }
 

@@ -22,6 +22,9 @@ export async function GET(
     const { planId } = await context.params;
     const operation = await resolveTtsPlaybackPlanOperation(planId);
     if (!operation) return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
+    if (operation.subject.kind !== 'tts_playback_plan') {
+      return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
+    }
 
     const scope = await resolveSegmentDocumentScope(request, operation.subject.documentId);
     if (scope instanceof Response) return scope;

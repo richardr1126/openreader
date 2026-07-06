@@ -69,6 +69,18 @@ export const documentPreviewResolveSchema = documentPreviewOperationCreateSchema
   targetWidth: true,
 });
 
+export const documentConversionOperationCreateSchema = z.object({
+  conversionId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
+  namespace: namespaceSchema,
+  sourceObjectKey: z.string().trim().min(1).max(2048),
+  sourceLastModifiedMs: z.number().int().nonnegative(),
+  sourceContentType: z.string().trim().min(1).max(256),
+  sourceEtag: z.string().trim().min(1).max(256).nullable().optional(),
+  converterVersion: z.string().trim().min(1).max(256).optional(),
+}).strict();
+
+export const documentConversionResolveSchema = documentConversionOperationCreateSchema;
+
 export const ttsPlaybackPlanningSchema = z.object({
   selectedOrdinal: z.number().int().nonnegative().optional(),
   maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -197,6 +209,10 @@ export const ttsPlaybackExportProgressSchema = z.object({
   plannedSegments: z.number(),
 });
 
+export const documentConversionProgressSchema = z.object({
+  phase: z.enum(['fetching', 'converting', 'uploading']),
+});
+
 export const ttsPlaybackExportArtifactMetadataSchema = z.object({
   schemaVersion: z.literal(1),
   artifactId: z.string(),
@@ -239,6 +255,24 @@ export const documentPreviewArtifactMetadataSchema = z.object({
   createdAt: z.number(),
 });
 
+export const documentConversionArtifactMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  conversionId: z.string(),
+  namespace: z.string().nullable(),
+  sourceObjectKey: z.string(),
+  sourceLastModifiedMs: z.number(),
+  sourceContentType: z.string(),
+  sourceEtag: z.string().nullable(),
+  converterVersion: z.string(),
+  objectKey: z.string(),
+  metadataObjectKey: z.string(),
+  contentType: z.literal('application/pdf'),
+  byteLength: z.number(),
+  documentId: z.string(),
+  status: z.literal('ready'),
+  createdAt: z.number(),
+});
+
 export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
@@ -270,6 +304,11 @@ export const computeOperationSchema = z.object({
       namespace: z.string().nullable(),
       previewKind: z.literal('card'),
     }),
+    z.object({
+      kind: z.literal('document_conversion'),
+      conversionId: z.string(),
+      namespace: z.string().nullable(),
+    }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
   queuedAt: z.number(),
@@ -282,7 +321,12 @@ export const computeOperationSchema = z.object({
     s3FetchMs: z.number().optional(),
     computeMs: z.number().optional(),
   }).optional(),
-  progress: z.union([pdfLayoutProgressSchema, ttsPlaybackProgressSchema, ttsPlaybackExportProgressSchema]).optional(),
+  progress: z.union([
+    pdfLayoutProgressSchema,
+    ttsPlaybackProgressSchema,
+    ttsPlaybackExportProgressSchema,
+    documentConversionProgressSchema,
+  ]).optional(),
 });
 
 export const computeOperationEventSchema = z.object({
@@ -309,6 +353,11 @@ export const ttsPlaybackExportArtifactResolutionSchema = z.object({
 
 export const documentPreviewResolutionSchema = z.object({
   artifact: documentPreviewArtifactMetadataSchema.nullable(),
+  operation: computeOperationSchema.nullable(),
+});
+
+export const documentConversionResolutionSchema = z.object({
+  artifact: documentConversionArtifactMetadataSchema.nullable(),
   operation: computeOperationSchema.nullable(),
 });
 

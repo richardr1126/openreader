@@ -4,6 +4,8 @@ import type {
   PdfLayoutResult,
   DocumentPreviewRequest,
   DocumentPreviewResolution,
+  DocumentConversionRequest,
+  DocumentConversionResolution,
   TtsPlaybackRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
@@ -92,6 +94,10 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/document-previews/jobs', input);
   }
 
+  createDocumentConversionOperation(input: DocumentConversionRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/document-conversions/docx/jobs', input);
+  }
+
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
     return this.requestJson('POST', '/v1/pdf-layout/resolve', {
       documentId: input.documentId,
@@ -102,6 +108,10 @@ export class ComputeWorkerClient {
 
   resolveDocumentPreview(input: Omit<DocumentPreviewRequest, 'targetWidth'>): Promise<DocumentPreviewResolution> {
     return this.requestJson('POST', '/v1/document-previews/resolve', input);
+  }
+
+  resolveDocumentConversion(input: DocumentConversionRequest): Promise<DocumentConversionResolution> {
+    return this.requestJson('POST', '/v1/document-conversions/docx/resolve', input);
   }
 
   createTtsPlaybackOperation(input: TtsPlaybackRequest): Promise<ComputeOperation> {

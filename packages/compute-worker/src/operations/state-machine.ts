@@ -65,7 +65,8 @@ export function shouldReuseExistingOperation(input: {
     return input.requestKind !== 'tts_playback_plan'
       && input.requestKind !== 'tts_playback'
       && input.requestKind !== 'tts_playback_export'
-      && input.requestKind !== 'document_preview';
+      && input.requestKind !== 'document_preview'
+      && input.requestKind !== 'document_conversion';
   }
   if (!isInflightStatus(input.current.status)) return false;
   const ageMs = input.now - input.current.updatedAt;

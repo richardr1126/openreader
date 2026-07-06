@@ -125,6 +125,37 @@ describe('compute worker API routes', () => {
     });
   });
 
+  test('creates document conversion operations without exposing internal keys', async () => {
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/document-conversions/docx/jobs',
+      headers: AUTH,
+      payload: {
+        conversionId: 'a'.repeat(64),
+        namespace: null,
+        sourceObjectKey: 'openreader/document_uploads_temp_v1/users/user-1/upload.bin',
+        sourceLastModifiedMs: 12345,
+        sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        sourceEtag: 'source-etag',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      subject: { kind: 'document_conversion', conversionId: 'a'.repeat(64), namespace: null },
+      status: 'queued',
+    });
+    expect(response.json()).not.toHaveProperty('opKey');
+    expect(response.json()).not.toHaveProperty('jobId');
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'document_conversion',
+      payload: {
+        conversionId: 'a'.repeat(64),
+        sourceObjectKey: 'openreader/document_uploads_temp_v1/users/user-1/upload.bin',
+      },
+    });
+  });
+
   test('reuses idempotent PDF requests and replaces them only with an explicit token', async () => {
     const documentId = 'e'.repeat(64);
     const payload = {

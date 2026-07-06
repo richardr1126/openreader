@@ -15,11 +15,13 @@ export const TTS_PLAYBACK_JOBS_SUBJECT = 'jobs.tts_playback';
 export const TTS_PLAYBACK_PLAN_JOBS_SUBJECT = 'jobs.tts_playback_plan';
 export const TTS_PLAYBACK_EXPORT_JOBS_SUBJECT = 'jobs.tts_playback_export';
 export const DOCUMENT_PREVIEW_JOBS_SUBJECT = 'jobs.document_preview';
+export const DOCUMENT_CONVERSION_JOBS_SUBJECT = 'jobs.document_conversion';
 export const LAYOUT_CONSUMER_NAME = 'compute_layout';
 export const TTS_PLAYBACK_CONSUMER_NAME = 'compute_tts_playback';
 export const TTS_PLAYBACK_PLAN_CONSUMER_NAME = 'compute_tts_playback_plan';
 export const TTS_PLAYBACK_EXPORT_CONSUMER_NAME = 'compute_tts_playback_export';
 export const DOCUMENT_PREVIEW_CONSUMER_NAME = 'compute_document_preview';
+export const DOCUMENT_CONVERSION_CONSUMER_NAME = 'compute_document_conversion';
 export const EVENTS_STREAM_NAME = 'compute_events';
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -47,6 +49,7 @@ export async function ensureJetStreamResources(input: {
       TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
       TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
       DOCUMENT_PREVIEW_JOBS_SUBJECT,
+      DOCUMENT_CONVERSION_JOBS_SUBJECT,
     ],
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
@@ -113,5 +116,6 @@ export async function ensureJetStreamResources(input: {
     ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
     ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
+    ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
   ]);
 }

@@ -120,8 +120,8 @@ Current known ownership debt:
 - `/api/documents/[id]/parsed` still can return completed parsed PDF JSON bytes
   through Next instead of making signed object delivery the primary artifact
   path.
-- Document preview ensure/presign/fallback routes can claim and render PDF/EPUB
-  preview images inside a Next request.
+- Document preview generation is worker-owned, but preview thumbnails still use
+  bounded client polling instead of operation SSE.
 - Document upload finalize converts DOCX to PDF with LibreOffice in Next.
 - User data export streams a ZIP archive and document blobs from Next.
 
@@ -347,8 +347,8 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 11 Idempotent playback jobs | Done | Live and export sessions are deterministic and separate; both share per-ordinal segment cache without sharing cursor/session state. |
 | 12 Compute worker API hard cut | Done | Worker routes use the finalized resource/job shape with no old aliases. |
 | 13 Audiobook export reconnect + worker-owned artifacts | Done | Export resolve now reconnects deterministic generation/artifact operations; speed transcode, M4B packaging, chapter metadata, artifact storage, and download serving are worker-owned. |
-| 14 Worker-owned document preview jobs | Planned | Move PDF first-page rendering and EPUB cover/preview extraction out of Next request handlers. |
-| 15 Worker-owned DOCX conversion | Planned | Move LibreOffice DOCX->PDF conversion to Railway worker jobs; keep non-DOCX finalize short in Next. |
+| 14 Worker-owned document preview jobs | Done | Preview ensure/presign/fallback now resolve/create worker preview jobs; PDF first-page rendering and EPUB cover extraction are worker-owned. |
+| 15 Worker-owned DOCX conversion | Done | DOCX upload finalize resolves/creates deterministic worker conversion jobs; LibreOffice runs only in the worker, and Next registers completed PDF artifacts through a short finalize call. |
 | 16 Worker-owned account export artifacts | Planned | Next remains the SQL/control plane, but large ZIP assembly and document-blob streaming move to worker-owned durable artifacts. |
 
 ---
@@ -622,20 +622,46 @@ Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
 server-state architecture tests, cache-clear tests, worker route tests, and
 worker-loop tests.
 
+### 15. Worker-Owned DOCX Conversion
+
+Status: implemented. Upload finalize stays a short metadata/control route.
+DOCX conversion is long-running native-process compute and now runs on Railway.
+
+Implemented:
+
+1. Added worker conversion resources:
+   `POST /v1/document-conversions/docx/jobs` and
+   `POST /v1/document-conversions/docx/resolve`.
+2. Jobs are keyed by namespace, temp source object key, source metadata, and
+   converter version. Payloads carry object keys and source metadata only; the
+   worker does not query SQL or upload rows.
+3. Moved LibreOffice invocation and temp-file handling into the compute worker.
+   The old Next-side `src/lib/server/documents/docx-convert.ts` helper is gone.
+4. DOCX upload finalize returns `202` with conversion operation state when the
+   worker artifact is not complete. The same existing finalize route registers
+   the converted PDF after worker completion; no new upload-specific SSE route
+   or long wait loop was added.
+5. The worker writes converted PDF artifacts and metadata sidecars under
+   `document_conversions_v1/docx/`; Next copies the ready artifact into the
+   canonical document blob location and creates the SQL document row.
+6. Regression coverage pins that DOCX finalize never reads/converts DOCX bytes
+   in Next, completed conversion registers exactly one PDF document, the worker
+   route surface includes conversion job/resolve resources, and compute-worker
+   source remains independent from app server modules.
+
+Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
+DOCX finalize tests, server-state architecture tests, compute worker client
+contract tests, worker route tests, and worker-loop tests.
+
 ---
 
 ## Remaining Work
 
 ### 14. Worker-Owned Document Preview Jobs
 
-Status: implemented. Preview image generation is worker-owned derived-media
-compute and no longer happens inside a Vercel request.
-
-Current ownership debt:
-
-- Fallback preview proxy routes remain as degraded compatibility paths for
-  reading completed preview bytes and text snippets. They do not claim or render
-  new previews in request.
+Status: remaining cleanup. Preview image generation is worker-owned
+derived-media compute and no longer happens inside a Vercel request, but the
+client still polls the preview ensure route while waiting for thumbnails.
 
 Target ownership:
 
@@ -647,12 +673,11 @@ Target ownership:
 - NATS/JetStream owns preview job queueing, operation state, progress, and retry
   state. S3 owns source blobs, preview images, and preview metadata. SQL remains
   a Next-owned document metadata source only.
-- Fallback preview proxy routes may remain only as degraded compatibility paths
-  and must not claim or render new previews in request.
+- Fallback preview proxy routes remain only as degraded compatibility paths for
+  reading completed preview bytes and text snippets; they do not claim or render
+  new previews in request.
 
-Implementation plan:
-
-Implemented:
+Implemented so far:
 
 1. Added worker preview job resources:
    `POST /v1/document-previews/jobs` and
@@ -668,51 +693,41 @@ Implemented:
 6. Completed preview delivery still prefers presigned S3 URLs, with the fallback
    proxy limited to compatibility reads.
 
-Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`,
-focused preview render tests, worker route tests, worker-loop tests,
-JetStream adapter tests, worker-loop policy tests, and
-`pnpm run check:compute-boundary`.
+Remaining hard cut:
 
-### 15. Worker-Owned DOCX Conversion
+1. Pending preview snapshots must include the current worker `opId` when a
+   queued/running preview job exists. Use the existing preview ensure/presign
+   route shape for short snapshots; do not add a preview-specific polling
+   fallback.
+2. Replace the `DocumentPreview` retry loop with operation-event subscription.
+   The client should listen to the existing operation SSE proxy for the preview
+   `opId`, then perform one final preview ensure/presign fetch after a
+   `succeeded` snapshot.
+3. Failed operation snapshots should move the thumbnail to failed state without
+   retry loops. User-initiated refresh/retry can create or resolve the same
+   deterministic preview job through the existing ensure route.
+4. Keep preview byte delivery unchanged: ready previews should still prefer
+   presigned S3 URLs, with fallback proxy routes limited to compatibility reads.
+5. Delete `retryAfterMs`-driven preview polling from client/server contracts
+   once SSE progress is wired. Do not preserve a hidden timer fallback.
+6. Add regression coverage that pending preview responses expose `opId`, the
+   thumbnail component subscribes to SSE instead of looping on ensure, completed
+   SSE snapshots trigger one final preview fetch, and failed SSE snapshots do
+   not schedule another poll.
 
-Status: planned. Upload finalize should stay a short metadata/control route.
-DOCX conversion is long-running native-process compute and belongs on Railway.
+Hard cuts and cleanups:
 
-Target ownership:
+- No client polling for worker preview completion.
+- No Next-side PDF/EPUB preview rendering fallback.
+- No new worker event primitive; keep `/v1/operations/:opId/events`.
+- No worker SQL access for preview jobs.
+- No preview-specific status table beyond the existing short metadata row used
+  for ready/queued/failed library state.
 
-- Non-DOCX upload finalize can remain synchronous in Next when it only validates
-  metadata, records blob keys, and returns document state.
-- DOCX finalize should create or resolve a deterministic conversion job and
-  return async state. The worker runs LibreOffice, writes the converted PDF
-  artifact, and reports completion through operation state.
-- Next registers the final document/PDF artifact after worker completion or via
-  a short resolve/finalize step that does not run `soffice`.
-- NATS/JetStream owns conversion job queueing and operation state. S3 owns the
-  original upload blob, converted PDF, and conversion metadata sidecar. SQL
-  document rows remain Next-owned and are updated only by Next routes after the
-  worker artifact is complete.
-
-Implementation plan:
-
-1. Add a worker conversion job keyed by canonical storage scope, original blob
-   key, document id/version, source MIME/type, and converter version.
-2. Pass the original blob key and conversion options through the job payload; do
-   not have the worker query SQL for upload/document rows.
-3. Move LibreOffice invocation and temp-file handling out of
-   `src/lib/server/documents/docx-convert.ts` request paths and into the worker.
-4. Change DOCX upload finalize to return `202`/pending state with operation id
-   when conversion is not complete.
-5. Add a Next resolve/finalize endpoint that checks conversion status, registers
-   the converted PDF artifact, and returns the normal document metadata snapshot.
-6. Ensure upload UI can show conversion progress/failure and retry the same
-   deterministic job without creating duplicate documents.
-7. Add regression coverage:
-   - DOCX finalize never spawns LibreOffice in Next;
-   - conversion worker code does not import SQL/database modules;
-   - duplicate finalize calls reuse the same worker conversion job;
-   - conversion success registers exactly one PDF artifact/document version;
-   - failed conversion is surfaced with retry state;
-   - non-DOCX finalize behavior stays short and synchronous.
+Previously verified worker-ownership work: `pnpm compute:openapi:generate`,
+`pnpm exec tsc --noEmit`, focused preview render tests, worker route tests,
+worker-loop tests, JetStream adapter tests, worker-loop policy tests,
+server-state architecture tests, and `pnpm run check:compute-boundary`.
 
 ### 16. Worker-Owned Account Export Artifacts
 
