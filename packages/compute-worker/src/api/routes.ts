@@ -13,6 +13,8 @@ import type {
   DocumentPreviewJobResult,
   DocumentConversionArtifactMetadata,
   DocumentConversionJobResult,
+  AccountExportArtifactMetadata,
+  AccountExportJobResult,
   TtsPlaybackJobResult,
   TtsPlaybackPlanJobResult,
   TtsPlaybackExportArtifactMetadata,
@@ -22,6 +24,7 @@ import { hashOpKey } from '../infrastructure/nats-adapters';
 import type { StreamedOperationState } from '../operations/recovery';
 import type { ReconciliationStateStore } from '../operations/reconciliation';
 import {
+  accountExportMetadataArtifactKey,
   documentPreviewMetadataArtifactKey,
   documentConversionMetadataArtifactKey,
   parsedPdfArtifactKey,
@@ -42,6 +45,7 @@ import {
 import {
   buildPdfOperationKey,
   buildDocumentConversionOperationKey,
+  buildAccountExportOperationKey,
   buildDocumentPreviewOperationKey,
   buildTtsPlaybackExportOperationKey,
   buildTtsPlaybackOperationKey,
@@ -77,6 +81,9 @@ import {
   ttsPlaybackExportArtifactCreateSchema,
   ttsPlaybackExportArtifactResolveSchema,
   ttsPlaybackExportArtifactResolutionSchema,
+  accountExportOperationCreateSchema,
+  accountExportResolveSchema,
+  accountExportResolutionSchema,
 } from './schemas';
 
 const OP_EVENTS_KEEPALIVE_MS = 15_000;
@@ -88,7 +95,7 @@ interface OperationEventStreamLike {
   subscribe(input: {
     opId: string;
     sinceEventId?: number;
-    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult>) => void | Promise<void>;
+    onEvent: (event: WorkerOperationEvent<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult>) => void | Promise<void>;
     onError?: (error: unknown) => void;
   }): Promise<() => void>;
 }
@@ -269,6 +276,40 @@ export function registerComputeWorkerRoutes(input: {
       const bytes = await storage.readObject(key);
       const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata;
       if (parsed.schemaVersion !== 1 || parsed.artifactId !== artifactId || parsed.status !== 'ready') return null;
+      if (!await storage.objectExists(parsed.objectKey).catch(() => false)) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const readAccountExportArtifactMetadata = async (input: {
+    artifactId: string;
+    storageUserId: string;
+    namespace: string | null;
+    schemaVersion?: number;
+    manifestHash?: string;
+  }): Promise<AccountExportArtifactMetadata | null> => {
+    const key = accountExportMetadataArtifactKey({
+      artifactId: input.artifactId,
+      storageUserId: input.storageUserId,
+      namespace: input.namespace,
+      prefix: s3Prefix,
+    });
+    try {
+      const bytes = await storage.readObject(key);
+      const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as AccountExportArtifactMetadata;
+      if (
+        parsed.schemaVersion !== 1
+        || parsed.artifactId !== input.artifactId
+        || parsed.status !== 'ready'
+        || parsed.storageUserId !== input.storageUserId
+        || parsed.namespace !== input.namespace
+        || (input.schemaVersion !== undefined && parsed.exportSchemaVersion !== input.schemaVersion)
+        || (input.manifestHash !== undefined && parsed.manifestHash !== input.manifestHash)
+      ) {
+        return null;
+      }
       if (!await storage.objectExists(parsed.objectKey).catch(() => false)) return null;
       return parsed;
     } catch {
@@ -1648,6 +1689,64 @@ export function registerComputeWorkerRoutes(input: {
     return toComputeOperation(op);
   });
 
+  app.post('/v1/account-exports/jobs', {
+    schema: {
+      body: jsonSchema(accountExportOperationCreateSchema),
+      response: { 202: jsonSchema(computeOperationSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = accountExportOperationCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+
+    const requestOp: WorkerOperationRequest = {
+      kind: 'account_export',
+      opKey: buildAccountExportOperationKey(parsed.data),
+      payload: parsed.data,
+    };
+    await ensureOrphanedOpRecovery();
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    app.log.info({
+      kind: requestOp.kind,
+      opId: op.opId,
+      jobId: op.jobId,
+      status: op.status,
+      opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
+    }, 'op.accepted');
+    reply.code(202);
+    return toComputeOperation(op);
+  });
+
+  app.post('/v1/account-exports/resolve', {
+    schema: {
+      body: jsonSchema(accountExportResolveSchema),
+      response: { 200: jsonSchema(accountExportResolutionSchema), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = accountExportResolveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    await ensureOrphanedOpRecovery();
+    const artifact = await readAccountExportArtifactMetadata(parsed.data);
+    const opKey = buildAccountExportOperationKey({
+      artifactId: parsed.data.artifactId,
+      storageUserId: parsed.data.storageUserId,
+      namespace: parsed.data.namespace,
+      schemaVersion: parsed.data.schemaVersion,
+      manifestHash: parsed.data.manifestHash,
+    });
+    const index = await deps.operationStateStore.getOpIndex?.(opKey);
+    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    return {
+      artifact,
+      operation: operation ? toComputeOperation(operation) : null,
+    };
+  });
+
   app.post('/v1/tts-playback/exports/jobs', {
     schema: {
       body: jsonSchema(ttsPlaybackExportArtifactCreateSchema),
@@ -1843,7 +1942,7 @@ export function registerComputeWorkerRoutes(input: {
     const writeSnapshot = (snapshot: StreamedOperationState, eventId: number): void => {
       if (closed || reply.raw.writableEnded) return;
       const frameEvent: ComputeOperationEvent<
-        PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult
+        PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult
       > = {
         eventId,
         snapshot: toComputeOperation(snapshot),

@@ -20,6 +20,7 @@ export const TTS_PLAYBACK_PLAN_QUEUE_NAME = 'tts-playback-plan';
 export const TTS_PLAYBACK_EXPORT_QUEUE_NAME = 'tts-playback-export';
 export const DOCUMENT_PREVIEW_QUEUE_NAME = 'document-preview';
 export const DOCUMENT_CONVERSION_QUEUE_NAME = 'document-conversion';
+export const ACCOUNT_EXPORT_QUEUE_NAME = 'account-export';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
 export const DOCUMENT_PREVIEW_RENDERER_VERSION = 'document-preview@pdfjs-4.8.69+epub-cover-v1';
 export const DOCX_CONVERTER_VERSION = 'docx-to-pdf@libreoffice-v1';
@@ -235,6 +236,38 @@ export interface DocumentConversionJobResult {
   timing?: WorkerJobTiming;
 }
 
+export interface AccountExportJobRequest {
+  artifactId: string;
+  userId: string;
+  storageUserId: string;
+  namespace: string | null;
+  schemaVersion: number;
+  manifestHash: string;
+  manifestObjectKey: string;
+}
+
+export interface AccountExportArtifactMetadata {
+  schemaVersion: 1;
+  artifactId: string;
+  userId: string;
+  storageUserId: string;
+  namespace: string | null;
+  exportSchemaVersion: number;
+  manifestHash: string;
+  manifestObjectKey: string;
+  objectKey: string;
+  contentType: 'application/zip';
+  byteLength: number;
+  dispositionFilename: string;
+  status: 'ready';
+  createdAt: number;
+}
+
+export interface AccountExportJobResult {
+  artifact: AccountExportArtifactMetadata;
+  timing?: WorkerJobTiming;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -292,7 +325,18 @@ export interface DocumentConversionProgress {
   phase: 'fetching' | 'converting' | 'uploading';
 }
 
-export type WorkerOperationProgress = PdfLayoutProgress | TtsPlaybackProgress | TtsPlaybackExportProgress | DocumentConversionProgress;
+export interface AccountExportProgress {
+  phase: 'assembling' | 'uploading';
+  completedFiles: number;
+  plannedFiles: number;
+}
+
+export type WorkerOperationProgress =
+  | PdfLayoutProgress
+  | TtsPlaybackProgress
+  | TtsPlaybackExportProgress
+  | DocumentConversionProgress
+  | AccountExportProgress;
 
 export interface WorkerJobStatusResponse<Result> {
   status: WorkerJobState;
@@ -301,7 +345,14 @@ export interface WorkerJobStatusResponse<Result> {
   timing?: WorkerJobTiming;
 }
 
-export type WorkerOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export' | 'document_preview' | 'document_conversion';
+export type WorkerOperationKind =
+  | 'pdf_layout'
+  | 'tts_playback'
+  | 'tts_playback_plan'
+  | 'tts_playback_export'
+  | 'document_preview'
+  | 'document_conversion'
+  | 'account_export';
 
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
@@ -339,13 +390,20 @@ export interface DocumentConversionOperationRequest {
   payload: DocumentConversionJobRequest;
 }
 
+export interface AccountExportOperationRequest {
+  kind: 'account_export';
+  opKey: string;
+  payload: AccountExportJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
   | TtsPlaybackPlanOperationRequest
   | TtsPlaybackExportArtifactOperationRequest
   | DocumentPreviewOperationRequest
-  | DocumentConversionOperationRequest;
+  | DocumentConversionOperationRequest
+  | AccountExportOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

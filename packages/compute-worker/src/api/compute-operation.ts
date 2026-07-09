@@ -1,5 +1,6 @@
 import type { WorkerOperationState } from '../operations/contracts';
 import {
+  accountExportSubjectFromOperationKey,
   documentConversionSubjectFromOperationKey,
   documentPreviewSubjectFromOperationKey,
   pdfSubjectFromOperationKey,
@@ -14,7 +15,8 @@ export type ComputeOperationSubject =
   | { kind: 'tts_playback_plan'; documentId: string; settingsHash: string; planSignature: string }
   | { kind: 'tts_playback_export'; documentId: string; artifactId: string; format: 'mp3' | 'm4b' }
   | { kind: 'document_preview'; documentId: string; namespace: string | null; previewKind: 'card' }
-  | { kind: 'document_conversion'; conversionId: string; namespace: string | null };
+  | { kind: 'document_conversion'; conversionId: string; namespace: string | null }
+  | { kind: 'account_export'; storageUserId: string; namespace: string | null; artifactId: string };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -66,7 +68,14 @@ export function toComputeOperation<Result>(
               conversionId: '',
               namespace: null,
             })
-            : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
+            : state.kind === 'account_export'
+              ? (accountExportSubjectFromOperationKey(state.opKey) ?? {
+                kind: 'account_export',
+                storageUserId: '',
+                namespace: null,
+                artifactId: '',
+              })
+              : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,
     subject,

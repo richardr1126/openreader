@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  buildAccountExportArtifactId,
   buildTtsPlaybackCanonicalScopeKey,
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
@@ -78,6 +79,44 @@ export function documentConversionSubjectFromOperationKey(opKey: string): {
     kind: 'document_conversion',
     conversionId,
     namespace: namespace || null,
+  };
+}
+
+export { buildAccountExportArtifactId };
+
+export function buildAccountExportOperationKey(input: {
+  artifactId: string;
+  storageUserId: string;
+  namespace: string | null;
+  schemaVersion: number;
+  manifestHash: string;
+}): string {
+  return [
+    'account_export',
+    'v1',
+    input.storageUserId,
+    input.namespace ?? '',
+    String(Math.max(1, Math.floor(input.schemaVersion))),
+    input.manifestHash,
+    input.artifactId,
+  ].join('|');
+}
+
+export function accountExportSubjectFromOperationKey(opKey: string): {
+  kind: 'account_export';
+  storageUserId: string;
+  namespace: string | null;
+  artifactId: string;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, storageUserId, namespace] = parts;
+  const artifactId = parts[6];
+  if (kind !== 'account_export' || version !== 'v1' || !storageUserId || !artifactId) return null;
+  return {
+    kind: 'account_export',
+    storageUserId,
+    namespace: namespace || null,
+    artifactId,
   };
 }
 

@@ -10,6 +10,7 @@ import type {
   QueuedOperation,
 } from '../operations';
 import type {
+  AccountExportJobRequest,
   DocumentPreviewJobRequest,
   DocumentConversionJobRequest,
   PdfLayoutJobRequest,
@@ -315,6 +316,7 @@ export interface JetStreamOperationQueueDeps<TPayload> {
   ttsPlaybackExportSubject?: string;
   documentPreviewSubject?: string;
   documentConversionSubject?: string;
+  accountExportSubject?: string;
   onEnqueued?: (job: QueuedOperation<TPayload>) => Promise<void> | void;
 }
 
@@ -324,7 +326,8 @@ type JetStreamQueuedPayload =
   | TtsPlaybackPlanJobRequest
   | TtsPlaybackExportArtifactRequest
   | DocumentPreviewJobRequest
-  | DocumentConversionJobRequest;
+  | DocumentConversionJobRequest
+  | AccountExportJobRequest;
 
 export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPayload> {
   private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
@@ -334,6 +337,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
   private readonly ttsPlaybackExportSubject: string;
   private readonly documentPreviewSubject: string;
   private readonly documentConversionSubject: string;
+  private readonly accountExportSubject: string;
   private readonly onEnqueued?: (job: QueuedOperation<JetStreamQueuedPayload>) => Promise<void> | void;
   private readonly layoutCodec = createJsonCodec<QueuedOperation<PdfLayoutJobRequest>>();
   private readonly ttsPlaybackCodec = createJsonCodec<QueuedOperation<TtsPlaybackJobRequest>>();
@@ -341,6 +345,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
   private readonly ttsPlaybackExportCodec = createJsonCodec<QueuedOperation<TtsPlaybackExportArtifactRequest>>();
   private readonly documentPreviewCodec = createJsonCodec<QueuedOperation<DocumentPreviewJobRequest>>();
   private readonly documentConversionCodec = createJsonCodec<QueuedOperation<DocumentConversionJobRequest>>();
+  private readonly accountExportCodec = createJsonCodec<QueuedOperation<AccountExportJobRequest>>();
 
   constructor(deps: JetStreamOperationQueueDeps<JetStreamQueuedPayload>) {
     this.getJs = deps.getJs;
@@ -350,6 +355,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
     this.ttsPlaybackExportSubject = deps.ttsPlaybackExportSubject ?? 'jobs.tts_playback_export';
     this.documentPreviewSubject = deps.documentPreviewSubject ?? 'jobs.document_preview';
     this.documentConversionSubject = deps.documentConversionSubject ?? 'jobs.document_conversion';
+    this.accountExportSubject = deps.accountExportSubject ?? 'jobs.account_export';
     this.onEnqueued = deps.onEnqueued;
   }
 
@@ -384,6 +390,11 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
       await js.publish(
         this.documentConversionSubject,
         this.documentConversionCodec.encode(job as QueuedOperation<DocumentConversionJobRequest>),
+      );
+    } else if (job.kind === 'account_export') {
+      await js.publish(
+        this.accountExportSubject,
+        this.accountExportCodec.encode(job as QueuedOperation<AccountExportJobRequest>),
       );
     } else {
       const exhaustive: never = job.kind;

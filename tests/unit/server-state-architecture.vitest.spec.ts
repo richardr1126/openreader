@@ -166,6 +166,8 @@ describe('server-state architecture', () => {
       'GET /v1/tts-playback/sessions/:sessionId',
       'GET /v1/tts-playback/sessions/:sessionId/audio',
       'GET /v1/tts-playback/sessions/:sessionId/segments',
+      'POST /v1/account-exports/jobs',
+      'POST /v1/account-exports/resolve',
       'POST /v1/document-conversions/docx/jobs',
       'POST /v1/document-conversions/docx/resolve',
       'POST /v1/document-previews/jobs',
@@ -180,6 +182,38 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/sessions/resolve',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
+  });
+
+  test('keeps account export archive assembly worker-owned', () => {
+    const accountExportRoute = source('src/app/api/user/export/route.ts');
+    const accountExportDownloadRoute = source('src/app/api/user/export/download/route.ts');
+    const accountExportEventsRoute = source('src/app/api/user/export/events/route.ts');
+    const settingsModal = source('src/components/SettingsModal.tsx');
+    const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
+    const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
+    const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
+    const computeClient = source('src/lib/server/compute-worker/client.ts');
+
+    expect(accountExportRoute).toContain('buildUserExportManifest');
+    expect(accountExportRoute).toContain('createAccountExportOperation');
+    expect(accountExportRoute).toContain('resolveAccountExport');
+    expect(accountExportRoute).toContain('/api/user/export/download');
+    expect(accountExportRoute).not.toContain('createAccountExportDownloadToken');
+    expect(accountExportDownloadRoute).toContain('getSignedUrl');
+    expect(accountExportDownloadRoute).toContain('resolveAccountExport');
+    expect(accountExportDownloadRoute).toContain('NextResponse.redirect');
+    expect(accountExportRoute).not.toContain("archiver('zip'");
+    expect(accountExportRoute).not.toContain('Readable.toWeb');
+    expect(accountExportEventsRoute).toContain("operation.subject.kind !== 'account_export'");
+    expect(accountExportEventsRoute).toContain('openOperationEvents(opId');
+    expect(settingsModal).toContain("new EventSource(`/api/user/export/events?opId=");
+    expect(settingsModal).not.toContain("window.open('/api/user/export'");
+    expect(workerRoutes).toContain("/v1/account-exports/jobs");
+    expect(workerRoutes).toContain("/v1/account-exports/resolve");
+    expect(workerRoutes).not.toContain('verifyAccountExportDownloadToken');
+    expect(workerHandlers).toContain('buildAccountExportArchive');
+    expect(workerContracts).toContain("export const ACCOUNT_EXPORT_QUEUE_NAME = 'account-export'");
+    expect(computeClient).toContain('createAccountExportOperation');
   });
 
   test('keeps legacy TTS manifest queries removed while centralizing other server state', () => {

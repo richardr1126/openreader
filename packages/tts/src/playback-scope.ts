@@ -50,3 +50,25 @@ export function buildTtsPlaybackExportArtifactId(
     .update(speed.toFixed(2))
     .digest('hex');
 }
+
+export interface AccountExportScopeInput {
+  storageUserId: string;
+  namespace: string | null;
+  schemaVersion: number;
+  manifestHash: string;
+}
+
+export function buildAccountExportScopeKey(input: AccountExportScopeInput): string {
+  return [
+    'account-export',
+    'v1',
+    input.storageUserId,
+    input.namespace ?? '',
+    String(Math.max(1, Math.floor(input.schemaVersion))),
+    input.manifestHash,
+  ].join('\0');
+}
+
+export function buildAccountExportArtifactId(input: AccountExportScopeInput): string {
+  return stableHash(buildAccountExportScopeKey(input));
+}

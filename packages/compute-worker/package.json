@@ -19,6 +19,7 @@
     "@openreader/database": "workspace:*",
     "@openreader/tts": "workspace:*",
     "@speech-sdk/core": "^0.15.0",
+    "archiver": "^7.0.1",
     "drizzle-orm": "^0.45.2",
     "fast-xml-parser": "^5.8.0",
     "fastify": "^5.8.5",

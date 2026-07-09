@@ -264,6 +264,9 @@ importers:
       '@speech-sdk/core':
         specifier: ^0.15.0
         version: 0.15.0
+      archiver:
+        specifier: ^7.0.1
+        version: 7.0.1
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.0)(kysely@0.28.17)(pg@8.21.0)

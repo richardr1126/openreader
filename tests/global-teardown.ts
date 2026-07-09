@@ -35,15 +35,13 @@ export default async function globalTeardown(): Promise<void> {
     const documentPreviewsNsRootPrefix = `${config.prefix}/document_previews_v1/ns/`;
     const tempUploadsNsRootPrefix = `${config.prefix}/document_uploads_temp_v1/ns/`;
     const playbackAudioNsRootPrefix = `${config.prefix}/tts_playback_segments_audio_v1/ns/`;
-    const ttsSegmentsNsRootPrefixV1 = `${config.prefix}/tts_segments_v1/ns/`;
-    const ttsSegmentsNsRootPrefixV2 = `${config.prefix}/tts_segments_v2/ns/`;
+    const accountExportsNsRootPrefix = `${config.prefix}/account_exports_v1/ns/`;
 
     await deleteDocumentPrefix(docsNsRootPrefix);
     await deleteDocumentPrefix(documentPreviewsNsRootPrefix);
     await deleteDocumentPrefix(tempUploadsNsRootPrefix);
+    await deleteDocumentPrefix(accountExportsNsRootPrefix);
     await deleteTtsSegmentPrefix(playbackAudioNsRootPrefix);
-    await deleteTtsSegmentPrefix(ttsSegmentsNsRootPrefixV1);
-    await deleteTtsSegmentPrefix(ttsSegmentsNsRootPrefixV2);
   }
 
   for (const ids of chunk(testUserIds, 200)) {

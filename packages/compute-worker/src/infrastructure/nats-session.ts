@@ -3,6 +3,7 @@ import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { Kvm } from '@nats-io/kv';
 import { connect, type ConnectionOptions, type NatsConnection } from '@nats-io/transport-node';
 import {
+  ACCOUNT_EXPORT_CONSUMER_NAME,
   COMPUTE_STATE_BUCKET,
   COMPUTE_STATE_TTL_MS,
   DOCUMENT_CONVERSION_CONSUMER_NAME,
@@ -32,6 +33,7 @@ export interface NatsSession {
   ttsPlaybackExportConsumer: Consumer;
   documentPreviewConsumer: Consumer;
   documentConversionConsumer: Consumer;
+  accountExportConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -171,6 +173,7 @@ export function createNatsSessionManager(input: {
         ttsPlaybackExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_EXPORT_CONSUMER_NAME),
         documentPreviewConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_PREVIEW_CONSUMER_NAME),
         documentConversionConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_CONVERSION_CONSUMER_NAME),
+        accountExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, ACCOUNT_EXPORT_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

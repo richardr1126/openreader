@@ -346,7 +346,7 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 13 Audiobook export reconnect + worker-owned artifacts | Done | Export resolve now reconnects deterministic generation/artifact operations; speed transcode, M4B packaging, chapter metadata, artifact storage, and download serving are worker-owned. |
 | 14 Worker-owned document preview jobs | Done | Preview ensure/presign/fallback now resolve/create worker preview jobs; PDF first-page rendering and EPUB cover extraction are worker-owned. |
 | 15 Worker-owned DOCX conversion | Done | DOCX upload finalize resolves/creates deterministic worker conversion jobs; LibreOffice runs only in the worker, and Next registers completed PDF artifacts through a short finalize call. |
-| 16 Worker-owned account export artifacts | Planned | Next remains the SQL/control plane, but large ZIP assembly and document-blob streaming move to worker-owned durable artifacts. |
+| 16 Worker-owned account export artifacts | Done | Next writes bounded manifests and returns short snapshots; the worker builds durable ZIP artifacts; Next authorizes downloads and redirects to signed storage URLs. |
 
 ---
 
@@ -712,13 +712,13 @@ contract tests, worker route tests, and worker-loop tests.
 
 ---
 
-## Remaining Work
-
 ### 16. Worker-Owned Account Export Artifacts
 
-Status: planned. This is worker-owned for artifact assembly, not worker-owned
-for account metadata. Next remains the SQL/control plane; the worker owns the
-long-running archive build.
+Status: completed. This is worker-owned for artifact assembly, not
+worker-owned for account metadata. Next remains the SQL/control plane and writes
+a bounded manifest to object storage; the worker owns ZIP assembly, document
+blob reads, durable artifact upload, progress, and reconnect state. Next owns
+download authorization and short-lived storage presigning.
 
 Target ownership:
 
@@ -754,7 +754,9 @@ Final flow:
    pending/running, and exposes a same-origin export-events proxy to the generic
    worker operation event stream. The client does not use timers or
    `retryAfterMs` loops.
-6. When complete, Next returns or redirects to a signed object URL for the ZIP.
+6. When complete, Next returns a short same-origin download URL. That route
+   re-authenticates the app session, resolves the artifact through the worker,
+   and redirects to a short-lived S3 presigned URL for the durable ZIP artifact.
 
 Manifest/artifact reuse policy:
 
@@ -767,47 +769,47 @@ Manifest/artifact reuse policy:
   manifest content hash, a new manifest object, and a new ZIP artifact.
 - Expire old manifests and ZIP artifacts through bounded cleanup.
 
-Implementation plan:
+Implemented:
 
-1. Define account export job identity by user id/storage namespace, export
-   schema version, selected scopes, request options, and manifest content hash.
-2. Have Next create a bounded export manifest in object storage. The manifest
-   should contain only the metadata and object keys needed to build the archive,
-   not secret credentials or unbounded inline blobs.
-3. Move ZIP streaming and document blob inclusion into a worker job that reads
-   the manifest and writes one durable export artifact.
-4. If the manifest would be too large to build inside a Vercel request, split
-   manifest creation into bounded Next-owned pages or add a separate
-   Next-owned metadata snapshot job. Do not solve that by giving the worker
-   broad SQL access.
-5. Return export snapshots from Next with operation status, progress if
-   available, failure message, and signed artifact URL when complete.
-6. Add a narrow account-export SSE proxy in Next that validates the authenticated
-   account/export scope and forwards the worker's generic
-   `/v1/operations/:opId/events` stream. Do not add a worker export-specific
-   events primitive.
-7. Remove or avoid any Next-side polling for account export completion. Pending
-   UI state should be driven by the initial resolve/create snapshot plus SSE
-   snapshots, with one final resolve/download action after success.
-8. Expire old account export artifacts through bounded maintenance, not by
-   blocking the export request.
-9. Add regression coverage:
-   - large export requests do not stream ZIP bodies from Next;
-   - export worker code does not import SQL/database modules;
-   - pending export snapshots expose `opId`;
-   - the export UI subscribes to the account-export SSE proxy instead of
-     polling resolve/status routes;
-   - the SSE proxy validates account/export scope before forwarding generic
-     worker operation events;
-   - repeated export clicks reuse or supersede deterministic jobs according to
-     explicit policy;
-   - completed export resolves after refresh;
-   - account deletion/cleanup handles pending and completed export artifacts;
-   - small metadata-only exports, if kept, remain bounded and documented.
+1. Added worker account export routes:
+   - `POST /v1/account-exports/jobs`
+   - `POST /v1/account-exports/resolve`
+2. Added a new `account_export` worker operation kind, JetStream subject,
+   consumer, operation key, progress shape, orphan recovery handling, and
+   OpenAPI/generated client surface.
+3. Replaced Next-side ZIP streaming with `/api/user/export` manifest creation
+   and worker job resolve/create. Object storage and compute worker
+   configuration are required; there is no metadata-only or Vercel ZIP fallback.
+4. Added `/api/user/export/events` as a narrow same-origin SSE proxy to the
+   generic worker operation event stream. It validates the signed-in user and
+   namespace before forwarding.
+5. Added `/api/user/export/download` as the only browser-facing account export
+   download route. It validates the signed-in user, resolves the account export
+   metadata through the worker, and redirects to a short-lived S3 presigned URL.
+   The worker does not expose a public account export byte-serving endpoint.
+6. Updated the settings UI to start/resolve the worker export, subscribe to SSE
+   while pending, and perform one final same-origin resolve to obtain the
+   same-origin download URL.
+7. Stored manifests, ZIPs, and metadata under
+   `account_exports_v1/[ns/<ns>/]users/<userId>/<artifactId>/`, so account
+   deletion and test teardown can delete user/namespaced export artifacts
+   without scanning global artifact ids.
+8. Added regression coverage for the hard-cut route map, manifest construction,
+   worker loop plumbing, and account deletion cleanup.
 
-### 17. Final Cleanup Pass Before Merge
+Verified: `pnpm compute:openapi:generate`, `pnpm exec tsc --noEmit`, focused
+worker route/loop, architecture, data-export, and cleanup unit tests; the focused
+unit command exercised the full configured unit suite.
 
-After the worker ownership steps are verified, the last pass is release hygiene:
+---
+
+## Final Steps
+
+### 17. Route Ownership and Security Audit
+
+After the worker ownership steps are verified, the last pass is a route-by-route
+ownership audit. Storage is required in this architecture; do not add
+metadata-only, local filesystem, or ad hoc ZIP fallbacks.
 
 - Run a final repo scan for runtime references to dropped symbols and routes:
   `ttsPlaybackSessions`, `ttsSegmentEntries`, `ttsSegmentVariants`,
@@ -823,6 +825,19 @@ After the worker ownership steps are verified, the last pass is release hygiene:
   return short JSON snapshots; Railway worker owns long-running stream,
   provider/model, render, parse, transcode, convert, archive, and large object
   scan work.
+- For browser downloads, prefer a same-origin Next control-plane route that
+  verifies the app session and redirects to a short-lived object-storage
+  presigned URL. Avoid browser-to-worker byte downloads for account data and
+  other user exports. Do not add ZIP download proxies unless object storage is
+  unavailable by design, which is not true for the hard-cut architecture.
+- Remove or transition Next routes that can exceed five minutes, hold large
+  response bodies open, perform provider calls, run document conversion,
+  generate previews, transcode audio, assemble archives, or scan broad object
+  prefixes. Keep only bounded control-plane routes in Next.
+- Rename routes that hide ownership. Route names should distinguish control
+  plane actions (`/resolve`, `/download`, `/events`) from worker-owned jobs and
+  object delivery; compatibility proxies should include explicit comments and
+  regression coverage explaining why they remain.
 - Re-scan every worker-owned operation integration for Next-side polling. A
   pending worker operation exposed to the browser must return an `opId` and use
   a same-origin, domain-scoped Next SSE proxy to the generic worker
@@ -833,6 +848,44 @@ After the worker ownership steps are verified, the last pass is release hygiene:
   and audiobook artifact code must not import database/schema modules or query
   app SQL tables. The only allowed current SQL exception is read-only
   `admin_providers` credential resolution for TTS provider keys.
+
+Initial audit findings after step 16:
+
+- Keep `/api/user/export`, `/api/user/export/events`, and
+  `/api/user/export/download` as bounded Next control-plane routes. Do not
+  reintroduce `GET /v1/account-exports/:artifactId/download`; account export
+  browser downloads must go through app-session auth and object-storage
+  presigning.
+- Revisit `/api/tts/export/resolve` and
+  `GET /v1/tts-playback/exports/:artifactId/download`. Audiobook exports still
+  use browser-to-worker signed download URLs. They may be acceptable for
+  playback-specific artifacts, but the safer and more consistent route shape is
+  a same-origin Next `/api/tts/export/download` route that resolves ownership
+  and redirects to a storage presigned URL.
+- Keep `/api/tts/stream/[sessionId]/audio` only as a documented compatibility
+  proxy for the canonical 1x MP3 stream. It holds a large response body open and
+  should not grow new export formats or transcode behavior.
+- Revisit byte fallback routes:
+  `/api/documents/blob/get/fallback`,
+  `/api/documents/blob/upload/fallback`, and
+  `/api/documents/blob/preview/fallback`. They are marked degraded fallback
+  paths and have presign-first siblings, but they still proxy large objects
+  through Next. Step 17 should decide whether to remove them, gate them harder,
+  or rename them to make the degraded compatibility purpose explicit.
+- Keep `/api/documents/blob/preview/ensure` as control plane. Despite the
+  helper name, `ensureDocumentPreview` resolves/creates worker preview jobs and
+  does not render previews in Next.
+- Revisit `/api/documents/[id]/parsed` GET. It still returns completed parsed
+  JSON bytes through Next. If parsed artifacts can be large enough to matter,
+  add a presign/redirect route and reserve this endpoint for short snapshots.
+- Review `/api/documents/library/content` separately from cloud storage routes.
+  It reads local library files into memory and returns bytes from Next; that may
+  be desktop/self-host-only behavior, but the route should be clearly scoped as
+  such or moved behind a more explicit local-library namespace.
+- Review 300-second admin/maintenance routes
+  `/api/admin/tasks/[key]/run`, `/api/admin/tasks/tick`, account deletion, and
+  TTS segment clear for broad storage scans/deletes. Prefer queueing worker or
+  maintenance tasks when cleanup can exceed a short control-plane request.
 - Run final validation from a clean local state: `pnpm migrate`, `pnpm test:unit`,
   `pnpm exec tsc --noEmit`, and a `pnpm dev` startup smoke test.
 - Optionally run the highest-value Playwright smoke path for upload/open/playback

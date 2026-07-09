@@ -1,20 +1,12 @@
 import { describe, expect, test, vi } from 'vitest';
-import type { Archiver } from 'archiver';
-import { appendUserExportArchive } from '../../src/lib/server/user/data-export';
+import { buildUserExportManifest } from '../../src/lib/server/user/data-export';
 
-describe('user data export archive', () => {
-  test('includes user metadata without credential secrets or transient playback cache', async () => {
-    const entries = new Map<string, unknown>();
-    const archive = {
-      append(value: unknown, options: { name: string }) {
-        entries.set(options.name, value);
-        return archive;
-      },
-    } as unknown as Archiver;
-
-    await appendUserExportArchive({
-      archive,
+describe('user data export manifest', () => {
+  test('includes user metadata without credential secrets or transient playback cache', () => {
+    const manifest = buildUserExportManifest({
       userId: 'user-1',
+      storageUserId: 'user-1',
+      namespace: null,
       exportedAtMs: 123,
       profileData: { user: { id: 'user-1', email: 'person@example.com' }, exportedAtMs: 123 },
       preferences: { dataJson: '{}' },
@@ -25,39 +17,28 @@ describe('user data export archive', () => {
       authSessions: [{ id: 'session-1', ipAddress: null }],
       linkedAccounts: [{ id: 'account-1', providerId: 'credential' }],
       documents: [],
-      storageEnabled: true,
-      getDocumentBlobStream: async () => new Uint8Array(),
+      getDocumentObjectKey: () => 'openreader/documents_v1/doc-1',
     });
 
-    expect(entries.has('document_settings.json')).toBe(true);
-    expect(entries.has('auth_sessions.json')).toBe(true);
-    expect(entries.has('linked_accounts.json')).toBe(true);
-    expect(entries.has('tts_segment_entries.json')).toBe(false);
-    expect(entries.has('tts_segment_variants.json')).toBe(false);
-
-    const manifest = JSON.parse(String(entries.get('export_manifest.json')));
-    expect(manifest).toMatchObject({
-      formatVersion: 3,
-      includes: {
-        credentialSecrets: false,
-      },
+    expect(manifest.entries.documentSettings).toHaveLength(1);
+    expect(manifest.entries.authSessions).toHaveLength(1);
+    expect(manifest.entries.linkedAccounts).toHaveLength(1);
+    expect(manifest.entries).not.toHaveProperty('ttsSegmentEntries');
+    expect(manifest.entries).not.toHaveProperty('ttsSegmentVariants');
+    expect(manifest.includes).toMatchObject({
+      credentialSecrets: false,
+      documentFiles: true,
     });
     expect(manifest.includes).not.toHaveProperty('ttsSegmentFiles');
   });
 
-  test('reports file buckets as excluded when storage is disabled', async () => {
-    const entries = new Map<string, unknown>();
-    const archive = {
-      append(value: unknown, options: { name: string }) {
-        entries.set(options.name, value);
-        return archive;
-      },
-    } as unknown as Archiver;
-    const getDocumentBlobStream = vi.fn(async () => new Uint8Array());
+  test('records document object keys for worker-owned ZIP assembly', () => {
+    const getDocumentObjectKey = vi.fn((documentId: string) => `openreader/documents_v1/${documentId}`);
 
-    await appendUserExportArchive({
-      archive,
+    const manifest = buildUserExportManifest({
       userId: 'user-1',
+      storageUserId: 'user-1',
+      namespace: 'test-ns',
       exportedAtMs: 123,
       profileData: {},
       preferences: null,
@@ -67,18 +48,15 @@ describe('user data export archive', () => {
       documentSettings: [],
       authSessions: [],
       linkedAccounts: [],
-      documents: [{ id: 'doc-1', name: 'doc.pdf' }],
-      storageEnabled: false,
-      getDocumentBlobStream,
+      documents: [{ id: 'doc/1', name: '../unsafe.pdf' }],
+      getDocumentObjectKey,
     });
 
-    const manifest = JSON.parse(String(entries.get('export_manifest.json')));
-    expect(manifest.includes).toMatchObject({
-      documentFiles: false,
-    });
-    expect(manifest.counts).toMatchObject({
-      documentFiles: 0,
-    });
-    expect(getDocumentBlobStream).not.toHaveBeenCalled();
+    expect(manifest.files).toEqual([{
+      documentId: 'doc/1',
+      objectKey: 'openreader/documents_v1/doc/1',
+      entryName: 'files/documents/doc_1/__unsafe.pdf',
+    }]);
+    expect(getDocumentObjectKey).toHaveBeenCalledWith('doc/1');
   });
 });

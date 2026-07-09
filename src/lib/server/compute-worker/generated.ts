@@ -224,6 +224,12 @@ export interface paths {
                                     kind: "document_conversion";
                                     conversionId: string;
                                     namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "account_export";
+                                    storageUserId: string;
+                                    namespace: string | null;
+                                    artifactId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -258,6 +264,11 @@ export interface paths {
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "uploading";
+                                    completedFiles: number;
+                                    plannedFiles: number;
                                 };
                             } | null;
                             progress: {
@@ -749,6 +760,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -783,6 +800,11 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
                         };
                     };
@@ -884,6 +906,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -918,6 +946,11 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
                         };
                     };
@@ -1016,6 +1049,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1050,6 +1089,11 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
                         };
                     };
@@ -1171,6 +1215,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1205,6 +1255,11 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
                         };
                     };
@@ -1317,6 +1372,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1351,7 +1412,317 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account-exports/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        artifactId: string;
+                        userId: string;
+                        storageUserId: string;
+                        namespace: string | null;
+                        schemaVersion: number;
+                        manifestHash: string;
+                        manifestObjectKey: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            opId: string;
+                            subject: {
+                                /** @enum {string} */
+                                kind: "pdf_layout";
+                                documentId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_conversion";
+                                conversionId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
+                            };
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed";
+                            queuedAt: number;
+                            updatedAt: number;
+                            startedAt?: number;
+                            result?: unknown;
+                            error?: {
+                                message: string;
+                                code?: string;
+                            };
+                            timing?: {
+                                queueWaitMs?: number;
+                                s3FetchMs?: number;
+                                computeMs?: number;
+                            };
+                            progress?: {
+                                totalPages: number;
+                                pagesParsed: number;
+                                currentPage?: number;
+                                /** @enum {string} */
+                                phase: "infer" | "merge";
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account-exports/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        artifactId: string;
+                        storageUserId: string;
+                        namespace: string | null;
+                        schemaVersion: number;
+                        manifestHash: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            artifact: {
+                                /** @enum {number} */
+                                schemaVersion: 1;
+                                artifactId: string;
+                                userId: string;
+                                storageUserId: string;
+                                namespace: string | null;
+                                exportSchemaVersion: number;
+                                manifestHash: string;
+                                manifestObjectKey: string;
+                                objectKey: string;
+                                /** @enum {string} */
+                                contentType: "application/zip";
+                                byteLength: number;
+                                dispositionFilename: string;
+                                /** @enum {string} */
+                                status: "ready";
+                                createdAt: number;
+                            } | null;
+                            operation: {
+                                opId: string;
+                                subject: {
+                                    /** @enum {string} */
+                                    kind: "pdf_layout";
+                                    documentId: string;
+                                    namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback";
+                                    documentId: string;
+                                    sessionId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_plan";
+                                    documentId: string;
+                                    settingsHash: string;
+                                    planSignature: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "tts_playback_export";
+                                    documentId: string;
+                                    artifactId: string;
+                                    /** @enum {string} */
+                                    format: "mp3" | "m4b";
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "document_preview";
+                                    documentId: string;
+                                    namespace: string | null;
+                                    /** @enum {string} */
+                                    previewKind: "card";
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "document_conversion";
+                                    conversionId: string;
+                                    namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "account_export";
+                                    storageUserId: string;
+                                    namespace: string | null;
+                                    artifactId: string;
+                                };
+                                /** @enum {string} */
+                                status: "queued" | "running" | "succeeded" | "failed";
+                                queuedAt: number;
+                                updatedAt: number;
+                                startedAt?: number;
+                                result?: unknown;
+                                error?: {
+                                    message: string;
+                                    code?: string;
+                                };
+                                timing?: {
+                                    queueWaitMs?: number;
+                                    s3FetchMs?: number;
+                                    computeMs?: number;
+                                };
+                                progress?: {
+                                    totalPages: number;
+                                    pagesParsed: number;
+                                    currentPage?: number;
+                                    /** @enum {string} */
+                                    phase: "infer" | "merge";
+                                } | {
+                                    completedThroughOrdinal: number;
+                                    completedCount: number;
+                                    plannedCount: number;
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "transcoding" | "uploading";
+                                    completedSegments: number;
+                                    plannedSegments: number;
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "fetching" | "converting" | "uploading";
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "uploading";
+                                    completedFiles: number;
+                                    plannedFiles: number;
+                                };
+                            } | null;
                         };
                     };
                 };
@@ -1456,6 +1827,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1490,6 +1867,11 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
                         };
                     };
@@ -1614,6 +1996,12 @@ export interface paths {
                                     kind: "document_conversion";
                                     conversionId: string;
                                     namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "account_export";
+                                    storageUserId: string;
+                                    namespace: string | null;
+                                    artifactId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1648,6 +2036,11 @@ export interface paths {
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "uploading";
+                                    completedFiles: number;
+                                    plannedFiles: number;
                                 };
                             } | null;
                         };
@@ -1747,6 +2140,12 @@ export interface paths {
                                     kind: "document_conversion";
                                     conversionId: string;
                                     namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "account_export";
+                                    storageUserId: string;
+                                    namespace: string | null;
+                                    artifactId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1781,6 +2180,11 @@ export interface paths {
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "uploading";
+                                    completedFiles: number;
+                                    plannedFiles: number;
                                 };
                             } | null;
                         };
@@ -1907,6 +2311,12 @@ export interface paths {
                                     kind: "document_conversion";
                                     conversionId: string;
                                     namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "account_export";
+                                    storageUserId: string;
+                                    namespace: string | null;
+                                    artifactId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1941,6 +2351,11 @@ export interface paths {
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "uploading";
+                                    completedFiles: number;
+                                    plannedFiles: number;
                                 };
                             } | null;
                         };
@@ -2061,6 +2476,12 @@ export interface paths {
                                     kind: "document_conversion";
                                     conversionId: string;
                                     namespace: string | null;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "account_export";
+                                    storageUserId: string;
+                                    namespace: string | null;
+                                    artifactId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2095,6 +2516,11 @@ export interface paths {
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
+                                } | {
+                                    /** @enum {string} */
+                                    phase: "assembling" | "uploading";
+                                    completedFiles: number;
+                                    plannedFiles: number;
                                 };
                             } | null;
                         };
@@ -2182,6 +2608,12 @@ export interface paths {
                                 kind: "document_conversion";
                                 conversionId: string;
                                 namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -2216,6 +2648,11 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
                             };
                         };
                     };
@@ -2396,6 +2833,12 @@ export interface components {
             /** @enum {string} */
             phase: "fetching" | "converting" | "uploading";
         };
+        AccountExportProgress: {
+            /** @enum {string} */
+            phase: "assembling" | "uploading";
+            completedFiles: number;
+            plannedFiles: number;
+        };
         TtsPlaybackExportArtifact: {
             /** @enum {number} */
             schemaVersion: 1;
@@ -2417,6 +2860,25 @@ export interface components {
             dispositionFilename: string;
             sourceSessionId: string;
             sourcePlanObjectKey: string;
+            /** @enum {string} */
+            status: "ready";
+            createdAt: number;
+        };
+        AccountExportArtifact: {
+            /** @enum {number} */
+            schemaVersion: 1;
+            artifactId: string;
+            userId: string;
+            storageUserId: string;
+            namespace: string | null;
+            exportSchemaVersion: number;
+            manifestHash: string;
+            manifestObjectKey: string;
+            objectKey: string;
+            /** @enum {string} */
+            contentType: "application/zip";
+            byteLength: number;
+            dispositionFilename: string;
             /** @enum {string} */
             status: "ready";
             createdAt: number;
@@ -2502,6 +2964,12 @@ export interface components {
                 kind: "document_conversion";
                 conversionId: string;
                 namespace: string | null;
+            } | {
+                /** @enum {string} */
+                kind: "account_export";
+                storageUserId: string;
+                namespace: string | null;
+                artifactId: string;
             };
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -2536,6 +3004,11 @@ export interface components {
             } | {
                 /** @enum {string} */
                 phase: "fetching" | "converting" | "uploading";
+            } | {
+                /** @enum {string} */
+                phase: "assembling" | "uploading";
+                completedFiles: number;
+                plannedFiles: number;
             };
         };
         ComputeOperationEvent: {
@@ -2577,6 +3050,12 @@ export interface components {
                     kind: "document_conversion";
                     conversionId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "account_export";
+                    storageUserId: string;
+                    namespace: string | null;
+                    artifactId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2611,6 +3090,11 @@ export interface components {
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "uploading";
+                    completedFiles: number;
+                    plannedFiles: number;
                 };
             };
         };
@@ -2655,6 +3139,12 @@ export interface components {
                     kind: "document_conversion";
                     conversionId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "account_export";
+                    storageUserId: string;
+                    namespace: string | null;
+                    artifactId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2689,6 +3179,11 @@ export interface components {
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "uploading";
+                    completedFiles: number;
+                    plannedFiles: number;
                 };
             } | null;
         };
@@ -2755,6 +3250,12 @@ export interface components {
                     kind: "document_conversion";
                     conversionId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "account_export";
+                    storageUserId: string;
+                    namespace: string | null;
+                    artifactId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2789,6 +3290,11 @@ export interface components {
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "uploading";
+                    completedFiles: number;
+                    plannedFiles: number;
                 };
             } | null;
         };
@@ -2854,6 +3360,12 @@ export interface components {
                     kind: "document_conversion";
                     conversionId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "account_export";
+                    storageUserId: string;
+                    namespace: string | null;
+                    artifactId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2888,6 +3400,11 @@ export interface components {
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "uploading";
+                    completedFiles: number;
+                    plannedFiles: number;
                 };
             } | null;
         };
@@ -2949,6 +3466,12 @@ export interface components {
                     kind: "document_conversion";
                     conversionId: string;
                     namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "account_export";
+                    storageUserId: string;
+                    namespace: string | null;
+                    artifactId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2983,6 +3506,116 @@ export interface components {
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "uploading";
+                    completedFiles: number;
+                    plannedFiles: number;
+                };
+            } | null;
+        };
+        AccountExportResolution: {
+            artifact: {
+                /** @enum {number} */
+                schemaVersion: 1;
+                artifactId: string;
+                userId: string;
+                storageUserId: string;
+                namespace: string | null;
+                exportSchemaVersion: number;
+                manifestHash: string;
+                manifestObjectKey: string;
+                objectKey: string;
+                /** @enum {string} */
+                contentType: "application/zip";
+                byteLength: number;
+                dispositionFilename: string;
+                /** @enum {string} */
+                status: "ready";
+                createdAt: number;
+            } | null;
+            operation: {
+                opId: string;
+                subject: {
+                    /** @enum {string} */
+                    kind: "pdf_layout";
+                    documentId: string;
+                    namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback";
+                    documentId: string;
+                    sessionId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_plan";
+                    documentId: string;
+                    settingsHash: string;
+                    planSignature: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "tts_playback_export";
+                    documentId: string;
+                    artifactId: string;
+                    /** @enum {string} */
+                    format: "mp3" | "m4b";
+                } | {
+                    /** @enum {string} */
+                    kind: "document_preview";
+                    documentId: string;
+                    namespace: string | null;
+                    /** @enum {string} */
+                    previewKind: "card";
+                } | {
+                    /** @enum {string} */
+                    kind: "document_conversion";
+                    conversionId: string;
+                    namespace: string | null;
+                } | {
+                    /** @enum {string} */
+                    kind: "account_export";
+                    storageUserId: string;
+                    namespace: string | null;
+                    artifactId: string;
+                };
+                /** @enum {string} */
+                status: "queued" | "running" | "succeeded" | "failed";
+                queuedAt: number;
+                updatedAt: number;
+                startedAt?: number;
+                result?: unknown;
+                error?: {
+                    message: string;
+                    code?: string;
+                };
+                timing?: {
+                    queueWaitMs?: number;
+                    s3FetchMs?: number;
+                    computeMs?: number;
+                };
+                progress?: {
+                    totalPages: number;
+                    pagesParsed: number;
+                    currentPage?: number;
+                    /** @enum {string} */
+                    phase: "infer" | "merge";
+                } | {
+                    completedThroughOrdinal: number;
+                    completedCount: number;
+                    plannedCount: number;
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "transcoding" | "uploading";
+                    completedSegments: number;
+                    plannedSegments: number;
+                } | {
+                    /** @enum {string} */
+                    phase: "fetching" | "converting" | "uploading";
+                } | {
+                    /** @enum {string} */
+                    phase: "assembling" | "uploading";
+                    completedFiles: number;
+                    plannedFiles: number;
                 };
             } | null;
         };

@@ -73,8 +73,9 @@ export async function deleteUserStorageData(
     }
   }
 
-  // --- Temp uploads + TTS segments (per-user object storage; not reaped) ---
+  // --- Temp uploads + TTS/account-export artifacts (per-user object storage; not reaped) ---
   let segmentsDeleted = 0;
+  let accountExportsDeleted = 0;
   if (s3Enabled) {
     try {
       await deleteDocumentPrefix(tempDocumentUploadPrefix(userId, namespace));
@@ -94,6 +95,8 @@ export async function deleteUserStorageData(
       const nsSegment = namespace ? `ns/${namespace}/` : '';
       const playbackAudioPrefix = `${cfg.prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(userId)}/`;
       segmentsDeleted += await deleteTtsSegmentPrefix(playbackAudioPrefix);
+      const accountExportPrefix = `${cfg.prefix}/account_exports_v1/${nsSegment}users/${encodeURIComponent(userId)}/`;
+      accountExportsDeleted += await deleteTtsSegmentPrefix(accountExportPrefix);
       if (namespace === null) {
         const playbackSidecarPrefix = `${cfg.prefix}/tts_playback_segments_v1/users/${storageUserHash(userId)}/`;
         segmentsDeleted += await deleteTtsSegmentPrefix(playbackSidecarPrefix);
@@ -102,8 +105,8 @@ export async function deleteUserStorageData(
       failures.push(error);
       logDegraded(serverLogger, {
         event: 'user.data_cleanup.tts_segments_delete.failed',
-        msg: 'Failed to delete TTS segment blobs',
-        step: 'delete_tts_segment_prefixes',
+        msg: 'Failed to delete TTS segment or account export blobs',
+        step: 'delete_tts_segment_and_account_export_prefixes',
         context: { userIdHash: hashForLog(userId) },
         error,
       });
@@ -140,12 +143,13 @@ export async function deleteUserStorageData(
     }
   }
 
-  if (docBlobsDeleted > 0 || segmentsDeleted > 0) {
+  if (docBlobsDeleted > 0 || segmentsDeleted > 0 || accountExportsDeleted > 0) {
     serverLogger.info({
       event: 'user.data_cleanup.completed',
       userIdHash: hashForLog(userId),
       docBlobsDeleted,
       segmentsDeleted,
+      accountExportsDeleted,
     }, 'Completed user storage cleanup');
   }
 

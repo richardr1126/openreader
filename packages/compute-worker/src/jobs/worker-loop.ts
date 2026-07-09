@@ -1,5 +1,7 @@
 import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
+  AccountExportJobRequest,
+  AccountExportJobResult,
   DocumentPreviewJobRequest,
   DocumentPreviewJobResult,
   DocumentConversionJobRequest,
@@ -30,6 +32,7 @@ const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
   tts_playback_export: 120_000,
   document_preview: 120_000,
   document_conversion: 120_000,
+  account_export: 120_000,
 };
 
 export interface QueuedJob<TPayload> {
@@ -135,6 +138,7 @@ export function createWorkerLoopController(input: {
   ttsPlaybackExportCodec?: JsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>;
   documentPreviewCodec?: JsonCodec<QueuedJob<DocumentPreviewJobRequest>>;
   documentConversionCodec?: JsonCodec<QueuedJob<DocumentConversionJobRequest>>;
+  accountExportCodec?: JsonCodec<QueuedJob<AccountExportJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -341,6 +345,7 @@ export function createWorkerLoopController(input: {
       ttsPlaybackExport?: Consumer;
       documentPreview?: Consumer;
       documentConversion?: Consumer;
+      accountExport?: Consumer;
     }): void {
       stopRequested = false;
       loops = [];
@@ -389,6 +394,14 @@ export function createWorkerLoopController(input: {
             gate: layoutGate,
           }
           : null;
+      const accountExportWork: WorkDefinition<AccountExportJobRequest, AccountExportJobResult> | null =
+        input.accountExportCodec && consumers.accountExport
+          ? {
+            codec: input.accountExportCodec,
+            run: input.handlers.runAccountExport,
+            gate: layoutGate,
+          }
+          : null;
       for (let i = 0; i < input.jobConcurrency; i += 1) {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
         if (ttsPlaybackWork && consumers.ttsPlayback) {
@@ -405,6 +418,9 @@ export function createWorkerLoopController(input: {
         }
         if (documentConversionWork && consumers.documentConversion) {
           loops.push(runLoop({ owner, consumer: consumers.documentConversion, ...documentConversionWork, workerLabel: `document-conversion-${i + 1}` }));
+        }
+        if (accountExportWork && consumers.accountExport) {
+          loops.push(runLoop({ owner, consumer: consumers.accountExport, ...accountExportWork, workerLabel: `account-export-${i + 1}` }));
         }
       }
     },

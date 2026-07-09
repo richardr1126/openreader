@@ -6,6 +6,9 @@ import type {
   DocumentPreviewResolution,
   DocumentConversionRequest,
   DocumentConversionResolution,
+  AccountExportRequest,
+  AccountExportResolveRequest,
+  AccountExportResolution,
   TtsPlaybackRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
@@ -98,6 +101,10 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/document-conversions/docx/jobs', input);
   }
 
+  createAccountExportOperation(input: AccountExportRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/account-exports/jobs', input);
+  }
+
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
     return this.requestJson('POST', '/v1/pdf-layout/resolve', {
       documentId: input.documentId,
@@ -112,6 +119,10 @@ export class ComputeWorkerClient {
 
   resolveDocumentConversion(input: DocumentConversionRequest): Promise<DocumentConversionResolution> {
     return this.requestJson('POST', '/v1/document-conversions/docx/resolve', input);
+  }
+
+  resolveAccountExport(input: AccountExportResolveRequest): Promise<AccountExportResolution> {
+    return this.requestJson('POST', '/v1/account-exports/resolve', input);
   }
 
   createTtsPlaybackOperation(input: TtsPlaybackRequest): Promise<ComputeOperation> {

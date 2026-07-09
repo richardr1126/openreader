@@ -81,6 +81,24 @@ export const documentConversionOperationCreateSchema = z.object({
 
 export const documentConversionResolveSchema = documentConversionOperationCreateSchema;
 
+export const accountExportOperationCreateSchema = z.object({
+  artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
+  userId: z.string().trim().min(1).max(256),
+  storageUserId: z.string().trim().min(1).max(256),
+  namespace: namespaceSchema,
+  schemaVersion: z.number().int().positive(),
+  manifestHash: z.string().trim().regex(/^[a-f0-9]{64}$/i),
+  manifestObjectKey: z.string().trim().min(1).max(2048),
+}).strict();
+
+export const accountExportResolveSchema = accountExportOperationCreateSchema.pick({
+  artifactId: true,
+  storageUserId: true,
+  namespace: true,
+  schemaVersion: true,
+  manifestHash: true,
+});
+
 export const ttsPlaybackPlanningSchema = z.object({
   selectedOrdinal: z.number().int().nonnegative().optional(),
   maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -213,6 +231,12 @@ export const documentConversionProgressSchema = z.object({
   phase: z.enum(['fetching', 'converting', 'uploading']),
 });
 
+export const accountExportProgressSchema = z.object({
+  phase: z.enum(['assembling', 'uploading']),
+  completedFiles: z.number(),
+  plannedFiles: z.number(),
+});
+
 export const ttsPlaybackExportArtifactMetadataSchema = z.object({
   schemaVersion: z.literal(1),
   artifactId: z.string(),
@@ -273,6 +297,24 @@ export const documentConversionArtifactMetadataSchema = z.object({
   createdAt: z.number(),
 });
 
+export const accountExportArtifactMetadataSchema = z.object({
+  schemaVersion: z.literal(1),
+  artifactId: z.string(),
+  userId: z.string(),
+  storageUserId: z.string(),
+  namespace: z.string().nullable(),
+  exportSchemaVersion: z.number(),
+  manifestHash: z.string(),
+  manifestObjectKey: z.string(),
+  objectKey: z.string(),
+  contentType: z.literal('application/zip'),
+  byteLength: z.number(),
+  dispositionFilename: z.string(),
+  status: z.literal('ready'),
+  createdAt: z.number(),
+});
+
+
 export const computeOperationSchema = z.object({
   opId: z.string(),
   subject: z.discriminatedUnion('kind', [
@@ -309,6 +351,12 @@ export const computeOperationSchema = z.object({
       conversionId: z.string(),
       namespace: z.string().nullable(),
     }),
+    z.object({
+      kind: z.literal('account_export'),
+      storageUserId: z.string(),
+      namespace: z.string().nullable(),
+      artifactId: z.string(),
+    }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
   queuedAt: z.number(),
@@ -326,6 +374,7 @@ export const computeOperationSchema = z.object({
     ttsPlaybackProgressSchema,
     ttsPlaybackExportProgressSchema,
     documentConversionProgressSchema,
+    accountExportProgressSchema,
   ]).optional(),
 });
 
@@ -358,6 +407,11 @@ export const documentPreviewResolutionSchema = z.object({
 
 export const documentConversionResolutionSchema = z.object({
   artifact: documentConversionArtifactMetadataSchema.nullable(),
+  operation: computeOperationSchema.nullable(),
+});
+
+export const accountExportResolutionSchema = z.object({
+  artifact: accountExportArtifactMetadataSchema.nullable(),
   operation: computeOperationSchema.nullable(),
 });
 

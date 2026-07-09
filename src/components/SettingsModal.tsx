@@ -58,6 +58,19 @@ import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 // Hard-coded theme color palettes for the visual theme selector
 type ThemeColorSet = { background: string; base: string; offbase: string; accent: string; secondaryAccent: string; foreground: string; muted: string };
 
+type AccountExportSnapshot = {
+  artifactId: string;
+  manifestHash: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'ready';
+  operationId: string | null;
+  progress?: {
+    phase?: 'assembling' | 'uploading';
+    completedFiles?: number;
+    plannedFiles?: number;
+  } | null;
+  downloadUrl: string | null;
+};
+
 const THEME_COLORS: Record<string, ThemeColorSet> = {
   light: { background: '#ffffff', base: '#f7fafc', offbase: '#e2e8f0', accent: '#ef4444', secondaryAccent: '#ed6868', foreground: '#2d3748', muted: '#718096' },
   dark: { background: '#111111', base: '#171717', offbase: '#343434', accent: '#f87171', secondaryAccent: '#eb6262', foreground: '#ededed', muted: '#a3a3a3' },
@@ -241,13 +254,15 @@ export function SettingsModal({
   const [showProgress, setShowProgress] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [isExportingAccountData, setIsExportingAccountData] = useState(false);
+  const accountExportSourceRef = useRef<EventSource | null>(null);
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
   const { baseUrl: authBaseUrl } = useAuthConfig();
   const { data: session } = useAuthSession();
   const { changelogOpenSignal } = useOnboardingFlow();
   const router = useRouter();
-  const isBusy = isImportingLibrary;
+  const isBusy = isImportingLibrary || isExportingAccountData;
   const {
     documents: libraryDocuments,
     isLoading: isLibraryDocumentsLoading,
@@ -281,6 +296,13 @@ export function SettingsModal({
     setIsOpen(true);
     setIsChangelogOpen(true);
   }, [changelogOpenSignal, setIsOpen]);
+
+  useEffect(() => {
+    return () => {
+      accountExportSourceRef.current?.close();
+      accountExportSourceRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     // Only mirror persisted config into the local form while the modal is closed.
@@ -432,6 +454,98 @@ export function SettingsModal({
     }
     setShowDeleteAccountConfirm(false);
   };
+
+  const resolveExistingAccountExport = useCallback(async (snapshot: Pick<AccountExportSnapshot, 'artifactId' | 'manifestHash'>) => {
+    const res = await fetch('/api/user/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snapshot),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(detail || `Account export resolve failed with status ${res.status}`);
+    }
+    return await res.json() as AccountExportSnapshot;
+  }, []);
+
+  const downloadAccountExportWhenReady = useCallback(async (snapshot: AccountExportSnapshot) => {
+    const ready = snapshot.downloadUrl ? snapshot : await resolveExistingAccountExport(snapshot);
+    if (!ready.downloadUrl) throw new Error('Account export finished without a download URL');
+    window.location.href = ready.downloadUrl;
+  }, [resolveExistingAccountExport]);
+
+  const handleExportAccountData = useCallback(async () => {
+    if (isExportingAccountData) return;
+    accountExportSourceRef.current?.close();
+    accountExportSourceRef.current = null;
+    setIsExportingAccountData(true);
+    const toastId = toast.loading('Preparing account export...');
+    try {
+      const res = await fetch('/api/user/export', { method: 'POST' });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(detail || `Account export failed with status ${res.status}`);
+      }
+      const snapshot = await res.json() as AccountExportSnapshot;
+      if (snapshot.downloadUrl || snapshot.status === 'ready' || snapshot.status === 'succeeded') {
+        await downloadAccountExportWhenReady(snapshot);
+        toast.success('Account export ready.', { id: toastId });
+        setIsExportingAccountData(false);
+        return;
+      }
+      if (!snapshot.operationId) {
+        throw new Error('Account export did not return a worker operation id');
+      }
+
+      const source = new EventSource(`/api/user/export/events?opId=${encodeURIComponent(snapshot.operationId)}`);
+      accountExportSourceRef.current = source;
+      source.addEventListener('snapshot', (event) => {
+        if (!(event instanceof MessageEvent)) return;
+        try {
+          const payload = JSON.parse(event.data) as {
+            snapshot?: {
+              status?: 'queued' | 'running' | 'succeeded' | 'failed';
+              progress?: AccountExportSnapshot['progress'];
+            };
+          };
+          const status = payload.snapshot?.status;
+          const progress = payload.snapshot?.progress;
+          if (progress?.plannedFiles && progress.plannedFiles > 0) {
+            toast.loading(`Preparing account export (${progress.completedFiles ?? 0}/${progress.plannedFiles})...`, { id: toastId });
+          }
+          if (status === 'failed') {
+            source.close();
+            accountExportSourceRef.current = null;
+            setIsExportingAccountData(false);
+            toast.error('Account export failed.', { id: toastId });
+          }
+          if (status === 'succeeded') {
+            source.close();
+            accountExportSourceRef.current = null;
+            void downloadAccountExportWhenReady(snapshot)
+              .then(() => toast.success('Account export ready.', { id: toastId }))
+              .catch((error) => {
+                console.error('Failed to download account export:', error);
+                toast.error(error instanceof Error ? error.message : 'Failed to download account export', { id: toastId });
+              })
+              .finally(() => setIsExportingAccountData(false));
+          }
+        } catch {
+          // Ignore malformed frames and keep the event stream alive.
+        }
+      });
+      source.addEventListener('error', () => {
+        source.close();
+        accountExportSourceRef.current = null;
+        setIsExportingAccountData(false);
+        toast.error('Account export progress disconnected.', { id: toastId });
+      });
+    } catch (error) {
+      console.error('Failed to export account data:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to export account data', { id: toastId });
+      setIsExportingAccountData(false);
+    }
+  }, [downloadAccountExportWhenReady, isExportingAccountData]);
 
   const resetToCurrent = useCallback(() => {
     setIsOpen(false);
@@ -967,9 +1081,8 @@ export function SettingsModal({
                           {/* Export Data */}
                           {session?.user && (
                             <ChoiceTile
-                              onClick={() => {
-                                window.open('/api/user/export', '_blank');
-                              }}
+                              onClick={handleExportAccountData}
+                              disabled={isExportingAccountData}
                               className="w-full rounded-lg bg-background p-4 text-left hover:bg-accent-wash"
                             >
                               <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center">
@@ -977,7 +1090,9 @@ export function SettingsModal({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-foreground">Export My Data</p>
-                                <p className="text-xs text-soft">Download all your data as a ZIP file</p>
+                                <p className="text-xs text-soft">
+                                  {isExportingAccountData ? 'Preparing your ZIP export...' : 'Download all your data as a ZIP file'}
+                                </p>
                               </div>
                             </ChoiceTile>
                           )}

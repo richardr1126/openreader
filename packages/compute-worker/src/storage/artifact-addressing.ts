@@ -208,3 +208,36 @@ export function documentConversionMetadataArtifactKey(input: {
 }): string {
   return `${documentConversionArtifactPrefix(input)}metadata.json`;
 }
+
+export function accountExportArtifactPrefix(input: {
+  artifactId: string;
+  storageUserId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  if (!SAFE_HASH_SEGMENT_REGEX.test(input.artifactId)) {
+    throw new Error(`Invalid account export artifact id: ${input.artifactId}`);
+  }
+  const namespaceSegment = input.namespace && SAFE_NAMESPACE_REGEX_WITH_DEFAULT.test(input.namespace)
+    ? `ns/${input.namespace}/`
+    : '';
+  return `${input.prefix}/account_exports_v1/${namespaceSegment}users/${encodeURIComponent(input.storageUserId)}/${input.artifactId}/`;
+}
+
+export function accountExportArtifactKey(input: {
+  artifactId: string;
+  storageUserId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  return `${accountExportArtifactPrefix(input)}artifact.zip`;
+}
+
+export function accountExportMetadataArtifactKey(input: {
+  artifactId: string;
+  storageUserId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
+  return `${accountExportArtifactPrefix(input)}metadata.json`;
+}
