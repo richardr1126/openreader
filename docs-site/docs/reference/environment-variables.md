@@ -35,7 +35,10 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 | `S3_SECRET_ACCESS_KEY` | Storage | auto-generated in embedded mode | Set explicitly for stable/external credentials |
 | `S3_BUCKET` | Storage | `openreader-documents` in embedded mode | Required for external S3-compatible storage |
 | `S3_REGION` | Storage | `us-east-1` in embedded mode | Required for external S3-compatible storage |
-| `S3_ENDPOINT` | Storage | derived in embedded mode | Set for S3-compatible providers (MinIO/SeaweedFS/R2/etc.) |
+| `S3_INTERNAL_ENDPOINT` | Storage | `http://127.0.0.1:8333` embedded | Private S3 endpoint for app and worker traffic |
+| `S3_PUBLIC_ENDPOINT` | Storage | — | Public HTTPS S3 endpoint for browser presigned transfers |
+| `S3_BROWSER_TRANSPORT` | Storage | `auto` | Browser transfer mode: `auto`, `proxy`, or `presigned` |
+| `S3_ENDPOINT` | Storage | deprecated | Compatibility alias; replace with explicit internal/public endpoints |
 | `S3_FORCE_PATH_STYLE` | Storage | `true` in embedded mode | Set per provider requirement |
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
 | `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
@@ -212,12 +215,21 @@ S3 region.
 - Embedded default: `us-east-1`
 - Required for external S3 mode
 
+### S3_INTERNAL_ENDPOINT
+
+Private endpoint used by the app and compute worker for S3-compatible storage.
+
+### S3_PUBLIC_ENDPOINT
+
+Browser-reachable HTTPS endpoint used only to generate direct presigned URLs.
+
+### S3_BROWSER_TRANSPORT
+
+`auto` (default), `proxy`, or `presigned`. Proxy is not allowed on Vercel/cloud request-duration hosting.
+
 ### S3_ENDPOINT
 
-Custom endpoint for S3-compatible providers.
-
-- Optional for AWS
-- Typical for MinIO/SeaweedFS/R2
+Deprecated compatibility alias for `S3_INTERNAL_ENDPOINT`; when `presigned` is explicitly selected it also supplies `S3_PUBLIC_ENDPOINT`. It will be removed in the next major release.
 
 ### S3_FORCE_PATH_STYLE
 

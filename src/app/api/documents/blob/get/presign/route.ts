@@ -5,7 +5,7 @@ import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignGet } from '@/lib/server/documents/blobstore';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
-import { isS3Configured } from '@/lib/server/storage/s3';
+import { getBrowserStorageTransport, isS3Configured } from '@/lib/server/storage/s3';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,9 @@ function s3NotConfiguredResponse(): NextResponse {
 export async function GET(req: NextRequest) {
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
+    if (getBrowserStorageTransport() !== 'presigned') {
+      return NextResponse.json({ error: 'Presigned document delivery is disabled when S3_BROWSER_TRANSPORT=proxy.' }, { status: 409 });
+    }
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;

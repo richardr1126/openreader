@@ -3,6 +3,7 @@ import { presignDocumentPreviewGet } from '@/lib/server/documents/previews-blobs
 import { ensureDocumentPreview } from '@/lib/server/documents/previews';
 import { validatePreviewRequest } from '../utils';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import { getBrowserStorageTransport } from '@/lib/server/storage/s3';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,9 @@ export async function GET(req: NextRequest) {
     if (validation.errorResponse) return validation.errorResponse;
     const { doc, testNamespace, id } = validation;
 
-    const presignUrl = `/api/documents/blob/preview/presign?id=${encodeURIComponent(id)}`;
+    const presignUrl = getBrowserStorageTransport() === 'proxy'
+      ? `/api/documents/blob/preview?id=${encodeURIComponent(id)}`
+      : `/api/documents/blob/preview/presign?id=${encodeURIComponent(id)}`;
     const preview = await ensureDocumentPreview(
       {
         id: doc.id,
@@ -36,7 +39,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const directUrl = await presignDocumentPreviewGet(doc.id, testNamespace);
+    const directUrl = getBrowserStorageTransport() === 'presigned'
+      ? await presignDocumentPreviewGet(doc.id, testNamespace)
+      : undefined;
     return NextResponse.json(
       {
         status: 'ready',

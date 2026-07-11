@@ -51,7 +51,7 @@ S3_SECRET_ACCESS_KEY=...
 Common optional variables:
 
 - `NATS_CREDS` or `NATS_CREDS_FILE`
-- `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=true`, `S3_PREFIX=openreader`
+- `S3_INTERNAL_ENDPOINT`, `S3_FORCE_PATH_STYLE=true`, `S3_PREFIX=openreader`
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `PORT=8081` for local/manual runs. Platforms like Railway usually inject `PORT`.
 - `LOG_FORMAT=json` and `COMPUTE_LOG_LEVEL=info`
@@ -124,7 +124,7 @@ S3_REGION=<region>
 S3_ACCESS_KEY_ID=<key>
 S3_SECRET_ACCESS_KEY=<secret>
 # Optional:
-# S3_ENDPOINT=https://...
+# S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
 # S3_FORCE_PATH_STYLE=true
 # S3_PREFIX=openreader
 ```

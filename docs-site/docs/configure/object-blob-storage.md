@@ -29,18 +29,23 @@ Storage variables are documented in [Environment Variables](../reference/environ
 ## Ports
 
 - `3003`: OpenReader app and API routes
-- `8333`: Embedded SeaweedFS S3 endpoint for direct browser blob access
+- `8333`: embedded SeaweedFS S3 endpoint for app/worker storage traffic
 
 :::info
-`8333` is only needed for direct browser presigned access to embedded SeaweedFS.
+The embedded default uses same-origin OpenReader proxy routes, so `8333` does not need to be exposed to browsers.
 :::
 
 ## Upload behavior
 
-- Primary path: browser uploads to presigned URL from `/api/documents/blob/upload/presign`.
-- Fallback path: `/api/documents/blob/upload/fallback` when direct upload fails/unreachable.
-- Document read path: direct presigned access from `/api/documents/blob/get/presign`, with `/api/documents/blob/get/fallback` as the app-server fallback.
-- Preview path: `/api/documents/blob/preview/ensure` reports generation status and version; presigned and fallback routes serve the generated artifact.
+OpenReader chooses one browser transport before every transfer with `S3_BROWSER_TRANSPORT`; it never retries a failed direct request through the app proxy.
+
+- `proxy` (the embedded default): uploads use `/api/documents/blob/upload`, reads use `/api/documents/blob/get`, and previews use `/api/documents/blob/preview`.
+- `presigned`: browser transfers use signatures generated from `S3_PUBLIC_ENDPOINT`. The server and compute worker still use `S3_INTERNAL_ENDPOINT`.
+- `auto`: chooses `proxy` for embedded SeaweedFS, otherwise requires a public HTTPS `S3_PUBLIC_ENDPOINT` and chooses `presigned`.
+
+`S3_ENDPOINT` is a deprecated compatibility alias. Configure `S3_INTERNAL_ENDPOINT` and, for direct browser storage, `S3_PUBLIC_ENDPOINT` instead.
+
+For a public SeaweedFS/S3 origin, use a dedicated HTTPS hostname such as `s3.reader.example`, not a `/s3` path mount. Preserve the signed path, query string, `Host`, and signed headers in the reverse proxy. Configure CORS for the OpenReader origin with `GET`, `HEAD`, `PUT`, and `OPTIONS`, allowing `Content-Type` and `x-amz-server-side-encryption`.
 
 ## Browser Cache Storage
 
@@ -83,17 +88,9 @@ Explicit audiobook MP3 exports are not persistently cached.
 - Mount string: `-v /path/to/your/library:/app/docstore/library:ro`
 - Details: [Server Library Import](./server-library-import)
 
-## Private blob endpoint mode
+## Transport topology
 
-If `8333` is not published externally:
-
-- Document uploads still work through upload fallback proxy
-- Reads/snippets continue through app API routes
-- Direct presigned browser upload/download to embedded endpoint is unavailable
-
-:::warning
-Without `8333`, expect higher app-server traffic because uploads/downloads go through API routes instead of direct object endpoint access.
-:::
+The default embedded topology is `Browser → OpenReader → http://127.0.0.1:8333 SeaweedFS`. For public object storage, use `Browser → https://s3.example → S3/SeaweedFS` and configure the app and worker with a private `S3_INTERNAL_ENDPOINT`.
 
 ## TTS Playback Storage
 
@@ -141,10 +138,10 @@ aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursi
 
 ```bash
 # List all playback audio objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_ENDPOINT"
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_INTERNAL_ENDPOINT"
 
 # Filter to one document id (replace <document-id>)
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_ENDPOINT" | grep "/docs/<document-id>/"
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_INTERNAL_ENDPOINT" | grep "/docs/<document-id>/"
 ```
 
   </TabItem>

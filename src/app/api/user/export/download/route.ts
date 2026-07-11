@@ -5,7 +5,7 @@ import { auth } from '@/lib/server/auth/auth';
 import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
-import { getS3Client, getS3Config, isS3Configured } from '@/lib/server/storage/s3';
+import { getBrowserStorageTransport, getS3Client, getS3Config, getS3InternalClient, isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { ACCOUNT_EXPORT_SCHEMA_VERSION } from '@/lib/server/user/data-export';
 
@@ -65,6 +65,17 @@ export async function GET(req: NextRequest) {
     }
 
     const cfg = getS3Config();
+    if (getBrowserStorageTransport() === 'proxy') {
+      const object = await getS3InternalClient().send(new GetObjectCommand({ Bucket: cfg.bucket, Key: resolved.artifact.objectKey }));
+      const bytes = await object.Body?.transformToByteArray();
+      return new NextResponse(bytes as unknown as BodyInit, {
+        headers: {
+          'Content-Type': resolved.artifact.contentType,
+          'Content-Disposition': `attachment; filename="${cleanDispositionFilename(resolved.artifact.dispositionFilename)}"`,
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
     const signedUrl = await getSignedUrl(
       getS3Client(),
       new GetObjectCommand({

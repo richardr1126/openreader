@@ -8,7 +8,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
+import { getS3Client, getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 
@@ -211,7 +211,7 @@ export async function headDocumentBlob(
   namespace: string | null,
 ): Promise<{ contentLength: number; contentType: string | null; eTag: string | null }> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentKey(id, namespace);
   const res = await client.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return {
@@ -227,7 +227,7 @@ export async function headTempDocumentBlob(
   namespace: string | null,
 ): Promise<{ contentLength: number; contentType: string | null; eTag: string | null; lastModified: number | null }> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = tempDocumentUploadKey(token, userId, namespace);
   const res = await client.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return {
@@ -245,7 +245,7 @@ export async function getDocumentRange(
   namespace: string | null,
 ): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentKey(id, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -259,7 +259,7 @@ export async function getDocumentRange(
 
 export async function getDocumentBlob(id: string, namespace: string | null): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentKey(id, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -276,7 +276,7 @@ export async function getTempDocumentBlob(
   namespace: string | null,
 ): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = tempDocumentUploadKey(token, userId, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -289,7 +289,7 @@ export async function getTempDocumentBlob(
 
 export async function getDocumentBlobStream(id: string, namespace: string | null): Promise<DocumentBlobBody> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentKey(id, namespace);
   const res = await client.send(
     new GetObjectCommand({
@@ -307,7 +307,7 @@ export async function getTempDocumentFinalizeReceipt<T>(
 ): Promise<T | null> {
   try {
     const cfg = getS3Config();
-    const client = getS3ProxyClient();
+    const client = getS3InternalClient();
     const key = tempDocumentUploadReceiptKey(token, userId, namespace);
     const res = await client.send(
       new GetObjectCommand({
@@ -325,7 +325,7 @@ export async function getTempDocumentFinalizeReceipt<T>(
 
 export async function getParsedDocumentBlobByKey(key: string): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const trimmed = key.trim();
   if (!trimmed) throw new Error('Parsed document key is empty');
   const res = await client.send(
@@ -344,7 +344,7 @@ export async function putTempDocumentFinalizeReceipt(
   body: Buffer,
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = tempDocumentUploadReceiptKey(token, userId, namespace);
   await client.send(
     new PutObjectCommand({
@@ -383,7 +383,7 @@ export async function putDocumentBlob(
   options?: { ifNoneMatch?: boolean },
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentKey(id, namespace);
   await client.send(
     new PutObjectCommand({
@@ -405,7 +405,7 @@ export async function putTempDocumentBlob(
   namespace: string | null,
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = tempDocumentUploadKey(token, userId, namespace);
   await client.send(
     new PutObjectCommand({
@@ -427,7 +427,7 @@ export async function copyTempDocumentBlobToDocument(
   options?: { ifNoneMatch?: boolean },
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   await client.send(
     new CopyObjectCommand({
       Bucket: cfg.bucket,
@@ -449,7 +449,7 @@ export async function copyObjectKeyToDocument(
   options?: { ifNoneMatch?: boolean },
 ): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const normalizedSourceKey = sourceKey.trim();
   if (!normalizedSourceKey.startsWith(`${cfg.prefix}/`)) {
     throw new Error('Source object key is outside the configured storage prefix');
@@ -469,7 +469,7 @@ export async function copyObjectKeyToDocument(
 
 export async function deleteDocumentBlob(id: string, namespace: string | null): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentKey(id, namespace);
   const legacyParsedKey = legacyDocumentParsedKey(id, namespace);
   const ns = sanitizeNamespace(namespace);
@@ -500,13 +500,13 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
 
 export async function deleteTempDocumentUpload(token: string, userId: string, namespace: string | null): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: tempDocumentUploadKey(token, userId, namespace) }));
 }
 
 export async function deleteTempDocumentFinalizeReceipt(token: string, userId: string, namespace: string | null): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: tempDocumentUploadReceiptKey(token, userId, namespace) }));
 }
 
@@ -521,7 +521,7 @@ export function isMissingBlobError(error: unknown): boolean {
 
 export async function deleteDocumentPrefix(prefix: string): Promise<number> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const cleanedPrefix = prefix.replace(/^\/+/, '');
   let deleted = 0;
   let continuationToken: string | undefined;
@@ -577,7 +577,7 @@ export async function listDocumentSourceBlobs(
   options?: { signal?: AbortSignal },
 ): Promise<Array<{ id: string; lastModifiedMs: number }>> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
   const prefix = `${cfg.prefix}/documents_v1/${nsSegment}`;
@@ -620,7 +620,7 @@ export async function deleteAllExpiredTempDocumentUploads(
   options?: { signal?: AbortSignal },
 ): Promise<number> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
   const prefix = `${cfg.prefix}/document_uploads_temp_v1/${nsSegment}`;

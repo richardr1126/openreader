@@ -7,7 +7,7 @@ import {
 import { MP3_FRAME_DURATION_MS } from '@openreader/tts/audio-format';
 import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import type { ComputeOperation, TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
-import { getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
+import { getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 
@@ -53,7 +53,7 @@ export async function readTtsPlaybackPlanArtifact(planObjectKey: string): Promis
   body: string;
 }> {
   const cfg = getS3Config();
-  const result = await getS3ProxyClient().send(new GetObjectCommand({
+  const result = await getS3InternalClient().send(new GetObjectCommand({
     Bucket: cfg.bucket,
     Key: planObjectKey,
   }));

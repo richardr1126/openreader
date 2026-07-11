@@ -72,7 +72,7 @@ function parseS3ConfigFromEnv(env) {
   const region = env.S3_REGION?.trim();
   const accessKeyId = env.S3_ACCESS_KEY_ID?.trim();
   const secretAccessKey = env.S3_SECRET_ACCESS_KEY?.trim();
-  const endpoint = env.S3_ENDPOINT?.trim();
+  const endpoint = env.S3_INTERNAL_ENDPOINT?.trim() || env.S3_ENDPOINT?.trim();
 
   if (!bucket || !region || !accessKeyId || !secretAccessKey) {
     throw new Error('S3 is not configured. Required env vars: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.');

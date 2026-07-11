@@ -59,7 +59,7 @@ test.describe('Document Upload Tests', () => {
       const doc = docs.find((item) => item.name === 'sample.txt');
       if (!doc?.id) return { ok: false, reason: 'Missing stored html document' as const };
 
-      const contentRes = await fetch(`/api/documents/blob/get/presign?id=${encodeURIComponent(doc.id)}`, { cache: 'no-store' });
+      const contentRes = await fetch(`/api/documents/blob/get?id=${encodeURIComponent(doc.id)}`, { cache: 'no-store' });
       if (!contentRes.ok) return { ok: false, reason: 'Content fetch failed' as const, storedId: doc.id };
       const digest = await crypto.subtle.digest('SHA-256', await contentRes.arrayBuffer());
       const computedId = Array.from(new Uint8Array(digest))

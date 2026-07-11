@@ -6,7 +6,7 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
+import { getS3Client, getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 
 function isNodeReadableStream(value: unknown): value is NodeJS.ReadableStream {
   return !!value && typeof value === 'object' && 'on' in value && typeof (value as NodeJS.ReadableStream).on === 'function';
@@ -131,7 +131,7 @@ export type TtsSegmentAudioObjectStream = {
 
 export async function putTtsSegmentAudioObject(key: string, buffer: Buffer): Promise<void> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   await client.send(new PutObjectCommand({
     Bucket: cfg.bucket,
     Key: key,
@@ -143,7 +143,7 @@ export async function putTtsSegmentAudioObject(key: string, buffer: Buffer): Pro
 
 export async function getTtsSegmentAudioObject(key: string): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return bodyToBuffer(res.Body);
 }
@@ -153,7 +153,7 @@ export async function getTtsSegmentAudioObjectStream(
   options?: { range?: string },
 ): Promise<TtsSegmentAudioObjectStream> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const res = await client.send(new GetObjectCommand({
     Bucket: cfg.bucket,
     Key: key,
@@ -192,7 +192,7 @@ export async function deleteTtsSegmentAudioObjects(keys: string[]): Promise<numb
   if (uniqueKeys.length === 0) return 0;
 
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   let deleted = 0;
 
   for (let i = 0; i < uniqueKeys.length; i += 1000) {
@@ -217,7 +217,7 @@ export async function deleteTtsSegmentAudioObjects(keys: string[]): Promise<numb
 
 export async function deleteTtsSegmentPrefix(prefix: string): Promise<number> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const cleanedPrefix = prefix.replace(/^\/+/, '');
   let deleted = 0;
   let continuationToken: string | undefined;
@@ -261,7 +261,7 @@ export async function deleteTtsSegmentPrefix(prefix: string): Promise<number> {
 
 export async function copyTtsSegmentPrefix(sourcePrefix: string, destinationPrefix: string): Promise<number> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const source = sourcePrefix.replace(/^\/+/, '');
   const destination = destinationPrefix.replace(/^\/+/, '');
   if (source === destination) return 0;

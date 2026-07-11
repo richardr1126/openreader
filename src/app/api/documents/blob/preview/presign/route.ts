@@ -3,11 +3,15 @@ import { presignDocumentPreviewGet } from '@/lib/server/documents/previews-blobs
 import { ensureDocumentPreview } from '@/lib/server/documents/previews';
 import { validatePreviewRequest } from '../utils';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import { getBrowserStorageTransport } from '@/lib/server/storage/s3';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    if (getBrowserStorageTransport() !== 'presigned') {
+      return NextResponse.json({ error: 'Presigned preview delivery is disabled when S3_BROWSER_TRANSPORT=proxy.' }, { status: 409 });
+    }
     const validation = await validatePreviewRequest(req);
     if (validation.errorResponse) return validation.errorResponse;
     const { doc, testNamespace, id } = validation;

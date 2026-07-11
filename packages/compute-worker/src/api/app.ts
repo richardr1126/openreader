@@ -91,6 +91,7 @@ import {
   ttsPlaybackExportArtifactResolutionSchema,
   ttsSentenceAlignmentSchema,
 } from './schemas';
+import { resolveStorageTransport } from '../../../bootstrap/src/storage-transport.mjs';
 
 // Disconnect from NATS after this much continuous idle so the worker stops
 // generating outbound traffic (pull polling + keepalive PINGs) and Railway can
@@ -123,6 +124,9 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const host = options.host ?? (process.env.COMPUTE_WORKER_HOST?.trim() || '0.0.0.0');
   const workerToken = options.workerToken ?? requireEnv('COMPUTE_WORKER_TOKEN');
   const disableWorkers = options.disableWorkers ?? false;
+  // Test/control-plane instances intentionally disable all object access. A
+  // real worker validates the shared browser/server storage contract at startup.
+  if (!disableWorkers) resolveStorageTransport(process.env);
   const natsUrl = requireEnv('NATS_URL');
   const timeoutConfig = getComputeTimeoutConfig();
 

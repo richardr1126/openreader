@@ -253,7 +253,9 @@ S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 # Optional for non-AWS providers:
-# S3_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
+# S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 ```
 
@@ -275,7 +277,9 @@ S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 # Optional for non-AWS providers:
-# S3_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
+# S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 ```
 

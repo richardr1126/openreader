@@ -1,18 +1,22 @@
 import { S3Client } from '@aws-sdk/client-s3';
+import { resolveStorageTransport } from '../../../../packages/bootstrap/src/storage-transport.mjs';
 
 type S3Config = {
   bucket: string;
   region: string;
-  endpoint?: string;
+  internalEndpoint: string;
+  publicEndpoint?: string;
+  browserTransport: 'proxy' | 'presigned';
   accessKeyId: string;
   secretAccessKey: string;
   forcePathStyle: boolean;
   prefix: string;
 };
 
-let cachedClient: S3Client | null = null;
-let cachedLoopbackClient: S3Client | null = null;
+let cachedPublicClient: S3Client | null = null;
+let cachedInternalClient: S3Client | null = null;
 let cachedConfig: S3Config | null = null;
+let warnedDeprecatedEndpoint = false;
 
 function parseBool(value: string | undefined): boolean {
   if (!value) return false;
@@ -26,39 +30,26 @@ function normalizePrefix(prefix: string | undefined): string {
   return base.replace(/^\/+|\/+$/g, '');
 }
 
-function isEmbeddedWeedMiniEnabled(): boolean {
-  const raw = process.env.USE_EMBEDDED_WEED_MINI;
-  if (raw == null || raw.trim() === '') return true;
-  const normalized = raw.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
-}
-
-function loopbackEndpoint(endpoint: string | undefined): string | undefined {
-  if (!endpoint) return endpoint;
-  try {
-    const parsed = new URL(endpoint);
-    parsed.hostname = '127.0.0.1';
-    return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
-  } catch {
-    return endpoint;
-  }
-}
-
 function loadS3ConfigFromEnv(): S3Config | null {
   const bucket = process.env.S3_BUCKET?.trim();
   const region = process.env.S3_REGION?.trim();
   const accessKeyId = process.env.S3_ACCESS_KEY_ID?.trim();
   const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY?.trim();
-  const endpoint = process.env.S3_ENDPOINT?.trim();
-
   if (!bucket || !region || !accessKeyId || !secretAccessKey) {
     return null;
+  }
+  const transport = resolveStorageTransport(process.env);
+  if (transport.usesDeprecatedEndpoint && !warnedDeprecatedEndpoint) {
+    warnedDeprecatedEndpoint = true;
+    console.warn('S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in the next major release.');
   }
 
   return {
     bucket,
     region,
-    endpoint: endpoint || undefined,
+    internalEndpoint: transport.internalEndpoint,
+    publicEndpoint: transport.publicEndpoint,
+    browserTransport: transport.mode as 'proxy' | 'presigned',
     accessKeyId,
     secretAccessKey,
     forcePathStyle: parseBool(process.env.S3_FORCE_PATH_STYLE),
@@ -83,35 +74,19 @@ export function getS3Config(): S3Config {
 }
 
 export function getS3Client(): S3Client {
-  if (cachedClient) return cachedClient;
-  const config = getS3Config();
-
-  cachedClient = new S3Client({
-    region: config.region,
-    endpoint: config.endpoint,
-    forcePathStyle: config.forcePathStyle,
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-    responseChecksumValidation: 'WHEN_REQUIRED',
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-  });
-
-  return cachedClient;
+  return getS3PublicClient();
 }
 
-export function getS3ProxyClient(): S3Client {
+export function getS3PublicClient(): S3Client {
+  if (cachedPublicClient) return cachedPublicClient;
   const config = getS3Config();
-  const useLoopback = isEmbeddedWeedMiniEnabled();
-  if (!useLoopback) {
-    return getS3Client();
+  if (!config.publicEndpoint) {
+    throw new Error('Direct browser object transfer is disabled because S3_BROWSER_TRANSPORT=proxy.');
   }
 
-  if (cachedLoopbackClient) return cachedLoopbackClient;
-  cachedLoopbackClient = new S3Client({
+  cachedPublicClient = new S3Client({
     region: config.region,
-    endpoint: loopbackEndpoint(config.endpoint),
+    endpoint: config.publicEndpoint,
     forcePathStyle: config.forcePathStyle,
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
@@ -120,5 +95,32 @@ export function getS3ProxyClient(): S3Client {
       secretAccessKey: config.secretAccessKey,
     },
   });
-  return cachedLoopbackClient;
+
+  return cachedPublicClient;
+}
+
+export function getS3InternalClient(): S3Client {
+  const config = getS3Config();
+  if (cachedInternalClient) return cachedInternalClient;
+  cachedInternalClient = new S3Client({
+    region: config.region,
+    endpoint: config.internalEndpoint,
+    forcePathStyle: config.forcePathStyle,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+  return cachedInternalClient;
+}
+
+/** @deprecated Use getS3InternalClient. */
+export function getS3ProxyClient(): S3Client {
+  return getS3InternalClient();
+}
+
+export function getBrowserStorageTransport(): 'proxy' | 'presigned' {
+  return getS3Config().browserTransport;
 }

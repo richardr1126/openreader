@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/server/storage/s3', () => ({
   getS3Config: () => ({ bucket: 'test-bucket' }),
   getS3Client: () => ({ send: mocks.send }),
+  getS3InternalClient: () => ({ send: mocks.send }),
   getS3ProxyClient: () => ({ send: mocks.send }),
 }));
 

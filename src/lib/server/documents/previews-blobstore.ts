@@ -4,7 +4,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { deleteDocumentPrefix, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
-import { getS3Client, getS3Config, getS3ProxyClient } from '@/lib/server/storage/s3';
+import { getS3Client, getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
 const DEFAULT_NAMESPACE_SEGMENT = '_default';
@@ -83,7 +83,7 @@ export async function headDocumentPreview(
   namespace: string | null,
 ): Promise<{ contentLength: number; contentType: string | null; eTag: string | null }> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentPreviewKey(documentId, namespace);
   const res = await client.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return {
@@ -95,7 +95,7 @@ export async function headDocumentPreview(
 
 export async function getDocumentPreviewBuffer(documentId: string, namespace: string | null): Promise<Buffer> {
   const cfg = getS3Config();
-  const client = getS3ProxyClient();
+  const client = getS3InternalClient();
   const key = documentPreviewKey(documentId, namespace);
   const res = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
   return bodyToBuffer(res.Body);

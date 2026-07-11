@@ -29,7 +29,9 @@ S3_BUCKET=...
 S3_REGION=us-east-1
 S3_PREFIX=openreader
 # Optional (non-AWS S3-compatible providers):
-# S3_ENDPOINT=https://...
+# S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
+# S3_PUBLIC_ENDPOINT=https://s3.example
+# S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 
 # Auth (required for the admin panel)

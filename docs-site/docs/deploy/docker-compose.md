@@ -108,15 +108,13 @@ is also published so browsers can load signed worker-owned TTS playback audio.
 
 ## LAN access
 
-Set `BASE_URL` and `S3_ENDPOINT` to the Docker host's LAN IP so browser-facing app and presigned
-S3 URLs are reachable from other devices:
+Set `BASE_URL` to the Docker host's LAN IP for the default same-origin proxy topology:
 
 <Tabs groupId="docker-compose-lan-stack">
 <TabItem value="slim" label="Slim" default>
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
 docker compose -f docker/examples/compose.yml up
 # Repository convenience command: pnpm compose
 ```
@@ -126,7 +124,6 @@ docker compose -f docker/examples/compose.yml up
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
 COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.full.yml up
 # Repository convenience command: pnpm compose:full
@@ -137,7 +134,6 @@ docker compose -f docker/examples/compose.full.yml up
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
 docker compose -f docker/examples/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
 ```
@@ -147,7 +143,6 @@ docker compose -f docker/examples/compose.local-slim.yml up --build
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
 COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.local-full.yml up --build
 # Repository convenience command: pnpm compose:local:full
@@ -156,12 +151,12 @@ docker compose -f docker/examples/compose.local-full.yml up --build
 </TabItem>
 </Tabs>
 
-Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP ports `3003` and
-`8333` for every stack, plus `8081` when using full stacks with the standalone compute worker.
+Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP port `3003`, plus
+`8081` when using full stacks with the standalone compute worker. The embedded/proxy storage endpoint does not need browser access.
 
 :::info Internal full-stack endpoint
-The full and local-full compute workers continue using `http://seaweedfs:8333` internally.
-`S3_ENDPOINT` configures the app endpoint and browser-facing presigned URLs.
+The full and local-full app and compute workers use `http://seaweedfs:8333` internally.
+For direct browser storage, configure `S3_BROWSER_TRANSPORT=presigned` and a public HTTPS `S3_PUBLIC_ENDPOINT`; do not use a path-mounted S3 reverse proxy.
 `COMPUTE_WORKER_PUBLIC_URL` configures the browser-facing worker playback audio URL.
 :::
 

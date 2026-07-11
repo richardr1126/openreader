@@ -7,6 +7,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
+import { resolveStorageTransport } from '../../../bootstrap/src/storage-transport.mjs';
 
 export interface ArtifactStorage {
   readObject(key: string): Promise<ArrayBuffer>;
@@ -69,9 +70,10 @@ export function normalizeS3Prefix(prefix: string | undefined): string {
 }
 
 export function createS3ClientFromEnv(requireEnv: (name: string) => string): S3Client {
+  const transport = resolveStorageTransport(process.env);
   return new S3Client({
     region: requireEnv('S3_REGION'),
-    endpoint: process.env.S3_ENDPOINT?.trim() || undefined,
+    endpoint: transport.internalEndpoint,
     forcePathStyle: ['1', 'true', 'yes', 'on'].includes(process.env.S3_FORCE_PATH_STYLE?.trim().toLowerCase() ?? ''),
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',

@@ -386,7 +386,7 @@ export async function putDocumentSettings(
 export async function uploadDocumentSources(sources: UploadSource[], options?: UploadOptions): Promise<BaseDocument[]> {
   if (sources.length === 0) return [];
 
-  const presignRes = await fetch('/api/documents/blob/upload/presign', {
+  const presignRes = await fetch('/api/documents/blob/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -415,7 +415,7 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     const source = sources[index];
     const upload = uploads[index];
     if (!upload?.url || !upload.token) {
-      throw new Error(`Missing presigned upload for document ${source.name}`);
+      throw new Error(`Missing prepared upload for document ${source.name}`);
     }
 
     try {
@@ -430,10 +430,10 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
       if (putRes.ok || putRes.status === 412) {
         continue;
       }
-      throw new Error(`Direct upload failed with status ${putRes.status}`);
+      throw new Error(`Document upload failed with status ${putRes.status}`);
     } catch (error) {
       if (options?.signal?.aborted) throw error;
-      const message = error instanceof Error ? error.message : 'unknown direct upload error';
+      const message = error instanceof Error ? error.message : 'unknown upload error';
       throw new Error(`Failed to upload document ${source.name}: ${message}`);
     }
   }
@@ -491,7 +491,7 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
 }
 
 export async function fetchDocumentContentResponse(id: string, options?: { signal?: AbortSignal }): Promise<Response> {
-  const res = await fetch(`/api/documents/blob/get/presign?id=${encodeURIComponent(id)}`, {
+  const res = await fetch(`/api/documents/blob/get?id=${encodeURIComponent(id)}`, {
     signal: options?.signal,
     cache: 'no-store',
   });
@@ -538,7 +538,7 @@ function documentPreviewEnsureUrl(id: string): string {
 }
 
 export function documentPreviewPresignUrl(id: string): string {
-  return `/api/documents/blob/preview/presign?id=${encodeURIComponent(id)}`;
+  return `/api/documents/blob/preview?id=${encodeURIComponent(id)}`;
 }
 
 function documentPreviewEventsUrl(id: string, opId: string): string {
