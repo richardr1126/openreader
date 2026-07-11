@@ -7,13 +7,9 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import {
   createOrReuseCurrentPdfParseOperation,
-  lookupCurrentPdfParseOperation,
+  resolveCurrentPdfParse,
 } from '@/lib/server/pdf-parse/operation';
-import { readCurrentParsedPdfArtifact, readParsedPdfArtifactByKey } from '@/lib/server/pdf-parse/artifact';
-import {
-  parsedObjectKeyFromWorkerState,
-  pdfParseSnapshotFromWorkerState,
-} from '@/lib/server/pdf-parse/snapshot';
+import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger } from '@/lib/server/logger';
@@ -56,16 +52,6 @@ function jsonSnapshot(snapshot: PdfParseSnapshot, status = 409): NextResponse {
   return NextResponse.json(snapshot, { status });
 }
 
-function artifactResponse(bytes: Buffer): NextResponse {
-  return new NextResponse(new Uint8Array(bytes), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    },
-  });
-}
-
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { logger } = createRequestLogger({
     route: '/api/documents/[id]/parsed',
@@ -95,12 +81,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
 
     const namespace = getOpenReaderTestNamespace(req.headers);
-    const artifact = await readCurrentParsedPdfArtifact({ documentId: id, namespace });
-    if (artifact) {
-      return artifactResponse(artifact.bytes);
+    const resolved = await resolveCurrentPdfParse({ documentId: id, namespace });
+    if (resolved.artifact) {
+      return jsonSnapshot({ parseStatus: 'ready', parseProgress: null, opId: null }, 200);
     }
 
-    const currentOp = await lookupCurrentPdfParseOperation({ documentId: id, namespace });
+    const currentOp = resolved.operation;
     if (!currentOp) {
       return jsonSnapshot({
         parseStatus: 'pending',
@@ -110,13 +96,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
 
     if (currentOp.status === 'succeeded') {
-      const artifactKey = parsedObjectKeyFromWorkerState(currentOp);
-      if (artifactKey) {
-        const artifactFromOp = await readParsedPdfArtifactByKey(artifactKey);
-        if (artifactFromOp) {
-          return artifactResponse(artifactFromOp.bytes);
-        }
-      }
       return NextResponse.json(
         {
           error: 'Current parse operation succeeded without a readable parsed artifact.',
@@ -177,8 +156,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const namespace = getOpenReaderTestNamespace(req.headers);
 
     if (!replace) {
-      const artifact = await readCurrentParsedPdfArtifact({ documentId: id, namespace });
-      if (artifact) {
+      const resolved = await resolveCurrentPdfParse({ documentId: id, namespace });
+      if (resolved.artifact) {
         return jsonSnapshot({
           parseStatus: 'ready',
           parseProgress: null,
@@ -186,17 +165,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         }, 200);
       }
 
-      const currentOp = await lookupCurrentPdfParseOperation({ documentId: id, namespace });
+      const currentOp = resolved.operation;
       if (currentOp) {
         const snapshot = pdfParseSnapshotFromWorkerState(currentOp);
         if (snapshot.parseStatus === 'failed') {
           return jsonSnapshot(snapshot);
         }
         if (snapshot.parseStatus === 'ready') {
-          const artifactKey = parsedObjectKeyFromWorkerState(currentOp);
-          if (artifactKey && await readParsedPdfArtifactByKey(artifactKey)) {
-            return jsonSnapshot(snapshot, 200);
-          }
           return jsonSnapshot({
             parseStatus: 'running',
             parseProgress: null,

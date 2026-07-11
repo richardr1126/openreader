@@ -42,21 +42,6 @@ function formatLabel(format: ExportFormat): string {
   return format.toUpperCase();
 }
 
-function withDownloadOptions(url: string, speed: number, format: ExportFormat): string {
-  const safeSpeed = Math.max(0.5, Math.min(3, Number.isFinite(speed) ? speed : 1));
-  const parsed = new URL(url, window.location.href);
-  if (Math.abs(safeSpeed - 1) >= 0.01) {
-    parsed.searchParams.set('speed', safeSpeed.toFixed(2));
-  } else {
-    parsed.searchParams.delete('speed');
-  }
-  parsed.searchParams.set('format', format);
-  if (parsed.origin === window.location.origin) {
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  }
-  return parsed.toString();
-}
-
 export function AudiobookExportModal({
   isOpen,
   setIsOpen,
@@ -450,7 +435,7 @@ export function AudiobookExportModal({
   ]);
 
   const handleDownload = useCallback(() => {
-    const urlToDownload = downloadUrl ? withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat) : null;
+    const urlToDownload = downloadUrl;
     if (!urlToDownload) return;
     setStatus('downloading');
     try {
@@ -465,7 +450,7 @@ export function AudiobookExportModal({
       setStatus('ready');
       setErrorMessage(error instanceof Error ? error.message : 'Download failed.');
     }
-  }, [documentId, documentType, downloadUrl, exportFormat, localAudioPlayerSpeed]);
+  }, [documentId, documentType, downloadUrl, exportFormat]);
 
   if (isLoading) {
     return null;

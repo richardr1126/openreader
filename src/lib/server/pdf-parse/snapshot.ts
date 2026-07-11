@@ -18,17 +18,6 @@ function mapWorkerStatusToParseStatus(status: ComputeOperation['status']): PdfPa
   return exhaustive;
 }
 
-export function parsedObjectKeyFromWorkerState(
-  state: ComputeOperation<PdfLayoutResult>,
-): string | null {
-  const result = state.result;
-  if (!result || typeof result !== 'object' || !('parsedObjectKey' in result)) return null;
-  const value = result.parsedObjectKey;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  return normalized || null;
-}
-
 function isPdfParseProgress(value: unknown): value is PdfParseProgress {
   if (!value || typeof value !== 'object') return false;
   const rec = value as Record<string, unknown>;

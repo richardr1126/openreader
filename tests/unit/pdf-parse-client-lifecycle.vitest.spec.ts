@@ -69,9 +69,17 @@ describe('PDF parse client lifecycle', () => {
         }
 
         return new Response(JSON.stringify({
-          documentId: 'doc-1',
-          pages: [],
+          parseStatus: 'ready',
+          parseProgress: null,
+          opId: null,
         }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.endsWith('/api/documents/doc-1/parsed/download') && method === 'GET') {
+        return new Response(JSON.stringify({ documentId: 'doc-1', pages: [] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });

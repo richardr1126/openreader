@@ -175,6 +175,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       readObject: storageDisabled,
       objectExists: storageDisabled,
       deleteObject: storageDisabled,
+      listPrefix: storageDisabled,
       putObject: storageDisabled,
       putParsedPdf: storageDisabled,
     }

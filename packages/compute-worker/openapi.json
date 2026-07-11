@@ -4092,7 +4092,7 @@
         }
       }
     },
-    "/v1/tts-playback/exports/{artifactId}/download": {
+    "/v1/tts-playback/exports/{artifactId}": {
       "get": {
         "parameters": [
           {
@@ -4104,28 +4104,114 @@
             "required": true
           }
         ],
-        "security": [],
         "responses": {
-          "400": {
+          "200": {
             "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "error": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "artifactId": {
                       "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "storageUserId": {
+                      "type": "string"
+                    },
+                    "documentId": {
+                      "type": "string"
+                    },
+                    "documentVersion": {
+                      "type": "number"
+                    },
+                    "readerType": {
+                      "type": "string",
+                      "enum": [
+                        "pdf",
+                        "epub",
+                        "html"
+                      ]
+                    },
+                    "settingsHash": {
+                      "type": "string"
+                    },
+                    "planObjectKey": {
+                      "type": "string"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "mp3",
+                        "m4b"
+                      ]
+                    },
+                    "speed": {
+                      "type": "number"
+                    },
+                    "objectKey": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "byteLength": {
+                      "type": "number"
+                    },
+                    "dispositionFilename": {
+                      "type": "string"
+                    },
+                    "sourceSessionId": {
+                      "type": "string"
+                    },
+                    "sourcePlanObjectKey": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
                     }
                   },
                   "required": [
-                    "error"
+                    "schemaVersion",
+                    "artifactId",
+                    "sessionId",
+                    "storageUserId",
+                    "documentId",
+                    "documentVersion",
+                    "readerType",
+                    "settingsHash",
+                    "planObjectKey",
+                    "format",
+                    "speed",
+                    "objectKey",
+                    "contentType",
+                    "byteLength",
+                    "dispositionFilename",
+                    "sourceSessionId",
+                    "sourcePlanObjectKey",
+                    "status",
+                    "createdAt"
                   ],
-                  "additionalProperties": {}
+                  "additionalProperties": false
                 }
               }
             }
           },
-          "401": {
+          "400": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -5044,6 +5130,235 @@
             }
           },
           "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/cache/clear": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "readerType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub",
+                      "html"
+                    ]
+                  }
+                },
+                "required": [
+                  "storageUserId",
+                  "documentId",
+                  "namespace"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deletedAudioObjects": {
+                      "type": "number"
+                    },
+                    "deletedSidecarObjects": {
+                      "type": "number"
+                    },
+                    "deletedPlanObjects": {
+                      "type": "number"
+                    },
+                    "deletedExportObjects": {
+                      "type": "number"
+                    },
+                    "invalidatedPlaybackSessions": {
+                      "type": "number"
+                    },
+                    "invalidatedJobOperations": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "deletedAudioObjects",
+                    "deletedSidecarObjects",
+                    "deletedPlanObjects",
+                    "deletedExportObjects",
+                    "invalidatedPlaybackSessions",
+                    "invalidatedJobOperations"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/user-storage/cleanup": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "documentIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  }
+                },
+                "required": [
+                  "storageUserId",
+                  "namespace",
+                  "documentIds"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deletedObjects": {
+                      "type": "number"
+                    },
+                    "deletedDocumentArtifacts": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "deletedObjects",
+                    "deletedDocumentArtifacts"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
             "description": "Default Response",
             "content": {
               "application/json": {

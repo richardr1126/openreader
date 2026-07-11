@@ -10,9 +10,7 @@ const hoisted = vi.hoisted(() => ({
     type: 'pdf',
   },
   requireAuthContext: vi.fn(),
-  readCurrentParsedPdfArtifact: vi.fn(),
-  readParsedPdfArtifactByKey: vi.fn(),
-  lookupCurrentPdfParseOperation: vi.fn(),
+  resolveCurrentPdfParse: vi.fn(),
   createOrReuseCurrentPdfParseOperation: vi.fn(),
   checkJobRate: vi.fn(),
   getPdfLayoutRateConfig: vi.fn(),
@@ -30,13 +28,8 @@ vi.mock('@/lib/server/auth/auth', () => ({
   requireAuthContext: hoisted.requireAuthContext,
 }));
 
-vi.mock('@/lib/server/pdf-parse/artifact', () => ({
-  readCurrentParsedPdfArtifact: hoisted.readCurrentParsedPdfArtifact,
-  readParsedPdfArtifactByKey: hoisted.readParsedPdfArtifactByKey,
-}));
-
 vi.mock('@/lib/server/pdf-parse/operation', () => ({
-  lookupCurrentPdfParseOperation: hoisted.lookupCurrentPdfParseOperation,
+  resolveCurrentPdfParse: hoisted.resolveCurrentPdfParse,
   createOrReuseCurrentPdfParseOperation: hoisted.createOrReuseCurrentPdfParseOperation,
 }));
 
@@ -89,12 +82,8 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     };
     hoisted.requireAuthContext.mockReset();
     hoisted.requireAuthContext.mockResolvedValue({ userId: 'user-1' });
-    hoisted.readCurrentParsedPdfArtifact.mockReset();
-    hoisted.readCurrentParsedPdfArtifact.mockResolvedValue(null);
-    hoisted.readParsedPdfArtifactByKey.mockReset();
-    hoisted.readParsedPdfArtifactByKey.mockResolvedValue(null);
-    hoisted.lookupCurrentPdfParseOperation.mockReset();
-    hoisted.lookupCurrentPdfParseOperation.mockResolvedValue(null);
+    hoisted.resolveCurrentPdfParse.mockReset();
+    hoisted.resolveCurrentPdfParse.mockResolvedValue({ artifact: null, operation: null });
     hoisted.createOrReuseCurrentPdfParseOperation.mockReset();
     hoisted.checkJobRate.mockReset();
     hoisted.checkJobRate.mockResolvedValue({ allowed: true });
@@ -119,21 +108,10 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     });
   });
 
-  test('GET reads the artifact referenced by a succeeded worker op', async () => {
-    hoisted.lookupCurrentPdfParseOperation.mockResolvedValue({
-      opId: 'op-1',
-      opKey: 'pdf_layout|v1|parser|doc-1||doc-key|',
-      kind: 'pdf_layout',
-      jobId: 'job-1',
-      status: 'succeeded',
-      queuedAt: Date.now() - 1000,
-      updatedAt: Date.now(),
-      result: { parsedObjectKey: 'parsed-key.json' },
-    });
-    hoisted.readParsedPdfArtifactByKey.mockResolvedValue({
-      key: 'parsed-key.json',
-      bytes: Buffer.from(JSON.stringify({ documentId: 'doc-1', pages: [] })),
-      parsed: { documentId: 'doc-1', pages: [] },
+  test('GET returns a ready control-plane snapshot when the worker artifact exists', async () => {
+    hoisted.resolveCurrentPdfParse.mockResolvedValue({
+      artifact: { objectKey: 'parsed-key.json' },
+      operation: null,
     });
 
     const { GET } = await import('../../src/app/api/documents/[id]/parsed/route');
@@ -142,8 +120,7 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ documentId: 'doc-1' });
-    expect(hoisted.readParsedPdfArtifactByKey).toHaveBeenCalledWith('parsed-key.json');
+    await expect(response.json()).resolves.toMatchObject({ parseStatus: 'ready' });
   });
 
   test('POST creates a worker op when replace is requested', async () => {
@@ -175,8 +152,8 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     expect(hoisted.createOrReuseCurrentPdfParseOperation).toHaveBeenCalled();
   });
 
-  test('POST does not report ready for a succeeded op until its artifact is readable', async () => {
-    hoisted.lookupCurrentPdfParseOperation.mockResolvedValue({
+  test('POST keeps a succeeded operation pending until the worker resolves its artifact', async () => {
+    hoisted.resolveCurrentPdfParse.mockResolvedValue({ artifact: null, operation: {
       opId: 'op-ready-1',
       opKey: 'pdf_layout|v1|parser|doc-1||doc-key|',
       kind: 'pdf_layout',
@@ -185,8 +162,7 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
       queuedAt: Date.now() - 1000,
       updatedAt: Date.now(),
       result: { parsedObjectKey: 'missing-parsed-key.json' },
-    });
-    hoisted.readParsedPdfArtifactByKey.mockResolvedValue(null);
+    } });
 
     const { POST } = await import('../../src/app/api/documents/[id]/parsed/route');
     const request = new NextRequest('http://localhost/api/documents/doc-1/parsed', {
@@ -203,7 +179,6 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
       parseStatus: 'running',
       opId: 'op-ready-1',
     });
-    expect(hoisted.readParsedPdfArtifactByKey).toHaveBeenCalledWith('missing-parsed-key.json');
     expect(hoisted.createOrReuseCurrentPdfParseOperation).not.toHaveBeenCalled();
   });
 

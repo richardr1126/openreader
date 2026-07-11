@@ -79,7 +79,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tts-playback/exports/{artifactId}/download": {
+    "/v1/tts-playback/exports/{artifactId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -98,20 +98,40 @@ export interface paths {
             requestBody?: never;
             responses: {
                 /** @description Default Response */
-                400: {
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
+                            /** @enum {number} */
+                            schemaVersion: 1;
+                            artifactId: string;
+                            sessionId: string;
+                            storageUserId: string;
+                            documentId: string;
+                            documentVersion: number;
+                            /** @enum {string} */
+                            readerType: "pdf" | "epub" | "html";
+                            settingsHash: string;
+                            planObjectKey: string;
+                            /** @enum {string} */
+                            format: "mp3" | "m4b";
+                            speed: number;
+                            objectKey: string;
+                            contentType: string;
+                            byteLength: number;
+                            dispositionFilename: string;
+                            sourceSessionId: string;
+                            sourcePlanObjectKey: string;
+                            /** @enum {string} */
+                            status: "ready";
+                            createdAt: number;
                         };
                     };
                 };
                 /** @description Default Response */
-                401: {
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -545,6 +565,145 @@ export interface paths {
                 };
                 /** @description Default Response */
                 503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback/cache/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        storageUserId: string;
+                        documentId: string;
+                        documentVersion?: number;
+                        settingsHash?: string;
+                        namespace: string | null;
+                        /** @enum {string} */
+                        readerType?: "pdf" | "epub" | "html";
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            deletedAudioObjects: number;
+                            deletedSidecarObjects: number;
+                            deletedPlanObjects: number;
+                            deletedExportObjects: number;
+                            invalidatedPlaybackSessions: number;
+                            invalidatedJobOperations: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/user-storage/cleanup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        storageUserId: string;
+                        namespace: string | null;
+                        documentIds: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            deletedObjects: number;
+                            deletedDocumentArtifacts: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };

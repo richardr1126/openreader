@@ -63,6 +63,10 @@ class MemoryStorage implements ArtifactStorage {
     this.objects.delete(key);
   }
 
+  async listPrefix(prefix: string): Promise<string[]> {
+    return [...this.objects.keys()].filter((key) => key.startsWith(prefix));
+  }
+
   async putObject(key: string, body: Buffer | Uint8Array): Promise<void> {
     this.objects.set(key, Buffer.from(body));
   }

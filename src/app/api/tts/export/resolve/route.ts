@@ -3,10 +3,8 @@ import {
   buildTtsPlaybackCanonicalSessionId,
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
-import { createTtsPlaybackToken } from '@openreader/tts/playback-token';
 import {
   ComputeWorkerClient,
-  getComputeWorkerPublicBaseUrl,
   isComputeWorkerAvailable,
 } from '@/lib/server/compute-worker/client';
 import { getRuntimeConfig } from '@/lib/server/admin/settings';
@@ -27,12 +25,6 @@ export const dynamic = 'force-dynamic';
 
 type ExportFormat = 'mp3' | 'm4b';
 
-function getPlaybackTokenSecret(): string {
-  const secret = process.env.TTS_PLAYBACK_TOKEN_SECRET?.trim();
-  if (!secret) throw new Error('TTS_PLAYBACK_TOKEN_SECRET is required for worker-owned playback');
-  return secret;
-}
-
 function normalizeSpeed(value: unknown): number {
   const speed = Number(value);
   if (!Number.isFinite(speed)) return 1;
@@ -41,28 +33,6 @@ function normalizeSpeed(value: unknown): number {
 
 function normalizeFormat(value: unknown): ExportFormat {
   return value === 'm4b' ? 'm4b' : 'mp3';
-}
-
-function buildWorkerExportDownloadUrl(input: {
-  artifactId: string;
-  sessionId: string;
-  userId: string;
-  storageUserId: string;
-  documentId: string;
-}): string {
-  const token = createTtsPlaybackToken({
-    sessionId: input.sessionId,
-    userId: input.userId,
-    storageUserId: input.storageUserId,
-    documentId: input.documentId,
-    exp: Date.now() + 5 * 60 * 1000,
-  }, getPlaybackTokenSecret());
-  const url = new URL(
-    `/v1/tts-playback/exports/${encodeURIComponent(input.artifactId)}/download`,
-    getComputeWorkerPublicBaseUrl(),
-  );
-  url.searchParams.set('token', token);
-  return url.toString();
 }
 
 export async function POST(request: NextRequest) {
@@ -211,13 +181,7 @@ export async function POST(request: NextRequest) {
     }
 
     const downloadUrl = artifact.artifact
-      ? buildWorkerExportDownloadUrl({
-        artifactId,
-        sessionId,
-        userId: scope.userId,
-        storageUserId: scope.storageUserId,
-        documentId: parsed.documentId,
-      })
+      ? `/api/tts/export/download?artifactId=${encodeURIComponent(artifactId)}`
       : null;
 
     return NextResponse.json({

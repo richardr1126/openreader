@@ -6,6 +6,9 @@ import { auth } from '@/lib/server/auth/auth';
 
 export const dynamic = 'force-dynamic';
 
+// This endpoint is intentionally self-host/desktop-only. Cloud document bytes
+// are delivered exclusively through authenticated presign-and-redirect routes.
+
 const HEADER_CONTROL_CHARS_REGEX = /[\u0000-\u001F\u007F]/g;
 
 function stripHeaderControlChars(value: string): string {

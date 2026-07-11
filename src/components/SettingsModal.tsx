@@ -388,7 +388,7 @@ export function SettingsModal({
         setStatusMessage(`Importing ${i + 1}/${selectedFiles.length}: ${doc.name}`);
         setProgress((i / Math.max(1, selectedFiles.length)) * 90);
 
-        const contentResponse = await fetch(`/api/documents/library/content?id=${encodeURIComponent(doc.id)}`, {
+        const contentResponse = await fetch(`/api/local-library/content?id=${encodeURIComponent(doc.id)}`, {
           signal: controller.signal,
         });
         if (!contentResponse.ok) {

@@ -1,4 +1,4 @@
-import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/client/api/documents';
+import { documentPreviewPresignUrl } from '@/lib/client/api/documents';
 import { evictCachedBlobPrefix, getCachedBlob, previewBlobCacheKey } from '@/lib/client/cache/blob-cache';
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
@@ -24,10 +24,7 @@ export function clearInMemoryDocumentPreviewCache(): void {
 }
 
 async function fetchPreviewSource(docId: string, signal?: AbortSignal): Promise<Response> {
-  const options = { signal, cache: 'no-store' as const };
-  const direct = await fetch(documentPreviewPresignUrl(docId), options).catch(() => null);
-  if (direct?.ok) return direct;
-  return fetch(documentPreviewFallbackUrl(docId), options);
+  return fetch(documentPreviewPresignUrl(docId), { signal, cache: 'no-store' });
 }
 
 export async function getPersistedDocumentPreviewUrl(

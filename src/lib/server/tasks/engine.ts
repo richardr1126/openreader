@@ -10,7 +10,10 @@ import type { TaskContext, TaskDef, TaskRegistry, TaskRunStatus } from './types'
 // A task still marked 'running' after this long is assumed abandoned (process
 // crashed mid-run) and may be reclaimed by the next tick.
 const STALE_RUNNING_MS = 60 * 60 * 1000;
-const DEFAULT_TASK_MAX_RUN_MS = 4 * 60 * 1000;
+// Next control-plane invocations must remain comfortably below Vercel's
+// request ceiling. Handlers must observe the supplied AbortSignal so a future
+// larger maintenance job is moved to the worker instead of stretching a route.
+const DEFAULT_TASK_MAX_RUN_MS = 45_000;
 
 /**
  * Seed a `scheduled_tasks` row for every registered task. Idempotent: existing

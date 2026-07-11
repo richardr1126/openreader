@@ -56,6 +56,8 @@ import { requireEnv } from '../infrastructure/config';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import type { TtsPlaybackStorage, TtsPlaybackSessionState, TtsPlaybackSegmentMetadata } from '../playback/storage';
 import { generationFloorForCursor } from '../playback/generation-window';
+import { clearTtsPlaybackArtifacts } from '../playback/cache-clear';
+import { cleanupUserStorageArtifacts } from '../storage/user-storage-cleanup';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -74,11 +76,14 @@ import {
   documentConversionResolutionSchema,
   ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackCursorUpdateSchema,
+  ttsPlaybackCacheClearSchema,
+  userStorageCleanupSchema,
   ttsPlaybackOperationCreateSchema,
   ttsPlaybackResetSchema,
   ttsPlaybackSessionResolutionSchema,
   ttsPlaybackSessionResolveSchema,
   ttsPlaybackExportArtifactCreateSchema,
+  ttsPlaybackExportArtifactMetadataSchema,
   ttsPlaybackExportArtifactResolveSchema,
   ttsPlaybackExportArtifactResolutionSchema,
   accountExportOperationCreateSchema,
@@ -850,52 +855,32 @@ export function registerComputeWorkerRoutes(input: {
     },
   }, async () => ({ ok: true, natsConnected: getNatsConnected() }));
 
-  app.get('/v1/tts-playback/exports/:artifactId/download', {
+  app.get('/v1/tts-playback/exports/:artifactId', {
     schema: {
-      security: [],
       params: {
         type: 'object',
         properties: { artifactId: { type: 'string' } },
         required: ['artifactId'],
       },
-      response: { 400: errorResponseSchema, 401: errorResponseSchema, 404: errorResponseSchema },
+      response: {
+        200: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
+        400: errorResponseSchema,
+        404: errorResponseSchema,
+      },
     },
   }, async (request, reply) => {
     const params = request.params as { artifactId?: string };
     const artifactId = params.artifactId?.trim() ?? '';
-    const token = (request.query as { token?: string }).token?.trim() ?? '';
-    if (!artifactId || !token) {
+    if (!artifactId) {
       reply.code(400);
-      return { error: 'Missing export artifact id or token' };
+      return { error: 'Missing export artifact id' };
     }
     const artifact = await readExportArtifactMetadata(artifactId);
     if (!artifact) {
       reply.code(404);
       return { error: 'Export artifact not found' };
     }
-    const secret = requireEnv('TTS_PLAYBACK_TOKEN_SECRET');
-    let verified: ReturnType<typeof verifyTtsPlaybackToken>;
-    try {
-      verified = verifyTtsPlaybackToken(token, secret);
-    } catch {
-      reply.code(401);
-      return { error: 'Invalid export download token' };
-    }
-    if (
-      verified.sessionId !== artifact.sessionId
-      || verified.storageUserId !== artifact.storageUserId
-      || verified.documentId !== artifact.documentId
-      || verified.exp <= Date.now()
-    ) {
-      reply.code(401);
-      return { error: 'Invalid export download token' };
-    }
-    const bytes = Buffer.from(await storage.readObject(artifact.objectKey));
-    reply.header('Content-Type', artifact.contentType);
-    reply.header('Content-Length', String(bytes.byteLength));
-    reply.header('Content-Disposition', `attachment; filename="${artifact.dispositionFilename}"`);
-    reply.header('Cache-Control', 'private, no-store');
-    return bytes;
+    return artifact;
   });
 
   app.post('/v1/tts-playback/sessions/resolve', {
@@ -1120,6 +1105,82 @@ export function registerComputeWorkerRoutes(input: {
       invalidatedSidecarCacheScopes,
       invalidatedJobOperations,
     };
+  });
+
+  app.post('/v1/tts-playback/cache/clear', {
+    schema: {
+      body: jsonSchema(ttsPlaybackCacheClearSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            deletedAudioObjects: { type: 'number' },
+            deletedSidecarObjects: { type: 'number' },
+            deletedPlanObjects: { type: 'number' },
+            deletedExportObjects: { type: 'number' },
+            invalidatedPlaybackSessions: { type: 'number' },
+            invalidatedJobOperations: { type: 'number' },
+          },
+          required: [
+            'deletedAudioObjects',
+            'deletedSidecarObjects',
+            'deletedPlanObjects',
+            'deletedExportObjects',
+            'invalidatedPlaybackSessions',
+            'invalidatedJobOperations',
+          ],
+        },
+        400: errorResponseSchema,
+        503: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackCacheClearSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    if (!playbackStorage) {
+      reply.code(503);
+      return { error: 'TTS playback storage is unavailable' };
+    }
+
+    const { namespace, readerType, ...resetScope } = parsed.data;
+    const now = Date.now();
+    await playbackStorage.artifacts.incrementScopeEpoch(resetScope, now);
+    const invalidatedPlaybackSessions = await playbackStorage.sessions.cancelSessionsForScope(resetScope, now);
+    invalidateCachedSidecarsForScope(resetScope);
+    const invalidatedJobOperations = await invalidateTtsJobOperationsForScope(resetScope, now);
+    const deleted = await clearTtsPlaybackArtifacts({
+      storage,
+      s3Prefix,
+      scope: { ...resetScope, namespace, ...(readerType ? { readerType } : {}) },
+    });
+    return { ...deleted, invalidatedPlaybackSessions, invalidatedJobOperations };
+  });
+
+  app.post('/v1/user-storage/cleanup', {
+    schema: {
+      body: jsonSchema(userStorageCleanupSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            deletedObjects: { type: 'number' },
+            deletedDocumentArtifacts: { type: 'number' },
+          },
+          required: ['deletedObjects', 'deletedDocumentArtifacts'],
+        },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = userStorageCleanupSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    return cleanupUserStorageArtifacts({ storage, s3Prefix, ...parsed.data });
   });
 
   app.get('/v1/tts-playback/sessions/:sessionId/audio', {

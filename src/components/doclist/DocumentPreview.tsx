@@ -2,7 +2,6 @@ import { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  documentPreviewFallbackUrl,
   getDocumentContentSnippet,
   getDocumentPreviewStatus,
   subscribeDocumentPreviewEvents,
@@ -127,9 +126,8 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
         return;
       }
 
-      const fallbackUrl = status.fallbackUrl || documentPreviewFallbackUrl(doc.id);
-      setInMemoryDocumentPreviewUrl(previewKey, fallbackUrl);
-      setImagePreview(fallbackUrl);
+      setInMemoryDocumentPreviewUrl(previewKey, status.presignUrl);
+      setImagePreview(status.presignUrl);
       setTextPreview(null);
     };
 
@@ -295,15 +293,13 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             onError={() => {
               if (!imagePreview) return;
               setIsImageReady(false);
-              const fallback = documentPreviewFallbackUrl(doc.id);
-              if (imagePreview === fallback) return;
-              setInMemoryDocumentPreviewUrl(previewKey, fallback);
-              setImagePreview(fallback);
               void primeDocumentPreviewCache(
                 doc.id,
                 Number(doc.lastModified),
                 previewKey,
-              ).catch(() => { });
+              ).then((url) => {
+                if (url) setImagePreview(url);
+              }).catch(() => { });
             }}
           />
           {isImageReady ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/15" /> : null}

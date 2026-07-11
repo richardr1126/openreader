@@ -27,7 +27,6 @@ export const createTtsPlaybackSession = async (
   sessionId: string;
   operation: unknown;
   audioUrl: string;
-  downloadUrl: string;
   timelineUrl: string;
   eventsUrl: string;
   seekLayoutUrl: string;

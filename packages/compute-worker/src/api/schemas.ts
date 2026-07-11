@@ -155,6 +155,17 @@ export const ttsPlaybackSessionResolveSchema = z.object({
   purpose: z.enum(['live', 'export-document']),
 }).strict();
 
+export const ttsPlaybackCacheClearSchema = ttsPlaybackResetSchema.extend({
+  namespace: z.string().trim().min(1).max(128).nullable(),
+  readerType: z.enum(['pdf', 'epub', 'html']).optional(),
+}).strict();
+
+export const userStorageCleanupSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  namespace: z.string().trim().min(1).max(128).nullable(),
+  documentIds: z.array(z.string().trim().regex(/^[a-f0-9]{64}$/i)).max(100),
+}).strict();
+
 export const ttsPlaybackExportFormatSchema = z.enum(['mp3', 'm4b']);
 
 export const ttsPlaybackExportArtifactCreateSchema = z.object({

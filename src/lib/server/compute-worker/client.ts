@@ -152,6 +152,15 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/exports/resolve', input);
   }
 
+  async getTtsPlaybackExportArtifact(artifactId: string): Promise<NonNullable<TtsPlaybackExportArtifactResolution['artifact']> | null> {
+    try {
+      return await this.requestJson('GET', `/v1/tts-playback/exports/${encodeURIComponent(artifactId)}`);
+    } catch (error) {
+      if (error instanceof WorkerHttpError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {
     try {
       return await this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}`);
@@ -191,6 +200,31 @@ export class ComputeWorkerClient {
     settingsHash?: string;
   }): Promise<TtsPlaybackResetResult> {
     return this.requestJson('POST', '/v1/tts-playback/cache/reset', input);
+  }
+
+  clearTtsPlaybackScope(input: {
+    storageUserId: string;
+    documentId: string;
+    documentVersion?: number;
+    readerType?: 'pdf' | 'epub' | 'html';
+    namespace: string | null;
+  }): Promise<{
+    deletedAudioObjects: number;
+    deletedSidecarObjects: number;
+    deletedPlanObjects: number;
+    deletedExportObjects: number;
+    invalidatedPlaybackSessions: number;
+    invalidatedJobOperations: number;
+  }> {
+    return this.requestJson('POST', '/v1/tts-playback/cache/clear', input);
+  }
+
+  cleanupUserStorage(input: {
+    storageUserId: string;
+    namespace: string | null;
+    documentIds: string[];
+  }): Promise<{ deletedObjects: number; deletedDocumentArtifacts: number }> {
+    return this.requestJson('POST', '/v1/user-storage/cleanup', input);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {

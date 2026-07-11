@@ -10,6 +10,10 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
 
+// This endpoint is intentionally self-host/desktop-only. It reads configured
+// local filesystem mounts and must never be exposed as part of cloud document
+// storage, which is object-storage-only.
+
 type LibraryDocument = {
   id: string;
   name: string;

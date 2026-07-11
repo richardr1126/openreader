@@ -2,6 +2,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -11,6 +12,7 @@ export interface ArtifactStorage {
   readObject(key: string): Promise<ArrayBuffer>;
   objectExists(key: string): Promise<boolean>;
   deleteObject(key: string): Promise<void>;
+  listPrefix(prefix: string): Promise<string[]>;
   putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown): Promise<string>;
 }
@@ -112,6 +114,23 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
         Bucket: config.bucket,
         Key: safeKey(key),
       }));
+    },
+    async listPrefix(prefix) {
+      const safePrefix = safeKey(prefix);
+      const keys: string[] = [];
+      let continuationToken: string | undefined;
+      do {
+        const response = await config.client.send(new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: safePrefix,
+          ContinuationToken: continuationToken,
+        }));
+        for (const item of response.Contents ?? []) {
+          if (typeof item.Key === 'string') keys.push(item.Key);
+        }
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
+      return keys;
     },
     async putObject(key, body, contentType) {
       await config.client.send(new PutObjectCommand({

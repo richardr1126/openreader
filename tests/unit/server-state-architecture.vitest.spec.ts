@@ -25,6 +25,15 @@ function collectSourceFiles(dir: string): string[] {
   return files;
 }
 
+function collectNextRoutePaths(): string[] {
+  return collectSourceFiles(path.join(srcRoot, 'app/api'))
+    .filter((file) => path.basename(file) === 'route.ts')
+    .map((file) => `/api${path.dirname(path.relative(path.join(srcRoot, 'app/api'), file)) === '.'
+      ? ''
+      : `/${path.dirname(path.relative(path.join(srcRoot, 'app/api'), file)).split(path.sep).join('/')}`}`)
+    .sort();
+}
+
 describe('server-state architecture', () => {
   const sourceFiles = collectSourceFiles(srcRoot);
 
@@ -106,7 +115,8 @@ describe('server-state architecture', () => {
     expect(modal).toContain('subscribeTtsExportGenerationEvents');
     expect(modal).toContain('subscribeTtsExportArtifactEvents');
     expect(modal).toContain('snapshot.completedCount');
-    expect(modal).toContain('withDownloadOptions(downloadUrl, localAudioPlayerSpeed, exportFormat)');
+    expect(modal).toContain('const urlToDownload = downloadUrl;');
+    expect(modal).not.toContain('withDownloadOptions');
     expect(modal).toContain("type ExportFormat = 'mp3' | 'm4b'");
     expect(modal).toContain('Audiobook export format');
     expect(modal).toContain('setAudioPlayerSpeedAndRestart');
@@ -162,7 +172,7 @@ describe('server-state architecture', () => {
       'GET /health/ready',
       'GET /v1/operations/:opId',
       'GET /v1/operations/:opId/events',
-      'GET /v1/tts-playback/exports/:artifactId/download',
+      'GET /v1/tts-playback/exports/:artifactId',
       'GET /v1/tts-playback/sessions/:sessionId',
       'GET /v1/tts-playback/sessions/:sessionId/audio',
       'GET /v1/tts-playback/sessions/:sessionId/segments',
@@ -175,13 +185,71 @@ describe('server-state architecture', () => {
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
       'POST /v1/tts-playback/cache/reset',
+      'POST /v1/tts-playback/cache/clear',
       'POST /v1/tts-playback/exports/jobs',
       'POST /v1/tts-playback/exports/resolve',
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/resolve',
+      'POST /v1/user-storage/cleanup',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
+  });
+
+  test('keeps the Next API surface on the hard-cut route map', () => {
+    expect(collectNextRoutePaths()).toEqual([
+      '/api/account/delete',
+      '/api/admin/providers',
+      '/api/admin/providers/[id]',
+      '/api/admin/settings',
+      '/api/admin/tasks',
+      '/api/admin/tasks/[key]',
+      '/api/admin/tasks/[key]/run',
+      '/api/admin/tasks/tick',
+      '/api/auth/[...all]',
+      '/api/documents',
+      '/api/documents/[id]/opened',
+      '/api/documents/[id]/parsed',
+      '/api/documents/[id]/parsed/download',
+      '/api/documents/[id]/parsed/events',
+      '/api/documents/[id]/settings',
+      '/api/documents/blob/get/presign',
+      '/api/documents/blob/preview/ensure',
+      '/api/documents/blob/preview/events',
+      '/api/documents/blob/preview/presign',
+      '/api/documents/blob/upload/finalize',
+      '/api/documents/blob/upload/presign',
+      '/api/documents/folders',
+      '/api/documents/import-url',
+      '/api/folders',
+      '/api/folders/[id]',
+      '/api/local-library',
+      '/api/local-library/content',
+      '/api/rate-limit/status',
+      '/api/tts/export/download',
+      '/api/tts/export/events',
+      '/api/tts/export/resolve',
+      '/api/tts/playback/plans',
+      '/api/tts/playback/plans/[planId]/plan',
+      '/api/tts/playback/plans/[planId]/seek-layout',
+      '/api/tts/segments/clear',
+      '/api/tts/shared-providers',
+      '/api/tts/stream/[sessionId]/cursor',
+      '/api/tts/stream/[sessionId]/events',
+      '/api/tts/stream/[sessionId]/timeline',
+      '/api/tts/stream/sessions',
+      '/api/tts/voices',
+      '/api/user/claim',
+      '/api/user/export',
+      '/api/user/export/download',
+      '/api/user/export/events',
+      '/api/user/state/changelog/version-check',
+      '/api/user/state/onboarding',
+      '/api/user/state/preferences',
+      '/api/user/state/progress',
+    ]);
+    expect(existsSync(path.join(root, 'src/app/api/documents/library/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/documents/library/content/route.ts'))).toBe(false);
   });
 
   test('keeps account export archive assembly worker-owned', () => {
@@ -235,8 +303,8 @@ describe('server-state architecture', () => {
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const streamTimelineRoute = source('src/app/api/tts/stream/[sessionId]/timeline/route.ts');
-    const streamAudioRoute = source('src/app/api/tts/stream/[sessionId]/audio/route.ts');
     const exportResolveRoute = source('src/app/api/tts/export/resolve/route.ts');
+    const exportDownloadRoute = source('src/app/api/tts/export/download/route.ts');
     const exportEventsRoute = source('src/app/api/tts/export/events/route.ts');
     const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
     const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
@@ -298,19 +366,15 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('setPlaybackSegments');
     expect(context).not.toContain('setSentences');
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
-    expect(streamSessionRoute).toContain('downloadUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/audio`');
-    expect(streamAudioRoute).toContain('resolveTtsPlaybackSession(request, sessionId)');
-    expect(streamAudioRoute).toContain('Content-Disposition');
-    expect(streamAudioRoute).toContain('readDownloadSpeed(request)');
-    expect(streamAudioRoute).toContain('readDownloadFormat(request)');
-    expect(streamAudioRoute).toContain("request.nextUrl.searchParams.get('format') === 'm4b'");
-    expect(streamAudioRoute).toContain('worker export artifacts');
-    expect(streamAudioRoute).not.toContain('spawn(');
-    expect(streamAudioRoute).not.toContain('ffmpeg');
+    expect(streamSessionRoute).not.toContain('downloadUrl');
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/audio/route.ts'))).toBe(false);
     expect(clientTts).toContain("fetch('/api/tts/export/resolve'");
     expect(exportResolveRoute).toContain('buildTtsPlaybackExportArtifactId');
     expect(exportResolveRoute).toContain('createTtsPlaybackExportArtifactOperation');
-    expect(exportResolveRoute).toContain('buildWorkerExportDownloadUrl');
+    expect(exportResolveRoute).toContain('/api/tts/export/download?artifactId=');
+    expect(exportDownloadRoute).toContain('getTtsPlaybackExportArtifact');
+    expect(exportDownloadRoute).toContain('getSignedUrl');
+    expect(exportDownloadRoute).toContain('NextResponse.redirect');
     expect(exportEventsRoute).toContain('openOperationEvents(opId');
     expect(workerHandlers).toContain('runTtsPlaybackExportArtifact');
     expect(workerHandlers).toContain('buildAtempoFilter');
@@ -324,7 +388,12 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/:sessionId/audio");
     expect(workerRoutes).toContain("/v1/tts-playback/exports/jobs");
     expect(workerRoutes).toContain("/v1/tts-playback/exports/resolve");
-    expect(workerRoutes).toContain("/v1/tts-playback/exports/:artifactId/download");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/:artifactId");
+    expect(workerRoutes).not.toContain("/v1/tts-playback/exports/:artifactId/download");
+    expect(source('src/app/api/tts/segments/clear/route.ts')).toContain('clearTtsPlaybackScope');
+    expect(source('src/app/api/tts/segments/clear/route.ts')).not.toContain('deleteTtsSegmentPrefix');
+    expect(source('src/lib/server/user/data-cleanup.ts')).toContain('cleanupUserStorage');
+    expect(source('src/lib/server/user/data-cleanup.ts')).not.toContain('deleteTtsSegmentPrefix');
     expect(workerRoutes).toContain("/v1/tts-playback/plans/jobs");
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");
     expect(workerRoutes).not.toContain("/v1/tts-playback/:sessionId/audio");

@@ -84,24 +84,6 @@ async function finalizeUploadedSources(
   throw new Error(failed?.error || data?.error || 'Failed to finalize uploaded documents');
 }
 
-async function uploadDocumentSourceViaProxy(
-  source: UploadSource,
-  token: string,
-  options?: UploadOptions,
-): Promise<void> {
-  const res = await fetch(`/api/documents/blob/upload/fallback?token=${encodeURIComponent(token)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': source.contentType || 'application/octet-stream' },
-    body: toUploadBody(source.body),
-    signal: options?.signal,
-  });
-
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || `Proxy upload failed (status ${res.status})`);
-  }
-}
-
 function documentTypeForName(name: string): DocumentType {
   const lower = name.toLowerCase();
   if (lower.endsWith('.pdf')) return 'pdf';
@@ -220,7 +202,20 @@ export async function getParsedPdfDocument(
     throw new Error(data?.error || 'Failed to load parsed PDF');
   }
 
-  return (await res.json()) as ParsedPdfDocument;
+  const snapshot = (await res.json().catch(() => null)) as { parseStatus?: string; error?: string } | null;
+  if (snapshot?.parseStatus !== 'ready') {
+    throw new Error(snapshot?.error || 'Parsed PDF is not ready');
+  }
+
+  const artifactRes = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed/download`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+  if (!artifactRes.ok) {
+    const data = (await artifactRes.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || 'Failed to load parsed PDF artifact');
+  }
+  return (await artifactRes.json()) as ParsedPdfDocument;
 }
 
 export function subscribeParsedPdfDocumentEvents(
@@ -423,7 +418,6 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
       throw new Error(`Missing presigned upload for document ${source.name}`);
     }
 
-    let putError: unknown = null;
     try {
       const putRes = await fetch(upload.url, {
         method: 'PUT',
@@ -436,18 +430,11 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
       if (putRes.ok || putRes.status === 412) {
         continue;
       }
-      putError = new Error(`Direct upload failed with status ${putRes.status}`);
+      throw new Error(`Direct upload failed with status ${putRes.status}`);
     } catch (error) {
       if (options?.signal?.aborted) throw error;
-      putError = error;
-    }
-
-    try {
-      await uploadDocumentSourceViaProxy(source, upload.token, options);
-    } catch (proxyError) {
-      const directMessage = putError instanceof Error ? putError.message : 'unknown direct upload error';
-      const proxyMessage = proxyError instanceof Error ? proxyError.message : 'unknown proxy upload error';
-      throw new Error(`Failed to upload document ${source.name}: ${directMessage}; fallback failed: ${proxyMessage}`);
+      const message = error instanceof Error ? error.message : 'unknown direct upload error';
+      throw new Error(`Failed to upload document ${source.name}: ${message}`);
     }
   }
 
@@ -504,73 +491,41 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
 }
 
 export async function fetchDocumentContentResponse(id: string, options?: { signal?: AbortSignal }): Promise<Response> {
-  const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(id)}`;
-
-  const fetchFallback = async (): Promise<Response> => {
-    const res = await fetch(fallbackUrl, { signal: options?.signal });
-    if (!res.ok) {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error || `Failed to download document (status ${res.status})`);
-      }
-      throw new Error(`Failed to download document (status ${res.status})`);
+  const res = await fetch(`/api/documents/blob/get/presign?id=${encodeURIComponent(id)}`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(data?.error || `Failed to download document (status ${res.status})`);
     }
-    return res;
-  };
-
-  try {
-    const directRes = await fetch(`/api/documents/blob/get/presign?id=${encodeURIComponent(id)}`, {
-      signal: options?.signal,
-      cache: 'no-store',
-    });
-    if (!directRes.ok) {
-      const contentType = directRes.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = (await directRes.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error || `Failed to download document (status ${directRes.status})`);
-      }
-      throw new Error(`Failed to download document (status ${directRes.status})`);
-    }
-    return directRes;
-  } catch (error) {
-    if (options?.signal?.aborted) throw error;
-    return fetchFallback();
+    throw new Error(`Failed to download document (status ${res.status})`);
   }
+  return res;
 }
 
 export async function getDocumentContentSnippet(
   id: string,
   options?: { maxChars?: number; maxBytes?: number; signal?: AbortSignal },
 ): Promise<string> {
-  const params = new URLSearchParams();
-  params.set('id', id);
-  params.set('snippet', '1');
-  if (typeof options?.maxChars === 'number') params.set('maxChars', String(options.maxChars));
-  if (typeof options?.maxBytes === 'number') params.set('maxBytes', String(options.maxBytes));
-
-  const res = await fetch(`/api/documents/blob/preview/fallback?${params.toString()}`, { signal: options?.signal });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || `Failed to load content snippet (status ${res.status})`);
-  }
-
-  const data = (await res.json()) as { snippet?: string };
-  return data?.snippet || '';
+  const maxBytes = Math.max(1, Math.floor(options?.maxBytes ?? 128 * 1024));
+  const maxChars = Math.max(1, Math.floor(options?.maxChars ?? 1600));
+  const bytes = new Uint8Array(await downloadDocumentContent(id, { signal: options?.signal }));
+  return new TextDecoder().decode(bytes.slice(0, maxBytes)).slice(0, maxChars);
 }
 
 export type DocumentPreviewPending = {
   kind: 'pending';
   status: 'queued' | 'processing' | 'failed';
   opId: string | null;
-  fallbackUrl: string;
   presignUrl: string;
   directUrl?: string;
 };
 
 export type DocumentPreviewReady = {
   kind: 'ready';
-  fallbackUrl: string;
   presignUrl: string;
   directUrl?: string;
   previewVersion: string;
@@ -584,10 +539,6 @@ function documentPreviewEnsureUrl(id: string): string {
 
 export function documentPreviewPresignUrl(id: string): string {
   return `/api/documents/blob/preview/presign?id=${encodeURIComponent(id)}`;
-}
-
-export function documentPreviewFallbackUrl(id: string): string {
-  return `/api/documents/blob/preview/fallback?id=${encodeURIComponent(id)}`;
 }
 
 function documentPreviewEventsUrl(id: string, opId: string): string {
@@ -610,7 +561,6 @@ export async function getDocumentPreviewStatus(
     const data = (await res.json().catch(() => null)) as {
       status?: 'queued' | 'processing' | 'failed';
       opId?: string | null;
-      fallbackUrl?: string;
       presignUrl?: string;
       directUrl?: string;
     } | null;
@@ -618,7 +568,6 @@ export async function getDocumentPreviewStatus(
       kind: 'pending',
       status: data?.status ?? 'queued',
       opId: data?.opId || null,
-      fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
     };
@@ -626,14 +575,12 @@ export async function getDocumentPreviewStatus(
 
   if (res.ok) {
     const data = (await res.json().catch(() => null)) as {
-      fallbackUrl?: string;
       presignUrl?: string;
       directUrl?: string;
       previewVersion?: string;
     } | null;
     return {
       kind: 'ready',
-      fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
       previewVersion: data?.previewVersion || '',
@@ -653,7 +600,6 @@ export async function getDocumentPreviewStatus(
         kind: 'pending',
         status: 'failed',
         opId: null,
-        fallbackUrl: documentPreviewFallbackUrl(id),
         presignUrl: documentPreviewPresignUrl(id),
       };
     }

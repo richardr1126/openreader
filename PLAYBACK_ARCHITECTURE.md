@@ -94,33 +94,34 @@ patterns require it:
 - Auth, account, admin, user-state, document metadata, folders, runtime config,
   TTS provider metadata, and rate-limit status are ordinary short JSON routes and
   stay in Next.
-- Document upload/download/preview primary paths should use S3 presigned URLs.
-  Fallback proxy routes may remain as degraded compatibility paths, but they
-  must not become the primary data plane because they buffer request or object
-  bodies inside Vercel functions.
+- Document upload/download/preview paths must use S3 presigned URLs. Do not keep
+  fallback proxy routes for old browsers, local object reads, or degraded object
+  storage behavior; storage is required and byte proxy fallbacks buffer request
+  or object bodies inside Vercel functions.
 - PDF parse and TTS playback generation are worker-owned jobs. Next creates or
   resolves deterministic jobs, returns short snapshots, and proxies operation
   SSE only as a bounded reconnectable stream. Completed parsed PDF artifacts
-  should be delivered primarily through signed object URLs; same-origin parsed
-  JSON byte proxying is compatibility/small-artifact behavior, not the primary
-  data plane.
+  should be delivered through signed object URLs; same-origin parsed JSON byte
+  proxying is route ownership debt to remove.
 - TTS live playback audio should use the signed Railway worker URL directly.
-  Same-origin Next audio routes are narrow compatibility/control-plane bridges;
-  normal audiobook downloads use worker-owned export artifacts.
+  Same-origin Next audio byte proxy routes are route ownership debt to remove;
+  normal audiobook downloads use worker-owned export artifacts plus same-origin
+  control-plane authorization and object-storage presigning.
 - Scheduled tasks may remain in Next while they are bounded maintenance work
   below Vercel's limit. They must not grow into parse/TTS/render/transcode/export
   jobs.
 
 Current known ownership debt:
 
-- `/api/tts/stream/[sessionId]/audio` still exists as a narrow same-origin MP3
-  compatibility proxy for authenticated playback/download cases, but it does
-  not own audiobook speed transcodes or M4B packaging. Export variants are
-  worker-owned artifacts.
+- `/api/tts/stream/[sessionId]/audio` still exists as a same-origin MP3 byte
+  proxy for authenticated playback/download cases. It does not own audiobook
+  speed transcodes or M4B packaging, and it should be removed once callers use
+  worker playback URLs or export artifact download routes.
 - `/api/documents/[id]/parsed` still can return completed parsed PDF JSON bytes
   through Next instead of making signed object delivery the primary artifact
   path.
-- User data export streams a ZIP archive and document blobs from Next.
+- Document blob upload/download/preview fallback proxy routes still exist and
+  should be removed, with callers moved to presign-only flows.
 
 ---
 
@@ -344,7 +345,7 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 11 Idempotent playback jobs | Done | Live and export sessions are deterministic and separate; both share per-ordinal segment cache without sharing cursor/session state. |
 | 12 Compute worker API hard cut | Done | Worker routes use the finalized resource/job shape with no old aliases. |
 | 13 Audiobook export reconnect + worker-owned artifacts | Done | Export resolve now reconnects deterministic generation/artifact operations; speed transcode, M4B packaging, chapter metadata, artifact storage, and download serving are worker-owned. |
-| 14 Worker-owned document preview jobs | Done | Preview ensure/presign/fallback now resolve/create worker preview jobs; PDF first-page rendering and EPUB cover extraction are worker-owned. |
+| 14 Worker-owned document preview jobs | Done | Preview ensure/presign now resolve/create worker preview jobs; PDF first-page rendering and EPUB cover extraction are worker-owned. Any preview fallback byte proxy is step 17 cleanup debt. |
 | 15 Worker-owned DOCX conversion | Done | DOCX upload finalize resolves/creates deterministic worker conversion jobs; LibreOffice runs only in the worker, and Next registers completed PDF artifacts through a short finalize call. |
 | 16 Worker-owned account export artifacts | Done | Next writes bounded manifests and returns short snapshots; the worker builds durable ZIP artifacts; Next authorizes downloads and redirects to signed storage URLs. |
 
@@ -635,9 +636,9 @@ Target ownership:
 - NATS/JetStream owns preview job queueing, operation state, progress, and retry
   state. S3 owns source blobs, preview images, and preview metadata. SQL remains
   a Next-owned document metadata source only.
-- Fallback preview proxy routes remain only as degraded compatibility paths for
-  reading completed preview bytes and text snippets; they do not claim or render
-  new previews in request.
+- Preview delivery must use presigned object URLs. Any remaining preview byte
+  proxy fallback route is cleanup debt; it must not render previews and should
+  be removed in the final route audit.
 
 Implemented:
 
@@ -650,17 +651,17 @@ Implemented:
    worker does not query SQL for document rows.
 4. PDF first-page rendering and EPUB cover extraction live in the compute
    worker.
-5. Next preview ensure/presign/fallback routes now resolve/create worker jobs
-   and return pending/failed/ready snapshots with the current worker `opId`;
-   they do not render previews.
+5. Next preview ensure/presign routes now resolve/create worker jobs and return
+   pending/failed/ready snapshots with the current worker `opId`; they do not
+   render previews.
 6. Thumbnail readiness uses a bounded authenticated Next SSE proxy over the
    existing worker `/v1/operations/:opId/events` primitive. The proxy validates
    document ownership and `document_preview` subject scope before forwarding.
 7. The `DocumentPreview` client removed the `retryAfterMs`/timer loop. It does
    one ensure call, subscribes to operation SSE when pending, and performs one
    final ensure/presign/cache-prime fetch after a succeeded snapshot.
-8. Completed preview delivery still prefers presigned S3 URLs, with the fallback
-   proxy limited to compatibility reads.
+8. Completed preview delivery uses presigned S3 URLs. Any fallback byte proxy
+   that still exists is final cleanup debt, not part of the target architecture.
 9. Regression coverage pins the no-polling component path, pending `opId`
    contract, preview SSE proxy authorization, worker route surface, worker-loop
    handling, and compute-worker SQL boundary.
@@ -803,90 +804,217 @@ unit command exercised the full configured unit suite.
 
 ---
 
-## Final Steps
+## Completed Work (continued)
 
-### 17. Route Ownership and Security Audit
+### 17. Final Route Hard Cut and Dead-Code Removal
 
-After the worker ownership steps are verified, the last pass is a route-by-route
-ownership audit. Storage is required in this architecture; do not add
-metadata-only, local filesystem, or ad hoc ZIP fallbacks.
+Status: complete. This is an implementation and cleanup step. The goal is to
+leave a clean route surface with no compatibility shims, no old-path aliases, no
+byte proxy fallbacks, and no dead code kept for "just in case" behavior. Storage
+is required. The list below is a minimum scope, not a ceiling: remove any
+additional obsolete routes, helpers, callers, tests, generated types, docs,
+config, env flags, scripts, or storage cleanup paths discovered while doing the
+work, as long as they are part of the same ownership hard cut.
 
-- Run a final repo scan for runtime references to dropped symbols and routes:
-  `ttsPlaybackSessions`, `ttsSegmentEntries`, `ttsSegmentVariants`,
-  `audiobookChapters`, `/api/audiobook`, `cleanup-legacy-tts-playback-cache`,
-  `migrate-fs`, `openreader-migrate-storage`, Next-side `ffmpeg` execution in
-  playback audio routes, request-path `convertDocxBufferToPdfBuffer` usage, and
-  request-path `ensureDocumentPreview` generation. Also verify completed parsed
-  PDF artifacts are primarily delivered by signed object URL rather than a
-  Vercel byte proxy. Migration history, frozen versioned docs, and decommission
-  docs are allowed exceptions.
-- Re-scan Next API route ownership against the rule in this document: Vercel
-  routes may authenticate, authorize, presign, enqueue, resolve, redirect, and
-  return short JSON snapshots; Railway worker owns long-running stream,
-  provider/model, render, parse, transcode, convert, archive, and large object
-  scan work.
-- For browser downloads, prefer a same-origin Next control-plane route that
-  verifies the app session and redirects to a short-lived object-storage
-  presigned URL. Avoid browser-to-worker byte downloads for account data and
-  other user exports. Do not add ZIP download proxies unless object storage is
-  unavailable by design, which is not true for the hard-cut architecture.
-- Remove or transition Next routes that can exceed five minutes, hold large
-  response bodies open, perform provider calls, run document conversion,
-  generate previews, transcode audio, assemble archives, or scan broad object
-  prefixes. Keep only bounded control-plane routes in Next.
-- Rename routes that hide ownership. Route names should distinguish control
-  plane actions (`/resolve`, `/download`, `/events`) from worker-owned jobs and
-  object delivery; compatibility proxies should include explicit comments and
-  regression coverage explaining why they remain.
-- Re-scan every worker-owned operation integration for Next-side polling. A
-  pending worker operation exposed to the browser must return an `opId` and use
-  a same-origin, domain-scoped Next SSE proxy to the generic worker
-  `/v1/operations/:opId/events` stream. The proxy must validate authenticated
-  ownership/scope before forwarding. Do not add `retryAfterMs` loops, hidden
-  timers, or worker operation-specific event primitives.
-- Re-scan worker SQL boundaries. New worker-owned preview, conversion, export,
-  and audiobook artifact code must not import database/schema modules or query
-  app SQL tables. The only allowed current SQL exception is read-only
-  `admin_providers` credential resolution for TTS provider keys.
+Target route contract:
 
-Initial audit findings after step 16:
+- Next owns bounded control-plane routes only: authenticate, authorize, validate
+  scope, enqueue/resolve worker jobs, proxy authorized SSE, finalize SQL
+  metadata, return short JSON snapshots, and redirect to short-lived
+  object-storage presigned URLs.
+- Worker owns long-running and heavy data-plane work: provider/model calls,
+  parsing, rendering, conversion, audio generation, transcoding, archive
+  assembly, broad object scans, and durable artifact writes.
+- Browser downloads go through same-origin Next control-plane authorization and
+  then redirect to object storage. Browser downloads must not hit worker
+  byte-serving routes and must not stream large bodies through Next.
+- Renames are hard cuts. When a route is renamed or re-shaped, update every
+  caller and delete the old route, helper code, tests, generated types, and docs.
 
-- Keep `/api/user/export`, `/api/user/export/events`, and
-  `/api/user/export/download` as bounded Next control-plane routes. Do not
-  reintroduce `GET /v1/account-exports/:artifactId/download`; account export
-  browser downloads must go through app-session auth and object-storage
-  presigning.
-- Revisit `/api/tts/export/resolve` and
-  `GET /v1/tts-playback/exports/:artifactId/download`. Audiobook exports still
-  use browser-to-worker signed download URLs. They may be acceptable for
-  playback-specific artifacts, but the safer and more consistent route shape is
-  a same-origin Next `/api/tts/export/download` route that resolves ownership
-  and redirects to a storage presigned URL.
-- Keep `/api/tts/stream/[sessionId]/audio` only as a documented compatibility
-  proxy for the canonical 1x MP3 stream. It holds a large response body open and
-  should not grow new export formats or transcode behavior.
-- Revisit byte fallback routes:
-  `/api/documents/blob/get/fallback`,
-  `/api/documents/blob/upload/fallback`, and
-  `/api/documents/blob/preview/fallback`. They are marked degraded fallback
-  paths and have presign-first siblings, but they still proxy large objects
-  through Next. Step 17 should decide whether to remove them, gate them harder,
-  or rename them to make the degraded compatibility purpose explicit.
-- Keep `/api/documents/blob/preview/ensure` as control plane. Despite the
-  helper name, `ensureDocumentPreview` resolves/creates worker preview jobs and
-  does not render previews in Next.
-- Revisit `/api/documents/[id]/parsed` GET. It still returns completed parsed
-  JSON bytes through Next. If parsed artifacts can be large enough to matter,
-  add a presign/redirect route and reserve this endpoint for short snapshots.
-- Review `/api/documents/library/content` separately from cloud storage routes.
-  It reads local library files into memory and returns bytes from Next; that may
-  be desktop/self-host-only behavior, but the route should be clearly scoped as
-  such or moved behind a more explicit local-library namespace.
-- Review 300-second admin/maintenance routes
-  `/api/admin/tasks/[key]/run`, `/api/admin/tasks/tick`, account deletion, and
-  TTS segment clear for broad storage scans/deletes. Prefer queueing worker or
-  maintenance tasks when cleanup can exceed a short control-plane request.
-- Run final validation from a clean local state: `pnpm migrate`, `pnpm test:unit`,
-  `pnpm exec tsc --noEmit`, and a `pnpm dev` startup smoke test.
-- Optionally run the highest-value Playwright smoke path for upload/open/playback
-  and audiobook MP3 export if the local worker/TTS provider is available.
+Implementation work:
+
+1. Replace audiobook export worker downloads with a same-origin control-plane
+   route:
+   - Add `/api/tts/export/download`.
+   - The route authenticates the user, resolves export artifact ownership, and
+     redirects to a short-lived object-storage presigned URL.
+   - Update `/api/tts/export/resolve` and the export modal to use the new
+     download route.
+   - Remove `GET /v1/tts-playback/exports/:artifactId/download` if no internal
+     worker owner remains, plus its token/download helpers and OpenAPI/generated
+     client surface.
+2. Remove the live-session MP3 byte proxy:
+   - Delete `/api/tts/stream/[sessionId]/audio`.
+   - Stop returning `downloadUrl` from `/api/tts/stream/sessions`.
+   - Keep live playback on the signed worker `audioUrl`.
+   - Route downloadable audio through audiobook export artifacts instead.
+3. Remove document blob byte fallback routes:
+   - Delete `/api/documents/blob/get/fallback`.
+   - Delete `/api/documents/blob/upload/fallback`.
+   - Delete `/api/documents/blob/preview/fallback`.
+   - Update presign/ensure clients so failure is explicit instead of redirecting
+     into a proxy fallback.
+4. Split parsed PDF delivery into control plane plus object delivery:
+   - Keep `/api/documents/[id]/parsed` for short parse snapshots and job
+     creation/resolution only.
+   - Add a presigned object delivery path for completed parsed artifacts if the
+     client still needs direct artifact reads.
+   - Remove completed parsed JSON byte responses from the generic parsed route.
+5. Keep preview ensure/presign routes as control plane, but remove all fallback
+   fields from their response shapes once fallback routes are deleted.
+6. Decide the local library content route explicitly:
+   - If local library file serving is desktop/self-host only, move it under an
+     explicit local-library namespace and keep it out of the cloud route surface.
+   - Otherwise remove `/api/documents/library/content`.
+7. Move or bound maintenance routes that can exceed a short control-plane
+   request:
+   - Review `/api/admin/tasks/[key]/run`, `/api/admin/tasks/tick`, account
+     deletion, and TTS segment clear.
+   - Queue worker/maintenance jobs for broad object scans or deletes instead of
+     doing them inline in Next request handlers.
+8. Remove stale runtime references to dropped state, routes, and helpers:
+   `ttsPlaybackSessions`, `ttsSegmentEntries`, `ttsSegmentVariants`,
+   `audiobookChapters`, `/api/audiobook`, `cleanup-legacy-tts-playback-cache`,
+   `migrate-fs`, `openreader-migrate-storage`, Next-side `ffmpeg` execution in
+   playback audio routes, request-path `convertDocxBufferToPdfBuffer`, and
+   request-path preview rendering. Also remove any newly discovered stale
+   runtime path that exists only to support removed routes or pre-hard-cut
+   behavior. Migration history, frozen versioned docs, and decommission docs are
+   allowed exceptions.
+9. Tighten regression coverage:
+   - Pin the final Next API route map.
+   - Pin the final worker API route map.
+   - Assert removed routes and old callers are absent.
+   - Assert worker-owned operation clients expose `opId` and use authenticated
+     same-origin SSE proxies instead of polling.
+   - Assert new worker-owned preview, conversion, export, and audiobook artifact
+     code does not import app SQL/database modules, except the existing
+     read-only `admin_providers` credential resolution for TTS provider keys.
+10. Run final validation from a clean local state:
+    `pnpm migrate`, `pnpm test:unit`, `pnpm exec tsc --noEmit`, and a
+    `pnpm dev` startup smoke test. Optionally run the highest-value Playwright
+    smoke path for upload/open/playback and audiobook MP3 export if the local
+    worker/TTS provider is available.
+
+Initial hard-cut implementation completed:
+
+- Audiobook artifact downloads now use `/api/tts/export/download`, which
+  authenticates and authorizes the document scope, resolves worker-owned
+  artifact metadata, and redirects to a short-lived S3 URL. The public worker
+  byte-serving export download route is replaced by a private metadata route.
+- The live-session Next MP3 proxy and its `downloadUrl` response field are
+  removed; live playback uses the signed worker `audioUrl` only.
+- All document blob upload/get/preview fallback proxy routes and client fallback
+  behavior are removed. Presign failures are explicit storage failures.
+- `/api/documents/[id]/parsed` returns parse snapshots only. Completed parsed
+  artifacts are delivered through the authorized
+  `/api/documents/[id]/parsed/download` redirect route.
+- Route-map and lifecycle coverage now assert the hard cut and the separate
+  parsed-artifact delivery flow.
+- Local filesystem library listing and content now live exclusively under
+  `/api/local-library`; the former `/api/documents/library*` cloud-looking
+  routes are removed.
+- Playback cache deletion and account-deletion artifact cleanup delegate S3
+  scans and deletions to authenticated compute-worker endpoints. Next retains
+  authentication, scope/ownership resolution, bounded document-id batching, and
+  SQL cleanup only.
+- Scheduled task handlers now have explicit 30–45 second ceilings, while the
+  manual-run and cron routes have a 60 second request ceiling.
+
+Final validation completed: `pnpm migrate`, `pnpm compute:openapi:generate`,
+`pnpm test:unit`, `pnpm exec tsc --noEmit`, and a `pnpm dev` readiness smoke
+test. The development watcher emitted host `EMFILE` watch-limit warnings but
+the Next app, embedded object storage, NATS, and compute worker all reached
+ready state.
+
+---
+
+## Planned Steps
+
+### 18. Hard Cut: Explicit Browser Object Transport and Dual S3 Endpoints
+
+Status: planned. This is a configuration and route-contract hard cut for
+self-hosted, Docker, and cloud deployments. It keeps same-origin object proxying
+as a supported embedded/self-hosted transport, but never as a reactive fallback
+after a browser presign attempt fails. The server selects one transport before a
+transfer begins, making deployment behavior predictable and observable.
+
+Browser object transport is selected deterministically with
+`S3_BROWSER_TRANSPORT`:
+
+| Setting | Behavior | Valid deployment |
+|---|---|---|
+| `proxy` | Browser transfers document/preview bytes through same-origin Next routes. | Self-hosted only; the normal embedded SeaweedFS choice. |
+| `presigned` | Browser transfers directly to the configured public S3 endpoint. | External S3 or SeaweedFS exposed as a public S3 origin. |
+| `auto` | `proxy` for embedded storage; `presigned` when a public S3 endpoint is configured; otherwise fail startup with an actionable configuration error. | Default. |
+
+`proxy` is not permitted on Vercel/cloud request-duration hosting. `presigned`
+is the required cloud transport. No client may attempt direct transfer and then
+retry through a proxy after an arbitrary error: a CORS/network error can occur
+after an object was accepted, and retrying masks deployment defects while
+silently moving large traffic through the app.
+
+Target configurations:
+
+```
+Embedded/self-hosted default
+Browser -> https://reader.example -> OpenReader proxy routes -> http://127.0.0.1:8333 SeaweedFS
+
+Public object storage
+Browser -> https://s3.reader.example -> SeaweedFS/S3
+App/worker -> http://seaweedfs:8333 (or another private S3 endpoint)
+```
+
+A presigned S3 API must use a dedicated host/subdomain (for example,
+`s3.reader.example`), not a path mount such as `https://reader.example/s3`.
+The presigned canonical path includes the S3 request path, so proxy path stripping
+or rewriting invalidates the signature. A different port is also a different
+browser origin and needs CORS.
+
+Configuration contract:
+
+- `S3_INTERNAL_ENDPOINT`: private endpoint used by all app and compute-worker
+  S3 operations.
+- `S3_PUBLIC_ENDPOINT`: browser-reachable HTTPS endpoint used only to generate
+  presigned URLs.
+- `S3_BROWSER_TRANSPORT`: `auto`, `proxy`, or `presigned`, default `auto`.
+- `S3_ENDPOINT`: deprecated compatibility alias. When `S3_INTERNAL_ENDPOINT`
+  is absent, it supplies the internal endpoint; when `presigned` is selected
+  and `S3_PUBLIC_ENDPOINT` is absent, it also supplies the public endpoint.
+  Emit a startup warning and document removal in the next major release. New
+  Compose files and docs must use the explicit settings only.
+
+Implementation work:
+
+1. Introduce the explicit settings and one validated storage-transport resolver
+   shared by the Next app, bootstrap process, and compute worker. Remove the
+   current public-host-to-loopback rewriting and any assumption that one endpoint
+   is simultaneously private and browser-reachable.
+2. Make embedded SeaweedFS bind independently of browser configuration:
+   - Add explicit embedded bind host/port settings, defaulting to local HTTP
+     port `8333`.
+   - Start the embedded worker with `S3_INTERNAL_ENDPOINT`.
+   - Do not derive a bind port or local protocol from a public URL.
+3. Establish canonical proxy-mode routes for document upload, document read, and
+   preview bytes. They are supported only in `proxy` mode; delete the old
+   `/fallback` aliases rather than retaining two path contracts. Presign routes
+   are supported only in `presigned` mode. Update every browser client to use
+   the server-selected transport, never try both.
+4. Generate every direct browser presign from the public client, while all
+   server/worker storage operations use the internal client. Cover document PUT
+   and GET, preview GET, parsed artifact GET, account/audiobook export GET, and
+   future browser-direct artifact flows.
+5. For `presigned` mode, document and validate the reverse-proxy/S3 contract:
+   preserve signed paths, query strings, `Host`, and signed headers; do not
+   rewrite S3 paths. Configure SeaweedFS CORS for the app origin with `GET`,
+   `HEAD`, `PUT`, and `OPTIONS`, plus `Content-Type` and
+   `x-amz-server-side-encryption` request headers.
+6. Rewrite Docker Compose examples, self-hosting docs, `.env.example`, and
+   current blob-storage docs around the two supported modes. Remove stale
+   instructions that describe automatic fallback behavior. Show the embedded
+   single-origin proxy mode as the default and a separate SeaweedFS container
+   plus `s3.<domain>` as the presigned topology.
+7. Add regression/integration coverage for deterministic transport resolution,
+   `S3_ENDPOINT` deprecation warnings, proxy-mode byte delivery, public-vs-
+   internal endpoint selection, path-style SeaweedFS signatures, CORS
+   preflight, and an HTTPS reverse-proxy smoke path.

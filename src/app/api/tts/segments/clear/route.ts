@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { clearTtsSegmentCache } from '@/lib/server/tts/segments-cache';
+import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -28,15 +29,22 @@ export async function POST(request: NextRequest) {
     const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
     if (scope instanceof Response) return scope;
 
-    const cleared = await clearTtsSegmentCache({
-      userId: scope.storageUserId,
+    if (!isComputeWorkerAvailable()) {
+      return NextResponse.json({ error: 'Compute worker is required to clear playback cache.' }, { status: 503 });
+    }
+    const cleared = await new ComputeWorkerClient().clearTtsPlaybackScope({
+      storageUserId: scope.storageUserId,
       documentId: parsed.documentId,
       documentVersion: scope.documentVersion,
       readerType: scope.readerType,
+      namespace: getOpenReaderTestNamespace(request.headers),
     });
 
     return NextResponse.json({
       documentId: parsed.documentId,
+      deletedSegments: 0,
+      requestedAudioObjects: cleared.deletedAudioObjects + cleared.deletedSidecarObjects,
+      deletedPlaybackObjects: cleared.deletedAudioObjects + cleared.deletedSidecarObjects + cleared.deletedPlanObjects + cleared.deletedExportObjects,
       ...cleared,
     });
   } catch (error) {
