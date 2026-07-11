@@ -1,5 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { resolveStorageTransport } from '../../../../packages/bootstrap/src/storage-transport.mjs';
+import { serverLogger } from '@/lib/server/logger';
 
 type S3Config = {
   bucket: string;
@@ -41,7 +42,10 @@ function loadS3ConfigFromEnv(): S3Config | null {
   const transport = resolveStorageTransport(process.env);
   if (transport.usesDeprecatedEndpoint && !warnedDeprecatedEndpoint) {
     warnedDeprecatedEndpoint = true;
-    console.warn('S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in the next major release.');
+    serverLogger.warn(
+      { event: 'storage.s3_endpoint_deprecated' },
+      'S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in the next major release.',
+    );
   }
 
   return {

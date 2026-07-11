@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     }
     const validation = await validatePreviewRequest(req);
     if (validation.errorResponse) return validation.errorResponse;
-    const { doc, testNamespace, id } = validation;
+    const { doc, testNamespace } = validation;
 
     const preview = await ensureDocumentPreview(
       {
