@@ -50,6 +50,7 @@ import {
   buildTtsPlaybackExportOperationKey,
   buildTtsPlaybackOperationKey,
   buildTtsPlaybackPlanOperationKey,
+  ttsPlaybackResetScopeFromOperationKey,
 } from '../operations/keys';
 import { computePlaybackPlanSignature } from '../jobs/handlers';
 import { requireEnv } from '../infrastructure/config';
@@ -184,32 +185,11 @@ function operationMatchesTtsResetScope(
     settingsHash?: string;
   },
 ): boolean {
-  const parts = state.opKey.split('|');
-  if (state.kind === 'tts_playback') {
-    const documentId = parts[2];
-    const documentVersion = Number(parts[3]);
-    const settingsHash = parts[4];
-    return documentId === scope.documentId
-      && (scope.documentVersion === undefined || documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
-      && (scope.settingsHash === undefined || settingsHash === scope.settingsHash);
-  }
-  if (state.kind === 'tts_playback_plan') {
-    const documentId = parts[2];
-    const documentVersion = Number(parts[3]);
-    const settingsHash = parts[5];
-    return documentId === scope.documentId
-      && (scope.documentVersion === undefined || documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
-      && (scope.settingsHash === undefined || settingsHash === scope.settingsHash);
-  }
-  if (state.kind === 'tts_playback_export') {
-    const documentId = parts[2];
-    const documentVersion = Number(parts[3]);
-    const settingsHash = parts[4];
-    return documentId === scope.documentId
-      && (scope.documentVersion === undefined || documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
-      && (scope.settingsHash === undefined || settingsHash === scope.settingsHash);
-  }
-  return false;
+  const keyScope = ttsPlaybackResetScopeFromOperationKey(state.opKey);
+  if (!keyScope) return false;
+  return keyScope.documentId === scope.documentId
+    && (scope.documentVersion === undefined || keyScope.documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
+    && (scope.settingsHash === undefined || keyScope.settingsHash === scope.settingsHash);
 }
 
 export function registerComputeWorkerRoutes(input: {

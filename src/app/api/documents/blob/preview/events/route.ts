@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
+import { proxyOperationEvents } from '@/lib/server/compute-worker/operation-events-proxy';
 import { validatePreviewRequest } from '../utils';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -36,30 +37,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Operation does not belong to this preview' }, { status: 403 });
     }
 
-    const lastEventId = req.headers.get('last-event-id');
-    const sinceEventId = req.nextUrl.searchParams.get('sinceEventId') || lastEventId;
-    const upstream = await client.openOperationEvents(opId, {
-      sinceEventId,
-      lastEventId,
-      signal: req.signal,
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      const detail = await upstream.text().catch(() => '');
-      return NextResponse.json(
-        { error: detail || 'Failed to proxy preview event stream' },
-        { status: upstream.status || 502 },
-      );
-    }
-
-    return new NextResponse(upstream.body, {
-      status: 200,
-      headers: {
-        'Content-Type': upstream.headers.get('content-type') || 'text/event-stream; charset=utf-8',
-        'Cache-Control': upstream.headers.get('cache-control') || 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
+    return await proxyOperationEvents({
+      request: req,
+      opId,
+      streamErrorMessage: 'Failed to proxy preview event stream',
     });
   } catch (error) {
     return errorResponse(error, {

@@ -113,15 +113,11 @@ patterns require it:
 
 Current known ownership debt:
 
-- `/api/tts/stream/[sessionId]/audio` still exists as a same-origin MP3 byte
-  proxy for authenticated playback/download cases. It does not own audiobook
-  speed transcodes or M4B packaging, and it should be removed once callers use
-  worker playback URLs or export artifact download routes.
-- `/api/documents/[id]/parsed` still can return completed parsed PDF JSON bytes
-  through Next instead of making signed object delivery the primary artifact
-  path.
-- Document blob upload/download/preview fallback proxy routes still exist and
-  should be removed, with callers moved to presign-only flows.
+- The pre-v5 route debt (same-origin MP3 byte proxy, parsed JSON byte
+  responses, blob fallback proxies) was removed by Step 17. The remaining
+  debt is storage-layout and retention work, tracked as Step 20: globally
+  keyed audiobook export artifacts and missing export artifact/manifest
+  expiry.
 
 ---
 
@@ -348,6 +344,10 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 14 Worker-owned document preview jobs | Done | Preview ensure/presign now resolve/create worker preview jobs; PDF first-page rendering and EPUB cover extraction are worker-owned. Any preview fallback byte proxy is step 17 cleanup debt. |
 | 15 Worker-owned DOCX conversion | Done | DOCX upload finalize resolves/creates deterministic worker conversion jobs; LibreOffice runs only in the worker, and Next registers completed PDF artifacts through a short finalize call. |
 | 16 Worker-owned account export artifacts | Done | Next writes bounded manifests and returns short snapshots; the worker builds durable ZIP artifacts; Next authorizes downloads and redirects to signed storage URLs. |
+| 17 Final route hard cut and dead-code removal | Done | Same-origin control-plane downloads, fallback proxy removal, parsed-snapshot-only routes, local-library namespace split, and worker-delegated storage scans are complete. |
+| 18 Explicit browser object transport + dual S3 endpoints | Done | `S3_INTERNAL_ENDPOINT`/`S3_PUBLIC_ENDPOINT`/`S3_BROWSER_TRANSPORT` select one deterministic transport; `S3_ENDPOINT` remains a deprecated startup-warning alias. |
+| 19 Pre-merge review cleanup | Done | Branch review fixes: batched cleanup/KV reads, shared SSE-proxy and artifact-download helpers, operation-kind reuse policy registry, shared opKey scope parsing, dead worker config removal. |
+| 20 Storage layout and retention debt | Planned | User-scoped audiobook export artifact keys and bounded export artifact/manifest expiry. |
 
 ---
 
@@ -929,11 +929,9 @@ ready state.
 
 ---
 
-## Planned Steps
-
 ### 18. Hard Cut: Explicit Browser Object Transport and Dual S3 Endpoints
 
-Status: planned. This is a configuration and route-contract hard cut for
+Status: complete. This is a configuration and route-contract hard cut for
 self-hosted, Docker, and cloud deployments. It keeps same-origin object proxying
 as a supported embedded/self-hosted transport, but never as a reactive fallback
 after a browser presign attempt fails. The server selects one transport before a
@@ -1018,3 +1016,97 @@ Implementation work:
    `S3_ENDPOINT` deprecation warnings, proxy-mode byte delivery, public-vs-
    internal endpoint selection, path-style SeaweedFS signatures, CORS
    preflight, and an HTTPS reverse-proxy smoke path.
+
+---
+
+### 19. Pre-Merge Branch Review Cleanup
+
+Status: complete. A full-branch review (dead code, leftover fallback/split
+logic, duplication, and efficiency) ran before merge. The hard cut itself came
+back clean — no compatibility shims, fallback byte proxies, stale callers, or
+invariant violations were found. The verified findings were fixed as follows:
+
+1. Shared `packages/compute-worker/src/storage/prefix-cleanup.ts` now owns
+   `deletePrefix`, `storageUserHash`, and
+   `findOwnedTtsPlaybackExportPrefixes`. Playback cache-clear and account
+   storage cleanup both use it; export metadata sidecar reads are batched in
+   groups of 32 instead of sequential per-object round-trips.
+2. `listSessions` in the playback KV store batches session reads and cursor
+   overlay reads in groups of 32 instead of two sequential KV reads per
+   session on the cache-reset path.
+3. The four Next operation-event SSE proxy routes (account export, audiobook
+   export, document preview, playback stream) share
+   `src/lib/server/compute-worker/operation-events-proxy.ts`. Routes keep
+   their own auth/scope validation; the reconnectable stream plumbing
+   (Last-Event-ID resume, SSE headers, upstream failure mapping) exists once.
+4. The three artifact download routes (audiobook export, account export,
+   parsed PDF) share `sendStorageArtifact` and `cleanDispositionFilename` in
+   `src/lib/server/storage/artifact-download.ts`, so proxy-vs-presigned
+   transport behavior, disposition sanitization, and the 5-minute presign
+   expiry cannot drift per route.
+5. Succeeded-operation reuse policy moved from a hardcoded kind list in
+   `shouldReuseExistingOperation` to the exhaustive
+   `WORKER_OPERATION_KIND_REUSES_SUCCEEDED` record in
+   `operations/contracts.ts`; the compiler now forces every new operation
+   kind to choose a reuse policy.
+6. `operationMatchesTtsResetScope` no longer hand-parses opKey segments by
+   array index. `ttsPlaybackResetScopeFromOperationKey` lives beside the key
+   builders in `operations/keys.ts`, so a key-format change cannot silently
+   desync cache-reset scope matching.
+7. Removed dead worker config surface: `getWorkerClientWaitTimeoutMs` and the
+   stale `ComputeOperationKind` type (it was missing `account_export` and had
+   no callers), plus their orphaned wait-buffer constants.
+8. `deleteDocumentBlob` also deletes the document's playback plan prefix
+   (`tts_playback_plan_v1/<documentId>/`). Plans are keyed by document id
+   only, so account deletion (SQL cascade + orphan reaper) previously left
+   them behind as orphaned segmented document text; blob deletion is the last
+   owner-independent point that can reap them. Explicit document deletion
+   already cleared plans through the playback cache clear.
+
+Reviewed and intentionally unchanged: client hook fetches already run in
+parallel, the scrubber gradient memo is stable between projection ticks, and
+the sidecar scan constants are single-module implementation details. The
+review also flagged that account deletion does not sweep pre-v5 prefixes;
+that is by design — `runV4Decommission` is the sole owner of legacy purge,
+and v5 runtime code does not reference pre-v5 prefixes.
+
+---
+
+## Planned Steps
+
+### 20. Storage Layout and Retention Debt
+
+Status: planned. These are the items the Step 19 review surfaced but
+deliberately did not fix on the merge branch, plus follow-through work the
+earlier steps promised. None of them block merge; all of them get more
+expensive the longer the current layout is live in production.
+
+1. Scope audiobook export artifact keys by user (and namespace). Today
+   `tts_playback_exports_v1/<artifactId>/{artifact.<format>,metadata.json}` is
+   keyed only by the opaque deterministic artifact id, so ownership is
+   recoverable only by listing the whole prefix and reading every metadata
+   sidecar. Step 19 batched those reads, but playback cache-clear and account
+   deletion still scan all exports across all users — O(total exports) per
+   operation. Move to
+   `tts_playback_exports_v1/[ns/<ns>/]users/<userId>/docs/<documentId>/<artifactId>/`,
+   mirroring `account_exports_v1`, so both cleanups list one bounded prefix
+   and the metadata-scan path disappears. If this ships in the same release
+   as the branch, it is a free hard cut (the prefix is new and unreleased);
+   after that it needs either a migration or a decommission-style purge with
+   re-preparation on next export.
+2. Implement the export retention policy Step 16 stated but no task enforces.
+   Nothing currently expires account export manifests/ZIPs under
+   `account_exports_v1/` or audiobook export artifacts under
+   `tts_playback_exports_v1/`; they persist until account deletion or a
+   playback cache clear, so storage grows monotonically with every "Generate
+   new export". Add a bounded scheduled cleanup that deletes export artifacts
+   and manifests past a freshness window (metadata carries the timestamps),
+   with a grace window for in-flight preparation. Per the Step 17 route
+   contract, the broad object scan/delete belongs on a worker maintenance
+   endpoint; the Next scheduled task stays a short trigger.
+3. Fold the remaining per-kind policy stragglers into the operation-kind
+   registry pattern Step 19 started (`WORKER_OPERATION_KIND_REUSES_SUCCEEDED`)
+   as they change next: the slow-job log threshold map in the worker loop and
+   any future kind-conditional timeout policy. Do this opportunistically —
+   both are currently exhaustive `Record`s the compiler already enforces, so
+   this is consolidation, not a defect.

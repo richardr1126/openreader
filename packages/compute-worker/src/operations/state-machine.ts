@@ -1,3 +1,4 @@
+import { WORKER_OPERATION_KIND_REUSES_SUCCEEDED } from '../operations/contracts';
 import type {
   WorkerJobErrorShape,
   WorkerJobState,
@@ -59,14 +60,7 @@ export function shouldReuseExistingOperation(input: {
 }): boolean {
   if (input.current.kind !== input.requestKind) return false;
   if (input.current.status === 'succeeded') {
-    // Playback artifacts are the reusable cache, not terminal playback job
-    // records. Replacing terminal playback jobs lets live/export requests verify
-    // the current sidecar state while still deduping active work.
-    return input.requestKind !== 'tts_playback_plan'
-      && input.requestKind !== 'tts_playback'
-      && input.requestKind !== 'tts_playback_export'
-      && input.requestKind !== 'document_preview'
-      && input.requestKind !== 'document_conversion';
+    return WORKER_OPERATION_KIND_REUSES_SUCCEEDED[input.requestKind];
   }
   if (!isInflightStatus(input.current.status)) return false;
   const ageMs = input.now - input.current.updatedAt;

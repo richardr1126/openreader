@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveTtsPlaybackSession } from '@/lib/server/tts/playback-sessions';
-import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { proxyOperationEvents } from '@/lib/server/compute-worker/operation-events-proxy';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -39,30 +40,10 @@ export async function GET(
       return NextResponse.json({ error: 'Playback session has no worker operation yet' }, { status: 409 });
     }
 
-    const lastEventId = request.headers.get('last-event-id');
-    const sinceEventId = request.nextUrl.searchParams.get('sinceEventId') || lastEventId;
-    const upstream = await getComputeWorkerClient().openOperationEvents(session.workerOpId, {
-      sinceEventId,
-      lastEventId,
-      signal: request.signal,
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      const detail = await upstream.text().catch(() => '');
-      return NextResponse.json(
-        { error: detail || 'Failed to proxy TTS playback event stream' },
-        { status: upstream.status || 502 },
-      );
-    }
-
-    return new NextResponse(upstream.body, {
-      status: 200,
-      headers: {
-        'Content-Type': upstream.headers.get('content-type') || 'text/event-stream; charset=utf-8',
-        'Cache-Control': upstream.headers.get('cache-control') || 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
+    return await proxyOperationEvents({
+      request,
+      opId: session.workerOpId,
+      streamErrorMessage: 'Failed to proxy TTS playback event stream',
     });
   } catch (error) {
     return errorResponse(error, {

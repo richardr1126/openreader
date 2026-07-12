@@ -151,7 +151,9 @@ describe('server-state architecture', () => {
     expect(documentsApi).toContain('/api/documents/blob/preview/events');
     expect(documentsApi).not.toContain('retryAfterMs');
     expect(previewEventsRoute).toContain("operation.subject.kind !== 'document_preview'");
-    expect(previewEventsRoute).toContain('openOperationEvents');
+    expect(previewEventsRoute).toContain('proxyOperationEvents');
+    const operationEventsProxy = source('src/lib/server/compute-worker/operation-events-proxy.ts');
+    expect(operationEventsProxy).toContain('openOperationEvents');
   });
 
   test('loads TTS voice metadata and claims through centralized query hooks', () => {
@@ -270,13 +272,15 @@ describe('server-state architecture', () => {
     expect(accountExportRoute).toContain('resolveAccountExport');
     expect(accountExportRoute).toContain('/api/user/export/download');
     expect(accountExportRoute).not.toContain('createAccountExportDownloadToken');
-    expect(accountExportDownloadRoute).toContain('getSignedUrl');
+    expect(accountExportDownloadRoute).toContain('sendStorageArtifact');
     expect(accountExportDownloadRoute).toContain('resolveAccountExport');
-    expect(accountExportDownloadRoute).toContain('NextResponse.redirect');
+    const artifactDownloadHelper = source('src/lib/server/storage/artifact-download.ts');
+    expect(artifactDownloadHelper).toContain('getSignedUrl');
+    expect(artifactDownloadHelper).toContain('NextResponse.redirect');
     expect(accountExportRoute).not.toContain("archiver('zip'");
     expect(accountExportRoute).not.toContain('Readable.toWeb');
     expect(accountExportEventsRoute).toContain("operation.subject.kind !== 'account_export'");
-    expect(accountExportEventsRoute).toContain('openOperationEvents(opId');
+    expect(accountExportEventsRoute).toContain('proxyOperationEvents');
     expect(settingsModal).toContain("new EventSource(`/api/user/export/events?opId=");
     expect(settingsModal).not.toContain("window.open('/api/user/export'");
     expect(workerRoutes).toContain("/v1/account-exports/jobs");
@@ -376,9 +380,8 @@ describe('server-state architecture', () => {
     expect(exportResolveRoute).toContain('createTtsPlaybackExportArtifactOperation');
     expect(exportResolveRoute).toContain('/api/tts/export/download?artifactId=');
     expect(exportDownloadRoute).toContain('getTtsPlaybackExportArtifact');
-    expect(exportDownloadRoute).toContain('getSignedUrl');
-    expect(exportDownloadRoute).toContain('NextResponse.redirect');
-    expect(exportEventsRoute).toContain('openOperationEvents(opId');
+    expect(exportDownloadRoute).toContain('sendStorageArtifact');
+    expect(exportEventsRoute).toContain('proxyOperationEvents');
     expect(workerHandlers).toContain('runTtsPlaybackExportArtifact');
     expect(workerHandlers).toContain('buildAtempoFilter');
     expect(workerHandlers).toContain("'aac'");
@@ -556,7 +559,7 @@ describe('server-state architecture', () => {
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startOrdinal?: number');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("readOptionalInt(rec, 'startOrdinal'");
     expect(ttsApi).toContain("throw new Error('TTS playback seek layout response was missing required numeric fields')");
-    expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('openOperationEvents');
+    expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('buildPlaybackGrid');
     expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('artifact.segments.length > 0 ? { limit: artifact.segments.length }');
@@ -619,7 +622,7 @@ describe('server-state architecture', () => {
     expect(workerHandlers.indexOf('if (forceDocumentExtent)')).toBeLessThan(
       workerHandlers.indexOf('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))'),
     );
-    expect(workerStateMachine).toContain("input.requestKind !== 'tts_playback'");
+    expect(workerStateMachine).toContain('WORKER_OPERATION_KIND_REUSES_SUCCEEDED[input.requestKind]');
   });
 
   test('keeps Cache Storage best-effort and admits only successful full responses', () => {

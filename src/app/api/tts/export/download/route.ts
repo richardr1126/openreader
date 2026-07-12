@@ -1,17 +1,12 @@
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NextRequest, NextResponse } from 'next/server';
 import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
-import { getBrowserStorageTransport, getS3Client, getS3Config, getS3InternalClient, isS3Configured } from '@/lib/server/storage/s3';
+import { sendStorageArtifact } from '@/lib/server/storage/artifact-download';
+import { isS3Configured } from '@/lib/server/storage/s3';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 
 export const dynamic = 'force-dynamic';
-
-function cleanDispositionFilename(filename: string): string {
-  return filename.replace(/[\r\n"\\]/g, '_');
-}
 
 export async function GET(request: NextRequest) {
   const { logger } = createRequestLogger({
@@ -43,29 +38,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const cfg = getS3Config();
-    if (getBrowserStorageTransport() === 'proxy') {
-      const object = await getS3InternalClient().send(new GetObjectCommand({ Bucket: cfg.bucket, Key: artifact.objectKey }));
-      const bytes = await object.Body?.transformToByteArray();
-      return new NextResponse(bytes as unknown as BodyInit, {
-        headers: {
-          'Content-Type': artifact.contentType,
-          'Content-Disposition': `attachment; filename="${cleanDispositionFilename(artifact.dispositionFilename)}"`,
-          'Cache-Control': 'private, no-store',
-        },
-      });
-    }
-    const signedUrl = await getSignedUrl(
-      getS3Client(),
-      new GetObjectCommand({
-        Bucket: cfg.bucket,
-        Key: artifact.objectKey,
-        ResponseContentType: artifact.contentType,
-        ResponseContentDisposition: `attachment; filename="${cleanDispositionFilename(artifact.dispositionFilename)}"`,
-      }),
-      { expiresIn: 5 * 60 },
-    );
-    return NextResponse.redirect(signedUrl, { status: 303 });
+    return await sendStorageArtifact({
+      objectKey: artifact.objectKey,
+      contentType: artifact.contentType,
+      dispositionFilename: artifact.dispositionFilename,
+    });
   } catch (error) {
     return errorResponse(error, {
       logger,

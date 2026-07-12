@@ -163,20 +163,27 @@ export function createTtsPlaybackKvStore(input: {
   const cursorCodec = createJsonCodec<TtsPlaybackCursorRecord>();
   const listSessions = async (scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]> => {
     const kv = await input.getKv();
-    const keys = await kv.keys('tts_playback.session.*');
+    const keys: string[] = [];
+    for await (const key of await kv.keys('tts_playback.session.*')) keys.push(key);
     const sessions: TtsPlaybackSessionState[] = [];
-    for await (const key of keys) {
-      const entry = await kv.get(key);
-      if (!isKvPut(entry)) continue;
-      const session = sessionCodec.decode(entry.value);
-      if (scope && !sessionMatchesScope(session, scope)) continue;
-      const cursorEntry = await kv.get(cursorKvKey(session.sessionId));
-      if (isKvPut(cursorEntry)) {
-        const cursor = cursorCodec.decode(cursorEntry.value);
-        session.cursorOrdinal = cursor.cursorOrdinal;
-        session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+    for (let index = 0; index < keys.length; index += 32) {
+      const entries = await Promise.all(keys.slice(index, index + 32).map((key) => kv.get(key)));
+      for (const entry of entries) {
+        if (!isKvPut(entry)) continue;
+        const session = sessionCodec.decode(entry.value);
+        if (scope && !sessionMatchesScope(session, scope)) continue;
+        sessions.push(session);
       }
-      sessions.push(session);
+    }
+    for (let index = 0; index < sessions.length; index += 32) {
+      await Promise.all(sessions.slice(index, index + 32).map(async (session) => {
+        const cursorEntry = await kv.get(cursorKvKey(session.sessionId));
+        if (isKvPut(cursorEntry)) {
+          const cursor = cursorCodec.decode(cursorEntry.value);
+          session.cursorOrdinal = cursor.cursorOrdinal;
+          session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+        }
+      }));
     }
     return sessions;
   };

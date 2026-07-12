@@ -1,5 +1,3 @@
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@openreader/database';
@@ -9,7 +7,8 @@ import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
 import { resolveCurrentPdfParse } from '@/lib/server/pdf-parse/operation';
-import { getBrowserStorageTransport, getS3Client, getS3Config, getS3InternalClient, isS3Configured } from '@/lib/server/storage/s3';
+import { sendStorageArtifact } from '@/lib/server/storage/artifact-download';
+import { isS3Configured } from '@/lib/server/storage/s3';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 
 export const dynamic = 'force-dynamic';
@@ -45,22 +44,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     });
     if (!resolved.artifact) return NextResponse.json({ error: 'Parsed PDF is not ready' }, { status: 404 });
 
-    const cfg = getS3Config();
-    if (getBrowserStorageTransport() === 'proxy') {
-      const object = await getS3InternalClient().send(new GetObjectCommand({ Bucket: cfg.bucket, Key: resolved.artifact.objectKey }));
-      const bytes = await object.Body?.transformToByteArray();
-      return new NextResponse(bytes as unknown as BodyInit, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } });
-    }
-    const signedUrl = await getSignedUrl(
-      getS3Client(),
-      new GetObjectCommand({
-        Bucket: cfg.bucket,
-        Key: resolved.artifact.objectKey,
-        ResponseContentType: 'application/json',
-      }),
-      { expiresIn: 5 * 60 },
-    );
-    return NextResponse.redirect(signedUrl, { status: 303 });
+    return await sendStorageArtifact({
+      objectKey: resolved.artifact.objectKey,
+      contentType: 'application/json',
+    });
   } catch (error) {
     return errorResponse(error, {
       logger,

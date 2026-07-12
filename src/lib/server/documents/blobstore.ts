@@ -475,26 +475,32 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   const ns = sanitizeNamespace(namespace);
   const nsSegment = ns ? `ns/${ns}/` : '';
   const parsedPrefix = `${cfg.prefix}/documents_v1/parsed_v2/${nsSegment}${id}/`;
+  // Playback plans are keyed by document id only (no user/namespace segment),
+  // so blob deletion is the last owner-independent point that can reap them.
+  const playbackPlanPrefix = `${cfg.prefix}/tts_playback_plan_v1/${id}/`;
 
   await deleteDocumentPrefix(parsedPrefix);
+  await deleteDocumentPrefix(playbackPlanPrefix);
   await deleteDocumentPrefix(`${key}/`);
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey }));
   // Delete the source after the initial derived-artifact cleanup, then sweep
-  // parsed output once more to catch a worker that finished during deletion.
+  // derived output once more to catch a worker that finished during deletion.
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
   // The source blob is already gone at this point. Treat the final sweep as a
   // best-effort cleanup: if it throws, rethrowing would make callers roll back
   // the document row even though the source is deleted, so log and swallow.
-  try {
-    await deleteDocumentPrefix(parsedPrefix);
-  } catch (error) {
-    logDegraded(serverLogger, {
-      event: 'documents.blob_delete.final_parsed_sweep.failed',
-      msg: 'Failed final parsed-output sweep after document deletion',
-      step: 'delete_document_parsed_prefix_final',
-      context: { parsedPrefix },
-      error,
-    });
+  for (const finalSweepPrefix of [parsedPrefix, playbackPlanPrefix]) {
+    try {
+      await deleteDocumentPrefix(finalSweepPrefix);
+    } catch (error) {
+      logDegraded(serverLogger, {
+        event: 'documents.blob_delete.final_parsed_sweep.failed',
+        msg: 'Failed final derived-output sweep after document deletion',
+        step: 'delete_document_parsed_prefix_final',
+        context: { parsedPrefix: finalSweepPrefix },
+        error,
+      });
+    }
   }
 }
 

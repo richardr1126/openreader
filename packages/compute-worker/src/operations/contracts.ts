@@ -354,6 +354,24 @@ export type WorkerOperationKind =
   | 'document_conversion'
   | 'account_export';
 
+/**
+ * Whether a succeeded operation record satisfies a new request for the same
+ * opKey. Kinds marked `false` treat durable artifacts (playback plans/segments,
+ * previews, conversions) as the reusable cache and replace terminal operation
+ * records so each request re-verifies current artifact/sidecar state. The
+ * exhaustive Record forces every new kind to choose a reuse policy here instead
+ * of growing kind-switches in the state machine.
+ */
+export const WORKER_OPERATION_KIND_REUSES_SUCCEEDED: Record<WorkerOperationKind, boolean> = {
+  pdf_layout: true,
+  tts_playback: false,
+  tts_playback_plan: false,
+  tts_playback_export: false,
+  document_preview: false,
+  document_conversion: false,
+  account_export: true,
+};
+
 export interface PdfLayoutOperationRequest {
   kind: 'pdf_layout';
   opKey: string;

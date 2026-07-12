@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { proxyOperationEvents } from '@/lib/server/compute-worker/operation-events-proxy';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
@@ -43,30 +44,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Operation does not belong to this account export' }, { status: 403 });
     }
 
-    const lastEventId = request.headers.get('last-event-id');
-    const sinceEventId = request.nextUrl.searchParams.get('sinceEventId') || lastEventId;
-    const upstream = await getComputeWorkerClient().openOperationEvents(opId, {
-      sinceEventId,
-      lastEventId,
-      signal: request.signal,
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      const detail = await upstream.text().catch(() => '');
-      return NextResponse.json(
-        { error: detail || 'Failed to proxy account export event stream' },
-        { status: upstream.status || 502 },
-      );
-    }
-
-    return new NextResponse(upstream.body, {
-      status: 200,
-      headers: {
-        'Content-Type': upstream.headers.get('content-type') || 'text/event-stream; charset=utf-8',
-        'Cache-Control': upstream.headers.get('cache-control') || 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
+    return await proxyOperationEvents({
+      request,
+      opId,
+      streamErrorMessage: 'Failed to proxy account export event stream',
     });
   } catch (error) {
     return errorResponse(error, {

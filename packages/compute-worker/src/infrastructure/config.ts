@@ -2,8 +2,6 @@ const DEFAULT_COMPUTE_WHISPER_TIMEOUT_MS = 30_000;
 const DEFAULT_COMPUTE_PDF_TIMEOUT_MS = 300_000;
 const DEFAULT_COMPUTE_PDF_HARD_CAP_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_COMPUTE_OP_STALE_MIN_MS = 30 * 60_000;
-const DEFAULT_WORKER_WAIT_BUFFER_MS = 15_000;
-const DEFAULT_WORKER_WAIT_MIN_MS = 60_000;
 
 export type ComputeTimeoutConfig = {
   whisperTimeoutMs: number;
@@ -12,7 +10,6 @@ export type ComputeTimeoutConfig = {
   ttsPlaybackSegmentTimeoutMs: number;
 };
 
-export type ComputeOperationKind = 'pdf_layout' | 'tts_playback' | 'tts_playback_plan' | 'tts_playback_export' | 'document_preview' | 'document_conversion';
 export type IdleTimeoutAndHardCapInput<T> = {
   run: (touchProgress: () => void) => Promise<T>;
   idleTimeoutMs: number;
@@ -85,14 +82,6 @@ export function getComputeOpStaleMs(): number {
     Math.max(DEFAULT_COMPUTE_OP_STALE_MIN_MS, Math.max(config.whisperTimeoutMs, config.pdfTimeoutMs) * 4),
   );
   return opStaleMsCache;
-}
-
-export function getWorkerClientWaitTimeoutMs(kind: ComputeOperationKind): number {
-  const config = getComputeTimeoutConfig();
-  const timeoutMs = kind === 'pdf_layout' || kind === 'tts_playback_export' || kind === 'document_preview' || kind === 'document_conversion'
-    ? config.pdfTimeoutMs
-    : config.whisperTimeoutMs;
-  return Math.max(DEFAULT_WORKER_WAIT_MIN_MS, timeoutMs + DEFAULT_WORKER_WAIT_BUFFER_MS);
 }
 
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {

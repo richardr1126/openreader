@@ -226,6 +226,29 @@ export function buildTtsPlaybackExportOperationKey(input: {
   ].join('|');
 }
 
+/**
+ * Extract the cache-reset scope fields shared by the playback operation keys.
+ * Kept beside the key builders so a key-format change cannot silently desync
+ * scope matching in the cache-reset path.
+ */
+export function ttsPlaybackResetScopeFromOperationKey(opKey: string): {
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  if (version !== 'v1' || !documentId) return null;
+  if (kind !== 'tts_playback' && kind !== 'tts_playback_plan' && kind !== 'tts_playback_export') return null;
+  // tts_playback        | v1 | documentId | version | settingsHash | scopeHash   | sessionId     | intent
+  // tts_playback_export | v1 | documentId | version | settingsHash | artifactId  | format        | speed
+  // tts_playback_plan   | v1 | documentId | version | readerType   | settingsHash | planSignature
+  const settingsHash = kind === 'tts_playback_plan' ? parts[5] : parts[4];
+  const documentVersion = Number(parts[3]);
+  if (!settingsHash || !Number.isFinite(documentVersion)) return null;
+  return { documentId, documentVersion, settingsHash };
+}
+
 export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
   kind: 'tts_playback';
   documentId: string;
