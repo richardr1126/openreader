@@ -1,5 +1,6 @@
 import type { ArtifactStorage } from '../infrastructure/storage';
-import { deletePrefix, findOwnedTtsPlaybackExportPrefixes, storageUserHash } from '../storage/prefix-cleanup';
+import { ttsPlaybackExportArtifactScopePrefix } from '../storage/artifact-addressing';
+import { deletePrefix, findExportArtifactPrefixesByMetadata, storageUserHash } from '../storage/prefix-cleanup';
 import type { TtsPlaybackResetScope } from './storage';
 
 export type TtsPlaybackCacheClearScope = TtsPlaybackResetScope & {
@@ -39,16 +40,26 @@ export async function clearTtsPlaybackArtifacts(input: {
     deletePrefix(storage, planPrefix),
   ]);
 
-  const exportPrefixes = await findOwnedTtsPlaybackExportPrefixes({
-    storage,
-    s3Prefix,
-    ownsMetadata: (metadata) => metadata.storageUserId === scope.storageUserId
-      && metadata.documentId === scope.documentId
-      && (version === null || Number(metadata.documentVersion) === version),
+  // Export artifacts are user/document-scoped, so the whole scope prefix can
+  // be dropped directly; only a version-bounded clear needs metadata reads.
+  const exportScopePrefix = ttsPlaybackExportArtifactScopePrefix({
+    storageUserId: scope.storageUserId,
+    documentId: scope.documentId,
+    prefix: s3Prefix,
   });
-  const deletedExportObjects = (await Promise.all(
-    exportPrefixes.map((prefix) => deletePrefix(storage, prefix)),
-  )).reduce((total, count) => total + count, 0);
+  let deletedExportObjects: number;
+  if (version === null) {
+    deletedExportObjects = await deletePrefix(storage, exportScopePrefix);
+  } else {
+    const exportPrefixes = await findExportArtifactPrefixesByMetadata({
+      storage,
+      exportRoot: exportScopePrefix,
+      ownsMetadata: (metadata) => Number(metadata.documentVersion) === version,
+    });
+    deletedExportObjects = (await Promise.all(
+      exportPrefixes.map((prefix) => deletePrefix(storage, prefix)),
+    )).reduce((total, count) => total + count, 0);
+  }
 
   return { deletedAudioObjects, deletedSidecarObjects, deletedPlanObjects, deletedExportObjects };
 }

@@ -1813,6 +1813,8 @@ export function createJobHandlers(input: {
 
       const metadataKey = ttsPlaybackExportMetadataArtifactKey({
         artifactId: parsed.artifactId,
+        storageUserId: parsed.storageUserId,
+        documentId: parsed.documentId,
         prefix: input.s3Prefix,
       });
       const existingMetadata = await input.storage.readObject(metadataKey)
@@ -1901,6 +1903,8 @@ export function createJobHandlers(input: {
 
       const objectKey = ttsPlaybackExportArtifactKey({
         artifactId: parsed.artifactId,
+        storageUserId: parsed.storageUserId,
+        documentId: parsed.documentId,
         format: parsed.format,
         prefix: input.s3Prefix,
       });

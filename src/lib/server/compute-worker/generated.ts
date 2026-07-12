@@ -88,7 +88,10 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query: {
+                    storageUserId: string;
+                    documentId: string;
+                };
                 header?: never;
                 path: {
                     artifactId: string;
@@ -699,6 +702,63 @@ export interface paths {
                         "application/json": {
                             deletedObjects: number;
                             deletedDocumentArtifacts: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/maintenance/exports/expire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        maxAgeMs: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            expiredArtifacts: number;
+                            deletedObjects: number;
                         };
                     };
                 };
@@ -2076,6 +2136,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         artifactId: string;
+                        storageUserId: string;
                         documentId: string;
                         documentVersion: number;
                         settingsHash: string;

@@ -1,5 +1,6 @@
 import type { ArtifactStorage } from '../infrastructure/storage';
-import { deletePrefix, findOwnedTtsPlaybackExportPrefixes, storageUserHash } from './prefix-cleanup';
+import { ttsPlaybackExportArtifactScopePrefix } from './artifact-addressing';
+import { deletePrefix, storageUserHash } from './prefix-cleanup';
 
 export type UserStorageCleanupResult = {
   deletedObjects: number;
@@ -24,6 +25,7 @@ export async function cleanupUserStorageArtifacts(input: {
     `${s3Prefix}/document_uploads_temp_v1/${nsSegment}users/${encodedUserId}/`,
     `${s3Prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodedUserId}/`,
     `${s3Prefix}/account_exports_v1/${nsSegment}users/${encodedUserId}/`,
+    ttsPlaybackExportArtifactScopePrefix({ storageUserId, prefix: s3Prefix }),
     ...(namespace === null ? [`${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(storageUserId)}/`] : []),
   ]) {
     deletedObjects += await deletePrefix(storage, prefix);
@@ -38,17 +40,6 @@ export async function cleanupUserStorageArtifacts(input: {
       ]);
       deletedDocumentArtifacts += deleted.reduce((total, count) => total + count, 0);
     }
-  }
-
-  // Audiobook exports predate scoped object paths. Their metadata is the
-  // durable ownership index, so this worker-only scan is the safe cleanup path.
-  const exportPrefixes = await findOwnedTtsPlaybackExportPrefixes({
-    storage,
-    s3Prefix,
-    ownsMetadata: (metadata) => metadata.storageUserId === storageUserId,
-  });
-  for (const prefix of exportPrefixes) {
-    deletedObjects += await deletePrefix(storage, prefix);
   }
 
   return { deletedObjects, deletedDocumentArtifacts };

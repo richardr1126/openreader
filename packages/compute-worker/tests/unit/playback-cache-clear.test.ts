@@ -43,11 +43,15 @@ describe('playback cache clear', () => {
     await storage.putObject(`${prefix}/tts_playback_segments_audio_v1/users/user-1/docs/${documentId}/3/settings/audio.mp3`, Buffer.from('audio'));
     await storage.putObject(`${prefix}/tts_playback_segments_v1/users/${userHash}/docs/${documentId}/3/settings/segments/0.json`, Buffer.from('{}'));
     await storage.putObject(`${prefix}/tts_playback_plan_v1/${documentId}/3/pdf/plan.json`, Buffer.from('{}'));
-    await storage.putObject(`${prefix}/tts_playback_exports_v1/export-a/metadata.json`, Buffer.from(JSON.stringify({
+    const exportScope = `${prefix}/tts_playback_exports_v1/users/user-1/docs/${documentId}`;
+    await storage.putObject(`${exportScope}/export-a/metadata.json`, Buffer.from(JSON.stringify({
       storageUserId: 'user-1', documentId, documentVersion: 3,
     })));
-    await storage.putObject(`${prefix}/tts_playback_exports_v1/export-a/artifact.mp3`, Buffer.from('export'));
-    await storage.putObject(`${prefix}/tts_playback_exports_v1/export-b/metadata.json`, Buffer.from(JSON.stringify({
+    await storage.putObject(`${exportScope}/export-a/artifact.mp3`, Buffer.from('export'));
+    await storage.putObject(`${exportScope}/export-old/metadata.json`, Buffer.from(JSON.stringify({
+      storageUserId: 'user-1', documentId, documentVersion: 2,
+    })));
+    await storage.putObject(`${prefix}/tts_playback_exports_v1/users/user-1/docs/${foreignDocumentId}/export-b/metadata.json`, Buffer.from(JSON.stringify({
       storageUserId: 'user-1', documentId: foreignDocumentId, documentVersion: 3,
     })));
 
@@ -63,7 +67,8 @@ describe('playback cache clear', () => {
       deletedPlanObjects: 1,
       deletedExportObjects: 2,
     });
-    expect(storage.objects.has(`${prefix}/tts_playback_exports_v1/export-a/artifact.mp3`)).toBe(false);
-    expect(storage.objects.has(`${prefix}/tts_playback_exports_v1/export-b/metadata.json`)).toBe(true);
+    expect(storage.objects.has(`${exportScope}/export-a/artifact.mp3`)).toBe(false);
+    expect(storage.objects.has(`${exportScope}/export-old/metadata.json`)).toBe(true);
+    expect(storage.objects.has(`${prefix}/tts_playback_exports_v1/users/user-1/docs/${foreignDocumentId}/export-b/metadata.json`)).toBe(true);
   });
 });

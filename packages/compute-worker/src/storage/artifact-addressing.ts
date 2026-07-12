@@ -126,25 +126,55 @@ export function ttsPlaybackSegmentSidecarArtifactKey(input: {
   return `${input.prefix}/tts_playback_segments_v1/users/${input.storageUserHash}/docs/${input.documentId}/${version}/${input.settingsHash}/segments/${ordinal}.json`;
 }
 
-export function ttsPlaybackExportArtifactKey(input: {
+/**
+ * Playback export artifacts are user/document-scoped so ownership cleanup can
+ * list one bounded prefix instead of scanning a global artifact-id namespace.
+ * The deterministic artifact id still provides variant identity within the
+ * scope. Like segment audio keys, no namespace segment is used: the worker job
+ * request carries no namespace and scope isolation comes from the user id.
+ */
+export function ttsPlaybackExportArtifactScopePrefix(input: {
+  storageUserId: string;
+  documentId?: string;
+  prefix: string;
+}): string {
+  const userSegment = `${input.prefix}/tts_playback_exports_v1/users/${encodeURIComponent(input.storageUserId)}/`;
+  if (input.documentId === undefined) return userSegment;
+  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
+    throw new Error(`Invalid document id: ${input.documentId}`);
+  }
+  return `${userSegment}docs/${input.documentId}/`;
+}
+
+function ttsPlaybackExportArtifactDirPrefix(input: {
   artifactId: string;
-  format: 'mp3' | 'm4b';
+  storageUserId: string;
+  documentId: string;
   prefix: string;
 }): string {
   if (!SAFE_HASH_SEGMENT_REGEX.test(input.artifactId)) {
     throw new Error(`Invalid playback export artifact id: ${input.artifactId}`);
   }
-  return `${input.prefix}/tts_playback_exports_v1/${input.artifactId}/artifact.${input.format}`;
+  return `${ttsPlaybackExportArtifactScopePrefix(input)}${input.artifactId}/`;
+}
+
+export function ttsPlaybackExportArtifactKey(input: {
+  artifactId: string;
+  storageUserId: string;
+  documentId: string;
+  format: 'mp3' | 'm4b';
+  prefix: string;
+}): string {
+  return `${ttsPlaybackExportArtifactDirPrefix(input)}artifact.${input.format}`;
 }
 
 export function ttsPlaybackExportMetadataArtifactKey(input: {
   artifactId: string;
+  storageUserId: string;
+  documentId: string;
   prefix: string;
 }): string {
-  if (!SAFE_HASH_SEGMENT_REGEX.test(input.artifactId)) {
-    throw new Error(`Invalid playback export artifact id: ${input.artifactId}`);
-  }
-  return `${input.prefix}/tts_playback_exports_v1/${input.artifactId}/metadata.json`;
+  return `${ttsPlaybackExportArtifactDirPrefix(input)}metadata.json`;
 }
 
 function previewNamespaceSegment(namespace: string | null): string {

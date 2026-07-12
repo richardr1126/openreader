@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
 
     let artifact = await client.resolveTtsPlaybackExportArtifact({
       artifactId,
+      storageUserId: scope.storageUserId,
       documentId: parsed.documentId,
       documentVersion: scope.documentVersion,
       settingsHash,
@@ -172,6 +173,7 @@ export async function POST(request: NextRequest) {
       });
       artifact = await client.resolveTtsPlaybackExportArtifact({
         artifactId,
+        storageUserId: scope.storageUserId,
         documentId: parsed.documentId,
         documentVersion: scope.documentVersion,
         settingsHash,
@@ -181,7 +183,7 @@ export async function POST(request: NextRequest) {
     }
 
     const downloadUrl = artifact.artifact
-      ? `/api/tts/export/download?artifactId=${encodeURIComponent(artifactId)}`
+      ? `/api/tts/export/download?artifactId=${encodeURIComponent(artifactId)}&documentId=${encodeURIComponent(parsed.documentId)}`
       : null;
 
     return NextResponse.json({

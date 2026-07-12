@@ -184,6 +184,7 @@ describe('server-state architecture', () => {
       'POST /v1/document-conversions/docx/resolve',
       'POST /v1/document-previews/jobs',
       'POST /v1/document-previews/resolve',
+      'POST /v1/maintenance/exports/expire',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
       'POST /v1/tts-playback/cache/reset',
@@ -622,7 +623,7 @@ describe('server-state architecture', () => {
     expect(workerHandlers.indexOf('if (forceDocumentExtent)')).toBeLessThan(
       workerHandlers.indexOf('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))'),
     );
-    expect(workerStateMachine).toContain('WORKER_OPERATION_KIND_REUSES_SUCCEEDED[input.requestKind]');
+    expect(workerStateMachine).toContain('WORKER_OPERATION_KIND_POLICY[input.requestKind].reusesSucceeded');
   });
 
   test('keeps Cache Storage best-effort and admits only successful full responses', () => {

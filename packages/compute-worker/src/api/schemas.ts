@@ -185,11 +185,18 @@ export const ttsPlaybackExportArtifactCreateSchema = z.object({
 
 export const ttsPlaybackExportArtifactResolveSchema = z.object({
   artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
+  storageUserId: z.string().trim().min(1).max(256),
   documentId: documentIdSchema,
   documentVersion: z.number().int().nonnegative(),
   settingsHash: z.string().trim().min(1).max(256),
   format: ttsPlaybackExportFormatSchema,
   speed: z.number().min(0.5).max(3),
+}).strict();
+
+export const exportRetentionSchema = z.object({
+  // Floor of one hour so a misconfigured caller cannot sweep artifacts that
+  // clients are actively downloading right after preparation.
+  maxAgeMs: z.number().int().min(60 * 60 * 1000),
 }).strict();
 
 export const pdfResolveSchema = z.object({

@@ -18,6 +18,7 @@ import type {
   WorkerOperationKind,
   WorkerOperationProgress,
 } from '../operations/contracts';
+import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
@@ -25,15 +26,6 @@ import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
 const PULL_EXPIRES_MS = 5_000;
-const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
-  pdf_layout: 120_000,
-  tts_playback: 30_000,
-  tts_playback_plan: 30_000,
-  tts_playback_export: 120_000,
-  document_preview: 120_000,
-  document_conversion: 120_000,
-  account_export: 120_000,
-};
 
 export interface QueuedJob<TPayload> {
   jobId: string;
@@ -249,7 +241,7 @@ export function createWorkerLoopController(input: {
       });
       work.msg.ack();
       const durationMs = safeDurationMs(startedAt, now);
-      if (durationMs >= SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND[decoded.kind]) {
+      if (durationMs >= WORKER_OPERATION_KIND_POLICY[decoded.kind].slowJobLogThresholdMs) {
         input.logger.info({ worker: work.workerLabel, kind: decoded.kind, opId: decoded.opId, jobId: decoded.jobId, durationMs, timing: timing ?? null }, 'job.stage');
       }
       input.logger.info({

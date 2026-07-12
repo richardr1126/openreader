@@ -1,6 +1,7 @@
 import type { TaskRegistry } from './types';
 import { reapOrphanedBlobs } from './handlers/reap-orphaned-blobs';
 import { cleanupTempUploads } from './handlers/cleanup-temp-uploads';
+import { expireExportArtifacts } from './handlers/expire-export-artifacts';
 import { pruneJobEvents } from './handlers/prune-job-events';
 import { pruneTtsUsage } from './handlers/prune-tts-usage';
 
@@ -23,6 +24,13 @@ export const TASK_REGISTRY: TaskRegistry = {
     defaultIntervalMs: 60 * 60 * 1000,
     maxRunMs: 45_000,
     run: cleanupTempUploads,
+  },
+  'expire-export-artifacts': {
+    name: 'Expire export artifacts',
+    description: 'Delete completed account/audiobook export artifacts older than the retention window.',
+    defaultIntervalMs: 24 * 60 * 60 * 1000,
+    maxRunMs: 45_000,
+    run: expireExportArtifacts,
   },
   'prune-job-events': {
     name: 'Prune job event ledger',

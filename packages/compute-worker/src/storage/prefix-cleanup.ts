@@ -18,16 +18,16 @@ export async function deletePrefix(storage: ArtifactStorage, prefix: string): Pr
 }
 
 /**
- * Playback export artifacts are keyed by opaque artifact id, so ownership can
- * only be recovered from each artifact's metadata sidecar. Metadata reads are
- * batched; unreadable metadata is skipped rather than failing the cleanup.
+ * List export artifact directory prefixes under `exportRoot` whose metadata
+ * sidecar matches `ownsMetadata`. Metadata reads are batched; unreadable
+ * metadata is skipped rather than failing the cleanup.
  */
-export async function findOwnedTtsPlaybackExportPrefixes(input: {
+export async function findExportArtifactPrefixesByMetadata(input: {
   storage: ArtifactStorage;
-  s3Prefix: string;
+  exportRoot: string;
   ownsMetadata: (metadata: Record<string, unknown>) => boolean;
 }): Promise<string[]> {
-  const metadataKeys = (await input.storage.listPrefix(`${input.s3Prefix}/tts_playback_exports_v1/`))
+  const metadataKeys = (await input.storage.listPrefix(input.exportRoot))
     .filter((key) => key.endsWith('/metadata.json'));
   const owned: string[] = [];
   for (let index = 0; index < metadataKeys.length; index += METADATA_READ_BATCH) {

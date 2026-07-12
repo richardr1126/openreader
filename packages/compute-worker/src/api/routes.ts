@@ -59,6 +59,7 @@ import type { TtsPlaybackStorage, TtsPlaybackSessionState, TtsPlaybackSegmentMet
 import { generationFloorForCursor } from '../playback/generation-window';
 import { clearTtsPlaybackArtifacts } from '../playback/cache-clear';
 import { cleanupUserStorageArtifacts } from '../storage/user-storage-cleanup';
+import { expireExportArtifacts } from '../storage/export-retention';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -79,6 +80,7 @@ import {
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackCacheClearSchema,
   userStorageCleanupSchema,
+  exportRetentionSchema,
   ttsPlaybackOperationCreateSchema,
   ttsPlaybackResetSchema,
   ttsPlaybackSessionResolutionSchema,
@@ -255,12 +257,16 @@ export function registerComputeWorkerRoutes(input: {
     return await playbackStorage?.sessions.getSession(sessionId) ?? null;
   };
 
-  const readExportArtifactMetadata = async (artifactId: string): Promise<TtsPlaybackExportArtifactMetadata | null> => {
-    const key = ttsPlaybackExportMetadataArtifactKey({ artifactId, prefix: s3Prefix });
+  const readExportArtifactMetadata = async (input: {
+    artifactId: string;
+    storageUserId: string;
+    documentId: string;
+  }): Promise<TtsPlaybackExportArtifactMetadata | null> => {
+    const key = ttsPlaybackExportMetadataArtifactKey({ ...input, prefix: s3Prefix });
     try {
       const bytes = await storage.readObject(key);
       const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata;
-      if (parsed.schemaVersion !== 1 || parsed.artifactId !== artifactId || parsed.status !== 'ready') return null;
+      if (parsed.schemaVersion !== 1 || parsed.artifactId !== input.artifactId || parsed.status !== 'ready') return null;
       if (!await storage.objectExists(parsed.objectKey).catch(() => false)) return null;
       return parsed;
     } catch {
@@ -393,12 +399,11 @@ export function registerComputeWorkerRoutes(input: {
         if (!sessionId) continue;
         const session = await readPlaybackSession(sessionId).catch(() => null);
         if (!session || session.storageUserId !== scope.storageUserId) continue;
-      } else if (state.kind === 'tts_playback_export') {
-        const artifactId = state.opKey.split('|')[5];
-        const metadata = artifactId ? await readExportArtifactMetadata(artifactId) : null;
-        if (metadata && metadata.storageUserId !== scope.storageUserId) continue;
-        if (!operationMatchesTtsResetScope(state, scope)) continue;
       } else if (!operationMatchesTtsResetScope(state, scope)) {
+        // Export op keys carry no user id, so a same-doc/version/settings match
+        // from another user can be invalidated here. That is benign: artifacts
+        // are user-scoped objects and export resolve is artifact-first, so the
+        // other user's ready artifact still resolves.
         continue;
       }
       const record = await deps.operationStateStore.getOpStateRecord(state.opId);
@@ -408,11 +413,6 @@ export function registerComputeWorkerRoutes(input: {
         if (!sessionId) continue;
         const session = await readPlaybackSession(sessionId).catch(() => null);
         if (!session || session.storageUserId !== scope.storageUserId) continue;
-      } else if (record.state.kind === 'tts_playback_export') {
-        const artifactId = record.state.opKey.split('|')[5];
-        const metadata = artifactId ? await readExportArtifactMetadata(artifactId) : null;
-        if (metadata && metadata.storageUserId !== scope.storageUserId) continue;
-        if (!operationMatchesTtsResetScope(record.state, scope)) continue;
       } else if (!operationMatchesTtsResetScope(record.state, scope)) {
         continue;
       }
@@ -842,6 +842,14 @@ export function registerComputeWorkerRoutes(input: {
         properties: { artifactId: { type: 'string' } },
         required: ['artifactId'],
       },
+      querystring: {
+        type: 'object',
+        properties: {
+          storageUserId: { type: 'string' },
+          documentId: { type: 'string' },
+        },
+        required: ['storageUserId', 'documentId'],
+      },
       response: {
         200: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
         400: errorResponseSchema,
@@ -850,12 +858,15 @@ export function registerComputeWorkerRoutes(input: {
     },
   }, async (request, reply) => {
     const params = request.params as { artifactId?: string };
+    const query = request.query as { storageUserId?: string; documentId?: string };
     const artifactId = params.artifactId?.trim() ?? '';
-    if (!artifactId) {
+    const storageUserId = query.storageUserId?.trim() ?? '';
+    const documentId = query.documentId?.trim() ?? '';
+    if (!artifactId || !storageUserId || !documentId) {
       reply.code(400);
-      return { error: 'Missing export artifact id' };
+      return { error: 'Missing export artifact scope' };
     }
-    const artifact = await readExportArtifactMetadata(artifactId);
+    const artifact = await readExportArtifactMetadata({ artifactId, storageUserId, documentId });
     if (!artifact) {
       reply.code(404);
       return { error: 'Export artifact not found' };
@@ -1161,6 +1172,30 @@ export function registerComputeWorkerRoutes(input: {
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     return cleanupUserStorageArtifacts({ storage, s3Prefix, ...parsed.data });
+  });
+
+  app.post('/v1/maintenance/exports/expire', {
+    schema: {
+      body: jsonSchema(exportRetentionSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            expiredArtifacts: { type: 'number' },
+            deletedObjects: { type: 'number' },
+          },
+          required: ['expiredArtifacts', 'deletedObjects'],
+        },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = exportRetentionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    return expireExportArtifacts({ storage, s3Prefix, maxAgeMs: parsed.data.maxAgeMs });
   });
 
   app.get('/v1/tts-playback/sessions/:sessionId/audio', {
@@ -1830,7 +1865,11 @@ export function registerComputeWorkerRoutes(input: {
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     await ensureOrphanedOpRecovery();
-    const artifact = await readExportArtifactMetadata(parsed.data.artifactId);
+    const artifact = await readExportArtifactMetadata({
+      artifactId: parsed.data.artifactId,
+      storageUserId: parsed.data.storageUserId,
+      documentId: parsed.data.documentId,
+    });
     const opKey = buildTtsPlaybackExportOperationKey(parsed.data);
     const index = await deps.operationStateStore.getOpIndex?.(opKey);
     const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;

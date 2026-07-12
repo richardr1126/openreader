@@ -4099,6 +4099,22 @@
             "schema": {
               "type": "string"
             },
+            "in": "query",
+            "name": "storageUserId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "documentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
             "in": "path",
             "name": "artifactId",
             "required": true
@@ -5353,6 +5369,74 @@
                   "required": [
                     "deletedObjects",
                     "deletedDocumentArtifacts"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/maintenance/exports/expire": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "maxAgeMs": {
+                    "type": "integer",
+                    "minimum": 3600000,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "maxAgeMs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiredArtifacts": {
+                      "type": "number"
+                    },
+                    "deletedObjects": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "expiredArtifacts",
+                    "deletedObjects"
                   ]
                 }
               }
@@ -9756,6 +9840,11 @@
                     "type": "string",
                     "pattern": "^[a-f0-9]{8,128}$"
                   },
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "documentId": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
@@ -9785,6 +9874,7 @@
                 },
                 "required": [
                   "artifactId",
+                  "storageUserId",
                   "documentId",
                   "documentVersion",
                   "settingsHash",

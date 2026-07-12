@@ -23,19 +23,23 @@ export async function GET(request: NextRequest) {
     }
 
     const artifactId = request.nextUrl.searchParams.get('artifactId')?.trim() ?? '';
-    if (!/^[a-f0-9]{8,128}$/i.test(artifactId)) {
+    const documentId = request.nextUrl.searchParams.get('documentId')?.trim().toLowerCase() ?? '';
+    if (!/^[a-f0-9]{8,128}$/i.test(artifactId) || !documentId) {
       return NextResponse.json({ error: 'Invalid audiobook export artifact reference' }, { status: 400 });
     }
 
-    const artifact = await new ComputeWorkerClient().getTtsPlaybackExportArtifact(artifactId);
-    if (!artifact) {
-      return NextResponse.json({ error: 'Audiobook export artifact is not ready' }, { status: 404 });
-    }
-
-    const scope = await resolveSegmentDocumentScope(request, artifact.documentId);
+    // Authorize the document scope before touching worker state; the artifact
+    // key is user/document-scoped, so the read cannot cross ownership.
+    const scope = await resolveSegmentDocumentScope(request, documentId);
     if (scope instanceof Response) return scope;
-    if (scope.storageUserId !== artifact.storageUserId) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const artifact = await new ComputeWorkerClient().getTtsPlaybackExportArtifact({
+      artifactId,
+      storageUserId: scope.storageUserId,
+      documentId,
+    });
+    if (!artifact || artifact.storageUserId !== scope.storageUserId) {
+      return NextResponse.json({ error: 'Audiobook export artifact is not ready' }, { status: 404 });
     }
 
     return await sendStorageArtifact({

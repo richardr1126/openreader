@@ -143,6 +143,7 @@ export class ComputeWorkerClient {
 
   resolveTtsPlaybackExportArtifact(input: {
     artifactId: string;
+    storageUserId: string;
     documentId: string;
     documentVersion: number;
     settingsHash: string;
@@ -152,9 +153,17 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/exports/resolve', input);
   }
 
-  async getTtsPlaybackExportArtifact(artifactId: string): Promise<NonNullable<TtsPlaybackExportArtifactResolution['artifact']> | null> {
+  async getTtsPlaybackExportArtifact(input: {
+    artifactId: string;
+    storageUserId: string;
+    documentId: string;
+  }): Promise<NonNullable<TtsPlaybackExportArtifactResolution['artifact']> | null> {
     try {
-      return await this.requestJson('GET', `/v1/tts-playback/exports/${encodeURIComponent(artifactId)}`);
+      const query = new URLSearchParams({
+        storageUserId: input.storageUserId,
+        documentId: input.documentId,
+      });
+      return await this.requestJson('GET', `/v1/tts-playback/exports/${encodeURIComponent(input.artifactId)}?${query.toString()}`);
     } catch (error) {
       if (error instanceof WorkerHttpError && error.status === 404) return null;
       throw error;
@@ -225,6 +234,12 @@ export class ComputeWorkerClient {
     documentIds: string[];
   }): Promise<{ deletedObjects: number; deletedDocumentArtifacts: number }> {
     return this.requestJson('POST', '/v1/user-storage/cleanup', input);
+  }
+
+  expireExportArtifacts(input: {
+    maxAgeMs: number;
+  }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/maintenance/exports/expire', input);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {

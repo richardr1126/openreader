@@ -1,4 +1,4 @@
-import { WORKER_OPERATION_KIND_REUSES_SUCCEEDED } from '../operations/contracts';
+import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type {
   WorkerJobErrorShape,
   WorkerJobState,
@@ -60,7 +60,7 @@ export function shouldReuseExistingOperation(input: {
 }): boolean {
   if (input.current.kind !== input.requestKind) return false;
   if (input.current.status === 'succeeded') {
-    return WORKER_OPERATION_KIND_REUSES_SUCCEEDED[input.requestKind];
+    return WORKER_OPERATION_KIND_POLICY[input.requestKind].reusesSucceeded;
   }
   if (!isInflightStatus(input.current.status)) return false;
   const ageMs = input.now - input.current.updatedAt;

@@ -355,21 +355,30 @@ export type WorkerOperationKind =
   | 'account_export';
 
 /**
- * Whether a succeeded operation record satisfies a new request for the same
- * opKey. Kinds marked `false` treat durable artifacts (playback plans/segments,
- * previews, conversions) as the reusable cache and replace terminal operation
- * records so each request re-verifies current artifact/sidecar state. The
- * exhaustive Record forces every new kind to choose a reuse policy here instead
- * of growing kind-switches in the state machine.
+ * Per-kind operation policy. The exhaustive Record forces every new operation
+ * kind to declare its policy here instead of growing kind-switches in the
+ * state machine or worker loop.
+ *
+ * `reusesSucceeded`: whether a succeeded operation record satisfies a new
+ * request for the same opKey. Kinds marked `false` treat durable artifacts
+ * (playback plans/segments, previews, conversions) as the reusable cache and
+ * replace terminal operation records so each request re-verifies current
+ * artifact/sidecar state.
+ *
+ * `slowJobLogThresholdMs`: compute duration above which the worker loop logs
+ * the job as slow.
  */
-export const WORKER_OPERATION_KIND_REUSES_SUCCEEDED: Record<WorkerOperationKind, boolean> = {
-  pdf_layout: true,
-  tts_playback: false,
-  tts_playback_plan: false,
-  tts_playback_export: false,
-  document_preview: false,
-  document_conversion: false,
-  account_export: true,
+export const WORKER_OPERATION_KIND_POLICY: Record<WorkerOperationKind, {
+  reusesSucceeded: boolean;
+  slowJobLogThresholdMs: number;
+}> = {
+  pdf_layout: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
+  tts_playback: { reusesSucceeded: false, slowJobLogThresholdMs: 30_000 },
+  tts_playback_plan: { reusesSucceeded: false, slowJobLogThresholdMs: 30_000 },
+  tts_playback_export: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
+  document_preview: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
+  document_conversion: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
+  account_export: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
 };
 
 export interface PdfLayoutOperationRequest {
