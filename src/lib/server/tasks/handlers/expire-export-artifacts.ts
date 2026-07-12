@@ -21,12 +21,15 @@ export async function expireExportArtifacts(_context: TaskContext): Promise<Task
   if (!isComputeWorkerAvailable()) {
     return { summary: 'Skipped: compute worker not configured', expiredArtifacts: 0 };
   }
-  const result = await getComputeWorkerClient().expireExportArtifacts({
-    maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS,
-  });
+  const client = getComputeWorkerClient();
+  const [accountExports, audiobookExports] = await Promise.all([
+    client.expireAccountExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }),
+    client.expireTtsPlaybackExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }),
+  ]);
+  const expiredArtifacts = accountExports.expiredArtifacts + audiobookExports.expiredArtifacts;
   return {
-    summary: `Expired ${result.expiredArtifacts} export artifact(s)`,
-    expiredArtifacts: result.expiredArtifacts,
-    deletedObjects: result.deletedObjects,
+    summary: `Expired ${expiredArtifacts} export artifact(s)`,
+    expiredArtifacts,
+    deletedObjects: accountExports.deletedObjects + audiobookExports.deletedObjects,
   };
 }

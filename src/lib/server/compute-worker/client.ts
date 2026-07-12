@@ -236,10 +236,16 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/user-storage/cleanup', input);
   }
 
-  expireExportArtifacts(input: {
+  expireAccountExportArtifacts(input: {
     maxAgeMs: number;
   }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/maintenance/exports/expire', input);
+    return this.requestJson('POST', '/v1/account-exports/expire', input);
+  }
+
+  expireTtsPlaybackExportArtifacts(input: {
+    maxAgeMs: number;
+  }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/expire', input);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {

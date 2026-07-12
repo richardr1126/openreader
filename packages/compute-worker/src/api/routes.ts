@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Readable } from 'node:stream';
 import { verifyTtsPlaybackToken } from '@openreader/tts/playback-token';
 import { buildTtsPlaybackCanonicalSessionId } from '@openreader/tts/playback-scope';
@@ -59,7 +59,7 @@ import type { TtsPlaybackStorage, TtsPlaybackSessionState, TtsPlaybackSegmentMet
 import { generationFloorForCursor } from '../playback/generation-window';
 import { clearTtsPlaybackArtifacts } from '../playback/cache-clear';
 import { cleanupUserStorageArtifacts } from '../storage/user-storage-cleanup';
-import { expireExportArtifacts } from '../storage/export-retention';
+import { expireExportArtifactsUnderRoot } from '../storage/export-retention';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -1174,29 +1174,39 @@ export function registerComputeWorkerRoutes(input: {
     return cleanupUserStorageArtifacts({ storage, s3Prefix, ...parsed.data });
   });
 
-  app.post('/v1/maintenance/exports/expire', {
-    schema: {
-      body: jsonSchema(exportRetentionSchema),
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            expiredArtifacts: { type: 'number' },
-            deletedObjects: { type: 'number' },
-          },
-          required: ['expiredArtifacts', 'deletedObjects'],
+  // Retention sweeps live inside each artifact's resource namespace; there is
+  // deliberately no separate maintenance namespace in the hard-cut route map.
+  const exportRetentionRouteSchema = {
+    body: jsonSchema(exportRetentionSchema),
+    response: {
+      200: {
+        type: 'object',
+        properties: {
+          expiredArtifacts: { type: 'number' },
+          deletedObjects: { type: 'number' },
         },
-        400: errorResponseSchema,
+        required: ['expiredArtifacts', 'deletedObjects'],
       },
+      400: errorResponseSchema,
     },
-  }, async (request, reply) => {
+  };
+  const makeExportRetentionHandler = (exportRoot: string) => async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
     const parsed = exportRetentionSchema.safeParse(request.body);
     if (!parsed.success) {
       reply.code(400);
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
-    return expireExportArtifacts({ storage, s3Prefix, maxAgeMs: parsed.data.maxAgeMs });
-  });
+    return expireExportArtifactsUnderRoot({ storage, exportRoot, maxAgeMs: parsed.data.maxAgeMs });
+  };
+  app.post('/v1/account-exports/expire', {
+    schema: exportRetentionRouteSchema,
+  }, makeExportRetentionHandler(`${s3Prefix}/account_exports_v1/`));
+  app.post('/v1/tts-playback/exports/expire', {
+    schema: exportRetentionRouteSchema,
+  }, makeExportRetentionHandler(`${s3Prefix}/tts_playback_exports_v1/`));
 
   app.get('/v1/tts-playback/sessions/:sessionId/audio', {
     schema: {
