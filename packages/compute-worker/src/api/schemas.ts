@@ -193,6 +193,13 @@ export const ttsPlaybackExportArtifactResolveSchema = z.object({
   speed: z.number().min(0.5).max(3),
 }).strict();
 
+export const pdfLayoutClearSchema = z.object({
+  documentId: documentIdSchema,
+  namespace: namespaceSchema,
+}).strict();
+
+export const documentPreviewClearSchema = pdfLayoutClearSchema;
+
 export const ttsPlaybackPlansClearSchema = z.object({
   documentId: documentIdSchema,
 }).strict();

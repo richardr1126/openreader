@@ -28,6 +28,7 @@ import {
   documentPreviewMetadataArtifactKey,
   documentConversionMetadataArtifactKey,
   parsedPdfArtifactKey,
+  ttsPlaybackPlanArtifactPrefix,
   ttsPlaybackExportMetadataArtifactKey,
 } from '../storage/artifact-addressing';
 import {
@@ -60,7 +61,11 @@ import { generationFloorForCursor } from '../playback/generation-window';
 import { clearTtsPlaybackArtifacts } from '../playback/cache-clear';
 import { cleanupUserStorageArtifacts } from '../storage/user-storage-cleanup';
 import { expireExportArtifactsUnderRoot } from '../storage/export-retention';
-import { deletePrefix } from '../storage/prefix-cleanup';
+import {
+  clearDocumentPreviewArtifacts,
+  clearPdfLayoutArtifacts,
+  clearTtsPlaybackPlanArtifacts,
+} from '../storage/document-derived-cleanup';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -80,6 +85,8 @@ import {
   ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackCacheClearSchema,
+  documentPreviewClearSchema,
+  pdfLayoutClearSchema,
   ttsPlaybackPlansClearSchema,
   userStorageCleanupSchema,
   exportRetentionSchema,
@@ -1153,9 +1160,60 @@ export function registerComputeWorkerRoutes(input: {
     return { ...deleted, invalidatedPlaybackSessions, invalidatedJobOperations };
   });
 
-  // Document-scoped plan cleanup for callers with no owning user left (the
-  // orphaned-document reaper). Lives on the worker so the durable plan objects
-  // and the worker-local plan cache are invalidated together.
+  app.post('/v1/pdf-layout/clear', {
+    schema: {
+      body: jsonSchema(pdfLayoutClearSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: { deletedParsedObjects: { type: 'number' } },
+          required: ['deletedParsedObjects'],
+        },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = pdfLayoutClearSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    const deletedParsedObjects = await clearPdfLayoutArtifacts({
+      storage,
+      s3Prefix,
+      documentId: parsed.data.documentId,
+      namespace: parsed.data.namespace,
+    });
+    return { deletedParsedObjects };
+  });
+
+  app.post('/v1/document-previews/clear', {
+    schema: {
+      body: jsonSchema(documentPreviewClearSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: { deletedPreviewObjects: { type: 'number' } },
+          required: ['deletedPreviewObjects'],
+        },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = documentPreviewClearSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    const deletedPreviewObjects = await clearDocumentPreviewArtifacts({
+      storage,
+      s3Prefix,
+      documentId: parsed.data.documentId,
+      namespace: parsed.data.namespace,
+    });
+    return { deletedPreviewObjects };
+  });
+
   app.post('/v1/tts-playback/plans/clear', {
     schema: {
       body: jsonSchema(ttsPlaybackPlansClearSchema),
@@ -1174,11 +1232,18 @@ export function registerComputeWorkerRoutes(input: {
       reply.code(400);
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
-    const planPrefix = `${s3Prefix}/tts_playback_plan_v1/${parsed.data.documentId}/`;
+    const planPrefix = ttsPlaybackPlanArtifactPrefix({
+      documentId: parsed.data.documentId,
+      prefix: s3Prefix,
+    });
     for (const key of [...planSegmentsCache.keys()]) {
       if (key.startsWith(planPrefix)) planSegmentsCache.delete(key);
     }
-    const deletedPlanObjects = await deletePrefix(storage, planPrefix);
+    const deletedPlanObjects = await clearTtsPlaybackPlanArtifacts({
+      storage,
+      s3Prefix,
+      documentId: parsed.data.documentId,
+    });
     return { deletedPlanObjects };
   });
 

@@ -3,7 +3,7 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { deleteDocumentPrefix, isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
+import { isMissingBlobError, isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { getS3Client, getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -118,10 +118,6 @@ export async function presignDocumentPreviewGet(
     }),
     { expiresIn: Math.max(30, Math.min(options?.expiresInSeconds ?? 300, 3600)) },
   );
-}
-
-export async function deleteDocumentPreviewArtifacts(documentId: string, namespace: string | null): Promise<number> {
-  return deleteDocumentPrefix(documentPreviewPrefix(documentId, namespace));
 }
 
 export { isMissingBlobError };

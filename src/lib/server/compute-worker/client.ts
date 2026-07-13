@@ -248,6 +248,20 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/exports/expire', input, init);
   }
 
+  clearPdfLayoutArtifacts(input: {
+    documentId: string;
+    namespace: string | null;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedParsedObjects: number }> {
+    return this.requestJson('POST', '/v1/pdf-layout/clear', input, init);
+  }
+
+  clearDocumentPreviewArtifacts(input: {
+    documentId: string;
+    namespace: string | null;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedPreviewObjects: number }> {
+    return this.requestJson('POST', '/v1/document-previews/clear', input, init);
+  }
+
   clearTtsPlaybackPlans(input: {
     documentId: string;
   }, init?: { signal?: AbortSignal }): Promise<{ deletedPlanObjects: number }> {

@@ -9,8 +9,6 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getS3Client, getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
-import { serverLogger } from '@/lib/server/logger';
-import { logDegraded } from '@/lib/server/errors/logging';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -122,16 +120,6 @@ export function tempDocumentUploadReceiptKey(token: string, userId: string, name
     throw new Error(`Invalid temp upload token: ${token}`);
   }
   return `${tempDocumentUploadPrefix(userId, namespace)}${token}.receipt.json`;
-}
-
-function legacyDocumentParsedKey(id: string, namespace: string | null): string {
-  if (!isValidDocumentId(id)) {
-    throw new Error(`Invalid document id: ${id}`);
-  }
-  const cfg = getS3Config();
-  const ns = sanitizeNamespace(namespace);
-  const nsSegment = ns ? `ns/${ns}/` : '';
-  return `${cfg.prefix}/documents_v1/${nsSegment}${id}/parsed.v1.json`;
 }
 
 export async function presignPut(
@@ -471,31 +459,7 @@ export async function deleteDocumentBlob(id: string, namespace: string | null): 
   const cfg = getS3Config();
   const client = getS3InternalClient();
   const key = documentKey(id, namespace);
-  const legacyParsedKey = legacyDocumentParsedKey(id, namespace);
-  const ns = sanitizeNamespace(namespace);
-  const nsSegment = ns ? `ns/${ns}/` : '';
-  const parsedPrefix = `${cfg.prefix}/documents_v1/parsed_v2/${nsSegment}${id}/`;
-
-  await deleteDocumentPrefix(parsedPrefix);
-  await deleteDocumentPrefix(`${key}/`);
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: legacyParsedKey }));
-  // Delete the source after the initial derived-artifact cleanup, then sweep
-  // parsed output once more to catch a worker that finished during deletion.
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
-  // The source blob is already gone at this point. Treat the final sweep as a
-  // best-effort cleanup: if it throws, rethrowing would make callers roll back
-  // the document row even though the source is deleted, so log and swallow.
-  try {
-    await deleteDocumentPrefix(parsedPrefix);
-  } catch (error) {
-    logDegraded(serverLogger, {
-      event: 'documents.blob_delete.final_parsed_sweep.failed',
-      msg: 'Failed final parsed-output sweep after document deletion',
-      step: 'delete_document_parsed_prefix_final',
-      context: { parsedPrefix },
-      error,
-    });
-  }
 }
 
 export async function deleteTempDocumentUpload(token: string, userId: string, namespace: string | null): Promise<void> {

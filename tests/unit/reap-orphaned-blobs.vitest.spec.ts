@@ -3,18 +3,26 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   del: vi.fn(async () => undefined),
+  clearPdfLayout: vi.fn(async () => ({ deletedParsedObjects: 0 })),
+  clearPreviews: vi.fn(async () => ({ deletedPreviewObjects: 0 })),
+  clearPlans: vi.fn(async () => ({ deletedPlanObjects: 0 })),
   owned: [] as Array<{ id: string }>,
   ownedAfterLease: [] as Array<{ id: string }>,
   leaseRelease: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/lib/server/storage/s3', () => ({ isS3Configured: () => true }));
+vi.mock('@/lib/server/compute-worker/client', () => ({
+  isComputeWorkerAvailable: () => true,
+  getComputeWorkerClient: () => ({
+    clearPdfLayoutArtifacts: mocks.clearPdfLayout,
+    clearDocumentPreviewArtifacts: mocks.clearPreviews,
+    clearTtsPlaybackPlans: mocks.clearPlans,
+  }),
+}));
 vi.mock('@/lib/server/documents/blobstore', () => ({
   listDocumentSourceBlobs: mocks.list,
   deleteDocumentBlob: mocks.del,
-}));
-vi.mock('@/lib/server/documents/previews-blobstore', () => ({
-  deleteDocumentPreviewArtifacts: vi.fn(async () => 0),
 }));
 vi.mock('@/lib/server/documents/previews', () => ({
   deleteDocumentPreviewRows: vi.fn(async () => undefined),
@@ -51,6 +59,9 @@ beforeEach(() => {
   mocks.list.mockReset();
   mocks.del.mockReset();
   mocks.del.mockResolvedValue(undefined);
+  mocks.clearPdfLayout.mockClear();
+  mocks.clearPreviews.mockClear();
+  mocks.clearPlans.mockClear();
   mocks.owned = [];
   mocks.ownedAfterLease = [];
   mocks.leaseRelease.mockClear();
@@ -70,6 +81,21 @@ describe('reap-orphaned-blobs', () => {
 
     expect(mocks.del).toHaveBeenCalledTimes(1);
     expect(mocks.del).toHaveBeenCalledWith('orphan-old', null);
+    expect(mocks.clearPdfLayout).toHaveBeenCalledWith(
+      { documentId: 'orphan-old', namespace: null },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(mocks.clearPreviews).toHaveBeenCalledWith(
+      { documentId: 'orphan-old', namespace: null },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(mocks.clearPlans).toHaveBeenCalledWith(
+      { documentId: 'orphan-old' },
+      { signal: expect.any(AbortSignal) },
+    );
+    for (const clear of [mocks.clearPdfLayout, mocks.clearPreviews, mocks.clearPlans]) {
+      expect(clear.mock.invocationCallOrder[0]).toBeLessThan(mocks.del.mock.invocationCallOrder[0]);
+    }
     expect(result.reaped).toBe(1);
     expect(result.scanned).toBe(3);
     expect(result.candidates).toBe(2);

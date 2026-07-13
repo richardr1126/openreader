@@ -1060,14 +1060,9 @@ invariant violations were found. The verified findings were fixed as follows:
    no callers), plus their orphaned wait-buffer constants.
 8. Orphaned playback plans are reaped through the worker. Plans are keyed by
    document id only, so account deletion (SQL cascade + orphan reaper)
-   previously left them behind as orphaned segmented document text. The
-   orphan reaper now calls `POST /v1/tts-playback/plans/clear` before
-   deleting an orphaned blob; the route lives on the worker so the durable
-   plan objects and the worker-local plan cache are invalidated together,
-   and a failed call leaves the blob for the next reaper cycle. Namespaced
-   account cleanup deletes per-document plan prefixes inside the worker
-   cleanup path. Explicit document deletion already cleared plans through
-   the playback cache clear.
+   previously left them behind as orphaned segmented document text. This was
+   handled by `POST /v1/tts-playback/plans/clear`; Step 21 added sibling
+   resource-owned cleanup routes for parsed layouts and previews.
 
 Reviewed and intentionally unchanged: client hook fetches already run in
 parallel, the scrubber gradient memo is stable between projection ticks, and
@@ -1129,73 +1124,28 @@ the new key layout, maintenance route, and policy registry).
 
 ---
 
-## Planned Steps
-
 ### 21. Worker-Owned Document Derived-Artifact Deletion
 
-Status: planned. This finishes the ownership hard cut for document
-derived-artifact deletion. Step 19 moved playback plan deletion to the worker
-(`POST /v1/tts-playback/plans/clear`) so durable plan objects and the
-worker-local plan cache are invalidated together. Two per-document S3 deletions
-still run inside Next request/task handlers and predate this branch:
+Status: complete. Document-derived artifact deletion now uses worker-owned,
+resource-scoped hard-cut paths.
 
-- `deleteDocumentBlob` (`src/lib/server/documents/blobstore.ts`) deletes the
-  parsed PDF prefix `documents_v1/parsed_v2/[ns/<ns>/]<documentId>/` (plus the
-  legacy single-object parsed key) directly from Next.
-- The orphaned-blob reaper calls `deleteDocumentPreviewArtifacts`
-  (`src/lib/server/documents/previews-blobstore.ts`), which deletes
-  `document_previews_v1/...` from Next.
+1. `POST /v1/pdf-layout/clear`, `POST /v1/document-previews/clear`, and
+   `POST /v1/tts-playback/plans/clear` keep cleanup in the same namespaces as
+   each resource's resolve/create routes. The first two accept `documentId`
+   and `namespace`; plans are document-keyed and accept `documentId` only.
+   Shared worker storage helpers derive and delete the current prefixes, and
+   the plan route also evicts matching entries from its local cache.
+2. The orphaned-blob reaper calls all three routes with its task abort signal
+   before deleting the source blob. A missing worker or any cleanup failure
+   leaves the source in place for a later retry.
+3. Next no longer deletes or constructs deletion paths for parsed PDF or
+   preview artifacts. `deleteDocumentBlob` deletes only the source object; the
+   obsolete parsed single-object and source-child cleanup paths and the
+   preview deletion helper are gone.
+4. Source blob reference counting, SQL ownership rows, preview SQL rows, and
+   the bounded per-document trigger remain Next-owned. No global object scan
+   was introduced.
 
-These are bounded single-document prefix deletes, not unbounded scans, so they
-do not violate the Vercel request-duration model the way a broad object scan
-would. They are ownership debt, not a correctness or latency bug: parsed
-artifacts and previews are worker-owned derived media (Steps 14 and the PDF
-parse flow), yet Next still reaches into their object layout to delete them.
-
-Why this matters now: the worker is the authority for parsed and preview
-artifact key layout and, for previews, may hold worker-local caches that a
-Next-side S3 delete cannot invalidate. Every time the parsed or preview key
-scheme changes, two codebases must change together. Keeping deletion in Next
-also keeps S3 client construction and object-key assembly for worker-owned
-prefixes inside the app, which the Step 17 route contract says should move out.
-
-Target ownership:
-
-- Next owns authentication, ownership/scope resolution, the SQL document-row
-  delete, and triggering deletion. It does not construct parsed/preview object
-  keys or issue their S3 deletes.
-- Worker owns parsed and preview artifact deletion plus any worker-local cache
-  invalidation, mirroring `POST /v1/tts-playback/plans/clear`.
-
-Implementation sketch (do not over-fit; collapse into one route if cleaner):
-
-1. Add a document-scoped worker cleanup route in the document-artifacts
-   namespace — either one `POST /v1/documents/:documentId/derived/clear` that
-   deletes parsed + preview (+ plan) prefixes for a document, or per-resource
-   routes matching the existing preview/conversion namespaces. Prefer folding
-   the existing `POST /v1/tts-playback/plans/clear` behavior in so a single
-   call reaps all document-derived playback/parse/preview artifacts.
-2. Body carries `documentId` and `namespace` only; the worker builds the object
-   keys from its own addressing module and does not query SQL.
-3. Update `deleteDocumentBlob` to delete only the source blob (and the legacy
-   parsed key if it must stay a Next concern) and have callers invoke the
-   worker cleanup route for derived artifacts. Update the orphaned-blob reaper
-   to call the combined worker route instead of `deleteDocumentPreviewArtifacts`
-   and the separate plans-clear call.
-4. Thread `context.signal` / request abort through the new client method, as
-   the plans-clear and export-retention calls already do.
-5. Remove now-unused Next-side parsed/preview delete helpers and their S3
-   key builders if no other caller remains. Keep account-deletion and
-   single-document delete flows behaving identically from the user's side.
-6. Regression coverage: pin the new worker route on the route map, assert the
-   reaper and document-delete paths call the worker for derived-artifact
-   deletion, and assert Next no longer constructs parsed/preview object keys
-   for deletion. Confirm `pnpm run check:compute-boundary` still passes.
-
-Non-goals:
-
-- Do not move the source document blob delete or the SQL row delete to the
-  worker; blob reference-counting and ownership stay Next-owned (the reaper is
-  the last owner-independent point, and it stays a Next-triggered task).
-- Do not turn any of these into unbounded object scans; they remain bounded
-  per-document prefix deletes.
+Verified by the generated worker OpenAPI/client contract, the hard-cut route
+map, worker cleanup unit coverage, orphan-reaper coverage, compute-boundary
+checks, type checking, and the unit suite.

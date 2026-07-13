@@ -10,6 +10,14 @@ export function parsedPdfArtifactKey(input: {
   prefix: string;
   parserVersion?: string;
 }): string {
+  return `${parsedPdfArtifactPrefix(input)}${encodeParserVersion(input.parserVersion ?? PDF_PARSER_VERSION)}.json`;
+}
+
+export function parsedPdfArtifactPrefix(input: {
+  documentId: string;
+  namespace: string | null;
+  prefix: string;
+}): string {
   if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
     throw new Error(`Invalid document id: ${input.documentId}`);
   }
@@ -17,7 +25,7 @@ export function parsedPdfArtifactKey(input: {
     ? input.namespace
     : null;
   const namespaceSegment = namespace ? `ns/${namespace}/` : '';
-  return `${input.prefix}/documents_v1/parsed_v2/${namespaceSegment}${input.documentId}/${encodeParserVersion(input.parserVersion ?? PDF_PARSER_VERSION)}.json`;
+  return `${input.prefix}/documents_v1/parsed_v2/${namespaceSegment}${input.documentId}/`;
 }
 
 /**
@@ -78,14 +86,21 @@ export function ttsPlaybackPlanArtifactKey(input: {
   planSignature: string;
   prefix: string;
 }): string {
-  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
-    throw new Error(`Invalid document id: ${input.documentId}`);
-  }
   if (!SAFE_PLAN_SIGNATURE_REGEX.test(input.planSignature)) {
     throw new Error(`Invalid playback plan signature: ${input.planSignature}`);
   }
   const version = Math.max(0, Math.floor(input.documentVersion));
-  return `${input.prefix}/tts_playback_plan_v1/${input.documentId}/${version}/${input.readerType}/${input.planSignature}.json`;
+  return `${ttsPlaybackPlanArtifactPrefix(input)}${version}/${input.readerType}/${input.planSignature}.json`;
+}
+
+export function ttsPlaybackPlanArtifactPrefix(input: {
+  documentId: string;
+  prefix: string;
+}): string {
+  if (!DOCUMENT_ID_REGEX.test(input.documentId)) {
+    throw new Error(`Invalid document id: ${input.documentId}`);
+  }
+  return `${input.prefix}/tts_playback_plan_v1/${input.documentId}/`;
 }
 
 const SAFE_HASH_SEGMENT_REGEX = /^[a-f0-9]{8,128}$/i;

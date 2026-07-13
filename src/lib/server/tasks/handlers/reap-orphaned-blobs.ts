@@ -4,7 +4,6 @@ import { documents } from '@openreader/database/schema';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { deleteDocumentBlob, listDocumentSourceBlobs } from '@/lib/server/documents/blobstore';
-import { deleteDocumentPreviewArtifacts } from '@/lib/server/documents/previews-blobstore';
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
@@ -57,17 +56,27 @@ export async function reapOrphanedBlobs(context: TaskContext): Promise<TaskResul
           .limit(1);
         if (owner) continue;
 
-        // Playback plans are document-keyed with no owner left to scope a
-        // cache clear, so the worker deletes them (and drops its plan cache)
-        // before the blob goes. A failure here leaves the blob for retry.
-        if (isComputeWorkerAvailable()) {
-          await getComputeWorkerClient().clearTtsPlaybackPlans(
+        // A failure to clear worker-owned derived artifacts leaves the source
+        // blob in place so the entire document cleanup can be retried.
+        if (!isComputeWorkerAvailable()) {
+          throw new Error('Compute worker is required to clear document-derived artifacts');
+        }
+        const client = getComputeWorkerClient();
+        await Promise.all([
+          client.clearPdfLayoutArtifacts(
+            { documentId: candidate.id, namespace: null },
+            { signal: context.signal },
+          ),
+          client.clearDocumentPreviewArtifacts(
+            { documentId: candidate.id, namespace: null },
+            { signal: context.signal },
+          ),
+          client.clearTtsPlaybackPlans(
             { documentId: candidate.id },
             { signal: context.signal },
-          );
-        }
+          ),
+        ]);
         await deleteDocumentBlob(candidate.id, null);
-        await deleteDocumentPreviewArtifacts(candidate.id, null);
         await deleteDocumentPreviewRows(candidate.id, null);
         reaped += 1;
       } catch (error) {
