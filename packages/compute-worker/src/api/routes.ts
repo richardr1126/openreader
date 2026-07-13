@@ -60,6 +60,7 @@ import { generationFloorForCursor } from '../playback/generation-window';
 import { clearTtsPlaybackArtifacts } from '../playback/cache-clear';
 import { cleanupUserStorageArtifacts } from '../storage/user-storage-cleanup';
 import { expireExportArtifactsUnderRoot } from '../storage/export-retention';
+import { deletePrefix } from '../storage/prefix-cleanup';
 import { toComputeOperation, type ComputeOperationEvent } from './compute-operation';
 import {
   apiErrorResponseSchema,
@@ -79,6 +80,7 @@ import {
   ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackCacheClearSchema,
+  ttsPlaybackPlansClearSchema,
   userStorageCleanupSchema,
   exportRetentionSchema,
   ttsPlaybackOperationCreateSchema,
@@ -182,6 +184,7 @@ function isTerminalStatus(status: import('../operations/contracts').WorkerJobSta
 function operationMatchesTtsResetScope(
   state: StreamedOperationState,
   scope: {
+    storageUserId: string;
     documentId: string;
     documentVersion?: number;
     settingsHash?: string;
@@ -189,6 +192,10 @@ function operationMatchesTtsResetScope(
 ): boolean {
   const keyScope = ttsPlaybackResetScopeFromOperationKey(state.opKey);
   if (!keyScope) return false;
+  // Keys that carry an owner (exports) must match the resetting user. Plan
+  // operations are owner-less by design: the plan is a shared derived
+  // artifact and its objects are deleted by this same reset.
+  if (keyScope.storageUserId !== null && keyScope.storageUserId !== scope.storageUserId) return false;
   return keyScope.documentId === scope.documentId
     && (scope.documentVersion === undefined || keyScope.documentVersion === Math.max(0, Math.floor(scope.documentVersion)))
     && (scope.settingsHash === undefined || keyScope.settingsHash === scope.settingsHash);
@@ -400,10 +407,6 @@ export function registerComputeWorkerRoutes(input: {
         const session = await readPlaybackSession(sessionId).catch(() => null);
         if (!session || session.storageUserId !== scope.storageUserId) continue;
       } else if (!operationMatchesTtsResetScope(state, scope)) {
-        // Export op keys carry no user id, so a same-doc/version/settings match
-        // from another user can be invalidated here. That is benign: artifacts
-        // are user-scoped objects and export resolve is artifact-first, so the
-        // other user's ready artifact still resolves.
         continue;
       }
       const record = await deps.operationStateStore.getOpStateRecord(state.opId);
@@ -1148,6 +1151,35 @@ export function registerComputeWorkerRoutes(input: {
       scope: { ...resetScope, namespace, ...(readerType ? { readerType } : {}) },
     });
     return { ...deleted, invalidatedPlaybackSessions, invalidatedJobOperations };
+  });
+
+  // Document-scoped plan cleanup for callers with no owning user left (the
+  // orphaned-document reaper). Lives on the worker so the durable plan objects
+  // and the worker-local plan cache are invalidated together.
+  app.post('/v1/tts-playback/plans/clear', {
+    schema: {
+      body: jsonSchema(ttsPlaybackPlansClearSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: { deletedPlanObjects: { type: 'number' } },
+          required: ['deletedPlanObjects'],
+        },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackPlansClearSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    const planPrefix = `${s3Prefix}/tts_playback_plan_v1/${parsed.data.documentId}/`;
+    for (const key of [...planSegmentsCache.keys()]) {
+      if (key.startsWith(planPrefix)) planSegmentsCache.delete(key);
+    }
+    const deletedPlanObjects = await deletePrefix(storage, planPrefix);
+    return { deletedPlanObjects };
   });
 
   app.post('/v1/user-storage/cleanup', {

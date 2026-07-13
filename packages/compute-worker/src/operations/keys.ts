@@ -207,6 +207,7 @@ export { buildTtsPlaybackExportArtifactId };
 
 export function buildTtsPlaybackExportOperationKey(input: {
   artifactId: string;
+  storageUserId: string;
   documentId: string;
   documentVersion: number;
   settingsHash: string;
@@ -214,11 +215,14 @@ export function buildTtsPlaybackExportOperationKey(input: {
   speed: number;
 }): string {
   const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
+  // storageUserId is part of the key so cache-reset invalidation can match
+  // export operations to their owner without reading artifact metadata.
   return [
     'tts_playback_export',
     'v1',
     input.documentId,
     String(input.documentVersion),
+    input.storageUserId,
     input.settingsHash,
     input.artifactId,
     input.format,
@@ -229,24 +233,28 @@ export function buildTtsPlaybackExportOperationKey(input: {
 /**
  * Extract the cache-reset scope fields shared by the playback operation keys.
  * Kept beside the key builders so a key-format change cannot silently desync
- * scope matching in the cache-reset path.
+ * scope matching in the cache-reset path. `storageUserId` is null for kinds
+ * whose keys carry no owner (shared plan operations).
  */
 export function ttsPlaybackResetScopeFromOperationKey(opKey: string): {
   documentId: string;
   documentVersion: number;
   settingsHash: string;
+  storageUserId: string | null;
 } | null {
   const parts = opKey.split('|');
   const [kind, version, documentId] = parts;
   if (version !== 'v1' || !documentId) return null;
   if (kind !== 'tts_playback' && kind !== 'tts_playback_plan' && kind !== 'tts_playback_export') return null;
-  // tts_playback        | v1 | documentId | version | settingsHash | scopeHash   | sessionId     | intent
-  // tts_playback_export | v1 | documentId | version | settingsHash | artifactId  | format        | speed
-  // tts_playback_plan   | v1 | documentId | version | readerType   | settingsHash | planSignature
-  const settingsHash = kind === 'tts_playback_plan' ? parts[5] : parts[4];
+  // tts_playback        | v1 | documentId | version | settingsHash  | scopeHash    | sessionId  | intent
+  // tts_playback_export | v1 | documentId | version | storageUserId | settingsHash | artifactId | format | speed
+  // tts_playback_plan   | v1 | documentId | version | readerType    | settingsHash | planSignature
+  const settingsHash = kind === 'tts_playback' ? parts[4] : parts[5];
+  const storageUserId = kind === 'tts_playback_export' ? parts[4] ?? null : null;
   const documentVersion = Number(parts[3]);
   if (!settingsHash || !Number.isFinite(documentVersion)) return null;
-  return { documentId, documentVersion, settingsHash };
+  if (kind === 'tts_playback_export' && !storageUserId) return null;
+  return { documentId, documentVersion, settingsHash, storageUserId };
 }
 
 export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
@@ -268,10 +276,11 @@ export function ttsPlaybackExportSubjectFromOperationKey(opKey: string): {
   artifactId: string;
   format: 'mp3' | 'm4b';
 } | null {
+  // tts_playback_export | v1 | documentId | version | storageUserId | settingsHash | artifactId | format | speed
   const parts = opKey.split('|');
   const [kind, version, documentId] = parts;
-  const artifactId = parts[5];
-  const format = parts[6];
+  const artifactId = parts[6];
+  const format = parts[7];
   if (
     kind !== 'tts_playback_export'
     || version !== 'v1'

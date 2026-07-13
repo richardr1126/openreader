@@ -192,6 +192,7 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/exports/expire',
       'POST /v1/tts-playback/exports/jobs',
       'POST /v1/tts-playback/exports/resolve',
+      'POST /v1/tts-playback/plans/clear',
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/resolve',

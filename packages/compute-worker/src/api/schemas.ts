@@ -193,6 +193,10 @@ export const ttsPlaybackExportArtifactResolveSchema = z.object({
   speed: z.number().min(0.5).max(3),
 }).strict();
 
+export const ttsPlaybackPlansClearSchema = z.object({
+  documentId: documentIdSchema,
+}).strict();
+
 export const exportRetentionSchema = z.object({
   // Floor of one hour so a misconfigured caller cannot sweep artifacts that
   // clients are actively downloading right after preparation.

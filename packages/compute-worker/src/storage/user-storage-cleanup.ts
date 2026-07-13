@@ -37,6 +37,9 @@ export async function cleanupUserStorageArtifacts(input: {
         deletePrefix(storage, `${s3Prefix}/documents_v1/ns/${namespace}/${documentId}`),
         deletePrefix(storage, `${s3Prefix}/documents_v1/parsed_v2/ns/${namespace}/${documentId}/`),
         deletePrefix(storage, `${s3Prefix}/document_previews_v1/ns/${namespace}/${documentId}/`),
+        // Plans are keyed by document id only; namespaced documents are
+        // test-owned, so their plans go with the document artifacts.
+        deletePrefix(storage, `${s3Prefix}/tts_playback_plan_v1/${documentId}/`),
       ]);
       deletedDocumentArtifacts += deleted.reduce((total, count) => total + count, 0);
     }

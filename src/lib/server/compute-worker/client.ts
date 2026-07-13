@@ -238,14 +238,20 @@ export class ComputeWorkerClient {
 
   expireAccountExportArtifacts(input: {
     maxAgeMs: number;
-  }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/account-exports/expire', input);
+  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/account-exports/expire', input, init);
   }
 
   expireTtsPlaybackExportArtifacts(input: {
     maxAgeMs: number;
-  }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/tts-playback/exports/expire', input);
+  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/expire', input, init);
+  }
+
+  clearTtsPlaybackPlans(input: {
+    documentId: string;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedPlanObjects: number }> {
+    return this.requestJson('POST', '/v1/tts-playback/plans/clear', input, init);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {
@@ -276,7 +282,12 @@ export class ComputeWorkerClient {
     });
   }
 
-  private async requestJson<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(
+    method: 'GET' | 'POST' | 'PUT',
+    path: string,
+    body?: unknown,
+    init?: { signal?: AbortSignal },
+  ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
@@ -285,6 +296,7 @@ export class ComputeWorkerClient {
         ...(method === 'POST' || method === 'PUT' ? { 'Content-Type': 'application/json' } : {}),
       },
       ...(method === 'POST' || method === 'PUT' ? { body: JSON.stringify(body ?? {}) } : {}),
+      ...(init?.signal ? { signal: init.signal } : {}),
       cache: 'no-store',
     });
     if (!response.ok) {

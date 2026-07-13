@@ -14,7 +14,7 @@ const EXPORT_ARTIFACT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
  * object scan and deletion run on the compute worker; this handler is only
  * the short scheduled trigger.
  */
-export async function expireExportArtifacts(_context: TaskContext): Promise<TaskResult> {
+export async function expireExportArtifacts(context: TaskContext): Promise<TaskResult> {
   if (!isS3Configured()) {
     return { summary: 'Skipped: object storage not configured', expiredArtifacts: 0 };
   }
@@ -23,8 +23,8 @@ export async function expireExportArtifacts(_context: TaskContext): Promise<Task
   }
   const client = getComputeWorkerClient();
   const [accountExports, audiobookExports] = await Promise.all([
-    client.expireAccountExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }),
-    client.expireTtsPlaybackExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }),
+    client.expireAccountExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }, { signal: context.signal }),
+    client.expireTtsPlaybackExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }, { signal: context.signal }),
   ]);
   const expiredArtifacts = accountExports.expiredArtifacts + audiobookExports.expiredArtifacts;
   return {
