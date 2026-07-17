@@ -1,11 +1,11 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { anonymous } from "better-auth/plugins";
+import { anonymous, genericOAuth } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@openreader/database";
-import { getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
+import { getOidcAuthConfig, getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
 import { isAdminEmail, syncAdminFlag } from "@/lib/server/admin/email-sync";
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { assertUserSignupAllowed } from '@/lib/server/auth/signup-policy';
@@ -52,6 +52,7 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
 
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 const requiredAuthEnv = getRequiredAuthEnv();
+const oidcAuthConfig = getOidcAuthConfig();
 
 const createAuth = () => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,6 +138,26 @@ const createAuth = () => betterAuth({
       },
     }),
   },
+  ...(oidcAuthConfig && {
+    account: {
+      accountLinking: {
+        enabled: true,
+        // Let OIDC sign-ins attach to an existing account with the same
+        // email (e.g. a user who originally signed up with email/password)
+        // instead of failing with "account already exists".
+        trustedProviders: [oidcAuthConfig.providerId],
+        // OpenReader never verifies local emails (`requireEmailVerification`
+        // is false and no verification emails are sent), so Better Auth's
+        // default of requiring `emailVerified: true` on the local row would
+        // permanently block linking for every email/password user. Rely on
+        // the trusted IdP's email claim as ownership proof instead. Note the
+        // trade-off: an unverified local account at some email can be linked
+        // by whoever owns that email at the IdP — acceptable when the IdP is
+        // operated by the same admin deploying OpenReader.
+        requireLocalEmailVerified: false,
+      },
+    },
+  }),
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (reasonable for user experience)
     updateAge: 60 * 60 * 1, // 1 hour (refresh more frequently)
@@ -191,6 +212,21 @@ const createAuth = () => betterAuth({
             }
             // Note: Anonymous user will be automatically deleted after this callback completes
           },
+        }),
+      ]
+      : []),
+    ...(oidcAuthConfig
+      ? [
+        genericOAuth({
+          config: [
+            {
+              providerId: oidcAuthConfig.providerId,
+              clientId: oidcAuthConfig.clientId,
+              clientSecret: oidcAuthConfig.clientSecret,
+              discoveryUrl: oidcAuthConfig.discoveryUrl,
+              scopes: oidcAuthConfig.scopes,
+            },
+          ],
         }),
       ]
       : []),
