@@ -1,11 +1,10 @@
 import { and, eq, inArray, like, ne } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documentPreviews, documents } from '@openreader/database/schema';
-import { deleteDocumentPrefix } from '../src/lib/server/documents/blobstore';
-import { deleteTtsSegmentPrefix } from '../src/lib/server/tts/segments-blobstore';
 import { getS3Config, isS3Configured } from '../src/lib/server/storage/s3';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
+import { deleteTestObjectPrefix } from './support/s3-prefix-cleanup';
 
 function chunk<T>(items: T[], size: number): T[][] {
   if (items.length === 0) return [];
@@ -37,11 +36,11 @@ export default async function globalTeardown(): Promise<void> {
     const playbackAudioNsRootPrefix = `${config.prefix}/tts_playback_segments_audio_v1/ns/`;
     const accountExportsNsRootPrefix = `${config.prefix}/account_exports_v1/ns/`;
 
-    await deleteDocumentPrefix(docsNsRootPrefix);
-    await deleteDocumentPrefix(documentPreviewsNsRootPrefix);
-    await deleteDocumentPrefix(tempUploadsNsRootPrefix);
-    await deleteDocumentPrefix(accountExportsNsRootPrefix);
-    await deleteTtsSegmentPrefix(playbackAudioNsRootPrefix);
+    await deleteTestObjectPrefix(docsNsRootPrefix);
+    await deleteTestObjectPrefix(documentPreviewsNsRootPrefix);
+    await deleteTestObjectPrefix(tempUploadsNsRootPrefix);
+    await deleteTestObjectPrefix(accountExportsNsRootPrefix);
+    await deleteTestObjectPrefix(playbackAudioNsRootPrefix);
   }
 
   for (const ids of chunk(testUserIds, 200)) {

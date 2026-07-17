@@ -79,8 +79,6 @@ export function getAppConfigDefaults(): AppConfigValues {
     documentListState: {
       sortBy: 'name',
       sortDirection: 'asc',
-      folders: [],
-      collapsedFolders: [],
       showHint: true,
       viewMode: 'grid',
     },

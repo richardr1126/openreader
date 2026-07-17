@@ -34,7 +34,6 @@ import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import {
-  createTtsPlaybackSession,
   createTtsPlaybackPlan,
   getTtsPlaybackSeekLayout,
   resolveTtsExport,
@@ -79,10 +78,8 @@ interface TTSContextType extends TTSPlaybackState {
   voice: string;
   availableVoices: string[];
 
-  // Sentence/segment list and cursor (for the segments sidebar)
+  // Current playback plan text and cursor
   sentences: string[];
-  playbackSegments: CanonicalTtsSegment[];
-  playbackPlanSource: 'idle' | 'worker';
   currentSentenceOrdinal: number | null;
   playbackTimeSec: number;
   playbackDurationSec: number;
@@ -100,8 +97,6 @@ interface TTSContextType extends TTSPlaybackState {
   skipBackward: () => void;
   pause: () => void;
   stop: () => void;
-  stopAndPlayFromOrdinal: (ordinal: number) => void;
-  playFromOrdinal: (ordinal: number, locator?: TTSSegmentLocator | null) => void;
   seekPlaybackTo: (seconds: number) => void;
   setText: (text: string, options?: boolean | SetTextOptions) => void;
   setDocumentPlaybackAnchor: (location: TTSLocation, hasReadableText: boolean, locator?: TTSSegmentLocator | null) => void;
@@ -334,7 +329,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackSegmentsRef,
     selectedOrdinalRef,
     playbackPlanSource,
-    playbackSegments,
     sentences,
     currentIndex,
     currentSentence,
@@ -442,7 +436,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     pauseActivePlayback: controllerPauseActivePlayback,
     seekPlaybackTo: controllerSeekPlaybackTo,
     seekPlaybackToOrdinal: controllerSeekPlaybackToOrdinal,
-    unlockPlaybackOnUserGesture: controllerUnlockPlaybackOnUserGesture,
     togglePlay: controllerTogglePlay,
   } = useTtsPlayback({
     audioContext: audioContext ?? null,
@@ -477,7 +470,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const pauseActivePlayback = controllerPauseActivePlayback;
   const seekPlaybackTo = controllerSeekPlaybackTo;
   const seekPlaybackToOrdinal = controllerSeekPlaybackToOrdinal;
-  const unlockPlaybackOnUserGesture = controllerUnlockPlaybackOnUserGesture;
   const togglePlay = controllerTogglePlay;
 
   const clearPendingEpubJump = useCallback(() => {
@@ -768,7 +760,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
     // Keep track of previous state and clear the worker-owned playback model.
     // setText now records only the visible document anchor. The worker plan is
-    // the single playback and sidebar segment source.
+    // the single playback segment source.
     invalidatePlaybackRun();
     setIsPlaying(false);
     abortAudio();
@@ -1331,120 +1323,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }, 0);
   }, [abortAudio, isPlaying, resetPlaybackPlan]);
 
-  const stopAndPlayFromOrdinal = useCallback((ordinal: number) => {
-    if (!Number.isFinite(ordinal)) return;
-    const normalizedOrdinal = Math.max(0, Math.floor(ordinal));
-    if (!playbackSegmentsRef.current.some((segment) => segment.ordinal === normalizedOrdinal)) return;
-    invalidatePlaybackRun();
-    abortAudio();
-
-    // Same autoplay-unlock issue as togglePlay when starting from a fresh load.
-    unlockPlaybackOnUserGesture();
-
-    setSelectedOrdinal(normalizedOrdinal);
-    setIsPlaying(true);
-  }, [abortAudio, invalidatePlaybackRun, playbackSegmentsRef, setSelectedOrdinal, unlockPlaybackOnUserGesture]);
-
-  const playFromOrdinal = useCallback((ordinal: number, locator?: TTSSegmentLocator | null) => {
-    if (!Number.isFinite(ordinal)) return;
-    const targetOrdinal = Math.max(0, Math.floor(ordinal));
-    const targetSegment = playbackSegmentsRef.current.find((segment) => segment.ordinal === targetOrdinal);
-    if (!targetSegment) return;
-    if (isEPUB) {
-      clearPendingEpubJump();
-    }
-
-    if (activeReaderType === 'pdf') {
-      const targetLocator = locator ?? targetSegment?.ownerLocator ?? null;
-      setSelectedOrdinal(targetOrdinal);
-      const page = pdfLocatorPage(targetLocator);
-      if (page !== null) {
-        setCurrDocPage(page);
-      }
-      if (playbackActiveRef.current && seekPlaybackToOrdinal(targetOrdinal)) {
-        return;
-      }
-      unlockPlaybackOnUserGesture();
-      setIsPlaying(true);
-      return;
-    }
-
-    const epubLocatorTarget = isEPUB && isStableEpubLocator(locator) ? locator : null;
-    const resolvedLocation: TTSLocation | undefined = (() => {
-      if (!locator) return undefined;
-      // Stable EPUB locators carry the jump-hint CFI in `cfi`, not `location`
-      // (which is reserved for HTML locator identity).
-      if (locator.readerType === 'epub' && typeof locator.cfi === 'string' && locator.cfi) {
-        return locator.cfi;
-      }
-      if (typeof locator.location === 'string' && locator.location) return locator.location;
-      const page = pdfLocatorPage(locator);
-      if (page !== null) return page;
-      return undefined;
-    })();
-
-    if (resolvedLocation === undefined && !epubLocatorTarget) {
-      stopAndPlayFromOrdinal(targetOrdinal);
-      return;
-    }
-
-    if (isEPUB && epubLocatorTarget) {
-      const nextAnchor: PlaybackAnchor = {
-        text: targetSegment?.text ?? '',
-        location: epubLocatorTarget.cfi ?? currDocPage,
-        locator: epubLocatorTarget,
-        hasContent: Boolean(targetSegment?.text?.trim()),
-      };
-      playbackAnchorRef.current = nextAnchor;
-      setPlaybackAnchor(nextAnchor);
-    }
-
-    const isSameLocation = resolvedLocation !== undefined && typeof resolvedLocation === 'string'
-      ? String(currDocPage) === String(resolvedLocation)
-      : resolvedLocation !== undefined && pdfAnchorPage(currDocPageNumber) === pdfAnchorPage(resolvedLocation);
-
-    if (isSameLocation) {
-      stopAndPlayFromOrdinal(targetOrdinal);
-      return;
-    }
-
-    invalidatePlaybackRun();
-    abortAudio();
-    unlockPlaybackOnUserGesture();
-    if (isEPUB) {
-      // CFI snapping makes locationKey unreliable; resolve via epoch on next setText.
-      pendingEpubJumpRef.current = {
-        epoch: epubJumpEpochRef.current,
-        locator: epubLocatorTarget,
-      };
-    }
-    resumeAfterLocationChangeRef.current = true;
-    setSelectedOrdinal(targetOrdinal);
-    setIsPlaying(true);
-    if (isEPUB && locationChangeHandlerRef.current) {
-      locationChangeHandlerRef.current(epubLocatorTarget ?? resolvedLocation!);
-      return;
-    }
-    if (resolvedLocation !== undefined) {
-      skipToLocation(resolvedLocation, false);
-    }
-  }, [
-    stopAndPlayFromOrdinal,
-    activeReaderType,
-    playbackSegmentsRef,
-    playbackActiveRef,
-    seekPlaybackToOrdinal,
-    currDocPage,
-    currDocPageNumber,
-    isEPUB,
-    invalidatePlaybackRun,
-    abortAudio,
-    unlockPlaybackOnUserGesture,
-    skipToLocation,
-    clearPendingEpubJump,
-    setSelectedOrdinal,
-  ]);
-
   /**
    * Sets the speed and restarts the playback
    * 
@@ -1576,8 +1454,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSentence,
     currentSegment,
     sentences,
-    playbackSegments,
-    playbackPlanSource,
     currentSentenceOrdinal: selectedOrdinal,
     playbackTimeSec,
     playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
@@ -1596,8 +1472,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipBackward,
     stop,
     pause,
-    stopAndPlayFromOrdinal,
-    playFromOrdinal,
     seekPlaybackTo,
     setText,
     setDocumentPlaybackAnchor,
@@ -1622,8 +1496,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSentence,
     currentSegment,
     sentences,
-    playbackSegments,
-    playbackPlanSource,
     playbackSeekLayout,
     playbackTimeSec,
     resolveDocumentAudioExport,
@@ -1639,8 +1511,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipBackward,
     stop,
     pause,
-    stopAndPlayFromOrdinal,
-    playFromOrdinal,
     seekPlaybackTo,
     setText,
     setDocumentPlaybackAnchor,

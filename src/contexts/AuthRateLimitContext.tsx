@@ -49,10 +49,6 @@ export function useAuthConfig() {
   return { baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled };
 }
 
-export function useRateLimit() {
-  return useAuthRateLimit();
-}
-
 function calculateTimeUntilReset(resetTimeMs: number): string {
   const timeDiff = resetTimeMs - nowTimestampMs();
 

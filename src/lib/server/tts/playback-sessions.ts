@@ -69,12 +69,3 @@ export async function listCompletedTtsPlaybackSegments(
     locator: null,
   }));
 }
-
-export async function resolveCompletedTtsPlaybackSegment(
-  session: TtsPlaybackSessionRow,
-  ordinal: number,
-): Promise<TtsPlaybackSegmentRow | null> {
-  const rows = await listCompletedTtsPlaybackSegments(session, { minOrdinal: ordinal, limit: 1 });
-  const row = rows[0];
-  return row && row.ordinal === ordinal ? row : null;
-}

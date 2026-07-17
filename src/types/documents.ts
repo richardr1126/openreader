@@ -69,8 +69,6 @@ export type SidebarFilter = string;
 export interface DocumentListState {
   sortBy: SortBy;
   sortDirection: SortDirection;
-  folders: Folder[];
-  collapsedFolders: string[];
   showHint: boolean;
   viewMode?: ViewMode | 'grid';
   iconSize?: IconSize;

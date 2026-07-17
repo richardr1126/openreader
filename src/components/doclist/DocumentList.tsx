@@ -48,7 +48,7 @@ type DocumentToDelete = {
 const DEFAULT_STATE: Required<
   Pick<
     DocumentListState,
-    'sortBy' | 'sortDirection' | 'folders' | 'collapsedFolders' | 'showHint'
+    'sortBy' | 'sortDirection' | 'showHint'
   >
 > & {
   viewMode: ViewMode;
@@ -59,8 +59,6 @@ const DEFAULT_STATE: Required<
 } = {
   sortBy: 'name',
   sortDirection: 'asc',
-  folders: [],
-  collapsedFolders: [],
   showHint: true,
   viewMode: 'icons',
   iconSize: 'md',
@@ -106,10 +104,6 @@ function toStoredListState(state: NormalizedListState): DocumentListState {
   return {
     sortBy: state.sortBy,
     sortDirection: state.sortDirection,
-    // `folders`/`collapsedFolders` are obsolete membership fields kept only for
-    // the persisted shape; folder membership now lives on documents[].folderId.
-    folders: [],
-    collapsedFolders: [],
     showHint: state.showHint,
     viewMode: state.viewMode,
     iconSize: state.iconSize,
