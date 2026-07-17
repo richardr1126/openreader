@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { ThemeProvider } from '@/contexts/ThemeContext';
-import { AuthRateLimitProvider } from '@/contexts/AuthRateLimitContext';
+import { AuthRateLimitProvider, type OidcAuthPublicConfig } from '@/contexts/AuthRateLimitContext';
 import { RuntimeConfigProvider } from '@/contexts/RuntimeConfigContext';
 import { AuthLoader } from '@/components/auth/AuthLoader';
 
@@ -13,9 +13,10 @@ interface ProvidersProps {
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
+  oidcAuth: OidcAuthPublicConfig | null;
 }
 
-export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled }: ProvidersProps) {
+export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -50,6 +51,7 @@ export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, g
           authBaseUrl={authBaseUrl}
           allowAnonymousAuthSessions={allowAnonymousAuthSessions}
           githubAuthEnabled={githubAuthEnabled}
+          oidcAuth={oidcAuth}
         >
           <ThemeProvider>
             <AuthLoader>

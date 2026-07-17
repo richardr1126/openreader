@@ -7,7 +7,7 @@ import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
-import { GithubIcon } from '@/components/icons/Icons';
+import { GithubIcon, KeyIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, Checkbox, Field, InlineButton, Input, Surface } from '@/components/ui';
 
@@ -26,15 +26,16 @@ function SignInContent() {
   const [password, setPassword] = useState('');
   const [loadingEmail, setLoadingEmail] = useState(false);
   const [loadingGithub, setLoadingGithub] = useState(false);
+  const [loadingOidc, setLoadingOidc] = useState(false);
   const [loadingAnonymous, setLoadingAnonymous] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
+  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
-  const isAnyLoading = loadingEmail || loadingGithub || loadingAnonymous;
+  const isAnyLoading = loadingEmail || loadingGithub || loadingOidc || loadingAnonymous;
 
   const validateEmail = (email: string): boolean => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -94,6 +95,27 @@ function SignInContent() {
       });
     } finally {
       setLoadingGithub(false);
+    }
+  };
+
+  const handleOidcSignIn = async () => {
+    if (!oidcAuth) return;
+    setError(null);
+    setLoadingOidc(true);
+    try {
+      const client = getAuthClient(baseUrl);
+      const result = await client.signIn.oauth2({
+        providerId: oidcAuth.providerId,
+        callbackURL: '/app'
+      });
+      if (result.error) {
+        setError(result.error.message || 'Unable to connect. Please try again.');
+      }
+    } catch (err) {
+      console.error('OIDC sign in error:', err);
+      setError('Unable to connect. Please try again.');
+    } finally {
+      setLoadingOidc(false);
     }
   };
 
@@ -204,6 +226,27 @@ function SignInContent() {
               <>
                 <GithubIcon className="w-4 h-4" />
                 Sign in with GitHub
+              </>
+            )}
+          </Button>
+          )}
+
+          {/* Generic OIDC */}
+          {oidcAuth && (
+          <Button
+            type="button"
+            disabled={isAnyLoading}
+            onClick={handleOidcSignIn}
+            variant="outline"
+            size="md"
+            className="w-full gap-2"
+          >
+            {loadingOidc ? (
+              <LoadingSpinner className="w-4 h-4" />
+            ) : (
+              <>
+                <KeyIcon className="w-4 h-4" />
+                Sign in with {oidcAuth.providerName}
               </>
             )}
           </Button>

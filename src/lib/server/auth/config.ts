@@ -48,6 +48,57 @@ export function isGithubAuthEnabled(): boolean {
   return !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
 }
 
+export type OidcAuthConfig = {
+  providerId: string;
+  providerName: string;
+  clientId: string;
+  clientSecret: string;
+  discoveryUrl: string;
+  scopes: string[];
+};
+
+/**
+ * Public subset of the OIDC config that is safe to send to the client
+ * (never include the client secret here).
+ */
+export type OidcPublicAuthConfig = Pick<OidcAuthConfig, 'providerId' | 'providerName'>;
+
+/**
+ * Generic OIDC sign-in is available when OIDC_CLIENT_ID, OIDC_CLIENT_SECRET,
+ * and OIDC_DISCOVERY_URL are all set. Optional overrides:
+ * - OIDC_PROVIDER_ID: URL-safe id used in the OAuth callback path
+ *   (`/api/auth/oauth2/callback/<id>`), defaults to "oidc"
+ * - OIDC_PROVIDER_NAME: display name for the sign-in button, defaults to "SSO"
+ * - OIDC_SCOPES: space- or comma-separated, defaults to "openid profile email"
+ */
+export function getOidcAuthConfig(): OidcAuthConfig | null {
+  const clientId = process.env.OIDC_CLIENT_ID?.trim();
+  const clientSecret = process.env.OIDC_CLIENT_SECRET?.trim();
+  const discoveryUrl = process.env.OIDC_DISCOVERY_URL?.trim();
+  if (!clientId || !clientSecret || !discoveryUrl) return null;
+
+  const providerId = process.env.OIDC_PROVIDER_ID?.trim() || 'oidc';
+  if (!/^[a-zA-Z0-9_-]+$/.test(providerId)) {
+    throw new Error(
+      'Invalid OIDC_PROVIDER_ID: it becomes part of the OAuth callback URL '
+      + 'and may only contain letters, numbers, hyphens, and underscores.',
+    );
+  }
+
+  const providerName = process.env.OIDC_PROVIDER_NAME?.trim() || 'SSO';
+  const scopes = (process.env.OIDC_SCOPES?.trim() || 'openid profile email')
+    .split(/[\s,]+/)
+    .filter(Boolean);
+
+  return { providerId, providerName, clientId, clientSecret, discoveryUrl, scopes };
+}
+
+export function getOidcPublicAuthConfig(): OidcPublicAuthConfig | null {
+  const config = getOidcAuthConfig();
+  if (!config) return null;
+  return { providerId: config.providerId, providerName: config.providerName };
+}
+
 /**
  * Get the required auth base URL.
  */
