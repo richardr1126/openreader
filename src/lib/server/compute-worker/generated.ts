@@ -508,85 +508,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tts-playback/cache/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        storageUserId: string;
-                        documentId: string;
-                        documentVersion?: number;
-                        settingsHash?: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            storageUserId: string;
-                            documentId: string;
-                            documentVersion: number | null;
-                            settingsHash: string | null;
-                            cacheEpoch: number;
-                            invalidatedPlaybackSessions: number;
-                            invalidatedSidecarCacheScopes: number;
-                            invalidatedJobOperations: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/tts-playback/cache/clear": {
         parameters: {
             query?: never;
@@ -1021,6 +942,7 @@ export interface paths {
             parameters: {
                 query: {
                     token: string;
+                    fromOrdinal?: number;
                 };
                 header?: never;
                 path: {

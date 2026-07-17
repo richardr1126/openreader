@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
+  documentTimeToMediaTime,
+  mediaTimeToDocumentTime,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
   type TtsPlaybackGrid,
@@ -50,6 +52,12 @@ const grid: TtsPlaybackGrid = {
 };
 
 describe('playback grid mapping', () => {
+  test('translates between a session-relative stream and whole-document time', () => {
+    expect(mediaTimeToDocumentTime(2.5, 120)).toBe(122.5);
+    expect(documentTimeToMediaTime(122.5, 120)).toBe(2.5);
+    expect(documentTimeToMediaTime(80, 120)).toBe(0);
+  });
+
   test('normalizes timeline payloads', () => {
     const normalized = normalizePlaybackGrid({
       sessionId: 's',

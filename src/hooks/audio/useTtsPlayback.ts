@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import toast from 'react-hot-toast';
 import {
+  documentTimeToMediaTime,
+  mediaTimeToDocumentTime,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
   type TtsPlaybackGrid,
@@ -114,6 +116,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const audioUnlockAttemptRef = useRef(0);
   const playbackInFlightRef = useRef(false);
   const playbackProjectionRafRef = useRef<number | null>(null);
+  // The worker stream is session-relative: byte/time zero is the ordinal where
+  // this stream window begins. UI/timeline time remains whole-document time.
+  const playbackStreamBaseSecRef = useRef(0);
   const playbackTimelineRef = useRef<TtsPlaybackGrid | null>(null);
   const playbackSessionRef = useRef<{
     sessionId: string;
@@ -175,6 +180,32 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if (!force && now - lastPlaybackTimePublishedAtRef.current < 250) return;
     lastPlaybackTimePublishedAtRef.current = now;
     setPlaybackTimeSec(next);
+  }, []);
+
+  const documentTimeForAudio = useCallback((audio: HTMLAudioElement): number => (
+    mediaTimeToDocumentTime(audio.currentTime, playbackStreamBaseSecRef.current)
+  ), []);
+
+  const setAudioDocumentTime = useCallback((
+    audio: HTMLAudioElement,
+    documentTimeSec: number,
+    targetOrdinal: number,
+    targetStartSec: number,
+  ) => {
+    const target = Math.max(0, documentTimeSec);
+    let base = playbackStreamBaseSecRef.current;
+    if (target + 0.001 < base) {
+      const session = playbackSessionRef.current;
+      if (session) {
+        const url = new URL(session.audioUrl, window.location.href);
+        url.searchParams.set('fromOrdinal', String(Math.max(0, Math.floor(targetOrdinal))));
+        base = Math.max(0, targetStartSec);
+        playbackStreamBaseSecRef.current = base;
+        audio.src = url.toString();
+        audio.load();
+      }
+    }
+    audio.currentTime = documentTimeToMediaTime(target, base);
   }, []);
 
   const refreshPlaybackTimeline = useCallback(async (timelineUrl: string, signal?: AbortSignal) => {
@@ -279,15 +310,17 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         playbackProjectionRafRef.current = null;
         return;
       }
-      publishPlaybackTimeSec(audio.currentTime);
-      projectPlaybackTime(audio.currentTime);
+      const documentTimeSec = documentTimeForAudio(audio);
+      publishPlaybackTimeSec(documentTimeSec);
+      projectPlaybackTime(documentTimeSec);
       playbackProjectionRafRef.current = requestAnimationFrame(tick);
     };
 
-    publishPlaybackTimeSec(audio.currentTime, { force: true });
-    projectPlaybackTime(audio.currentTime);
+    const documentTimeSec = documentTimeForAudio(audio);
+    publishPlaybackTimeSec(documentTimeSec, { force: true });
+    projectPlaybackTime(documentTimeSec);
     playbackProjectionRafRef.current = requestAnimationFrame(tick);
-  }, [playbackRunIdRef, projectPlaybackTime, publishPlaybackTimeSec, stopPlaybackProjectionLoop]);
+  }, [documentTimeForAudio, playbackRunIdRef, projectPlaybackTime, publishPlaybackTimeSec, stopPlaybackProjectionLoop]);
 
   const startPlaybackForegroundSync = useCallback((runId: number, headers: TTSRequestHeaders) => {
     const activeSession = playbackSessionRef.current;
@@ -335,27 +368,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setPlaybackSeekLayout,
     stopPlaybackTimelinePolling,
   ]);
-
-  const waitForAudioSeekReady = useCallback(async (audio: HTMLAudioElement, runId: number): Promise<void> => {
-    if (runId !== playbackRunIdRef.current) return;
-    if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) return;
-    await new Promise<void>((resolve) => {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        audio.removeEventListener('loadedmetadata', finish);
-        audio.removeEventListener('durationchange', finish);
-        audio.removeEventListener('canplay', finish);
-        window.clearTimeout(timeout);
-        resolve();
-      };
-      const timeout = window.setTimeout(finish, 1500);
-      audio.addEventListener('loadedmetadata', finish, { once: true });
-      audio.addEventListener('durationchange', finish, { once: true });
-      audio.addEventListener('canplay', finish, { once: true });
-    });
-  }, [playbackRunIdRef]);
 
   const stopSeekResync = useCallback(() => {
     if (resyncTimerRef.current) {
@@ -442,6 +454,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackActiveRef.current = false;
     playbackSessionRef.current = null;
     playbackTimelineRef.current = null;
+    playbackStreamBaseSecRef.current = 0;
     lastProjectionRef.current = null;
     playbackCursorOrdinalRef.current = null;
     playbackRequestHeadersRef.current = null;
@@ -526,7 +539,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         const audio = unlockedAudioRef.current;
         if (audio && playbackActiveRef.current && audio.src) {
           try {
-            audio.currentTime = targetSec;
+            setAudioDocumentTime(audio, targetSec, ordinal, targetSec);
           } catch {
             // Best-effort; projection below still updates the UI.
           }
@@ -560,6 +573,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setPlaybackPhase,
     setPlaybackSeekLayout,
     setSelectedOrdinal,
+    setAudioDocumentTime,
     stopSeekResync,
   ]);
 
@@ -594,7 +608,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       setIsProcessing(false);
       if (audio && playbackActiveRef.current && audio.src) {
         try {
-          audio.currentTime = targetSec;
+          setAudioDocumentTime(audio, targetSec, target.ordinal, targetStartSec);
         } catch {
           // Best-effort; the projection still updates immediately below.
         }
@@ -621,7 +635,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     }
     if (audio && playbackActiveRef.current && audio.src) {
       try {
-        audio.currentTime = targetStartSec;
+        setAudioDocumentTime(audio, targetStartSec, target.ordinal, targetStartSec);
       } catch {
         // Best-effort; the resync re-seeks accurately when the audio is ready.
       }
@@ -638,6 +652,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setIsProcessing,
     setPlaybackPhase,
     setSelectedOrdinal,
+    setAudioDocumentTime,
     startSeekResync,
     syncPlaybackLocator,
   ]);
@@ -798,8 +813,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       audio.ontimeupdate = () => {
         if (runId !== playbackRunIdRef.current) return;
         setIsProcessing(false);
-        publishPlaybackTimeSec(audio.currentTime, { force: true });
-        projectPlaybackTime(audio.currentTime);
+        const documentTimeSec = documentTimeForAudio(audio);
+        publishPlaybackTimeSec(documentTimeSec, { force: true });
+        projectPlaybackTime(documentTimeSec);
       };
       audio.onwaiting = () => {
         if (runId !== playbackRunIdRef.current) return;
@@ -817,19 +833,11 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       startPlaybackForegroundSync(runId, headers);
 
       playbackActiveRef.current = true;
+      playbackStreamBaseSecRef.current = initialStartSec;
       audio.src = session.audioUrl;
       audio.load();
-      if (initialStartSec > 0) {
-        await waitForAudioSeekReady(audio, runId);
-        if (runId !== playbackRunIdRef.current) return;
-        try {
-          audio.currentTime = initialStartSec;
-          publishPlaybackTimeSec(initialStartSec, { force: true });
-          projectPlaybackTime(initialStartSec);
-        } catch {
-          // The stream is range-capable; projection recovers once metadata is ready.
-        }
-      }
+      publishPlaybackTimeSec(initialStartSec, { force: true });
+      projectPlaybackTime(initialStartSec);
       await audio.play();
       if (runId === playbackRunIdRef.current && !audio.paused && !audio.ended) {
         startPlaybackProjectionLoop(audio, runId);
@@ -851,6 +859,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   }, [
     audioSpeed,
     controllerRefs,
+    documentTimeForAudio,
     isAbortLikeError,
     isPlayingRef,
     onAdvance,
@@ -868,7 +877,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     startPlaybackForegroundSync,
     startPlaybackProjectionLoop,
     stopPlaybackProjectionLoop,
-    waitForAudioSeekReady,
   ]);
 
   const togglePlay = useCallback(() => {
@@ -953,13 +961,13 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       void refreshPlaybackTimeline(session.timelineUrl)
         .then(() => {
           if (!playbackActiveRef.current || audio.paused || audio.ended) return;
-          projectPlaybackTime(audio.currentTime);
+          projectPlaybackTime(documentTimeForAudio(audio));
         })
         .catch(() => undefined);
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [projectPlaybackTime, refreshPlaybackTimeline]);
+  }, [documentTimeForAudio, projectPlaybackTime, refreshPlaybackTimeline]);
 
   return {
     unlockedAudioRef,
@@ -990,6 +998,5 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     startPlaybackProjectionLoop,
     stopPlaybackProjectionLoop,
     stopPlaybackTimelinePolling,
-    waitForAudioSeekReady,
   };
 }

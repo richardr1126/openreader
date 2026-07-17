@@ -14,6 +14,20 @@ import {
 } from '@/lib/client/highlight-token-alignment';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import {
+  clearRangeHighlight,
+  paintRangeHighlight,
+} from '@/lib/client/highlight-range-painter';
+
+const EPUB_SEGMENT_HIGHLIGHT = 'openreader-epub-segment';
+const EPUB_WORD_HIGHLIGHT = 'openreader-epub-word';
+
+const resolvePrimaryHighlightColor = (): string => {
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--accent')
+    .trim();
+  return accent || '#ef4444';
+};
 
 type UseEpubHighlightingParams = {
   renditionRef: RefObject<Rendition | undefined>;
@@ -50,26 +64,36 @@ export function useEPUBHighlighting({
   const wordRangeCacheRef = useRef<{
     key: string;
     spans: Array<AlignmentCharSpan | null>;
+    ranges: Array<Range | null | undefined>;
     cfis: Array<string | null | undefined>;
   } | null>(null);
-  const activeWordHighlightRef = useRef<{ key: string; wordIndex: number; cfi: string } | null>(null);
+  const activeWordHighlightRef = useRef<{ key: string; wordIndex: number } | null>(null);
+  const highlightedDocumentsRef = useRef<Set<Document>>(new Set());
+
+  const clearPaintedHighlight = useCallback((name: string) => {
+    for (const document of highlightedDocumentsRef.current) {
+      clearRangeHighlight(document, name);
+    }
+  }, []);
 
   const clearWordHighlights = useCallback(() => {
+    clearPaintedHighlight(EPUB_WORD_HIGHLIGHT);
+    activeWordHighlightRef.current = null;
     if (!renditionRef.current) return;
     if (currentWordHighlightCfiRef.current) {
       renditionRef.current.annotations.remove(currentWordHighlightCfiRef.current, 'highlight');
       currentWordHighlightCfiRef.current = null;
     }
-    activeWordHighlightRef.current = null;
-  }, [currentWordHighlightCfiRef, renditionRef]);
+  }, [clearPaintedHighlight, currentWordHighlightCfiRef, renditionRef]);
 
   const clearHighlights = useCallback(() => {
+    clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
     if (renditionRef.current && currentHighlightCfiRef.current) {
       renditionRef.current.annotations.remove(currentHighlightCfiRef.current, 'highlight');
       currentHighlightCfiRef.current = null;
     }
     clearWordHighlights();
-  }, [clearWordHighlights, currentHighlightCfiRef, renditionRef]);
+  }, [clearPaintedHighlight, clearWordHighlights, currentHighlightCfiRef, renditionRef]);
 
   const highlightSegment = useCallback((segment: CanonicalTtsSegment | null | undefined) => {
     if (!renditionRef.current) return;
@@ -80,6 +104,16 @@ export function useEPUBHighlighting({
 
     const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
     if (!resolved) return;
+
+    if (paintRangeHighlight(
+      resolved.range,
+      EPUB_SEGMENT_HIGHLIGHT,
+      'background-color: rgba(128, 128, 128, 0.32);',
+    )) {
+      const document = resolved.range.startContainer.ownerDocument;
+      if (document) highlightedDocumentsRef.current.add(document);
+      return;
+    }
 
     try {
       const cfi = resolved.map.content.cfiFromRange(resolved.range);
@@ -157,6 +191,7 @@ export function useEPUBHighlighting({
       wordRangeCacheRef.current = {
         key: cacheKey,
         spans: locateAlignmentWordSpans(words, regionText),
+        ranges: new Array(words.length).fill(undefined),
         cfis: new Array(words.length).fill(undefined),
       };
     }
@@ -168,16 +203,42 @@ export function useEPUBHighlighting({
       return;
     }
 
-    let wordCfi = cache.cfis[wordIndex];
-    if (wordCfi === undefined) {
+    let wordRange = cache.ranges[wordIndex];
+    if (wordRange === undefined) {
       const absStart = resolved.startOffset + span.start;
       const absEnd = resolved.startOffset + span.end;
-      const wordRange = createRangeFromMappedOffsets(resolved.map, absStart, absEnd);
+      wordRange = createRangeFromMappedOffsets(resolved.map, absStart, absEnd);
+      cache.ranges[wordIndex] = wordRange;
       if (!wordRange) {
-        cache.cfis[wordIndex] = null;
         clearWordHighlights();
         return;
       }
+    }
+    if (!wordRange) {
+      clearWordHighlights();
+      return;
+    }
+
+    const active = activeWordHighlightRef.current;
+    if (active && active.key === cacheKey && active.wordIndex === wordIndex) return;
+
+    if (paintRangeHighlight(
+      wordRange,
+      EPUB_WORD_HIGHLIGHT,
+      `background-color: color-mix(in srgb, ${resolvePrimaryHighlightColor()} 40%, transparent);`,
+    )) {
+      const document = wordRange.startContainer.ownerDocument;
+      if (document) highlightedDocumentsRef.current.add(document);
+      if (currentWordHighlightCfiRef.current) {
+        renditionRef.current.annotations.remove(currentWordHighlightCfiRef.current, 'highlight');
+        currentWordHighlightCfiRef.current = null;
+      }
+      activeWordHighlightRef.current = { key: cacheKey, wordIndex };
+      return;
+    }
+
+    let wordCfi = cache.cfis[wordIndex];
+    if (wordCfi === undefined) {
       try {
         wordCfi = resolved.map.content.cfiFromRange(wordRange);
         cache.cfis[wordIndex] = wordCfi;
@@ -193,27 +254,16 @@ export function useEPUBHighlighting({
       return;
     }
 
-    const active = activeWordHighlightRef.current;
-    if (
-      active
-      && active.key === cacheKey
-      && active.wordIndex === wordIndex
-      && active.cfi === wordCfi
-      && currentWordHighlightCfiRef.current === wordCfi
-    ) {
-      return;
-    }
-
     try {
       if (currentWordHighlightCfiRef.current && currentWordHighlightCfiRef.current !== wordCfi) {
         renditionRef.current.annotations.remove(currentWordHighlightCfiRef.current, 'highlight');
       }
       if (currentWordHighlightCfiRef.current === wordCfi) {
-        activeWordHighlightRef.current = { key: cacheKey, wordIndex, cfi: wordCfi };
+        activeWordHighlightRef.current = { key: cacheKey, wordIndex };
         return;
       }
       currentWordHighlightCfiRef.current = wordCfi;
-      activeWordHighlightRef.current = { key: cacheKey, wordIndex, cfi: wordCfi };
+      activeWordHighlightRef.current = { key: cacheKey, wordIndex };
       renditionRef.current.annotations.add(
         'highlight',
         wordCfi,
@@ -221,7 +271,7 @@ export function useEPUBHighlighting({
         () => { },
         '',
         {
-          fill: 'var(--accent)',
+          fill: resolvePrimaryHighlightColor(),
           'fill-opacity': '0.4',
           'mix-blend-mode': 'multiply',
         }
@@ -239,18 +289,22 @@ export function useEPUBHighlighting({
   ]);
 
   const setRenderedTextMaps = useCallback((maps: EpubRenderedTextMap[]) => {
+    clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
+    clearPaintedHighlight(EPUB_WORD_HIGHLIGHT);
+    highlightedDocumentsRef.current.clear();
     renderedTextMapsRef.current = maps;
     // Remapped content can change a region's text under an unchanged cache key,
     // so drop the word-span cache whenever the text maps are replaced.
     wordRangeCacheRef.current = null;
     activeWordHighlightRef.current = null;
-  }, [renderedTextMapsRef]);
+  }, [clearPaintedHighlight, renderedTextMapsRef]);
 
   const resetHighlightState = useCallback(() => {
     renderedTextMapsRef.current = [];
     wordRangeCacheRef.current = null;
     activeWordHighlightRef.current = null;
     clearHighlights();
+    highlightedDocumentsRef.current.clear();
   }, [clearHighlights, renderedTextMapsRef]);
 
   // Clear any highlight annotations when feature is disabled.

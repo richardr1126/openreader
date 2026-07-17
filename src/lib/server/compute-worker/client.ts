@@ -15,7 +15,6 @@ import type {
   TtsPlaybackPlanRequest,
   TtsPlaybackSessionState,
   TtsPlaybackCompletedSegment,
-  TtsPlaybackResetResult,
   TtsPlaybackSessionResolution,
   TtsPlaybackSessionResolveRequest,
   ComputeOperation,
@@ -200,15 +199,6 @@ export class ComputeWorkerClient {
       ordinal: input.ordinal,
       ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
     });
-  }
-
-  resetTtsPlaybackScope(input: {
-    storageUserId: string;
-    documentId: string;
-    documentVersion?: number;
-    settingsHash?: string;
-  }): Promise<TtsPlaybackResetResult> {
-    return this.requestJson('POST', '/v1/tts-playback/cache/reset', input);
   }
 
   clearTtsPlaybackScope(input: {

@@ -138,12 +138,14 @@ export const ttsPlaybackCursorUpdateSchema = z.object({
   expiresAt: z.number().int().positive().optional(),
 });
 
-export const ttsPlaybackResetSchema = z.object({
+export const ttsPlaybackCacheClearSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),
   documentId: documentIdSchema,
   documentVersion: z.number().int().nonnegative().optional(),
   settingsHash: z.string().trim().min(1).max(256).optional(),
-});
+  namespace: z.string().trim().min(1).max(128).nullable(),
+  readerType: z.enum(['pdf', 'epub', 'html']).optional(),
+}).strict();
 
 export const ttsPlaybackSessionResolveSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),
@@ -153,11 +155,6 @@ export const ttsPlaybackSessionResolveSchema = z.object({
   settingsHash: z.string().trim().min(1).max(256),
   planObjectKey: z.string().trim().min(1).max(2048),
   purpose: z.enum(['live', 'export-document']),
-}).strict();
-
-export const ttsPlaybackCacheClearSchema = ttsPlaybackResetSchema.extend({
-  namespace: z.string().trim().min(1).max(128).nullable(),
-  readerType: z.enum(['pdf', 'epub', 'html']).optional(),
 }).strict();
 
 export const userStorageCleanupSchema = z.object({

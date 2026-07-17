@@ -33,6 +33,18 @@ export type TtsPlaybackTimeProjection = {
   wordIndex: number | null;
 };
 
+export function mediaTimeToDocumentTime(mediaTimeSec: number, streamBaseSec: number): number {
+  const media = Number.isFinite(mediaTimeSec) ? Math.max(0, mediaTimeSec) : 0;
+  const base = Number.isFinite(streamBaseSec) ? Math.max(0, streamBaseSec) : 0;
+  return base + media;
+}
+
+export function documentTimeToMediaTime(documentTimeSec: number, streamBaseSec: number): number {
+  const documentTime = Number.isFinite(documentTimeSec) ? Math.max(0, documentTimeSec) : 0;
+  const base = Number.isFinite(streamBaseSec) ? Math.max(0, streamBaseSec) : 0;
+  return Math.max(0, documentTime - base);
+}
+
 export function normalizePlaybackGrid(value: unknown): TtsPlaybackGrid {
   if (!value || typeof value !== 'object') {
     return {

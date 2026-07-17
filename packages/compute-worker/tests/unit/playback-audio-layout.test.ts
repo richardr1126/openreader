@@ -13,8 +13,23 @@ import {
   estimateDurationMs,
   locateByte,
   parseRangeHeader,
+  resolvePlaybackStreamStartOrdinal,
   type PlanSlotInput,
 } from '../../src/api/playback-audio-layout';
+
+describe('resolvePlaybackStreamStartOrdinal', () => {
+  const ordinals = [0, 1, 5, 9];
+
+  test('defaults to the session start and accepts an explicit rebase', () => {
+    expect(resolvePlaybackStreamStartOrdinal(ordinals, 5)).toBe(5);
+    expect(resolvePlaybackStreamStartOrdinal(ordinals, 5, 1)).toBe(1);
+  });
+
+  test('rejects invalid or non-plan stream starts', () => {
+    expect(resolvePlaybackStreamStartOrdinal(ordinals, 5, 6)).toBeNull();
+    expect(resolvePlaybackStreamStartOrdinal(ordinals, 5, 'nope')).toBeNull();
+  });
+});
 
 // 128 kbps CBR ⇒ 16000 bytes/sec.
 const BPS = STREAM_AUDIO_BYTES_PER_SECOND;

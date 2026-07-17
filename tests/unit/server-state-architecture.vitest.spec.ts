@@ -34,6 +34,17 @@ function collectNextRoutePaths(): string[] {
     .sort();
 }
 
+function computeWorkerRouteSource(): string {
+  const routeRoot = path.join(root, 'packages/compute-worker/src/api/routes');
+  const playbackRoot = path.join(root, 'packages/compute-worker/src/api/playback');
+  return [
+    source('packages/compute-worker/src/api/routes.ts'),
+    ...collectSourceFiles(routeRoot).map((file) => readFileSync(file, 'utf8')),
+    ...collectSourceFiles(playbackRoot).map((file) => readFileSync(file, 'utf8')),
+  ]
+    .join('\n');
+}
+
 describe('server-state architecture', () => {
   const sourceFiles = collectSourceFiles(srcRoot);
 
@@ -165,7 +176,8 @@ describe('server-state architecture', () => {
   });
 
   test('keeps the compute worker API surface on the hard-cut route map', () => {
-    const routes = Array.from(source('packages/compute-worker/src/api/routes.ts').matchAll(/app\.(get|post|put|delete)\('([^']+)'/g))
+    const workerRoutes = computeWorkerRouteSource();
+    const routes = Array.from(workerRoutes.matchAll(/app\.(get|post|put|delete)\('([^']+)'/g))
       .map((match) => `${match[1].toUpperCase()} ${match[2]}`)
       .sort();
 
@@ -189,7 +201,6 @@ describe('server-state architecture', () => {
       'POST /v1/pdf-layout/clear',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
-      'POST /v1/tts-playback/cache/reset',
       'POST /v1/tts-playback/cache/clear',
       'POST /v1/tts-playback/exports/expire',
       'POST /v1/tts-playback/exports/jobs',
@@ -201,6 +212,19 @@ describe('server-state architecture', () => {
       'POST /v1/user-storage/cleanup',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
+    expect(workerRoutes).not.toContain('/v1/tts-playback/cache/reset');
+    expect(workerRoutes).toContain('await playbackStorage.artifacts.incrementScopeEpoch(scope, now)');
+    expect(workerRoutes).toContain('await playbackStorage.sessions.cancelSessionsForScope(scope, now)');
+    expect(workerRoutes).toContain('readModel.invalidateSidecarsForScope(scope)');
+    expect(workerRoutes).toContain('await invalidatePlaybackOperationsForScope({');
+    expect(workerRoutes).toContain('await clearTtsPlaybackArtifacts({');
+    const compositionRoot = source('packages/compute-worker/src/api/routes.ts');
+    expect(compositionRoot).toContain('registerPlaybackAudioRoutes(context, playbackReadModel, playbackController)');
+    expect(compositionRoot).not.toContain('app.get(');
+    expect(source('packages/compute-worker/src/api/playback/operation-invalidation.ts')).toContain(
+      'ttsPlaybackSubjectFromOperationKey(state.opKey)',
+    );
+    expect(computeWorkerRouteSource()).not.toContain("state.opKey.split('|')");
   });
 
   test('keeps the Next API surface on the hard-cut route map', () => {
@@ -267,7 +291,7 @@ describe('server-state architecture', () => {
     const accountExportDownloadRoute = source('src/app/api/user/export/download/route.ts');
     const accountExportEventsRoute = source('src/app/api/user/export/events/route.ts');
     const settingsModal = source('src/components/SettingsModal.tsx');
-    const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
+    const workerRoutes = computeWorkerRouteSource();
     const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
     const computeClient = source('src/lib/server/compute-worker/client.ts');
@@ -319,7 +343,7 @@ describe('server-state architecture', () => {
     const exportDownloadRoute = source('src/app/api/tts/export/download/route.ts');
     const exportEventsRoute = source('src/app/api/tts/export/events/route.ts');
     const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
-    const workerRoutes = source('packages/compute-worker/src/api/routes.ts');
+    const workerRoutes = computeWorkerRouteSource();
     const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
     const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
@@ -415,7 +439,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain("reply.header('Accept-Ranges', 'bytes')");
     expect(workerRoutes).toContain('parseRangeHeader');
     expect(workerRoutes).toContain('verifyTtsPlaybackToken');
-    expect(workerRoutes).toContain('updatePlaybackCursor');
+    expect(workerRoutes).toContain('controller.updateCursor');
     // The scaffolding-silence floor follows the cursor via the shared helper (so
     // it cannot drift from the worker's generation floor → no bytes=0- hang), and
     // a seek request pins the floor to its own race-proof start ordinal. The
@@ -460,12 +484,14 @@ describe('server-state architecture', () => {
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
     // The stream re-anchors generation to the ordinal it is blocked on so the
     // continuation starts promptly after a seek (not at the next heartbeat).
-    expect(workerRoutes).toContain('await updatePlaybackCursor(sessionId, ordinal).catch((error) => {');
+    expect(workerRoutes).toContain('await controller.updateCursor(sessionId, ordinal).catch((error) => {');
     expect(workerRoutes).toContain('tts.playback.cursor_reanchor_failed');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('status: \'running\',\n          planObjectKey,\n          generationStartOrdinal');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('status: \'running\',\n        lastError: null');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('planObjectKey,\n          startOrdinal,\n          generationStartOrdinal');
-    expect(workerRoutes).toContain('const startOrdinal = 0;');
+    expect(workerRoutes).toContain('resolvePlaybackStreamStartOrdinal');
+    expect(workerRoutes).toContain('session.generationStartOrdinal');
+    expect(workerRoutes).toContain('query.fromOrdinal');
     expect(streamTimelineRoute).toContain('startOrdinal: 0');
     expect(seekLayoutRoute).toContain('const startOrdinal = 0;');
     expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
@@ -508,7 +534,6 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('Math.max(1, Math.floor(Number(location) || 1))');
     expect(context).not.toContain('Number(anchor?.location');
     expect(context).toContain('const page = pdfLocatorPage(locator);');
-    expect(context).toContain('const page = pdfLocatorPage(targetLocator);');
     expect(context).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html') {\n        playbackSyncNavigationRef.current = false;");
     // Cursor-follow swallow is independent of play state (paused skip follows the
     // page exactly like playback), so the consume sites no longer gate on
@@ -532,7 +557,7 @@ describe('server-state architecture', () => {
     expect(context).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html')");
     expect(context).toContain('resolveFirstPlanIndexForDocumentAnchor(');
     expect(playbackHook).toContain('seekPlaybackTo');
-    expect(playbackHook).toContain('audio.currentTime = targetSec');
+    expect(playbackHook).toContain('setAudioDocumentTime(audio, targetSec');
     expect(playbackHook).toContain('const targetOrdinal = projection.segment.ordinal;');
     expect(playbackHook).toContain('setSelectedOrdinal(targetOrdinal)');
     expect(playbackHook).not.toContain('ordinalIndexCacheRef');
@@ -545,13 +570,16 @@ describe('server-state architecture', () => {
     expect(playbackModel).not.toContain('setPlaybackIndex');
     expect(playbackModel).not.toContain('currentIndexRef');
     expect(context).not.toContain('setPlaybackIndex');
-    expect(context).toContain('stopAndPlayFromOrdinal');
-    expect(context).toContain('playFromOrdinal');
+    expect(context).not.toContain('stopAndPlayFromOrdinal');
+    expect(context).not.toContain('playFromOrdinal');
     expect(context).not.toContain('stopAndPlayFromIndex');
     expect(context).not.toContain('playFromSegment');
     expect(context).toContain('currentSentenceOrdinal');
     expect(playbackHook).toContain("layout?.status === 'running' || layout?.status === 'succeeded'");
     expect(playbackHook).toContain('initialSeekLayout.generationStartOrdinal');
+    expect(playbackHook).toContain('playbackStreamBaseSecRef.current = initialStartSec');
+    expect(playbackHook).toContain('mediaTimeToDocumentTime');
+    expect(playbackHook).not.toContain('waitForAudioSeekReady');
     expect(context).not.toContain('return last');
     expect(context).not.toContain('?? initialSeekLayout.segments[0]');
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('scrubberTrackBackground');

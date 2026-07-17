@@ -232,10 +232,22 @@ storage is the correctness boundary.
 
 ### Stream Audio and Layout
 
-The audio route builds a CBR whole-document layout from the plan plus completed
-sidecars. Generated segments use exact probed duration. Missing segments are
-represented by frame-aligned silence estimates, so byte-range seeking can target
-ungenerated regions without cutting a segment in half.
+Timeline and seek-layout responses remain whole-document grids. The audio byte
+stream is a session-relative suffix whose byte/time zero is the session's
+`generationStartOrdinal` (or an explicitly validated `fromOrdinal` when a
+backward seek rebases the stream). This keeps startup identical for EPUB, PDF,
+and HTML: the browser plays from media time zero and never has to load a long
+synthetic prefix before attempting a deep initial seek.
+
+The client retains one stream-base time and translates between session-relative
+`audio.currentTime` and whole-document UI time. A seek within the current suffix
+is an ordinary media seek. A seek before the suffix rebases the same session at
+the target plan ordinal; it does not introduce a reader-specific restart path.
+
+The audio route builds the suffix CBR layout from the canonical plan plus
+completed sidecars. Generated segments use exact probed duration. Missing
+segments are represented by frame-aligned silence estimates, so byte-range
+seeking can target ungenerated regions without cutting a segment in half.
 
 Readiness is derived from sidecars:
 
@@ -298,6 +310,8 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
   navigation.
 - It maps the current worker-plan segment to visible ranges; it does not
   materialize client-owned playback segments.
+- It paints those ranges with the shared non-mutating DOM Range painter. EPUB.js
+  CFI annotations are a compatibility fallback, not the per-word hot path.
 - It does not use CFI, viewport locator, page-start anchor, text, segment key, or
   array index as playback-start identity.
 
@@ -314,7 +328,10 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 - There is no mutable aggregate segment index.
 - There is no KV segment claim store.
 - Stream/timeline/seek-layout readers derive readiness from per-ordinal sidecars.
-- Seeks are whole-document time/byte operations and do not split segments.
+- Seek intent uses whole-document time and plan ordinals; stream byte ranges are
+  relative to the active ordinal suffix and do not split segments.
+- Audio streams start at a validated plan ordinal; media time is translated to
+  whole-document time by one shared client stream base for every reader type.
 - The browser projects UI state from `audio.currentTime`; highlights do not drive
   audio time.
 - Playback start requires a canonical worker-plan ordinal.
@@ -496,7 +513,6 @@ Implemented route structure:
     sidecars.
   - `PUT /v1/tts-playback/sessions/:sessionId/cursor` updates live cursor.
   - `GET /v1/tts-playback/sessions/:sessionId/audio` streams MP3 bytes.
-  - `POST /v1/tts-playback/cache/reset` bumps cache epoch and cancels sessions.
 
 Implemented notes:
 

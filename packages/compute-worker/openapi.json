@@ -5039,134 +5039,6 @@
         }
       }
     },
-    "/v1/tts-playback/cache/reset": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "storageUserId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "documentId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "documentVersion": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "settingsHash": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  }
-                },
-                "required": [
-                  "storageUserId",
-                  "documentId"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "storageUserId": {
-                      "type": "string"
-                    },
-                    "documentId": {
-                      "type": "string"
-                    },
-                    "documentVersion": {
-                      "type": "number",
-                      "nullable": true
-                    },
-                    "settingsHash": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "cacheEpoch": {
-                      "type": "number"
-                    },
-                    "invalidatedPlaybackSessions": {
-                      "type": "number"
-                    },
-                    "invalidatedSidecarCacheScopes": {
-                      "type": "number"
-                    },
-                    "invalidatedJobOperations": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "storageUserId",
-                    "documentId",
-                    "documentVersion",
-                    "settingsHash",
-                    "cacheEpoch",
-                    "invalidatedPlaybackSessions",
-                    "invalidatedSidecarCacheScopes",
-                    "invalidatedJobOperations"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/tts-playback/cache/clear": {
       "post": {
         "requestBody": {
@@ -5755,6 +5627,15 @@
             "in": "query",
             "name": "token",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "in": "query",
+            "name": "fromOrdinal",
+            "required": false
           },
           {
             "schema": {

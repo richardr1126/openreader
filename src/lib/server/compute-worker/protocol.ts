@@ -126,17 +126,6 @@ export type TtsPlaybackCompletedSegment = {
   updatedAt: number | null;
 };
 
-export type TtsPlaybackResetResult = {
-  storageUserId: string;
-  documentId: string;
-  documentVersion: number | null;
-  settingsHash: string | null;
-  cacheEpoch: number;
-  invalidatedPlaybackSessions: number;
-  invalidatedSidecarCacheScopes: number;
-  invalidatedJobOperations: number;
-};
-
 export type PdfLayoutResolution = {
   artifact: { objectKey: string } | null;
   operation: ComputeOperation<PdfLayoutResult> | null;
