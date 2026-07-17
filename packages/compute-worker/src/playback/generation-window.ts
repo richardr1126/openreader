@@ -2,7 +2,7 @@
  * The single definition of the playback generation floor.
  *
  * The audio stream's scaffolding-silence boundary (api/routes.ts) and the
- * worker's generation lower bound (jobs/handlers.ts) MUST be computed from the
+ * worker's generation lower bound (jobs/playback/playback-job.ts) MUST be computed from the
  * exact same formula. If they ever drift, the stream can advertise "real audio
  * coming" for an ordinal the worker never generates — the browser then waits
  * forever (the `bytes=0-` probe hang). Routing both through this one helper

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseTtsSettings, resolvePlaybackSourceUnits } from '../../src/jobs/handlers';
+import { parseTtsSettings, resolvePlaybackSourceUnits } from '../../src/jobs/playback/plan';
 import { documentSourceKey } from '../../src/storage/artifact-addressing';
 import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
 

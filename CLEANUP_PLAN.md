@@ -155,22 +155,22 @@ Each worker job kind should own its request parsing and implementation.
 `createJobHandlers` should compose those implementations rather than contain
 them.
 
-Conceptual target:
+Implemented in Step 3:
 
 ```text
 packages/compute-worker/src/jobs/
   handlers.ts                       # JobHandlers interface + composition
-  shared/
-    timeouts.ts
+  context.ts                        # shared handler dependencies only
   pdf-layout.ts
   document-preview.ts
   document-conversion.ts
   account-export.ts
   playback/
-    plan.ts
-    source-units.ts
-    segment-generation.ts
-    playback-job.ts
+    schemas.ts
+    plan.ts                         # source derivation + canonical plan persistence
+    segment-generation.ts          # synthesis, retry, leases, sidecars
+    playback-job.ts                # live generation pacing
+    plan-job.ts
     export-job.ts
     ffmpeg-export.ts
 ```
@@ -293,12 +293,12 @@ keep/split decision based on ownership and cohesion.
 ## Current State Snapshot
 
 This snapshot was verified against the working tree on 2026-07-17 and reflects
-the repository after Steps 1 and 2:
+the repository after Steps 1 through 3:
 
 | Roadmap owner | Current state | Next action |
 |---|---|---|
 | Compute worker routes | `api/routes.ts` is a 46-line composition root over domain registrars; playback read-model, session-controller, and invalidation ownership are extracted | Complete in Step 2 |
-| Compute worker jobs | `jobs/handlers.ts` is 1,950 lines and still owns seven job kinds plus playback/export internals | Step 3 |
+| Compute worker jobs | `jobs/handlers.ts` is a 51-line exhaustive composition root; each job kind owns parsing and implementation, while playback planning, segment generation, pacing, and FFmpeg export have explicit modules | Complete in Step 3 |
 | Client playback | `TTSContext.tsx` is 1,568 lines and `useTtsPlayback.ts` is 1,002 lines | Step 4 |
 | Settings | `SettingsModal.tsx` is 1,357 lines | Step 5 |
 | Document list | `DocumentList.tsx` is 826 lines; obsolete preference fields are already gone | Step 6 |
@@ -310,9 +310,10 @@ the authoritative summary of current roadmap state.
 
 Current verification:
 
-- `pnpm test:unit` passed: 102 files, 552 tests;
+- `pnpm test:unit` passed: 103 files, 557 tests;
 - root and compute-worker TypeScript checks passed;
 - compute-boundary and route-error checks passed;
+- the production build passed;
 - `git diff --check` passed.
 
 ---
@@ -578,6 +579,40 @@ Validation:
 - the production build passed;
 - `git diff --check` passed.
 
+### Step 3: Decompose Worker Job Handlers
+
+Status: complete.
+
+The 1,950-line job-handler monolith is now a 51-line exhaustive composition
+root. PDF layout, document preview, document conversion, account export, live
+playback, playback planning, and playback export each own their request parsing
+and implementation. A narrow `JobHandlerContext` makes shared dependencies
+explicit without coupling job modules to API routes.
+
+Playback plan schemas, source-unit derivation, segmentation signatures, and
+canonical plan persistence live together under `jobs/playback/plan.ts` and
+`schemas.ts`. Segment synthesis now owns provider resolution, bounded retries,
+error classification, generation leases, cache-epoch checks, sidecar healing,
+alignment, and content-addressed audio writes in
+`segment-generation.ts`. Live cursor pacing and background-extent decisions
+remain in `playback-job.ts`; audiobook assembly and FFmpeg details are isolated
+in `export-job.ts` and `ffmpeg-export.ts`.
+
+The worker-loop dispatch contract and timing/progress payloads are unchanged.
+Existing plan/source derivation tests now import their domain owner directly,
+and focused tests cover exhaustive handler composition, retry classification,
+speed-adjusted export chapters, filenames/content types, and ID3 stripping.
+Architecture assertions follow the extracted job modules instead of pinning
+behavior to the old monolith.
+
+Validation:
+
+- the full unit suite passed: 103 files, 557 tests;
+- root and compute-worker TypeScript checks passed;
+- compute-boundary and route-error checks passed;
+- the production build passed;
+- `git diff --check` passed.
+
 ---
 
 ## Remaining Work
@@ -591,43 +626,17 @@ its detailed result into `Completed Work` and mark its status row complete.
 |---:|---|---|
 | 1 | Remove verified dead runtime surface | Complete |
 | 2 | Decompose compute worker routes | Complete |
-| 3 | Decompose worker job handlers | Next |
-| 4 | Simplify client playback state | Pending |
+| 3 | Decompose worker job handlers | Complete |
+| 4 | Simplify client playback state | Next |
 | 5 | Split settings by section | Pending |
 | 6 | Split document-list state from presentation | Pending |
 | 7 | Establish shared runtime configuration boundary and sweep environment variables | Pending |
 | 8 | Final dead-code and boundary audit | Pending |
 
 
-### Step 3: Decompose Worker Job Handlers
-
-Status: next. The worker route split is complete.
-
-`packages/compute-worker/src/jobs/handlers.ts` is currently 1,950 lines and owns
-request parsing, playback source derivation, segment generation/retry behavior,
-export transcoding/chapter assembly, and implementations for seven job kinds.
-
-Rules:
-
-- each job module owns its request parsing and implementation;
-- shared helpers must have at least two real owners or represent an important
-  invariant, not merely reduce line count;
-- keep plan signature and segment ordinal rules centralized;
-- keep retry/error classification beside segment generation;
-- keep FFmpeg export details out of the general job registry;
-- `createJobHandlers` should become a small dependency-composition function.
-
-Acceptance criteria:
-
-- the `JobHandlers` contract remains exhaustive;
-- worker-loop dispatch requires no behavioral changes;
-- focused tests exist for extracted plan, segment generation, and export logic;
-- no circular imports are introduced between job modules and API routes;
-- worker job timing/progress payloads remain unchanged.
-
 ### Step 4: Simplify Client Playback State
 
-Status: pending after Step 3 stabilizes the worker contracts.
+Status: next. Step 3 stabilized the worker contracts.
 
 `TTSContext.tsx` (1,568 lines) and `useTtsPlayback.ts` (1,002 lines) together
 contain document navigation,
@@ -779,9 +788,8 @@ Acceptance criteria:
 
 ### Execution Order
 
-Steps 1 and 2 are complete. Continue using the canonical roadmap numbers:
+Steps 1 through 3 are complete. Continue using the canonical roadmap numbers:
 
-- **Step 3:** split worker job handlers by job kind;
 - **Step 4:** thin `TTSContext` and extract playback/export lifecycles;
 - **Steps 5 and 6:** split settings and document-list ownership; these may be
   completed independently when convenient;

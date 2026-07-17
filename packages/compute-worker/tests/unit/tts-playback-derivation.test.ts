@@ -4,7 +4,7 @@ import {
   planTtsPlaybackSegments,
   resolvePlaybackSourceUnits,
   resolvePlaybackStartOrdinal,
-} from '../../src/jobs/handlers';
+} from '../../src/jobs/playback/plan';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 
 const PREFIX = 'openreader';

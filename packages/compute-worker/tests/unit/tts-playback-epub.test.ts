@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { resolvePlaybackSourceUnits } from '../../src/jobs/handlers';
+import { resolvePlaybackSourceUnits } from '../../src/jobs/playback/plan';
 import { extractEpubSpine } from '../../src/inference/epub/spine-text';
 import { documentSourceKey } from '../../src/storage/artifact-addressing';
 

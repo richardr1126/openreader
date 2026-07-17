@@ -5,7 +5,7 @@ import {
   buildTtsPlaybackOperationKey,
   buildTtsPlaybackPlanOperationKey,
 } from '../../../operations/keys';
-import { computePlaybackPlanSignature } from '../../../jobs/handlers';
+import { computePlaybackPlanSignature } from '../../../jobs/playback/plan';
 import { toComputeOperation } from '../../compute-operation';
 import type { PlaybackSessionController } from '../../playback/session-controller';
 import type { PlaybackSessionReadModel } from '../../playback/session-read-model';

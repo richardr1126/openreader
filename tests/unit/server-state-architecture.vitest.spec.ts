@@ -45,6 +45,12 @@ function computeWorkerRouteSource(): string {
     .join('\n');
 }
 
+function computeWorkerJobSource(): string {
+  return collectSourceFiles(path.join(root, 'packages/compute-worker/src/jobs'))
+    .map((file) => readFileSync(file, 'utf8'))
+    .join('\n');
+}
+
 describe('server-state architecture', () => {
   const sourceFiles = collectSourceFiles(srcRoot);
 
@@ -292,7 +298,7 @@ describe('server-state architecture', () => {
     const accountExportEventsRoute = source('src/app/api/user/export/events/route.ts');
     const settingsModal = source('src/components/SettingsModal.tsx');
     const workerRoutes = computeWorkerRouteSource();
-    const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
+    const workerHandlers = computeWorkerJobSource();
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
     const computeClient = source('src/lib/server/compute-worker/client.ts');
 
@@ -344,7 +350,7 @@ describe('server-state architecture', () => {
     const exportEventsRoute = source('src/app/api/tts/export/events/route.ts');
     const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
     const workerRoutes = computeWorkerRouteSource();
-    const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
+    const workerHandlers = computeWorkerJobSource();
     const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
     const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
@@ -468,33 +474,31 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain('const startOrdinal = Math.max(0, Math.floor(Number(requestBody.planning.selectedOrdinal)))');
     expect(workerRoutes).toContain('generationStartOrdinal: startOrdinal');
     expect(workerRoutes).toContain('cursorOrdinal: startOrdinal');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('const isContinuationRun = Boolean(parsed.generationRunId)');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal');
+    expect(workerHandlers).toContain('const isContinuationRun = Boolean(parsed.generationRunId)');
+    expect(workerHandlers).toContain('cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal');
     // Generation centers on the cursor via the same shared floor helper as the
     // stream's silence boundary: a fresh run uses the resolved start, a
     // continuation follows the (possibly seeked-backward) cursor — no clamp to
     // the original start.
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain(
-      'generationFloorForCursor(\n          isContinuationRun ? sessionCursorOrdinal : startOrdinal,\n        )',
-    );
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('segment.ordinal >= generationFloor');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('segment.ordinal >= startOrdinal');
+    expect(workerHandlers).toMatch(/generationFloorForCursor\(\s*isContinuationRun \? sessionCursorOrdinal : startOrdinal\s*\)/);
+    expect(workerHandlers).toContain('segment.ordinal >= generationFloor');
+    expect(workerHandlers).not.toContain('segment.ordinal >= startOrdinal');
     // A run abandons ordinals that fell below the live floor (forward seek) so a
     // continuation re-anchors at the cursor instead of grinding through the gap.
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
+    expect(workerHandlers).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
     // The stream re-anchors generation to the ordinal it is blocked on so the
     // continuation starts promptly after a seek (not at the next heartbeat).
     expect(workerRoutes).toContain('await controller.updateCursor(sessionId, ordinal).catch((error) => {');
     expect(workerRoutes).toContain('tts.playback.cursor_reanchor_failed');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).toContain('status: \'running\',\n          planObjectKey,\n          generationStartOrdinal');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('status: \'running\',\n        lastError: null');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('planObjectKey,\n          startOrdinal,\n          generationStartOrdinal');
+    expect(workerHandlers).toMatch(/status: 'running',\s*planObjectKey,\s*generationStartOrdinal/);
+    expect(workerHandlers).not.toContain('status: \'running\',\n        lastError: null');
+    expect(workerHandlers).not.toMatch(/planObjectKey,\s*startOrdinal,\s*generationStartOrdinal/);
     expect(workerRoutes).toContain('resolvePlaybackStreamStartOrdinal');
     expect(workerRoutes).toContain('session.generationStartOrdinal');
     expect(workerRoutes).toContain('query.fromOrdinal');
     expect(streamTimelineRoute).toContain('startOrdinal: 0');
     expect(seekLayoutRoute).toContain('const startOrdinal = 0;');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
+    expect(workerHandlers).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("typeof rec.nativeSpeed !== 'number'");
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("readOptionalInt(startRec, 'page', 1)");
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("const planExtent = 'document'");
@@ -505,8 +509,8 @@ describe('server-state architecture', () => {
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("startSpineIndex: parsed.startLocation.spineIndex ?? 0");
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startText');
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain("throw new Error('EPUB playback start requires stable spine coordinates')");
-    expect(source('packages/compute-worker/src/jobs/handlers.ts')).not.toContain('if (planning.startText)');
+    expect(workerHandlers).not.toContain("throw new Error('EPUB playback start requires stable spine coordinates')");
+    expect(workerHandlers).not.toContain('if (planning.startText)');
     expect(epubHighlighting).toContain('resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)');
     expect(epubHighlighting).not.toContain('segment.startAnchor.sourceKey !== resolved.map.sourceKey');
     // Single forward-generation job throttled to a client cursor; segment
@@ -625,7 +629,7 @@ describe('server-state architecture', () => {
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
     const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
-    const workerHandlers = source('packages/compute-worker/src/jobs/handlers.ts');
+    const workerHandlers = computeWorkerJobSource();
     const workerStateMachine = source('packages/compute-worker/src/operations/state-machine.ts');
     const playbackScope = source('packages/tts/src/playback-scope.ts');
     const playbackStorage = source('packages/compute-worker/src/playback/storage.ts');
@@ -651,7 +655,7 @@ describe('server-state architecture', () => {
     expect(workerHandlers).toContain("persistSegmentMetadata(segment, 'generating'");
     expect(workerHandlers).toContain('isFreshForeignLease');
     expect(workerHandlers).toContain('leaseStaleMs');
-    expect(workerHandlers).toContain('forceDocumentExtent\n          ? plannedSegments');
+    expect(workerHandlers).toMatch(/forceDocumentExtent\s*\? plannedSegments/);
     expect(workerHandlers.indexOf('if (forceDocumentExtent)')).toBeLessThan(
       workerHandlers.indexOf('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))'),
     );

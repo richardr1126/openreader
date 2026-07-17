@@ -343,7 +343,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const jobHandlers = createJobHandlers({
     storage,
     playbackStorage,
-    whisperTimeoutMs,
     pdfTimeoutMs,
     pdfHardCapMs,
     ttsPlaybackSegmentTimeoutMs,
