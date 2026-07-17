@@ -100,13 +100,20 @@ function SignInContent() {
 
   const handleOidcSignIn = async () => {
     if (!oidcAuth) return;
+    setError(null);
     setLoadingOidc(true);
     try {
       const client = getAuthClient(baseUrl);
-      await client.signIn.oauth2({
+      const result = await client.signIn.oauth2({
         providerId: oidcAuth.providerId,
         callbackURL: '/app'
       });
+      if (result.error) {
+        setError(result.error.message || 'Unable to connect. Please try again.');
+      }
+    } catch (err) {
+      console.error('OIDC sign in error:', err);
+      setError('Unable to connect. Please try again.');
     } finally {
       setLoadingOidc(false);
     }
