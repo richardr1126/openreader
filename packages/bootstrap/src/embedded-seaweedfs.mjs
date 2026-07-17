@@ -27,6 +27,21 @@ export function detectHostForDefaultEndpoint() {
   return ipv4.find(isPrivateIPv4) || ipv4[0] || '127.0.0.1';
 }
 
+export function resolveWeedMiniAdvertiseHost(
+  bindHost,
+  configuredAdvertiseHost,
+  detectedHost = detectHostForDefaultEndpoint(),
+) {
+  const explicit = configuredAdvertiseHost?.trim();
+  if (explicit) return explicit;
+
+  const bind = bindHost?.trim() || '127.0.0.1';
+  if (bind === '0.0.0.0' || bind === '::' || bind === '[::]') {
+    return detectedHost;
+  }
+  return bind;
+}
+
 export function parseS3Endpoint(endpoint) {
   let url;
   try {

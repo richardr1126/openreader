@@ -44,18 +44,6 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const transport = getBrowserStorageTransport();
     const namespace = getOpenReaderTestNamespace(req.headers);
-    const token = req.nextUrl.searchParams.get('token')?.trim().toLowerCase();
-
-    if (token) {
-      if (transport !== 'proxy') return NextResponse.json({ error: 'Proxy upload is disabled when S3_BROWSER_TRANSPORT=presigned.' }, { status: 409 });
-      if (!isValidTempUploadToken(token)) return NextResponse.json({ error: 'Invalid upload token' }, { status: 400 });
-      const { maxUploadMb } = await getResolvedRuntimeConfig();
-      const bytes = Buffer.from(await req.arrayBuffer());
-      if (bytes.byteLength > maxUploadMb * 1024 * 1024) return NextResponse.json({ error: 'Upload exceeds the configured maximum size' }, { status: 413 });
-      const contentType = req.headers.get('content-type') || 'application/octet-stream';
-      await putTempDocumentBlob(token, userId, bytes, contentType, namespace);
-      return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
-    }
 
     if (!req.headers.get('content-type')?.includes('application/json')) {
       return NextResponse.json({ error: 'Upload preparation requires application/json.' }, { status: 400 });
@@ -82,6 +70,42 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     return errorResponse(error, {
       apiErrorMessage: 'Failed to prepare document upload',
+      normalize: { code: 'DOCUMENTS_BLOB_UPLOAD_FAILED', errorClass: 'storage' },
+    });
+  }
+}
+
+/** Store bytes for a same-origin proxy transfer prepared by POST. Presigned
+ * transfers use the same PUT method directly against object storage. */
+export async function PUT(req: NextRequest) {
+  try {
+    if (!isS3Configured()) return storageUnavailable();
+    const auth = await authorize(req);
+    if (auth instanceof Response) return auth;
+    const userId = auth.userId;
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (getBrowserStorageTransport() !== 'proxy') {
+      return NextResponse.json({ error: 'Proxy upload is disabled when S3_BROWSER_TRANSPORT=presigned.' }, { status: 409 });
+    }
+
+    const token = req.nextUrl.searchParams.get('token')?.trim().toLowerCase() ?? '';
+    if (!isValidTempUploadToken(token)) {
+      return NextResponse.json({ error: 'Invalid upload token' }, { status: 400 });
+    }
+
+    const { maxUploadMb } = await getResolvedRuntimeConfig();
+    const bytes = Buffer.from(await req.arrayBuffer());
+    if (bytes.byteLength > maxUploadMb * 1024 * 1024) {
+      return NextResponse.json({ error: 'Upload exceeds the configured maximum size' }, { status: 413 });
+    }
+
+    const contentType = req.headers.get('content-type') || 'application/octet-stream';
+    const namespace = getOpenReaderTestNamespace(req.headers);
+    await putTempDocumentBlob(token, userId, bytes, contentType, namespace);
+    return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    return errorResponse(error, {
+      apiErrorMessage: 'Failed to upload document',
       normalize: { code: 'DOCUMENTS_BLOB_UPLOAD_FAILED', errorClass: 'storage' },
     });
   }

@@ -12,6 +12,7 @@ import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
   hasWeedBinary,
+  resolveWeedMiniAdvertiseHost,
   waitForEndpoint,
 } from './embedded-seaweedfs.mjs';
 import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
@@ -277,6 +278,10 @@ async function main() {
       runtimeEnv.WEED_MINI_DIR = withDefault(runtimeEnv.WEED_MINI_DIR, path.join(workspaceRoot, 'docstore/seaweedfs'));
       runtimeEnv.WEED_MINI_WAIT_SEC = withDefault(runtimeEnv.WEED_MINI_WAIT_SEC, '20');
       runtimeEnv.WEED_MINI_BIND_HOST = withDefault(runtimeEnv.WEED_MINI_BIND_HOST, '127.0.0.1');
+      runtimeEnv.WEED_MINI_ADVERTISE_HOST = resolveWeedMiniAdvertiseHost(
+        runtimeEnv.WEED_MINI_BIND_HOST,
+        runtimeEnv.WEED_MINI_ADVERTISE_HOST,
+      );
       runtimeEnv.WEED_MINI_PORT = withDefault(runtimeEnv.WEED_MINI_PORT, '8333');
       runtimeEnv.S3_BUCKET = withDefault(runtimeEnv.S3_BUCKET, 'openreader-documents');
       runtimeEnv.S3_REGION = withDefault(runtimeEnv.S3_REGION, 'us-east-1');
@@ -301,6 +306,7 @@ async function main() {
           `-dir=${runtimeEnv.WEED_MINI_DIR}`,
         ];
         weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
+        weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
         weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
 
         weedProc = spawn('weed', weedArgs, {
