@@ -28,6 +28,12 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
+| `OIDC_CLIENT_ID` | Auth/OAuth | unset | Set with `OIDC_CLIENT_SECRET` and `OIDC_DISCOVERY_URL` to enable generic OIDC sign-in |
+| `OIDC_CLIENT_SECRET` | Auth/OAuth | unset | OIDC client secret |
+| `OIDC_DISCOVERY_URL` | Auth/OAuth | unset | OIDC provider `/.well-known/openid-configuration` URL |
+| `OIDC_PROVIDER_ID` | Auth/OAuth | `oidc` | URL-safe id used in the OAuth callback path |
+| `OIDC_PROVIDER_NAME` | Auth/OAuth | `SSO` | Display name on the sign-in button |
+| `OIDC_SCOPES` | Auth/OAuth | `openid profile email` | Space- or comma-separated scopes |
 | `BOOTSTRAP_ADMIN_EMAIL` | First-admin seed (app only) | unset | Initial credential account email on a fresh instance |
 | `BOOTSTRAP_ADMIN_PASSWORD` | First-admin seed (app only) | unset | Initial password (16+ characters); remove after rotation |
 | `BOOTSTRAP_ADMIN_PASSWORD_FILE` | First-admin seed (app only) | unset | Read initial password from a mounted file instead of inline env |
@@ -172,6 +178,41 @@ GitHub OAuth client ID.
 GitHub OAuth client secret.
 
 - Set with `GITHUB_CLIENT_ID`
+
+### OIDC_CLIENT_ID
+
+Client ID for a generic OIDC provider (Pocket ID, Authelia, Authentik, Keycloak, etc.).
+
+- Set with `OIDC_CLIENT_SECRET` and `OIDC_DISCOVERY_URL` to enable OIDC sign-in
+
+### OIDC_CLIENT_SECRET
+
+Client secret for the OIDC provider.
+
+- Set with `OIDC_CLIENT_ID` and `OIDC_DISCOVERY_URL`
+
+### OIDC_DISCOVERY_URL
+
+The provider's OIDC discovery document URL, e.g. `https://auth.example.com/.well-known/openid-configuration`. Endpoints are resolved from the discovery document.
+
+### OIDC_PROVIDER_ID
+
+URL-safe identifier for the provider (letters, numbers, hyphens, underscores).
+
+- Default: `oidc`
+- Forms the OAuth callback path: `<BASE_URL>/api/auth/oauth2/callback/<OIDC_PROVIDER_ID>`
+
+### OIDC_PROVIDER_NAME
+
+Display name shown on the sign-in button ("Sign in with …").
+
+- Default: `SSO`
+
+### OIDC_SCOPES
+
+Space- or comma-separated OAuth scopes to request.
+
+- Default: `openid profile email`
 
 ### BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, BOOTSTRAP_ADMIN_PASSWORD_FILE
 

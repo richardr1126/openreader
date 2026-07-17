@@ -11,6 +11,22 @@ This page covers application-level configuration for provider access and authent
 - Anonymous auth sessions are disabled by default.
 - Set `USE_ANONYMOUS_AUTH_SESSIONS=true` to enable anonymous session flows.
 
+## Single sign-on (OAuth / OIDC)
+
+Alongside email/password, two optional SSO methods are supported. Each appears on the sign-in page only when configured:
+
+- **GitHub** — set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. The OAuth callback URL to register with GitHub is `<BASE_URL>/api/auth/callback/github`.
+- **Generic OIDC** — for self-hosted identity providers (Pocket ID, Authelia, Authentik, Keycloak, etc.). Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_DISCOVERY_URL` (the provider's `/.well-known/openid-configuration` URL). The callback URL to register with your provider is `<BASE_URL>/api/auth/oauth2/callback/<OIDC_PROVIDER_ID>` (`oidc` unless you override `OIDC_PROVIDER_ID`). Optional: `OIDC_PROVIDER_NAME` labels the sign-in button (defaults to `SSO`), and `OIDC_SCOPES` overrides the requested scopes (defaults to `openid profile email`).
+
+```env
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
+OIDC_PROVIDER_NAME=Pocket ID
+```
+
+OIDC sign-ins are trusted for account linking: a user who originally signed up with email/password and later signs in through your identity provider with the same email address is attached to their existing account, keeping their documents and settings. OpenReader does not verify local email addresses. The IdP's email claim serves as ownership proof — only enable OIDC against an identity provider you operate and trust.
+
 ## Runtime modes
 
 OpenReader has two common runtime modes:

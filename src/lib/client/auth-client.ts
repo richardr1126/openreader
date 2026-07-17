@@ -1,11 +1,11 @@
 import { createAuthClient } from "better-auth/react";
-import { anonymousClient } from "better-auth/client/plugins";
+import { anonymousClient, genericOAuthClient } from "better-auth/client/plugins";
 
 // Factory function to create auth client with specific baseUrl
 function createAuthClientWithUrl(baseUrl: string) {
   return createAuthClient({
     baseURL: baseUrl,
-    plugins: [anonymousClient()],
+    plugins: [anonymousClient(), genericOAuthClient()],
   });
 }
 
