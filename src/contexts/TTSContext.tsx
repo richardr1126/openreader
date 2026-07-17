@@ -24,7 +24,6 @@ import {
   ReactNode,
   ReactElement
 } from 'react';
-import toast from 'react-hot-toast';
 import { useParams, usePathname } from 'next/navigation';
 
 import { useConfig } from '@/contexts/ConfigContext';
@@ -32,17 +31,16 @@ import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
+import { useTtsDocumentNavigation, type SetTtsTextOptions } from '@/hooks/audio/useTtsDocumentNavigation';
+import { useTtsDocumentExport, type TtsDocumentAudioExportResolution } from '@/hooks/audio/useTtsDocumentExport';
+import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
+import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
+import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import {
-  createTtsPlaybackPlan,
-  getTtsPlaybackSeekLayout,
-  resolveTtsExport,
-  type TtsPlaybackPlanPayload,
-  type TtsPlaybackSeekLayout,
-} from '@/lib/client/api/tts';
-import {
-  normalizePlaybackPlan,
-} from '@/lib/client/tts/playback-plan';
+  pdfLocatorPage,
+  type PlaybackAnchor,
+} from '@/lib/client/tts/playback-selection';
 import {
   type CanonicalTtsSegment,
 } from '@openreader/tts/segment-plan';
@@ -58,7 +56,6 @@ import type {
   TTSRequestHeaders,
   TTSSegmentLocator,
 } from '@/types/client';
-import { isPdfLocator, isStableEpubLocator } from '@/types/client';
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
@@ -98,7 +95,7 @@ interface TTSContextType extends TTSPlaybackState {
   pause: () => void;
   stop: () => void;
   seekPlaybackTo: (seconds: number) => void;
-  setText: (text: string, options?: boolean | SetTextOptions) => void;
+  setText: (text: string, options?: boolean | SetTtsTextOptions) => void;
   setDocumentPlaybackAnchor: (location: TTSLocation, hasReadableText: boolean, locator?: TTSSegmentLocator | null) => void;
   setCurrDocPages: (num: number | undefined) => void;
   setSpeedAndRestart: (speed: number) => void;
@@ -118,128 +115,6 @@ interface TTSContextType extends TTSPlaybackState {
   /** Effective reader type used for worker playback/session scoping. */
   activeReaderType: ReaderType;
 }
-
-type TtsDocumentAudioExportResolution = {
-  sessionId: string;
-  artifactId: string;
-  downloadUrl: string | null;
-  generationOperationId: string | null;
-  artifactOperationId: string | null;
-  generationStatus: string | null;
-  artifactStatus: string | null;
-  seekLayoutUrl: string;
-  plannedCount: number;
-  completedCount: number | null;
-};
-
-interface SetTextOptions {
-  shouldPause?: boolean;
-  location?: TTSLocation;
-  /**
-   * Stable locator for the visible start position. Load-bearing for EPUB worker
-   * playback: startup anchors by spine coordinates because the worker plan is
-   * keyed from persisted document structure, not transient viewport state.
-   */
-  startLocator?: TTSSegmentLocator;
-}
-
-type PlaybackAnchor = {
-  text: string;
-  location: TTSLocation;
-  locator: TTSSegmentLocator | null;
-  hasContent: boolean;
-};
-
-type PlaybackStartLocation = {
-  page?: TTSLocation;
-  spineIndex?: number;
-  charOffset?: number;
-};
-const pdfLocatorPage = (locator: TTSSegmentLocator | null | undefined): number | null => {
-  return isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
-};
-
-const pdfAnchorPage = (location: TTSLocation | undefined): number | null => {
-  return typeof location === 'number' && Number.isFinite(location)
-    ? Math.max(1, Math.floor(location))
-    : null;
-};
-
-const resolveFirstPlanIndexForPdfPage = (
-  plan: CanonicalTtsSegment[],
-  page: number | undefined,
-): number => {
-  if (typeof page !== 'number' || !Number.isFinite(page)) return -1;
-  const targetPage = Math.max(1, Math.floor(page));
-  return plan.findIndex((segment) => {
-    return pdfLocatorPage(segment.ownerLocator) === targetPage;
-  });
-};
-
-const resolveFirstPlanIndexForDocumentAnchor = (
-  plan: CanonicalTtsSegment[],
-  readerType: ReaderType,
-  location: TTSLocation,
-): number => {
-  if (readerType === 'pdf') {
-    const page = pdfAnchorPage(location);
-    return page === null ? -1 : resolveFirstPlanIndexForPdfPage(plan, page);
-  }
-  if (readerType === 'html') {
-    const locationKey = String(location || '1');
-    return plan.findIndex((segment) => {
-      const locator = segment.ownerLocator;
-      return locator?.readerType === 'html' && String(locator.location || '1') === locationKey;
-    });
-  }
-  return -1;
-};
-
-const resolvePlanBackedSelectionIndex = (input: {
-  plan: CanonicalTtsSegment[];
-  readerType: ReaderType;
-  selectedOrdinal?: number | null;
-  anchorLocation: PlaybackStartLocation;
-}): number => {
-  if (input.plan.length === 0) return -1;
-  if (typeof input.selectedOrdinal === 'number' && Number.isFinite(input.selectedOrdinal)) {
-    const byOrdinal = input.plan.findIndex((segment) => segment.ordinal === Math.max(0, Math.floor(input.selectedOrdinal!)));
-    return byOrdinal;
-  }
-
-  if (input.readerType === 'pdf') {
-    const page = typeof input.anchorLocation.page === 'number' ? input.anchorLocation.page : undefined;
-    return resolveFirstPlanIndexForPdfPage(input.plan, page);
-  }
-
-  if (input.readerType === 'html') {
-    const locationKey = String(input.anchorLocation.page ?? '1');
-    return input.plan.findIndex((segment) => {
-      const locator = segment.ownerLocator;
-      return locator?.readerType === 'html' && String(locator.location || '1') === locationKey;
-    });
-  }
-
-  if (input.readerType === 'epub') {
-    if (
-      typeof input.anchorLocation.spineIndex !== 'number'
-      || typeof input.anchorLocation.charOffset !== 'number'
-    ) {
-      return -1;
-    }
-    return input.plan.findIndex((segment) => {
-      const locator = segment.ownerLocator;
-      if (locator?.readerType !== 'epub' || typeof locator.spineIndex !== 'number') return false;
-      if (locator.spineIndex > input.anchorLocation.spineIndex!) return true;
-      if (locator.spineIndex < input.anchorLocation.spineIndex!) return false;
-      return typeof locator.charOffset !== 'number'
-        || locator.charOffset >= input.anchorLocation.charOffset!;
-    });
-  }
-
-  return -1;
-};
-
 
 // Create the context
 const TTSContext = createContext<TTSContextType | undefined>(undefined);
@@ -391,7 +266,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const pauseEpochRef = useRef(0);
   const playbackAnchorRef = useRef<PlaybackAnchor | null>(null);
   const [playbackAnchor, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
-  const planPreviewRunIdRef = useRef(0);
   const playbackSyncNavigationRef = useRef(false);
   // The single "make the view follow the cursor" primitive. Used identically by
   // live playback (projection), the scrubber, and skip — so paused skip turns the
@@ -420,10 +294,85 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [setSelectedOrdinal]);
 
   const advanceRef = useRef<((backwards?: boolean) => void | Promise<void>) | null>(null);
-  const buildPlaybackPlanRequestRef = useRef<(() => import('@/hooks/audio/useTtsPlayback').TtsPlaybackPlanRequest | null) | null>(null);
-  const buildPlaybackSessionRequestRef = useRef<(() => import('@/hooks/audio/useTtsPlayback').TtsPlaybackSessionRequest | null) | null>(null);
-  const createAndApplyPlaybackPlanRef = useRef<((request: import('@/hooks/audio/useTtsPlayback').TtsPlaybackPlanRequest, signal?: AbortSignal) => Promise<ReturnType<typeof normalizePlaybackPlan> | null>) | null>(null);
-  const applyPlaybackPlanRef = useRef<((plan: ReturnType<typeof normalizePlaybackPlan>) => ReturnType<typeof normalizePlaybackPlan>) | null>(null);
+  const playbackPlanRequest = useMemo(() => {
+    if (!documentId) return null;
+    const headers: TTSRequestHeaders = {
+      'Content-Type': 'application/json',
+      'x-tts-provider': configProviderRef,
+    };
+    return {
+      headers,
+      payload: {
+        documentId,
+        settings: {
+          providerRef: configProviderRef,
+          providerType: configProviderType,
+          ttsModel,
+          voice,
+          nativeSpeed: effectiveNativeSpeed,
+          ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
+          language: resolvedLanguage,
+        },
+        planning: {
+          maxBlockLength: ttsSegmentMaxBlockLength,
+          language: resolvedLanguage,
+          ...(activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds } : {}),
+        },
+      },
+    };
+  }, [
+    activeReaderType,
+    configProviderRef,
+    configProviderType,
+    documentId,
+    effectiveNativeSpeed,
+    pdfSkipBlockKinds,
+    providerModelPolicy.supportsInstructions,
+    resolvedLanguage,
+    ttsInstructions,
+    ttsModel,
+    ttsSegmentMaxBlockLength,
+    voice,
+  ]);
+  const {
+    applyPlaybackPlan,
+    buildPlaybackPlanRequest,
+    buildPlaybackSessionRequest,
+    createAndApplyPlaybackPlan,
+    ensurePlaybackPlan,
+  } = useTtsPlanController({
+    activeReaderType,
+    currentLocation: currDocPage,
+    currentPdfPage: currDocPageNumber,
+    isPlaying,
+    playbackAnchor,
+    playbackAnchorRef,
+    playbackPlanRef,
+    playbackPlanSource,
+    playbackSeekLayout,
+    request: playbackPlanRequest,
+    selectedOrdinalRef,
+    applyWorkerPlan,
+    setPlaybackSeekLayout,
+    setSelectedOrdinal,
+  });
+  const { resolveDocumentAudioExport, startDocumentAudioExport } = useTtsDocumentExport({
+    playbackPlanRef,
+    applyWorkerPlan,
+    buildPlaybackPlanRequest,
+    ensurePlaybackPlan,
+  });
+  const playbackController = useMemo(() => ({
+    applyPlaybackPlan,
+    buildPlaybackPlanRequest,
+    buildPlaybackSessionRequest,
+    createAndApplyPlaybackPlan,
+  }), [
+    applyPlaybackPlan,
+    buildPlaybackPlanRequest,
+    buildPlaybackSessionRequest,
+    createAndApplyPlaybackPlan,
+  ]);
 
   const {
     unlockedAudioRef,
@@ -456,12 +405,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
     onAdvance: () => advanceRef.current?.(),
-    controllerRefs: {
-      buildPlaybackPlanRequestRef,
-      buildPlaybackSessionRequestRef,
-      createAndApplyPlaybackPlanRef,
-      applyPlaybackPlanRef,
-    },
+    controller: playbackController,
   });
 
   const abortAudio = controllerAbortAudio;
@@ -477,385 +421,52 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     epubJumpEpochRef.current += 1;
   }, []);
 
-  useEffect(() => {
-    isPlayingRef.current = isPlaying;
-  }, [isPlaying]);
-
-  const recordManualPause = useCallback(() => {
-    // Cancel any queued auto-resume intent and mark an explicit user pause.
-    resumeAfterLocationChangeRef.current = false;
-    pauseEpochRef.current += 1;
-  }, []);
-
-  /**
-   * Pauses the current audio playback
-   * Used for external control of playback state
-   */
-  const pause = useCallback(() => {
-    recordManualPause();
-    clearPendingEpubJump();
-    cancelSeekResync();
-    pauseActivePlayback();
-    setIsPlaying(false);
-  }, [cancelSeekResync, pauseActivePlayback, recordManualPause, clearPendingEpubJump]);
-
-  /**
-   * Navigates to a specific location in the document
-   * Works for both PDF pages and EPUB locations
-   * 
-   * @param {string | number} location - The target location to navigate to
-   * @param {boolean} shouldPause - Whether to pause playback
-   */
-  const skipToLocation = useCallback((location: TTSLocation, shouldPause = false) => {
-    // Cursor-follow echo (set by syncPlaybackLocator): keep the plan, just record
-    // the position. Independent of play state so paused skip is swallowed too.
-    if (playbackSyncNavigationRef.current) {
-      if (activeReaderType === 'pdf' || activeReaderType === 'html') {
-        playbackSyncNavigationRef.current = false;
-      } else {
-        setCurrDocPage(location);
-        return;
-      }
-    }
-
-    if (activeReaderType === 'pdf' || activeReaderType === 'html') {
-      setCurrDocPage(location);
-      if (shouldPause) {
-        resumeAfterLocationChangeRef.current = false;
-        pauseActivePlayback();
-        setIsPlaying(false);
-      } else if (isPlayingRef.current) {
-        resumeAfterLocationChangeRef.current = true;
-      }
-      const planIndex = resolveFirstPlanIndexForDocumentAnchor(
-        playbackSegmentsRef.current,
-        activeReaderType,
-        location,
-      );
-      if (planIndex >= 0) {
-        selectPlaybackSegment(playbackSegmentsRef.current[planIndex]);
-      }
-      return;
-    }
-
-    if (shouldPause) {
-      resumeAfterLocationChangeRef.current = false;
-    } else if (isPlayingRef.current) {
-      resumeAfterLocationChangeRef.current = true;
-    }
-
-    // Reset state for new content in correct order
-    invalidatePlaybackRun();
-    abortAudio();
-    if (shouldPause) setIsPlaying(false);
-    clearPlaybackSegments();
-    playbackAnchorRef.current = null;
-    setPlaybackAnchor(null);
-    setCurrDocPage(location);
-
-  }, [abortAudio, activeReaderType, clearPlaybackSegments, invalidatePlaybackRun, pauseActivePlayback, playbackSegmentsRef, selectPlaybackSegment]);
-
-  const prepareInitialPosition = useCallback((location: TTSLocation) => {
-    skipToLocation(location, true);
-  }, [skipToLocation]);
-
-  /**
-   * Moves to the next or previous sentence
-   * 
-   * @param {boolean} [backwards=false] - Whether to move backwards
-   */
-  const advance = useCallback(async (backwards = false) => {
-    const nextIndex = currentIndex + (backwards ? -1 : 1);
-
-    // Within the plan: just move. The worker plans the whole forward extent as
-    // one session, so page/section boundaries are crossed seamlessly inside the
-    // playback session: `advance` never page-turns for PDF/HTML, it only moves the cursor.
-    if (nextIndex < sentences.length && nextIndex >= 0) {
-      selectPlaybackSegment(playbackSegmentsRef.current[nextIndex]);
-      return;
-    }
-
-    // For EPUB documents, hand off to the next/prev section (its own session).
-    if (isEPUB && locationChangeHandlerRef.current) {
-      const direction = nextIndex >= sentences.length ? 'next' : 'prev';
-      // EPUB navigation is asynchronous (rendition.next/prev -> relocated ->
-      // skipToLocation → setText). Without clearing the just-finished page now,
-      // an unrelated re-render during the async gap can re-fire the playback
-      // effect against the *stale* last index and replay the final segment
-      // before the next page loads. Reset synchronously for a deterministic handoff.
-      if (isPlayingRef.current) {
-        resumeAfterLocationChangeRef.current = true;
-      }
-      invalidatePlaybackRun();
-      clearPlaybackSegments();
-      playbackAnchorRef.current = null;
-      setPlaybackAnchor(null);
-      setCurrentSentenceAlignment(undefined);
-      setCurrentWordIndex(null);
-      locationChangeHandlerRef.current(direction);
-      return;
-    }
-
-    // PDF/HTML: the plan already spans to the end of the forward document, so
-    // running past either end of the plan is the end of playback.
-    setIsPlaying(false);
-  }, [clearPlaybackSegments, currentIndex, isEPUB, invalidatePlaybackRun, playbackSegmentsRef, selectPlaybackSegment, sentences]);
-  advanceRef.current = advance;
-
-  /**
-   * Handles blank text sections based on document type
-   * 
-   * @param {string[]} sentences - Array of processed sentences
-   * @returns {boolean} - True if blank section was handled
-   */
-  const handleBlankSection = useCallback((text: string): boolean => {
-    if (!isPlaying || !skipBlank || text.length > 0) {
-      return false;
-    }
-
-    // Use advance to handle navigation for both EPUB and PDF
-    advance();
-
-    toast.success(isEPUB ? 'Skipping blank section' : `Skipping blank page ${currDocPageNumber}`, {
-      id: isEPUB ? `epub-section-skip` : `page-${currDocPageNumber}`,
-      style: {
-        background: 'var(--background)',
-        color: 'var(--accent)',
-      },
-      duration: 1000,
-      position: 'top-center',
-    });
-
-    return true;
-  }, [isPlaying, skipBlank, advance, isEPUB, currDocPageNumber]);
-
-  const applyDocumentPlaybackAnchor = useCallback((
-    location: TTSLocation,
-    hasReadableText: boolean,
-    locator?: TTSSegmentLocator | null,
-  ) => {
-    let resolvedLocation: TTSLocation = location;
-    let defaultLocator: TTSSegmentLocator | null = null;
-    if (activeReaderType === 'pdf') {
-      const page = pdfAnchorPage(location);
-      if (page === null) {
-        setIsProcessing(false);
-        return;
-      }
-      resolvedLocation = page;
-      defaultLocator = { readerType: 'pdf', page };
-    } else if (activeReaderType === 'html') {
-      defaultLocator = { readerType: 'html', location: String(resolvedLocation || '1') };
-    }
-    const nextAnchor: PlaybackAnchor = {
-      text: '',
-      location: resolvedLocation,
-      locator: locator ?? defaultLocator,
-      hasContent: hasReadableText,
-    };
-    playbackAnchorRef.current = nextAnchor;
-    setPlaybackAnchor(nextAnchor);
-    setCurrDocPage(resolvedLocation);
-
-    if (playbackSyncNavigationRef.current) {
-      playbackSyncNavigationRef.current = false;
-      setIsProcessing(false);
-      return;
-    }
-
-    const plan = playbackSegmentsRef.current;
-    const planIndex = resolveFirstPlanIndexForDocumentAnchor(plan, activeReaderType, resolvedLocation);
-    if (planIndex >= 0) {
-      selectPlaybackSegment(plan[planIndex]);
-    } else if (!playbackActiveRef.current) {
-      // Document extraction is only a viewport/content anchor. If the current
-      // worker plan does not cover this anchor, retire it so the plan API can
-      // derive a canonical plan from the stored document artifact.
-      resetPlaybackPlan();
-      sentenceAlignmentCacheRef.current.clear();
-      setCurrentSentenceAlignment(undefined);
-      setCurrentWordIndex(null);
-    }
-    setIsProcessing(false);
-  }, [activeReaderType, playbackActiveRef, playbackSegmentsRef, resetPlaybackPlan, selectPlaybackSegment]);
-
-  const setDocumentPlaybackAnchor = useCallback((
-    location: TTSLocation,
-    hasReadableText: boolean,
-    locator?: TTSSegmentLocator | null,
-  ) => {
-    applyDocumentPlaybackAnchor(location, hasReadableText, locator);
-  }, [applyDocumentPlaybackAnchor]);
-
-  /**
-   * Records the current viewport anchor. Sentence planning is worker-owned.
-   * 
-   * @param {string} text - The rendered text visible at this anchor
-   */
-  const setText = useCallback((text: string, options?: boolean | SetTextOptions) => {
-    const normalizedOptions: SetTextOptions = typeof options === 'boolean'
-      ? { shouldPause: options }
-      : (options || {});
-
-    const resolvedLocation = normalizedOptions.location !== undefined
-      ? normalizedOptions.location
-      : currDocPage;
-
-    // Keep currDocPage aligned with whatever the caller declared as the viewport's
-    // location. This is the canonical entry point for "the rendered page now shows
-    // this content at this location" — the navigation flow (handleLocationChanged →
-    // skipToLocation) already set it before calling setText, so this is a no-op
-    // for next/prev/jump. The path that needs it is **resize**: EPUBViewer's
-    // checkResize calls extractPageText directly (bypassing skipToLocation), so
-    // without this, currDocPage would stay pinned to the pre-resize CFI even
-    // though the page has repaginated to a new start CFI.
-    if (normalizedOptions.location !== undefined && normalizedOptions.location !== currDocPage) {
-      setCurrDocPage(normalizedOptions.location);
-    }
-
-    const pendingEpubLocator = isEPUB
-      && pendingEpubJumpRef.current?.epoch === epubJumpEpochRef.current
-      && pendingEpubJumpRef.current.locator
-      ? pendingEpubJumpRef.current.locator
-      : null;
-    const nextAnchor: PlaybackAnchor = {
-      text,
-      location: resolvedLocation,
-      locator: pendingEpubLocator ?? normalizedOptions.startLocator ?? null,
-      hasContent: Boolean(text.trim()),
-    };
-    playbackAnchorRef.current = nextAnchor;
-    setPlaybackAnchor(nextAnchor);
-    if (pendingEpubLocator) {
-      clearPendingEpubJump();
-    }
-
-    if (playbackSyncNavigationRef.current) {
-      playbackSyncNavigationRef.current = false;
-      setIsProcessing(false);
-      return;
-    }
-
-    if (handleBlankSection(text.trim())) return;
-
-    const shouldPause = normalizedOptions.shouldPause ?? false;
-    if (activeReaderType === 'pdf') {
-      if (shouldPause) {
-        resumeAfterLocationChangeRef.current = false;
-        setIsPlaying(false);
-      }
-
-      const page = pdfAnchorPage(resolvedLocation) ?? pdfAnchorPage(currDocPageNumber);
-      if (page === null) {
-        setIsProcessing(false);
-        return;
-      }
-      applyDocumentPlaybackAnchor(page, Boolean(text.trim()));
-      return;
-    }
-
-    const pauseEpochAtStart = pauseEpochRef.current;
-    const pendingAutoResume = resumeAfterLocationChangeRef.current;
-    const shouldResumePlayback = !shouldPause && (isPlaying || pendingAutoResume);
-
-    // Keep track of previous state and clear the worker-owned playback model.
-    // setText now records only the visible document anchor. The worker plan is
-    // the single playback segment source.
-    invalidatePlaybackRun();
-    setIsPlaying(false);
-    abortAudio();
-    setIsProcessing(true);
-
-    try {
-      if (!text.trim()) {
-        if (shouldPause || pendingAutoResume) {
-          resumeAfterLocationChangeRef.current = false;
-        }
-        setIsProcessing(false);
-        return;
-      }
-
-      if (shouldPause || pendingAutoResume) {
-        resumeAfterLocationChangeRef.current = false;
-      }
-      clearPlaybackSegments();
-      if (!pendingEpubLocator && isEPUB) {
-        clearPendingEpubJump();
-      }
-
-      sentenceAlignmentCacheRef.current.clear();
-      setCurrentSentenceAlignment(undefined);
-      setCurrentWordIndex(null);
-
-      setIsProcessing(false);
-
-      if (shouldResumePlayback && pauseEpochRef.current === pauseEpochAtStart) {
-        setIsPlaying(true);
-      }
-    } catch (error) {
-      console.warn('Error processing text:', error);
-      setIsProcessing(false);
-      toast.error('Failed to process text', {
-        duration: 3000,
-      });
-    }
-  }, [
-    isPlaying,
-    handleBlankSection,
-    abortAudio,
-    isEPUB,
+  const {
+    pause,
+    prepareInitialPosition,
+    setDocumentPlaybackAnchor,
+    setText,
+    skipBackward,
+    skipForward,
+    skipToLocation,
+  } = useTtsDocumentNavigation({
     activeReaderType,
-    applyDocumentPlaybackAnchor,
-    invalidatePlaybackRun,
     currDocPage,
     currDocPageNumber,
+    currentIndex,
+    isEPUB,
+    isPlaying,
+    sentences,
+    skipBlank,
+    advanceRef,
+    epubJumpEpochRef,
+    isPlayingRef,
+    locationChangeHandlerRef,
+    pauseEpochRef,
+    pendingEpubJumpRef,
+    playbackActiveRef,
+    playbackAnchorRef,
+    playbackSegmentsRef,
+    playbackSyncNavigationRef,
+    resumeAfterLocationChangeRef,
+    sentenceAlignmentCacheRef,
+    abortAudio,
+    cancelSeekResync,
     clearPendingEpubJump,
     clearPlaybackSegments,
-  ]);
+    invalidatePlaybackRun,
+    pauseActivePlayback,
+    resetPlaybackPlan,
+    seekPlaybackToOrdinal,
+    selectPlaybackSegment,
+    setCurrentSentenceAlignment,
+    setCurrentWordIndex,
+    setCurrDocPage,
+    setIsPlaying,
+    setIsProcessing,
+    setPlaybackAnchor,
+  });
 
-  /**
-   * Moves forward one sentence in the text
-   */
-  const skipForward = useCallback(async () => {
-    const nextIndex = currentIndex + 1;
-    // Move the cursor within the loaded (whole-book) plan and let the view
-    // follow — same path as playback/scrubber, regardless of play state. Only
-    // fall back to advance when there's no seek layout yet (plan not loaded).
-    const nextSegment = playbackSegmentsRef.current[nextIndex];
-    if (nextSegment && seekPlaybackToOrdinal(nextSegment.ordinal)) {
-      return;
-    }
-    // Only show processing state if we're currently playing
-    if (isPlaying) {
-      setIsProcessing(true);
-    }
-    invalidatePlaybackRun();
-    abortAudio();
-    await advance();
-  }, [currentIndex, playbackSegmentsRef, seekPlaybackToOrdinal, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
-
-  /**
-   * Moves backward one sentence in the text
-   */
-  const skipBackward = useCallback(async () => {
-    const nextIndex = currentIndex - 1;
-    const nextSegment = playbackSegmentsRef.current[nextIndex];
-    if (nextIndex >= 0 && nextSegment && seekPlaybackToOrdinal(nextSegment.ordinal)) {
-      return;
-    }
-    // Only show processing state if we're currently playing
-    if (isPlaying) {
-      setIsProcessing(true);
-    }
-    invalidatePlaybackRun();
-    abortAudio();
-    await advance(true);
-  }, [currentIndex, playbackSegmentsRef, seekPlaybackToOrdinal, isPlaying, abortAudio, advance, invalidatePlaybackRun]);
-
-
-  /**
-   * Updates the voice and speed settings from the configuration
-   */
   const updateVoiceAndSpeed = useCallback(() => {
     setVoice(configVoice);
     setSpeed(voiceSpeed);
@@ -956,323 +567,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }
   }, [audioSpeed, unlockedAudioRef]);
 
-  const resolvePlaybackAnchorLocation = useCallback((): PlaybackStartLocation => {
-    const anchor = playbackAnchorRef.current;
-    if (activeReaderType === 'pdf') {
-      const page = pdfAnchorPage(anchor?.location) ?? pdfAnchorPage(currDocPageNumber);
-      return page === null ? {} : { page };
-    }
-    if (activeReaderType === 'html') {
-      return { page: (anchor?.location ?? currDocPage) || '1' };
-    }
-    if (activeReaderType === 'epub') {
-      const locator = isStableEpubLocator(anchor?.locator) ? anchor.locator : null;
-      if (!locator) return {};
-      const charOffset = typeof locator.charOffset === 'number' && Number.isFinite(locator.charOffset)
-        ? Math.max(0, Math.floor(locator.charOffset))
-        : null;
-      if (charOffset === null) return {};
-      return {
-        spineIndex: Math.max(0, locator.spineIndex),
-        charOffset,
-      };
-    }
-    return {};
-  }, [activeReaderType, currDocPage, currDocPageNumber]);
-
-  const buildPlaybackPlanRequest = useCallback((): {
-    payload: TtsPlaybackPlanPayload;
-    headers: TTSRequestHeaders;
-  } | null => {
-    if (!documentId) {
-      return null;
-    }
-
-    const headers: TTSRequestHeaders = {
-      'Content-Type': 'application/json',
-      'x-tts-provider': configProviderRef,
-    };
-    return {
-      headers,
-      payload: {
-        documentId,
-        settings: {
-          providerRef: configProviderRef,
-          providerType: configProviderType,
-          ttsModel,
-          voice,
-          nativeSpeed: effectiveNativeSpeed,
-          ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
-          language: resolvedLanguage,
-        },
-        planning: {
-          maxBlockLength: ttsSegmentMaxBlockLength,
-          language: resolvedLanguage,
-          ...(activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds } : {}),
-        },
-      },
-    };
-  }, [
-    activeReaderType,
-    configProviderRef,
-    configProviderType,
-    documentId,
-    effectiveNativeSpeed,
-    providerModelPolicy.supportsInstructions,
-    pdfSkipBlockKinds,
-    resolvedLanguage,
-    ttsInstructions,
-    ttsModel,
-    ttsSegmentMaxBlockLength,
-    voice,
-  ]);
-
-  const buildPlaybackSessionRequest = useCallback((): {
-    payload: TtsPlaybackPlanPayload;
-    headers: TTSRequestHeaders;
-    selectedOrdinal: number;
-  } | null => {
-    const request = buildPlaybackPlanRequest();
-    const ordinal = selectedOrdinalRef.current;
-    if (!request || ordinal === null || !Number.isFinite(ordinal)) return null;
-    return {
-      ...request,
-      selectedOrdinal: Math.max(0, Math.floor(ordinal)),
-    };
-  }, [buildPlaybackPlanRequest, selectedOrdinalRef]);
-
-  const fetchPlaybackPlanUntilReady = useCallback(async (
-    planUrl: string,
-    signal?: AbortSignal,
-  ) => {
-    const fetchPlan = async () => {
-      const res = await fetch(planUrl, { cache: 'no-store', signal });
-      if (!res.ok) return null;
-      return normalizePlaybackPlan(await res.json());
-    };
-    let plan = await fetchPlan();
-    for (let attempt = 0; (!plan || plan.segments.length === 0) && attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (signal?.aborted) return null;
-      plan = await fetchPlan();
-    }
-    return plan && plan.segments.length > 0 ? plan : null;
-  }, []);
-
-  const fetchPlaybackSeekLayoutUntilReady = useCallback(async (
-    seekLayoutUrl: string,
-    signal?: AbortSignal,
-  ) => {
-    const fetchLayout = async () => {
-      const layout = await getTtsPlaybackSeekLayout(seekLayoutUrl, signal).catch(() => null);
-      return layout && layout.durationMs > 0 && layout.segments.length > 0 ? layout : null;
-    };
-
-    let layout = await fetchLayout();
-    for (let attempt = 0; !layout && attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (signal?.aborted) return null;
-      layout = await fetchLayout();
-    }
-    return layout;
-  }, []);
-
-  const isAbortLikeError = useCallback((err: unknown): boolean => {
-    if (err instanceof Error) {
-      return err.name === 'AbortError' || /abort|cancel/i.test(err.message || '');
-    }
-    if (typeof err === 'string') return /abort|cancel/i.test(err);
-    if (typeof err === 'object' && err !== null && 'message' in err) {
-      const maybe = (err as { message?: unknown }).message;
-      return typeof maybe === 'string' && /abort|cancel/i.test(maybe);
-    }
-    return false;
-  }, []);
-
-  const applyPlaybackPlan = useCallback((plan: ReturnType<typeof normalizePlaybackPlan>): ReturnType<typeof normalizePlaybackPlan> => {
-    const canonicalPlan = applyWorkerPlan(plan);
-    const startPlanIndex = resolvePlanBackedSelectionIndex({
-      plan: canonicalPlan,
-      readerType: activeReaderType,
-      selectedOrdinal: selectedOrdinalRef.current,
-      anchorLocation: resolvePlaybackAnchorLocation(),
-    });
-    const startSegment = canonicalPlan[startPlanIndex];
-    if (!startSegment) {
-      throw new Error('TTS playback plan did not contain a plan-backed selection for the current anchor');
-    }
-    setSelectedOrdinal(startSegment.ordinal);
-    return plan;
-  }, [activeReaderType, applyWorkerPlan, resolvePlaybackAnchorLocation, selectedOrdinalRef, setSelectedOrdinal]);
-
-  const createAndApplyPlaybackPlan = useCallback(async (
-    request: ReturnType<typeof buildPlaybackPlanRequest>,
-    signal?: AbortSignal,
-  ) => {
-    if (!request) return null;
-    const existing = playbackPlanRef.current;
-    if (existing?.planObjectKey && existing.segments.length > 0) {
-      if (existing.planId && !playbackSeekLayout) {
-        const layout = await fetchPlaybackSeekLayoutUntilReady(
-          `/api/tts/playback/plans/${encodeURIComponent(existing.planId)}/seek-layout`,
-          signal,
-        );
-        if (!signal?.aborted && layout) setPlaybackSeekLayout(layout);
-      }
-      return applyPlaybackPlan(existing);
-    }
-    const planHandle = await createTtsPlaybackPlan(request.payload, request.headers, signal);
-    const plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
-    if (!plan) return null;
-    const layout = await fetchPlaybackSeekLayoutUntilReady(planHandle.seekLayoutUrl, signal);
-    if (!signal?.aborted && layout) setPlaybackSeekLayout(layout);
-    return applyPlaybackPlan(plan);
-  }, [
-    applyPlaybackPlan,
-    fetchPlaybackPlanUntilReady,
-    fetchPlaybackSeekLayoutUntilReady,
-    playbackPlanRef,
-    playbackSeekLayout,
-    setPlaybackSeekLayout,
-  ]);
-
-  const resolveDocumentAudioExportInternal = useCallback(async (
-    options: { format: 'mp3' | 'm4b'; speed: number },
-    start: boolean,
-    signal?: AbortSignal,
-  ): Promise<TtsDocumentAudioExportResolution> => {
-    const request = buildPlaybackPlanRequest();
-    if (!request) {
-      throw new Error('No document is ready for audio export.');
-    }
-
-    let plan = playbackPlanRef.current;
-    if (!plan?.planObjectKey || plan.segments.length === 0) {
-      const planHandle = await createTtsPlaybackPlan(request.payload, request.headers, signal);
-      plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
-      if (!signal?.aborted) {
-        const layout = await fetchPlaybackSeekLayoutUntilReady(planHandle.seekLayoutUrl, signal);
-        if (layout) setPlaybackSeekLayout(layout);
-      }
-    }
-
-    if (!plan?.planObjectKey || plan.segments.length === 0) {
-      throw new Error('The worker playback plan was not ready for export.');
-    }
-
-    const canonicalPlan = applyWorkerPlan(plan);
-    if (canonicalPlan.length === 0) {
-      throw new Error('The worker playback plan was empty for export.');
-    }
-
-    const snapshot = await resolveTtsExport({
-      documentId: request.payload.documentId,
-      settings: request.payload.settings,
-      ...(request.payload.planning ? { planning: request.payload.planning } : {}),
-      startIntent: { selectedOrdinal: 0 },
-      ...(plan.planId ? { planId: plan.planId } : {}),
-      planObjectKey: plan.planObjectKey,
-      ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
-      generationExtent: 'document',
-      format: options.format,
-      speed: options.speed,
-      start,
-    }, request.headers, signal);
-
-    const plannedCount = plan.plannedCount ?? plan.segments.length;
-    const generationProgress = snapshot.generation.progress ?? snapshot.generation.operation?.progress ?? null;
-    const progressCompletedCount = generationProgress && Number.isFinite(Number(generationProgress.completedCount))
-      ? Math.max(0, Math.floor(Number(generationProgress.completedCount)))
-      : generationProgress && Number.isFinite(Number(generationProgress.completedThroughOrdinal))
-        ? Math.max(0, Math.floor(Number(generationProgress.completedThroughOrdinal)) + 1)
-        : null;
-    const generationStatus = snapshot.generation.operation?.status ?? snapshot.generation.session?.status ?? null;
-    const artifactStatus = snapshot.artifact.artifact ? 'succeeded' : snapshot.artifact.operation?.status ?? null;
-    const completedCount = snapshot.downloadUrl || artifactStatus === 'succeeded' || generationStatus === 'succeeded'
-      ? plannedCount
-      : progressCompletedCount === null
-        ? null
-        : Math.min(plannedCount, progressCompletedCount);
-
-    return {
-      sessionId: snapshot.sessionId,
-      artifactId: snapshot.artifactId,
-      downloadUrl: snapshot.downloadUrl,
-      generationOperationId: snapshot.generation.operation?.opId ?? null,
-      artifactOperationId: snapshot.artifact.operation?.opId ?? null,
-      generationStatus,
-      artifactStatus,
-      seekLayoutUrl: plan.planId
-        ? `/api/tts/playback/plans/${encodeURIComponent(plan.planId)}/seek-layout?sessionId=${encodeURIComponent(snapshot.sessionId)}`
-        : '',
-      plannedCount,
-      completedCount,
-    };
-  }, [
-    applyWorkerPlan,
-    buildPlaybackPlanRequest,
-    fetchPlaybackPlanUntilReady,
-    fetchPlaybackSeekLayoutUntilReady,
-    playbackPlanRef,
-    setPlaybackSeekLayout,
-  ]);
-
-  const resolveDocumentAudioExport = useCallback((
-    options: { format: 'mp3' | 'm4b'; speed: number },
-    signal?: AbortSignal,
-  ) => resolveDocumentAudioExportInternal(options, false, signal), [resolveDocumentAudioExportInternal]);
-
-  const startDocumentAudioExport = useCallback((
-    options: { format: 'mp3' | 'm4b'; speed: number },
-    signal?: AbortSignal,
-  ) => resolveDocumentAudioExportInternal(options, true, signal), [resolveDocumentAudioExportInternal]);
-
-  buildPlaybackPlanRequestRef.current = buildPlaybackPlanRequest;
-  buildPlaybackSessionRequestRef.current = buildPlaybackSessionRequest;
-  createAndApplyPlaybackPlanRef.current = createAndApplyPlaybackPlan;
-  applyPlaybackPlanRef.current = applyPlaybackPlan;
-
-  useEffect(() => {
-    if (isPlaying || playbackPlanSource === 'worker') return;
-    if (!playbackAnchor?.hasContent && !playbackAnchor?.text.trim()) return;
-    const request = buildPlaybackPlanRequest();
-    if (!request) return;
-
-    const controller = new AbortController();
-    const runId = ++planPreviewRunIdRef.current;
-
-    void (async () => {
-      try {
-        const session = await createTtsPlaybackPlan(request.payload, request.headers, controller.signal);
-        if (controller.signal.aborted || runId !== planPreviewRunIdRef.current) return;
-        const plan = await fetchPlaybackPlanUntilReady(session.planUrl, controller.signal);
-        if (controller.signal.aborted || runId !== planPreviewRunIdRef.current || !plan) return;
-
-        const layout = await fetchPlaybackSeekLayoutUntilReady(session.seekLayoutUrl, controller.signal);
-        if (controller.signal.aborted || runId !== planPreviewRunIdRef.current || !layout) return;
-        setPlaybackSeekLayout(layout);
-        applyPlaybackPlan(plan);
-      } catch (error) {
-        if (controller.signal.aborted || isAbortLikeError(error)) return;
-        console.warn('Failed to prefetch TTS playback plan:', error);
-      }
-    })();
-
-    return () => {
-      controller.abort();
-    };
-  }, [
-    buildPlaybackPlanRequest,
-    applyPlaybackPlan,
-    fetchPlaybackPlanUntilReady,
-    fetchPlaybackSeekLayoutUntilReady,
-    isAbortLikeError,
-    isPlaying,
-    playbackAnchor,
-    playbackPlanSource,
-    setPlaybackSeekLayout,
-  ]);
-
   /**
    * Stops the current audio playback and resets all state
    */
@@ -1295,155 +589,29 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentWordIndex(null);
   }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, publishPlaybackTimeSec, resetPlaybackPlan]);
 
-  const clearSegmentCaches = useCallback(() => {
-    // A server-side clear deletes every generated-audio object and the segment
-    // index for this document. The cached plan/seek-layout/segments now point at
-    // artifacts that no longer exist, so we must drop them all — otherwise the
-    // next play reuses the stale plan and the audio stream waits forever on a
-    // start ordinal whose audio was deleted (the "unplayable after clear" bug).
-    // Resetting plan source to 'idle' also lets the plan-preview effect rebuild a
-    // fresh plan + seek layout for the scrubber/grid.
-    const wasPlaying = isPlaying;
-    const mySeq = ++restartSeqRef.current;
-    resetPlaybackPlan({ resetSelection: false });
-    abortAudio();
-    sentenceAlignmentCacheRef.current.clear();
-    setCurrentSentenceAlignment(undefined);
-    setCurrentWordIndex(null);
-    if (!wasPlaying) return;
-    // Bridge two renders so the playback driver sees a real false→true edge and
-    // requests a brand-new session that regenerates the cleared segments.
-    setIsProcessing(true);
-    setIsPlaying(false);
-    window.setTimeout(() => {
-      setIsProcessing(false);
-      if (mySeq === restartSeqRef.current) {
-        setIsPlaying(true);
-      }
-    }, 0);
-  }, [abortAudio, isPlaying, resetPlaybackPlan]);
+  const {
+    clearSegmentCaches,
+    invalidatePlaybackPlan,
+    setAudioPlayerSpeedAndRestart,
+    setSpeedAndRestart,
+    setVoiceAndRestart,
+  } = useTtsPlaybackSettings({
+    isPlaying,
+    restartSeqRef,
+    sentenceAlignmentCacheRef,
+    abortAudio,
+    clearPendingEpubJump,
+    resetPlaybackPlan,
+    setAudioSpeed,
+    setCurrentSentenceAlignment,
+    setCurrentWordIndex,
+    setIsPlaying,
+    setIsProcessing,
+    setSpeed,
+    setVoice,
+    updateConfigKey,
+  });
 
-  /**
-   * Sets the speed and restarts the playback
-   * 
-   * @param {number} newSpeed - The new speed to set
-   */
-  const setSpeedAndRestart = useCallback((newSpeed: number) => {
-    const wasPlaying = isPlaying;
-
-    // Bump restart sequence to invalidate older restarts
-    const mySeq = ++restartSeqRef.current;
-
-    // Set a flag to prevent double audio requests during config update
-    setIsProcessing(true);
-
-    // First stop any current playback
-    setIsPlaying(false);
-    clearPendingEpubJump();
-    abortAudio();
-    resetPlaybackPlan({ resetSelection: false });
-
-    // Update speed and config
-    setSpeed(newSpeed);
-
-    // Update config after state changes
-    updateConfigKey('voiceSpeed', newSpeed).then(() => {
-      setIsProcessing(false);
-      // Resume playback if it was playing before and this is the latest restart
-      if (wasPlaying && mySeq === restartSeqRef.current) {
-        setIsPlaying(true);
-      }
-    });
-  }, [abortAudio, updateConfigKey, isPlaying, clearPendingEpubJump, resetPlaybackPlan]);
-
-  /**
-   * Sets the voice and restarts the playback
-   * 
-   * @param {string} newVoice - The new voice to set
-   */
-  const setVoiceAndRestart = useCallback((newVoice: string) => {
-    const wasPlaying = isPlaying;
-
-    // Bump restart sequence to invalidate older restarts
-    const mySeq = ++restartSeqRef.current;
-
-    // Set a flag to prevent double audio requests during config update
-    setIsProcessing(true);
-
-    // First stop any current playback
-    setIsPlaying(false);
-    clearPendingEpubJump();
-    abortAudio();
-    resetPlaybackPlan({ resetSelection: false });
-
-    // Update voice and config
-    setVoice(newVoice);
-
-    // Update config after state changes
-    updateConfigKey('voice', newVoice).then(() => {
-      setIsProcessing(false);
-      // Resume playback if it was playing before and this is the latest restart
-      if (wasPlaying && mySeq === restartSeqRef.current) {
-        setIsPlaying(true);
-      }
-    });
-  }, [abortAudio, updateConfigKey, isPlaying, clearPendingEpubJump, resetPlaybackPlan]);
-
-  /**
-   * Sets the audio player speed and restarts the playback
-   * 
-   * @param {number} newSpeed - The new audio player speed to set
-   */
-  const setAudioPlayerSpeedAndRestart = useCallback((newSpeed: number) => {
-    const wasPlaying = isPlaying;
-
-    // Bump restart sequence to invalidate older restarts
-    const mySeq = ++restartSeqRef.current;
-
-    // Set a flag to prevent double audio requests during config update
-    setIsProcessing(true);
-
-    // First stop any current playback
-    setIsPlaying(false);
-    clearPendingEpubJump();
-    abortAudio();
-
-    // Update audio speed and config
-    setAudioSpeed(newSpeed);
-
-    // Update config after state changes
-    updateConfigKey('audioPlayerSpeed', newSpeed).then(() => {
-      setIsProcessing(false);
-      // Resume playback if it was playing before and this is the latest restart
-      if (wasPlaying && mySeq === restartSeqRef.current) {
-        setIsPlaying(true);
-      }
-    });
-  }, [abortAudio, updateConfigKey, isPlaying, clearPendingEpubJump]);
-
-  /**
-   * Drops the cached position-independent playback plan and its derived seek
-   * layout so the next playback fetches a fresh one. Callers that mutate
-   * segmentation knobs must invalidate explicitly, mirroring how voice/speed
-   * changes reset the plan in `setVoiceAndRestart`. Resumes playback if it was
-   * active so the change takes effect immediately.
-   */
-  const invalidatePlaybackPlan = useCallback(() => {
-    const wasPlaying = isPlaying;
-    const mySeq = ++restartSeqRef.current;
-    resetPlaybackPlan({ resetSelection: false });
-    if (!wasPlaying) return;
-    setIsProcessing(true);
-    setIsPlaying(false);
-    abortAudio();
-    // Bridge two renders so the playback driver sees a real false→true edge.
-    window.setTimeout(() => {
-      setIsProcessing(false);
-      if (mySeq === restartSeqRef.current) {
-        setIsPlaying(true);
-      }
-    }, 0);
-  }, [abortAudio, isPlaying, resetPlaybackPlan]);
 
   /**
    * Provides the TTS context value to child components

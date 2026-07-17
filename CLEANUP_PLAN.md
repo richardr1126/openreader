@@ -181,23 +181,25 @@ packages/compute-worker/src/jobs/
 should not implement every playback, plan, export, navigation, and browser-audio
 lifecycle itself.
 
-Conceptual ownership:
+Implemented in Step 4:
 
 ```text
 src/contexts/TTSContext.tsx             # public facade and composition only
 src/hooks/audio/
   useTtsPlayback.ts                     # high-level playback controller
-  usePlaybackAudioElement.ts            # element lifecycle and browser unlock
   usePlaybackProjection.ts              # time -> segment/word/location
   usePlaybackForegroundSync.ts          # SSE/timeline/cursor heartbeat
-  usePlaybackSeek.ts                    # seek layout and resync lifecycle
   useTtsPlanController.ts               # plan creation/application
   useTtsDocumentExport.ts               # resolve/start export artifact flow
+  useTtsDocumentNavigation.ts           # reader anchors, navigation, and auto-resume
+  useTtsPlaybackSettings.ts             # settings-driven restart/invalidation
+src/lib/client/tts/
+  playback-selection.ts                 # pure anchor -> canonical selection rules
 ```
 
-This is not a mandate to create every listed file. Lifecycles should remain
-together when separating them would require mirrored mutable refs or a second
-source of truth.
+The audio element, seek/resync state, and session transport remain together in
+`useTtsPlayback.ts` because separating them would require mirrored mutable refs
+or a second state machine.
 
 ### Settings
 
@@ -293,13 +295,13 @@ keep/split decision based on ownership and cohesion.
 ## Current State Snapshot
 
 This snapshot was verified against the working tree on 2026-07-17 and reflects
-the repository after Steps 1 through 3:
+the repository after Steps 1 through 4:
 
 | Roadmap owner | Current state | Next action |
 |---|---|---|
 | Compute worker routes | `api/routes.ts` is a 46-line composition root over domain registrars; playback read-model, session-controller, and invalidation ownership are extracted | Complete in Step 2 |
 | Compute worker jobs | `jobs/handlers.ts` is a 51-line exhaustive composition root; each job kind owns parsing and implementation, while playback planning, segment generation, pacing, and FFmpeg export have explicit modules | Complete in Step 3 |
-| Client playback | `TTSContext.tsx` is 1,568 lines and `useTtsPlayback.ts` is 1,002 lines | Step 4 |
+| Client playback | `TTSContext.tsx` is a 736-line facade/composition root; plan, export, projection, foreground sync, navigation, and settings-restart ownership are extracted; `useTtsPlayback.ts` is the single 754-line audio/session/seek controller | Complete in Step 4 |
 | Settings | `SettingsModal.tsx` is 1,357 lines | Step 5 |
 | Document list | `DocumentList.tsx` is 826 lines; obsolete preference fields are already gone | Step 6 |
 | Runtime configuration | Four runtime files and one test still import `packages/bootstrap/src/storage-transport.mjs` directly; the full environment-variable contract has not yet been reconciled | Step 7 |
@@ -310,7 +312,7 @@ the authoritative summary of current roadmap state.
 
 Current verification:
 
-- `pnpm test:unit` passed: 103 files, 557 tests;
+- `pnpm test:unit` passed: 104 files, 560 tests;
 - root and compute-worker TypeScript checks passed;
 - compute-boundary and route-error checks passed;
 - the production build passed;
@@ -613,6 +615,45 @@ Validation:
 - the production build passed;
 - `git diff --check` passed.
 
+### Step 4: Simplify Client Playback State
+
+Status: complete.
+
+`TTSContext.tsx` is now a 736-line public facade and composition root, down
+from 1,568 lines at the start of the step. Canonical plan creation,
+ready-state loading, plan application, and plan preview ownership live in
+`useTtsPlanController.ts`; document MP3/M4B resolution and start orchestration
+live independently in `useTtsDocumentExport.ts`.
+
+The live playback controller remains the sole owner of the
+`HTMLAudioElement`, session transport, and seek/resync state. Its playhead
+projection and timeline refresh loop moved to `usePlaybackProjection.ts`, and
+SSE refresh plus cursor heartbeats moved to `usePlaybackForegroundSync.ts`.
+This reduced `useTtsPlayback.ts` from 1,002 to 754 lines without introducing a
+polling fallback or a second playback state machine.
+
+Reader-anchor updates, PDF/HTML/EPUB navigation, blank-section handling,
+pause/auto-resume intent, and skip behavior now have one owner in
+`useTtsDocumentNavigation.ts`. Settings-driven audio restarts and plan/cache
+invalidation live in `useTtsPlaybackSettings.ts`. Pure PDF, HTML, and EPUB
+anchor-to-plan selection rules moved to `playback-selection.ts` with focused
+tests, while `useTtsPlaybackModel.ts` remains the single canonical plan and
+selected-ordinal model.
+
+Architecture assertions now follow the extracted owners instead of pinning
+all playback behavior to the context or live-audio file. The context's public
+surface and reader integrations are unchanged.
+
+Validation:
+
+- the full unit suite passed: 104 files, 560 tests;
+- focused playback-selection, reader-ownership, and server-state architecture
+  tests passed;
+- root and compute-worker TypeScript checks passed;
+- compute-boundary and route-error checks passed;
+- the production build passed without hook or unused-variable warnings;
+- `git diff --check` passed.
+
 ---
 
 ## Remaining Work
@@ -627,47 +668,16 @@ its detailed result into `Completed Work` and mark its status row complete.
 | 1 | Remove verified dead runtime surface | Complete |
 | 2 | Decompose compute worker routes | Complete |
 | 3 | Decompose worker job handlers | Complete |
-| 4 | Simplify client playback state | Next |
-| 5 | Split settings by section | Pending |
+| 4 | Simplify client playback state | Complete |
+| 5 | Split settings by section | Next |
 | 6 | Split document-list state from presentation | Pending |
 | 7 | Establish shared runtime configuration boundary and sweep environment variables | Pending |
 | 8 | Final dead-code and boundary audit | Pending |
 
 
-### Step 4: Simplify Client Playback State
-
-Status: next. Step 3 stabilized the worker contracts.
-
-`TTSContext.tsx` (1,568 lines) and `useTtsPlayback.ts` (1,002 lines) together
-contain document navigation,
-plan creation, session creation, export orchestration, audio element lifecycle,
-timeline projection, foreground synchronization, seek recovery, settings
-restart behavior, and the public context facade.
-
-Rules:
-
-- `TTSContext` remains the only public reader/player integration facade;
-- one controller owns the `HTMLAudioElement`;
-- one projection path updates selected ordinal, highlighting, and reader
-  location;
-- one canonical playback plan remains the source of segment identity;
-- export generation must reuse plan/session contracts without becoming part of
-  the live audio element lifecycle;
-- avoid a second state machine layered on top of incompatible React state.
-
-Acceptance criteria:
-
-- the provider is primarily composition plus a memoized public value;
-- dead public context fields are gone;
-- existing PDF/EPUB/HTML readers require no duplicated playback logic;
-- pause/resume, seek, background/foreground recovery, document navigation,
-  highlighting, and export tests remain green;
-- no new polling fallback is introduced.
-
 ### Step 5: Split Settings by Section
 
-Status: pending. Step 1 is complete, so this can proceed independently of
-Steps 3 and 4.
+Status: next. Step 4 is complete.
 
 `SettingsModal.tsx` is currently 1,357 lines and combines navigation, provider
 selection, appearance, custom themes, document import, cache clearing, account
@@ -788,10 +798,10 @@ Acceptance criteria:
 
 ### Execution Order
 
-Steps 1 through 3 are complete. Continue using the canonical roadmap numbers:
+Steps 1 through 4 are complete. Continue using the canonical roadmap numbers:
 
-- **Step 4:** thin `TTSContext` and extract playback/export lifecycles;
-- **Steps 5 and 6:** split settings and document-list ownership; these may be
+- **Step 5:** split settings and mutation ownership;
+- **Step 6:** split document-list ownership; Steps 5 and 6 may be
   completed independently when convenient;
 - **Step 7:** move storage transport resolution into an explicit shared package
   and complete the environment-variable sweep;

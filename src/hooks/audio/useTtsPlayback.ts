@@ -1,27 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import toast from 'react-hot-toast';
-import {
-  documentTimeToMediaTime,
-  mediaTimeToDocumentTime,
-  normalizePlaybackGrid,
-  projectPlaybackGridAtTime,
-  type TtsPlaybackGrid,
-} from '@/lib/client/tts/playback-grid';
-import { TTS_PLAYBACK_CURSOR_HEARTBEAT_MS, type TTSLocation, type TTSSentenceAlignment } from '@/types/tts';
+import { type TTSLocation, type TTSSentenceAlignment } from '@/types/tts';
 import {
   createTtsPlaybackSession,
   getTtsPlaybackSeekLayout,
   postTtsPlaybackCursor,
-  subscribeTtsPlaybackEvents,
   type TtsPlaybackPlanPayload,
   type TtsPlaybackSeekLayout,
   type TtsPlaybackSessionPayload,
 } from '@/lib/client/api/tts';
 import type { TTSRequestHeaders } from '@/types/client';
-import { isPdfLocator } from '@/types/client';
 import type { TtsPlaybackPlan } from '@/lib/client/tts/playback-plan';
+import { usePlaybackForegroundSync } from '@/hooks/audio/usePlaybackForegroundSync';
+import {
+  usePlaybackProjection,
+  type PlaybackSessionState,
+} from '@/hooks/audio/usePlaybackProjection';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 export type TtsPlaybackPlanRequest = {
@@ -33,11 +29,11 @@ export type TtsPlaybackSessionRequest = TtsPlaybackPlanRequest & {
   selectedOrdinal: number;
 };
 
-type PlaybackControllerRefs = {
-  buildPlaybackPlanRequestRef: MutableRefObject<(() => TtsPlaybackPlanRequest | null) | null>;
-  buildPlaybackSessionRequestRef: MutableRefObject<(() => TtsPlaybackSessionRequest | null) | null>;
-  createAndApplyPlaybackPlanRef: MutableRefObject<((request: TtsPlaybackPlanRequest, signal?: AbortSignal) => Promise<TtsPlaybackPlan | null>) | null>;
-  applyPlaybackPlanRef: MutableRefObject<((plan: TtsPlaybackPlan) => TtsPlaybackPlan) | null>;
+type PlaybackController = {
+  buildPlaybackPlanRequest: () => TtsPlaybackPlanRequest | null;
+  buildPlaybackSessionRequest: () => TtsPlaybackSessionRequest | null;
+  createAndApplyPlaybackPlan: (request: TtsPlaybackPlanRequest, signal?: AbortSignal) => Promise<TtsPlaybackPlan | null>;
+  applyPlaybackPlan: (plan: TtsPlaybackPlan) => TtsPlaybackPlan;
 };
 
 type UseTtsPlaybackInput = {
@@ -59,10 +55,8 @@ type UseTtsPlaybackInput = {
   setCurrentSentenceAlignment: (alignment: TTSSentenceAlignment | undefined) => void;
   setCurrentWordIndex: (wordIndex: number | null) => void;
   onAdvance: () => void | Promise<void>;
-  controllerRefs: PlaybackControllerRefs;
+  controller: PlaybackController;
 };
-
-const WORD_HIGHLIGHT_LEAD_SEC = 0.12;
 
 // Tiny silent WAV used to unlock HTML5 audio on iOS/Safari.
 const SILENT_WAV_DATA_URI =
@@ -77,18 +71,6 @@ export type TtsPlaybackPhase =
   | 'buffering'
   | 'ended'
   | 'failed';
-
-function locatorProjectionKey(locator: import('@/types/client').TTSSegmentLocator | null): string {
-  if (!locator) return '';
-  return [
-    locator.readerType,
-    locator.page ?? '',
-    locator.spineIndex ?? '',
-    locator.spineHref ?? '',
-    locator.charOffset ?? '',
-    locator.location ?? '',
-  ].join('|');
-}
 
 export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const {
@@ -110,264 +92,54 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
     onAdvance,
-    controllerRefs,
+    controller,
   } = input;
   const unlockedAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioUnlockAttemptRef = useRef(0);
   const playbackInFlightRef = useRef(false);
-  const playbackProjectionRafRef = useRef<number | null>(null);
-  // The worker stream is session-relative: byte/time zero is the ordinal where
-  // this stream window begins. UI/timeline time remains whole-document time.
-  const playbackStreamBaseSecRef = useRef(0);
-  const playbackTimelineRef = useRef<TtsPlaybackGrid | null>(null);
-  const playbackSessionRef = useRef<{
-    sessionId: string;
-    audioUrl: string;
-    timelineUrl: string;
-    seekLayoutUrl?: string;
-  } | null>(null);
-  const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
-  const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playbackSessionRef = useRef<PlaybackSessionState | null>(null);
   const playbackActiveRef = useRef(false);
   const pendingResyncRef = useRef<{ ordinal: number } | null>(null);
   const resyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playbackRequestHeadersRef = useRef<TTSRequestHeaders | null>(null);
-  const [playbackPhase, setPlaybackPhaseState] = useState<TtsPlaybackPhase>('idle');
   const playbackPhaseRef = useRef<TtsPlaybackPhase>('idle');
-  const [playbackTimeSec, setPlaybackTimeSec] = useState(0);
-  const playbackTimeSecRef = useRef(0);
-  const lastPlaybackTimePublishedAtRef = useRef(0);
-  const lastProjectionRef = useRef<{
-    ordinal: number;
-    wordIndex: number | null;
-    alignment: TTSSentenceAlignment | null | undefined;
-    locatorKey: string;
-  } | null>(null);
-  // Throttle for the stale-grid self-heal refresh (see projectPlaybackTime).
-  const lastTimelineHealAtRef = useRef(0);
-  // The single playback cursor: the plan ordinal under the playhead. Written
-  // ONLY by the playhead projection (and seeded once at start/seek), so the
-  // heartbeat reports exactly the highlighted segment and never a transient
-  // selection resets bleeding through reader navigation. `null`
-  // means "no faithful position yet" — don't post.
-  const playbackCursorOrdinalRef = useRef<number | null>(null);
-
-  const stopPlaybackTimelinePolling = useCallback(() => {
-    if (playbackCursorIntervalRef.current) {
-      clearInterval(playbackCursorIntervalRef.current);
-      playbackCursorIntervalRef.current = null;
-    }
-    if (playbackEventsUnsubRef.current) {
-      try {
-        playbackEventsUnsubRef.current();
-      } catch {
-        // ignore teardown errors
-      }
-      playbackEventsUnsubRef.current = null;
-    }
-  }, []);
 
   const setPlaybackPhase = useCallback((phase: TtsPlaybackPhase) => {
     playbackPhaseRef.current = phase;
-    setPlaybackPhaseState(phase);
   }, []);
 
-  const publishPlaybackTimeSec = useCallback((value: number, options?: { force?: boolean }) => {
-    const next = Math.max(0, Number.isFinite(value) ? value : 0);
-    playbackTimeSecRef.current = next;
-    const now = Date.now();
-    const force = Boolean(options?.force);
-    if (!force && now - lastPlaybackTimePublishedAtRef.current < 250) return;
-    lastPlaybackTimePublishedAtRef.current = now;
-    setPlaybackTimeSec(next);
-  }, []);
-
-  const documentTimeForAudio = useCallback((audio: HTMLAudioElement): number => (
-    mediaTimeToDocumentTime(audio.currentTime, playbackStreamBaseSecRef.current)
-  ), []);
-
-  const setAudioDocumentTime = useCallback((
-    audio: HTMLAudioElement,
-    documentTimeSec: number,
-    targetOrdinal: number,
-    targetStartSec: number,
-  ) => {
-    const target = Math.max(0, documentTimeSec);
-    let base = playbackStreamBaseSecRef.current;
-    if (target + 0.001 < base) {
-      const session = playbackSessionRef.current;
-      if (session) {
-        const url = new URL(session.audioUrl, window.location.href);
-        url.searchParams.set('fromOrdinal', String(Math.max(0, Math.floor(targetOrdinal))));
-        base = Math.max(0, targetStartSec);
-        playbackStreamBaseSecRef.current = base;
-        audio.src = url.toString();
-        audio.load();
-      }
-    }
-    audio.currentTime = documentTimeToMediaTime(target, base);
-  }, []);
-
-  const refreshPlaybackTimeline = useCallback(async (timelineUrl: string, signal?: AbortSignal) => {
-    const response = await fetch(timelineUrl, {
-      cache: 'no-store',
-      signal,
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
-    }
-    const timeline = normalizePlaybackGrid(await response.json());
-    playbackTimelineRef.current = timeline;
-    return timeline;
-  }, []);
-
-  const projectPlaybackTime = useCallback((currentTimeSec: number) => {
-    const timeline = playbackTimelineRef.current;
-    if (!timeline) return;
-    const projection = projectPlaybackGridAtTime(timeline, currentTimeSec, { wordLeadSec: WORD_HIGHLIGHT_LEAD_SEC });
-    if (!projection.segment) return;
-
-    // Self-heal a stale grid. The grid carries real durations + word alignment
-    // only for GENERATED slots; ungenerated slots are estimates with null
-    // alignment (so the word highlight vanishes) and estimate-based timing (so
-    // the sentence/scrubber drift). After a forward seek the playhead lands on
-    // such estimated slots until the grid is refreshed with the now-generated
-    // region. The SSE refresh doesn't always cover a post-seek continuation, so
-    // when we're actively playing over an ungenerated slot, pull a fresh grid
-    // (throttled). As the seeked region finishes generating, the refreshed grid
-    // turns those slots exact and the highlight returns — no pause/play needed.
-    if (projection.segment.generated === false) {
-      const session = playbackSessionRef.current;
-      const now = Date.now();
-      if (session?.timelineUrl && now - lastTimelineHealAtRef.current > 1_000) {
-        lastTimelineHealAtRef.current = now;
-        void refreshPlaybackTimeline(session.timelineUrl).catch(() => undefined);
-      }
-    }
-
-    // `ordinal` is the authoritative, unique plan index. `segmentKey` is a hash
-    // of the segment text and is NOT unique (repeated lines, chapter labels,
-    // dividers, refrains), so playback projection must not use it.
-    const targetOrdinal = projection.segment.ordinal;
-    // The playhead's ordinal IS the cursor. Set it before the dedupe early-return
-    // below so the heartbeat always sees the live playhead, even on a tick where
-    // the highlight didn't change.
-    playbackCursorOrdinalRef.current = targetOrdinal;
-    if (selectedOrdinalRef.current !== targetOrdinal) {
-      setSelectedOrdinal(targetOrdinal);
-    }
-    const locator = projection.segment.locator;
-    const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
-    const locatorKey = locatorProjectionKey(locator);
-    const previous = lastProjectionRef.current;
-    const alignment = projection.segment.alignment ?? undefined;
-    if (
-      previous
-      && previous.ordinal === targetOrdinal
-      && previous.wordIndex === projection.wordIndex
-      && previous.alignment === alignment
-      && previous.locatorKey === locatorKey
-    ) {
-      return;
-    }
-    lastProjectionRef.current = {
-      ordinal: targetOrdinal,
-      wordIndex: projection.wordIndex,
-      alignment,
-      locatorKey,
-    };
-    setCurrentSentenceAlignment(alignment);
-    setCurrentWordIndex(projection.wordIndex);
-
-    if (page !== null) {
-      setCurrDocPage(page);
-    }
-    if (locator) {
-      syncPlaybackLocator?.(locator);
-    }
-  }, [
+  const {
+    playbackCursorOrdinalRef,
+    playbackStreamBaseSecRef,
+    playbackTimeSec,
+    documentTimeForAudio,
+    projectPlaybackTime,
+    publishPlaybackTimeSec,
     refreshPlaybackTimeline,
-    setCurrDocPage,
-    syncPlaybackLocator,
+    resetPlaybackProjection,
+    setAudioDocumentTime,
+    startPlaybackProjectionLoop,
+    stopPlaybackProjectionLoop,
+  } = usePlaybackProjection({
+    playbackRunIdRef,
+    playbackSessionRef,
     selectedOrdinalRef,
-    setSelectedOrdinal,
+    setCurrDocPage,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
-  ]);
-
-  const stopPlaybackProjectionLoop = useCallback(() => {
-    if (playbackProjectionRafRef.current !== null) {
-      cancelAnimationFrame(playbackProjectionRafRef.current);
-      playbackProjectionRafRef.current = null;
-    }
-  }, []);
-
-  const startPlaybackProjectionLoop = useCallback((audio: HTMLAudioElement, runId: number) => {
-    stopPlaybackProjectionLoop();
-
-    const tick = () => {
-      if (runId !== playbackRunIdRef.current || audio.paused || audio.ended) {
-        playbackProjectionRafRef.current = null;
-        return;
-      }
-      const documentTimeSec = documentTimeForAudio(audio);
-      publishPlaybackTimeSec(documentTimeSec);
-      projectPlaybackTime(documentTimeSec);
-      playbackProjectionRafRef.current = requestAnimationFrame(tick);
-    };
-
-    const documentTimeSec = documentTimeForAudio(audio);
-    publishPlaybackTimeSec(documentTimeSec, { force: true });
-    projectPlaybackTime(documentTimeSec);
-    playbackProjectionRafRef.current = requestAnimationFrame(tick);
-  }, [documentTimeForAudio, playbackRunIdRef, projectPlaybackTime, publishPlaybackTimeSec, stopPlaybackProjectionLoop]);
-
-  const startPlaybackForegroundSync = useCallback((runId: number, headers: TTSRequestHeaders) => {
-    const activeSession = playbackSessionRef.current;
-    if (!activeSession) return;
-
-    stopPlaybackTimelinePolling();
-    void refreshPlaybackTimeline(activeSession.timelineUrl).catch(() => undefined);
-    playbackEventsUnsubRef.current = subscribeTtsPlaybackEvents(activeSession.sessionId, {
-      onSnapshot: (snapshot) => {
-        if (runId !== playbackRunIdRef.current) return;
-        if (snapshot.status === 'failed') return;
-        const currentSession = playbackSessionRef.current;
-        if (!currentSession) return;
-        void refreshPlaybackTimeline(currentSession.timelineUrl)
-          .catch(() => undefined);
-        if (currentSession.seekLayoutUrl) {
-          void getTtsPlaybackSeekLayout(currentSession.seekLayoutUrl)
-            .then((layout) => {
-              if (runId !== playbackRunIdRef.current) return;
-              setPlaybackSeekLayout(layout);
-            })
-            .catch(() => undefined);
-        }
-      },
-    });
-
-    const writeCursor = () => {
-      const currentSession = playbackSessionRef.current;
-      if (!currentSession) return;
-      // Source the cursor strictly from the playhead projection, not from derived
-      // UI indexes. `null` means no faithful playhead yet.
-      const cursorOrdinal = playbackCursorOrdinalRef.current;
-      if (cursorOrdinal == null) return;
-      const cursor = Math.max(0, cursorOrdinal);
-      void postTtsPlaybackCursor(currentSession.sessionId, cursor, headers);
-    };
-    writeCursor();
-    playbackCursorIntervalRef.current = setInterval(() => {
-      if (runId !== playbackRunIdRef.current) return;
-      writeCursor();
-    }, TTS_PLAYBACK_CURSOR_HEARTBEAT_MS);
-  }, [
+    setSelectedOrdinal,
+    syncPlaybackLocator,
+  });
+  const {
+    startPlaybackForegroundSync,
+    stopPlaybackForegroundSync,
+  } = usePlaybackForegroundSync({
+    playbackCursorOrdinalRef,
     playbackRunIdRef,
+    playbackSessionRef,
     refreshPlaybackTimeline,
     setPlaybackSeekLayout,
-    stopPlaybackTimelinePolling,
-  ]);
+  });
 
   const stopSeekResync = useCallback(() => {
     if (resyncTimerRef.current) {
@@ -449,18 +221,13 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   }, [audioContext]);
 
   const resetPlaybackRefs = useCallback(() => {
-    stopPlaybackTimelinePolling();
-    stopPlaybackProjectionLoop();
+    stopPlaybackForegroundSync();
     playbackActiveRef.current = false;
     playbackSessionRef.current = null;
-    playbackTimelineRef.current = null;
-    playbackStreamBaseSecRef.current = 0;
-    lastProjectionRef.current = null;
-    playbackCursorOrdinalRef.current = null;
     playbackRequestHeadersRef.current = null;
-    publishPlaybackTimeSec(0, { force: true });
+    resetPlaybackProjection();
     setPlaybackPhase('idle');
-  }, [publishPlaybackTimeSec, setPlaybackPhase, stopPlaybackProjectionLoop, stopPlaybackTimelinePolling]);
+  }, [resetPlaybackProjection, setPlaybackPhase, stopPlaybackForegroundSync]);
 
   const abortAudio = useCallback(() => {
     invalidatePlaybackRun();
@@ -498,14 +265,14 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       }
     }
     stopPlaybackProjectionLoop();
-    stopPlaybackTimelinePolling();
+    stopPlaybackForegroundSync();
     playbackInFlightRef.current = false;
     setIsProcessing(false);
     setPlaybackPhase('ready');
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'paused';
     }
-  }, [setIsProcessing, setPlaybackPhase, stopPlaybackProjectionLoop, stopPlaybackTimelinePolling]);
+  }, [setIsProcessing, setPlaybackPhase, stopPlaybackForegroundSync, stopPlaybackProjectionLoop]);
 
   const startSeekResync = useCallback((ordinal: number) => {
     pendingResyncRef.current = { ordinal };
@@ -668,7 +435,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
 
   const playWorkerPlaybackStream = useCallback(async () => {
     const runId = playbackRunIdRef.current;
-    const request = controllerRefs.buildPlaybackPlanRequestRef.current?.() ?? null;
+    const request = controller.buildPlaybackPlanRequest();
     if (!request) {
       playbackInFlightRef.current = false;
       setIsProcessing(false);
@@ -689,12 +456,12 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     }
 
     try {
-      const plan = await controllerRefs.createAndApplyPlaybackPlanRef.current?.(request);
+      const plan = await controller.createAndApplyPlaybackPlan(request);
       if (runId !== playbackRunIdRef.current) return;
       if (!plan?.planObjectKey) {
         throw new Error('TTS playback plan was not ready in time');
       }
-      const sessionRequest = controllerRefs.buildPlaybackSessionRequestRef.current?.() ?? null;
+      const sessionRequest = controller.buildPlaybackSessionRequest();
       const selectedOrdinal = sessionRequest?.selectedOrdinal;
       if (!sessionRequest || !Number.isFinite(Number(selectedOrdinal))) {
         throw new Error('TTS playback requires a selected worker-plan segment');
@@ -721,7 +488,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       playbackRequestHeadersRef.current = headers;
       setPlaybackPhase('ready');
 
-      controllerRefs.applyPlaybackPlanRef.current?.(plan);
+      controller.applyPlaybackPlan(plan);
 
       const initialSeekLayout = await (async () => {
         const deadline = Date.now() + 20_000;
@@ -858,13 +625,15 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     }
   }, [
     audioSpeed,
-    controllerRefs,
+    controller,
     documentTimeForAudio,
     isAbortLikeError,
     isPlayingRef,
     onAdvance,
+    playbackCursorOrdinalRef,
     playbackRunIdRef,
     playbackSegmentsRef,
+    playbackStreamBaseSecRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,
     refreshPlaybackTimeline,
@@ -972,31 +741,14 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   return {
     unlockedAudioRef,
     playbackActiveRef,
-    playbackCursorIntervalRef,
-    playbackCursorOrdinalRef,
-    playbackEventsUnsubRef,
-    playbackPhase,
-    playbackPhaseRef,
     playbackTimeSec,
     publishPlaybackTimeSec,
-    playbackSessionRef,
-    projectPlaybackTime,
-    refreshPlaybackTimeline,
-    resetPlaybackRefs,
-    setPlaybackPhase,
     abortAudio,
     cancelSeekResync,
     invalidatePlaybackRun,
     pauseActivePlayback,
-    playWorkerPlaybackStream,
     seekPlaybackTo,
     seekPlaybackToOrdinal,
-    startSeekResync,
-    unlockPlaybackOnUserGesture,
     togglePlay,
-    startPlaybackForegroundSync,
-    startPlaybackProjectionLoop,
-    stopPlaybackProjectionLoop,
-    stopPlaybackTimelinePolling,
   };
 }
