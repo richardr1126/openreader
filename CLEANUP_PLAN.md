@@ -206,16 +206,17 @@ or a second state machine.
 Settings navigation and modal composition should be separate from section
 business logic and long-lived mutations.
 
-Conceptual target:
+Implemented in Step 5:
 
 ```text
+src/components/SettingsModal.tsx               # compatibility re-export
 src/components/settings/
-  SettingsModal.tsx
-  SettingsSidebar.tsx                 # only if navigation remains substantial
+  SettingsModal.tsx                            # navigation + composition
   ProviderSettingsPanel.tsx
   AppearanceSettingsPanel.tsx
   DocumentSettingsPanel.tsx
   AccountSettingsPanel.tsx
+  AdminSettingsPanel.tsx
   SettingsChangelogPanel.tsx
   useLibraryImport.ts
   useAccountExport.ts
@@ -295,14 +296,14 @@ keep/split decision based on ownership and cohesion.
 ## Current State Snapshot
 
 This snapshot was verified against the working tree on 2026-07-17 and reflects
-the repository after Steps 1 through 4:
+the repository after Steps 1 through 5:
 
 | Roadmap owner | Current state | Next action |
 |---|---|---|
 | Compute worker routes | `api/routes.ts` is a 46-line composition root over domain registrars; playback read-model, session-controller, and invalidation ownership are extracted | Complete in Step 2 |
 | Compute worker jobs | `jobs/handlers.ts` is a 51-line exhaustive composition root; each job kind owns parsing and implementation, while playback planning, segment generation, pacing, and FFmpeg export have explicit modules | Complete in Step 3 |
 | Client playback | `TTSContext.tsx` is a 736-line facade/composition root; plan, export, projection, foreground sync, navigation, and settings-restart ownership are extracted; `useTtsPlayback.ts` is the single 754-line audio/session/seek controller | Complete in Step 4 |
-| Settings | `SettingsModal.tsx` is 1,357 lines | Step 5 |
+| Settings | The public `SettingsModal.tsx` is a one-line compatibility export over a 195-line navigation/composition root; provider, appearance, documents, account, admin, changelog, import, and export ownership are extracted | Complete in Step 5 |
 | Document list | `DocumentList.tsx` is 826 lines; obsolete preference fields are already gone | Step 6 |
 | Runtime configuration | Four runtime files and one test still import `packages/bootstrap/src/storage-transport.mjs` directly; the full environment-variable contract has not yet been reconciled | Step 7 |
 | Final audit | Deferred until the structural steps are complete | Step 8 |
@@ -312,7 +313,7 @@ the authoritative summary of current roadmap state.
 
 Current verification:
 
-- `pnpm test:unit` passed: 104 files, 560 tests;
+- `pnpm test:unit` passed: 105 files, 563 tests;
 - root and compute-worker TypeScript checks passed;
 - compute-boundary and route-error checks passed;
 - the production build passed;
@@ -654,6 +655,40 @@ Validation:
 - the production build passed without hook or unused-variable warnings;
 - `git diff --check` passed.
 
+### Step 5: Split Settings by Section
+
+Status: complete.
+
+The 1,357-line settings monolith is now a one-line public compatibility export
+over a 195-line navigation and composition root. Provider selection and draft
+state, appearance and custom-theme editing, document maintenance, account
+actions, admin tabs, and changelog rendering each have a domain-owned panel
+under `src/components/settings/`; no settings section imports another section.
+
+Library import now has an explicit `useLibraryImport` lifecycle owner for
+selection, progress, upload orchestration, cancellation, and unmount cleanup.
+Account export similarly has a `useAccountExport` owner for artifact resolution,
+SSE progress, download handoff, disconnection handling, and EventSource cleanup.
+The panels remain mounted while users switch settings sections or inspect the
+changelog, preserving in-progress form state and the previous cross-tab
+behavior.
+
+The existing responsive sidebar/modal layout, shared UI primitives, admin
+panels, provider policy, theme presentation, import/export flows, account
+actions, privacy entry point, and changelog presentation are unchanged.
+Architecture assertions now follow the extracted account-export and form-control
+owners and protect the small composition root, section independence, and
+long-running lifecycle cleanup.
+
+Validation:
+
+- the full unit suite passed: 105 files, 563 tests;
+- focused settings-architecture, shared-control, provider-view-model, and
+  server-state architecture tests passed;
+- root TypeScript, compute-boundary, and route-error checks passed;
+- the production build passed;
+- `git diff --check` passed.
+
 ---
 
 ## Remaining Work
@@ -669,41 +704,15 @@ its detailed result into `Completed Work` and mark its status row complete.
 | 2 | Decompose compute worker routes | Complete |
 | 3 | Decompose worker job handlers | Complete |
 | 4 | Simplify client playback state | Complete |
-| 5 | Split settings by section | Next |
-| 6 | Split document-list state from presentation | Pending |
+| 5 | Split settings by section | Complete |
+| 6 | Split document-list state from presentation | Next |
 | 7 | Establish shared runtime configuration boundary and sweep environment variables | Pending |
 | 8 | Final dead-code and boundary audit | Pending |
 
 
-### Step 5: Split Settings by Section
-
-Status: next. Step 4 is complete.
-
-`SettingsModal.tsx` is currently 1,357 lines and combines navigation, provider
-selection, appearance, custom themes, document import, cache clearing, account
-export, account deletion, admin panels, and changelog rendering.
-
-Rules:
-
-- section components receive narrow props or consume the context they own;
-- move mutations and reconnect loops into named hooks when they have meaningful
-  lifecycle state;
-- do not create a giant settings props object that simply relocates the
-  monolith;
-- preserve current sidebar/modal behavior and responsive layout.
-
-Acceptance criteria:
-
-- `SettingsModal` owns modal navigation and section composition, not every
-  section's business logic;
-- account export and library import have explicit cancellation/cleanup owners;
-- no settings section imports another section;
-- existing admin, provider, theme, import, export, deletion, and changelog
-  behavior remains covered.
-
 ### Step 6: Split Document List State from Presentation
 
-Status: pending. The obsolete preference fields were removed in Step 1, so this
+Status: next. The obsolete preference fields were removed in Step 1, so this
 can proceed independently of Steps 3 through 5.
 
 `DocumentList.tsx` is currently 826 lines and owns preference persistence,
@@ -798,11 +807,9 @@ Acceptance criteria:
 
 ### Execution Order
 
-Steps 1 through 4 are complete. Continue using the canonical roadmap numbers:
+Steps 1 through 5 are complete. Continue using the canonical roadmap numbers:
 
-- **Step 5:** split settings and mutation ownership;
-- **Step 6:** split document-list ownership; Steps 5 and 6 may be
-  completed independently when convenient;
+- **Step 6:** split document-list ownership;
 - **Step 7:** move storage transport resolution into an explicit shared package
   and complete the environment-variable sweep;
 - **Step 8:** run the final dead-code, dependency, documentation, and large-file

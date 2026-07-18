@@ -296,7 +296,7 @@ describe('server-state architecture', () => {
     const accountExportRoute = source('src/app/api/user/export/route.ts');
     const accountExportDownloadRoute = source('src/app/api/user/export/download/route.ts');
     const accountExportEventsRoute = source('src/app/api/user/export/events/route.ts');
-    const settingsModal = source('src/components/SettingsModal.tsx');
+    const accountExport = source('src/components/settings/useAccountExport.ts');
     const workerRoutes = computeWorkerRouteSource();
     const workerHandlers = computeWorkerJobSource();
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
@@ -316,8 +316,8 @@ describe('server-state architecture', () => {
     expect(accountExportRoute).not.toContain('Readable.toWeb');
     expect(accountExportEventsRoute).toContain("operation.subject.kind !== 'account_export'");
     expect(accountExportEventsRoute).toContain('proxyOperationEvents');
-    expect(settingsModal).toContain("new EventSource(`/api/user/export/events?opId=");
-    expect(settingsModal).not.toContain("window.open('/api/user/export'");
+    expect(accountExport).toContain("new EventSource(`/api/user/export/events?opId=");
+    expect(accountExport).not.toContain("window.open('/api/user/export'");
     expect(workerRoutes).toContain("/v1/account-exports/jobs");
     expect(workerRoutes).toContain("/v1/account-exports/resolve");
     expect(workerRoutes).not.toContain('verifyAccountExportDownloadToken');

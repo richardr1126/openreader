@@ -6,7 +6,7 @@ const STANDARD_FORM_CONSUMERS = [
   'src/app/(app)/signin/page.tsx',
   'src/app/(app)/signup/page.tsx',
   'src/components/PrivacyModal.tsx',
-  'src/components/SettingsModal.tsx',
+  'src/components/settings/ProviderSettingsPanel.tsx',
   'src/components/admin/AdminFeaturesPanel.tsx',
   'src/components/admin/AdminProvidersPanel.tsx',
   'src/components/documents/DocumentSelectionModal.tsx',
