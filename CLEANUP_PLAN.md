@@ -230,13 +230,14 @@ The Finder-style presentation should consume a controller instead of owning
 preference persistence, query derivation, mutations, DnD actions, upload state,
 dialogs, and rendering in one component.
 
-Conceptual target:
+Implemented in Step 6:
 
 ```text
 src/components/doclist/
   DocumentList.tsx                    # providers + shell composition
   useDocumentListController.ts        # derived data and user actions
   document-list-preferences.ts        # normalize/serialize current shape
+  document-list-model.ts              # pure folder/filter/sort/status derivation
   SidebarUploadLoader.tsx
 ```
 
@@ -295,8 +296,8 @@ keep/split decision based on ownership and cohesion.
 
 ## Current State Snapshot
 
-This snapshot was verified against the working tree on 2026-07-17 and reflects
-the repository after Steps 1 through 5:
+This snapshot was verified against the working tree on 2026-07-18 and reflects
+the repository after Steps 1 through 6:
 
 | Roadmap owner | Current state | Next action |
 |---|---|---|
@@ -304,8 +305,8 @@ the repository after Steps 1 through 5:
 | Compute worker jobs | `jobs/handlers.ts` is a 51-line exhaustive composition root; each job kind owns parsing and implementation, while playback planning, segment generation, pacing, and FFmpeg export have explicit modules | Complete in Step 3 |
 | Client playback | `TTSContext.tsx` is a 736-line facade/composition root; plan, export, projection, foreground sync, navigation, and settings-restart ownership are extracted; `useTtsPlayback.ts` is the single 754-line audio/session/seek controller | Complete in Step 4 |
 | Settings | The public `SettingsModal.tsx` is a one-line compatibility export over a 195-line navigation/composition root; provider, appearance, documents, account, admin, changelog, import, and export ownership are extracted | Complete in Step 5 |
-| Document list | `DocumentList.tsx` is 826 lines; obsolete preference fields are already gone | Step 6 |
-| Runtime configuration | Four runtime files and one test still import `packages/bootstrap/src/storage-transport.mjs` directly; the full environment-variable contract has not yet been reconciled | Step 7 |
+| Document list | `DocumentList.tsx` is a 269-line presentation/composition shell over an explicit controller; preferences and pure folder/filter/sort/status derivation have focused owners | Complete in Step 6 |
+| Runtime configuration | Four runtime files and one test still import `packages/bootstrap/src/storage-transport.mjs` directly; the full environment-variable contract has not yet been reconciled | Step 7 (next) |
 | Final audit | Deferred until the structural steps are complete | Step 8 |
 
 The audit-baseline table above remains historical evidence; this snapshot is
@@ -313,7 +314,7 @@ the authoritative summary of current roadmap state.
 
 Current verification:
 
-- `pnpm test:unit` passed: 105 files, 563 tests;
+- `pnpm test:unit` passed: 108 files, 571 tests;
 - root and compute-worker TypeScript checks passed;
 - compute-boundary and route-error checks passed;
 - the production build passed;
@@ -689,6 +690,39 @@ Validation:
 - the production build passed;
 - `git diff --check` passed.
 
+### Step 6: Split Document List State from Presentation
+
+Status: complete.
+
+The 826-line document-list monolith is now a 269-line presentation and
+composition shell over `useDocumentListController.ts`. The controller owns
+local dialog, search, responsive-sidebar, upload-progress, and selection state,
+while continuing to delegate document, folder, and preference mutations to the
+existing `useDocuments`, `useFolders`, and `useUserPreferences` query owners.
+No parallel document, folder, or preference state was introduced.
+
+Preference defaults, the former `grid` migration, and current-shape
+serialization live in `document-list-preferences.ts`; serialization tests
+protect the removal of obsolete folder fields. Folder membership, stale-folder
+handling, document unioning, sidebar and search filtering, sorting, recents,
+counts, status summaries, and folder-name suggestions are pure and covered in
+`document-list-model.ts`. The sidebar upload indicator also has its own small
+presentation component.
+
+The existing Finder window, toolbar, sidebar, status bar, views, DnD provider,
+selection provider, upload surfaces, and dialogs remain the rendering owners.
+Architecture assertions protect the small shell and prevent query/mutation
+ownership from drifting back into it.
+
+Validation:
+
+- the full unit suite passed: 108 files, 571 tests;
+- focused preference, model, and document-list architecture tests passed;
+- root and compute-worker TypeScript checks passed;
+- compute-boundary and route-error checks passed;
+- the production build passed;
+- `git diff --check` passed.
+
 ---
 
 ## Remaining Work
@@ -705,33 +739,13 @@ its detailed result into `Completed Work` and mark its status row complete.
 | 3 | Decompose worker job handlers | Complete |
 | 4 | Simplify client playback state | Complete |
 | 5 | Split settings by section | Complete |
-| 6 | Split document-list state from presentation | Next |
-| 7 | Establish shared runtime configuration boundary and sweep environment variables | Pending |
+| 6 | Split document-list state from presentation | Complete |
+| 7 | Establish shared runtime configuration boundary and sweep environment variables | Next |
 | 8 | Final dead-code and boundary audit | Pending |
-
-
-### Step 6: Split Document List State from Presentation
-
-Status: next. The obsolete preference fields were removed in Step 1, so this
-can proceed independently of Steps 3 through 5.
-
-`DocumentList.tsx` is currently 826 lines and owns preference persistence,
-server/query state derivation, filtering, sorting, folder mutations, drag/drop
-actions, upload progress, modal state, and the entire Finder-style presentation
-shell.
-
-Acceptance criteria:
-
-- preference serialization has a focused test and no obsolete folder fields;
-- sorting/filtering/folder derivation is testable without rendering the whole
-  Finder shell;
-- mutation ownership remains in existing query hooks;
-- the visual component reads a controller result and renders dialogs/layout;
-- upload, folder DnD, selection, and responsive behavior are unchanged.
 
 ### Step 7: Establish a Shared Runtime Configuration Boundary and Sweep Environment Variables
 
-Status: pending after Steps 3 through 6.
+Status: next.
 
 Storage transport resolution currently lives in
 `packages/bootstrap/src/storage-transport.mjs`, but the Next app and compute
@@ -807,9 +821,8 @@ Acceptance criteria:
 
 ### Execution Order
 
-Steps 1 through 5 are complete. Continue using the canonical roadmap numbers:
+Steps 1 through 6 are complete. Continue using the canonical roadmap numbers:
 
-- **Step 6:** split document-list ownership;
 - **Step 7:** move storage transport resolution into an explicit shared package
   and complete the environment-variable sweep;
 - **Step 8:** run the final dead-code, dependency, documentation, and large-file
