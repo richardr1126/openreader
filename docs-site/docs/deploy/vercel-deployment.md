@@ -58,6 +58,7 @@ LOG_LEVEL=info
 
 If you also run an external worker service (for example Railway), set these there too:
 
+- `AUTH_SECRET` to the same value as the app, for shared-provider credential decryption
 - `LOG_FORMAT=json`
 - `COMPUTE_LOG_LEVEL=info`
 

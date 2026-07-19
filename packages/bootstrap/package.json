@@ -17,6 +17,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1061.0",
     "@openreader/database": "workspace:*",
+    "@openreader/runtime-config": "workspace:*",
     "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
     "pg": "^8.21.0"

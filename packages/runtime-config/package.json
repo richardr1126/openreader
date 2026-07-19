@@ -1,0 +1,12 @@
+{
+  "name": "@openreader/runtime-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    "./storage-transport": "./src/storage-transport.mjs"
+  }
+}

@@ -13,24 +13,30 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 
 ## Quick Reference Table
 
-| Variable | Area | Default | When to set |
+All OpenReader configuration variables are server-only; none are exposed through a `NEXT_PUBLIC_` browser variable. "App" includes the bootstrap process and embedded worker it starts. Standalone-worker rows must be set on the worker service itself.
+
+| Variable | Owner / runtime | Default and validation | When to set |
 | --- | --- | --- | --- |
 | `LOG_FORMAT` | Runtime logging | `pretty` | Set `json` for structured logs |
 | `LOG_LEVEL` | Runtime logging | `info` | Set app server log level |
 | `API_BASE` | TTS provider bootstrap seed | unset | Optional first-boot base URL for `default-openai` |
 | `API_KEY` | TTS provider bootstrap seed | unset | Optional first-boot API key for `default-openai` |
 | `BASE_URL` | Auth | unset | Required at startup |
-| `AUTH_SECRET` | Auth | unset | Required at startup |
+| `AUTH_SECRET` | App auth + worker provider credentials | unset | Required on the app; standalone workers must use the same value |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
 | `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `ADMIN_EMAILS` | Admin | empty | Comma-separated emails auto-promoted to admin |
 | `CRON_SECRET` | Scheduled tasks | unset | Required for Vercel cron invocations |
+| `RICHARDRDEV_PRODUCTION` | Official hosted instance | `false`; enabled only by exact `true` | Enables the official-instance label, privacy notice, and US region gate |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
 | `WEED_MINI_DIR` | Storage | `docstore/seaweedfs` | Override embedded SeaweedFS data directory |
 | `WEED_MINI_WAIT_SEC` | Storage | `20` | Tune SeaweedFS startup wait timeout |
+| `WEED_MINI_BIND_HOST` | Storage | `127.0.0.1` | Override embedded SeaweedFS bind interface |
+| `WEED_MINI_ADVERTISE_HOST` | Storage | bind host or detected private host | Override the host embedded SeaweedFS advertises |
+| `WEED_MINI_PORT` | Storage | `8333` | Override embedded SeaweedFS S3 port |
 | `S3_ACCESS_KEY_ID` | Storage | auto-generated in embedded mode | Set explicitly for stable/external credentials |
 | `S3_SECRET_ACCESS_KEY` | Storage | auto-generated in embedded mode | Set explicitly for stable/external credentials |
 | `S3_BUCKET` | Storage | `openreader-documents` in embedded mode | Required for external S3-compatible storage |
@@ -41,18 +47,27 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 | `S3_ENDPOINT` | Storage | deprecated | Compatibility alias; replace with explicit internal/public endpoints |
 | `S3_FORCE_PATH_STYLE` | Storage | `true` in embedded mode | Set per provider requirement |
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
-| `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
-| `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
+| `IMPORT_LIBRARY_DIRS` | App library import | `docstore/library` fallback | Set one or more roots (comma/colon/semicolon separated) |
 | `EMBEDDED_COMPUTE_WORKER_PORT` | Compute | `8081` | Override embedded worker bind port |
 | `EMBEDDED_NATS_PORT` | Compute | `4222` | Override embedded NATS client port |
 | `EMBEDDED_NATS_MONITOR_PORT` | Compute | `8222` | Override embedded NATS monitor port |
 | `EMBEDDED_NATS_STORE_DIR` | Compute | `docstore/nats/jetstream` | Override embedded JetStream storage directory |
 | `NATS_URL` | Compute | `nats://127.0.0.1:4222` in embedded startup | Override embedded startup or set standalone worker URL |
+| `NATS_CREDS` | Standalone worker | unset | Raw NATS credentials; mutually exclusive in practice with `NATS_CREDS_FILE` |
+| `NATS_CREDS_FILE` | Standalone worker | unset | Path to a NATS credentials file |
 | `COMPUTE_LOG_LEVEL` | Compute | `info` | Compute worker log level |
+| `COMPUTE_WORKER_HOST` | Compute worker HTTP | `127.0.0.1` embedded; `0.0.0.0` standalone | Override worker bind host |
+| `PORT` | Standalone worker / container | `8081` in worker; `3003` in app image | Usually injected by the hosting platform |
 | `COMPUTE_JOB_CONCURRENCY` | Compute | `1` | Shared compute concurrency cap |
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Compute | `30000` | Whisper alignment timeout budget |
 | `COMPUTE_PDF_TIMEOUT_MS` | Compute | `300000` | PDF parse timeout budget |
+| `COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS` | Compute | Whisper timeout | Per-segment TTS generation timeout budget |
 | `COMPUTE_PDF_JOB_ATTEMPTS` | Compute | `1` | Max JetStream deliveries for PDF layout jobs |
+| `COMPUTE_PREWARM_MODELS` | Compute | `false` | Set `true` to pre-download worker models at startup |
+| `COMPUTE_JOBS_STREAM_MAX_BYTES` | Compute / JetStream | `268435456` | Override jobs stream retention bytes with a positive integer |
+| `COMPUTE_EVENTS_STREAM_MAX_BYTES` | Compute / JetStream | `134217728` | Override events stream retention bytes with a positive integer |
+| `COMPUTE_JOB_STATES_MAX_BYTES` | Compute / JetStream | `67108864` | Override job-state KV storage bytes with a positive integer |
+| `COMPUTE_NATS_REPLICAS` | Compute / JetStream | `1`; only `1`, `3`, or `5` survive normalization | Use `3` or `5` for a clustered NATS deployment |
 | `COMPUTE_OP_STALE_MS` | Compute | `max(30m, 4x max compute timeout)` | Shared stale window for compute op replacement |
 | `WHISPER_MODEL_BASE_URL` | Compute model source | onnx-community default | Override Whisper ONNX model base URL |
 | `PDF_LAYOUT_MODEL_BASE_URL` | Compute model source | PP-DocLayoutV3 default | Override PDF layout ONNX model base URL |
@@ -116,6 +131,7 @@ Required external base URL for this OpenReader instance.
 Required secret key used by auth/session handling.
 
 - Required at startup
+- Required on standalone workers and must match the app value so encrypted shared-provider credentials can be decrypted
 - Generate with `openssl rand -base64 32`
 
 ### AUTH_TRUSTED_ORIGINS
@@ -159,6 +175,14 @@ Bearer-token secret for `GET /api/admin/tasks/tick`.
 - Generate a strong random value, for example with `openssl rand -base64 32`.
 - Self-hosted Node.js deployments run the scheduler in-process and do not require this variable.
 
+### RICHARDRDEV_PRODUCTION
+
+Official-host deployment flag for `openreader.richardr.dev`.
+
+- Default: `false`
+- Exact `true` enables the official-instance badge, official privacy notice, and US-only request gate
+- Self-hosted deployments should leave it unset
+
 ## Database and Object Blob Storage
 
 ### POSTGRES_URL
@@ -186,6 +210,24 @@ Data directory for embedded SeaweedFS (`weed mini`).
 Max wait time for embedded SeaweedFS startup.
 
 - Default: `20`
+
+### WEED_MINI_BIND_HOST
+
+Bind interface for embedded SeaweedFS.
+
+- Default: `127.0.0.1`
+
+### WEED_MINI_ADVERTISE_HOST
+
+Host embedded SeaweedFS advertises in generated S3 URLs.
+
+- Default: the bind host, or a detected reachable private address when binding all interfaces
+
+### WEED_MINI_PORT
+
+S3-compatible port for embedded SeaweedFS.
+
+- Default: `8333`
 
 ### S3_ACCESS_KEY_ID
 
@@ -229,7 +271,7 @@ Browser-reachable HTTPS endpoint used only to generate direct presigned URLs.
 
 ### S3_ENDPOINT
 
-Deprecated compatibility alias for `S3_INTERNAL_ENDPOINT`; when `presigned` is explicitly selected it also supplies `S3_PUBLIC_ENDPOINT`. It will be removed in the next major release.
+Deprecated compatibility alias for `S3_INTERNAL_ENDPOINT`; when `presigned` is explicitly selected it also supplies `S3_PUBLIC_ENDPOINT`. It will be removed in OpenReader 5.0.
 
 ### S3_FORCE_PATH_STYLE
 
@@ -245,15 +287,12 @@ Object key prefix.
 
 ## Library Import
 
-### IMPORT_LIBRARY_DIR
-
-Single library source directory.
-
 ### IMPORT_LIBRARY_DIRS
 
-Multiple library roots.
+One or more library roots.
 
 - Supports comma, colon, or semicolon-separated values
+- Defaults to `docstore/library` when unset
 
 ## Compute Worker and Model Configuration
 
@@ -287,11 +326,34 @@ NATS URL used by compute services.
 
 - Embedded startup default: `nats://127.0.0.1:4222`
 
+### NATS_CREDS
+
+Raw NATS credentials content for a standalone worker. Prefer this form on platforms that inject multiline secrets.
+
+### NATS_CREDS_FILE
+
+Path to a NATS credentials file for a standalone worker. `NATS_CREDS` takes precedence when both are set.
+
 ### COMPUTE_LOG_LEVEL
 
 Compute worker log level.
 
 - Default: `info`
+
+### COMPUTE_WORKER_HOST
+
+Compute worker HTTP bind host.
+
+- Embedded default: `127.0.0.1`
+- Standalone default: `0.0.0.0`
+
+### PORT
+
+Compute worker HTTP port.
+
+- Worker default: `8081`
+- Hosting platforms commonly inject this value
+- The published app container separately sets `PORT=3003` for the Next standalone server
 
 ### COMPUTE_JOB_CONCURRENCY
 
@@ -311,12 +373,49 @@ PDF parse timeout budget.
 
 - Default: `300000`
 
+### COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS
+
+Per-segment TTS generation timeout budget.
+
+- Default: the resolved `COMPUTE_WHISPER_TIMEOUT_MS` value
+
 ### COMPUTE_PDF_JOB_ATTEMPTS
 
 Max JetStream deliveries for PDF layout jobs.
 
 - Default: `1`
 - In embedded worker mode, set this in the root `.env`
+
+### COMPUTE_PREWARM_MODELS
+
+Controls whether the worker downloads model artifacts during startup.
+
+- Default: `false`
+
+### COMPUTE_JOBS_STREAM_MAX_BYTES
+
+Maximum retained bytes in the JetStream jobs stream.
+
+- Default: `268435456`
+
+### COMPUTE_EVENTS_STREAM_MAX_BYTES
+
+Maximum retained bytes in the JetStream operation-events stream.
+
+- Default: `134217728`
+
+### COMPUTE_JOB_STATES_MAX_BYTES
+
+Maximum bytes used by the job-state key-value bucket.
+
+- Default: `67108864`
+
+### COMPUTE_NATS_REPLICAS
+
+JetStream replica count requested by the worker.
+
+- Default: `1`
+- Accepted effective values: `1`, `3`, or `5`; other values normalize to `1`
 
 ### COMPUTE_OP_STALE_MS
 
@@ -476,6 +575,33 @@ Precedence summary:
 - Runtime reads: admin DB runtime rows override built-in defaults.
 - Seed input (`RUNTIME_SEED_JSON*`) only populates missing runtime rows on first boot; it does not overwrite existing/admin-edited rows.
 - Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY` fallback > no provider bootstrap.
+
+## Platform-Supplied Signals
+
+These values are read by OpenReader but owned by Node.js, Next.js, the hosting platform, or the test runner. They are not deployment configuration knobs and should normally be left to the owning platform.
+
+| Variable | Owner | OpenReader use |
+| --- | --- | --- |
+| `NODE_ENV` | Node.js / Next.js | Production cookie security and test-namespace defaults |
+| `NEXT_RUNTIME` | Next.js | Loads Node-only instrumentation in the Node runtime |
+| `VERCEL` | Vercel | Selects scheduled-task behavior, request IP handling, and rejects proxy browser storage on request-duration hosting |
+| `CI` | CI runner | Test retries, server reuse, and reporter selection |
+| `PWD` | Process launcher | Worker fallback for locating the bundled `docstore` directory |
+
+## Documentation Build Variables
+
+These variables belong only to `scripts/build-changelog-feed.mjs` and the documentation deployment workflow; they are not read by the OpenReader app or worker.
+
+| Variable | Default / owner | Purpose |
+| --- | --- | --- |
+| `CHANGELOG_REPO` | `GITHUB_REPOSITORY`, then `richardr1126/openreader` | Release repository queried for changelog data |
+| `CHANGELOG_PUBLIC_BASE_URL` | `https://docs.openreader.richardr.dev` | Public base used in generated changelog URLs |
+| `CHANGELOG_MUTABLE_COUNT` | `3`; positive numeric input expected | Number of recent releases refreshed during incremental builds |
+| `CHANGELOG_FORCE_FULL` | unset; exact `1` enables | Forces a full changelog reconciliation |
+| `GITHUB_TOKEN` | GitHub Actions secret | Authenticates release API requests |
+| `GITHUB_REPOSITORY` | GitHub Actions | Default changelog repository |
+| `GITHUB_EVENT_PATH` | GitHub Actions | Event payload used to identify a release change |
+| `GITHUB_EVENT_NAME` | GitHub Actions | Selects incremental event handling |
 
 ## Related
 

@@ -997,7 +997,7 @@ Configuration contract:
 - `S3_ENDPOINT`: deprecated compatibility alias. When `S3_INTERNAL_ENDPOINT`
   is absent, it supplies the internal endpoint; when `presigned` is selected
   and `S3_PUBLIC_ENDPOINT` is absent, it also supplies the public endpoint.
-  Emit a startup warning and document removal in the next major release. New
+  Emit a startup warning and document removal in OpenReader 5.0. New
   Compose files and docs must use the explicit settings only.
 
 Implementation work:

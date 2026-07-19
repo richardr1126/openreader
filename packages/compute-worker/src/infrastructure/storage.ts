@@ -7,7 +7,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
-import { resolveStorageTransport } from '../../../bootstrap/src/storage-transport.mjs';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
 export interface ArtifactStorage {
   readObject(key: string): Promise<ArrayBuffer>;

@@ -35,6 +35,9 @@ importers:
       '@openreader/database':
         specifier: workspace:*
         version: link:packages/database
+      '@openreader/runtime-config':
+        specifier: workspace:*
+        version: link:packages/runtime-config
       '@openreader/tts':
         specifier: workspace:*
         version: link:packages/tts
@@ -222,6 +225,9 @@ importers:
       '@openreader/database':
         specifier: workspace:*
         version: link:../database
+      '@openreader/runtime-config':
+        specifier: workspace:*
+        version: link:../runtime-config
       better-sqlite3:
         specifier: ^12.10.0
         version: 12.10.0
@@ -258,6 +264,9 @@ importers:
       '@openreader/database':
         specifier: workspace:*
         version: link:../database
+      '@openreader/runtime-config':
+        specifier: workspace:*
+        version: link:../runtime-config
       '@openreader/tts':
         specifier: workspace:*
         version: link:../tts
@@ -327,6 +336,8 @@ importers:
       pg:
         specifier: ^8.21.0
         version: 8.21.0
+
+  packages/runtime-config: {}
 
   packages/tts:
     dependencies:

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { resolveStorageTransport } from '../../packages/bootstrap/src/storage-transport.mjs';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
 const base = {
   S3_INTERNAL_ENDPOINT: 'http://seaweedfs:8333',

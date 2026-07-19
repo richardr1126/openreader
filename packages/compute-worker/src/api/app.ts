@@ -91,7 +91,7 @@ import {
   ttsPlaybackExportArtifactResolutionSchema,
   ttsSentenceAlignmentSchema,
 } from './schemas';
-import { resolveStorageTransport } from '../../../bootstrap/src/storage-transport.mjs';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
 // Disconnect from NATS after this much continuous idle so the worker stops
 // generating outbound traffic (pull polling + keepalive PINGs) and Railway can

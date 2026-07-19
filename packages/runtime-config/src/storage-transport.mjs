@@ -1,7 +1,7 @@
 /**
  * Resolve browser object delivery independently from the S3 endpoint used by
- * server processes.  This module deliberately has no framework dependencies:
- * bootstrap, Next, and the compute worker all load the exact same contract.
+ * server processes. This module deliberately has no framework or startup
+ * dependencies so every runtime consumes the same pure contract.
  */
 function bool(value, fallback) {
   if (value == null || String(value).trim() === '') return fallback;
@@ -75,12 +75,4 @@ export function resolveStorageTransport(env = process.env, options = {}) {
     publicEndpoint,
     usesDeprecatedEndpoint: Boolean(env.S3_ENDPOINT?.trim()),
   };
-}
-
-export function applyStorageTransportEnv(env = process.env, options = {}) {
-  const resolved = resolveStorageTransport(env, options);
-  env.S3_INTERNAL_ENDPOINT = resolved.internalEndpoint;
-  if (resolved.publicEndpoint) env.S3_PUBLIC_ENDPOINT = resolved.publicEndpoint;
-  env.S3_BROWSER_TRANSPORT = resolved.mode;
-  return resolved;
 }

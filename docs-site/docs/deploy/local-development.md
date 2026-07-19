@@ -208,8 +208,8 @@ TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 ```
 
 Use the same ownership split:
-- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus optional shared timeout/stale overrides
-- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning) plus the matching `COMPUTE_WORKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`
+- root `.env`: app routing/auth (`AUTH_SECRET`, `COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus embedded-worker tuning
+- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning) plus the matching `AUTH_SECRET`, `COMPUTE_WORKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`
 
 Use one of these `.env` mode templates:
 

@@ -17,6 +17,7 @@
     "@nats-io/kv": "^3.4.0",
     "@nats-io/transport-node": "^3.4.0",
     "@openreader/database": "workspace:*",
+    "@openreader/runtime-config": "workspace:*",
     "@openreader/tts": "workspace:*",
     "@speech-sdk/core": "^0.15.0",
     "archiver": "^7.0.1",

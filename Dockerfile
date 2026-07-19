@@ -23,6 +23,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/bootstrap/package.json ./packages/bootstrap/package.json
 COPY packages/compute-worker/package.json ./packages/compute-worker/package.json
 COPY packages/database/package.json ./packages/database/package.json
+COPY packages/runtime-config/package.json ./packages/runtime-config/package.json
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile

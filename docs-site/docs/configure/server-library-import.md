@@ -54,10 +54,9 @@ Imported documents are still saved to the importing user's document scope.
 
 You only need this when the default mounted path is not what you want.
 
-By default, OpenReader uses `docstore/library` as the import root. You can override that with environment variables:
+By default, OpenReader uses `docstore/library` as the import root. You can override that with an environment variable:
 
-- `IMPORT_LIBRARY_DIRS` (takes precedence): multiple roots separated by comma, colon, or semicolon
-- `IMPORT_LIBRARY_DIR`: single root
+- `IMPORT_LIBRARY_DIRS`: one or more roots separated by comma, colon, or semicolon
 
 See [Environment Variables](../reference/environment-variables#library-import) for variable details.
 

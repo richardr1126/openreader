@@ -32,6 +32,7 @@ Required worker variables:
 
 ```env
 COMPUTE_WORKER_TOKEN=...
+AUTH_SECRET=...
 TTS_PLAYBACK_TOKEN_SECRET=...
 NATS_URL=nats://...
 S3_BUCKET=...
@@ -45,7 +46,7 @@ S3_SECRET_ACCESS_KEY=...
 
 - Embedded/local mode: configure the root `.env` only.
 - External worker mode: set `COMPUTE_WORKER_URL`, optional `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET` on the app, and worker runtime values on the worker service.
-- Keep shared values aligned across app and worker: `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`, `S3_*`, `COMPUTE_WHISPER_TIMEOUT_MS`, `COMPUTE_PDF_TIMEOUT_MS`, `COMPUTE_PDF_JOB_ATTEMPTS`, and `COMPUTE_OP_STALE_MS`.
+- Keep shared values aligned across app and worker: `AUTH_SECRET`, `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`, and `S3_*`. The worker uses `AUTH_SECRET` to decrypt app-managed shared-provider credentials.
 :::
 
 Common optional variables:
@@ -59,6 +60,7 @@ Common optional variables:
 - `COMPUTE_JOB_CONCURRENCY=1`
 - `COMPUTE_WHISPER_TIMEOUT_MS=30000`
 - `COMPUTE_PDF_TIMEOUT_MS=300000`
+- `COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS=30000` (defaults to the Whisper timeout)
 - `COMPUTE_PDF_JOB_ATTEMPTS=1`
 - `COMPUTE_JOBS_STREAM_MAX_BYTES=268435456`
 - `COMPUTE_EVENTS_STREAM_MAX_BYTES=134217728`
@@ -80,11 +82,6 @@ COMPUTE_WORKER_URL=https://worker.example.com
 # COMPUTE_WORKER_PUBLIC_URL=https://worker-public.example.com
 COMPUTE_WORKER_TOKEN=<same-token-as-worker>
 TTS_PLAYBACK_TOKEN_SECRET=<same-playback-secret-as-worker>
-# Optional shared overrides:
-# COMPUTE_WHISPER_TIMEOUT_MS=30000
-# COMPUTE_PDF_TIMEOUT_MS=300000
-# COMPUTE_PDF_JOB_ATTEMPTS=1
-# COMPUTE_OP_STALE_MS=1800000
 ```
 
 Notes:
@@ -98,7 +95,7 @@ Notes:
 
 - App and worker must share the same object storage.
 - Embedded `weed mini` is not supported for external worker mode.
-- Protect `COMPUTE_WORKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`.
+- Protect `AUTH_SECRET`, `COMPUTE_WORKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`.
 - The public `/v1/tts-playback/sessions/:sessionId/audio` route is intentionally browser-reachable, but it requires a signed playback token. Other worker routes remain protected by `COMPUTE_WORKER_TOKEN`.
 - The worker connects to NATS lazily and disconnects after 120 seconds of full idle time. That allows platforms like Railway to sleep the service, but the first request after a cold start will be slower.
 
@@ -114,6 +111,7 @@ Deploy the worker image to Railway and set worker env vars similar to:
 ```env
 COMPUTE_WORKER_HOST=0.0.0.0
 COMPUTE_WORKER_TOKEN=<shared-token>
+AUTH_SECRET=<same-auth-secret-as-app>
 TTS_PLAYBACK_TOKEN_SECRET=<shared-playback-secret>
 NATS_URL=tls://connect.ngs.global:4222
 NATS_CREDS="-----BEGIN NATS USER JWT-----

@@ -8,6 +8,7 @@ import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as dotenv from 'dotenv';
 import { runMigrations } from '@openreader/database/migrate';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
@@ -16,7 +17,14 @@ import {
   waitForEndpoint,
 } from './embedded-seaweedfs.mjs';
 import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
-import { applyStorageTransportEnv } from './storage-transport.mjs';
+
+function applyStorageTransportEnv(env, options = {}) {
+  const resolved = resolveStorageTransport(env, options);
+  env.S3_INTERNAL_ENDPOINT = resolved.internalEndpoint;
+  if (resolved.publicEndpoint) env.S3_PUBLIC_ENDPOINT = resolved.publicEndpoint;
+  env.S3_BROWSER_TRANSPORT = resolved.mode;
+  return resolved;
+}
 
 function findWorkspaceRoot(startDir = process.cwd()) {
   let dir = startDir;
@@ -336,7 +344,7 @@ async function main() {
 
     const storageTransport = applyStorageTransportEnv(runtimeEnv, { embedded: useEmbeddedWeed });
     if (storageTransport.usesDeprecatedEndpoint) {
-      console.warn('S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in the next major release.');
+      console.warn('S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in OpenReader 5.0.');
     }
 
     const shouldRunV4Decommission = resolveBooleanEnv(runtimeEnv, 'RUN_V4_DECOMMISSION', true);

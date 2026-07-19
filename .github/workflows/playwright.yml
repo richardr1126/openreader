@@ -15,7 +15,7 @@ jobs:
       BASE_URL: http://127.0.0.1:3003
       AUTH_SECRET: ci-auth-secret-change-me
       USE_ANONYMOUS_AUTH_SESSIONS: true
-      S3_ENDPOINT: http://127.0.0.1:8333
+      S3_INTERNAL_ENDPOINT: http://127.0.0.1:8333
     steps:
     - uses: actions/checkout@v5
     - uses: actions/setup-node@v5

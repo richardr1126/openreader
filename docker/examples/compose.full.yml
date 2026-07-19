@@ -110,6 +110,7 @@ services:
       COMPUTE_WORKER_HOST: 0.0.0.0
       PORT: 8081
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
       TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       S3_INTERNAL_ENDPOINT: http://seaweedfs:8333
       S3_BUCKET: ${S3_BUCKET:-openreader-documents}

@@ -1,5 +1,5 @@
 import { S3Client } from '@aws-sdk/client-s3';
-import { resolveStorageTransport } from '../../../../packages/bootstrap/src/storage-transport.mjs';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 import { serverLogger } from '@/lib/server/logger';
 
 type S3Config = {
@@ -44,7 +44,7 @@ function loadS3ConfigFromEnv(): S3Config | null {
     warnedDeprecatedEndpoint = true;
     serverLogger.warn(
       { event: 'storage.s3_endpoint_deprecated' },
-      'S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in the next major release.',
+      'S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in OpenReader 5.0.',
     );
   }
 

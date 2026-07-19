@@ -43,7 +43,7 @@ OpenReader chooses one browser transport before every transfer with `S3_BROWSER_
 - `presigned`: browser transfers use signatures generated from `S3_PUBLIC_ENDPOINT`. The server and compute worker still use `S3_INTERNAL_ENDPOINT`.
 - `auto`: chooses `proxy` for embedded SeaweedFS, otherwise requires a public HTTPS `S3_PUBLIC_ENDPOINT` and chooses `presigned`.
 
-`S3_ENDPOINT` is a deprecated compatibility alias. Configure `S3_INTERNAL_ENDPOINT` and, for direct browser storage, `S3_PUBLIC_ENDPOINT` instead.
+`S3_ENDPOINT` is a deprecated compatibility alias scheduled for removal in OpenReader 5.0. Configure `S3_INTERNAL_ENDPOINT` and, for direct browser storage, `S3_PUBLIC_ENDPOINT` instead.
 
 For a public SeaweedFS/S3 origin, use a dedicated HTTPS hostname such as `s3.reader.example`, not a `/s3` path mount. Preserve the signed path, query string, `Host`, and signed headers in the reverse proxy. Configure CORS for the OpenReader origin with `GET`, `HEAD`, `PUT`, and `OPTIONS`, allowing `Content-Type` and `x-amz-server-side-encryption`.
 

@@ -296,8 +296,8 @@ keep/split decision based on ownership and cohesion.
 
 ## Current State Snapshot
 
-This snapshot was verified against the working tree on 2026-07-18 and reflects
-the repository after Steps 1 through 6:
+This snapshot was verified against the working tree on 2026-07-19 and reflects
+the repository after Steps 1 through 7:
 
 | Roadmap owner | Current state | Next action |
 |---|---|---|
@@ -306,18 +306,19 @@ the repository after Steps 1 through 6:
 | Client playback | `TTSContext.tsx` is a 736-line facade/composition root; plan, export, projection, foreground sync, navigation, and settings-restart ownership are extracted; `useTtsPlayback.ts` is the single 754-line audio/session/seek controller | Complete in Step 4 |
 | Settings | The public `SettingsModal.tsx` is a one-line compatibility export over a 195-line navigation/composition root; provider, appearance, documents, account, admin, changelog, import, and export ownership are extracted | Complete in Step 5 |
 | Document list | `DocumentList.tsx` is a 269-line presentation/composition shell over an explicit controller; preferences and pure folder/filter/sort/status derivation have focused owners | Complete in Step 6 |
-| Runtime configuration | Four runtime files and one test still import `packages/bootstrap/src/storage-transport.mjs` directly; the full environment-variable contract has not yet been reconciled | Step 7 (next) |
-| Final audit | Deferred until the structural steps are complete | Step 8 |
+| Runtime configuration | `@openreader/runtime-config/storage-transport` is the explicit pure resolver boundary used by bootstrap, Next, and the worker; active environment reads, templates, deployment examples, Compose files, and ignored local env names are reconciled | Complete in Step 7 |
+| Final audit | Structural work is complete; the final repository-wide dead-code and boundary audit remains | Step 8 (next) |
 
 The audit-baseline table above remains historical evidence; this snapshot is
 the authoritative summary of current roadmap state.
 
 Current verification:
 
-- `pnpm test:unit` passed: 108 files, 571 tests;
+- `pnpm test:unit` passed: 109 files, 574 tests;
 - root and compute-worker TypeScript checks passed;
 - compute-boundary and route-error checks passed;
-- the production build passed;
+- OpenAPI generation/check, the docs build, the production build, and the
+  server-bundle guard passed;
 - `git diff --check` passed.
 
 ---
@@ -723,12 +724,49 @@ Validation:
 - the production build passed;
 - `git diff --check` passed.
 
+### Step 7: Establish a Shared Runtime Configuration Boundary and Sweep Environment Variables
+
+Status: complete.
+
+Storage transport resolution now lives in the dependency-free
+`@openreader/runtime-config/storage-transport` workspace export. Bootstrap,
+Next instrumentation and S3 configuration, and both compute-worker consumers
+import that package instead of reaching through `packages/bootstrap/src/`.
+The resolver remains pure; bootstrap alone layers resolved values onto the
+child-process environment. Focused architecture assertions protect the package
+export, pure resolver, explicit consumers, and bootstrap mutation boundary.
+
+A fresh environment-read inventory now covers app, bootstrap, database, TTS,
+worker, test/CI, deployment, and changelog-build owners. The active environment
+reference records runtime ownership, defaults and validation, server-only
+exposure, platform-provided signals, and build-only variables. Root and worker
+templates, active deployment docs, Docker build contexts, Compose examples, and
+Playwright CI now use the same names and defaults.
+
+The unregistered singular `IMPORT_LIBRARY_DIR` alias was removed in favor of
+`IMPORT_LIBRARY_DIRS`. Standalone worker examples and full Compose deployments
+now pass the app's `AUTH_SECRET`, which the worker requires to decrypt
+app-managed shared-provider credentials. The registered `S3_ENDPOINT` alias,
+warnings, test, and OpenReader 5.0 removal condition remain; current CI and
+locally present ignored worker configuration now use `S3_INTERNAL_ENDPOINT`.
+Ignored env files were reconciled by variable name without printing, committing,
+or documenting their secret values.
+
+Validation:
+
+- focused storage-transport and runtime-boundary tests passed: 2 files, 7 tests;
+- the full unit suite passed: 109 files, 574 tests;
+- root and compute-worker TypeScript checks passed;
+- compute-boundary, route-error, OpenAPI, and server-bundle checks passed;
+- the active documentation build and production application build passed;
+- `git diff --check` passed.
+
 ---
 
 ## Remaining Work
 
-The steps below are the remaining implementation work. When a step lands, move
-its detailed result into `Completed Work` and mark its status row complete.
+Step 8 is the remaining implementation work. When it lands, move its detailed
+result into `Completed Work` and mark the roadmap complete.
 
 ### Step Status
 
@@ -740,60 +778,12 @@ its detailed result into `Completed Work` and mark its status row complete.
 | 4 | Simplify client playback state | Complete |
 | 5 | Split settings by section | Complete |
 | 6 | Split document-list state from presentation | Complete |
-| 7 | Establish shared runtime configuration boundary and sweep environment variables | Next |
-| 8 | Final dead-code and boundary audit | Pending |
-
-### Step 7: Establish a Shared Runtime Configuration Boundary and Sweep Environment Variables
-
-Status: next.
-
-Storage transport resolution currently lives in
-`packages/bootstrap/src/storage-transport.mjs`, but the Next app and compute
-worker import that bootstrap source directly. Bootstrap is therefore acting as
-an undeclared shared library. This step must also perform a fresh inventory of
-every environment-variable read on the branch rather than assuming the current
-templates and documentation are complete.
-
-Rules:
-
-- inventory environment access across the Next app, bootstrap, compute worker,
-  packages, scripts, tests, and deployment tooling;
-- classify each variable by owner, required runtime, default, validation,
-  public/server-only exposure, compatibility status, and removal condition;
-- reconcile `.env.example`, tracked deployment examples, Compose files, and
-  active environment-variable documentation against that inventory;
-- review locally present gitignored `.env*` files against the canonical names
-  and defaults, updating them where needed without committing, printing, or
-  documenting secret values;
-- remove stale variables and duplicate aliases completely, unless they have an
-  explicit compatibility-register entry and removal condition;
-- the shared resolver must not depend on Next, Fastify, AWS clients, or process
-  startup side effects;
-- callers may adapt the resolved config to their own runtime clients;
-- environment mutation, if still required by bootstrap, remains a bootstrap
-  concern layered over the pure resolver;
-- preserve the active `S3_ENDPOINT` deprecation behavior until its planned
-  removal.
-
-Acceptance criteria:
-
-- every active environment-variable read has one canonical name, owner,
-  validation/default policy, and active documentation entry where appropriate;
-- `.env.example`, active docs, local-development instructions, deployment
-  examples, and Compose configuration agree with the implemented contract;
-- locally present gitignored `.env*` files have been reconciled without adding
-  secrets or ignored files to version control;
-- no removed or renamed variable remains in active code, templates, tests,
-  examples, or documentation, except a registered compatibility alias;
-- no app or worker file imports source through `packages/bootstrap/src/...`;
-- storage transport validation has one test suite;
-- bootstrap, Next, and worker produce the same transport decision for the same
-  environment;
-- package exports make the dependency explicit.
+| 7 | Establish shared runtime configuration boundary and sweep environment variables | Complete |
+| 8 | Final dead-code and boundary audit | Next |
 
 ### Step 8: Second Dead-Code and Boundary Audit
 
-Status: pending after Steps 3 through 7.
+Status: next.
 
 Review:
 
@@ -821,12 +811,8 @@ Acceptance criteria:
 
 ### Execution Order
 
-Steps 1 through 6 are complete. Continue using the canonical roadmap numbers:
-
-- **Step 7:** move storage transport resolution into an explicit shared package
-  and complete the environment-variable sweep;
-- **Step 8:** run the final dead-code, dependency, documentation, and large-file
-  audit.
+Steps 1 through 7 are complete. Continue with **Step 8**, the final dead-code,
+dependency, documentation, and large-file audit.
 
 Every step should leave the branch buildable and independently reviewable.
 
