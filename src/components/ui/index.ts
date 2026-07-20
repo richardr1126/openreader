@@ -4,7 +4,6 @@ export * from './checkbox';
 export * from './choice-tile';
 export * from './cn';
 export * from './dialog';
-export * from './divider';
 export * from './dropzone';
 export * from './field';
 export * from './icon-button';

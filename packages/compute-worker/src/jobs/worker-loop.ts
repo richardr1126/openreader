@@ -22,6 +22,7 @@ import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
+import { toErrorMessage } from '../infrastructure/errors';
 
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
@@ -86,10 +87,6 @@ class ConcurrencyGate {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : String(error);
 }
 
 function toErrorLog(error: unknown): { message: string; name?: string; stack?: string } {

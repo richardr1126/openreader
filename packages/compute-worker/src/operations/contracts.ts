@@ -14,13 +14,6 @@ export type {
   ParsedPdfDocument,
 } from '../api/types';
 
-export const PDF_LAYOUT_QUEUE_NAME = 'pdf-layout';
-export const TTS_PLAYBACK_QUEUE_NAME = 'tts-playback';
-export const TTS_PLAYBACK_PLAN_QUEUE_NAME = 'tts-playback-plan';
-export const TTS_PLAYBACK_EXPORT_QUEUE_NAME = 'tts-playback-export';
-export const DOCUMENT_PREVIEW_QUEUE_NAME = 'document-preview';
-export const DOCUMENT_CONVERSION_QUEUE_NAME = 'document-conversion';
-export const ACCOUNT_EXPORT_QUEUE_NAME = 'account-export';
 export const PDF_PARSER_VERSION = 'pp-doclayoutv3-onnx@800+pdfjs@4.8.69';
 export const DOCUMENT_PREVIEW_RENDERER_VERSION = 'document-preview@pdfjs-4.8.69+epub-cover-v1';
 export const DOCX_CONVERTER_VERSION = 'docx-to-pdf@libreoffice-v1';
@@ -337,13 +330,6 @@ export type WorkerOperationProgress =
   | TtsPlaybackExportProgress
   | DocumentConversionProgress
   | AccountExportProgress;
-
-export interface WorkerJobStatusResponse<Result> {
-  status: WorkerJobState;
-  result?: Result;
-  error?: WorkerJobErrorShape;
-  timing?: WorkerJobTiming;
-}
 
 export type WorkerOperationKind =
   | 'pdf_layout'

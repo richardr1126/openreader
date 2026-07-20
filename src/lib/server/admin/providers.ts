@@ -364,11 +364,6 @@ export async function getEnabledAdminProviderBySlug(
   return arr[0] ? rowToRecord(arr[0]) : null;
 }
 
-export async function getFirstEnabledAdminProvider(): Promise<AdminProviderRecord | null> {
-  const rows = await listEnabledAdminProviders();
-  return rows[0] ?? null;
-}
-
 export async function resolvePreferredEnabledAdminProvider(input: {
   requestedSlug?: string | null;
   runtimeDefaultSlug?: string | null;

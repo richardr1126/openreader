@@ -122,44 +122,6 @@ export function tempDocumentUploadReceiptKey(token: string, userId: string, name
   return `${tempDocumentUploadPrefix(userId, namespace)}${token}.receipt.json`;
 }
 
-export async function presignPut(
-  id: string,
-  contentType: string,
-  namespace: string | null,
-  options?: { contentLength?: number },
-): Promise<{ url: string; headers: Record<string, string> }> {
-  const cfg = getS3Config();
-  const client = getS3Client();
-  const key = documentKey(id, namespace);
-  const normalizedType = (contentType || 'application/octet-stream').trim() || 'application/octet-stream';
-
-  // When the client declares an exact size, sign Content-Length so S3 rejects a
-  // PUT whose body does not match (the browser always sends an accurate
-  // Content-Length for a known body). Skipped when size is unknown/zero so the
-  // upload still works against stores that enforce the signed header.
-  const contentLength =
-    typeof options?.contentLength === 'number' && Number.isFinite(options.contentLength) && options.contentLength > 0
-      ? Math.floor(options.contentLength)
-      : undefined;
-
-  const command = new PutObjectCommand({
-    Bucket: cfg.bucket,
-    Key: key,
-    ContentType: normalizedType,
-    ServerSideEncryption: 'AES256',
-    ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
-  });
-  const url = await getSignedUrl(client, command, { expiresIn: 60 * 5 });
-
-  return {
-    url,
-    headers: {
-      'Content-Type': normalizedType,
-      'x-amz-server-side-encryption': 'AES256',
-    },
-  };
-}
-
 export async function presignTempPut(
   token: string,
   userId: string,
@@ -226,38 +188,6 @@ export async function headTempDocumentBlob(
   };
 }
 
-export async function getDocumentRange(
-  id: string,
-  start: number,
-  endInclusive: number,
-  namespace: string | null,
-): Promise<Buffer> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const key = documentKey(id, namespace);
-  const res = await client.send(
-    new GetObjectCommand({
-      Bucket: cfg.bucket,
-      Key: key,
-      Range: `bytes=${Math.max(0, start)}-${Math.max(0, endInclusive)}`,
-    }),
-  );
-  return bodyToBuffer(res.Body);
-}
-
-export async function getDocumentBlob(id: string, namespace: string | null): Promise<Buffer> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const key = documentKey(id, namespace);
-  const res = await client.send(
-    new GetObjectCommand({
-      Bucket: cfg.bucket,
-      Key: key,
-    }),
-  );
-  return bodyToBuffer(res.Body);
-}
-
 export async function getTempDocumentBlob(
   token: string,
   userId: string,
@@ -311,20 +241,6 @@ export async function getTempDocumentFinalizeReceipt<T>(
   }
 }
 
-export async function getParsedDocumentBlobByKey(key: string): Promise<Buffer> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const trimmed = key.trim();
-  if (!trimmed) throw new Error('Parsed document key is empty');
-  const res = await client.send(
-    new GetObjectCommand({
-      Bucket: cfg.bucket,
-      Key: trimmed,
-    }),
-  );
-  return bodyToBuffer(res.Body);
-}
-
 export async function putTempDocumentFinalizeReceipt(
   token: string,
   userId: string,
@@ -360,28 +276,6 @@ export async function presignGet(
       Key: key,
     }),
     { expiresIn: Math.max(30, Math.min(options?.expiresInSeconds ?? 300, 3600)) },
-  );
-}
-
-export async function putDocumentBlob(
-  id: string,
-  body: Buffer,
-  contentType: string,
-  namespace: string | null,
-  options?: { ifNoneMatch?: boolean },
-): Promise<void> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const key = documentKey(id, namespace);
-  await client.send(
-    new PutObjectCommand({
-      Bucket: cfg.bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ServerSideEncryption: 'AES256',
-      ...(options?.ifNoneMatch ? { IfNoneMatch: '*' } : {}),
-    }),
   );
 }
 
@@ -468,12 +362,6 @@ export async function deleteTempDocumentUpload(token: string, userId: string, na
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: tempDocumentUploadKey(token, userId, namespace) }));
 }
 
-export async function deleteTempDocumentFinalizeReceipt(token: string, userId: string, namespace: string | null): Promise<void> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: tempDocumentUploadReceiptKey(token, userId, namespace) }));
-}
-
 export function isMissingBlobError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const maybe = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
@@ -481,54 +369,6 @@ export function isMissingBlobError(error: unknown): boolean {
   if (maybe.name === 'NotFound' || maybe.name === 'NoSuchKey') return true;
   if (maybe.Code === 'NotFound' || maybe.Code === 'NoSuchKey') return true;
   return false;
-}
-
-export async function deleteDocumentPrefix(prefix: string): Promise<number> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const cleanedPrefix = prefix.replace(/^\/+/, '');
-  let deleted = 0;
-  let continuationToken: string | undefined;
-
-  do {
-    const listRes = await client.send(
-      new ListObjectsV2Command({
-        Bucket: cfg.bucket,
-        Prefix: cleanedPrefix,
-        ContinuationToken: continuationToken,
-      }),
-    );
-
-    const keys = (listRes.Contents ?? [])
-      .map((item) => item.Key)
-      .filter((value): value is string => typeof value === 'string' && value.length > 0);
-
-    if (keys.length > 0) {
-      const deleteRes = await client.send(
-        new DeleteObjectsCommand({
-          Bucket: cfg.bucket,
-          Delete: {
-            Objects: keys.map((Key) => ({ Key })),
-            Quiet: true,
-          },
-        }),
-      );
-      const errors = deleteRes.Errors ?? [];
-      if (errors.length > 0) {
-        const details = errors
-          .map((e) => `${e.Key ?? '?'} (${e.Code ?? 'Unknown'}: ${e.Message ?? 'no message'})`)
-          .join('; ');
-        throw new Error(
-          `Failed deleting ${errors.length} document storage object(s) under prefix "${cleanedPrefix}": ${details}`,
-        );
-      }
-      deleted += keys.length;
-    }
-
-    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
-  } while (continuationToken);
-
-  return deleted;
 }
 
 /**

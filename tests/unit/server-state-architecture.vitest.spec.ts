@@ -299,7 +299,6 @@ describe('server-state architecture', () => {
     const accountExport = source('src/components/settings/useAccountExport.ts');
     const workerRoutes = computeWorkerRouteSource();
     const workerHandlers = computeWorkerJobSource();
-    const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
     const computeClient = source('src/lib/server/compute-worker/client.ts');
 
     expect(accountExportRoute).toContain('buildUserExportManifest');
@@ -322,7 +321,6 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain("/v1/account-exports/resolve");
     expect(workerRoutes).not.toContain('verifyAccountExportDownloadToken');
     expect(workerHandlers).toContain('buildAccountExportArchive');
-    expect(workerContracts).toContain("export const ACCOUNT_EXPORT_QUEUE_NAME = 'account-export'");
     expect(computeClient).toContain('createAccountExportOperation');
   });
 
@@ -342,7 +340,6 @@ describe('server-state architecture', () => {
     const clientTts = source('src/lib/client/api/tts.ts');
     const playbackHook = source('src/hooks/audio/useTtsPlayback.ts');
     const planController = source('src/hooks/audio/useTtsPlanController.ts');
-    const documentExport = source('src/hooks/audio/useTtsDocumentExport.ts');
     const playbackProjection = source('src/hooks/audio/usePlaybackProjection.ts');
     const playbackForegroundSync = source('src/hooks/audio/usePlaybackForegroundSync.ts');
     const playbackSelection = source('src/lib/client/tts/playback-selection.ts');

@@ -22,18 +22,6 @@ export const dialogPanelStyles = variants({
   },
 });
 
-export function DialogShell({
-  children,
-  className,
-  size = 'md',
-}: {
-  children: ReactNode;
-  className?: string;
-  size?: DialogSize;
-}) {
-  return <div className={dialogPanelStyles({ size, className })}>{children}</div>;
-}
-
 export function ModalFrame({
   open,
   onClose,

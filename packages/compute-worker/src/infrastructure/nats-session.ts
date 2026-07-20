@@ -16,6 +16,7 @@ import {
   TTS_PLAYBACK_PLAN_CONSUMER_NAME,
   ensureJetStreamResources,
 } from './nats';
+import { toErrorMessage } from './errors';
 
 const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
@@ -48,10 +49,6 @@ export interface NatsActivitySnapshot {
   inFlightJobs: number;
   lastActivityAt: number;
   lastActivityReason: string;
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : String(error);
 }
 
 export function createNatsSessionManager(input: {

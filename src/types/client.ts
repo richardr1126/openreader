@@ -14,14 +14,6 @@ export {
 // Headers used when calling TTS-related endpoints from the client.
 export type TTSRequestHeaders = Record<string, string>;
 
-// Options for retrying TTS requests on failure in withRetry
-export interface TTSRetryOptions {
-  maxRetries?: number;
-  initialDelay?: number;
-  maxDelay?: number;
-  backoffFactor?: number;
-}
-
 export interface TTSRequestError extends Error {
   status?: number;
   code?: string;

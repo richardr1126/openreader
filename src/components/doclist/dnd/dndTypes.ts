@@ -14,9 +14,3 @@ export interface DocumentDragItem {
   /** Folder id the drag originated from, if any (cross-folder vs unfoldered moves). */
   fromFolderId?: string;
 }
-
-export type DropTarget =
-  | { kind: 'document'; id: string }
-  | { kind: 'folder'; id: string }
-  | { kind: 'sidebar-folder'; id: string }
-  | { kind: 'pane'; id: 'unfoldered' };

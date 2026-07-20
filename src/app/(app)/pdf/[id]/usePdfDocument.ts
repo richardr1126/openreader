@@ -77,7 +77,6 @@ export interface PdfDocumentState {
   // PDF functionality
   onDocumentLoadSuccess: (pdf: PDFDocumentProxy) => void;
   highlightPattern: (
-    text: string,
     pattern: string,
     containerRef: RefObject<HTMLDivElement>,
     options?: {

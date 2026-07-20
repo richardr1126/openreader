@@ -1,4 +1,3 @@
-import path from 'path';
 import { UNCLAIMED_USER_ID } from '@/lib/server/storage/docstore-legacy';
 import { ensureSystemUserExists } from '@openreader/database';
 
@@ -33,17 +32,8 @@ export function getOpenReaderTestNamespace(headers: Headers): string | null {
   return safe;
 }
 
-export function applyOpenReaderTestNamespacePath(baseDir: string, namespace: string | null): string {
-  if (!namespace) return baseDir;
-
-  const resolved = path.resolve(baseDir, namespace);
-  if (!resolved.startsWith(path.resolve(baseDir) + path.sep)) return baseDir;
-  return resolved;
-}
-
 export function getUnclaimedUserIdForNamespace(namespace: string | null): string {
   const userId = !namespace ? UNCLAIMED_USER_ID : `${UNCLAIMED_USER_ID}::${namespace}`;
   ensureSystemUserExists(userId);
   return userId;
 }
-

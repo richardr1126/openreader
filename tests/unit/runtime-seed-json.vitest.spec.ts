@@ -1,4 +1,4 @@
-import { and, eq, inArray, not } from 'drizzle-orm';
+import { eq, inArray, not } from 'drizzle-orm';
 import { describe, expect, test } from 'vitest';
 
 import { db } from '@openreader/database';

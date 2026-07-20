@@ -89,12 +89,3 @@ export function useFeatureFlag<K extends keyof RuntimeConfig>(key: K): RuntimeCo
   const cfg = useRuntimeConfig();
   return cfg[key];
 }
-
-/**
- * Synchronous accessor for modules that are loaded before the React tree
- * mounts (for example config defaults). Falls back to the
- * built-in defaults during SSR.
- */
-export function readRuntimeConfigSync(): RuntimeConfig {
-  return readInjectedConfig();
-}

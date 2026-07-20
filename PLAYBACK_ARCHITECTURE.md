@@ -4,7 +4,7 @@ This is the current architecture for TTS playback and adjacent derived-media
 work across the browser client, Next.js app on Vercel, and compute worker on the
 Railway container. It reflects the cursor/session split, the move from the
 mutable segment index/claim store to per-ordinal sidecars, the compute-worker API
-hard cut, and the remaining Next/worker ownership debt.
+hard cut, and the final Next/worker ownership model.
 
 ---
 
@@ -387,8 +387,9 @@ longer send reader coordinates or text/key hints.
 
 `useTtsPlayback` owns the media controller: phase, unlocked audio ref, session
 and timeline refs, playback time, stream creation, audio events, seek/resync,
-foreground SSE sync, cursor heartbeat, visibility resync, projection loop, and
-the in-flight driver. `TTSContext` remains the app-level state/actions facade.
+and the in-flight driver. Foreground SSE/timeline synchronization, cursor
+heartbeats, and playhead projection are delegated to focused hooks;
+`TTSContext` remains the app-level state/actions facade.
 
 ### 4. Collapse Duplicate Client State
 
@@ -400,7 +401,7 @@ playback session start requests.
 
 ### 5. Fix Clear Cache to be a Playback Reset Boundary
 
-Clear cache now calls the worker reset endpoint before object deletion. The
+Clear cache now calls the worker `/v1/tts-playback/cache/clear` endpoint. The
 worker bumps a durable cache epoch, cancels matching sessions, invalidates local
 sidecar caches, and makes epoch-aware readers/writers reject stale sidecars and
 late writes.
@@ -1051,7 +1052,7 @@ invariant violations were found. The verified findings were fixed as follows:
    groups of 32 instead of sequential per-object round-trips.
 2. `listSessions` in the playback KV store batches session reads and cursor
    overlay reads in groups of 32 instead of two sequential KV reads per
-   session on the cache-reset path.
+   session on the cache-clear path.
 3. The four Next operation-event SSE proxy routes (account export, audiobook
    export, document preview, playback stream) share
    `src/lib/server/compute-worker/operation-events-proxy.ts`. Routes keep
@@ -1070,7 +1071,7 @@ invariant violations were found. The verified findings were fixed as follows:
 6. `operationMatchesTtsResetScope` no longer hand-parses opKey segments by
    array index. `ttsPlaybackResetScopeFromOperationKey` lives beside the key
    builders in `operations/keys.ts`, so a key-format change cannot silently
-   desync cache-reset scope matching.
+   desync cache-clear scope matching.
 7. Removed dead worker config surface: `getWorkerClientWaitTimeoutMs` and the
    stale `ComputeOperationKind` type (it was missing `account_export` and had
    no callers), plus their orphaned wait-buffer constants.
@@ -1110,7 +1111,7 @@ Step 19 review surfaced, before the new export prefixes ship in a release.
      /v1/tts-playback/exports/resolve`) now require the user/document scope,
      and `/api/tts/export/download` authorizes the document scope before
      resolving the artifact instead of after.
-   - Export operation keys carry the owning `storageUserId`, so cache-reset
+   - Export operation keys carry the owning `storageUserId`, so cache-clear
      invalidation matches owner + document/version/settings from the opKey
      alone — no metadata reads, and another user's export operations are
      never invalidated. Plan operations remain owner-less by design: the plan

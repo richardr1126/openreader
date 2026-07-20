@@ -18,7 +18,7 @@ import {
   readPositiveIntEnv,
   requireEnv,
 } from '../infrastructure/config';
-import { OperationOrchestrator } from '../operations';
+import { OperationOrchestrator } from '../operations/service';
 import type {
   AccountExportJobRequest,
   AccountExportJobResult,
@@ -92,14 +92,6 @@ import {
   ttsSentenceAlignmentSchema,
 } from './schemas';
 import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
-
-// Disconnect from NATS after this much continuous idle so the worker stops
-// generating outbound traffic (pull polling + keepalive PINGs) and Railway can
-// put it to sleep. Reconnect happens lazily on the next inbound request.
-const IDLE_DISCONNECT_MS = 120_000;
-const IDLE_CHECK_INTERVAL_MS = 5_000;
-const IDLE_STATUS_LOG_INTERVAL_MS = 60_000;
-const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
 
 export type { ComputeWorkerRouteDeps } from './routes';
 

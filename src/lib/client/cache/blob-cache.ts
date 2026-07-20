@@ -63,7 +63,3 @@ export function documentBlobCacheKey(documentId: string, contentVersion: string)
 export function previewBlobCacheKey(documentId: string, previewVersion: string | number): string {
   return `/openreader-cache/previews/${encodeURIComponent(documentId)}/${encodeURIComponent(String(previewVersion))}`;
 }
-
-export function audioBlobCacheKey(audioKey: string, version: string | number): string {
-  return `/openreader-cache/audio/${encodeURIComponent(audioKey)}/${encodeURIComponent(String(version))}`;
-}

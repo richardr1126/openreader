@@ -10,7 +10,6 @@ export type TTSSentenceAlignment = components['schemas']['TTSSentenceAlignment']
 export type TTSSentenceWord = TTSSentenceAlignment['words'][number];
 
 export type PdfLayoutProgress = NonNullable<components['schemas']['ComputeOperation']['progress']>;
-export type ComputeOperationStatus = components['schemas']['ComputeOperation']['status'];
 export type ComputeOperationSubject = components['schemas']['ComputeOperation']['subject'];
 
 export type ComputeOperation<Result = unknown> =
@@ -29,32 +28,24 @@ export type TtsPlaybackRequest =
   & { generationExtent?: 'window' | 'document' };
 export type TtsPlaybackPlanRequest =
   Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent'>;
-export type PdfLayoutResolveRequest =
-  paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionResolveRequest =
   paths['/v1/tts-playback/sessions/resolve']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionResolution =
   paths['/v1/tts-playback/sessions/resolve']['post']['responses'][200]['content']['application/json'];
 export type TtsPlaybackExportArtifactRequest =
   paths['/v1/tts-playback/exports/jobs']['post']['requestBody']['content']['application/json'];
-export type TtsPlaybackExportArtifactResolveRequest =
-  paths['/v1/tts-playback/exports/resolve']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackExportArtifactResolution =
   paths['/v1/tts-playback/exports/resolve']['post']['responses'][200]['content']['application/json'];
 export type TtsPlaybackExportArtifactMetadata =
   NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
 export type DocumentPreviewRequest =
   paths['/v1/document-previews/jobs']['post']['requestBody']['content']['application/json'];
-export type DocumentPreviewResolveRequest =
-  paths['/v1/document-previews/resolve']['post']['requestBody']['content']['application/json'];
 export type DocumentPreviewResolution =
   paths['/v1/document-previews/resolve']['post']['responses'][200]['content']['application/json'];
 export type DocumentPreviewArtifactMetadata =
   NonNullable<DocumentPreviewResolution['artifact']>;
 export type DocumentConversionRequest =
   paths['/v1/document-conversions/docx/jobs']['post']['requestBody']['content']['application/json'];
-export type DocumentConversionResolveRequest =
-  paths['/v1/document-conversions/docx/resolve']['post']['requestBody']['content']['application/json'];
 export type DocumentConversionResolution =
   paths['/v1/document-conversions/docx/resolve']['post']['responses'][200]['content']['application/json'];
 export type DocumentConversionArtifactMetadata =
@@ -70,12 +61,6 @@ export type AccountExportArtifactMetadata =
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;
-  timing?: components['schemas']['ComputeOperation']['timing'];
-};
-
-export type TtsPlaybackResult = {
-  sessionId: string;
-  planObjectKey?: string;
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
@@ -130,15 +115,3 @@ export type PdfLayoutResolution = {
   artifact: { objectKey: string } | null;
   operation: ComputeOperation<PdfLayoutResult> | null;
 };
-
-export function isComputeOperation(value: unknown): value is ComputeOperation {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
-  return typeof record.opId === 'string'
-    && !!record.subject
-    && typeof record.subject === 'object'
-    && typeof (record.subject as Record<string, unknown>).kind === 'string'
-    && typeof record.status === 'string'
-    && typeof record.queuedAt === 'number'
-    && typeof record.updatedAt === 'number';
-}

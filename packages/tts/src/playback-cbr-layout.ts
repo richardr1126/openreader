@@ -1,4 +1,4 @@
-import { MP3_FRAME_DURATION_MS, STREAM_AUDIO_BYTES_PER_SECOND } from './audio-format';
+import { STREAM_AUDIO_BYTES_PER_SECOND } from './audio-format';
 
 /**
  * Pure helpers that map the progressive playback stream between time, bytes,
@@ -11,11 +11,6 @@ export const DEFAULT_MS_PER_CHAR = 65;
 export function bytesForDurationMs(durationMs: number): number {
   if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
   return Math.max(0, Math.round((durationMs * STREAM_AUDIO_BYTES_PER_SECOND) / 1000));
-}
-
-export function durationMsForBytes(bytes: number): number {
-  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
-  return Math.max(0, Math.round((bytes * 1000) / STREAM_AUDIO_BYTES_PER_SECOND));
 }
 
 export function estimateDurationMs(text: string, msPerChar: number): number {
@@ -166,40 +161,6 @@ export function locateByte(
   }
   const idx = Math.min(lo, layout.slots.length - 1);
   return { slotIndex: idx, offsetWithin: 0 };
-}
-
-export function locateTime(
-  layout: Pick<PlaybackCbrLayout, 'durationMs' | 'slots'>,
-  timeMs: number,
-): { slotIndex: number; offsetWithinMs: number } | null {
-  if (timeMs < 0 || layout.slots.length === 0) return null;
-  if (timeMs >= layout.durationMs) return null;
-
-  let lo = 0;
-  let hi = layout.slots.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const slot = layout.slots[mid];
-    if (timeMs < slot.startMs) {
-      hi = mid - 1;
-    } else if (timeMs >= slot.endMs) {
-      lo = mid + 1;
-    } else {
-      return { slotIndex: mid, offsetWithinMs: timeMs - slot.startMs };
-    }
-  }
-  const idx = Math.min(lo, layout.slots.length - 1);
-  return { slotIndex: idx, offsetWithinMs: 0 };
-}
-
-export function ordinalAtTime(layout: Pick<PlaybackCbrLayout, 'durationMs' | 'slots'>, timeMs: number): number | null {
-  const loc = locateTime(layout, timeMs);
-  return loc ? layout.slots[loc.slotIndex]?.ordinal ?? null : null;
-}
-
-export function ordinalAtByte(layout: Pick<PlaybackCbrLayout, 'totalBytes' | 'slots'>, byteOffset: number): number | null {
-  const loc = locateByte(layout, byteOffset);
-  return loc ? layout.slots[loc.slotIndex]?.ordinal ?? null : null;
 }
 
 export interface ParsedRange {

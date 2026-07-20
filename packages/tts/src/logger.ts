@@ -132,24 +132,3 @@ export function logTtsError(
     },
   }, input.msg);
 }
-
-export function logTtsDegraded(
-  logger: TtsLogger,
-  input: {
-    event: string;
-    msg: string;
-    step?: string;
-    fallbackPath?: string;
-    context?: Record<string, unknown>;
-    error?: unknown;
-  },
-): void {
-  logger.warn({
-    event: input.event,
-    degraded: true,
-    ...(input.step ? { step: input.step } : {}),
-    ...(input.fallbackPath ? { fallbackPath: input.fallbackPath } : {}),
-    ...(input.context || {}),
-    ...(input.error !== undefined ? { error: errorToLog(input.error) } : {}),
-  }, input.msg);
-}

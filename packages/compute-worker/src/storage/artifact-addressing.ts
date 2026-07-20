@@ -47,24 +47,6 @@ export function documentSourceKey(input: {
   return `${input.prefix}/documents_v1/${namespaceSegment}${input.documentId}`;
 }
 
-const SAFE_SESSION_ID_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
-
-/**
- * Object key for a TTS playback session's persisted plan / timeline artifact.
- * SQL stores only the key + status; the full reusable plan and timeline live
- * in object storage. Keyed per session id.
- */
-export function ttsPlaybackArtifactKey(input: {
-  sessionId: string;
-  kind: 'plan' | 'timeline';
-  prefix: string;
-}): string {
-  if (!SAFE_SESSION_ID_REGEX.test(input.sessionId)) {
-    throw new Error(`Invalid playback session id: ${input.sessionId}`);
-  }
-  return `${input.prefix}/tts_playback_v1/${input.sessionId}/${input.kind}.json`;
-}
-
 const SAFE_PLAN_SIGNATURE_REGEX = /^[a-f0-9]{8,64}$/i;
 const SAFE_NAMESPACE_REGEX_WITH_DEFAULT = /^[a-zA-Z0-9._-]{1,128}$/;
 

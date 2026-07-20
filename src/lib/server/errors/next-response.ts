@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import type { ServerLogger } from '@/lib/server/logger';
-import { normalizeServerError, toApiErrorBody, toHttpStatus, type NormalizedServerError, type ServerErrorContext } from '@/lib/server/errors/contract';
+import { normalizeServerError, toApiErrorBody, toHttpStatus, type ServerErrorContext } from '@/lib/server/errors/contract';
 import { logServerError } from '@/lib/server/errors/logging';
 
 export type ErrorResponseOptions = {
@@ -80,11 +80,4 @@ export function asRouteErrorContext(input: {
     method: input.method ?? input.request.method,
     ...(input.requestId ? { requestId: input.requestId } : {}),
   };
-}
-
-export function normalizeForResponseOnly(
-  error: unknown,
-  normalize?: ServerErrorContext,
-): NormalizedServerError {
-  return normalizeServerError(error, normalize);
 }

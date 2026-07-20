@@ -56,22 +56,6 @@ export function Surface({
   );
 }
 
-export function Panel({
-  children,
-  className,
-  elevation = '1',
-  ...props
-}: HTMLAttributes<HTMLDivElement> & {
-  children: ReactNode;
-  elevation?: SurfaceElevation;
-}) {
-  return (
-    <Surface elevation={elevation} className={cn('overflow-hidden', className)} {...props}>
-      {children}
-    </Surface>
-  );
-}
-
 export function Card({
   children,
   className,

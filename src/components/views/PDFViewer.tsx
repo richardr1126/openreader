@@ -209,7 +209,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
         }
       }
 
-      highlightPattern(currDocText, currentSentence, containerRef as RefObject<HTMLDivElement>, {
+      highlightPattern(currentSentence, containerRef as RefObject<HTMLDivElement>, {
         parsedDocument,
         locator: activeLocator,
         useBlockGeometryOnly,

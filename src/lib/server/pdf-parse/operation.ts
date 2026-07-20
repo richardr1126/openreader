@@ -30,13 +30,6 @@ export async function resolveCurrentPdfParse(input: {
   ));
 }
 
-export async function lookupCurrentPdfParseOperation(input: {
-  documentId: string;
-  namespace: string | null;
-}): Promise<ComputeOperation<PdfLayoutResult> | null> {
-  return (await resolveCurrentPdfParse(input)).operation;
-}
-
 export async function createOrReuseCurrentPdfParseOperation(input: {
   documentId: string;
   namespace: string | null;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { OperationOrchestrator } from '../../src/operations';
+import { OperationOrchestrator } from '../../src/operations/service';
 import type { WorkerOperationRequest } from '../../src/operations/contracts';
 import {
   JetStreamOperationEventStream,
@@ -46,7 +46,7 @@ class FakeKvStore implements KvStoreLike {
     this.data.set(key, { operation: 'PUT', value: data.slice(), revision: this.revision });
   }
 
-  async keys(filter?: string | string[]): Promise<AsyncIterable<string>> {
+  async keys(_filter?: string | string[]): Promise<AsyncIterable<string>> {
     const keys = Array.from(this.data.keys());
     return {
       async *[Symbol.asyncIterator]() {

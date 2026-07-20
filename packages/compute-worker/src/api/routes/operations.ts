@@ -1,4 +1,4 @@
-import { encodeSseFrame } from '../../operations';
+import { encodeSseFrame } from '../../operations/sse';
 import type {
   AccountExportJobResult,
   DocumentConversionJobResult,

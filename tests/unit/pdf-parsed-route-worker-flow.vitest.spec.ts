@@ -14,6 +14,7 @@ const hoisted = vi.hoisted(() => ({
   createOrReuseCurrentPdfParseOperation: vi.fn(),
   checkJobRate: vi.fn(),
   getPdfLayoutRateConfig: vi.fn(),
+  recordJobEvent: vi.fn(),
   getResolvedRuntimeConfig: vi.fn(),
   buildComputeRateLimitedResponse: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock('@/lib/server/pdf-parse/operation', () => ({
 vi.mock('@/lib/server/rate-limit/job-rate-limiter', () => ({
   checkJobRate: hoisted.checkJobRate,
   getPdfLayoutRateConfig: hoisted.getPdfLayoutRateConfig,
+  recordJobEvent: hoisted.recordJobEvent,
 }));
 
 vi.mock('@/lib/server/rate-limit/problem-response', () => ({
@@ -89,6 +91,8 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     hoisted.checkJobRate.mockResolvedValue({ allowed: true });
     hoisted.getPdfLayoutRateConfig.mockReset();
     hoisted.getPdfLayoutRateConfig.mockReturnValue({});
+    hoisted.recordJobEvent.mockReset();
+    hoisted.recordJobEvent.mockResolvedValue(undefined);
     hoisted.getResolvedRuntimeConfig.mockReset();
     hoisted.getResolvedRuntimeConfig.mockResolvedValue({});
     hoisted.buildComputeRateLimitedResponse.mockReset();
@@ -150,6 +154,7 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
       opId: 'op-force-1',
     });
     expect(hoisted.createOrReuseCurrentPdfParseOperation).toHaveBeenCalled();
+    expect(hoisted.recordJobEvent).toHaveBeenCalledWith('user-1', 'pdf_layout', 'op-force-1', {});
   });
 
   test('POST keeps a succeeded operation pending until the worker resolves its artifact', async () => {
@@ -180,6 +185,7 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
       opId: 'op-ready-1',
     });
     expect(hoisted.createOrReuseCurrentPdfParseOperation).not.toHaveBeenCalled();
+    expect(hoisted.recordJobEvent).not.toHaveBeenCalled();
   });
 
   test('POST returns the rate-limited response without creating a worker op', async () => {
@@ -199,5 +205,6 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
 
     expect(response).toBe(sentinel);
     expect(hoisted.createOrReuseCurrentPdfParseOperation).not.toHaveBeenCalled();
+    expect(hoisted.recordJobEvent).not.toHaveBeenCalled();
   });
 });

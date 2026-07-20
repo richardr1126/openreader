@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import * as ort from 'onnxruntime-node';
 import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
-import type { TTSAudioBuffer, TTSAudioBytes, TTSSentenceAlignment } from '../../api/types';
+import type { TTSAudioBuffer, TTSSentenceAlignment } from '../../api/types';
 import { getFFmpegPath } from '../../infrastructure/platform';
 import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import { getComputeTimeoutConfig } from '../../infrastructure/config';
@@ -58,12 +58,6 @@ export function goertzelPower(samples: Float32Array, coeff: number): number {
 interface WhisperAlignmentOptions {
   lang?: string;
   textHint?: string;
-}
-
-export interface WhisperRequestBody {
-  text: string;
-  audio: TTSAudioBytes;
-  lang?: string;
 }
 
 interface WhisperRuntime {
@@ -911,16 +905,4 @@ export async function alignAudioWithText(
     }
   });
   return run;
-}
-
-export function makeWhisperCacheKey(input: WhisperRequestBody): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        text: input.text,
-        lang: input.lang || '',
-        audioLen: input.audio?.length || 0,
-      }),
-    )
-    .digest('hex');
 }

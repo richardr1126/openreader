@@ -15,7 +15,10 @@ import type {
 import type { StreamedOperationState } from '../operations/recovery';
 import type { ReconciliationStateStore } from '../operations/reconciliation';
 import type { ArtifactStorage } from '../infrastructure/storage';
+import { toErrorMessage } from '../infrastructure/errors';
 import type { TtsPlaybackStorage } from '../playback/storage';
+
+export { toErrorMessage } from '../infrastructure/errors';
 
 export type WorkerRouteResult =
   | PdfLayoutJobResult
@@ -91,11 +94,6 @@ export interface ComputeWorkerRouteContext {
   releaseHttp: (request: FastifyRequest) => void;
   markActivity: (reason: string) => void;
   onActiveSseChanged: (delta: number) => void;
-}
-
-export function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
 }
 
 export function errorCode(error: unknown): string | null {

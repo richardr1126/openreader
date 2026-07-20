@@ -118,12 +118,6 @@ export type RuntimeConfig = {
     : never;
 };
 
-export type RuntimeConfigEntry = {
-  key: RuntimeConfigKey;
-  value: RuntimeConfig[RuntimeConfigKey];
-  source: RuntimeConfigSource | 'default';
-};
-
 const RUNTIME_KEYS = Object.keys(RUNTIME_CONFIG_SCHEMA) as RuntimeConfigKey[];
 
 async function resolveImplicitDefaultTtsProvider(): Promise<string | undefined> {

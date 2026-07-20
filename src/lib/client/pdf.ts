@@ -79,26 +79,18 @@ function runHighlightTokenMatch(
   });
 }
 
-// Function to detect if we need to use legacy build
-function shouldUseLegacyBuild() {
-  try {
-    if (typeof window === 'undefined') return false;
+export function shouldUseLegacyPdfBuild(userAgent: string): boolean {
+  const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent);
+  if (!isSafari) return false;
 
-    const ua = window.navigator.userAgent;
-    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+  const match = userAgent.match(/Version\/(\d+)/i);
+  if (!match?.[1]) return true;
+  return Number.parseInt(match[1], 10) <= 18;
+}
 
-    if (!isSafari) return false;
-
-    // Extract Safari version - matches "Version/18" format
-    const match = ua.match(/Version\/(\d+)/i);
-    if (!match || !match[1]) return true; // If we can't determine version, use legacy to be safe
-
-    const version = parseInt(match[1]);
-    return version < 18; // Use legacy build for Safari versions equal or below 18
-  } catch (e) {
-    console.error('Error detecting Safari version:', e);
-    return false;
-  }
+function shouldUseLegacyBuild(): boolean {
+  if (typeof window === 'undefined') return false;
+  return shouldUseLegacyPdfBuild(window.navigator.userAgent);
 }
 
 // Function to initialize PDF worker
@@ -404,7 +396,6 @@ export function clearWordHighlights() {
 }
 
 export function highlightPattern(
-  text: string,
   pattern: string,
   containerRef: React.RefObject<HTMLDivElement>,
   options?: HighlightPatternOptions,

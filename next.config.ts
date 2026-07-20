@@ -24,7 +24,6 @@ const pdfjsTraceFiles = [
 const serverExternalPackages = [
   '@napi-rs/canvas',
   'better-sqlite3',
-  'ffmpeg-static',
   // Keep pdfjs-dist as a real package in node_modules. Server-side preview
   // rendering resolves pdf.js runtime assets from the filesystem at runtime.
   'pdfjs-dist',
@@ -55,9 +54,6 @@ const nextConfig: NextConfig = {
       ...pdfjsTraceFiles,
     ],
     '/api/documents/blob/preview/presign': [
-      ...pdfjsTraceFiles,
-    ],
-    '/api/documents/blob/preview/fallback': [
       ...pdfjsTraceFiles,
     ],
   },

@@ -14,7 +14,7 @@ import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace'
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { checkJobRate, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
+import { checkJobRate, getPdfLayoutRateConfig, recordJobEvent } from '@/lib/server/rate-limit/job-rate-limiter';
 import { buildComputeRateLimitedResponse } from '@/lib/server/rate-limit/problem-response';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import type { PdfParseSnapshot } from '@/lib/server/pdf-parse/types';
@@ -193,6 +193,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       namespace,
       ...(replace ? { forceToken: randomUUID() } : {}),
     });
+    await recordJobEvent(authCtxOrRes.userId, 'pdf_layout', workerState.opId, rateConfig);
 
     return jsonSnapshot(pdfParseSnapshotFromWorkerState(workerState), 202);
   } catch (error) {

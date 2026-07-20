@@ -377,14 +377,6 @@ export async function deleteDocumentByName(page: Page, fileName: string) {
   await confirmBtn.click();
 }
 
-// Open Settings modal and navigate to Documents section
-export async function openSettingsDocumentsTab(page: Page) {
-  await page.getByRole('button', { name: 'Settings' }).click();
-  const settingsDialog = page.locator('[data-testid="settings-modal"]');
-  await expect(settingsDialog).toBeVisible({ timeout: 10000 });
-  await settingsDialog.getByRole('button', { name: /^Documents$/ }).click();
-}
-
 // Open the Voices dropdown from the TTS bar and return the button locator
 export async function openVoicesMenu(page: Page) {
   const ttsbar = page.locator('[data-app-ttsbar]');
@@ -510,11 +502,6 @@ export async function navigateToPdfPageViaNavigator(page: Page, targetPage: numb
 // Count currently rendered react-pdf Page components
 export async function countRenderedPdfPages(page: Page): Promise<number> {
   return await page.locator('.react-pdf__Page').count();
-}
-
-// Count currently rendered text layers (active page(s))
-export async function countRenderedTextLayers(page: Page): Promise<number> {
-  return await page.locator('.react-pdf__Page__textContent').count();
 }
 
 // Force viewport resize to trigger resize hooks (e.g., EPUB)

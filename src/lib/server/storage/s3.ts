@@ -120,11 +120,6 @@ export function getS3InternalClient(): S3Client {
   return cachedInternalClient;
 }
 
-/** @deprecated Use getS3InternalClient. */
-export function getS3ProxyClient(): S3Client {
-  return getS3InternalClient();
-}
-
 export function getBrowserStorageTransport(): 'proxy' | 'presigned' {
   return getS3Config().browserTransport;
 }

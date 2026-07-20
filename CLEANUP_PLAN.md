@@ -297,9 +297,9 @@ keep/split decision based on ownership and cohesion.
 ## Current State Snapshot
 
 This snapshot was verified against the working tree on 2026-07-19 and reflects
-the repository after Steps 1 through 7:
+the repository after Steps 1 through 8:
 
-| Roadmap owner | Current state | Next action |
+| Roadmap owner | Current state | Roadmap result |
 |---|---|---|
 | Compute worker routes | `api/routes.ts` is a 46-line composition root over domain registrars; playback read-model, session-controller, and invalidation ownership are extracted | Complete in Step 2 |
 | Compute worker jobs | `jobs/handlers.ts` is a 51-line exhaustive composition root; each job kind owns parsing and implementation, while playback planning, segment generation, pacing, and FFmpeg export have explicit modules | Complete in Step 3 |
@@ -307,18 +307,20 @@ the repository after Steps 1 through 7:
 | Settings | The public `SettingsModal.tsx` is a one-line compatibility export over a 195-line navigation/composition root; provider, appearance, documents, account, admin, changelog, import, and export ownership are extracted | Complete in Step 5 |
 | Document list | `DocumentList.tsx` is a 269-line presentation/composition shell over an explicit controller; preferences and pure folder/filter/sort/status derivation have focused owners | Complete in Step 6 |
 | Runtime configuration | `@openreader/runtime-config/storage-transport` is the explicit pure resolver boundary used by bootstrap, Next, and the worker; active environment reads, templates, deployment examples, Compose files, and ignored local env names are reconciled | Complete in Step 7 |
-| Final audit | Structural work is complete; the final repository-wide dead-code and boundary audit remains | Step 8 (next) |
+| Final audit | Repository-wide reachability, export, dependency, bundle-boundary, compatibility, documentation, and large-file audits are complete | Complete in Step 8 |
 
 The audit-baseline table above remains historical evidence; this snapshot is
 the authoritative summary of current roadmap state.
 
 Current verification:
 
-- `pnpm test:unit` passed: 109 files, 574 tests;
-- root and compute-worker TypeScript checks passed;
+- `pnpm test:unit` passed: 106 files, 553 tests;
+- root and compute-worker TypeScript checks passed, including strict
+  `noUnusedLocals`/`noUnusedParameters` audit passes;
 - compute-boundary and route-error checks passed;
 - OpenAPI generation/check, the docs build, the production build, and the
   server-bundle guard passed;
+- database migrations passed;
 - `git diff --check` passed.
 
 ---
@@ -337,6 +339,9 @@ Do not delete a path merely because it contains words such as `legacy` or
 | legacy filesystem claim cleanup | User claim/data cleanup; active claims can still encounter pre-server-storage filesystem records | Remove when the supported upgrade floor excludes filesystem-backed user data and the claim migration is retired |
 | browser `openreader-db` IndexedDB deletion | App provider startup; best-effort cleanup for clients predating server-backed state | Remove after the v4.4.0 release, which completes the documented full release cycle following v4.3.0 |
 | non-EPUB TTS locator `location`/`page` fallbacks | Shared TTS locator identity; PDF and HTML plans still use these fields | Remove only after a versioned plan migration guarantees all supported persisted plans use replacement typed locator fields |
+| `API_BASE` / `API_KEY` provider bootstrap seed | Admin provider seeding; lets env-only v4 installations materialize their first shared provider row | Remove in OpenReader 5.0 with the env reference, templates, seed tests, and fallback branch after supported v4 upgrades are expected to have provider rows |
+| legacy HTML reader-position token parsing | Reader progress bootstrap; accepts pre-typed `page:ordinal` HTML positions until the next progress write stores the typed `html:<location>:<ordinal>` token | Remove after a migration rewrites stored HTML positions and the supported upgrade floor excludes unmigrated position tokens |
+| historical `defaultTtsProvider` / `defaultTtsModel` row cleanup | Admin startup seed; removes obsolete env-seed settings that conflict with provider-owned defaults | Remove after the supported database upgrade floor guarantees those rows were deleted by a versioned migration |
 
 Avoid open-ended “just in case” compatibility. When a removal condition is met,
 add the deletion to `Remaining Work` or record it under `Completed Work` when it
@@ -761,12 +766,83 @@ Validation:
 - the active documentation build and production application build passed;
 - `git diff --check` passed.
 
+### Step 8: Final Dead-Code and Boundary Audit
+
+Status: complete.
+
+The second reachability pass removed eight production modules that survived
+only through tests after their runtime callers disappeared: the old EPUB
+viewport planner and range-context helpers, walker-theme builder, client
+segment-retry policy, client SHA-256 fallback, synced-preference patch adapter,
+document text-snippet helper, and unused server error catalog. Their
+preservation-only tests were removed with them. The audit also removed an
+unused UI divider module, private package barrels, duplicate worker idle
+constants, obsolete document-blob helpers, protocol aliases, icons, types, and
+other exports with no runtime or test caller.
+
+Package manifests now describe direct ownership. Twelve root dependencies that
+belong only to `@openreader/tts` or the compute worker (or had no caller at all)
+were removed; five redundant compute-worker provider/logging dependencies were
+removed; and the Archiver type package moved to the worker that imports
+Archiver. The unused bare `@openreader/tts` export and compute operations barrel
+were deleted in favor of explicit subpath/owner imports. The lockfile was
+regenerated offline.
+
+The bundle/config audit removed the deleted preview-fallback route from Next
+output tracing and removed Next's stale `ffmpeg-static` external. Client-owned
+source has no Node-only imports, app code has no relative reach-through into
+workspace package internals, and the production server bundle contains no
+compute inference dependencies. Worker error-string normalization now has one
+shared infrastructure owner instead of four copies.
+
+One audit finding exposed an intended live path rather than dead code: PDF
+compute rate limiting checked `user_job_events` but no longer recorded the
+newly created/reused operation. The parsed-PDF route now records the operation
+id after creation, with focused route coverage, so configured burst and
+sustained limits use the ledger described by their contract. The Safari
+PDF.js compatibility branch also now matches its documented Safari 18-and-
+earlier support condition.
+
+Active docs and bundle configuration no longer name removed runtime routes.
+The playback architecture uses the implemented cache-clear terminology and
+describes the extracted foreground synchronization/projection owners. Three
+additional retained compatibility paths now have explicit owners and removal
+conditions in the register: env-only provider bootstrap, legacy HTML progress
+tokens, and historical admin-setting row cleanup.
+
+Final large-file decisions (generated client code remains excluded):
+
+| File | Lines | Decision |
+|---|---:|---|
+| `packages/tts/src/generate.ts` | 911 | Follow up by extracting Replicate, Speech SDK, and OpenAI-compatible adapters from cache/retry orchestration; keep behavior together until adapter-specific contract tests protect that move |
+| `packages/compute-worker/src/inference/whisper/align.ts` | 908 | Keep; ONNX model lifecycle, mel preprocessing, decoding, and alignment share one algorithmic state/invariant set |
+| `src/hooks/audio/useTtsPlayback.ts` | 754 | Keep; it is the single audio/session/seek state machine and was already reduced to that owner in Step 4 |
+| `src/lib/client/pdf.ts` | 732 | Follow up by splitting PDF.js runtime/worker selection from DOM highlight rendering, preserving the new Safari 18 build-selection coverage |
+| `src/contexts/TTSContext.tsx` | 736 | Keep; public context facade and controller composition are one consumer-facing owner after Step 4 extraction |
+| `src/components/admin/AdminFeaturesPanel.tsx` | 683 | Keep; one admin feature-settings form, draft, source, and mutation lifecycle |
+| `src/lib/client/api/documents.ts` | 678 | Keep; one typed document HTTP adapter spanning the document resource's upload/read/preview operations |
+| `src/components/admin/AdminProvidersPanel.tsx` | 657 | Keep; one shared-provider CRUD form/query/mutation owner |
+| `src/components/views/PDFViewer.tsx` | 621 | Keep; one mounted PDF renderer and highlight-application lifecycle |
+| `src/components/icons/Icons.tsx` | 613 | Keep; a stateless explicitly named icon catalog with unused glyphs removed |
+| `src/components/AudiobookExportModal.tsx` | 608 | Keep; one export-dialog settings, progress, and completion lifecycle |
+
+Validation:
+
+- migrations passed;
+- the full unit suite passed: 106 files, 553 tests;
+- root and compute-worker TypeScript checks passed, including strict unused
+  symbol/parameter passes;
+- compute-boundary, route-error, OpenAPI, and server-bundle checks passed;
+- the production application and active documentation builds passed;
+- `git diff --check` passed.
+
 ---
 
 ## Remaining Work
 
-Step 8 is the remaining implementation work. When it lands, move its detailed
-result into `Completed Work` and mark the roadmap complete.
+None. The cleanup roadmap is complete. The two deliberately deferred large-file
+extractions are recorded with concrete boundaries in the Step 8 size review and
+are not blockers for this cleanup series.
 
 ### Step Status
 
@@ -779,46 +855,21 @@ result into `Completed Work` and mark the roadmap complete.
 | 5 | Split settings by section | Complete |
 | 6 | Split document-list state from presentation | Complete |
 | 7 | Establish shared runtime configuration boundary and sweep environment variables | Complete |
-| 8 | Final dead-code and boundary audit | Next |
+| 8 | Final dead-code and boundary audit | Complete |
 
 ### Step 8: Second Dead-Code and Boundary Audit
 
-Status: next.
-
-Review:
-
-- unreferenced files and exports;
-- unused dependencies and package exports;
-- active docs pointing at removed routes/config;
-- duplicate parsers, retry loops, storage helpers, and error mappings;
-- cross-package relative imports;
-- Node-only dependencies reachable from client bundles;
-- broad barrel exports that hide ownership;
-- stale comments naming removed components or architectures;
-- tests that assert source strings instead of behavior where a behavioral test
-  is now practical;
-- file-size inventory again, with an explicit keep/split decision for every
-  remaining file over roughly 600 lines.
-
-The size threshold is a review trigger, not a failure condition.
-
-Acceptance criteria:
-
-- every retained compatibility path has a reason and removal condition;
-- no verified dead runtime module remains;
-- remaining large files have one cohesive owner or a documented follow-up;
-- active architecture docs match the final route and package layout.
+Status: complete. See the detailed Step 8 record under `Completed Work`.
 
 ### Execution Order
 
-Steps 1 through 7 are complete. Continue with **Step 8**, the final dead-code,
-dependency, documentation, and large-file audit.
+Steps 1 through 8 are complete.
 
 Every step should leave the branch buildable and independently reviewable.
 
 ### Definition of Done
 
-This cleanup plan is complete when:
+All definition-of-done criteria are satisfied:
 
 1. All verified dead paths in Step 1 are removed or explicitly documented as
    intentional with a removal condition.

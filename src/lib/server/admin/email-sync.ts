@@ -72,9 +72,3 @@ export async function syncAdminFlag(
     return currentIsAdmin;
   }
 }
-
-/** Test-only: clear the memoized env value so a fresh read picks up changes. */
-export function _resetAdminEmailCacheForTests() {
-  cachedAdminEmails = null;
-  cachedAdminEmailsRaw = null;
-}

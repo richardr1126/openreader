@@ -1,6 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import { Button } from './button';
 import { cn } from './cn';
 import { LoadingSpinner } from '@/components/Spinner';
@@ -17,16 +16,6 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong.')
   if (error instanceof Error) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
-}
-
-/** Blocking skeleton: initial query pending with no data yet. */
-export function QueryLoading({ label = 'Loading…', className }: { label?: string; className?: string }) {
-  return (
-    <div className={cn('flex flex-col items-center justify-center gap-3 py-12 text-soft', className)}>
-      <LoadingSpinner className="w-6 h-6 text-accent" />
-      <p className="text-sm">{label}</p>
-    </div>
-  );
 }
 
 /** Hard error: query failed with no usable data. Offers a retry action. */
@@ -49,15 +38,6 @@ export function QueryError({
           {retrying ? 'Retrying…' : 'Retry'}
         </Button>
       ) : null}
-    </div>
-  );
-}
-
-/** Empty state: query succeeded but returned no rows. */
-export function QueryEmpty({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cn('flex flex-col items-center justify-center gap-2 py-12 text-center text-soft', className)}>
-      {children}
     </div>
   );
 }

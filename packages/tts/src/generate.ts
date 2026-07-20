@@ -430,14 +430,6 @@ export function buildTTSCacheKey(request: ServerTTSRequest): string {
   });
 }
 
-export function getCachedTTSBuffer(cacheKey: string): Buffer | undefined {
-  return ttsAudioCache.get(cacheKey);
-}
-
-export function getTTSContentType(format: string | undefined): string {
-  return (format || 'mp3') === 'mp3' ? 'audio/mpeg' : 'application/octet-stream';
-}
-
 async function getTestMockTtsBuffer(testNamespace?: string | null): Promise<Buffer | null> {
   if (!testNamespace) return null;
   if (!testMockTtsBufferPromise) {

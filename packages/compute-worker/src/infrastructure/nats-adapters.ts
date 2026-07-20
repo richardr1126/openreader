@@ -8,7 +8,7 @@ import type {
   OperationState,
   OperationStateStore,
   QueuedOperation,
-} from '../operations';
+} from '../operations/types';
 import type {
   AccountExportJobRequest,
   DocumentPreviewJobRequest,
@@ -20,6 +20,7 @@ import type {
   WorkerOperationKind,
 } from '../operations/contracts';
 import { createJsonCodec } from './json-codec';
+import { toErrorMessage } from './errors';
 
 export interface KvEntryLike {
   operation?: string;
@@ -33,11 +34,6 @@ export interface KvStoreLike {
   create(key: string, data: Uint8Array): Promise<unknown>;
   update(key: string, data: Uint8Array, version: number): Promise<unknown>;
   keys(filter?: string | string[]): Promise<AsyncIterable<string>>;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
 }
 
 function isCasConflictError(error: unknown): boolean {
