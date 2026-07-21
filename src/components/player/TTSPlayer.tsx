@@ -13,13 +13,7 @@ import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
 import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
-
-function formatTime(seconds: number): string {
-  const safe = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
-  const mins = Math.floor(safe / 60);
-  const secs = safe % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
+import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 
 export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = true }: {
   currentPage?: number;
@@ -115,7 +109,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
               left: `${Math.min(95, Math.max(5, (shownSec / playbackDurationSec) * 100))}%`
             }}
           >
-            {formatTime(shownSec)}
+            {formatPlaybackTime(shownSec)}
           </div>
         )}
       </div>
@@ -173,7 +167,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
             />
           )}
           <div className="text-[11px] text-soft font-mono tabular-nums select-none whitespace-nowrap">
-            {formatTime(shownSec)} / {formatTime(playbackDurationSec)}
+            {formatPlaybackTime(shownSec)} / {formatPlaybackTime(playbackDurationSec)}
           </div>
         </div>
       </div>
