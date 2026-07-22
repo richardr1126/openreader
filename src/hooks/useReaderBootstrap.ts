@@ -68,8 +68,8 @@ export function useReaderBootstrap(documentId: string | undefined, expectedType:
     settings.query.error,
   ]);
   const initialPosition = useMemo(
-    () => parseReaderInitialPosition(expectedType, progress.query.data?.location),
-    [expectedType, progress.query.data?.location],
+    () => parseReaderInitialPosition(expectedType, progress.query.data),
+    [expectedType, progress.query.data],
   );
   const mutateSettings = settings.mutation.mutateAsync;
   const updateSettings = useCallback(
@@ -90,6 +90,13 @@ export function useReaderBootstrap(documentId: string | undefined, expectedType:
     progressPersistenceEnabledRef.current = false;
     flushDocumentProgress();
   }, [flushDocumentProgress]);
+  const retry = useCallback(async () => {
+    await Promise.all([
+      metadata.query.refetch(),
+      settings.query.refetch(),
+      progress.query.refetch(),
+    ]);
+  }, [metadata.query, progress.query, settings.query]);
 
   useEffect(() => {
     progressPersistenceEnabledRef.current = false;
@@ -105,6 +112,7 @@ export function useReaderBootstrap(documentId: string | undefined, expectedType:
     scheduleProgress,
     enableProgressPersistence,
     disableProgressPersistence,
+    retry,
     updateSettings,
     preferencesReady,
     queries: {

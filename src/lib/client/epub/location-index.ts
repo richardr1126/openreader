@@ -114,7 +114,7 @@ export async function resolveEpubLocatorToCfi(
 
   const section = book.spine.get(locator.spineHref as never) as SectionLike | undefined;
   if (!section || typeof section.load !== 'function' || typeof section.cfiFromRange !== 'function') {
-    return typeof locator.cfi === 'string' && locator.cfi ? locator.cfi : null;
+    return null;
   }
 
   try {
@@ -129,7 +129,7 @@ export async function resolveEpubLocatorToCfi(
     if (!range) return null;
     return section.cfiFromRange(range);
   } catch {
-    return typeof locator.cfi === 'string' && locator.cfi ? locator.cfi : null;
+    return null;
   } finally {
     try {
       section.unload?.();

@@ -10,8 +10,8 @@ export function escapeRegExp(input: string) {
 
 async function waitForPdfViewerReady(page: Page, timeout = 60000) {
   await expect(page).toHaveURL(/\/pdf\/[A-Za-z0-9._%-]+$/, { timeout: Math.min(timeout, 20000) });
-  const loader = page.getByTestId('pdf-status-loader').first();
-  const parseFailedBanner = page.getByText('PDF parsing failed. Retry to continue.').first();
+  const loader = page.getByTestId('reader-phase-loader').first();
+  const parseFailedBanner = page.getByText('This document is not ready yet').first();
   await expect
     .poll(async () => {
       const parseFailed = await parseFailedBanner.isVisible().catch(() => false);

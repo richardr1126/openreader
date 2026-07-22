@@ -31,9 +31,15 @@ import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
-import { useTtsDocumentNavigation, type SetTtsTextOptions } from '@/hooks/audio/useTtsDocumentNavigation';
+import {
+  useTtsDocumentNavigation,
+  type EpubRenderedAnchorInput,
+  type EpubRenderedAnchorResult,
+  type EpubPlanLocatorResult,
+} from '@/hooks/audio/useTtsDocumentNavigation';
 import { useTtsDocumentExport, type TtsDocumentAudioExportResolution } from '@/hooks/audio/useTtsDocumentExport';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
+import type { PlaybackPlanLifecycle } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
@@ -81,6 +87,7 @@ interface TTSContextType extends TTSPlaybackState {
   playbackTimeSec: number;
   playbackDurationSec: number;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
+  playbackPlanSegmentCount: number | null;
   resolveDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
   startDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
 
@@ -95,7 +102,8 @@ interface TTSContextType extends TTSPlaybackState {
   pause: () => void;
   stop: () => void;
   seekPlaybackTo: (seconds: number) => void;
-  setText: (text: string, options?: boolean | SetTtsTextOptions) => void;
+  reconcileEpubRenderedAnchor: (rendered: EpubRenderedAnchorInput) => EpubRenderedAnchorResult;
+  resolveEpubPlanLocator: (savedLocator: TTSSegmentLocator | null) => EpubPlanLocatorResult;
   setDocumentPlaybackAnchor: (location: TTSLocation, hasReadableText: boolean, locator?: TTSSegmentLocator | null) => void;
   setCurrDocPages: (num: number | undefined) => void;
   setSpeedAndRestart: (speed: number) => void;
@@ -103,13 +111,16 @@ interface TTSContextType extends TTSPlaybackState {
   setVoiceAndRestart: (voice: string) => void;
   /** Drop the cached playback plan after a segmentation change (block kinds / language). */
   invalidatePlaybackPlan: () => void;
+  playbackPlanLifecycle: PlaybackPlanLifecycle;
+  preparePlaybackPlan: () => Promise<import('@/lib/client/tts/playback-plan').TtsPlaybackPlan | null>;
+  retryPlaybackPlan: () => Promise<import('@/lib/client/tts/playback-plan').TtsPlaybackPlan | null>;
   setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
   setDocumentLanguage: (language: string) => void;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
-  prepareInitialPosition: (location: TTSLocation) => void;
+  prepareInitialPosition: (location: TTSLocation, segmentOrdinal?: number) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation | TTSSegmentLocator) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
   /** Effective reader type used for worker playback/session scoping. */
@@ -139,7 +150,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsModel: configTTSModel,
     ttsInstructions: configTTSInstructions,
     updateConfigKey,
-    skipBlank,
     ttsSegmentMaxBlockLength,
   } = useConfig();
 
@@ -203,15 +213,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef,
     playbackSegmentsRef,
     selectedOrdinalRef,
-    playbackPlanSource,
     sentences,
     currentIndex,
     currentSentence,
     currentSegment,
     selectedOrdinal,
+    playbackPlan,
     playbackSeekLayout,
     applyWorkerPlan,
-    clearPlaybackSegments,
     resetPlaybackPlan,
     setSelectedOrdinal,
     setPlaybackSeekLayout,
@@ -249,10 +258,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   );
 
   const playbackRunIdRef = useRef(0);
-  // EPUB-only jump resolution. epub.js navigation snaps CFIs to page-aligned
-  // values, so carry a stable locator through the next rendered text update.
-  const pendingEpubJumpRef = useRef<{ epoch: number; locator?: TTSSegmentLocator | null } | null>(null);
-  const epubJumpEpochRef = useRef<number>(0);
   // Guard to coalesce rapid restarts and only resume the latest change
   const restartSeqRef = useRef(0);
   // Preserve autoplay intent across location changes. Some browsers can emit pause
@@ -265,7 +270,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const isPlayingRef = useRef(false);
   const pauseEpochRef = useRef(0);
   const playbackAnchorRef = useRef<PlaybackAnchor | null>(null);
-  const [playbackAnchor, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
+  const [, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
   const playbackSyncNavigationRef = useRef(false);
   // The single "make the view follow the cursor" primitive. Used identically by
   // live playback (projection), the scrubber, and skip — so paused skip turns the
@@ -340,19 +345,21 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     buildPlaybackSessionRequest,
     createAndApplyPlaybackPlan,
     ensurePlaybackPlan,
+    invalidatePlaybackPlanLifecycle,
+    planLifecycle: playbackPlanLifecycle,
+    preparePlaybackPlan,
+    retryPlaybackPlan,
   } = useTtsPlanController({
     activeReaderType,
     currentLocation: currDocPage,
     currentPdfPage: currDocPageNumber,
-    isPlaying,
-    playbackAnchor,
     playbackAnchorRef,
     playbackPlanRef,
-    playbackPlanSource,
     playbackSeekLayout,
     request: playbackPlanRequest,
     selectedOrdinalRef,
     applyWorkerPlan,
+    resetPlaybackPlan,
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   });
@@ -376,7 +383,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const {
     unlockedAudioRef,
-    playbackActiveRef,
     playbackTimeSec,
     publishPlaybackTimeSec,
     abortAudio: controllerAbortAudio,
@@ -416,55 +422,40 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const seekPlaybackToOrdinal = controllerSeekPlaybackToOrdinal;
   const togglePlay = controllerTogglePlay;
 
-  const clearPendingEpubJump = useCallback(() => {
-    pendingEpubJumpRef.current = null;
-    epubJumpEpochRef.current += 1;
-  }, []);
-
   const {
     pause,
     prepareInitialPosition,
+    reconcileEpubRenderedAnchor,
+    resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
-    setText,
     skipBackward,
     skipForward,
     skipToLocation,
   } = useTtsDocumentNavigation({
     activeReaderType,
-    currDocPage,
-    currDocPageNumber,
     currentIndex,
-    isEPUB,
     isPlaying,
     sentences,
-    skipBlank,
     advanceRef,
-    epubJumpEpochRef,
     isPlayingRef,
-    locationChangeHandlerRef,
     pauseEpochRef,
-    pendingEpubJumpRef,
-    playbackActiveRef,
     playbackAnchorRef,
+    playbackPlanReady: playbackPlanLifecycle.status === 'ready',
+    playbackPlanRef,
     playbackSegmentsRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
-    sentenceAlignmentCacheRef,
     abortAudio,
     cancelSeekResync,
-    clearPendingEpubJump,
-    clearPlaybackSegments,
     invalidatePlaybackRun,
     pauseActivePlayback,
-    resetPlaybackPlan,
     seekPlaybackToOrdinal,
     selectPlaybackSegment,
-    setCurrentSentenceAlignment,
-    setCurrentWordIndex,
     setCurrDocPage,
     setIsPlaying,
     setIsProcessing,
     setPlaybackAnchor,
+    setSelectedOrdinal,
   });
 
   const updateVoiceAndSpeed = useCallback(() => {
@@ -483,40 +474,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       setTTSInstructions(configTTSInstructions);
     }
   }, [configIsLoading, updateVoiceAndSpeed, configTTSModel, configTTSInstructions]);
-
-  const preloadGenerationSignatureRef = useRef<string>('');
-  useEffect(() => {
-    const signature = [
-      documentId,
-      configProviderRef,
-      ttsModel,
-      voice,
-      effectiveNativeSpeed,
-      providerModelPolicy.supportsInstructions ? ttsInstructions : '',
-      resolvedLanguage,
-      ttsSegmentMaxBlockLength,
-    ].join('|');
-
-    if (!preloadGenerationSignatureRef.current) {
-      preloadGenerationSignatureRef.current = signature;
-      return;
-    }
-    if (preloadGenerationSignatureRef.current === signature) return;
-
-    preloadGenerationSignatureRef.current = signature;
-    clearPendingEpubJump();
-  }, [
-    documentId,
-    configProviderRef,
-    ttsModel,
-    voice,
-    effectiveNativeSpeed,
-    providerModelPolicy.supportsInstructions,
-    ttsInstructions,
-    resolvedLanguage,
-    ttsSegmentMaxBlockLength,
-    clearPendingEpubJump,
-  ]);
 
   /**
    * Validates that the current voice is in the available voices list
@@ -574,7 +531,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Cancel any ongoing request
     invalidatePlaybackRun();
     abortAudio();
-    clearPendingEpubJump();
     setIsPlaying(false);
     publishPlaybackTimeSec(0, { force: true });
     resetPlaybackPlan();
@@ -587,11 +543,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-  }, [abortAudio, invalidatePlaybackRun, clearPendingEpubJump, publishPlaybackTimeSec, resetPlaybackPlan]);
+  }, [abortAudio, invalidatePlaybackRun, publishPlaybackTimeSec, resetPlaybackPlan]);
 
   const {
     clearSegmentCaches,
-    invalidatePlaybackPlan,
+    invalidatePlaybackPlan: invalidatePlaybackPlanSettings,
     setAudioPlayerSpeedAndRestart,
     setSpeedAndRestart,
     setVoiceAndRestart,
@@ -600,7 +556,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     restartSeqRef,
     sentenceAlignmentCacheRef,
     abortAudio,
-    clearPendingEpubJump,
     resetPlaybackPlan,
     setAudioSpeed,
     setCurrentSentenceAlignment,
@@ -611,6 +566,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setVoice,
     updateConfigKey,
   });
+
+  const invalidatePlaybackPlan = useCallback(() => {
+    invalidatePlaybackPlanSettings();
+    invalidatePlaybackPlanLifecycle();
+  }, [invalidatePlaybackPlanLifecycle, invalidatePlaybackPlanSettings]);
 
 
   /**
@@ -626,6 +586,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackTimeSec,
     playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
     playbackSeekLayout,
+    playbackPlanSegmentCount: playbackPlan ? sentences.length : null,
     resolveDocumentAudioExport,
     startDocumentAudioExport,
     currentSentenceAlignment,
@@ -641,13 +602,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stop,
     pause,
     seekPlaybackTo,
-    setText,
+    reconcileEpubRenderedAnchor,
+    resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
     setCurrDocPages,
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
     invalidatePlaybackPlan,
+    playbackPlanLifecycle,
+    preparePlaybackPlan,
+    retryPlaybackPlan,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
@@ -665,6 +630,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSegment,
     sentences,
     playbackSeekLayout,
+    playbackPlan,
     playbackTimeSec,
     resolveDocumentAudioExport,
     startDocumentAudioExport,
@@ -680,13 +646,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stop,
     pause,
     seekPlaybackTo,
-    setText,
+    reconcileEpubRenderedAnchor,
+    resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
     setCurrDocPages,
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
     invalidatePlaybackPlan,
+    playbackPlanLifecycle,
+    preparePlaybackPlan,
+    retryPlaybackPlan,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,

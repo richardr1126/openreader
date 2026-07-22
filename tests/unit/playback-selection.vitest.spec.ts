@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   pdfAnchorPage,
+  resolveEpubPlanBackedSelection,
   resolveFirstPlanIndexForDocumentAnchor,
   resolvePlanBackedSelectionIndex,
   resolvePlaybackAnchorLocation,
@@ -73,11 +74,76 @@ describe('playback plan selection', () => {
       segment(2, { readerType: 'epub', spineIndex: 3, spineHref: 'chapter-3.xhtml', charOffset: 0 }),
     ];
 
-    expect(start).toEqual({ spineIndex: 2, charOffset: 35 });
+    expect(start).toEqual({ spineHref: 'chapter-2.xhtml', spineIndex: 2, charOffset: 35 });
     expect(resolvePlanBackedSelectionIndex({
       plan,
       readerType: 'epub',
       anchorLocation: start,
     })).toBe(1);
+  });
+
+  test('makes EPUB placement authoritative-plan-only', () => {
+    const plan = [
+      segment(12, { readerType: 'epub', spineIndex: 4, spineHref: 'chapter-4.xhtml', charOffset: 20 }),
+      segment(13, { readerType: 'epub', spineIndex: 4, spineHref: 'chapter-4.xhtml', charOffset: 80 }),
+    ];
+
+    expect(resolveEpubPlanBackedSelection({
+      plan,
+      locator: {
+        readerType: 'epub',
+        spineIndex: 4,
+        spineHref: 'chapter-4.xhtml',
+        charOffset: 50,
+        cfi: 'epubcfi(/6/8!/4:50)',
+      },
+    })).toEqual({ status: 'selected', index: 1, ordinal: 13 });
+    expect(resolveEpubPlanBackedSelection({
+      plan,
+      locator: { readerType: 'epub', cfi: 'epubcfi(/6/8!/4:50)' },
+    })).toEqual({ status: 'invalid-anchor' });
+    expect(resolveEpubPlanBackedSelection({
+      plan,
+      locator: {
+        readerType: 'epub',
+        spineIndex: 9,
+        spineHref: 'after-the-book.xhtml',
+        charOffset: 0,
+      },
+    })).toEqual({ status: 'unmapped-anchor' });
+    expect(resolveEpubPlanBackedSelection({
+      plan,
+      locator: {
+        readerType: 'epub',
+        spineIndex: 4,
+        spineHref: 'different-chapter.xhtml',
+        charOffset: 50,
+      },
+    })).toEqual({ status: 'unmapped-anchor' });
+    expect(resolveEpubPlanBackedSelection({ plan: [], locator: null }))
+      .toEqual({ status: 'empty-plan' });
+  });
+
+  test('resolves the same stable EPUB position across plan variants without trusting ordinals', () => {
+    const locator = {
+      readerType: 'epub' as const,
+      spineIndex: 1,
+      spineHref: 'chapter-1.xhtml',
+      charOffset: 75,
+    };
+    const shortPlan = [
+      segment(2, { ...locator, charOffset: 0 }),
+      segment(3, { ...locator, charOffset: 100 }),
+    ];
+    const detailedPlan = [
+      segment(20, { ...locator, charOffset: 0 }),
+      segment(21, { ...locator, charOffset: 50 }),
+      segment(22, { ...locator, charOffset: 90 }),
+    ];
+
+    expect(resolveEpubPlanBackedSelection({ plan: shortPlan, locator }))
+      .toEqual({ status: 'selected', index: 1, ordinal: 3 });
+    expect(resolveEpubPlanBackedSelection({ plan: detailedPlan, locator }))
+      .toEqual({ status: 'selected', index: 2, ordinal: 22 });
   });
 });

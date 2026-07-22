@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
-import type { Rendition } from 'epubjs';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 
 import {
   createRangeFromMappedOffsets,
@@ -30,16 +29,13 @@ const resolvePrimaryHighlightColor = (): string => {
 };
 
 type UseEpubHighlightingParams = {
-  renditionRef: RefObject<Rendition | undefined>;
   epubHighlightEnabled: boolean;
-  currentHighlightCfiRef: MutableRefObject<string | null>;
-  currentWordHighlightCfiRef: MutableRefObject<string | null>;
   renderedTextMapsRef: MutableRefObject<EpubRenderedTextMap[]>;
 };
 
 type UseEpubHighlightingResult = {
   clearHighlights: () => void;
-  highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => void;
+  highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => boolean;
   clearWordHighlights: () => void;
   highlightWordIndex: (
     alignment: TTSSentenceAlignment | undefined,
@@ -51,10 +47,7 @@ type UseEpubHighlightingResult = {
 };
 
 export function useEPUBHighlighting({
-  renditionRef,
   epubHighlightEnabled,
-  currentHighlightCfiRef,
-  currentWordHighlightCfiRef,
   renderedTextMapsRef,
 }: UseEpubHighlightingParams): UseEpubHighlightingResult {
   // Cache the per-segment word→region map so we don't re-align on every whisper
@@ -65,7 +58,6 @@ export function useEPUBHighlighting({
     key: string;
     spans: Array<AlignmentCharSpan | null>;
     ranges: Array<Range | null | undefined>;
-    cfis: Array<string | null | undefined>;
   } | null>(null);
   const activeWordHighlightRef = useRef<{ key: string; wordIndex: number } | null>(null);
   const highlightedDocumentsRef = useRef<Set<Document>>(new Set());
@@ -79,57 +71,32 @@ export function useEPUBHighlighting({
   const clearWordHighlights = useCallback(() => {
     clearPaintedHighlight(EPUB_WORD_HIGHLIGHT);
     activeWordHighlightRef.current = null;
-    if (!renditionRef.current) return;
-    if (currentWordHighlightCfiRef.current) {
-      renditionRef.current.annotations.remove(currentWordHighlightCfiRef.current, 'highlight');
-      currentWordHighlightCfiRef.current = null;
-    }
-  }, [clearPaintedHighlight, currentWordHighlightCfiRef, renditionRef]);
+  }, [clearPaintedHighlight]);
 
   const clearHighlights = useCallback(() => {
     clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
-    if (renditionRef.current && currentHighlightCfiRef.current) {
-      renditionRef.current.annotations.remove(currentHighlightCfiRef.current, 'highlight');
-      currentHighlightCfiRef.current = null;
-    }
     clearWordHighlights();
-  }, [clearPaintedHighlight, clearWordHighlights, currentHighlightCfiRef, renditionRef]);
+  }, [clearPaintedHighlight, clearWordHighlights]);
 
   const highlightSegment = useCallback((segment: CanonicalTtsSegment | null | undefined) => {
-    if (!renditionRef.current) return;
-
     clearHighlights();
 
-    if (!epubHighlightEnabled || !segment) return;
+    if (!epubHighlightEnabled) return true;
+    if (!segment) return false;
 
     const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
-    if (!resolved) return;
+    if (!resolved) return false;
 
-    if (paintRangeHighlight(
+    const painted = paintRangeHighlight(
       resolved.range,
       EPUB_SEGMENT_HIGHLIGHT,
       'background-color: rgba(128, 128, 128, 0.32);',
-    )) {
-      const document = resolved.range.startContainer.ownerDocument;
-      if (document) highlightedDocumentsRef.current.add(document);
-      return;
-    }
-
-    try {
-      const cfi = resolved.map.content.cfiFromRange(resolved.range);
-      currentHighlightCfiRef.current = cfi;
-      renditionRef.current.annotations.add(
-        'highlight',
-        cfi,
-        {},
-        () => { },
-        '',
-        { fill: 'grey', 'fill-opacity': '0.4', 'mix-blend-mode': 'multiply' },
-      );
-    } catch (error) {
-      console.error('Error highlighting EPUB segment:', error);
-    }
-  }, [clearHighlights, currentHighlightCfiRef, epubHighlightEnabled, renderedTextMapsRef, renditionRef]);
+    );
+    if (!painted) return false;
+    const document = resolved.range.startContainer.ownerDocument;
+    if (document) highlightedDocumentsRef.current.add(document);
+    return true;
+  }, [clearHighlights, epubHighlightEnabled, renderedTextMapsRef]);
 
   const highlightWordIndex = useCallback((
     alignment: TTSSentenceAlignment | undefined,
@@ -151,11 +118,6 @@ export function useEPUBHighlighting({
 
     const words = alignment.words || [];
     if (!words.length || wordIndex >= words.length) {
-      clearWordHighlights();
-      return;
-    }
-
-    if (!renditionRef.current) {
       clearWordHighlights();
       return;
     }
@@ -192,7 +154,6 @@ export function useEPUBHighlighting({
         key: cacheKey,
         spans: locateAlignmentWordSpans(words, regionText),
         ranges: new Array(words.length).fill(undefined),
-        cfis: new Array(words.length).fill(undefined),
       };
     }
     const cache = wordRangeCacheRef.current;
@@ -229,63 +190,14 @@ export function useEPUBHighlighting({
     )) {
       const document = wordRange.startContainer.ownerDocument;
       if (document) highlightedDocumentsRef.current.add(document);
-      if (currentWordHighlightCfiRef.current) {
-        renditionRef.current.annotations.remove(currentWordHighlightCfiRef.current, 'highlight');
-        currentWordHighlightCfiRef.current = null;
-      }
       activeWordHighlightRef.current = { key: cacheKey, wordIndex };
       return;
     }
-
-    let wordCfi = cache.cfis[wordIndex];
-    if (wordCfi === undefined) {
-      try {
-        wordCfi = resolved.map.content.cfiFromRange(wordRange);
-        cache.cfis[wordIndex] = wordCfi;
-      } catch (error) {
-        cache.cfis[wordIndex] = null;
-        console.error('Error resolving EPUB word CFI:', error);
-        clearWordHighlights();
-        return;
-      }
-    }
-    if (!wordCfi) {
-      clearWordHighlights();
-      return;
-    }
-
-    try {
-      if (currentWordHighlightCfiRef.current && currentWordHighlightCfiRef.current !== wordCfi) {
-        renditionRef.current.annotations.remove(currentWordHighlightCfiRef.current, 'highlight');
-      }
-      if (currentWordHighlightCfiRef.current === wordCfi) {
-        activeWordHighlightRef.current = { key: cacheKey, wordIndex };
-        return;
-      }
-      currentWordHighlightCfiRef.current = wordCfi;
-      activeWordHighlightRef.current = { key: cacheKey, wordIndex };
-      renditionRef.current.annotations.add(
-        'highlight',
-        wordCfi,
-        {},
-        () => { },
-        '',
-        {
-          fill: resolvePrimaryHighlightColor(),
-          'fill-opacity': '0.4',
-          'mix-blend-mode': 'multiply',
-        }
-      );
-    } catch (error) {
-      console.error('Error highlighting EPUB word:', error);
-      activeWordHighlightRef.current = null;
-    }
+    clearWordHighlights();
   }, [
     clearWordHighlights,
-    currentWordHighlightCfiRef,
     epubHighlightEnabled,
     renderedTextMapsRef,
-    renditionRef,
   ]);
 
   const setRenderedTextMaps = useCallback((maps: EpubRenderedTextMap[]) => {

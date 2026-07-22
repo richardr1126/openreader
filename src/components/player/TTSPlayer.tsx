@@ -15,10 +15,11 @@ import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 
-export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = true }: {
+export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = true, hasReadableContent = true }: {
   currentPage?: number;
   numPages?: number | undefined;
   isPlaybackReady?: boolean;
+  hasReadableContent?: boolean;
 }) {
   const {
     isPlaying,
@@ -130,7 +131,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           <IconButton
             onClick={skipBackward}
             aria-label="Skip backward"
-            disabled={isProcessing || !isPlaybackReady}
+            disabled={isProcessing || !isPlaybackReady || !hasReadableContent}
             className="relative"
           >
             {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
@@ -139,10 +140,12 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           <IconButton
             onClick={togglePlay}
             aria-label={isPlaying ? 'Pause' : 'Play'}
-            disabled={!isPlaying && (!isPlaybackReady || isProcessing)}
+            disabled={!isPlaying && (!isPlaybackReady || isProcessing || !hasReadableContent)}
             className="relative"
           >
-            {!isPlaying && !isPlaybackReady
+            {!hasReadableContent
+              ? <PlayIcon className="w-5 h-5" />
+              : !isPlaying && !isPlaybackReady
               ? <LoadingSpinner />
               : (isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />)}
           </IconButton>
@@ -150,7 +153,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           <IconButton
             onClick={skipForward}
             aria-label="Skip forward"
-            disabled={isProcessing || !isPlaybackReady}
+            disabled={isProcessing || !isPlaybackReady || !hasReadableContent}
             className="relative"
           >
             {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}
@@ -167,7 +170,9 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
             />
           )}
           <div className="text-[11px] text-soft font-mono tabular-nums select-none whitespace-nowrap">
-            {formatPlaybackTime(shownSec)} / {formatPlaybackTime(playbackDurationSec)}
+            {hasReadableContent
+              ? `${formatPlaybackTime(shownSec)} / ${formatPlaybackTime(playbackDurationSec)}`
+              : 'No readable text'}
           </div>
         </div>
       </div>

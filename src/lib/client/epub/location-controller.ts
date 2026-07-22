@@ -13,10 +13,3 @@ export function shouldNavigateToDifferentCfi(
     && !!currentStartCfi
     && location !== currentStartCfi;
 }
-
-export function shouldPersistEpubLocation(
-  documentId: string | undefined,
-  previousLocation: EpubLocation,
-): documentId is string {
-  return typeof documentId === 'string' && documentId.length > 0 && previousLocation !== 1;
-}

@@ -67,7 +67,6 @@
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^10.1.0",
     "react-pdf": "^9.2.1",
-    "react-reader": "^2.0.15",
     "remark-gfm": "^4.0.1",
     "turndown": "^7.2.4"
   },

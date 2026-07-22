@@ -28,8 +28,34 @@ export async function GET(
 
     const scope = await resolveSegmentDocumentScope(request, operation.subject.documentId);
     if (scope instanceof Response) return scope;
-    if (operation.status !== 'succeeded' || !operation.result?.planObjectKey) {
-      return NextResponse.json({ error: 'Playback plan not ready' }, { status: 404 });
+    if (operation.status === 'queued' || operation.status === 'running') {
+      return NextResponse.json({
+        planId,
+        status: operation.status,
+      }, {
+        status: 202,
+        headers: {
+          'Cache-Control': 'private, no-store',
+          'Retry-After': '1',
+          Vary: 'Cookie, Authorization',
+        },
+      });
+    }
+    if (operation.status === 'failed') {
+      return NextResponse.json({
+        error: operation.error?.message || 'Playback plan failed',
+        code: operation.error?.code || 'TTS_PLAYBACK_PLAN_FAILED',
+        planId,
+        status: operation.status,
+      }, { status: 409 });
+    }
+    if (!operation.result?.planObjectKey) {
+      return NextResponse.json({
+        error: 'Playback plan completed without an artifact',
+        code: 'TTS_PLAYBACK_PLAN_ARTIFACT_MISSING',
+        planId,
+        status: operation.status,
+      }, { status: 502 });
     }
 
     const { artifact, body } = await readTtsPlaybackPlanArtifact(operation.result.planObjectKey);

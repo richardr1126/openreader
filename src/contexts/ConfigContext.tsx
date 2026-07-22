@@ -17,7 +17,6 @@ interface ConfigContextType {
   voiceSpeed: number;
   audioPlayerSpeed: number;
   voice: string;
-  skipBlank: boolean;
   epubTheme: boolean;
   ttsSegmentMaxBlockLength: number;
   headerMargin: number;
@@ -88,7 +87,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       voiceSpeed: config.voiceSpeed,
       audioPlayerSpeed: config.audioPlayerSpeed,
       voice: config.voice,
-      skipBlank: config.skipBlank,
       epubTheme: config.epubTheme,
       ttsSegmentMaxBlockLength: config.ttsSegmentMaxBlockLength,
       headerMargin: config.headerMargin,

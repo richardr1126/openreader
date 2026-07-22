@@ -109,7 +109,6 @@ export function sanitizePreferencesPatch(
       case 'rightMargin':
         if (Number.isFinite(value)) out[key] = Number(value);
         break;
-      case 'skipBlank':
       case 'epubTheme':
       case 'pdfHighlightEnabled':
       case 'pdfWordHighlightEnabled':

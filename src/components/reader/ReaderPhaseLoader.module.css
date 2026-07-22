@@ -1,0 +1,127 @@
+.root {
+  position: relative;
+  display: grid;
+  min-height: 100%;
+  width: 100%;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 30rem),
+    var(--surface);
+}
+
+.ambient {
+  position: absolute;
+  inset: 0;
+  opacity: 0.28;
+  background-image: radial-gradient(color-mix(in srgb, var(--foreground) 16%, transparent) 0.7px, transparent 0.7px);
+  background-size: 18px 18px;
+  mask-image: radial-gradient(circle at center, #000 15%, transparent 68%);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(22rem, calc(100vw - 2rem));
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.mark {
+  position: relative;
+  display: grid;
+  width: 7.5rem;
+  aspect-ratio: 1;
+  place-items: center;
+}
+
+.sheet {
+  position: relative;
+  width: 4.75rem;
+  height: 6.25rem;
+  overflow: hidden;
+  border: 1px solid var(--accent-line);
+  border-radius: 0.7rem 1.25rem 0.7rem 0.7rem;
+  background: linear-gradient(145deg, var(--surface-solid), var(--surface-sunken));
+  box-shadow: var(--elev-2), inset 0 1px color-mix(in srgb, var(--foreground) 8%, transparent);
+  transition: transform 420ms var(--ease), border-radius 420ms var(--ease);
+}
+
+.fold {
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-bottom: 1px solid var(--accent-line);
+  border-left: 1px solid var(--accent-line);
+  border-bottom-left-radius: 0.45rem;
+  background: var(--accent-wash);
+}
+
+.lineOne, .lineTwo, .lineThree, .blockOne, .blockTwo, .cursor, .scan {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 24%, transparent);
+  transition: all 420ms var(--ease);
+}
+
+.lineOne { left: 0.8rem; top: 1.55rem; width: 2.55rem; height: 0.34rem; background: var(--accent); }
+.lineTwo { left: 0.8rem; top: 2.35rem; width: 3.1rem; height: 0.22rem; }
+.lineThree { left: 0.8rem; top: 2.9rem; width: 2.4rem; height: 0.22rem; }
+.blockOne { left: 0.8rem; top: 3.65rem; width: 1.35rem; height: 1.15rem; border-radius: 0.35rem; background: var(--accent-wash); border: 1px solid var(--accent-line); }
+.blockTwo { right: 0.8rem; top: 3.65rem; width: 1.35rem; height: 1.15rem; border-radius: 0.35rem; background: color-mix(in srgb, var(--foreground) 7%, transparent); border: 1px solid var(--line); }
+.cursor { left: 0.8rem; bottom: 0.7rem; width: 0.9rem; height: 0.18rem; background: var(--accent); animation: cursor-pulse 900ms ease-in-out infinite alternate; }
+.scan { left: -10%; top: 0; width: 120%; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, var(--accent), transparent); box-shadow: 0 0 14px var(--accent); }
+
+.mark[data-phase='understanding-structure'] .scan {
+  opacity: 1;
+  animation: scan 1.35s var(--ease) infinite;
+}
+
+.mark[data-phase='understanding-structure'] .blockOne,
+.mark[data-phase='understanding-structure'] .blockTwo {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.mark[data-phase='preparing-reading-plan'] .lineOne { width: 0.55rem; height: 0.55rem; border-radius: 50%; }
+.mark[data-phase='preparing-reading-plan'] .lineTwo { left: 1.75rem; top: 1.7rem; width: 2.15rem; background: var(--accent); }
+.mark[data-phase='preparing-reading-plan'] .lineThree { left: 1.15rem; top: 2.75rem; width: 2.75rem; }
+.mark[data-phase='preparing-reading-plan'] .blockOne { left: 1.1rem; top: 3.5rem; width: 2.55rem; height: 0.25rem; border: 0; }
+.mark[data-phase='preparing-reading-plan'] .blockTwo { left: 1.55rem; top: 4.25rem; width: 2.1rem; height: 0.25rem; border: 0; background: var(--accent); }
+
+.mark[data-phase='setting-your-place'] .sheet { transform: translateY(-0.12rem) rotate(-1.5deg); }
+.mark[data-phase='setting-your-place'] .cursor { width: 2.8rem; animation-duration: 520ms; }
+
+.mark[data-failed='true'] .sheet { transform: rotate(-3deg); border-color: var(--danger); }
+.mark[data-failed='true'] .scan, .mark[data-failed='true'] .cursor { animation: none; opacity: 0; }
+.mark[data-failed='true'] .lineOne { width: 2.5rem; height: 2px; transform: translate(0.15rem, 1.05rem) rotate(45deg); background: var(--danger); }
+.mark[data-failed='true'] .lineTwo { width: 2.5rem; height: 2px; transform: translate(-0.05rem, 0.25rem) rotate(-45deg); background: var(--danger); }
+.mark[data-failed='true'] .lineThree, .mark[data-failed='true'] .blockOne, .mark[data-failed='true'] .blockTwo { opacity: 0.22; }
+
+.copy { display: grid; gap: 0.4rem; }
+.copy h2 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: -0.015em; color: var(--foreground); }
+.copy p { margin: 0; font-size: 0.78rem; line-height: 1.5; color: var(--soft); }
+.copy .eyebrow { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent-strong); }
+
+.progress { width: 100%; text-align: left; }
+.progressLabels { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.65rem; font-weight: 650; color: var(--soft); font-variant-numeric: tabular-nums; }
+.track { height: 0.3rem; margin-top: 0.45rem; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--foreground) 9%, transparent); }
+.track span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 300ms var(--ease); }
+.track[data-indeterminate='true'] span { width: 38%; animation: progress-sweep 1.35s var(--ease) infinite; }
+
+@keyframes scan { from { top: -3%; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } to { top: 103%; opacity: 0; } }
+@keyframes cursor-pulse { to { opacity: 0.35; transform: scaleX(0.75); transform-origin: left; } }
+@keyframes progress-sweep { from { transform: translateX(-115%); } to { transform: translateX(305%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor, .mark[data-phase='understanding-structure'] .scan, .track[data-indeterminate='true'] span { animation: none; }
+  .mark[data-phase='understanding-structure'] .scan { top: 52%; opacity: 0.65; }
+  .track[data-indeterminate='true'] span { width: 46%; transform: none; opacity: 0.72; }
+}

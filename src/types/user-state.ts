@@ -5,7 +5,6 @@ export const SYNCED_PREFERENCE_KEYS = [
   'voiceSpeed',
   'audioPlayerSpeed',
   'voice',
-  'skipBlank',
   'epubTheme',
   'ttsSegmentMaxBlockLength',
   'headerMargin',
@@ -32,22 +31,35 @@ export type SyncedPreferencesPatch = Partial<SyncedPreferences>;
 
 export type ReaderType = 'pdf' | 'epub' | 'html';
 
-export interface DocumentProgressRecord {
+export type EpubProgressLocator = {
+  schemaVersion: 1;
+  spineHref: string;
+  spineIndex: number;
+  charOffset: number;
+};
+
+type DocumentProgressRecordBase = {
   documentId: string;
-  readerType: ReaderType;
-  location: string;
   progress: number | null;
   clientUpdatedAtMs: number;
   updatedAtMs: number;
-}
+};
 
-export interface DocumentProgressPayload {
+export type DocumentProgressRecord = DocumentProgressRecordBase & (
+  | { readerType: 'pdf' | 'html'; location: string }
+  | { readerType: 'epub'; locator: EpubProgressLocator }
+);
+
+type DocumentProgressPayloadBase = {
   documentId: string;
-  readerType: ReaderType;
-  location: string;
   progress?: number | null;
   clientUpdatedAtMs?: number;
-}
+};
+
+export type DocumentProgressPayload = DocumentProgressPayloadBase & (
+  | { readerType: 'pdf' | 'html'; location: string }
+  | { readerType: 'epub'; locator: EpubProgressLocator }
+);
 
 export type ScheduleDocumentProgress = (
   payload: DocumentProgressPayload,

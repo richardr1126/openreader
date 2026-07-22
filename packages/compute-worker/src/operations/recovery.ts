@@ -60,6 +60,7 @@ export function getOrphanRecoveryThresholdMs(input: {
       : input.whisperTimeoutMs;
   }
   return input.state.kind === 'pdf_layout'
+    || input.state.kind === 'tts_playback_plan'
     || input.state.kind === 'document_preview'
     || input.state.kind === 'document_conversion'
     || input.state.kind === 'account_export'

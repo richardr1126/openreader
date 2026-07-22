@@ -8,6 +8,11 @@ import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import {
+  normalizeEpubProgressLocator,
+  parseEpubProgressLocator,
+  serializeEpubProgressLocator,
+} from '@/lib/shared/epub-progress';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +58,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ progress: null });
     }
 
+    if (row.readerType === 'epub') {
+      const locator = parseEpubProgressLocator(row.location);
+      if (!locator) {
+        return NextResponse.json({ progress: null, invalidated: true });
+      }
+      return NextResponse.json({
+        progress: {
+          documentId: row.documentId,
+          readerType: 'epub',
+          locator,
+          progress: row.progress == null ? null : Number(row.progress),
+          clientUpdatedAtMs: Number(row.clientUpdatedAtMs ?? 0),
+          updatedAtMs: coerceTimestampMs(row.updatedAt, nowTimestampMs()),
+        },
+      });
+    }
+
     return NextResponse.json({
       progress: {
         documentId: row.documentId,
@@ -85,6 +107,7 @@ export async function PUT(req: NextRequest) {
         documentId?: unknown;
         readerType?: unknown;
         location?: unknown;
+        locator?: unknown;
         progress?: unknown;
         clientUpdatedAtMs?: unknown;
       }
@@ -100,10 +123,13 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invalid readerType. Expected 'pdf', 'epub', or 'html'." }, { status: 400 });
     }
 
-    const location = typeof body?.location === 'string' ? body.location.trim() : '';
-    if (!location) {
-      return NextResponse.json({ error: 'Invalid location' }, { status: 400 });
-    }
+    const locator = readerType === 'epub' ? normalizeEpubProgressLocator(body?.locator) : null;
+    const location = readerType === 'epub'
+      ? (locator ? serializeEpubProgressLocator(locator) : '')
+      : (typeof body?.location === 'string' ? body.location.trim() : '');
+    if (!location) return NextResponse.json({
+      error: readerType === 'epub' ? 'Invalid EPUB progress locator' : 'Invalid location',
+    }, { status: 400 });
 
     const progress =
       body?.progress == null
@@ -130,16 +156,43 @@ export async function PUT(req: NextRequest) {
     const existing = existingRows[0];
     const existingUpdated = Number(existing?.clientUpdatedAtMs ?? 0);
 
+    const responseProgress = (
+      storedReaderType: string,
+      storedLocation: string,
+      storedProgress: number | null,
+      storedClientUpdatedAtMs: number,
+      storedUpdatedAtMs: number,
+    ) => {
+      if (storedReaderType === 'epub') {
+        const storedLocator = parseEpubProgressLocator(storedLocation);
+        return storedLocator ? {
+          documentId,
+          readerType: 'epub' as const,
+          locator: storedLocator,
+          progress: storedProgress,
+          clientUpdatedAtMs: storedClientUpdatedAtMs,
+          updatedAtMs: storedUpdatedAtMs,
+        } : null;
+      }
+      return {
+        documentId,
+        readerType: storedReaderType,
+        location: storedLocation,
+        progress: storedProgress,
+        clientUpdatedAtMs: storedClientUpdatedAtMs,
+        updatedAtMs: storedUpdatedAtMs,
+      };
+    };
+
     if (existing && clientUpdatedAtMs < existingUpdated) {
       return NextResponse.json({
-        progress: {
-          documentId,
-          readerType: existing.readerType,
-          location: existing.location,
-          progress: existing.progress == null ? null : Number(existing.progress),
-          clientUpdatedAtMs: existingUpdated,
-          updatedAtMs: coerceTimestampMs(existing.updatedAt, nowTimestampMs()),
-        },
+        progress: responseProgress(
+          existing.readerType,
+          existing.location,
+          existing.progress == null ? null : Number(existing.progress),
+          existingUpdated,
+          coerceTimestampMs(existing.updatedAt, nowTimestampMs()),
+        ),
         applied: false,
       });
     }
@@ -169,14 +222,7 @@ export async function PUT(req: NextRequest) {
       });
 
     return NextResponse.json({
-      progress: {
-        documentId,
-        readerType,
-        location,
-        progress,
-        clientUpdatedAtMs,
-        updatedAtMs: updatedAt,
-      },
+      progress: responseProgress(readerType, location, progress, clientUpdatedAtMs, updatedAt),
       applied: true,
     });
   } catch (error) {

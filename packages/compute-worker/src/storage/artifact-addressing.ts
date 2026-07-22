@@ -55,11 +55,12 @@ const SAFE_NAMESPACE_REGEX_WITH_DEFAULT = /^[a-zA-Z0-9._-]{1,128}$/;
  *
  * Unlike {@link ttsPlaybackArtifactKey} this is NOT keyed by session: the plan
  * (segment list + ordinals + locators, voice/speed-independent) is identical for
- * a given document version + reader type + segmentation signature, so every
- * playback session that jumps/seeks within the same document reuses one cached
- * plan with stable absolute ordinals instead of re-deriving a position-relative
- * one. `planSignature` is a hash of the segmentation knobs (maxBlockLength,
- * language, enforceSourceBoundaries, skipBlockKinds, isPlainText, namespace).
+ * a given storage owner + document version + reader type + segmentation
+ * signature, so every playback session that jumps/seeks within that scope
+ * reuses one cached plan with stable absolute ordinals instead of re-deriving a
+ * position-relative one. `planSignature` includes the storage owner and the
+ * segmentation knobs (maxBlockLength, language, enforceSourceBoundaries,
+ * skipBlockKinds, isPlainText, namespace).
  */
 export function ttsPlaybackPlanArtifactKey(input: {
   documentId: string;

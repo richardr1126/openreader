@@ -245,7 +245,7 @@ describe('worker-owned TTS playback source derivation', () => {
     );
   });
 
-  test('plan signature ignores start position and voice/speed but varies with segmentation knobs', () => {
+  test('plan signature ignores start position and voice/speed but varies with scope and segmentation knobs', () => {
     const fromTop = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
     );
@@ -259,6 +259,12 @@ describe('worker-owned TTS playback source derivation', () => {
       settingsJson: { voice: 'echo', providerRef: 'p', providerType: 'openai', ttsModel: 'm', nativeSpeed: 2 },
     } as Parameters<typeof computePlaybackPlanSignature>[0];
     expect(computePlaybackPlanSignature(differentVoice)).toBe(fromTop); // voice/speed don't affect the plan
+
+    const differentOwner = {
+      ...baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
+      storageUserId: 'another-storage-owner',
+    } as Parameters<typeof computePlaybackPlanSignature>[0];
+    expect(computePlaybackPlanSignature(differentOwner)).not.toBe(fromTop);
 
     const biggerBlocks = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 400, documentSource: { namespace: null, extent: 'document' } }),

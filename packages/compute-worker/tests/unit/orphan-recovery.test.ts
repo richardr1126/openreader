@@ -1,10 +1,27 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { recoverOrphanedOperations } from '../../src/operations/recovery';
+import { getOrphanRecoveryThresholdMs, recoverOrphanedOperations } from '../../src/operations/recovery';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
 
 describe('orphan recovery', () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  test('gives queued playback-plan operations a terminal stale threshold', () => {
+    expect(getOrphanRecoveryThresholdMs({
+      state: {
+        opId: 'op-plan-queued',
+        opKey: 'k-plan-queued',
+        kind: 'tts_playback_plan',
+        jobId: 'job-op-plan-queued',
+        status: 'queued',
+        queuedAt: 1,
+        updatedAt: 1,
+      },
+      whisperTimeoutMs: 30_000,
+      pdfTimeoutMs: 300_000,
+      opStaleMs: 1_800_000,
+    })).toBe(1_800_000);
   });
 
   test('recovers a running playback op when a later sweep crosses the timeout in the same session', async () => {

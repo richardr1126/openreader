@@ -7,9 +7,9 @@ import { DOMParser } from 'linkedom';
  * One spine item's worker-extracted plain text. `index` is the 0-based spine
  * order (matches epub.js `section.index`); `href` is the manifest href resolved
  * relative to the OPF directory; `text` is the body text content — extracted
- * with the SAME DOM `body.textContent` semantics the client uses in
- * `getSpineItemPlainText`, so normalized segment text (and therefore audio
- * identity + per-segment charOffsets) match the client byte-for-byte.
+ * with the same DOM `body.textContent` semantics consumed by the browser's
+ * direct CFI-range coordinate mapper, so normalized segment text (and therefore
+ * audio identity + per-segment charOffsets) match the client byte-for-byte.
  */
 export interface EpubSpineItemText {
   index: number;

@@ -405,9 +405,14 @@ describe('server-state architecture', () => {
     expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('buildEpubCanonicalWindow');
     expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('canonicalWindow');
     expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('startLocator: canonicalWindow.segments[0]?.ownerLocator');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('setText: setTTSText');
+    expect(documentNavigation).toContain('resolveEpubPlanBackedSelection');
+    expect(documentNavigation).not.toContain('clearPlaybackSegments');
+    expect(context).not.toContain('setText:');
+    expect(playbackModel).not.toContain('clearPlaybackSegments');
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('skipBlank');
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).toContain('setDocumentPlaybackAnchor(currDocPageNumber, Boolean(text.trim()))');
-    expect(pdfPage).toContain('void updateDocumentSettings(nextSettings).then(() => {');
-    expect(pdfPage).toContain('reads it from the document-settings row, so wait for persistence');
+    expect(pdfPage).toMatch(/updateDocumentSettings\(nextSettings\)\.then\(\(\) => \{[\s\S]*?invalidatePlaybackPlan\(\);[\s\S]*?\}\);/);
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).not.toContain('setTTSText(text');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).toContain('setDocumentPlaybackAnchor(1, true');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setText: setTTSText');
@@ -415,7 +420,8 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('if (!sentences[currentIndex]) return');
     expect(context).toContain('currentSentence,');
     expect(context).not.toContain('playbackAnchor:');
-    expect(planController).toContain("playbackPlanSource === 'worker'");
+    expect(planController).toContain('preparePlaybackPlan');
+    expect(planController).toContain('resolveTtsPlaybackPlan');
     expect(context).not.toContain('setPlaybackPlanSource');
     expect(context).not.toContain('setPlaybackSegments');
     expect(context).not.toContain('setSentences');
@@ -602,7 +608,7 @@ describe('server-state architecture', () => {
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('segment.generated ? ready : estimated');
     expect(context).toContain('playbackSyncNavigationRef');
     expect(context).toContain('syncPlaybackLocator');
-    expect(planController).toContain("throw new Error('TTS playback plan did not contain a plan-backed selection for the current anchor')");
+    expect(planController).toContain('setSelectedOrdinal(null)');
     expect(context).not.toContain('startOrdinal: startSegment.ordinal');
     expect(source('src/lib/client/api/tts.ts')).not.toContain('startOrdinal?: number');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startOrdinal?: number');

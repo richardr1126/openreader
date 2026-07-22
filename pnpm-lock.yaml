@@ -104,9 +104,6 @@ importers:
       react-pdf:
         specifier: ^9.2.1
         version: 9.2.1(@types/react@19.2.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      react-reader:
-        specifier: ^2.0.15
-        version: 2.0.15(react@19.2.7)
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
@@ -4313,18 +4310,10 @@ packages:
       '@types/react':
         optional: true
 
-  react-reader@2.0.15:
-    resolution: {integrity: sha512-xc+Mm1GXUxRG1Aa8E2uc1Vku01mwgF+GrDYif0C/J/D0QCWgDqvQx6UDMwjaR5x8Z9gIej9lAs72Tklg7wLBGg==}
-
   react-stately@3.47.0:
     resolution: {integrity: sha512-H3ar+SOWP920EbVg7qWfP3fZjZiwhlEJAEJQqjt+w8oKijCwFgr0+R4941PIHscOXRNRvEOjvWilitImC0DdBg==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
-
-  react-swipeable@7.0.2:
-    resolution: {integrity: sha512-v1Qx1l+aC2fdxKa9aKJiaU/ZxmJ5o98RMoFwUqAAzVWUcxgfHFXDDruCKXhw6zIYXm6V64JiHgP9f6mlME5l8w==}
-    peerDependencies:
-      react: ^16.8.3 || ^17 || ^18 || ^19.0.0 || ^19.0.0-rc
 
   react@19.2.7:
     resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
@@ -9157,13 +9146,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.16
 
-  react-reader@2.0.15(react@19.2.7):
-    dependencies:
-      epubjs: 0.3.93
-      react-swipeable: 7.0.2(react@19.2.7)
-    transitivePeerDependencies:
-      - react
-
   react-stately@3.47.0(react@19.2.7):
     dependencies:
       '@internationalized/date': 3.12.2
@@ -9173,10 +9155,6 @@ snapshots:
       '@swc/helpers': 0.5.23
       react: 19.2.7
       use-sync-external-store: 1.6.0(react@19.2.7)
-
-  react-swipeable@7.0.2(react@19.2.7):
-    dependencies:
-      react: 19.2.7
 
   react@19.2.7: {}
 

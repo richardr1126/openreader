@@ -14,9 +14,16 @@ export type PlaybackAnchor = {
 
 export type PlaybackStartLocation = {
   page?: TTSLocation;
+  spineHref?: string;
   spineIndex?: number;
   charOffset?: number;
 };
+
+export type EpubPlanBackedSelection =
+  | { status: 'empty-plan' }
+  | { status: 'invalid-anchor' }
+  | { status: 'unmapped-anchor' }
+  | { status: 'selected'; index: number; ordinal: number };
 
 export function pdfLocatorPage(locator: TTSSegmentLocator | null | undefined): number | null {
   return isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
@@ -78,6 +85,7 @@ export function resolvePlaybackAnchorLocation(input: {
       : null;
     if (charOffset === null) return {};
     return {
+      spineHref: locator.spineHref,
       spineIndex: Math.max(0, locator.spineIndex),
       charOffset,
     };
@@ -93,9 +101,10 @@ export function resolvePlanBackedSelectionIndex(input: {
 }): number {
   if (input.plan.length === 0) return -1;
   if (typeof input.selectedOrdinal === 'number' && Number.isFinite(input.selectedOrdinal)) {
-    return input.plan.findIndex(
+    const selectedIndex = input.plan.findIndex(
       (segment) => segment.ordinal === Math.max(0, Math.floor(input.selectedOrdinal!)),
     );
+    if (selectedIndex >= 0) return selectedIndex;
   }
 
   if (input.readerType === 'pdf') {
@@ -114,19 +123,57 @@ export function resolvePlanBackedSelectionIndex(input: {
   if (input.readerType === 'epub') {
     if (
       typeof input.anchorLocation.spineIndex !== 'number'
+      || typeof input.anchorLocation.spineHref !== 'string'
       || typeof input.anchorLocation.charOffset !== 'number'
     ) {
       return -1;
     }
+    const hasMatchingSpine = input.plan.some((segment) => {
+      const locator = segment.ownerLocator;
+      return locator?.readerType === 'epub'
+        && locator.spineIndex === input.anchorLocation.spineIndex
+        && locator.spineHref === input.anchorLocation.spineHref;
+    });
+    if (!hasMatchingSpine) return -1;
     return input.plan.findIndex((segment) => {
       const locator = segment.ownerLocator;
       if (locator?.readerType !== 'epub' || typeof locator.spineIndex !== 'number') return false;
       if (locator.spineIndex > input.anchorLocation.spineIndex!) return true;
       if (locator.spineIndex < input.anchorLocation.spineIndex!) return false;
+      if (locator.spineHref !== input.anchorLocation.spineHref) return false;
       return typeof locator.charOffset !== 'number'
         || locator.charOffset >= input.anchorLocation.charOffset!;
     });
   }
 
   return -1;
+}
+
+/**
+ * Reconcile one committed EPUB viewport anchor with the authoritative worker
+ * plan. This deliberately does not accept text, CFI, array index, or a previous
+ * selection as identity: a stable spine coordinate must resolve to an absolute
+ * worker-plan ordinal.
+ */
+export function resolveEpubPlanBackedSelection(input: {
+  plan: CanonicalTtsSegment[];
+  locator: TTSSegmentLocator | null | undefined;
+}): EpubPlanBackedSelection {
+  if (input.plan.length === 0) return { status: 'empty-plan' };
+  if (!isStableEpubLocator(input.locator)) return { status: 'invalid-anchor' };
+
+  const index = resolvePlanBackedSelectionIndex({
+    plan: input.plan,
+    readerType: 'epub',
+    selectedOrdinal: null,
+    anchorLocation: {
+      spineHref: input.locator.spineHref,
+      spineIndex: Math.max(0, Math.floor(input.locator.spineIndex)),
+      charOffset: Math.max(0, Math.floor(input.locator.charOffset)),
+    },
+  });
+  const segment = input.plan[index];
+  return segment
+    ? { status: 'selected', index, ordinal: segment.ordinal }
+    : { status: 'unmapped-anchor' };
 }

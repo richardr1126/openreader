@@ -214,7 +214,13 @@ export function computePlaybackPlanSignature(request: TtsPlaybackPlanCapableRequ
     enforceSourceBoundaries: Boolean(request.planning.enforceSourceBoundaries),
     skipBlockKinds: documentSource?.skipBlockKinds ?? [],
     isPlainText: Boolean(documentSource?.isPlainText),
-    namespace: documentSource?.namespace ?? null,
+    // Plans contain user-scoped document text and settings metadata. Include
+    // the storage owner in their stable identity so identical content owned by
+    // different users cannot reuse an operation or artifact across scopes.
+    namespace: JSON.stringify([
+      documentSource?.namespace ?? null,
+      request.storageUserId,
+    ]),
   });
 }
 

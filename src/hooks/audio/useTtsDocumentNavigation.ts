@@ -1,99 +1,94 @@
 'use client';
 
 import { useCallback, useEffect, type MutableRefObject } from 'react';
-import toast from 'react-hot-toast';
 
 import {
   pdfAnchorPage,
+  resolveEpubPlanBackedSelection,
   resolveFirstPlanIndexForDocumentAnchor,
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
+import type { TtsPlaybackPlan } from '@/lib/client/tts/playback-plan';
 import type { TTSSegmentLocator } from '@/types/client';
-import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
+import type { TTSLocation } from '@/types/tts';
 import type { ReaderType } from '@/types/user-state';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+import { isStableEpubLocator } from '@openreader/tts/types';
 
-export type SetTtsTextOptions = {
+export type EpubRenderedAnchorInput = {
+  locator: TTSSegmentLocator | null;
+  hasReadableText: boolean;
   shouldPause?: boolean;
-  location?: TTSLocation;
-  startLocator?: TTSSegmentLocator;
 };
+
+export type EpubRenderedAnchorResult =
+  | { status: 'waiting-plan' }
+  | { status: 'empty-plan' }
+  | { status: 'non-text' }
+  | { status: 'invalid-anchor' }
+  | { status: 'unmapped-anchor' }
+  | { status: 'selected'; ordinal: number };
+
+export type EpubPlanLocatorResult =
+  | { status: 'waiting-plan' }
+  | { status: 'empty-plan' }
+  | { status: 'invalid-locator' }
+  | { status: 'unmapped-locator' }
+  | { status: 'selected'; ordinal: number; displayLocator: TTSSegmentLocator };
 
 type UseTtsDocumentNavigationInput = {
   activeReaderType: ReaderType;
-  currDocPage: TTSLocation;
-  currDocPageNumber: number;
   currentIndex: number;
-  isEPUB: boolean;
   isPlaying: boolean;
   sentences: string[];
-  skipBlank: boolean;
   advanceRef: MutableRefObject<((backwards?: boolean) => void | Promise<void>) | null>;
-  epubJumpEpochRef: MutableRefObject<number>;
   isPlayingRef: MutableRefObject<boolean>;
-  locationChangeHandlerRef: MutableRefObject<((location: TTSLocation | TTSSegmentLocator) => void) | null>;
   pauseEpochRef: MutableRefObject<number>;
-  pendingEpubJumpRef: MutableRefObject<{ epoch: number; locator?: TTSSegmentLocator | null } | null>;
-  playbackActiveRef: MutableRefObject<boolean>;
   playbackAnchorRef: MutableRefObject<PlaybackAnchor | null>;
+  playbackPlanReady: boolean;
+  playbackPlanRef: MutableRefObject<TtsPlaybackPlan | null>;
   playbackSegmentsRef: MutableRefObject<CanonicalTtsSegment[]>;
   playbackSyncNavigationRef: MutableRefObject<boolean>;
   resumeAfterLocationChangeRef: MutableRefObject<boolean>;
-  sentenceAlignmentCacheRef: MutableRefObject<Map<string, TTSSentenceAlignment>>;
   abortAudio: () => void;
   cancelSeekResync: () => void;
-  clearPendingEpubJump: () => void;
-  clearPlaybackSegments: (options?: { resetSelection?: boolean }) => void;
   invalidatePlaybackRun: () => void;
   pauseActivePlayback: () => void;
-  resetPlaybackPlan: (options?: { resetSelection?: boolean; resetSeekLayout?: boolean }) => void;
   seekPlaybackToOrdinal: (ordinal: number) => boolean;
   selectPlaybackSegment: (segment: CanonicalTtsSegment | null | undefined) => boolean;
-  setCurrentSentenceAlignment: (alignment: TTSSentenceAlignment | undefined) => void;
-  setCurrentWordIndex: (wordIndex: number | null) => void;
   setCurrDocPage: (location: TTSLocation) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setIsProcessing: (isProcessing: boolean) => void;
   setPlaybackAnchor: (anchor: PlaybackAnchor | null) => void;
+  setSelectedOrdinal: (ordinal: number | null) => void;
 };
 
 export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
   const {
     activeReaderType,
-    currDocPage,
-    currDocPageNumber,
     currentIndex,
-    isEPUB,
     isPlaying,
     sentences,
-    skipBlank,
     advanceRef,
-    epubJumpEpochRef,
     isPlayingRef,
-    locationChangeHandlerRef,
     pauseEpochRef,
-    pendingEpubJumpRef,
-    playbackActiveRef,
     playbackAnchorRef,
+    playbackPlanReady,
+    playbackPlanRef,
     playbackSegmentsRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
-    sentenceAlignmentCacheRef,
     abortAudio,
     cancelSeekResync,
-    clearPendingEpubJump,
-    clearPlaybackSegments,
     invalidatePlaybackRun,
     pauseActivePlayback,
-    resetPlaybackPlan,
     seekPlaybackToOrdinal,
     selectPlaybackSegment,
-    setCurrentSentenceAlignment,
-    setCurrentWordIndex,
     setCurrDocPage,
     setIsPlaying,
     setIsProcessing,
     setPlaybackAnchor,
+    setSelectedOrdinal,
   } = input;
 
   useEffect(() => {
@@ -103,13 +98,11 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
   const pause = useCallback(() => {
     resumeAfterLocationChangeRef.current = false;
     pauseEpochRef.current += 1;
-    clearPendingEpubJump();
     cancelSeekResync();
     pauseActivePlayback();
     setIsPlaying(false);
   }, [
     cancelSeekResync,
-    clearPendingEpubJump,
     pauseActivePlayback,
     pauseEpochRef,
     resumeAfterLocationChangeRef,
@@ -126,56 +119,41 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
       }
     }
 
+    setCurrDocPage(location);
+    if (shouldPause) {
+      resumeAfterLocationChangeRef.current = false;
+      pauseActivePlayback();
+      setIsPlaying(false);
+    } else if (isPlayingRef.current) {
+      resumeAfterLocationChangeRef.current = true;
+    }
+
     if (activeReaderType === 'pdf' || activeReaderType === 'html') {
-      setCurrDocPage(location);
-      if (shouldPause) {
-        resumeAfterLocationChangeRef.current = false;
-        pauseActivePlayback();
-        setIsPlaying(false);
-      } else if (isPlayingRef.current) {
-        resumeAfterLocationChangeRef.current = true;
-      }
       const planIndex = resolveFirstPlanIndexForDocumentAnchor(
         playbackSegmentsRef.current,
         activeReaderType,
         location,
       );
       if (planIndex >= 0) selectPlaybackSegment(playbackSegmentsRef.current[planIndex]);
-      return;
     }
-
-    if (shouldPause) {
-      resumeAfterLocationChangeRef.current = false;
-    } else if (isPlayingRef.current) {
-      resumeAfterLocationChangeRef.current = true;
-    }
-    invalidatePlaybackRun();
-    abortAudio();
-    if (shouldPause) setIsPlaying(false);
-    clearPlaybackSegments();
-    playbackAnchorRef.current = null;
-    setPlaybackAnchor(null);
-    setCurrDocPage(location);
   }, [
-    abortAudio,
     activeReaderType,
-    clearPlaybackSegments,
-    invalidatePlaybackRun,
     isPlayingRef,
     pauseActivePlayback,
-    playbackAnchorRef,
     playbackSegmentsRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
     selectPlaybackSegment,
     setCurrDocPage,
     setIsPlaying,
-    setPlaybackAnchor,
   ]);
 
-  const prepareInitialPosition = useCallback((location: TTSLocation) => {
+  const prepareInitialPosition = useCallback((location: TTSLocation, segmentOrdinal?: number) => {
+    if (typeof segmentOrdinal === 'number' && Number.isFinite(segmentOrdinal)) {
+      setSelectedOrdinal(Math.max(0, Math.floor(segmentOrdinal)));
+    }
     skipToLocation(location, true);
-  }, [skipToLocation]);
+  }, [setSelectedOrdinal, skipToLocation]);
 
   const advance = useCallback(async (backwards = false) => {
     const nextIndex = currentIndex + (backwards ? -1 : 1);
@@ -183,53 +161,17 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
       selectPlaybackSegment(playbackSegmentsRef.current[nextIndex]);
       return;
     }
-
-    if (isEPUB && locationChangeHandlerRef.current) {
-      const direction = nextIndex >= sentences.length ? 'next' : 'prev';
-      if (isPlayingRef.current) resumeAfterLocationChangeRef.current = true;
-      invalidatePlaybackRun();
-      clearPlaybackSegments();
-      playbackAnchorRef.current = null;
-      setPlaybackAnchor(null);
-      setCurrentSentenceAlignment(undefined);
-      setCurrentWordIndex(null);
-      locationChangeHandlerRef.current(direction);
-      return;
-    }
-
     setIsPlaying(false);
   }, [
-    clearPlaybackSegments,
     currentIndex,
-    invalidatePlaybackRun,
-    isEPUB,
-    isPlayingRef,
-    locationChangeHandlerRef,
-    playbackAnchorRef,
     playbackSegmentsRef,
-    resumeAfterLocationChangeRef,
     selectPlaybackSegment,
-    sentences,
-    setCurrentSentenceAlignment,
-    setCurrentWordIndex,
+    sentences.length,
     setIsPlaying,
-    setPlaybackAnchor,
   ]);
   advanceRef.current = advance;
 
-  const handleBlankSection = useCallback((text: string): boolean => {
-    if (!isPlaying || !skipBlank || text.length > 0) return false;
-    void advance();
-    toast.success(isEPUB ? 'Skipping blank section' : `Skipping blank page ${currDocPageNumber}`, {
-      id: isEPUB ? 'epub-section-skip' : `page-${currDocPageNumber}`,
-      style: { background: 'var(--background)', color: 'var(--accent)' },
-      duration: 1000,
-      position: 'top-center',
-    });
-    return true;
-  }, [advance, currDocPageNumber, isEPUB, isPlaying, skipBlank]);
-
-  const applyDocumentPlaybackAnchor = useCallback((
+  const setDocumentPlaybackAnchor = useCallback((
     location: TTSLocation,
     hasReadableText: boolean,
     locator?: TTSSegmentLocator | null,
@@ -270,133 +212,129 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     );
     if (planIndex >= 0) {
       selectPlaybackSegment(playbackSegmentsRef.current[planIndex]);
-    } else if (!playbackActiveRef.current) {
-      resetPlaybackPlan();
-      sentenceAlignmentCacheRef.current.clear();
-      setCurrentSentenceAlignment(undefined);
-      setCurrentWordIndex(null);
+    } else if (playbackPlanRef.current) {
+      setSelectedOrdinal(null);
     }
     setIsProcessing(false);
   }, [
     activeReaderType,
-    playbackActiveRef,
     playbackAnchorRef,
+    playbackPlanRef,
     playbackSegmentsRef,
     playbackSyncNavigationRef,
-    resetPlaybackPlan,
     selectPlaybackSegment,
-    sentenceAlignmentCacheRef,
-    setCurrentSentenceAlignment,
-    setCurrentWordIndex,
     setCurrDocPage,
     setIsProcessing,
     setPlaybackAnchor,
+    setSelectedOrdinal,
   ]);
 
-  const setDocumentPlaybackAnchor = useCallback((
-    location: TTSLocation,
-    hasReadableText: boolean,
-    locator?: TTSSegmentLocator | null,
-  ) => applyDocumentPlaybackAnchor(location, hasReadableText, locator), [applyDocumentPlaybackAnchor]);
-
-  const setText = useCallback((text: string, options?: boolean | SetTtsTextOptions) => {
-    const normalizedOptions: SetTtsTextOptions = typeof options === 'boolean'
-      ? { shouldPause: options }
-      : (options || {});
-    const resolvedLocation = normalizedOptions.location ?? currDocPage;
-    if (normalizedOptions.location !== undefined && normalizedOptions.location !== currDocPage) {
-      setCurrDocPage(normalizedOptions.location);
-    }
-
-    const pendingEpubLocator = isEPUB
-      && pendingEpubJumpRef.current?.epoch === epubJumpEpochRef.current
-      && pendingEpubJumpRef.current.locator
-      ? pendingEpubJumpRef.current.locator
-      : null;
+  const reconcileEpubRenderedAnchor = useCallback((
+    rendered: EpubRenderedAnchorInput,
+  ): EpubRenderedAnchorResult => {
+    const renderedLocation: TTSLocation = isStableEpubLocator(rendered.locator)
+      ? `epub:${rendered.locator.spineIndex}:${encodeURIComponent(rendered.locator.spineHref)}:${rendered.locator.charOffset}`
+      : 1;
     const nextAnchor: PlaybackAnchor = {
-      text,
-      location: resolvedLocation,
-      locator: pendingEpubLocator ?? normalizedOptions.startLocator ?? null,
-      hasContent: Boolean(text.trim()),
+      text: '',
+      location: renderedLocation,
+      locator: rendered.locator,
+      hasContent: rendered.hasReadableText,
     };
     playbackAnchorRef.current = nextAnchor;
     setPlaybackAnchor(nextAnchor);
-    if (pendingEpubLocator) clearPendingEpubJump();
+    setCurrDocPage(renderedLocation);
 
-    if (playbackSyncNavigationRef.current) {
+    if (!playbackPlanReady || !playbackPlanRef.current) return { status: 'waiting-plan' };
+
+    if (!rendered.hasReadableText) {
       playbackSyncNavigationRef.current = false;
+      resumeAfterLocationChangeRef.current = false;
+      pauseActivePlayback();
+      setIsPlaying(false);
+      setSelectedOrdinal(null);
       setIsProcessing(false);
-      return;
-    }
-    if (handleBlankSection(text.trim())) return;
-
-    const shouldPause = normalizedOptions.shouldPause ?? false;
-    if (activeReaderType === 'pdf') {
-      if (shouldPause) {
-        resumeAfterLocationChangeRef.current = false;
-        setIsPlaying(false);
-      }
-      const page = pdfAnchorPage(resolvedLocation) ?? pdfAnchorPage(currDocPageNumber);
-      if (page === null) {
-        setIsProcessing(false);
-        return;
-      }
-      applyDocumentPlaybackAnchor(page, Boolean(text.trim()));
-      return;
+      return { status: 'non-text' };
     }
 
-    const pauseEpochAtStart = pauseEpochRef.current;
-    const pendingAutoResume = resumeAfterLocationChangeRef.current;
-    const shouldResumePlayback = !shouldPause && (isPlaying || pendingAutoResume);
-    invalidatePlaybackRun();
-    setIsPlaying(false);
-    abortAudio();
-    setIsProcessing(true);
-
-    try {
-      if (!text.trim()) {
-        if (shouldPause || pendingAutoResume) resumeAfterLocationChangeRef.current = false;
-        setIsProcessing(false);
-        return;
-      }
-      if (shouldPause || pendingAutoResume) resumeAfterLocationChangeRef.current = false;
-      clearPlaybackSegments();
-      if (!pendingEpubLocator && isEPUB) clearPendingEpubJump();
-      sentenceAlignmentCacheRef.current.clear();
-      setCurrentSentenceAlignment(undefined);
-      setCurrentWordIndex(null);
-      setIsProcessing(false);
-      if (shouldResumePlayback && pauseEpochRef.current === pauseEpochAtStart) setIsPlaying(true);
-    } catch (error) {
-      console.warn('Error processing text:', error);
-      setIsProcessing(false);
-      toast.error('Failed to process text', { duration: 3000 });
+    const resolution = resolveEpubPlanBackedSelection({
+      plan: playbackSegmentsRef.current,
+      locator: rendered.locator,
+    });
+    const playbackDrivenNavigation = playbackSyncNavigationRef.current;
+    playbackSyncNavigationRef.current = false;
+    if (resolution.status === 'invalid-anchor' || resolution.status === 'unmapped-anchor') {
+      return resolution;
     }
+
+    if (rendered.shouldPause) {
+      resumeAfterLocationChangeRef.current = false;
+      pauseActivePlayback();
+      setIsPlaying(false);
+    }
+
+    if (resolution.status === 'empty-plan') {
+      setSelectedOrdinal(null);
+      setIsProcessing(false);
+      return resolution;
+    }
+
+    setSelectedOrdinal(resolution.ordinal);
+    if (!rendered.shouldPause && !playbackDrivenNavigation && isPlayingRef.current) {
+      seekPlaybackToOrdinal(resolution.ordinal);
+    }
+    resumeAfterLocationChangeRef.current = false;
+    setIsProcessing(false);
+    return { status: 'selected', ordinal: resolution.ordinal };
   }, [
-    abortAudio,
-    activeReaderType,
-    applyDocumentPlaybackAnchor,
-    clearPendingEpubJump,
-    clearPlaybackSegments,
-    currDocPage,
-    currDocPageNumber,
-    epubJumpEpochRef,
-    handleBlankSection,
-    invalidatePlaybackRun,
-    isEPUB,
-    isPlaying,
-    pauseEpochRef,
-    pendingEpubJumpRef,
+    isPlayingRef,
+    pauseActivePlayback,
     playbackAnchorRef,
+    playbackPlanReady,
+    playbackPlanRef,
+    playbackSegmentsRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
-    sentenceAlignmentCacheRef,
-    setCurrentSentenceAlignment,
-    setCurrentWordIndex,
+    seekPlaybackToOrdinal,
     setCurrDocPage,
     setIsPlaying,
     setIsProcessing,
     setPlaybackAnchor,
+    setSelectedOrdinal,
+  ]);
+
+  const resolveEpubPlanLocator = useCallback((
+    savedLocator: TTSSegmentLocator | null,
+  ): EpubPlanLocatorResult => {
+    if (!playbackPlanReady || !playbackPlanRef.current) return { status: 'waiting-plan' };
+    const plan = playbackSegmentsRef.current;
+    if (plan.length === 0) {
+      return { status: 'empty-plan' };
+    }
+
+    if (!savedLocator) {
+      const first = plan[0];
+      if (!first || !isStableEpubLocator(first.ownerLocator)) return { status: 'invalid-locator' };
+      return {
+        status: 'selected',
+        ordinal: first.ordinal,
+        displayLocator: first.ownerLocator,
+      };
+    }
+
+    const resolution = resolveEpubPlanBackedSelection({ plan, locator: savedLocator });
+    if (resolution.status === 'invalid-anchor') return { status: 'invalid-locator' };
+    if (resolution.status === 'unmapped-anchor') return { status: 'unmapped-locator' };
+    if (resolution.status === 'empty-plan') return { status: 'empty-plan' };
+    return {
+      status: 'selected',
+      ordinal: resolution.ordinal,
+      displayLocator: savedLocator,
+    };
+  }, [
+    playbackPlanReady,
+    playbackPlanRef,
+    playbackSegmentsRef,
   ]);
 
   const skipForward = useCallback(async () => {
@@ -421,8 +359,9 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
   return {
     pause,
     prepareInitialPosition,
+    reconcileEpubRenderedAnchor,
+    resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
-    setText,
     skipBackward,
     skipForward,
     skipToLocation,

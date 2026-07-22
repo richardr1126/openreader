@@ -844,6 +844,20 @@ None. The cleanup roadmap is complete. The two deliberately deferred large-file
 extractions are recorded with concrete boundaries in the Step 8 size review and
 are not blockers for this cleanup series.
 
+### Post-roadmap reader loading hard cut
+
+The v5 reader routes now share one phased preparation gate across PDF, EPUB,
+and HTML. The gate owns server bootstrap, source acquisition, PDF structure
+parsing, authoritative playback-plan resolution, and first rendered placement.
+The old document skeleton and PDF-specific loading card/scanner were removed;
+reader actions and playback are unavailable until the canonical worker plan and
+rendered anchor are both ready.
+
+Plan resolution now reports queued/running work as `202` instead of overloading
+`404`, and the client follows that operation without a fixed attempt limit. It
+accepts valid empty artifacts, rejects mismatched or partially normalized
+artifacts, and does not derive fallback playback segments from reader text.
+
 ### Step Status
 
 | Step | Work | Status |

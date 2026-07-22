@@ -1,21 +1,22 @@
 'use client';
 
 import {
-  useState,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
-  RefObject,
+  useState,
+  type RefObject,
 } from 'react';
 
-import type { NavItem } from 'epubjs';
-import type { Book, Rendition } from 'epubjs';
+import type { Book, NavItem, Rendition } from 'epubjs';
 
-import { ensureCachedDocument } from '@/lib/client/cache/documents';
-import { useTTS } from '@/contexts/TTSContext';
-import { createRangeCfi } from '@/lib/client/epub';
-import { normalizeTtsLocationKey } from '@openreader/tts/locator';
 import { useConfig } from '@/contexts/ConfigContext';
+import { useTTS } from '@/contexts/TTSContext';
+import { useEPUBHighlighting } from '@/hooks/epub/useEPUBHighlighting';
+import { useEPUBLocationController } from '@/hooks/epub/useEPUBLocationController';
+import { ensureCachedDocument } from '@/lib/client/cache/documents';
+import { createRangeCfi } from '@/lib/client/epub';
 import {
   buildRenderedTextMaps,
   type EpubRenderedTextMap,
@@ -24,38 +25,55 @@ import {
   clearEpubWindowIndex,
   resolveEpubLocatorToCfi,
 } from '@/lib/client/epub/location-index';
-import { buildEpubChunkAnchor } from '@/lib/client/epub/spine-coordinates';
 import {
-  useEPUBHighlighting,
-} from '@/hooks/epub/useEPUBHighlighting';
-import { useEPUBLocationController } from '@/hooks/epub/useEPUBLocationController';
-import type {
-  TTSSentenceAlignment,
-} from '@/types/tts';
-import type { TTSSegmentLocator } from '@/types/client';
-import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+  IDLE_EPUB_PLACEMENT,
+  readEpubCommittedLocation,
+  type EpubCommittedLocation,
+  type EpubPlacementLifecycle,
+} from '@/lib/client/epub/plan-backed-placement';
+import { buildEpubRangeStartAnchor } from '@/lib/client/epub/spine-coordinates';
+import { normalizeTtsLocationKey } from '@openreader/tts/locator';
 import { normalizeOptionalLanguageTag } from '@openreader/tts/language';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { BaseDocument } from '@/types/documents';
+import type { TTSSegmentLocator } from '@/types/client';
+import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ScheduleDocumentProgress } from '@/types/user-state';
+import type { EpubProgressLocator } from '@/types/user-state';
+
+type RefreshRenderedPlacement = (
+  shouldPause?: boolean,
+) => Promise<void>;
+
+type RequestCommittedPlacement = (
+  book: Book,
+  rendition: Rendition,
+  location: EpubCommittedLocation,
+  shouldPause?: boolean,
+) => Promise<void>;
 
 export interface EpubDocumentState {
   currDocData: ArrayBuffer | undefined;
   currDocName: string | undefined;
   currDocPages: number | undefined;
   currDocPage: number | string;
-  currDocText: string | undefined;
   metadataLanguage: string | null;
+  isMetadataReady: boolean;
   isPlaybackReady: boolean;
-  setCurrentDocument: (metadata: BaseDocument, initialLocation?: string) => Promise<void>;
+  placementLifecycle: EpubPlacementLifecycle;
+  renderedTextRevision: number;
+  renditionAttempt: number;
+  setCurrentDocument: (metadata: BaseDocument, initialLocator: EpubProgressLocator | null) => Promise<void>;
   clearCurrDoc: () => void;
-  extractPageText: (book: Book, rendition: Rendition, shouldPause?: boolean) => Promise<string>;
+  refreshRenderedPlacement: RefreshRenderedPlacement;
+  retryPlacement: () => void;
+  failPlacement: (error: Error) => void;
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
   tocRef: RefObject<NavItem[]>;
-  locationRef: RefObject<string | number>;
   handleLocationChanged: (location: string | number | TTSSegmentLocator) => void;
   setRendition: (rendition: Rendition) => void;
-  highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => void;
+  highlightSegment: (segment: CanonicalTtsSegment | null | undefined) => boolean;
   clearHighlights: () => void;
   highlightWordIndex: (
     alignment: TTSSentenceAlignment | undefined,
@@ -66,44 +84,52 @@ export interface EpubDocumentState {
 }
 
 /**
- * Route-local EPUB reader hook.
+ * Route-local EPUB reader state. EPUB.js owns rendering; the worker plan owns
+ * every playback row. A rendered location becomes ready only after its stable
+ * spine anchor resolves to an ordinal from that already-applied plan.
  */
 export function useEpubDocument(
   documentId: string | undefined,
   scheduleProgress: ScheduleDocumentProgress,
 ): EpubDocumentState {
   const {
-    setText: setTTSText,
     currDocPage,
     currDocPages,
+    playbackPlanLifecycle,
+    playbackPlanSegmentCount,
+    reconcileEpubRenderedAnchor,
+    resolveEpubPlanLocator,
     setCurrDocPages,
-    stop,
-    skipToLocation,
     setIsEPUB,
+    stop,
   } = useTTS();
-  const {
-    epubHighlightEnabled,
-  } = useConfig();
-  // Current document state
+  const { epubHighlightEnabled } = useConfig();
+
   const [currDocData, setCurrDocData] = useState<ArrayBuffer>();
   const [currDocName, setCurrDocName] = useState<string>();
-  const [currDocText, setCurrDocText] = useState<string>();
   const [metadataLanguage, setMetadataLanguage] = useState<string | null>(null);
-  const [isPlaybackReady, setIsPlaybackReady] = useState(false);
+  const [isMetadataReady, setIsMetadataReady] = useState(false);
+  const [placementLifecycle, setPlacementLifecycle] = useState<EpubPlacementLifecycle>(IDLE_EPUB_PLACEMENT);
+  const [renderedTextRevision, setRenderedTextRevision] = useState(0);
+  const [isRenditionReady, setIsRenditionReady] = useState(false);
+  const [renditionAttempt, setRenditionAttempt] = useState(0);
 
-  // Add new refs
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | undefined>(undefined);
   const tocRef = useRef<NavItem[]>([]);
-  const locationRef = useRef<string | number>(currDocPage);
   const isEPUBSetOnce = useRef(false);
   const renditionEventsCleanupRef = useRef<(() => void) | null>(null);
-  // Should pause ref
   const shouldPauseRef = useRef(true);
-  // Track current highlight CFI for removal
-  const currentHighlightCfi = useRef<string | null>(null);
-  const currentWordHighlightCfi = useRef<string | null>(null);
   const renderedTextMapsRef = useRef<EpubRenderedTextMap[]>([]);
+  const placementOwnerRef = useRef(0);
+  const completedPlacementCfiRef = useRef<string | null>(null);
+  const committedLocationRef = useRef<EpubCommittedLocation | null>(null);
+  const playbackPlanReadyRef = useRef(false);
+  const requestPlacementRef = useRef<RequestCommittedPlacement | null>(null);
+  const initialLocatorRef = useRef<EpubProgressLocator | null>(null);
+  const startupDisplayStartedRef = useRef(false);
+  const startupDisplayOwnerRef = useRef(0);
+
   const {
     clearHighlights,
     highlightSegment,
@@ -112,22 +138,24 @@ export function useEpubDocument(
     setRenderedTextMaps,
     resetHighlightState,
   } = useEPUBHighlighting({
-    renditionRef,
     epubHighlightEnabled,
-    currentHighlightCfiRef: currentHighlightCfi,
-    currentWordHighlightCfiRef: currentWordHighlightCfi,
     renderedTextMapsRef,
   });
 
-  /**
-   * Clears all current document state and stops any active TTS
-   */
+  const resetPlacement = useCallback((status: EpubPlacementLifecycle['status'] = 'idle') => {
+    placementOwnerRef.current += 1;
+    completedPlacementCfiRef.current = null;
+    committedLocationRef.current = null;
+    startupDisplayOwnerRef.current += 1;
+    startupDisplayStartedRef.current = false;
+    setPlacementLifecycle({ status, error: null });
+  }, []);
+
   const clearCurrDoc = useCallback(() => {
     setCurrDocData(undefined);
     setCurrDocName(undefined);
-    setCurrDocText(undefined);
     setMetadataLanguage(null);
-    setIsPlaybackReady(false);
+    setIsMetadataReady(false);
     setCurrDocPages(undefined);
     isEPUBSetOnce.current = false;
     shouldPauseRef.current = true;
@@ -136,209 +164,419 @@ export function useEpubDocument(
     renditionEventsCleanupRef.current?.();
     renditionEventsCleanupRef.current = null;
     renditionRef.current = undefined;
-    locationRef.current = 1;
+    setIsRenditionReady(false);
+    initialLocatorRef.current = null;
     tocRef.current = [];
+    resetPlacement();
+    setRenderedTextRevision(0);
     resetHighlightState();
     stop();
-  }, [resetHighlightState, setCurrDocPages, stop]);
+  }, [resetHighlightState, resetPlacement, setCurrDocPages, stop]);
 
-  /**
-   * Sets the current document based on its ID using server metadata and the browser blob cache.
-   * @param {string} id - The unique identifier of the document
-   * @throws {Error} When document data is empty or retrieval fails
-   */
-  const setCurrentDocument = useCallback(async (meta: BaseDocument, initialLocation?: string): Promise<void> => {
+  const setCurrentDocument = useCallback(async (
+    meta: BaseDocument,
+    initialLocator: EpubProgressLocator | null,
+  ): Promise<void> => {
     try {
-      setIsPlaybackReady(false);
       setMetadataLanguage(null);
+      setIsMetadataReady(false);
       clearEpubWindowIndex(bookRef.current);
       bookRef.current = null;
       renditionEventsCleanupRef.current?.();
       renditionEventsCleanupRef.current = null;
       renditionRef.current = undefined;
-      locationRef.current = initialLocation || 1;
+      setIsRenditionReady(false);
+      initialLocatorRef.current = initialLocator;
+      isEPUBSetOnce.current = false;
+      shouldPauseRef.current = true;
+      resetPlacement();
+
       const doc = await ensureCachedDocument(meta);
-      if (doc.type !== 'epub') {
-        clearCurrDoc();
-        console.error('Document is not an EPUB');
+      if (doc.type !== 'epub') throw new Error('Document is not an EPUB');
+      if (doc.data.byteLength === 0) throw new Error('Empty document data');
+
+      setCurrDocName(doc.name);
+      setCurrDocData(doc.data);
+    } catch (error) {
+      console.error('Failed to get EPUB document:', error);
+      clearCurrDoc();
+      throw error;
+    }
+  }, [clearCurrDoc, resetPlacement]);
+
+  const runRenderedPlacement = useCallback(async (
+    owner: number,
+    book: Book,
+    rendition: Rendition,
+    location: EpubCommittedLocation,
+    shouldPause: boolean,
+  ): Promise<void> => {
+    const ownsPlacement = () => (
+      placementOwnerRef.current === owner
+      && bookRef.current === book
+      && renditionRef.current === rendition
+    );
+    try {
+      if (!book.isOpen) throw new Error('The EPUB renderer closed before placement completed.');
+
+      const { startCfi, endCfi } = location;
+
+      // An authoritative empty plan needs rendition readiness, but there is no
+      // ordinal to map. Complete it before DOM range extraction so an empty book
+      // or non-text cover page cannot deadlock the reader gate.
+      if (playbackPlanLifecycle.status === 'ready' && playbackPlanSegmentCount === 0) {
+        const emptyResult = reconcileEpubRenderedAnchor({
+          locator: null,
+          hasReadableText: false,
+          shouldPause,
+        });
+        if (!ownsPlacement()) return;
+        if (emptyResult.status !== 'empty-plan') {
+          throw new Error('The authoritative empty EPUB plan could not complete placement.');
+        }
+        setRenderedTextMaps([]);
+        completedPlacementCfiRef.current = startCfi;
+        shouldPauseRef.current = true;
+        setPlacementLifecycle({ status: 'empty-plan', error: null });
         return;
       }
 
-      if (doc.data.byteLength === 0) {
-        console.error('Retrieved ArrayBuffer is empty');
-        throw new Error('Empty document data');
-      }
-
-      setCurrDocName(doc.name);
-      setCurrDocData(doc.data); // Store ArrayBuffer directly
-    } catch (error) {
-      console.error('Failed to get EPUB document:', error);
-      clearCurrDoc(); // Clean up on error
-      throw error;
-    }
-  }, [clearCurrDoc]);
-
-  /**
-   * Extracts text content from the current EPUB page/location
-   * @param {Book} book - The EPUB.js Book instance
-   * @param {Rendition} rendition - The EPUB.js Rendition instance
-   * @param {boolean} shouldPause - Whether to pause TTS
-   * @returns {Promise<string>} The extracted text content
-   */
-  const extractPageText = useCallback(async (book: Book, rendition: Rendition, shouldPause = false): Promise<string> => {
-    try {
-      setIsPlaybackReady(false);
-      const location = rendition?.location;
-      if (!location) return '';
-      const { start, end } = location;
-      if (!start?.cfi || !end?.cfi || !book || !book.isOpen || !rendition) return '';
-
-      // Guard against stale async completion: this function awaits range and
-      // spine-coordinate resolution, during which rapid page turns can move the
-      // rendition on. If the live location no longer matches the page we
-      // captured, bail before writing state so we don't overwrite the active
-      // page's highlights with a superseded page's.
-      const capturedStartCfi = start.cfi;
-      const isStale = (): boolean => {
-        const live = rendition.location?.start?.cfi;
-        return Boolean(live) && live !== capturedStartCfi;
-      };
-
-      const rangeCfi = createRangeCfi(start.cfi, end.cfi);
-
+      const rangeCfi = createRangeCfi(startCfi, endCfi);
       const range = await book.getRange(rangeCfi);
-      if (!range) {
-        console.warn('Failed to get range from CFI:', rangeCfi);
-        return '';
-      }
-      if (isStale()) return '';
+      if (!ownsPlacement()) return;
+      if (!range) throw new Error('EPUB.js could not resolve the committed location to rendered text.');
+
       const textContent = range.toString().trim();
-      const startAnchor = await buildEpubChunkAnchor(book, start.cfi, textContent);
-      if (isStale()) return '';
+      const startAnchor = buildEpubRangeStartAnchor(book, startCfi, range);
+      if (!ownsPlacement()) return;
+      if (!startAnchor) {
+        throw new Error('The rendered EPUB position could not be mapped to a stable spine anchor.');
+      }
+
+      const locator: TTSSegmentLocator = {
+        readerType: 'epub',
+        spineHref: startAnchor.spineHref,
+        spineIndex: startAnchor.spineIndex,
+        charOffset: startAnchor.charOffset,
+      };
       setRenderedTextMaps(buildRenderedTextMaps(
         rendition,
         rangeCfi,
-        normalizeTtsLocationKey(start.cfi),
+        normalizeTtsLocationKey(startCfi),
         startAnchor,
       ));
+      // Rendered maps are part of the surface commit. They live in refs for
+      // range lookup, so publish an explicit revision that makes an unchanged
+      // selected ordinal repaint against the newly committed rendition.
+      setRenderedTextRevision((revision) => revision + 1);
 
-      setTTSText(textContent, {
+      const result = reconcileEpubRenderedAnchor({
+        locator,
+        hasReadableText: Boolean(textContent),
         shouldPause,
-        location: start.cfi,
-        startLocator: startAnchor
-          ? {
-              readerType: 'epub',
-              spineHref: startAnchor.spineHref,
-              spineIndex: startAnchor.spineIndex,
-              charOffset: startAnchor.charOffset,
-              cfi: start.cfi,
-            }
-          : undefined,
       });
+      if (!ownsPlacement()) return;
 
-      setCurrDocText(textContent);
-      setIsPlaybackReady(true);
+      if (result.status === 'waiting-plan') {
+        setPlacementLifecycle({ status: 'waiting-plan', error: null });
+        return;
+      }
+      if (result.status === 'invalid-anchor') {
+        throw new Error('The rendered EPUB anchor was not a stable spine coordinate.');
+      }
+      if (result.status === 'unmapped-anchor') {
+        throw new Error('The rendered EPUB position did not map to the authoritative playback plan.');
+      }
+      if (result.status === 'selected' && documentId) {
+        scheduleProgress({
+          documentId,
+          readerType: 'epub',
+          locator: {
+            schemaVersion: 1,
+            spineHref: startAnchor.spineHref,
+            spineIndex: startAnchor.spineIndex,
+            charOffset: startAnchor.charOffset,
+          },
+        });
+      }
 
-      return textContent;
+      completedPlacementCfiRef.current = startCfi;
+      shouldPauseRef.current = true;
+      if (!ownsPlacement()) return;
+      setPlacementLifecycle({
+        status: result.status === 'empty-plan' ? 'empty-plan' : 'ready',
+        error: null,
+      });
     } catch (error) {
-      console.error('Error extracting EPUB text:', error);
-      return '';
+      const resolved = error instanceof Error ? error : new Error('Failed to place the EPUB reader');
+      if (!ownsPlacement()) return;
+      console.error('Failed to reconcile rendered EPUB position:', resolved);
+      setPlacementLifecycle({ status: 'failed', error: resolved });
     }
-  }, [setRenderedTextMaps, setTTSText]);
+  }, [
+    playbackPlanLifecycle.status,
+    playbackPlanSegmentCount,
+    reconcileEpubRenderedAnchor,
+    documentId,
+    scheduleProgress,
+    setPlacementLifecycle,
+    setRenderedTextMaps,
+  ]);
+
+  playbackPlanReadyRef.current = playbackPlanLifecycle.status === 'ready';
+
+  const requestCommittedPlacement = useCallback<RequestCommittedPlacement>(async (
+    book,
+    rendition,
+    location,
+    shouldPause = false,
+  ) => {
+    if (!playbackPlanReadyRef.current) {
+      setPlacementLifecycle({ status: 'waiting-plan', error: null });
+      return;
+    }
+    if (
+      completedPlacementCfiRef.current === location.startCfi
+    ) return;
+
+    const owner = placementOwnerRef.current + 1;
+    placementOwnerRef.current = owner;
+    setPlacementLifecycle({ status: 'placing', error: null });
+    await runRenderedPlacement(owner, book, rendition, location, shouldPause);
+  }, [runRenderedPlacement]);
+  requestPlacementRef.current = requestCommittedPlacement;
+
+  const refreshRenderedPlacement = useCallback<RefreshRenderedPlacement>(async (
+    shouldPause = false,
+  ) => {
+    const book = bookRef.current;
+    const rendition = renditionRef.current;
+    if (!book?.isOpen || !rendition) return;
+    const location = committedLocationRef.current ?? readEpubCommittedLocation(rendition.location);
+    if (!location) return;
+    committedLocationRef.current = location;
+    completedPlacementCfiRef.current = null;
+    await requestCommittedPlacement(book, rendition, location, shouldPause);
+  }, [requestCommittedPlacement]);
+
+  const issueInitialDisplay = useCallback(async (): Promise<void> => {
+    const book = bookRef.current;
+    const rendition = renditionRef.current;
+    if (
+      !book?.isOpen
+      || !rendition
+      || !playbackPlanReadyRef.current
+      || startupDisplayStartedRef.current
+    ) return;
+
+    const owner = startupDisplayOwnerRef.current + 1;
+    startupDisplayOwnerRef.current = owner;
+    startupDisplayStartedRef.current = true;
+    setPlacementLifecycle({ status: 'placing', error: null });
+    const ownsDisplay = () => (
+      startupDisplayOwnerRef.current === owner
+      && bookRef.current === book
+      && renditionRef.current === rendition
+    );
+
+    try {
+      const saved = initialLocatorRef.current;
+      const resolution = resolveEpubPlanLocator(saved ? {
+        readerType: 'epub',
+        spineHref: saved.spineHref,
+        spineIndex: saved.spineIndex,
+        charOffset: saved.charOffset,
+      } : null);
+      if (resolution.status === 'waiting-plan') {
+        throw new Error('The authoritative EPUB plan was not available for initial placement.');
+      }
+      if (resolution.status === 'invalid-locator') {
+        throw new Error('The authoritative EPUB plan does not contain a stable initial locator.');
+      }
+      if (resolution.status === 'unmapped-locator') {
+        throw new Error('The saved EPUB position does not map to the authoritative playback plan.');
+      }
+
+      let displayTarget: string | undefined;
+      if (resolution.status === 'selected') {
+        const resolved = await resolveEpubLocatorToCfi(book, resolution.displayLocator);
+        if (!ownsDisplay()) return;
+        if (!resolved) {
+          throw new Error('The stable EPUB position could not be resolved by the rendition.');
+        }
+        displayTarget = resolved;
+      }
+
+      await Promise.resolve(displayTarget ? rendition.display(displayTarget) : rendition.display());
+      if (!ownsDisplay()) return;
+    } catch (error) {
+      if (!ownsDisplay()) return;
+      const resolved = error instanceof Error ? error : new Error('Failed to place the EPUB reader');
+      console.error('Failed to issue the EPUB startup display:', resolved);
+      setPlacementLifecycle({ status: 'failed', error: resolved });
+    }
+  }, [resolveEpubPlanLocator]);
+
+  useEffect(() => {
+    const book = bookRef.current;
+    const rendition = renditionRef.current;
+    if (!book?.isOpen || !rendition) return;
+    completedPlacementCfiRef.current = null;
+    placementOwnerRef.current += 1;
+    if (playbackPlanLifecycle.status !== 'ready') {
+      setPlacementLifecycle({ status: 'waiting-plan', error: null });
+      return;
+    }
+    if (!committedLocationRef.current) {
+      void issueInitialDisplay();
+      return;
+    }
+    void refreshRenderedPlacement(shouldPauseRef.current);
+  }, [isRenditionReady, issueInitialDisplay, playbackPlanLifecycle.status, refreshRenderedPlacement]);
+
+  const failPlacement = useCallback((error: Error) => {
+    placementOwnerRef.current += 1;
+    startupDisplayOwnerRef.current += 1;
+    completedPlacementCfiRef.current = null;
+    setPlacementLifecycle({ status: 'failed', error });
+  }, []);
+
+  const retryPlacement = useCallback(() => {
+    const book = bookRef.current;
+    const rendition = renditionRef.current;
+    completedPlacementCfiRef.current = null;
+    if (!book?.isOpen || !rendition) {
+      setIsRenditionReady(false);
+      setPlacementLifecycle({ status: 'placing', error: null });
+      setRenditionAttempt((attempt) => attempt + 1);
+      return;
+    }
+    if (!committedLocationRef.current) {
+      startupDisplayStartedRef.current = false;
+      void issueInitialDisplay();
+      return;
+    }
+    void refreshRenderedPlacement(true);
+  }, [issueInitialDisplay, refreshRenderedPlacement]);
 
   const setRendition = useCallback((rendition: Rendition) => {
     renditionEventsCleanupRef.current?.();
     const book = rendition.book;
     bookRef.current = book;
     renditionRef.current = rendition;
-    const initializeFromRelocated = () => {
-      if (renditionRef.current !== rendition || isEPUBSetOnce.current || !book.isOpen) return;
-      const location = rendition.location?.start?.cfi;
-      if (!location) return;
+    setIsRenditionReady(true);
+    committedLocationRef.current = null;
+    completedPlacementCfiRef.current = null;
+    placementOwnerRef.current += 1;
+    startupDisplayOwnerRef.current += 1;
+    startupDisplayStartedRef.current = false;
+    setPlacementLifecycle({
+      status: playbackPlanReadyRef.current ? 'placing' : 'waiting-plan',
+      error: null,
+    });
 
-      setIsEPUB(true);
-      isEPUBSetOnce.current = true;
-      locationRef.current = location;
-      skipToLocation(location);
-      void extractPageText(book, rendition, shouldPauseRef.current);
-      shouldPauseRef.current = true;
+    const commitLocation = (candidate: unknown) => {
+      if (renditionRef.current !== rendition || !book.isOpen) return;
+      const location = readEpubCommittedLocation(candidate);
+      if (!location) return;
+      committedLocationRef.current = location;
+      if (!isEPUBSetOnce.current) {
+        setIsEPUB(true);
+        isEPUBSetOnce.current = true;
+      }
+      void requestPlacementRef.current?.(
+        book,
+        rendition,
+        location,
+        shouldPauseRef.current,
+      );
     };
-    rendition.on('relocated', initializeFromRelocated);
+    const requestFromRendered = () => commitLocation(rendition.location);
+    const requestFromRelocated = (location: unknown) => commitLocation(location ?? rendition.location);
+
+    rendition.on('rendered', requestFromRendered);
+    rendition.on('relocated', requestFromRelocated);
     renditionEventsCleanupRef.current = () => {
-      rendition.off('relocated', initializeFromRelocated);
+      rendition.off('rendered', requestFromRendered);
+      rendition.off('relocated', requestFromRelocated);
     };
+
     void book.loaded.metadata
       .then((metadata) => {
         if (bookRef.current !== book) return;
         setMetadataLanguage(normalizeOptionalLanguageTag(metadata.language));
+        setIsMetadataReady(true);
       })
       .catch((error) => {
         if (bookRef.current !== book) return;
         setMetadataLanguage(null);
+        setIsMetadataReady(true);
         console.warn('Failed to read EPUB language metadata:', error);
       });
-  }, [extractPageText, setIsEPUB, skipToLocation]);
+  }, [setIsEPUB]);
 
   const resolveLocatorToCfi = useCallback((locator: TTSSegmentLocator) => (
     resolveEpubLocatorToCfi(bookRef.current, locator)
   ), []);
 
   const handleLocationChanged = useEPUBLocationController({
-    documentId,
     isEpubSetOnceRef: isEPUBSetOnce,
     shouldPauseRef,
     setIsEpub: setIsEPUB,
-    skipToLocation,
-    extractPageText,
     bookRef,
     renditionRef,
-    locationRef,
-    scheduleProgress,
     resolveLocatorToCfi,
   });
 
+  const isPlaybackReady = placementLifecycle.status === 'ready'
+    || placementLifecycle.status === 'empty-plan';
 
-
-  return useMemo(
-    () => ({
-      setCurrentDocument,
-      currDocData,
-      currDocName,
-      currDocPages,
-      currDocPage,
-      currDocText,
-      metadataLanguage,
-      isPlaybackReady,
-      clearCurrDoc,
-      extractPageText,
-      bookRef,
-      renditionRef,
-      tocRef,
-      locationRef,
-      handleLocationChanged,
-      setRendition,
-      highlightSegment,
-      clearHighlights,
-      highlightWordIndex,
-      clearWordHighlights,
-    }),
-    [
-      setCurrentDocument,
-      currDocData,
-      currDocName,
-      currDocPages,
-      currDocPage,
-      currDocText,
-      metadataLanguage,
-      isPlaybackReady,
-      clearCurrDoc,
-      extractPageText,
-      handleLocationChanged,
-      setRendition,
-      highlightSegment,
-      clearHighlights,
-      highlightWordIndex,
-      clearWordHighlights,
-    ]
-  );
+  return useMemo(() => ({
+    setCurrentDocument,
+    currDocData,
+    currDocName,
+    currDocPages,
+    currDocPage,
+    metadataLanguage,
+    isMetadataReady,
+    isPlaybackReady,
+    placementLifecycle,
+    renderedTextRevision,
+    renditionAttempt,
+    clearCurrDoc,
+    refreshRenderedPlacement,
+    retryPlacement,
+    failPlacement,
+    bookRef,
+    renditionRef,
+    tocRef,
+    handleLocationChanged,
+    setRendition,
+    highlightSegment,
+    clearHighlights,
+    highlightWordIndex,
+    clearWordHighlights,
+  }), [
+    setCurrentDocument,
+    currDocData,
+    currDocName,
+    currDocPages,
+    currDocPage,
+    metadataLanguage,
+    isMetadataReady,
+    isPlaybackReady,
+    placementLifecycle,
+    renderedTextRevision,
+    renditionAttempt,
+    clearCurrDoc,
+    refreshRenderedPlacement,
+    retryPlacement,
+    failPlacement,
+    handleLocationChanged,
+    setRendition,
+    highlightSegment,
+    clearHighlights,
+    highlightWordIndex,
+    clearWordHighlights,
+  ]);
 }

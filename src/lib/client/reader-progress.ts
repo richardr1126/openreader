@@ -1,10 +1,15 @@
 import type { DocumentType } from '@/types/documents';
 import type { TTSLocation } from '@/types/tts';
+import type {
+  DocumentProgressRecord,
+  EpubProgressLocator,
+} from '@/types/user-state';
+import { normalizeEpubProgressLocator } from '@/lib/shared/epub-progress';
 
 export type ReaderInitialPosition =
   | { readerType: 'pdf'; location: number; segmentOrdinal: number }
   | { readerType: 'html'; location: TTSLocation; segmentOrdinal: number }
-  | { readerType: 'epub'; location: string }
+  | { readerType: 'epub'; locator: EpubProgressLocator }
   | null;
 
 function parsePositionToken(location: string): { location: number; segmentOrdinal: number } | null {
@@ -18,15 +23,19 @@ function parsePositionToken(location: string): { location: number; segmentOrdina
 
 export function parseReaderInitialPosition(
   readerType: DocumentType,
-  location: string | null | undefined,
+  progress: DocumentProgressRecord | null | undefined,
 ): ReaderInitialPosition {
-  if (!location) return null;
+  if (!progress || progress.readerType !== readerType) return null;
 
   if (readerType === 'epub') {
-    return location === 'next' || location === 'prev'
-      ? null
-      : { readerType, location };
+    if (progress.readerType !== 'epub') return null;
+    const locator = normalizeEpubProgressLocator(progress.locator);
+    return locator ? { readerType, locator } : null;
   }
+
+  if (progress.readerType === 'epub') return null;
+  const { location } = progress;
+  if (!location) return null;
 
   if (readerType === 'pdf') {
     const parsed = parsePositionToken(location);
@@ -53,8 +62,7 @@ export function parseReaderInitialPosition(
       };
     }
 
-    const legacy = parsePositionToken(location);
-    return legacy ? { readerType, ...legacy } : null;
+    return null;
   }
 
   return null;

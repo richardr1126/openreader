@@ -19,7 +19,6 @@ export interface AppConfigValues {
   voiceSpeed: number;
   audioPlayerSpeed: number;
   voice: string;
-  skipBlank: boolean;
   epubTheme: boolean;
   headerMargin: number;
   footerMargin: number;
@@ -58,7 +57,6 @@ export function getAppConfigDefaults(): AppConfigValues {
     voiceSpeed: 1,
     audioPlayerSpeed: 1,
     voice: '',
-    skipBlank: true,
     epubTheme: false,
     headerMargin: 0,
     footerMargin: 0,

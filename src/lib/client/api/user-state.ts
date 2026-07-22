@@ -1,4 +1,9 @@
-import { SYNCED_PREFERENCE_KEYS, type DocumentProgressRecord, type ReaderType, type SyncedPreferencesPatch } from '@/types/user-state';
+import {
+  SYNCED_PREFERENCE_KEYS,
+  type DocumentProgressPayload,
+  type DocumentProgressRecord,
+  type SyncedPreferencesPatch,
+} from '@/types/user-state';
 
 export type PreferencesResponse = {
   preferences: SyncedPreferencesPatch;
@@ -93,21 +98,18 @@ export async function getDocumentProgress(
   return data.progress ?? null;
 }
 
-export async function putDocumentProgress(payload: {
-  documentId: string;
-  readerType: ReaderType;
-  location: string;
-  progress?: number | null;
-  clientUpdatedAtMs?: number;
-  signal?: AbortSignal;
-}): Promise<DocumentProgressRecord | null> {
+export async function putDocumentProgress(
+  payload: DocumentProgressPayload & { signal?: AbortSignal },
+): Promise<DocumentProgressRecord | null> {
   const res = await fetch('/api/user/state/progress', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       documentId: payload.documentId,
       readerType: payload.readerType,
-      location: payload.location,
+      ...(payload.readerType === 'epub'
+        ? { locator: payload.locator }
+        : { location: payload.location }),
       progress: payload.progress ?? null,
       clientUpdatedAtMs: payload.clientUpdatedAtMs ?? Date.now(),
     }),

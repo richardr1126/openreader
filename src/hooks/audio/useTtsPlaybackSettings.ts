@@ -10,7 +10,6 @@ type UseTtsPlaybackSettingsInput = {
   restartSeqRef: MutableRefObject<number>;
   sentenceAlignmentCacheRef: MutableRefObject<Map<string, TTSSentenceAlignment>>;
   abortAudio: () => void;
-  clearPendingEpubJump: () => void;
   resetPlaybackPlan: (options?: { resetSelection?: boolean; resetSeekLayout?: boolean }) => void;
   setAudioSpeed: (speed: number) => void;
   setCurrentSentenceAlignment: (alignment: TTSSentenceAlignment | undefined) => void;
@@ -28,7 +27,6 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     restartSeqRef,
     sentenceAlignmentCacheRef,
     abortAudio,
-    clearPendingEpubJump,
     resetPlaybackPlan,
     setAudioSpeed,
     setCurrentSentenceAlignment,
@@ -76,7 +74,6 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     const sequence = ++restartSeqRef.current;
     setIsProcessing(true);
     setIsPlaying(false);
-    clearPendingEpubJump();
     abortAudio();
     if (options.resetPlan) resetPlaybackPlan({ resetSelection: false });
     applyLocalState();
@@ -85,7 +82,6 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     if (wasPlaying && sequence === restartSeqRef.current) setIsPlaying(true);
   }, [
     abortAudio,
-    clearPendingEpubJump,
     isPlaying,
     resetPlaybackPlan,
     restartSeqRef,

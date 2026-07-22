@@ -78,13 +78,12 @@ queue/progress/state moves to NATS/JetStream and its durable files move to objec
 storage; it does not mean the worker starts reading or writing SQL ownership
 tables.
 
-That split is still too blurry for EPUB rendering/highlight behavior. The worker
-is the authority for the durable plan and absolute ordinals, while the client
-still derives rendered EPUB windows and keeps a viewport anchor for navigation.
-Playback start no longer branches across EPUB CFI, viewport locator, selected
-locator, text, segment key, or current index. The canonical worker plan is always
-the playback identity source, and starting audio requires one absolute
-worker-plan ordinal.
+The worker is the authority for the durable plan and absolute ordinals. The
+client owns only reader-surface rendering, stable navigation anchors, and
+visible-range projection. Plan application, ordinal selection, rendered-surface
+commit, and initial highlighting form one startup boundary for PDF, EPUB, and
+HTML. Playback start never branches across CFI, viewport locator, text, segment
+key, or current index; it requires one selected worker-plan ordinal.
 
 ### Next API Surface
 
@@ -144,6 +143,51 @@ timeline, highlighting, and sidebar readers. A worker-plan ordinal is the only
 valid playback-start identity. Reader locators/CFIs can help the UI navigate and
 map visible DOM ranges, but they must not be competing playback-start inputs once
 the canonical plan exists.
+
+The browser treats that artifact as a reader-readiness dependency, not a
+best-effort playback prefetch. PDF, EPUB, and HTML readers remain behind the
+shared preparation gate until the matching worker plan has completed, been
+strictly validated, and been applied. PDF additionally waits for its parsed
+layout artifact before requesting the plan. A plan-signature change re-enters
+the same blocking gate while preserving the mounted renderer underneath it.
+
+Client text extraction may establish rendered anchors and highlighting maps,
+but it may never synthesize playback segments or substitute for a missing,
+failed, stale, or malformed plan. A valid zero-segment plan is authoritative
+and reveals the document with playback unavailable; it is not treated as an
+incomplete operation.
+
+Plan lifecycle is scoped to the serialized request for the current document and
+settings. The request identity is current during render, before any page effect
+can request preparation. A result whose owner no longer matches the current
+request is discarded and cannot apply its plan, selection, or lifecycle state.
+Queued plan operations participate in worker stale-operation reconciliation, so
+a lost queue delivery resolves to an explicit failure instead of an infinite
+active snapshot.
+
+A normalized plan does not imply a current segment. `currentSegment` remains
+null until a plan ordinal is explicitly selected. For a readable surface,
+reader readiness then requires the selected ordinal to commit to the current
+surface:
+
+- EPUB commits a stable rendered spine anchor and visible text maps before it
+  selects and paints the segment range.
+- PDF commits the current PDF.js canvas and text layer, maps the exact selected
+  segment through stable worker-to-PDF.js text-item identity, and paints that
+  range. Block geometry alone is not a readable-surface commit. The replacement
+  lifecycle is specified in `READER_READINESS_STATE_MACHINE.md`.
+- HTML commits the rendered block tree and maps the selected segment into that
+  tree.
+
+A committed non-text EPUB surface is explicit: it pauses playback and clears the
+selected ordinal and highlight. It is not forced through a text-segment mapper,
+is not persisted as though it owned a plan segment, and is not confused with an
+empty worker plan.
+
+When highlighting is enabled, the initial highlight is part of that surface
+commit. A mapping or paint failure enters the shared render-error state. It does
+not reveal an unhighlighted reader, select segment zero implicitly, start a
+timer retry loop, or use a second renderer-specific highlighting mechanism.
 
 ### Segment Audio
 
@@ -311,7 +355,7 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 - It maps the current worker-plan segment to visible ranges; it does not
   materialize client-owned playback segments.
 - It paints those ranges with the shared non-mutating DOM Range painter. EPUB.js
-  CFI annotations are a compatibility fallback, not the per-word hot path.
+  CFI annotations are not a secondary highlighting path.
 - It does not use CFI, viewport locator, page-start anchor, text, segment key, or
   array index as playback-start identity.
 
@@ -335,6 +379,13 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 - The browser projects UI state from `audio.currentTime`; highlights do not drive
   audio time.
 - Playback start requires a canonical worker-plan ordinal.
+- A loaded plan with no selected ordinal has no current segment.
+- Readable-surface readiness requires the selected ordinal to commit to the
+  current rendered surface; when highlighting is enabled, that commit includes
+  the initial segment highlight. A committed non-text EPUB surface explicitly
+  has no selected ordinal.
+- PDF, EPUB, and HTML do not use timer retries or alternate renderer highlight
+  mechanisms to recover a missed startup commit.
 - EPUB CFI, viewport locator, page-start anchor, segment text, and segment key are
   not playback-start inputs.
 - The worker validates the requested ordinal against the canonical plan and stores
@@ -363,7 +414,10 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 18 Explicit browser object transport + dual S3 endpoints | Done | `S3_INTERNAL_ENDPOINT`/`S3_PUBLIC_ENDPOINT`/`S3_BROWSER_TRANSPORT` select one deterministic transport; `S3_ENDPOINT` remains a deprecated startup-warning alias. |
 | 19 Pre-merge review cleanup | Done | Branch review fixes: batched cleanup/KV reads, shared SSE-proxy and artifact-download helpers, operation-kind reuse policy registry, shared opKey scope parsing, dead worker config removal. |
 | 20 Export storage layout and retention | Done | Audiobook export artifacts are user/document-scoped, export retention runs as a worker-owned maintenance sweep with a scheduled Next trigger, and per-kind worker policy is a single registry. |
-| 21 Worker-owned document derived-artifact deletion | Planned | Move the remaining Next-side per-document S3 deletions (parsed PDF artifacts and preview images) into the worker so all derived-artifact deletion is worker-owned and control-plane-triggered. |
+| 21 Worker-owned document derived-artifact deletion | Done | Parsed PDF, preview, and playback-plan cleanup is worker-owned and control-plane-triggered. |
+| 22 EPUB plan-backed render handoff | Done | EPUB rendering now reconciles committed stable spine anchors against the applied worker plan; the client-text/setText branch and plan-clearing navigation paths are removed. |
+| 23 Plan-canonical EPUB resume progress | Done | Server-backed EPUB progress is a versioned stable spine locator; startup resolves it through the applied plan and issues one adapter-owned EPUB.js display command. |
+| 24 Plan-selected surface commit | Reopened | EPUB and HTML improvements remain, but the PDF implementation is rejected and reset to the pre-`c00a7ab` baseline. Exact cross-reader orchestration and PDF text-item projection are specified in `READER_READINESS_STATE_MACHINE.md`. |
 
 ---
 
@@ -1166,3 +1220,295 @@ resource-scoped hard-cut paths.
 Verified by the generated worker OpenAPI/client contract, the hard-cut route
 map, worker cleanup unit coverage, orphan-reaper coverage, compute-boundary
 checks, type checking, and the unit suite.
+
+---
+
+## Post-Cleanup Reconciliation
+
+The cleanup roadmap was completed after the original playback architecture was
+written. It established the worker plan as the sole source of canonical
+segments and ordinals, moved PDF and HTML onto the shared document-anchor
+interface, and added a blocking reader-preparation gate for source, structure,
+plan, and first-placement readiness.
+
+A subsequent EPUB startup review found that the final client handoff had not
+been completed. At that point EPUB was the only production caller of the older
+`setText` interface: it extracted rendered text and then cleared the canonical
+playback segments. The reader gate also combined independent `viewerReady` and
+`isPlaybackReady` booleans, neither of which proved that a rendered EPUB anchor
+had mapped to a worker-plan ordinal.
+
+Step 22 completed that partial client migration without relaxing the plan gate.
+EPUB still owns browser rendering, pagination, CFI navigation, stable
+rendered-anchor construction, and visible-range highlight maps. It does not
+own, synthesize, replace, or clear playback segments. The canonical worker plan
+remains a hard prerequisite for both revealing the reader and enabling
+playback.
+
+---
+
+### 22. Complete the EPUB Plan-Backed Render Handoff
+
+Status: complete. EPUB now uses one plan-backed placement lifecycle and has no
+client-text playback branch.
+
+1. Preserve the shared preparation contract. The EPUB source and renderer may
+   be prepared underneath the blocking loader, but the reader, reader actions,
+   and playback remain unavailable until the matching worker plan is complete,
+   strictly validated, applied to the client playback model, and reconciled
+   with the first committed rendered location.
+2. Replace EPUB's legacy `setText` integration with an explicit rendered-anchor
+   handoff. Text extraction may build stable spine coordinates, visible text
+   maps, and highlight ranges, but applying the result must resolve a selection
+   from the canonical segments already supplied by the worker plan. It must
+   never call `clearPlaybackSegments`, create client-owned segments, or use CFI
+   or extracted text as playback identity.
+3. Make the handoff one observable lifecycle rather than combining unrelated
+   booleans. For a non-empty plan, first-placement readiness means that the
+   rendition committed a stable anchor and that anchor selected a canonical
+   worker-plan ordinal. For a valid zero-segment plan, the authoritative empty
+   result opens the reader with playback unavailable and does not wait for an
+   ordinal that cannot exist.
+4. Drive rendition completion from the EPUB.js rendered/relocated lifecycle,
+   not solely from the wrapper's `locationChanged` callback. The wrapper may
+   suppress that callback when the rendered location equals the supplied saved
+   location, so reopening at an unchanged position must still complete the
+   plan-backed handoff.
+5. Make every terminal placement outcome explicit. Stale rendition work may be
+   discarded only when a newer placement owns completion. Missing locations,
+   anchor-construction failures, and plan-mapping failures must retry from a
+   defined owner or enter the shared render-error state; they must not leave the
+   reader indefinitely on `setting-your-place`.
+6. Preserve the worker plan across EPUB page turns and cursor-follow
+   navigation. Navigation updates only the rendered anchor, selected canonical
+   ordinal, and highlight maps. It does not reset the applied plan or return the
+   playback model to a client-owned/idle source.
+7. Remove `setText` and its client-text playback branch after EPUB has migrated
+   and repository search confirms that no production caller remains. Keep the
+   shared document-anchor API only if its name and contract accurately describe
+   both initial placement and subsequent EPUB navigation; otherwise introduce
+   one dedicated plan-backed rendered-anchor boundary rather than another
+   compatibility adapter.
+8. Verify the contract in layers: pure anchor-to-plan selection and lifecycle
+   tests first; focused EPUB integration coverage for saved-location,
+   zero-segment, stale-placement, and mapping-error behavior next; then one
+   representative browser opening before the EPUB domain spec and relevant
+   browser matrix. Preserve existing test artifacts until the test-migration
+   phase explicitly authorizes a new run.
+
+Acceptance criteria:
+
+- A non-empty EPUB is never revealed before its authoritative plan is ready and
+  its first rendered anchor maps to a canonical worker-plan ordinal.
+- A valid zero-segment EPUB is revealed after plan and rendition readiness with
+  playback clearly unavailable.
+- A failed, stale, malformed, or missing plan never falls back to extracted
+  client text and never reveals the reader.
+- Opening at the same saved CFI cannot deadlock on `setting-your-place`.
+- Initial placement and every later navigation preserve the applied worker plan
+  and use only its ordinals as playback-start identity.
+- Placement failures produce an actionable retry or error instead of an
+  unbounded loading state.
+
+Implemented:
+
+- `reconcileEpubRenderedAnchor` accepts only a stable rendered locator and maps
+  it to an ordinal in the already-applied worker plan. It never creates or
+  clears playback rows.
+- `setText`, `SetTtsTextOptions`, `clearPlaybackSegments`, the client plan-source
+  state, the now-inert `skipBlank` preference, and the page-turn paths that
+  erased canonical segments are removed.
+- The EPUB hook owns one placement lifecycle (`waiting-plan`, `placing`,
+  `ready`, `empty-plan`, or `failed`). The page gate consumes that lifecycle
+  directly instead of combining wrapper-ready and playback-ready booleans.
+- EPUB.js `rendered` and `relocated` publish a committed location into the same
+  gate. The current rendition is consumed synchronously after listener
+  registration only when it already contains complete start/end CFIs. Reopening
+  at an unchanged saved CFI therefore does not depend on the wrapper's
+  `locationChanged` callback or on speculative retries.
+- Async placement work has an explicit monotonically increasing owner. A stale
+  range/anchor resolution hands completion to a new placement; stale owners
+  cannot settle readiness or errors.
+- Incomplete EPUB.js locations are not treated as committed lifecycle events;
+  there is no polling or timeout. Renderer failures, missing DOM ranges,
+  stable-anchor failures, and plan-mapping failures enter the shared render
+  error state with a retry action. Authoritative zero-segment plans complete
+  after rendition readiness without inventing an ordinal.
+- Manual navigation updates the rendered anchor and selected worker ordinal;
+  playback-follow navigation preserves its canonical cursor. Neither path
+  resets the plan.
+
+Verified: `pnpm exec tsc --noEmit`, the focused EPUB placement/selection and
+architecture tests, `pnpm test:unit` (573 tests), `pnpm build`, and the Chromium
+EPUB display test body. The browser command's existing global teardown still
+exits nonzero after the passing test because it loads the database package as
+CommonJS in an ES-module scope; the EPUB assertion itself completed successfully.
+
+---
+
+### 23. Make EPUB Resume Progress Plan-Canonical
+
+Status: complete. Step 22 removed the client-text playback fallback, but its
+startup boundary exposed an older ownership mismatch: EPUB progress was still
+persisted as an opaque EPUB.js CFI while the authoritative worker plan identifies
+positions with stable spine coordinates. Reconciliation should confirm a
+rendered result, not recover canonical playback identity from a renderer-only
+bookmark.
+
+1. Replace the EPUB-only `{ readerType: 'epub', location: string }` progress
+   shape with a versioned stable locator containing `spineHref`, `spineIndex`,
+   and `charOffset`. Use the same normalization and ordering contract as worker
+   plan locators. Do not persist a worker-plan ordinal as the durable identity:
+   ordinals can move when segmentation inputs change, while the document spine
+   coordinate remains stable.
+2. Keep CFI ownership at the EPUB.js adapter boundary. A CFI may be calculated
+   from the saved stable locator to call `rendition.display`, and may be retained
+   only as an explicitly disposable rendering cache if measurement proves that
+   useful. It is not canonical progress, plan identity, or a fallback source of
+   playback rows.
+3. Make initial placement plan-driven and single-command. After source,
+   rendition, authoritative plan, and saved stable locator are available,
+   resolve the locator against the applied plan, convert it to the one CFI
+   EPUB.js needs, and issue one display operation. The subsequent committed
+   `relocated` event confirms the visible anchor and completes the existing
+   blocking preparation gate; it does not initiate another startup navigation.
+4. Collapse the transitional startup orchestration after the canonical resume
+   path exists. Remove viewer revision remounts, forced placement retries,
+   timeout/polling branches, and any state that exists only to recover from
+   CFI-first startup races. Retain only explicit source failure, plan failure,
+   rendition failure, stale async ownership, and committed-location
+   reconciliation.
+5. Persist progress from the committed rendered anchor only after it has been
+   normalized to a stable spine locator. Page turns, chapter navigation,
+   cursor-follow navigation, and playback-follow navigation all write the same
+   position shape and select from the already-applied worker plan; none writes
+   a raw CFI or clears/rebuilds the plan.
+6. Make the storage transition a hard cut. Update the shared progress codec,
+   API types, bootstrap parser, EPUB location controller, tests, exports, and
+   architecture pins together. Do not leave dual CFI/locator readers, silent
+   fallback parsing, or a permanent legacy compatibility branch. If existing
+   pre-release progress cannot be migrated without renderer context, invalidate
+   that EPUB progress explicitly rather than embedding an indefinite runtime
+   fallback.
+
+Acceptance criteria:
+
+- Server-backed EPUB progress has one authoritative identity:
+  `spineHref + spineIndex + charOffset`.
+- The current worker plan resolves the saved locator to the playback selection;
+  a saved ordinal is never trusted across plan variants.
+- EPUB.js receives one resolved display target for startup and does not remount
+  or repeat navigation to make plan reconciliation succeed.
+- A committed rendition location confirms readiness and updates progress, but
+  its CFI never becomes canonical playback identity.
+- Empty, malformed, stale, or unmappable progress has one explicit outcome and
+  cannot enter a retry loop or fall back to client-extracted text.
+- Repository search finds no production path that persists a raw CFI as EPUB
+  progress and no compatibility branch that restores the CFI-only contract.
+
+Verification:
+
+- Add pure codec and locator-to-plan selection tests, including plan variants
+  whose ordinals differ while the stable locator continues to resolve.
+- Add EPUB integration coverage for first open, stable-locator resume, page
+  turn persistence, cursor-follow navigation, invalid progress, empty plans,
+  and one-shot display behavior.
+- Run type checking, the unit suite, a production build, and the representative
+  Chromium EPUB resume test before the step is marked complete.
+
+Implemented:
+
+- `DocumentProgressRecord` and `DocumentProgressPayload` are strict unions. EPUB
+  uses `{ schemaVersion: 1, spineHref, spineIndex, charOffset }`; only PDF and
+  HTML retain the generic `location` string.
+- The shared EPUB progress codec normalizes the stable locator and version-encodes
+  it only for the existing database column. The progress API accepts and returns
+  the typed locator. Pre-cut CFI rows fail strict decoding and return an explicit
+  invalidated/null result; there is no dual reader.
+- Codec callers import the shared owner directly; the client progress parser and
+  EPUB navigation hook do not re-export adjacent helpers. The document loader
+  requires an explicit stable locator or `null`, and the old PDF-shaped HTML
+  progress-token fallback was removed from the same parser.
+- Bootstrap passes the saved stable locator to the EPUB controller. The applied
+  plan resolves the selection for the current plan variant, so a stored ordinal
+  is neither accepted nor persisted.
+- The generic `react-reader` wrapper was removed because it always issued its own
+  default/CFI display during mount. The EPUB adapter now constructs the book and
+  rendition without displaying. Once rendition, metadata, and plan are ready,
+  the controller resolves the plan-backed stable locator to one disposable CFI
+  and owns the single startup `rendition.display` command.
+- Committed `rendered`/`relocated` events remain the readiness confirmation.
+  Progress is written only after their stable rendered anchor successfully maps
+  to the applied plan. Page turns, chapter jumps, and playback/cursor-follow
+  navigation therefore converge on the same persistence path.
+- The EPUB page no longer carries a viewer revision or remounts the viewer to
+  recover startup. Async display/reconciliation work has explicit stale owners;
+  rendition, mapping, and source failures enter the shared error state. A user
+  retry restarts only the failed adapter/display boundary.
+- Locator-to-CFI resolution no longer falls back to a CFI cached on the locator,
+  and the unused `react-reader`/`react-swipeable` dependency chain was removed.
+
+Verified: `pnpm exec tsc --noEmit`; focused progress codec, plan-variant
+selection, placement, and architecture coverage; `pnpm test:unit` (574 tests);
+`pnpm build`; and the representative Chromium EPUB display test.
+The Chromium assertion passed. Its existing global teardown still exits nonzero
+afterward because the database package is loaded as CommonJS in an ES-module
+scope (`exports is not defined`), the same unrelated teardown defect recorded
+for Step 22.
+
+---
+
+### 24. Commit Startup Selection and Highlight as One Surface Boundary
+
+Status: reopened. The blocking reader gate added in `c00a7ab` made the worker
+plan mandatory, but it left plan preparation, selection, renderer readiness,
+and highlighting in independent effects. The strict policy therefore exposed
+races that the former best-effort prefetch had hidden. The attempted PDF repair
+did not establish exact projection identity, regressed performance, and is
+rejected. `READER_READINESS_STATE_MACHINE.md` is now the normative replacement
+plan for readiness orchestration and PDF mapping.
+
+1. A loaded plan is not an implicit selection. When no worker ordinal is
+   selected, `currentSegment` is null; segment zero cannot render or highlight
+   speculatively.
+2. Plan lifecycle state is owned by the serialized request for the current
+   document. Request identity is published during render rather than in a later
+   passive effect, stale terminal lifecycle state is cleared on an owner
+   change, and a completed request cannot apply after its document key changes.
+3. EPUB resolves the startup display locator without selecting it. Selection
+   is committed only by rendered-anchor reconciliation after visible text maps
+   exist. Replacing those maps publishes a render revision, so the selected
+   segment is highlighted against that exact committed rendition before paint.
+4. PDF readiness requires the current canvas, current text layer, exact selected
+   segment projection, and initial highlight paint to share one surface owner.
+   The rejected geometry-only implementation did not prove that mapping. PDF is
+   reset to its pre-`c00a7ab` functional baseline until the identity-based hard
+   cut in `READER_READINESS_STATE_MACHINE.md` replaces it.
+5. HTML readiness is emitted by one layout commit that maps the selected worker
+   segment into the rendered blocks and applies its highlight. The mount-only
+   ready callback and sentence/word retry timers were removed.
+6. A selected segment that cannot map to a rendered PDF, EPUB, or HTML surface
+   enters the shared render error state. It does not silently reveal an
+   unhighlighted reader or wait on speculative retries.
+7. Queued playback-plan operations participate in stale-operation
+   reconciliation. A lost queue delivery therefore becomes an explicit failed
+   operation instead of an indefinitely polled plan.
+8. EPUB highlighting has one implementation: visible DOM ranges painted through
+   the shared Highlight API boundary. The EPUB.js CFI annotation fallback and
+   its cached CFI state were removed.
+9. EPUB page placement converts the committed CFI range start directly into the
+   worker plan's normalized spine-character space. Rendered page text is never
+   searched inside chapter text, so pagination, spreads, repeated prose, markup
+   boundaries, and non-text pages cannot fabricate or erase the stable anchor.
+   A committed non-text surface is a first-class ready state with no selected
+   segment; it pauses and clears highlighting rather than failing text mapping.
+10. PDF completion remains outstanding. The replacement must use a single
+    session actor and stable worker-to-PDF.js text-item identity; it must not use
+    geometry-only readiness, page-wide text-search readiness, retry timers, or
+    parallel legacy/new reader paths.
+
+The previous verification record applies only to the rejected implementation
+and is not acceptance evidence for Step 24. EPUB and HTML retain their focused
+coverage. PDF must pass the reset smoke test and the automated and signed-in
+acceptance matrix in `READER_READINESS_STATE_MACHINE.md` before this step can be
+marked complete.

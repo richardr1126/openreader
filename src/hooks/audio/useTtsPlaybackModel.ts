@@ -10,11 +10,8 @@ import {
 } from '@/lib/client/tts/playback-plan';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
-type PlaybackPlanSource = 'idle' | 'worker';
-
 type PlaybackModelState = {
   plan: TtsPlaybackPlan | null;
-  planSource: PlaybackPlanSource;
   segments: CanonicalTtsSegment[];
   seekLayout: TtsPlaybackSeekLayout | null;
   selectedOrdinal: number | null;
@@ -27,7 +24,6 @@ export type PlaybackPlanResetOptions = {
 
 const EMPTY_MODEL: PlaybackModelState = {
   plan: null,
-  planSource: 'idle',
   segments: [],
   seekLayout: null,
   selectedOrdinal: null,
@@ -48,11 +44,16 @@ export function useTtsPlaybackModel() {
     [model.segments],
   );
   const currentIndex = useMemo(() => {
-    if (model.selectedOrdinal === null) return 0;
+    if (model.selectedOrdinal === null) return -1;
     const index = model.segments.findIndex((segment) => segment.ordinal === model.selectedOrdinal);
-    return index >= 0 ? index : 0;
+    return index;
   }, [model.segments, model.selectedOrdinal]);
-  const currentSegment = model.segments[currentIndex] ?? null;
+  // A loaded plan is not a selection. Keeping segment zero "current" while
+  // selectedOrdinal was null let every viewer run its initial highlight before
+  // its rendered surface had committed a plan-backed location.
+  const currentSegment = model.selectedOrdinal === null
+    ? null
+    : model.segments[currentIndex] ?? null;
   const currentSentence = currentSegment?.text ?? '';
   const selectedOrdinal = model.selectedOrdinal;
 
@@ -73,7 +74,6 @@ export function useTtsPlaybackModel() {
     setModel((previous) => ({
       ...previous,
       plan,
-      planSource: 'worker',
       segments: canonicalPlan,
     }));
     return canonicalPlan;
@@ -105,26 +105,11 @@ export function useTtsPlaybackModel() {
     }));
   }, []);
 
-  const clearPlaybackSegments = useCallback((options?: { resetSelection?: boolean }) => {
-    const resetSelection = options?.resetSelection ?? true;
-    playbackSegmentsRef.current = [];
-    if (resetSelection) {
-      selectedOrdinalRef.current = null;
-    }
-    setModel((previous) => ({
-      ...previous,
-      segments: [],
-      planSource: 'idle',
-      selectedOrdinal: resetSelection ? null : previous.selectedOrdinal,
-    }));
-  }, []);
-
   return {
     playbackPlanRef,
     playbackSegmentsRef,
     selectedOrdinalRef,
     playbackPlan: model.plan,
-    playbackPlanSource: model.planSource,
     playbackSegments: model.segments,
     sentences,
     currentIndex,
@@ -133,7 +118,6 @@ export function useTtsPlaybackModel() {
     selectedOrdinal,
     playbackSeekLayout: model.seekLayout,
     applyWorkerPlan,
-    clearPlaybackSegments,
     resetPlaybackPlan,
     setSelectedOrdinal,
     setPlaybackSeekLayout,

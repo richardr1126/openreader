@@ -27,6 +27,29 @@ export type TtsPlaybackPlan = {
   segments: TtsPlaybackPlanSegment[];
 };
 
+export function assertAuthoritativePlaybackPlan(
+  plan: TtsPlaybackPlan,
+  expected: { documentId: string; readerType: string },
+): TtsPlaybackPlan {
+  if (!plan.planId || !plan.planObjectKey || !plan.planSignature) {
+    throw new Error('Playback plan artifact was missing its authoritative identity');
+  }
+  if (plan.documentId !== expected.documentId || plan.readerType !== expected.readerType) {
+    throw new Error('Playback plan artifact did not match the active document');
+  }
+  if (plan.plannedCount === undefined || plan.plannedCount !== plan.segments.length) {
+    throw new Error('Playback plan artifact segment count was inconsistent');
+  }
+  const ordinals = new Set<number>();
+  for (const segment of plan.segments) {
+    if (ordinals.has(segment.ordinal)) {
+      throw new Error('Playback plan artifact contained duplicate ordinals');
+    }
+    ordinals.add(segment.ordinal);
+  }
+  return plan;
+}
+
 export function normalizePlaybackPlan(value: unknown): TtsPlaybackPlan {
   const empty: TtsPlaybackPlan = { sessionId: '', documentId: '', readerType: '', segments: [] };
   if (!value || typeof value !== 'object') return empty;

@@ -103,7 +103,6 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
   const canWordHighlight = true;
   const {
     viewType,
-    skipBlank,
     epubTheme,
     ttsSegmentMaxBlockLength,
     updateConfigKey,
@@ -306,17 +305,6 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           subtitle="Segment and queue behavior."
           variant="flat"
         >
-          {!html && (
-            <ToggleRow
-              label="Skip blank pages"
-              description="Skip pages with no readable text."
-              checked={skipBlank}
-              onChange={(checked) => updateConfigKey('skipBlank', checked)}
-              variant="flat"
-            />
-          )}
-
-
           <div className="pt-1">
             <RangeField
               label="TTS segment max block length"

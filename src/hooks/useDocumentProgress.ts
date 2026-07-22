@@ -30,7 +30,9 @@ export function useDocumentProgress(documentId: string | undefined) {
       queryClient.setQueryData(key, {
         documentId: payload.documentId,
         readerType: payload.readerType,
-        location: payload.location,
+        ...(payload.readerType === 'epub'
+          ? { locator: payload.locator }
+          : { location: payload.location }),
         progress: payload.progress ?? null,
         clientUpdatedAtMs,
         updatedAtMs: clientUpdatedAtMs,

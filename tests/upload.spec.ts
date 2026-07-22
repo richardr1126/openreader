@@ -94,11 +94,21 @@ test.describe('Document Upload Tests', () => {
   });
 
   test('displays an EPUB document', async ({ page }) => {
+    const epubLifecycleErrors: string[] = [];
+    const recordEpubLifecycleError = (message: string) => {
+      if (/this\.(?:loading\.(?:displayOptions|navigation)|resources\.replaceCss)/.test(message)) {
+        epubLifecycleErrors.push(message);
+      }
+    };
+    page.on('pageerror', (error) => recordEpubLifecycleError(error.message));
+    page.on('console', (message) => recordEpubLifecycleError(message.text()));
+
     await uploadAndDisplay(page, 'sample.epub');
     await expectViewerForFile(page, 'sample.epub');
     // Navigation controls should be exposed via accessible labels
     await expect(page.getByRole('button', { name: 'Previous section' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Next section' })).toBeVisible();
+    expect(epubLifecycleErrors).toEqual([]);
   });
 
   test('displays a DOCX document as PDF after conversion', async ({ page }) => {

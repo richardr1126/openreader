@@ -1,14 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 
 import {
   createTtsPlaybackPlan,
   getTtsPlaybackSeekLayout,
+  resolveTtsPlaybackPlan,
   type TtsPlaybackSeekLayout,
 } from '@/lib/client/api/tts';
 import {
-  normalizePlaybackPlan,
+  assertAuthoritativePlaybackPlan,
   type TtsPlaybackPlan,
 } from '@/lib/client/tts/playback-plan';
 import {
@@ -28,18 +29,23 @@ type UseTtsPlanControllerInput = {
   activeReaderType: ReaderType;
   currentLocation: TTSLocation;
   currentPdfPage: number;
-  isPlaying: boolean;
-  playbackAnchor: PlaybackAnchor | null;
   playbackAnchorRef: MutableRefObject<PlaybackAnchor | null>;
   playbackPlanRef: MutableRefObject<TtsPlaybackPlan | null>;
-  playbackPlanSource: 'idle' | 'worker';
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
   request: TtsPlaybackPlanRequest | null;
   selectedOrdinalRef: MutableRefObject<number | null>;
   applyWorkerPlan: (plan: TtsPlaybackPlan) => CanonicalTtsSegment[];
+  resetPlaybackPlan: (options?: { resetSelection?: boolean; resetSeekLayout?: boolean }) => void;
   setPlaybackSeekLayout: (layout: TtsPlaybackSeekLayout | null) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
 };
+
+export type PlaybackPlanLifecycle = {
+  status: 'idle' | 'queued' | 'running' | 'ready' | 'failed';
+  error: Error | null;
+};
+
+const IDLE_PLAN_LIFECYCLE: PlaybackPlanLifecycle = { status: 'idle', error: null };
 
 export function isAbortLikeError(error: unknown): boolean {
   if (error instanceof Error) {
@@ -58,18 +64,49 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     activeReaderType,
     currentLocation,
     currentPdfPage,
-    isPlaying,
-    playbackAnchor,
     playbackAnchorRef,
     playbackPlanRef,
-    playbackPlanSource,
     playbackSeekLayout,
     request,
     selectedOrdinalRef,
     applyWorkerPlan,
+    resetPlaybackPlan,
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   } = input;
+  const [planLifecycle, setPlanLifecycle] = useState<PlaybackPlanLifecycle>(IDLE_PLAN_LIFECYCLE);
+  const requestKey = useMemo(() => request ? JSON.stringify(request) : '', [request]);
+  const preparedRequestKeyRef = useRef('');
+  const requestKeyRef = useRef(requestKey);
+  const lifecycleRequestKeyRef = useRef('');
+  // Page effects may request preparation before this controller's passive
+  // effects run. Publish the render's request identity immediately so that a
+  // new document can never start under the previous document's key.
+  requestKeyRef.current = requestKey;
+  const inFlightRef = useRef<{ key: string; promise: Promise<TtsPlaybackPlan | null>; controller: AbortController } | null>(null);
+
+  useEffect(() => {
+    const preparedKey = preparedRequestKeyRef.current;
+    const inFlight = inFlightRef.current;
+    const inFlightChanged = Boolean(inFlight && inFlight.key !== requestKey);
+    const preparedChanged = Boolean(preparedKey && preparedKey !== requestKey);
+    const lifecycleChanged = Boolean(
+      lifecycleRequestKeyRef.current
+      && lifecycleRequestKeyRef.current !== requestKey,
+    );
+    if (!inFlightChanged && !preparedChanged && !lifecycleChanged) return;
+    if (inFlightChanged) inFlight?.controller.abort();
+    if (inFlightChanged) inFlightRef.current = null;
+    preparedRequestKeyRef.current = '';
+    lifecycleRequestKeyRef.current = '';
+    resetPlaybackPlan({ resetSelection: false });
+    setPlanLifecycle(IDLE_PLAN_LIFECYCLE);
+  }, [requestKey, resetPlaybackPlan]);
+
+  useEffect(() => () => {
+    inFlightRef.current?.controller.abort();
+    inFlightRef.current = null;
+  }, []);
 
   const buildPlaybackPlanRequest = useCallback(
     (): TtsPlaybackPlanRequest | null => request,
@@ -88,20 +125,24 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
 
   const fetchPlaybackPlanUntilReady = useCallback(async (
     planUrl: string,
+    expected: { documentId: string; readerType: ReaderType },
     signal?: AbortSignal,
   ): Promise<TtsPlaybackPlan | null> => {
-    const fetchPlan = async () => {
-      const response = await fetch(planUrl, { cache: 'no-store', signal });
-      if (!response.ok) return null;
-      return normalizePlaybackPlan(await response.json());
-    };
-    let plan = await fetchPlan();
-    for (let attempt = 0; (!plan || plan.segments.length === 0) && attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (signal?.aborted) return null;
-      plan = await fetchPlan();
+    while (!signal?.aborted) {
+      const resolution = await resolveTtsPlaybackPlan(planUrl, signal);
+      if (resolution.status === 'ready') {
+        return assertAuthoritativePlaybackPlan(resolution.plan, expected);
+      }
+      setPlanLifecycle({ status: resolution.status, error: null });
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(resolve, resolution.retryAfterMs);
+        signal?.addEventListener('abort', () => {
+          window.clearTimeout(timeout);
+          reject(new DOMException('Aborted', 'AbortError'));
+        }, { once: true });
+      });
     }
-    return plan && plan.segments.length > 0 ? plan : null;
+    return null;
   }, []);
 
   const fetchPlaybackSeekLayoutUntilReady = useCallback(async (
@@ -124,6 +165,10 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
 
   const applyPlaybackPlan = useCallback((plan: TtsPlaybackPlan): TtsPlaybackPlan => {
     const canonicalPlan = applyWorkerPlan(plan);
+    if (canonicalPlan.length === 0) {
+      setSelectedOrdinal(null);
+      return plan;
+    }
     const startPlanIndex = resolvePlanBackedSelectionIndex({
       plan: canonicalPlan,
       readerType: activeReaderType,
@@ -137,7 +182,11 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     });
     const startSegment = canonicalPlan[startPlanIndex];
     if (!startSegment) {
-      throw new Error('TTS playback plan did not contain a plan-backed selection for the current anchor');
+      // EPUB cannot provide a stable rendered locator until its first rendition
+      // commits. The authoritative plan is still ready; the renderer will
+      // establish the plan-backed selection before the reader gate opens.
+      setSelectedOrdinal(null);
+      return plan;
     }
     setSelectedOrdinal(startSegment.ordinal);
     return plan;
@@ -156,7 +205,7 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     signal?: AbortSignal,
   ): Promise<TtsPlaybackPlan | null> => {
     const existing = playbackPlanRef.current;
-    if (existing?.planObjectKey && existing.segments.length > 0) {
+    if (existing?.planObjectKey && preparedRequestKeyRef.current === requestKeyRef.current) {
       if (existing.planId && !playbackSeekLayout) {
         const layout = await fetchPlaybackSeekLayoutUntilReady(
           `/api/tts/playback/plans/${encodeURIComponent(existing.planId)}/seek-layout`,
@@ -167,13 +216,20 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
       return existing;
     }
 
+    setPlanLifecycle({ status: 'queued', error: null });
     const planHandle = await createTtsPlaybackPlan(planRequest.payload, planRequest.headers, signal);
-    const plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, signal);
+    const plan = await fetchPlaybackPlanUntilReady(planHandle.planUrl, {
+      documentId: planRequest.payload.documentId,
+      readerType: activeReaderType,
+    }, signal);
     if (!plan) return null;
-    const layout = await fetchPlaybackSeekLayoutUntilReady(planHandle.seekLayoutUrl, signal);
-    if (!signal?.aborted && layout) setPlaybackSeekLayout(layout);
+    if (plan.segments.length > 0) {
+      const layout = await fetchPlaybackSeekLayoutUntilReady(planHandle.seekLayoutUrl, signal);
+      if (!signal?.aborted && layout) setPlaybackSeekLayout(layout);
+    }
     return plan;
   }, [
+    activeReaderType,
     fetchPlaybackPlanUntilReady,
     fetchPlaybackSeekLayoutUntilReady,
     playbackPlanRef,
@@ -185,36 +241,66 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     planRequest: TtsPlaybackPlanRequest,
     signal?: AbortSignal,
   ): Promise<TtsPlaybackPlan | null> => {
+    const operationKey = JSON.stringify(planRequest);
+    lifecycleRequestKeyRef.current = operationKey;
     const plan = await ensurePlaybackPlan(planRequest, signal);
-    return plan ? applyPlaybackPlan(plan) : null;
+    if (!plan || signal?.aborted || requestKeyRef.current !== operationKey) return null;
+    const applied = applyPlaybackPlan(plan);
+    preparedRequestKeyRef.current = operationKey;
+    setPlanLifecycle({ status: 'ready', error: null });
+    return applied;
   }, [applyPlaybackPlan, ensurePlaybackPlan]);
 
-  useEffect(() => {
-    if (isPlaying || playbackPlanSource === 'worker') return;
-    if (!playbackAnchor?.hasContent && !playbackAnchor?.text.trim()) return;
+  const preparePlaybackPlan = useCallback(async (): Promise<TtsPlaybackPlan | null> => {
     const planRequest = buildPlaybackPlanRequest();
-    if (!planRequest) return;
-
+    if (!planRequest) return null;
+    const key = requestKeyRef.current;
+    if (planLifecycle.status === 'ready' && preparedRequestKeyRef.current === key) {
+      return playbackPlanRef.current;
+    }
+    const current = inFlightRef.current;
+    if (current?.key === key) return current.promise;
+    current?.controller.abort();
     const controller = new AbortController();
-    void (async () => {
+    lifecycleRequestKeyRef.current = key;
+    const promise = (async () => {
       try {
-        const plan = await ensurePlaybackPlan(planRequest, controller.signal);
-        if (!controller.signal.aborted && plan) applyPlaybackPlan(plan);
+        return await createAndApplyPlaybackPlan(planRequest, controller.signal);
       } catch (error) {
-        if (controller.signal.aborted || isAbortLikeError(error)) return;
-        console.warn('Failed to prefetch TTS playback plan:', error);
+        if (controller.signal.aborted || isAbortLikeError(error)) return null;
+        const resolved = error instanceof Error ? error : new Error('Failed to build reading plan');
+        setPlanLifecycle({ status: 'failed', error: resolved });
+        return null;
+      } finally {
+        if (inFlightRef.current?.controller === controller) inFlightRef.current = null;
       }
     })();
-
-    return () => controller.abort();
+    inFlightRef.current = { key, promise, controller };
+    return promise;
   }, [
-    applyPlaybackPlan,
     buildPlaybackPlanRequest,
-    ensurePlaybackPlan,
-    isPlaying,
-    playbackAnchor,
-    playbackPlanSource,
+    createAndApplyPlaybackPlan,
+    planLifecycle.status,
+    playbackPlanRef,
   ]);
+
+  const retryPlaybackPlan = useCallback(async (): Promise<TtsPlaybackPlan | null> => {
+    inFlightRef.current?.controller.abort();
+    inFlightRef.current = null;
+    preparedRequestKeyRef.current = '';
+    lifecycleRequestKeyRef.current = '';
+    resetPlaybackPlan({ resetSelection: false });
+    setPlanLifecycle(IDLE_PLAN_LIFECYCLE);
+    return preparePlaybackPlan();
+  }, [preparePlaybackPlan, resetPlaybackPlan]);
+
+  const invalidatePlaybackPlanLifecycle = useCallback(() => {
+    inFlightRef.current?.controller.abort();
+    inFlightRef.current = null;
+    preparedRequestKeyRef.current = '';
+    lifecycleRequestKeyRef.current = '';
+    setPlanLifecycle(IDLE_PLAN_LIFECYCLE);
+  }, []);
 
   return {
     applyPlaybackPlan,
@@ -222,5 +308,9 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     buildPlaybackSessionRequest,
     createAndApplyPlaybackPlan,
     ensurePlaybackPlan,
+    invalidatePlaybackPlanLifecycle,
+    planLifecycle,
+    preparePlaybackPlan,
+    retryPlaybackPlan,
   };
 }
