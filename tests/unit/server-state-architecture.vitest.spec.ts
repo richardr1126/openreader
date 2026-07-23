@@ -249,6 +249,7 @@ describe('server-state architecture', () => {
       '/api/documents/[id]/parsed',
       '/api/documents/[id]/parsed/download',
       '/api/documents/[id]/parsed/events',
+      '/api/documents/[id]/reader-bootstrap',
       '/api/documents/[id]/settings',
       '/api/documents/blob/get',
       '/api/documents/blob/get/presign',
@@ -359,7 +360,7 @@ describe('server-state architecture', () => {
     const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
     const computeGenerated = source('src/lib/server/compute-worker/generated.ts');
     const adminFeatures = source('src/components/admin/AdminFeaturesPanel.tsx');
-    const playbackPlan = source('src/lib/client/tts/playback-plan.ts');
+    const playbackPlan = source('src/lib/shared/playback-plan.ts');
     const playbackGrid = source('src/lib/client/tts/playback-grid.ts');
     const playbackModel = source('src/hooks/audio/useTtsPlaybackModel.ts');
     const ttsApi = source('src/lib/client/api/tts.ts');
@@ -420,7 +421,7 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('if (!sentences[currentIndex]) return');
     expect(context).toContain('currentSentence,');
     expect(context).not.toContain('playbackAnchor:');
-    expect(planController).toContain('preparePlaybackPlan');
+    expect(planController).toContain('acceptBootstrapPlaybackPlan');
     expect(planController).toContain('resolveTtsPlaybackPlan');
     expect(context).not.toContain('setPlaybackPlanSource');
     expect(context).not.toContain('setPlaybackSegments');

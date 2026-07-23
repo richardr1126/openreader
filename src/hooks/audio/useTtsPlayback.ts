@@ -12,7 +12,7 @@ import {
   type TtsPlaybackSessionPayload,
 } from '@/lib/client/api/tts';
 import type { TTSRequestHeaders } from '@/types/client';
-import type { TtsPlaybackPlan } from '@/lib/client/tts/playback-plan';
+import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import { usePlaybackForegroundSync } from '@/hooks/audio/usePlaybackForegroundSync';
 import {
   usePlaybackProjection,

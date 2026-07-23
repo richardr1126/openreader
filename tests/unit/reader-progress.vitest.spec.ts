@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   parseReaderInitialPosition,
   serializeReaderPosition,
-} from '../../src/lib/client/reader-progress';
+} from '../../src/lib/shared/reader-position';
 import {
   parseEpubProgressLocator,
   serializeEpubProgressLocator,

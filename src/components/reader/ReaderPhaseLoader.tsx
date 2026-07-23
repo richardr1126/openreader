@@ -14,10 +14,6 @@ const PHASE_COPY: Record<Exclude<ReaderLoadPhase, 'ready'>, { title: string; det
     title: 'Understanding structure',
     detail: 'Finding the reading order across each page',
   },
-  'preparing-reading-plan': {
-    title: 'Preparing reading plan',
-    detail: 'Getting the authoritative text and navigation map ready',
-  },
   'setting-your-place': {
     title: 'Setting your place',
     detail: 'Rendering the document at your saved position',

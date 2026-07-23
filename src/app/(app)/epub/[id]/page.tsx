@@ -27,7 +27,8 @@ export default function EPUBPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
-  const bootstrap = useReaderBootstrap(routeDocumentId, 'epub');
+  const bootstrap = useReaderBootstrap(routeDocumentId);
+  const { result } = bootstrap;
   const {
     disableProgressPersistence,
     enableProgressPersistence,
@@ -51,13 +52,14 @@ export default function EPUBPage() {
     setDocumentLanguage,
     sentences,
     invalidatePlaybackPlan,
-    playbackPlanLifecycle,
-    preparePlaybackPlan,
-    retryPlaybackPlan,
+    acceptBootstrapPlaybackPlan,
   } = useTTS();
   const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
   const stopRef = useLatestRef(stop);
-  const documentSettings = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, bootstrap.settings);
+  const documentSettings = mergeDocumentSettings(
+    DEFAULT_DOCUMENT_SETTINGS,
+    result.status === 'ready' ? result.payload.settings : null,
+  );
   const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<Error | null>(null);
@@ -81,18 +83,22 @@ export default function EPUBPage() {
   }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
 
   useEffect(() => {
-    if (bootstrap.phase !== 'error') return;
-    setError(bootstrap.error ?? new Error('Failed to load document'));
+    if (result.status !== 'error') return;
+    setError(new Error(result.message));
     setIsLoading(false);
-  }, [bootstrap.error, bootstrap.phase]);
+  }, [result]);
 
   const loadDocument = useCallback(async () => {
     console.log('Loading new epub (from page.tsx)');
+    if (documentLanguage !== language) return;
     let startedLoad = false;
     let loadSucceeded = false;
     try {
-      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
-      const resolved = bootstrap.document.id;
+      if (result.status !== 'ready') return;
+      if (result.payload.readerType !== 'epub') {
+        throw new Error(`Expected an EPUB document, received ${result.payload.readerType}`);
+      }
+      const resolved = result.payload.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -103,10 +109,11 @@ export default function EPUBPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      const initialLocator = bootstrap.initialPosition?.readerType === 'epub'
-        ? bootstrap.initialPosition.locator
+      const initialLocator = result.payload.initialPosition?.readerType === 'epub'
+        ? result.payload.initialPosition.locator
         : null;
-      await setCurrentDocument(bootstrap.document, initialLocator);
+      await acceptBootstrapPlaybackPlan(result.payload.plan);
+      await setCurrentDocument(result.payload.document, initialLocator);
       loadedDocIdRef.current = resolved;
       loadSucceeded = true;
     } catch (err) {
@@ -120,7 +127,7 @@ export default function EPUBPage() {
         setIsLoading(false);
       }
     }
-  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, setCurrentDocument]);
+  }, [acceptBootstrapPlaybackPlan, documentLanguage, language, result, setCurrentDocument]);
 
   useEffect(() => {
     if (!isLoading) return;
@@ -134,35 +141,15 @@ export default function EPUBPage() {
   }, [clearCurrDoc, disableProgressPersistence]);
   useUnmountCleanupRef(clearReaderSession);
 
-  const effectiveLanguage = language === 'auto' ? metadataLanguage ?? 'auto' : language;
   useEffect(() => {
-    setDocumentLanguage(effectiveLanguage);
-  }, [effectiveLanguage, setDocumentLanguage]);
-
-  useEffect(() => {
-    if (
-      isLoading
-      || !isMetadataReady
-      || documentLanguage !== effectiveLanguage
-      || playbackPlanLifecycle.status !== 'idle'
-    ) return;
-    void preparePlaybackPlan();
-  }, [
-    documentLanguage,
-    effectiveLanguage,
-    isLoading,
-    isMetadataReady,
-    playbackPlanLifecycle.status,
-    preparePlaybackPlan,
-  ]);
+    setDocumentLanguage(language);
+  }, [language, setDocumentLanguage]);
 
   const loadState = deriveReaderLoadState({
-    bootstrapPhase: bootstrap.phase,
-    bootstrapError: bootstrap.error,
+    bootstrap: result,
     sourceStatus: error ? 'failed' : (isLoading ? 'loading' : (epubState.currDocData ? 'ready' : 'failed')),
     sourceError: error,
     parseStatus: isMetadataReady ? 'ready' : 'pending',
-    plan: playbackPlanLifecycle,
     viewerReady: isPlaybackReady,
     viewerError: placementLifecycle.error,
   });
@@ -172,21 +159,11 @@ export default function EPUBPage() {
     if (readerReady) enableProgressPersistence();
   }, [enableProgressPersistence, readerReady]);
 
-  useEffect(() => {
-    if (playbackPlanLifecycle.status === 'queued' || playbackPlanLifecycle.status === 'running') {
-      setActiveSidebar(null);
-    }
-  }, [playbackPlanLifecycle.status]);
-
   const retryLoad = useCallback(() => {
     setError(null);
     if (loadState.retryKind === 'bootstrap') {
       setIsLoading(true);
       void bootstrap.retry();
-      return;
-    }
-    if (loadState.retryKind === 'plan') {
-      void retryPlaybackPlan();
       return;
     }
     if (loadState.retryKind === 'render') {
@@ -196,7 +173,7 @@ export default function EPUBPage() {
     loadedDocIdRef.current = null;
     inFlightDocIdRef.current = null;
     setIsLoading(true);
-  }, [bootstrap, loadState.retryKind, retryPlacement, retryPlaybackPlan]);
+  }, [bootstrap, loadState.retryKind, retryPlacement]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -253,7 +230,7 @@ export default function EPUBPage() {
             Documents
           </ButtonLink>
         }
-        title={currDocName || bootstrap.document?.name || 'Opening document'}
+        title={currDocName || (result.status === 'ready' ? result.payload.document.name : 'Opening document')}
         right={readerReady ? (
           <div className="flex items-center gap-3">
             <DocumentHeaderMenu

@@ -95,7 +95,7 @@ export function useEpubDocument(
   const {
     currDocPage,
     currDocPages,
-    playbackPlanLifecycle,
+    playbackPlanReady,
     playbackPlanSegmentCount,
     reconcileEpubRenderedAnchor,
     resolveEpubPlanLocator,
@@ -224,7 +224,7 @@ export function useEpubDocument(
       // An authoritative empty plan needs rendition readiness, but there is no
       // ordinal to map. Complete it before DOM range extraction so an empty book
       // or non-text cover page cannot deadlock the reader gate.
-      if (playbackPlanLifecycle.status === 'ready' && playbackPlanSegmentCount === 0) {
+      if (playbackPlanReady && playbackPlanSegmentCount === 0) {
         const emptyResult = reconcileEpubRenderedAnchor({
           locator: null,
           hasReadableText: false,
@@ -314,7 +314,7 @@ export function useEpubDocument(
       setPlacementLifecycle({ status: 'failed', error: resolved });
     }
   }, [
-    playbackPlanLifecycle.status,
+    playbackPlanReady,
     playbackPlanSegmentCount,
     reconcileEpubRenderedAnchor,
     documentId,
@@ -323,7 +323,7 @@ export function useEpubDocument(
     setRenderedTextMaps,
   ]);
 
-  playbackPlanReadyRef.current = playbackPlanLifecycle.status === 'ready';
+  playbackPlanReadyRef.current = playbackPlanReady;
 
   const requestCommittedPlacement = useCallback<RequestCommittedPlacement>(async (
     book,
@@ -423,7 +423,7 @@ export function useEpubDocument(
     if (!book?.isOpen || !rendition) return;
     completedPlacementCfiRef.current = null;
     placementOwnerRef.current += 1;
-    if (playbackPlanLifecycle.status !== 'ready') {
+    if (!playbackPlanReady) {
       setPlacementLifecycle({ status: 'waiting-plan', error: null });
       return;
     }
@@ -432,7 +432,7 @@ export function useEpubDocument(
       return;
     }
     void refreshRenderedPlacement(shouldPauseRef.current);
-  }, [isRenditionReady, issueInitialDisplay, playbackPlanLifecycle.status, refreshRenderedPlacement]);
+  }, [isRenditionReady, issueInitialDisplay, playbackPlanReady, refreshRenderedPlacement]);
 
   const failPlacement = useCallback((error: Error) => {
     placementOwnerRef.current += 1;

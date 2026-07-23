@@ -1,10 +1,8 @@
 export const queryKeys = {
   documents: (sessionId: string) => ['documents', sessionId] as const,
-  document: (sessionId: string, documentId: string) => ['documents', sessionId, 'detail', documentId] as const,
+  readerBootstrap: (sessionId: string, documentId: string) => ['reader-bootstrap', sessionId, documentId] as const,
   libraryDocuments: (sessionId: string) => ['documents', sessionId, 'library'] as const,
   preferences: (sessionId: string) => ['preferences', sessionId] as const,
-  progress: (sessionId: string, documentId: string) => ['progress', sessionId, documentId] as const,
-  documentSettings: (sessionId: string, documentId: string) => ['document-settings', sessionId, documentId] as const,
   onboarding: (sessionId: string) => ['onboarding', sessionId] as const,
   folders: (sessionId: string) => ['folders', sessionId] as const,
   sharedProviders: (sessionId: string) => ['tts-shared-providers', sessionId] as const,

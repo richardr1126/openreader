@@ -37,7 +37,7 @@ export function HTMLViewer({
     currentSentenceAlignment,
     currentWordIndex,
     resolvedLanguage,
-    playbackPlanLifecycle,
+    playbackPlanReady,
     playbackPlanSegmentCount,
   } = useTTS();
   const { htmlHighlightEnabled, htmlWordHighlightEnabled } = useConfig();
@@ -49,7 +49,7 @@ export function HTMLViewer({
   // selection before the reader is revealed. Missing canonical text is an
   // explicit render failure, not a timer-driven retry branch.
   useLayoutEffect(() => {
-    if (playbackPlanLifecycle.status !== 'ready') return;
+    if (!playbackPlanReady) return;
     if (playbackPlanSegmentCount === 0) {
       clearHtmlSentenceHighlight();
       if (readySegmentRef.current !== 'empty') {
@@ -76,7 +76,7 @@ export function HTMLViewer({
     htmlHighlightEnabled,
     currentSentence,
     resolvedLanguage,
-    playbackPlanLifecycle.status,
+    playbackPlanReady,
     playbackPlanSegmentCount,
     onError,
     onReady,

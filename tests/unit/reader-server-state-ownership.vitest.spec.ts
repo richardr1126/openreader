@@ -9,14 +9,20 @@ function source(path: string): string {
 }
 
 describe('reader server-state ownership', () => {
-  test('queries progress only through the route bootstrap', () => {
-    expect(source('src/hooks/useReaderBootstrap.ts')).toContain('useDocumentProgress(documentId)');
+  test('queries reader startup through one aggregate operation', () => {
+    const bootstrap = source('src/hooks/useReaderBootstrap.ts');
+    expect(bootstrap).toContain('getReaderBootstrap(documentId!');
+    expect(bootstrap).not.toContain('useDocumentProgress');
+    expect(bootstrap).not.toContain('useDocumentSettings');
+    expect(bootstrap).not.toContain('useDocumentMetadata');
     expect(source('src/contexts/TTSContext.tsx')).not.toContain('useDocumentProgress(');
     expect(source('src/hooks/epub/useEPUBLocationController.ts')).not.toContain('useDocumentProgress(');
   });
 
-  test('queries document settings only through the route bootstrap', () => {
-    expect(source('src/hooks/useReaderBootstrap.ts')).toContain('useDocumentSettings(documentId)');
+  test('does not retain per-document startup query hooks', () => {
+    expect(existsSync(resolve(root, 'src/hooks/useDocumentMetadata.ts'))).toBe(false);
+    expect(existsSync(resolve(root, 'src/hooks/useDocumentSettings.ts'))).toBe(false);
+    expect(existsSync(resolve(root, 'src/hooks/useDocumentProgress.ts'))).toBe(false);
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).not.toContain('useDocumentSettings');
     expect(source('src/app/(app)/epub/[id]/page.tsx')).not.toContain('useDocumentSettings');
     expect(source('src/app/(app)/html/[id]/page.tsx')).not.toContain('useDocumentSettings');
@@ -24,8 +30,8 @@ describe('reader server-state ownership', () => {
 
   test('disables and flushes progress before reader cleanup can reset location state', () => {
     const bootstrap = source('src/hooks/useReaderBootstrap.ts');
-    expect(bootstrap).toContain('progressPersistenceEnabledRef.current = false');
-    expect(bootstrap).toContain('flushDocumentProgress()');
+    expect(bootstrap).toContain('progressPersistenceEnabled.current = false');
+    expect(bootstrap).toContain('flushProgress()');
 
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
@@ -70,7 +76,7 @@ describe('reader server-state ownership', () => {
   });
 
   test('hard-cuts EPUB progress and startup to stable plan locators', () => {
-    const readerProgress = source('src/lib/client/reader-progress.ts');
+    const readerProgress = source('src/lib/shared/reader-position.ts');
     expect(readerProgress).not.toContain('export {');
     expect(readerProgress).not.toContain('const legacy = parsePositionToken(location)');
 

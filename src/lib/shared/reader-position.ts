@@ -44,25 +44,19 @@ export function parseReaderInitialPosition(
 
   if (readerType === 'html') {
     const match = /^html:([^:]+):(\d+)$/.exec(location);
-    if (match) {
-      let decoded: string;
-      try {
-        decoded = decodeURIComponent(match[1]);
-      } catch {
-        return null;
-      }
-      const numeric = Number(decoded);
-      const resolvedLocation: TTSLocation = decoded.trim() !== '' && Number.isFinite(numeric)
-        ? numeric
-        : decoded || 1;
-      return {
-        readerType,
-        location: resolvedLocation,
-        segmentOrdinal: Math.max(0, Number(match[2])),
-      };
+    if (!match) return null;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(match[1]);
+    } catch {
+      return null;
     }
-
-    return null;
+    const numeric = Number(decoded);
+    return {
+      readerType,
+      location: decoded.trim() !== '' && Number.isFinite(numeric) ? numeric : decoded || 1,
+      segmentOrdinal: Math.max(0, Number(match[2])),
+    };
   }
 
   return null;
@@ -75,9 +69,6 @@ export function serializeReaderPosition(
 ): string {
   const safeOrdinal = Math.max(0, Math.floor(segmentOrdinal));
   if (readerType === 'html') {
-    // Empty strings must default to a valid token too: `html::${idx}` fails to
-    // round-trip through parseReaderInitialPosition (its location group requires
-    // a non-empty match), so an empty location would silently drop progress.
     const safeLocation = location == null || location === '' ? 1 : location;
     return `html:${encodeURIComponent(String(safeLocation))}:${safeOrdinal}`;
   }

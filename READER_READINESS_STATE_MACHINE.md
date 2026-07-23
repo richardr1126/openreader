@@ -1,6 +1,7 @@
 # Unified Reader Bootstrap and Readiness
 
-Status: replacement architecture and branch-completion artifact.
+Status: implementation in progress. Server aggregation and the client query
+hard cut are implemented; SSE transport and the shared shell remain.
 
 This document completely supersedes the previous reader-readiness state-machine
 proposal. The filename is retained so existing references continue to find the
@@ -21,7 +22,8 @@ Do not add XState or Zustand for reader readiness.
 Use:
 
 - one server-owned bootstrap operation;
-- TanStack Query for its remote snapshot and retry behavior;
+- TanStack Query for the latest remote snapshot and explicit retry behavior;
+- one Next SSE route for pending bootstrap updates;
 - one small amount of local React state for the mounted renderer;
 - one uniform renderer callback when the initial surface is usable.
 
@@ -109,7 +111,9 @@ consumes them; it does not launch another plan-preparation lifecycle.
 | PDF parse job and artifact | Compute/server pipeline |
 | Playback plan | Compute/server pipeline |
 | Bootstrap aggregation | One server bootstrap operation |
-| Pending/ready/error snapshot | One TanStack Query |
+| Durable work | Existing PDF parse and playback-plan worker jobs |
+| Initial pending/ready/error snapshot | One TanStack Query |
+| Pending snapshot updates | One Next SSE route |
 | Shared loading presentation | `ReaderLoader` |
 | Initial renderer mount | `ReaderShell` |
 | Canvas, text layer, relocation, layout | Individual renderer |
@@ -121,8 +125,10 @@ No concern has two owners.
 
 ## Server Bootstrap Operation
 
-One operation resolves the existing metadata, settings, source, parsed
-artifact where applicable, playback plan, and initial position.
+The bootstrap operation is a server coordinator, not a new compute-worker job.
+It resolves the existing metadata, settings, source, parsed artifact where
+applicable, playback plan, and initial position by composing the existing
+durable PDF parse and playback-plan operations.
 
 It returns:
 
@@ -131,12 +137,29 @@ It returns:
 - `error` for a terminal or retryable failure.
 
 The operation may use existing services internally. Those services do not each
-need a corresponding client hook. The client observes only the aggregate
-bootstrap result.
+need a corresponding client hook. Creating or reconnecting a bootstrap
+observation must reuse the worker operations' existing idempotency keys.
 
-While the result is pending, the one bootstrap query owns any refetch policy.
-There must not also be document polling, parse polling, plan polling, and
-readiness polling in separate hooks.
+The initial `POST /api/documents/[id]/reader-bootstrap` ensures the required
+work and returns the current aggregate snapshot. If it is pending, the client
+opens `GET /api/documents/[id]/reader-bootstrap/events`.
+
+The SSE route:
+
+- authenticates and resolves the current snapshot immediately;
+- observes the active durable worker operation;
+- emits complete `ReaderBootstrapResult` snapshots, never client-reassembled
+  partial lifecycle events;
+- advances from PDF parse completion to playback-plan resolution on the server;
+- closes after `ready` or a terminal `error`;
+- safely recomputes and reattaches after EventSource reconnects.
+
+The connection observes work; it does not own it. Closing the browser or losing
+the stream does not cancel a parse or plan job.
+
+For serverless connection limits, EventSource reconnect is the recovery path.
+The reconnect starts from the current durable snapshot rather than depending on
+an in-memory event history.
 
 ## One Client Hook
 
@@ -148,8 +171,12 @@ const bootstrap = useReaderBootstrap(documentId);
 
 It exposes the server result directly. It does not mirror query fields into
 local state, derive a second lifecycle, or coordinate other readiness hooks.
+The hook performs one initial query and, only while pending, one EventSource
+subscription that writes full snapshots into that same query cache entry.
 
-Retry means refetching or retrying the same bootstrap operation.
+Retry means invoking the same bootstrap operation again. There is no
+`refetchInterval`, parse polling, plan polling, readiness timer, or second cache
+entry.
 
 ## One Reader Shell
 
@@ -263,8 +290,8 @@ useEffect(() => {
 }, [someReadinessFlag]);
 ```
 
-Renderers use their real completion callback. The bootstrap query owns its one
-server refetch policy.
+Renderers use their real completion callback. Pending server work is delivered
+by the bootstrap SSE route.
 
 ### State copied between contexts
 
@@ -289,23 +316,61 @@ The hard cut should remove the replaced instances of:
 Repository search should show that each deleted concept has no remaining alias
 under a new name.
 
-## Implementation Sequence
+## Current Implementation State
 
-This branch should finish in three bounded slices.
+Implemented:
 
-### 1. Contract and server aggregation
+- unified `ReaderBootstrapResult`, payload, position, and playback-plan types;
+- `POST /api/documents/[id]/reader-bootstrap`;
+- server aggregation of metadata, document settings, saved position, user TTS
+  preferences, PDF parse readiness, and the authoritative playback plan;
+- PDF parse progress mapping into the unified pending result;
+- one public `useReaderBootstrap(documentId)` query;
+- direct adoption of the supplied plan by the shared playback layer;
+- removal of `useDocumentMetadata`, `useDocumentSettings`,
+  `useDocumentProgress`, the old client bootstrap phase resolver, and
+  route-triggered playback-plan preparation;
+- PDF parsed-artifact loading is disabled until aggregate bootstrap readiness,
+  so it no longer competes with bootstrap parse observation;
+- TypeScript, the full unit suite, production build, compute-boundary check,
+  server-bundle guard, and route-error check pass for this slice.
 
-Add the unified result and payload types. Implement the single bootstrap
-operation by composing existing server services. Do not add a new client
-orchestrator.
+Temporary implementation that must be replaced, not retained:
 
-### 2. Shared shell and renderers
+- `useReaderBootstrap` currently uses a one-second `refetchInterval` while the
+  result is pending;
+- the three routes still own separate loader and renderer-mount presentation;
+- `ReaderPhaseLoader` and PDF's custom parse loader have not yet collapsed into
+  `ReaderLoader`;
+- route-local load derivation and several readiness booleans still exist;
+- the PDF renderer still fetches the ready parsed artifact after aggregate
+  bootstrap rather than receiving all renderer-immutable bootstrap data through
+  the final payload.
+
+## Remaining Implementation Sequence
+
+### 1. Replace bootstrap polling with SSE
+
+Add the one Next bootstrap-events route by reusing the existing worker
+operation-stream proxy infrastructure. It must emit aggregate snapshots and
+transition server-side from PDF parsing to playback-plan resolution. Replace
+the hook's `refetchInterval` with one EventSource subscription and update the
+same TanStack Query cache entry.
+
+Delete the polling policy in the same change. Do not add a bootstrap worker job,
+an SSE-specific store, or another client lifecycle.
+
+### 2. Shared shell, loader, and renderers
 
 Connect `useReaderBootstrap`, `ReaderShell`, `ReaderLoader`, and the uniform
 renderer contract for PDF, EPUB, and HTML. PDF passes optional parse progress.
 Cut all three routes to the shared path rather than retaining parallel paths.
 
-### 3. Deletion and effect audit
+Move any remaining immutable renderer bootstrap data into `ReaderPayload` as
+part of this cut. Do not retain a second initial artifact/source readiness
+workflow.
+
+### 3. Final deletion and effect audit
 
 Delete every replaced hook, flag, context field, timer, effect, loader branch,
 and compatibility type. Review every remaining readiness-related effect against
@@ -351,8 +416,11 @@ The branch is complete when:
 4. Each renderer exposes one initial `onReady` callback and keeps its internal
    lifecycle private.
 5. TTS consumes the supplied plan without preparing another one.
-6. Replaced readiness hooks, flags, effects, timers, and contexts are deleted.
-7. There is no XState, Zustand, compatibility layer, or fallback reader path.
-8. The final change is a clear net reduction in production client code.
+6. Pending bootstrap updates arrive through one aggregate SSE subscription,
+   with no polling interval.
+7. Replaced readiness hooks, flags, effects, timers, and contexts are deleted.
+8. There is no XState, Zustand, compatibility layer, fallback reader path, or
+   bootstrap worker job.
+9. The final change is a clear net reduction in production client code.
 
 Simplicity and deletion are acceptance criteria, not follow-up cleanup.

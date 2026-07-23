@@ -5,8 +5,8 @@ describe('query keys', () => {
   test('isolates server state by session and document', () => {
     expect(queryKeys.documents('user-a')).not.toEqual(queryKeys.documents('user-b'));
     expect(queryKeys.libraryDocuments('user-a')).not.toEqual(queryKeys.libraryDocuments('user-b'));
-    expect(queryKeys.progress('user-a', 'doc-a')).not.toEqual(queryKeys.progress('user-a', 'doc-b'));
-    expect(queryKeys.documentSettings('user-a', 'doc-a')).not.toEqual(queryKeys.documentSettings('user-b', 'doc-a'));
+    expect(queryKeys.readerBootstrap('user-a', 'doc-a')).not.toEqual(queryKeys.readerBootstrap('user-a', 'doc-b'));
+    expect(queryKeys.readerBootstrap('user-a', 'doc-a')).not.toEqual(queryKeys.readerBootstrap('user-b', 'doc-a'));
   });
 
   test('defines centralized keys for migrated server-state domains', () => {

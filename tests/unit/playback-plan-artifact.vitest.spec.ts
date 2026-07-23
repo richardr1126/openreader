@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   assertAuthoritativePlaybackPlan,
   normalizePlaybackPlan,
-} from '../../src/lib/client/tts/playback-plan';
+} from '../../src/lib/shared/playback-plan';
 
 describe('authoritative playback plan artifacts', () => {
   test('accepts a valid zero-segment artifact as authoritative', () => {

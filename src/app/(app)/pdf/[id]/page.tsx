@@ -26,7 +26,7 @@ import {
 import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
-import { serializeReaderPosition } from '@/lib/client/reader-progress';
+import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
 
@@ -46,13 +46,18 @@ export default function PDFViewerPage() {
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
   const router = useRouter();
-  const bootstrap = useReaderBootstrap(routeDocumentId, 'pdf');
+  const bootstrap = useReaderBootstrap(routeDocumentId);
+  const { result } = bootstrap;
   const {
     disableProgressPersistence,
     enableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
-  const pdfState = usePdfDocument(routeDocumentId, bootstrap.settings, bootstrap.updateSettings);
+  const pdfState = usePdfDocument(
+    result.status === 'ready' && result.payload.readerType === 'pdf' ? routeDocumentId : undefined,
+    result.status === 'ready' ? result.payload.settings : null,
+    bootstrap.updateSettings,
+  );
   const {
     setCurrentDocument,
     currDocName,
@@ -76,6 +81,8 @@ export default function PDFViewerPage() {
     stop,
     invalidatePlaybackPlan,
     setPdfSkipBlockKinds,
+    acceptBootstrapPlaybackPlan,
+    documentLanguage,
   } = useTTS();
   const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
   const stopRef = useLatestRef(stop);
@@ -119,19 +126,26 @@ export default function PDFViewerPage() {
   }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
 
   useEffect(() => {
-    if (bootstrap.phase !== 'error') return;
-    setError(bootstrap.error?.message || 'Failed to load document');
+    if (result.status !== 'error') return;
+    setError(result.message);
     setIsLoading(false);
-  }, [bootstrap.error, bootstrap.phase]);
+  }, [result]);
 
   const loadDocument = useCallback(async () => {
     if (!isLoading) return; // Prevent calls when not loading new doc
+    if (
+      result.status === 'ready'
+      && documentLanguage !== (result.payload.settings.language ?? 'auto')
+    ) return;
     console.log('Loading new document (from page.tsx)');
     let startedLoad = false;
     let loadSucceeded = false;
     try {
-      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
-      const resolved = bootstrap.document.id;
+      if (result.status !== 'ready') return;
+      if (result.payload.readerType !== 'pdf') {
+        throw new Error(`Expected a PDF document, received ${result.payload.readerType}`);
+      }
+      const resolved = result.payload.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -142,17 +156,18 @@ export default function PDFViewerPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      if (bootstrap.initialPosition?.readerType === 'pdf') {
-        prepareInitialPosition(bootstrap.initialPosition.location);
+      if (result.payload.initialPosition?.readerType === 'pdf') {
+        prepareInitialPosition(result.payload.initialPosition.location);
       }
+      await acceptBootstrapPlaybackPlan(result.payload.plan);
       for (let attempt = 0; attempt < 2; attempt += 1) {
-        const result = await setCurrentDocument(bootstrap.document);
-        if (result === 'loaded') {
+        const loadResult = await setCurrentDocument(result.payload.document);
+        if (loadResult === 'loaded') {
           loadSucceeded = true;
           loadedDocIdRef.current = resolved;
           break;
         }
-        if (result === 'superseded') {
+        if (loadResult === 'superseded') {
           // A newer load (or unmount) is now authoritative; it owns the loading
           // lifecycle. Bail without surfacing an error to avoid the spurious
           // "Failed to load" screen on first launch.
@@ -177,7 +192,7 @@ export default function PDFViewerPage() {
         setIsLoading(false);
       }
     }
-  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, enableProgressPersistence, isLoading, prepareInitialPosition, setCurrentDocument]);
+  }, [acceptBootstrapPlaybackPlan, documentLanguage, enableProgressPersistence, isLoading, prepareInitialPosition, result, setCurrentDocument]);
 
   useEffect(() => {
     loadDocument();

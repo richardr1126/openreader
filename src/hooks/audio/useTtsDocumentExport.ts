@@ -3,7 +3,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 
 import { resolveTtsExport } from '@/lib/client/api/tts';
-import type { TtsPlaybackPlan } from '@/lib/client/tts/playback-plan';
+import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { TtsPlaybackPlanRequest } from '@/hooks/audio/useTtsPlayback';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 

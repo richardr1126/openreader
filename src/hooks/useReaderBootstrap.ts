@@ -1,124 +1,108 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useDocumentMetadata } from '@/hooks/useDocumentMetadata';
-import { useDocumentProgress } from '@/hooks/useDocumentProgress';
-import { useDocumentSettings } from '@/hooks/useDocumentSettings';
-import { resolveReaderBootstrapPhase } from '@/lib/client/reader-bootstrap';
-import { parseReaderInitialPosition } from '@/lib/client/reader-progress';
-import type { DocumentType } from '@/types/documents';
+import { useCallback, useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuthSession } from '@/hooks/useAuthSession';
+import { getReaderBootstrap } from '@/lib/client/api/reader-bootstrap';
+import { putDocumentSettings } from '@/lib/client/api/documents';
+import { putDocumentProgress } from '@/lib/client/api/user-state';
+import { queryKeys } from '@/lib/client/query-keys';
 import type { DocumentSettings } from '@/types/document-settings';
+import type { ReaderBootstrapResult } from '@/types/reader-bootstrap';
 import type { DocumentProgressPayload } from '@/types/user-state';
-import { useConfig } from '@/contexts/ConfigContext';
 
-export function useReaderBootstrap(documentId: string | undefined, expectedType: DocumentType) {
-  const metadata = useDocumentMetadata(documentId);
-  const settings = useDocumentSettings(documentId);
-  const progress = useDocumentProgress(documentId);
-  const scheduleDocumentProgress = progress.schedule;
-  const flushDocumentProgress = progress.flush;
-  const { preferencesError, preferencesReady } = useConfig();
-  const markedOpenedDocumentRef = useRef<string | null>(null);
-  const progressPersistenceEnabledRef = useRef(false);
-  const markOpened = metadata.openedMutation.mutate;
+export function useReaderBootstrap(documentId: string | undefined) {
+  const { data: session, isPending: sessionPending } = useAuthSession();
+  const sessionId = session?.user?.id ?? 'no-session';
+  const key = queryKeys.readerBootstrap(sessionId, documentId ?? '');
+  const queryClient = useQueryClient();
+  const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingProgress = useRef<DocumentProgressPayload | null>(null);
+  const lastProgressTimestamp = useRef(0);
+  const progressPersistenceEnabled = useRef(false);
 
-  const phase = resolveReaderBootstrapPhase({
-    documentId,
-    expectedType,
-    metadataType: metadata.query.data?.type,
-    preferencesReady,
-    preferencesError: !!preferencesError,
-    metadata: metadata.query,
-    settings: settings.query,
-    progress: progress.query,
+  const query = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) => getReaderBootstrap(documentId!, { signal }),
+    enabled: !sessionPending && Boolean(documentId),
+    retry: false,
+    gcTime: 0,
+    refetchInterval: (current) => (
+      current.state.data?.status === 'pending' ? 1_000 : false
+    ),
   });
+  const settingsMutation = useMutation({
+    mutationFn: (settings: DocumentSettings) => putDocumentSettings(documentId!, settings),
+    onSuccess: (response) => {
+      queryClient.setQueryData<ReaderBootstrapResult>(key, (current) => (
+        current?.status === 'ready'
+          ? {
+            ...current,
+            payload: { ...current.payload, settings: response.settings },
+          }
+          : current
+      ));
+    },
+  });
+  const progressMutation = useMutation({ mutationFn: putDocumentProgress });
+  const mutateProgress = progressMutation.mutate;
 
-  useEffect(() => {
-    if (phase !== 'ready' || !documentId || markedOpenedDocumentRef.current === documentId) return;
-    markedOpenedDocumentRef.current = documentId;
-    markOpened(undefined, {
-      onError: () => {
-        // Release the guard on a transient failure so a later effect run can retry.
-        if (markedOpenedDocumentRef.current === documentId) {
-          markedOpenedDocumentRef.current = null;
-        }
-      },
-    });
-  }, [documentId, markOpened, phase]);
+  const flushProgress = useCallback(() => {
+    if (progressTimer.current) clearTimeout(progressTimer.current);
+    progressTimer.current = null;
+    const payload = pendingProgress.current;
+    pendingProgress.current = null;
+    if (payload) mutateProgress(payload);
+  }, [mutateProgress]);
 
-  const error = useMemo(() => {
-    if (!documentId) return new Error('Document not found');
-    if (preferencesError) return preferencesError;
-    if (metadata.query.error) return metadata.query.error;
-    if (settings.query.error) return settings.query.error;
-    if (progress.query.error) return progress.query.error;
-    if (metadata.query.isSuccess && !metadata.query.data) return new Error('Document not found');
-    if (metadata.query.data && metadata.query.data.type !== expectedType) {
-      return new Error(`Expected a ${expectedType} document, received ${metadata.query.data.type}`);
-    }
-    return null;
-  }, [
-    documentId,
-    expectedType,
-    metadata.query.data,
-    metadata.query.error,
-    metadata.query.isSuccess,
-    progress.query.error,
-    preferencesError,
-    settings.query.error,
-  ]);
-  const initialPosition = useMemo(
-    () => parseReaderInitialPosition(expectedType, progress.query.data),
-    [expectedType, progress.query.data],
-  );
-  const mutateSettings = settings.mutation.mutateAsync;
-  const updateSettings = useCallback(
-    (nextSettings: DocumentSettings) => mutateSettings(nextSettings),
-    [mutateSettings],
-  );
   const scheduleProgress = useCallback((
     payload: DocumentProgressPayload,
-    debounceMs?: number,
+    debounceMs = 1_000,
   ) => {
-    if (!progressPersistenceEnabledRef.current) return;
-    scheduleDocumentProgress(payload, debounceMs);
-  }, [scheduleDocumentProgress]);
+    if (!progressPersistenceEnabled.current) return;
+    if (progressTimer.current) clearTimeout(progressTimer.current);
+    const clientUpdatedAtMs = Math.max(Date.now(), lastProgressTimestamp.current + 1);
+    lastProgressTimestamp.current = clientUpdatedAtMs;
+    pendingProgress.current = { ...payload, clientUpdatedAtMs };
+    progressTimer.current = setTimeout(flushProgress, debounceMs);
+  }, [flushProgress]);
+
   const enableProgressPersistence = useCallback(() => {
-    progressPersistenceEnabledRef.current = true;
+    progressPersistenceEnabled.current = true;
   }, []);
   const disableProgressPersistence = useCallback(() => {
-    progressPersistenceEnabledRef.current = false;
-    flushDocumentProgress();
-  }, [flushDocumentProgress]);
+    progressPersistenceEnabled.current = false;
+    flushProgress();
+  }, [flushProgress]);
+  const updateSettings = useCallback(
+    (settings: DocumentSettings) => settingsMutation.mutateAsync(settings),
+    [settingsMutation],
+  );
   const retry = useCallback(async () => {
-    await Promise.all([
-      metadata.query.refetch(),
-      settings.query.refetch(),
-      progress.query.refetch(),
-    ]);
-  }, [metadata.query, progress.query, settings.query]);
+    await query.refetch();
+  }, [query]);
 
   useEffect(() => {
-    progressPersistenceEnabledRef.current = false;
+    progressPersistenceEnabled.current = false;
   }, [documentId]);
+  useEffect(() => () => flushProgress(), [flushProgress]);
+
+  const result: ReaderBootstrapResult = !documentId
+    ? { status: 'error', message: 'Document not found.', retryable: false }
+    : query.error
+      ? {
+        status: 'error',
+        message: query.error instanceof Error ? query.error.message : 'Failed to prepare reader.',
+        retryable: true,
+      }
+      : query.data ?? { status: 'pending' };
 
   return {
-    phase,
-    error,
-    document: metadata.query.data ?? null,
-    settings: settings.query.data?.settings ?? null,
-    progress: progress.query.data ?? null,
-    initialPosition,
+    result,
+    retry,
+    updateSettings,
     scheduleProgress,
     enableProgressPersistence,
     disableProgressPersistence,
-    retry,
-    updateSettings,
-    preferencesReady,
-    queries: {
-      metadata: metadata.query,
-      settings: settings.query,
-      progress: progress.query,
-    },
   };
 }

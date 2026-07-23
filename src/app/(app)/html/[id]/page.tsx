@@ -18,7 +18,7 @@ import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
-import { serializeReaderPosition } from '@/lib/client/reader-progress';
+import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { deriveReaderLoadState } from '@/lib/client/reader-load';
@@ -28,7 +28,8 @@ export default function HTMLPage() {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
-  const bootstrap = useReaderBootstrap(routeDocumentId, 'html');
+  const bootstrap = useReaderBootstrap(routeDocumentId);
+  const { result } = bootstrap;
   const {
     disableProgressPersistence,
     enableProgressPersistence,
@@ -53,13 +54,14 @@ export default function HTMLPage() {
     documentLanguage,
     setDocumentLanguage,
     invalidatePlaybackPlan,
-    playbackPlanLifecycle,
-    preparePlaybackPlan,
-    retryPlaybackPlan,
+    acceptBootstrapPlaybackPlan,
   } = useTTS();
   const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
   const stopRef = useLatestRef(stop);
-  const documentSettings = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, bootstrap.settings);
+  const documentSettings = mergeDocumentSettings(
+    DEFAULT_DOCUMENT_SETTINGS,
+    result.status === 'ready' ? result.payload.settings : null,
+  );
   const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
   const [error, setError] = useState<Error | null>(null);
@@ -87,19 +89,23 @@ export default function HTMLPage() {
   }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
 
   useEffect(() => {
-    if (bootstrap.phase !== 'error') return;
-    setError(bootstrap.error ?? new Error('Failed to load document'));
+    if (result.status !== 'error') return;
+    setError(new Error(result.message));
     setIsLoading(false);
-  }, [bootstrap.error, bootstrap.phase]);
+  }, [result]);
 
   const loadDocument = useCallback(async () => {
     if (!isLoading) return;
+    if (documentLanguage !== language) return;
     console.log('Loading new HTML document (from page.tsx)');
     let startedLoad = false;
     let loadSucceeded = false;
     try {
-      if (bootstrap.phase !== 'ready' || !bootstrap.document) return;
-      const resolved = bootstrap.document.id;
+      if (result.status !== 'ready') return;
+      if (result.payload.readerType !== 'html') {
+        throw new Error(`Expected an HTML document, received ${result.payload.readerType}`);
+      }
+      const resolved = result.payload.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -110,10 +116,14 @@ export default function HTMLPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      if (bootstrap.initialPosition?.readerType === 'html') {
-        prepareInitialPosition(bootstrap.initialPosition.location, bootstrap.initialPosition.segmentOrdinal);
+      if (result.payload.initialPosition?.readerType === 'html') {
+        prepareInitialPosition(
+          result.payload.initialPosition.location,
+          result.payload.initialPosition.segmentOrdinal,
+        );
       }
-      await setCurrentDocument(bootstrap.document);
+      await acceptBootstrapPlaybackPlan(result.payload.plan);
+      await setCurrentDocument(result.payload.document);
       loadedDocIdRef.current = resolved;
       loadSucceeded = true;
     } catch (err) {
@@ -127,7 +137,7 @@ export default function HTMLPage() {
         setIsLoading(false);
       }
     }
-  }, [bootstrap.document, bootstrap.initialPosition, bootstrap.phase, isLoading, prepareInitialPosition, setCurrentDocument]);
+  }, [acceptBootstrapPlaybackPlan, documentLanguage, isLoading, language, prepareInitialPosition, result, setCurrentDocument]);
 
   useEffect(() => {
     if (!isLoading) return;
@@ -144,17 +154,10 @@ export default function HTMLPage() {
     setDocumentLanguage(language);
   }, [language, setDocumentLanguage]);
 
-  useEffect(() => {
-    if (isLoading || currDocData === undefined || documentLanguage !== language || playbackPlanLifecycle.status !== 'idle') return;
-    void preparePlaybackPlan();
-  }, [currDocData, documentLanguage, isLoading, language, playbackPlanLifecycle.status, preparePlaybackPlan]);
-
   const loadState = deriveReaderLoadState({
-    bootstrapPhase: bootstrap.phase,
-    bootstrapError: bootstrap.error,
+    bootstrap: result,
     sourceStatus: error ? 'failed' : (isLoading ? 'loading' : (currDocData !== undefined ? 'ready' : 'failed')),
     sourceError: error,
-    plan: playbackPlanLifecycle,
     viewerReady,
     viewerError,
   });
@@ -182,21 +185,11 @@ export default function HTMLPage() {
     sentences.length,
   ]);
 
-  useEffect(() => {
-    if (playbackPlanLifecycle.status === 'queued' || playbackPlanLifecycle.status === 'running') {
-      setActiveSidebar(null);
-    }
-  }, [playbackPlanLifecycle.status]);
-
   const retryLoad = useCallback(() => {
     setError(null);
     if (loadState.retryKind === 'bootstrap') {
       setIsLoading(true);
       void bootstrap.retry();
-      return;
-    }
-    if (loadState.retryKind === 'plan') {
-      void retryPlaybackPlan();
       return;
     }
     if (loadState.retryKind === 'render') {
@@ -208,7 +201,7 @@ export default function HTMLPage() {
     loadedDocIdRef.current = null;
     inFlightDocIdRef.current = null;
     setIsLoading(true);
-  }, [bootstrap, loadState.retryKind, retryPlaybackPlan]);
+  }, [bootstrap, loadState.retryKind]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -252,7 +245,7 @@ export default function HTMLPage() {
             Documents
           </ButtonLink>
         }
-        title={currDocName || bootstrap.document?.name || 'Opening document'}
+        title={currDocName || (result.status === 'ready' ? result.payload.document.name : 'Opening document')}
         right={readerReady ? (
           <div className="flex items-center gap-3">
             <DocumentHeaderMenu

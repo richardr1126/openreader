@@ -39,7 +39,6 @@ import {
 } from '@/hooks/audio/useTtsDocumentNavigation';
 import { useTtsDocumentExport, type TtsDocumentAudioExportResolution } from '@/hooks/audio/useTtsDocumentExport';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
-import type { PlaybackPlanLifecycle } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
@@ -65,6 +64,7 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
+import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 
 // Media globals
 declare global {
@@ -111,9 +111,8 @@ interface TTSContextType extends TTSPlaybackState {
   setVoiceAndRestart: (voice: string) => void;
   /** Drop the cached playback plan after a segmentation change (block kinds / language). */
   invalidatePlaybackPlan: () => void;
-  playbackPlanLifecycle: PlaybackPlanLifecycle;
-  preparePlaybackPlan: () => Promise<import('@/lib/client/tts/playback-plan').TtsPlaybackPlan | null>;
-  retryPlaybackPlan: () => Promise<import('@/lib/client/tts/playback-plan').TtsPlaybackPlan | null>;
+  acceptBootstrapPlaybackPlan: (plan: TtsPlaybackPlan) => Promise<TtsPlaybackPlan>;
+  playbackPlanReady: boolean;
   setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
@@ -340,6 +339,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     voice,
   ]);
   const {
+    acceptBootstrapPlaybackPlan,
     applyPlaybackPlan,
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
@@ -347,8 +347,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ensurePlaybackPlan,
     invalidatePlaybackPlanLifecycle,
     planLifecycle: playbackPlanLifecycle,
-    preparePlaybackPlan,
-    retryPlaybackPlan,
   } = useTtsPlanController({
     activeReaderType,
     currentLocation: currDocPage,
@@ -610,9 +608,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
     invalidatePlaybackPlan,
-    playbackPlanLifecycle,
-    preparePlaybackPlan,
-    retryPlaybackPlan,
+    acceptBootstrapPlaybackPlan,
+    playbackPlanReady: playbackPlanLifecycle.status === 'ready',
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
@@ -654,9 +651,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
     invalidatePlaybackPlan,
-    playbackPlanLifecycle,
-    preparePlaybackPlan,
-    retryPlaybackPlan,
+    acceptBootstrapPlaybackPlan,
+    playbackPlanLifecycle.status,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,

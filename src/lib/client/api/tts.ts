@@ -8,7 +8,7 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { normalizeLocator } from '@openreader/tts/locator';
-import { normalizePlaybackPlan, type TtsPlaybackPlan } from '@/lib/client/tts/playback-plan';
+import { normalizePlaybackPlan, type TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
   const response = await fetch('/api/tts/voices', {

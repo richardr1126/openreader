@@ -7,7 +7,7 @@ import {
   normalizePlaybackPlan,
   playbackPlanToCanonicalSegments,
   type TtsPlaybackPlan,
-} from '@/lib/client/tts/playback-plan';
+} from '@/lib/shared/playback-plan';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 type PlaybackModelState = {

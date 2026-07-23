@@ -1,62 +1,53 @@
 import { describe, expect, test } from 'vitest';
 import { deriveReaderLoadState } from '../../src/lib/client/reader-load';
+import type { ReaderBootstrapResult } from '../../src/types/reader-bootstrap';
 
-const readyPlan = { status: 'ready' as const, error: null };
+const pending: ReaderBootstrapResult = { status: 'pending' };
+const ready = { status: 'ready', payload: {} } as ReaderBootstrapResult;
 
-describe('deriveReaderLoadState', () => {
-  test('uses the same ordered gates for every reader', () => {
+describe('reader load presentation', () => {
+  test('waits for the aggregate server bootstrap before client rendering', () => {
     expect(deriveReaderLoadState({
-      bootstrapPhase: 'loading-server-state',
+      bootstrap: pending,
       sourceStatus: 'idle',
-      plan: { status: 'idle', error: null },
       viewerReady: false,
     }).phase).toBe('opening-document');
+  });
 
+  test('keeps renderer mechanics in their natural order after bootstrap', () => {
     expect(deriveReaderLoadState({
-      bootstrapPhase: 'ready',
+      bootstrap: ready,
       sourceStatus: 'ready',
       parseStatus: 'running',
-      plan: { status: 'idle', error: null },
       viewerReady: false,
     }).phase).toBe('understanding-structure');
 
     expect(deriveReaderLoadState({
-      bootstrapPhase: 'ready',
+      bootstrap: ready,
       sourceStatus: 'ready',
-      plan: { status: 'running', error: null },
-      viewerReady: false,
-    }).phase).toBe('preparing-reading-plan');
-
-    expect(deriveReaderLoadState({
-      bootstrapPhase: 'ready',
-      sourceStatus: 'ready',
-      plan: readyPlan,
       viewerReady: false,
     }).phase).toBe('setting-your-place');
   });
 
-  test('only becomes non-blocking after the authoritative plan and viewer are ready', () => {
-    const state = deriveReaderLoadState({
-      bootstrapPhase: 'ready',
+  test('only becomes non-blocking after the renderer is ready', () => {
+    expect(deriveReaderLoadState({
+      bootstrap: ready,
       sourceStatus: 'ready',
-      plan: readyPlan,
       viewerReady: true,
-    });
-    expect(state).toMatchObject({ phase: 'ready', blocking: false, error: null });
+    })).toMatchObject({ phase: 'ready', blocking: false, error: null });
   });
 
-  test('keeps plan failure blocking with a plan-scoped retry', () => {
-    const error = new Error('worker failed');
-    expect(deriveReaderLoadState({
-      bootstrapPhase: 'ready',
-      sourceStatus: 'ready',
-      plan: { status: 'failed', error },
+  test('uses the aggregate retry policy for server errors', () => {
+    const state = deriveReaderLoadState({
+      bootstrap: { status: 'error', message: 'worker failed', retryable: true },
+      sourceStatus: 'idle',
       viewerReady: false,
-    })).toMatchObject({
-      phase: 'preparing-reading-plan',
-      blocking: true,
-      retryKind: 'plan',
-      error,
     });
+    expect(state).toMatchObject({
+      phase: 'opening-document',
+      blocking: true,
+      retryKind: 'bootstrap',
+    });
+    expect(state.error?.message).toBe('worker failed');
   });
 });

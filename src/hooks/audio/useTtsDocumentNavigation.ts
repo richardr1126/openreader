@@ -8,7 +8,7 @@ import {
   resolveFirstPlanIndexForDocumentAnchor,
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
-import type { TtsPlaybackPlan } from '@/lib/client/tts/playback-plan';
+import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSLocation } from '@/types/tts';
 import type { ReaderType } from '@/types/user-state';
