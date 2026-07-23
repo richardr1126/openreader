@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { getReaderBootstrap } from '@/lib/client/api/reader-bootstrap';
+import {
+  getReaderBootstrap,
+  subscribeReaderBootstrap,
+} from '@/lib/client/api/reader-bootstrap';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { putDocumentProgress } from '@/lib/client/api/user-state';
 import { queryKeys } from '@/lib/client/query-keys';
@@ -27,9 +30,6 @@ export function useReaderBootstrap(documentId: string | undefined) {
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
-    refetchInterval: (current) => (
-      current.state.data?.status === 'pending' ? 1_000 : false
-    ),
   });
   const settingsMutation = useMutation({
     mutationFn: (settings: DocumentSettings) => putDocumentSettings(documentId!, settings),
@@ -86,6 +86,15 @@ export function useReaderBootstrap(documentId: string | undefined) {
     progressPersistenceEnabled.current = false;
   }, [documentId]);
   useEffect(() => () => flushProgress(), [flushProgress]);
+  useEffect(() => {
+    if (!documentId || query.data?.status !== 'pending') return;
+    return subscribeReaderBootstrap(documentId, (snapshot) => {
+      queryClient.setQueryData<ReaderBootstrapResult>(
+        queryKeys.readerBootstrap(sessionId, documentId),
+        snapshot,
+      );
+    });
+  }, [documentId, query.data?.status, queryClient, sessionId]);
 
   const result: ReaderBootstrapResult = !documentId
     ? { status: 'error', message: 'Document not found.', retryable: false }

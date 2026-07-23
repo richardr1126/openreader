@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EPUBViewer } from '@/components/views/EPUBViewer';
-import { ReaderPhaseLoader } from '@/components/reader/ReaderPhaseLoader';
+import { ReaderError, ReaderLoader } from '@/components/reader/ReaderLoader';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
@@ -264,11 +264,12 @@ export default function EPUBPage() {
         ) : null}
         {loadState.blocking ? (
           <div className="absolute inset-0 z-10">
-            <ReaderPhaseLoader
-              phase={loadState.phase as Exclude<typeof loadState.phase, 'ready'>}
-              error={loadState.error}
-              onRetry={loadState.retryKind ? retryLoad : undefined}
-            />
+            {loadState.error ? (
+              <ReaderError
+                error={loadState.error}
+                onRetry={loadState.retryKind ? retryLoad : undefined}
+              />
+            ) : <ReaderLoader />}
           </div>
         ) : null}
       </div>

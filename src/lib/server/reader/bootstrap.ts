@@ -72,6 +72,11 @@ type DocumentRow = {
   recentlyOpenedAt: number | null;
 };
 
+export type ReaderBootstrapResolution = {
+  result: ReaderBootstrapResult;
+  operationId?: string;
+};
+
 function storedRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'string') {
     try {
@@ -128,7 +133,7 @@ function pendingPdfProgress(
 async function ensurePdfReady(
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
-): Promise<ReaderBootstrapResult | null> {
+): Promise<ReaderBootstrapResolution | null> {
   const input = {
     documentId,
     namespace: scope.testNamespace,
@@ -140,9 +145,11 @@ async function ensurePdfReady(
     const decision = await checkJobRate(scope.userId, 'pdf_layout', rateConfig);
     if (!decision.allowed) {
       return {
-        status: 'error',
-        message: 'PDF preparation is temporarily rate limited. Please try again shortly.',
-        retryable: true,
+        result: {
+          status: 'error',
+          message: 'PDF preparation is temporarily rate limited. Please try again shortly.',
+          retryable: true,
+        },
       };
     }
     const operation = await createOrReuseCurrentPdfParseOperation(input);
@@ -152,29 +159,36 @@ async function ensurePdfReady(
   if (resolved.artifact) return null;
   const operation = resolved.operation;
   if (!operation) {
-    return { status: 'pending', progress: pendingPdfProgress('pending', null) };
+    return { result: { status: 'pending', progress: pendingPdfProgress('pending', null) } };
   }
   const snapshot = pdfParseSnapshotFromWorkerState(operation);
   if (snapshot.parseStatus === 'failed') {
     return {
-      status: 'error',
-      message: snapshot.error || 'PDF structure could not be prepared.',
-      retryable: true,
+      result: {
+        status: 'error',
+        message: snapshot.error || 'PDF structure could not be prepared.',
+        retryable: true,
+      },
     };
   }
   if (snapshot.parseStatus === 'ready') {
     return {
-      status: 'error',
-      message: 'PDF preparation completed without a readable artifact.',
-      retryable: true,
+      result: {
+        status: 'error',
+        message: 'PDF preparation completed without a readable artifact.',
+        retryable: true,
+      },
     };
   }
   return {
-    status: 'pending',
-    progress: pendingPdfProgress(
-      snapshot.parseStatus === 'running' ? 'running' : 'pending',
-      snapshot.parseProgress,
-    ),
+    result: {
+      status: 'pending',
+      progress: pendingPdfProgress(
+        snapshot.parseStatus === 'running' ? 'running' : 'pending',
+        snapshot.parseProgress,
+      ),
+    },
+    operationId: operation.opId,
   };
 }
 
@@ -198,12 +212,14 @@ async function resolvePlan(
   scope: ResolvedSegmentDocumentScope,
   settings: ReturnType<typeof mergeDocumentSettings>,
   storedPreferences: unknown,
-): Promise<ReaderBootstrapResult | { plan: ReaderPayload['plan'] }> {
+): Promise<ReaderBootstrapResolution | { plan: ReaderPayload['plan'] }> {
   if (!isComputeWorkerAvailable()) {
     return {
-      status: 'error',
-      message: 'The compute worker required for reader playback is unavailable.',
-      retryable: true,
+      result: {
+        status: 'error',
+        message: 'The compute worker required for reader playback is unavailable.',
+        retryable: true,
+      },
     };
   }
   const [runtimeConfig, providers] = await Promise.all([
@@ -264,26 +280,36 @@ async function resolvePlan(
     }),
   );
   if (operation.status === 'queued' || operation.status === 'running') {
-    return { status: 'pending' };
+    return { result: { status: 'pending' }, operationId: operation.opId };
   }
   if (operation.status === 'failed') {
     return {
-      status: 'error',
-      message: operation.error?.message || 'The reading plan could not be prepared.',
-      retryable: true,
+      result: {
+        status: 'error',
+        message: operation.error?.message || 'The reading plan could not be prepared.',
+        retryable: true,
+      },
     };
   }
   const result = operation.result as TtsPlaybackPlanResult | undefined;
   if (!result?.planObjectKey) {
     return {
-      status: 'error',
-      message: 'The reading plan completed without an artifact.',
-      retryable: true,
+      result: {
+        status: 'error',
+        message: 'The reading plan completed without an artifact.',
+        retryable: true,
+      },
     };
   }
   const { artifact, body } = await readTtsPlaybackPlanArtifact(result.planObjectKey);
   if (artifact.storageUserId && artifact.storageUserId !== scope.storageUserId) {
-    return { status: 'error', message: 'Reading plan scope mismatch.', retryable: false };
+    return {
+      result: {
+        status: 'error',
+        message: 'Reading plan scope mismatch.',
+        retryable: false,
+      },
+    };
   }
   return {
     plan: assertAuthoritativePlaybackPlan(normalizePlaybackPlan({
@@ -297,10 +323,10 @@ async function resolvePlan(
   };
 }
 
-export async function resolveReaderBootstrap(
+export async function resolveReaderBootstrapState(
   request: NextRequest,
   documentId: string,
-): Promise<ReaderBootstrapResult | Response> {
+): Promise<ReaderBootstrapResolution | Response> {
   const scope = await resolveSegmentDocumentScope(request, documentId);
   if (scope instanceof Response) return scope;
   if (scope.readerType === 'pdf') {
@@ -335,9 +361,11 @@ export async function resolveReaderBootstrap(
   if (!row) return Response.json({ error: 'Document not found' }, { status: 404 });
   if (row.type !== 'pdf' && row.type !== 'epub' && row.type !== 'html') {
     return {
-      status: 'error',
-      message: `Document type "${row.type}" does not have a reader.`,
-      retryable: false,
+      result: {
+        status: 'error',
+        message: `Document type "${row.type}" does not have a reader.`,
+        retryable: false,
+      },
     };
   }
   const settings = mergeDocumentSettings(
@@ -346,7 +374,7 @@ export async function resolveReaderBootstrap(
   );
   const progress = toProgress(progressRows[0]);
   const planResult = await resolvePlan(documentId, scope, settings, preferenceRows[0]?.dataJson);
-  if ('status' in planResult) return planResult;
+  if ('result' in planResult) return planResult;
 
   const document: BaseDocument = {
     id: row.id,
@@ -364,14 +392,24 @@ export async function resolveReaderBootstrap(
     eq(documents.userId, scope.storageUserId),
   ));
   return {
-    status: 'ready',
-    payload: {
-      documentId,
-      readerType: row.type,
-      document: document as BaseDocument & { type: ReaderType },
-      settings,
-      plan: planResult.plan,
-      initialPosition: parseReaderInitialPosition(row.type, progress),
-    } as ReaderPayload,
+    result: {
+      status: 'ready',
+      payload: {
+        documentId,
+        readerType: row.type,
+        document: document as BaseDocument & { type: ReaderType },
+        settings,
+        plan: planResult.plan,
+        initialPosition: parseReaderInitialPosition(row.type, progress),
+      } as ReaderPayload,
+    },
   };
+}
+
+export async function resolveReaderBootstrap(
+  request: NextRequest,
+  documentId: string,
+): Promise<ReaderBootstrapResult | Response> {
+  const resolution = await resolveReaderBootstrapState(request, documentId);
+  return resolution instanceof Response ? resolution : resolution.result;
 }

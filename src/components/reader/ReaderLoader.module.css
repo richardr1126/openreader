@@ -79,31 +79,16 @@
 .cursor { left: 0.8rem; bottom: 0.7rem; width: 0.9rem; height: 0.18rem; background: var(--accent); animation: cursor-pulse 900ms ease-in-out infinite alternate; }
 .scan { left: -10%; top: 0; width: 120%; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, var(--accent), transparent); box-shadow: 0 0 14px var(--accent); }
 
-.mark[data-phase='understanding-structure'] .scan {
+.mark[data-parsing='true'] .scan {
   opacity: 1;
   animation: scan 1.35s var(--ease) infinite;
 }
 
-.mark[data-phase='understanding-structure'] .blockOne,
-.mark[data-phase='understanding-structure'] .blockTwo {
+.mark[data-parsing='true'] .blockOne,
+.mark[data-parsing='true'] .blockTwo {
   border-color: var(--accent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-
-.mark[data-phase='preparing-reading-plan'] .lineOne { width: 0.55rem; height: 0.55rem; border-radius: 50%; }
-.mark[data-phase='preparing-reading-plan'] .lineTwo { left: 1.75rem; top: 1.7rem; width: 2.15rem; background: var(--accent); }
-.mark[data-phase='preparing-reading-plan'] .lineThree { left: 1.15rem; top: 2.75rem; width: 2.75rem; }
-.mark[data-phase='preparing-reading-plan'] .blockOne { left: 1.1rem; top: 3.5rem; width: 2.55rem; height: 0.25rem; border: 0; }
-.mark[data-phase='preparing-reading-plan'] .blockTwo { left: 1.55rem; top: 4.25rem; width: 2.1rem; height: 0.25rem; border: 0; background: var(--accent); }
-
-.mark[data-phase='setting-your-place'] .sheet { transform: translateY(-0.12rem) rotate(-1.5deg); }
-.mark[data-phase='setting-your-place'] .cursor { width: 2.8rem; animation-duration: 520ms; }
-
-.mark[data-failed='true'] .sheet { transform: rotate(-3deg); border-color: var(--danger); }
-.mark[data-failed='true'] .scan, .mark[data-failed='true'] .cursor { animation: none; opacity: 0; }
-.mark[data-failed='true'] .lineOne { width: 2.5rem; height: 2px; transform: translate(0.15rem, 1.05rem) rotate(45deg); background: var(--danger); }
-.mark[data-failed='true'] .lineTwo { width: 2.5rem; height: 2px; transform: translate(-0.05rem, 0.25rem) rotate(-45deg); background: var(--danger); }
-.mark[data-failed='true'] .lineThree, .mark[data-failed='true'] .blockOne, .mark[data-failed='true'] .blockTwo { opacity: 0.22; }
 
 .copy { display: grid; gap: 0.4rem; }
 .copy h2 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: -0.015em; color: var(--foreground); }
@@ -121,7 +106,7 @@
 @keyframes progress-sweep { from { transform: translateX(-115%); } to { transform: translateX(305%); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .cursor, .mark[data-phase='understanding-structure'] .scan, .track[data-indeterminate='true'] span { animation: none; }
-  .mark[data-phase='understanding-structure'] .scan { top: 52%; opacity: 0.65; }
+  .cursor, .mark[data-parsing='true'] .scan, .track[data-indeterminate='true'] span { animation: none; }
+  .mark[data-parsing='true'] .scan { top: 52%; opacity: 0.65; }
   .track[data-indeterminate='true'] span { width: 46%; transform: none; opacity: 0.72; }
 }

@@ -27,3 +27,24 @@ export async function getReaderBootstrap(
   }
   return (await response.json()) as ReaderBootstrapResult;
 }
+
+export function subscribeReaderBootstrap(
+  documentId: string,
+  onSnapshot: (result: ReaderBootstrapResult) => void,
+): () => void {
+  const source = new EventSource(
+    `/api/documents/${encodeURIComponent(documentId)}/reader-bootstrap/events`,
+  );
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const result = JSON.parse(event.data) as ReaderBootstrapResult;
+      if (result.status !== 'pending' && result.status !== 'ready' && result.status !== 'error') return;
+      onSnapshot(result);
+      if (result.status !== 'pending') source.close();
+    } catch {
+      // EventSource reconnects; malformed snapshots do not replace valid cache data.
+    }
+  });
+  return () => source.close();
+}

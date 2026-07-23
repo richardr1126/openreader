@@ -30,7 +30,6 @@ export async function POST(
       headers: {
         'Cache-Control': 'private, no-store',
         Vary: 'Cookie, Authorization',
-        ...(result.status === 'pending' ? { 'Retry-After': '1' } : {}),
       },
     });
   } catch (error) {

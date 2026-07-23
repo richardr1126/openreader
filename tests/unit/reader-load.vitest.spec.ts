@@ -11,7 +11,7 @@ describe('reader load presentation', () => {
       bootstrap: pending,
       sourceStatus: 'idle',
       viewerReady: false,
-    }).phase).toBe('opening-document');
+    })).toMatchObject({ blocking: true, error: null });
   });
 
   test('keeps renderer mechanics in their natural order after bootstrap', () => {
@@ -20,13 +20,13 @@ describe('reader load presentation', () => {
       sourceStatus: 'ready',
       parseStatus: 'running',
       viewerReady: false,
-    }).phase).toBe('understanding-structure');
+    })).toMatchObject({ blocking: true, error: null });
 
     expect(deriveReaderLoadState({
       bootstrap: ready,
       sourceStatus: 'ready',
       viewerReady: false,
-    }).phase).toBe('setting-your-place');
+    })).toMatchObject({ blocking: true, error: null });
   });
 
   test('only becomes non-blocking after the renderer is ready', () => {
@@ -34,7 +34,7 @@ describe('reader load presentation', () => {
       bootstrap: ready,
       sourceStatus: 'ready',
       viewerReady: true,
-    })).toMatchObject({ phase: 'ready', blocking: false, error: null });
+    })).toMatchObject({ blocking: false, error: null });
   });
 
   test('uses the aggregate retry policy for server errors', () => {
@@ -44,7 +44,6 @@ describe('reader load presentation', () => {
       viewerReady: false,
     });
     expect(state).toMatchObject({
-      phase: 'opening-document',
       blocking: true,
       retryKind: 'bootstrap',
     });

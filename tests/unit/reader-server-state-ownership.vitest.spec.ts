@@ -12,6 +12,8 @@ describe('reader server-state ownership', () => {
   test('queries reader startup through one aggregate operation', () => {
     const bootstrap = source('src/hooks/useReaderBootstrap.ts');
     expect(bootstrap).toContain('getReaderBootstrap(documentId!');
+    expect(bootstrap).toContain('subscribeReaderBootstrap(documentId');
+    expect(bootstrap).not.toContain('refetchInterval');
     expect(bootstrap).not.toContain('useDocumentProgress');
     expect(bootstrap).not.toContain('useDocumentSettings');
     expect(bootstrap).not.toContain('useDocumentMetadata');
@@ -26,6 +28,23 @@ describe('reader server-state ownership', () => {
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).not.toContain('useDocumentSettings');
     expect(source('src/app/(app)/epub/[id]/page.tsx')).not.toContain('useDocumentSettings');
     expect(source('src/app/(app)/html/[id]/page.tsx')).not.toContain('useDocumentSettings');
+  });
+
+  test('uses one reader loader and aggregate PDF progress', () => {
+    expect(existsSync(resolve(root, 'src/components/reader/ReaderPhaseLoader.tsx'))).toBe(false);
+    expect(existsSync(resolve(root, 'src/components/reader/PdfLayoutScan.tsx'))).toBe(false);
+    const loader = source('src/components/reader/ReaderLoader.tsx');
+    expect(loader).toContain('progress?: ReaderBootstrapProgress');
+    for (const path of [
+      'src/app/(app)/pdf/[id]/page.tsx',
+      'src/app/(app)/epub/[id]/page.tsx',
+      'src/app/(app)/html/[id]/page.tsx',
+    ]) {
+      expect(source(path)).toContain('ReaderLoader');
+    }
+    expect(source('src/app/(app)/pdf/[id]/page.tsx')).toContain(
+      "result.status === 'pending' ? result.progress : undefined",
+    );
   });
 
   test('disables and flushes progress before reader cleanup can reset location state', () => {

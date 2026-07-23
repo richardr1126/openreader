@@ -1,7 +1,8 @@
 # Unified Reader Bootstrap and Readiness
 
-Status: implementation in progress. Server aggregation and the client query
-hard cut are implemented; SSE transport and the shared shell remain.
+Status: implementation in progress. Server aggregation, the client query hard
+cut, aggregate SSE transport, and the shared loader are implemented; the shared
+shell remains.
 
 This document completely supersedes the previous reader-readiness state-machine
 proposal. The filename is retained so existing references continue to find the
@@ -326,22 +327,23 @@ Implemented:
   preferences, PDF parse readiness, and the authoritative playback plan;
 - PDF parse progress mapping into the unified pending result;
 - one public `useReaderBootstrap(documentId)` query;
+- one aggregate bootstrap SSE route that follows PDF parsing into playback-plan
+  preparation and updates the existing query cache entry;
 - direct adoption of the supplied plan by the shared playback layer;
 - removal of `useDocumentMetadata`, `useDocumentSettings`,
   `useDocumentProgress`, the old client bootstrap phase resolver, and
   route-triggered playback-plan preparation;
 - PDF parsed-artifact loading is disabled until aggregate bootstrap readiness,
   so it no longer competes with bootstrap parse observation;
+- the PDF-specific parse loader and `ReaderPhaseLoader` have been replaced by
+  one `ReaderLoader`, with optional aggregate PDF parse progress;
 - TypeScript, the full unit suite, production build, compute-boundary check,
   server-bundle guard, and route-error check pass for this slice.
 
 Temporary implementation that must be replaced, not retained:
 
-- `useReaderBootstrap` currently uses a one-second `refetchInterval` while the
-  result is pending;
-- the three routes still own separate loader and renderer-mount presentation;
-- `ReaderPhaseLoader` and PDF's custom parse loader have not yet collapsed into
-  `ReaderLoader`;
+- the three routes still own separate loader placement and renderer-mount
+  presentation;
 - route-local load derivation and several readiness booleans still exist;
 - the PDF renderer still fetches the ready parsed artifact after aggregate
   bootstrap rather than receiving all renderer-immutable bootstrap data through
@@ -349,18 +351,7 @@ Temporary implementation that must be replaced, not retained:
 
 ## Remaining Implementation Sequence
 
-### 1. Replace bootstrap polling with SSE
-
-Add the one Next bootstrap-events route by reusing the existing worker
-operation-stream proxy infrastructure. It must emit aggregate snapshots and
-transition server-side from PDF parsing to playback-plan resolution. Replace
-the hook's `refetchInterval` with one EventSource subscription and update the
-same TanStack Query cache entry.
-
-Delete the polling policy in the same change. Do not add a bootstrap worker job,
-an SSE-specific store, or another client lifecycle.
-
-### 2. Shared shell, loader, and renderers
+### 1. Shared shell and renderers
 
 Connect `useReaderBootstrap`, `ReaderShell`, `ReaderLoader`, and the uniform
 renderer contract for PDF, EPUB, and HTML. PDF passes optional parse progress.
@@ -370,7 +361,7 @@ Move any remaining immutable renderer bootstrap data into `ReaderPayload` as
 part of this cut. Do not retain a second initial artifact/source readiness
 workflow.
 
-### 3. Final deletion and effect audit
+### 2. Final deletion and effect audit
 
 Delete every replaced hook, flag, context field, timer, effect, loader branch,
 and compatibility type. Review every remaining readiness-related effect against

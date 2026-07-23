@@ -32,7 +32,7 @@ import {
   type DocumentSettings,
 } from '@/types/document-settings';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
-import type { ParsedPdfDocument, ParsedPdfPage, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
+import type { ParsedPdfDocument, ParsedPdfPage, PdfParseStatus } from '@/types/parsed-pdf';
 import { useParsedPdfDocument } from '@/hooks/useParsedPdfDocument';
 
 import type {
@@ -65,7 +65,6 @@ export interface PdfDocumentState {
   pdfDocument: PDFDocumentProxy | undefined;
   parsedDocument: ParsedPdfDocument | null;
   parseStatus: PdfParseStatus | null;
-  parseProgress: PdfParseProgress | null;
   documentSettings: DocumentSettings;
   updateDocumentSettings: (settings: DocumentSettings) => Promise<void>;
   parsedOverlayEnabled: boolean;
@@ -124,7 +123,6 @@ export function usePdfDocument(
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy>();
   const parsedDocument = parsedPdf.query.data?.document ?? null;
   const parseStatus = parsedPdf.query.data?.parseStatus ?? (parsedPdf.query.isError ? 'failed' : null);
-  const parseProgress = parsedPdf.query.data?.parseProgress ?? null;
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   useEffect(() => {
     if (!serverDocumentSettings) return;
@@ -398,7 +396,6 @@ export function usePdfDocument(
       isPlaybackReady,
       parsedDocument,
       parseStatus,
-      parseProgress,
       documentSettings,
       updateDocumentSettings,
       parsedOverlayEnabled,
@@ -423,7 +420,6 @@ export function usePdfDocument(
       isPlaybackReady,
       parsedDocument,
       parseStatus,
-      parseProgress,
       documentSettings,
       updateDocumentSettings,
       parsedOverlayEnabled,

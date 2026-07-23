@@ -250,6 +250,7 @@ describe('server-state architecture', () => {
       '/api/documents/[id]/parsed/download',
       '/api/documents/[id]/parsed/events',
       '/api/documents/[id]/reader-bootstrap',
+      '/api/documents/[id]/reader-bootstrap/events',
       '/api/documents/[id]/settings',
       '/api/documents/blob/get',
       '/api/documents/blob/get/presign',
