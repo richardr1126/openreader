@@ -33,16 +33,6 @@ export function useReaderBootstrap(documentId: string | undefined) {
   });
   const settingsMutation = useMutation({
     mutationFn: (settings: DocumentSettings) => putDocumentSettings(documentId!, settings),
-    onSuccess: (response) => {
-      queryClient.setQueryData<ReaderBootstrapResult>(key, (current) => (
-        current?.status === 'ready'
-          ? {
-            ...current,
-            payload: { ...current.payload, settings: response.settings },
-          }
-          : current
-      ));
-    },
   });
   const progressMutation = useMutation({ mutationFn: putDocumentProgress });
   const mutateProgress = progressMutation.mutate;
@@ -74,10 +64,10 @@ export function useReaderBootstrap(documentId: string | undefined) {
     progressPersistenceEnabled.current = false;
     flushProgress();
   }, [flushProgress]);
-  const updateSettings = useCallback(
-    (settings: DocumentSettings) => settingsMutation.mutateAsync(settings),
-    [settingsMutation],
-  );
+  const updateSettings = useCallback(async (settings: DocumentSettings) => {
+    await settingsMutation.mutateAsync(settings);
+    await query.refetch({ throwOnError: true });
+  }, [query, settingsMutation]);
   const retry = useCallback(async () => {
     await query.refetch();
   }, [query]);

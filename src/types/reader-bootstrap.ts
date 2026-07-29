@@ -2,6 +2,7 @@ import type { DocumentSettings } from '@/types/document-settings';
 import type { BaseDocument } from '@/types/documents';
 import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
+import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type { ReaderType } from '@/types/user-state';
 
 export type ReaderBootstrapProgress = {
@@ -20,8 +21,12 @@ type ReaderPayloadBase<T extends ReaderType> = {
   initialPosition: ReaderInitialPosition;
 };
 
+export type PdfReaderPayload = ReaderPayloadBase<'pdf'> & {
+  parsedDocument: ParsedPdfDocument;
+};
+
 export type ReaderPayload =
-  | ReaderPayloadBase<'pdf'>
+  | PdfReaderPayload
   | ReaderPayloadBase<'epub'>
   | ReaderPayloadBase<'html'>;
 

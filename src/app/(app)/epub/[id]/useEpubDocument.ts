@@ -58,15 +58,12 @@ export interface EpubDocumentState {
   currDocPages: number | undefined;
   currDocPage: number | string;
   metadataLanguage: string | null;
-  isMetadataReady: boolean;
   isPlaybackReady: boolean;
   placementLifecycle: EpubPlacementLifecycle;
   renderedTextRevision: number;
-  renditionAttempt: number;
   setCurrentDocument: (metadata: BaseDocument, initialLocator: EpubProgressLocator | null) => Promise<void>;
   clearCurrDoc: () => void;
   refreshRenderedPlacement: RefreshRenderedPlacement;
-  retryPlacement: () => void;
   failPlacement: (error: Error) => void;
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
@@ -108,11 +105,9 @@ export function useEpubDocument(
   const [currDocData, setCurrDocData] = useState<ArrayBuffer>();
   const [currDocName, setCurrDocName] = useState<string>();
   const [metadataLanguage, setMetadataLanguage] = useState<string | null>(null);
-  const [isMetadataReady, setIsMetadataReady] = useState(false);
   const [placementLifecycle, setPlacementLifecycle] = useState<EpubPlacementLifecycle>(IDLE_EPUB_PLACEMENT);
   const [renderedTextRevision, setRenderedTextRevision] = useState(0);
   const [isRenditionReady, setIsRenditionReady] = useState(false);
-  const [renditionAttempt, setRenditionAttempt] = useState(0);
 
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | undefined>(undefined);
@@ -124,6 +119,7 @@ export function useEpubDocument(
   const placementOwnerRef = useRef(0);
   const completedPlacementCfiRef = useRef<string | null>(null);
   const committedLocationRef = useRef<EpubCommittedLocation | null>(null);
+  const initialPlacementCommittedRef = useRef(false);
   const playbackPlanReadyRef = useRef(false);
   const requestPlacementRef = useRef<RequestCommittedPlacement | null>(null);
   const initialLocatorRef = useRef<EpubProgressLocator | null>(null);
@@ -148,6 +144,7 @@ export function useEpubDocument(
     committedLocationRef.current = null;
     startupDisplayOwnerRef.current += 1;
     startupDisplayStartedRef.current = false;
+    initialPlacementCommittedRef.current = false;
     setPlacementLifecycle({ status, error: null });
   }, []);
 
@@ -155,7 +152,6 @@ export function useEpubDocument(
     setCurrDocData(undefined);
     setCurrDocName(undefined);
     setMetadataLanguage(null);
-    setIsMetadataReady(false);
     setCurrDocPages(undefined);
     isEPUBSetOnce.current = false;
     shouldPauseRef.current = true;
@@ -179,7 +175,6 @@ export function useEpubDocument(
   ): Promise<void> => {
     try {
       setMetadataLanguage(null);
-      setIsMetadataReady(false);
       clearEpubWindowIndex(bookRef.current);
       bookRef.current = null;
       renditionEventsCleanupRef.current?.();
@@ -236,6 +231,7 @@ export function useEpubDocument(
         }
         setRenderedTextMaps([]);
         completedPlacementCfiRef.current = startCfi;
+        initialPlacementCommittedRef.current = true;
         shouldPauseRef.current = true;
         setPlacementLifecycle({ status: 'empty-plan', error: null });
         return;
@@ -301,6 +297,7 @@ export function useEpubDocument(
       }
 
       completedPlacementCfiRef.current = startCfi;
+      initialPlacementCommittedRef.current = true;
       shouldPauseRef.current = true;
       if (!ownsPlacement()) return;
       setPlacementLifecycle({
@@ -441,24 +438,6 @@ export function useEpubDocument(
     setPlacementLifecycle({ status: 'failed', error });
   }, []);
 
-  const retryPlacement = useCallback(() => {
-    const book = bookRef.current;
-    const rendition = renditionRef.current;
-    completedPlacementCfiRef.current = null;
-    if (!book?.isOpen || !rendition) {
-      setIsRenditionReady(false);
-      setPlacementLifecycle({ status: 'placing', error: null });
-      setRenditionAttempt((attempt) => attempt + 1);
-      return;
-    }
-    if (!committedLocationRef.current) {
-      startupDisplayStartedRef.current = false;
-      void issueInitialDisplay();
-      return;
-    }
-    void refreshRenderedPlacement(true);
-  }, [issueInitialDisplay, refreshRenderedPlacement]);
-
   const setRendition = useCallback((rendition: Rendition) => {
     renditionEventsCleanupRef.current?.();
     const book = rendition.book;
@@ -505,12 +484,10 @@ export function useEpubDocument(
       .then((metadata) => {
         if (bookRef.current !== book) return;
         setMetadataLanguage(normalizeOptionalLanguageTag(metadata.language));
-        setIsMetadataReady(true);
       })
       .catch((error) => {
         if (bookRef.current !== book) return;
         setMetadataLanguage(null);
-        setIsMetadataReady(true);
         console.warn('Failed to read EPUB language metadata:', error);
       });
   }, [setIsEPUB]);
@@ -528,7 +505,8 @@ export function useEpubDocument(
     resolveLocatorToCfi,
   });
 
-  const isPlaybackReady = placementLifecycle.status === 'ready'
+  const isPlaybackReady = initialPlacementCommittedRef.current
+    || placementLifecycle.status === 'ready'
     || placementLifecycle.status === 'empty-plan';
 
   return useMemo(() => ({
@@ -538,14 +516,11 @@ export function useEpubDocument(
     currDocPages,
     currDocPage,
     metadataLanguage,
-    isMetadataReady,
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
-    renditionAttempt,
     clearCurrDoc,
     refreshRenderedPlacement,
-    retryPlacement,
     failPlacement,
     bookRef,
     renditionRef,
@@ -563,14 +538,11 @@ export function useEpubDocument(
     currDocPages,
     currDocPage,
     metadataLanguage,
-    isMetadataReady,
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
-    renditionAttempt,
     clearCurrDoc,
     refreshRenderedPlacement,
-    retryPlacement,
     failPlacement,
     handleLocationChanged,
     setRendition,

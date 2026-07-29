@@ -148,13 +148,14 @@ describe('server-state architecture', () => {
     expect(modal).not.toContain('setBookId');
   });
 
-  test('keeps parsed PDF server state and SSE cache updates in the parsed-document query hook', () => {
+  test('supplies the parsed PDF artifact through the aggregate bootstrap payload', () => {
     const pdf = source('src/app/(app)/pdf/[id]/usePdfDocument.ts');
-    const parsedDocumentHook = source('src/hooks/useParsedPdfDocument.ts');
-    expect(pdf).toContain('useParsedPdfDocument(documentId)');
+    const bootstrap = source('src/lib/server/reader/bootstrap.ts');
+    expect(pdf).toContain('parsedDocument: ParsedPdfDocument');
+    expect(pdf).not.toContain('useParsedPdfDocument');
     expect(pdf).not.toContain('subscribeParsedPdfDocumentEvents');
-    expect(parsedDocumentHook).toContain('queryKeys.parsedDocument');
-    expect(parsedDocumentHook).toContain('queryClient.setQueryData<ParsedPdfQueryState>');
+    expect(bootstrap).toContain('parsedDocument: parsedPdfDocument');
+    expect(existsSync(path.resolve(root, 'src/hooks/useParsedPdfDocument.ts'))).toBe(false);
   });
 
   test('keeps document preview completion on operation SSE instead of polling', () => {
@@ -271,8 +272,6 @@ describe('server-state architecture', () => {
       '/api/tts/export/download',
       '/api/tts/export/events',
       '/api/tts/export/resolve',
-      '/api/tts/playback/plans',
-      '/api/tts/playback/plans/[planId]/plan',
       '/api/tts/playback/plans/[planId]/seek-layout',
       '/api/tts/segments/clear',
       '/api/tts/shared-providers',
@@ -367,11 +366,12 @@ describe('server-state architecture', () => {
     const ttsApi = source('src/lib/client/api/tts.ts');
     const pdfPage = source('src/app/(app)/pdf/[id]/page.tsx');
     expect(playbackHook).toContain('createTtsPlaybackSession');
-    expect(planController).toContain('createTtsPlaybackPlan');
+    expect(planController).not.toContain('createTtsPlaybackPlan');
+    expect(planController).toContain('getPlaybackPlan');
     expect(planController).toContain('fetchPlaybackSeekLayoutUntilReady');
     expect(playbackHook).toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');
     expect(planController).toContain('applyPlaybackPlan(plan)');
-    expect(clientTts).toContain("fetch('/api/tts/playback/plans'");
+    expect(clientTts).not.toContain("fetch('/api/tts/playback/plans'");
     expect(clientTts).not.toContain('planOnly');
     expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('planOnly');
     expect(context).toContain('useTtsPlayback');
@@ -414,7 +414,8 @@ describe('server-state architecture', () => {
     expect(playbackModel).not.toContain('clearPlaybackSegments');
     expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('skipBlank');
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).toContain('setDocumentPlaybackAnchor(currDocPageNumber, Boolean(text.trim()))');
-    expect(pdfPage).toMatch(/updateDocumentSettings\(nextSettings\)\.then\(\(\) => \{[\s\S]*?invalidatePlaybackPlan\(\);[\s\S]*?\}\);/);
+    expect(pdfPage).toContain('void updateDocumentSettings(nextSettings)');
+    expect(pdfPage).not.toContain('invalidatePlaybackPlan');
     expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).not.toContain('setTTSText(text');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).toContain('setDocumentPlaybackAnchor(1, true');
     expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setText: setTTSText');
@@ -423,7 +424,8 @@ describe('server-state architecture', () => {
     expect(context).toContain('currentSentence,');
     expect(context).not.toContain('playbackAnchor:');
     expect(planController).toContain('acceptBootstrapPlaybackPlan');
-    expect(planController).toContain('resolveTtsPlaybackPlan');
+    expect(planController).not.toContain('resolveTtsPlaybackPlan');
+    expect(context).toContain('reacquirePlaybackPlan');
     expect(context).not.toContain('setPlaybackPlanSource');
     expect(context).not.toContain('setPlaybackSegments');
     expect(context).not.toContain('setSentences');

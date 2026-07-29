@@ -3,7 +3,10 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
-import { ReaderError, ReaderLoader } from '@/components/reader/ReaderLoader';
+import {
+  ReaderShell,
+  type ReaderRendererProps,
+} from '@/components/reader/ReaderShell';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { RateLimitPauseButton } from '@/components/player/RateLimitPauseButton';
 import { Header } from '@/components/Header';
@@ -14,25 +17,35 @@ import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
-import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
 import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
-import { deriveReaderLoadState } from '@/lib/client/reader-load';
 import { useHtmlDocument } from './useHtmlDocument';
 
 export default function HTMLPage() {
-  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
-  const bootstrap = useReaderBootstrap(routeDocumentId);
-  const { result } = bootstrap;
+
+  return (
+    <ReaderShell documentId={routeDocumentId} readerType="html">
+      {(props) => <HtmlReader {...props} />}
+    </ReaderShell>
+  );
+}
+
+function HtmlReader({
+  payload,
+  bootstrap,
+  rendererReady,
+  onReady,
+  onError,
+}: ReaderRendererProps<'html'>) {
+  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
+  const routeDocumentId = payload.documentId;
   const {
     disableProgressPersistence,
-    enableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
   const htmlState = useHtmlDocument();
@@ -50,25 +63,16 @@ export default function HTMLPage() {
     currentSentenceOrdinal,
     prepareInitialPosition,
     sentences,
-    stop,
     documentLanguage,
     setDocumentLanguage,
-    invalidatePlaybackPlan,
     acceptBootstrapPlaybackPlan,
   } = useTTS();
-  const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
-  const stopRef = useLatestRef(stop);
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
-    result.status === 'ready' ? result.payload.settings : null,
+    payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
-  const [error, setError] = useState<Error | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [viewerReady, setViewerReady] = useState(false);
-  const [viewerError, setViewerError] = useState<Error | null>(null);
-  const [viewerRevision, setViewerRevision] = useState(0);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
@@ -76,36 +80,12 @@ export default function HTMLPage() {
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    disableProgressPersistenceRef.current();
-    stopRef.current();
-    setIsLoading(true);
-    setViewerReady(false);
-    setViewerError(null);
-    setError(null);
-    setActiveSidebar(null);
-    inFlightDocIdRef.current = null;
-    loadedDocIdRef.current = null;
-  }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
-
-  useEffect(() => {
-    if (result.status !== 'error') return;
-    setError(new Error(result.message));
-    setIsLoading(false);
-  }, [result]);
-
   const loadDocument = useCallback(async () => {
-    if (!isLoading) return;
     if (documentLanguage !== language) return;
     console.log('Loading new HTML document (from page.tsx)');
     let startedLoad = false;
-    let loadSucceeded = false;
     try {
-      if (result.status !== 'ready') return;
-      if (result.payload.readerType !== 'html') {
-        throw new Error(`Expected an HTML document, received ${result.payload.readerType}`);
-      }
-      const resolved = result.payload.document.id;
+      const resolved = payload.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -116,36 +96,33 @@ export default function HTMLPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      if (result.payload.initialPosition?.readerType === 'html') {
+      if (payload.initialPosition?.readerType === 'html') {
         prepareInitialPosition(
-          result.payload.initialPosition.location,
-          result.payload.initialPosition.segmentOrdinal,
+          payload.initialPosition.location,
+          payload.initialPosition.segmentOrdinal,
         );
       }
-      await acceptBootstrapPlaybackPlan(result.payload.plan);
-      await setCurrentDocument(result.payload.document);
+      await acceptBootstrapPlaybackPlan(payload.plan);
+      await setCurrentDocument(payload.document);
       loadedDocIdRef.current = resolved;
-      loadSucceeded = true;
     } catch (err) {
       console.error('Error loading document:', err);
-      setError(err instanceof Error ? err : new Error('Failed to load document'));
+      onError(err instanceof Error ? err : new Error('Failed to load document'));
     } finally {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (startedLoad && loadSucceeded) {
-        setIsLoading(false);
-      }
     }
-  }, [acceptBootstrapPlaybackPlan, documentLanguage, isLoading, language, prepareInitialPosition, result, setCurrentDocument]);
+  }, [acceptBootstrapPlaybackPlan, documentLanguage, language, onError, payload, prepareInitialPosition, setCurrentDocument]);
 
   useEffect(() => {
-    if (!isLoading) return;
-    loadDocument();
-  }, [loadDocument, isLoading]);
+    void loadDocument();
+  }, [loadDocument]);
 
   const clearReaderSession = useCallback(() => {
     disableProgressPersistence();
+    inFlightDocIdRef.current = null;
+    loadedDocIdRef.current = null;
     clearCurrDoc();
   }, [clearCurrDoc, disableProgressPersistence]);
   useUnmountCleanupRef(clearReaderSession);
@@ -154,22 +131,8 @@ export default function HTMLPage() {
     setDocumentLanguage(language);
   }, [language, setDocumentLanguage]);
 
-  const loadState = deriveReaderLoadState({
-    bootstrap: result,
-    sourceStatus: error ? 'failed' : (isLoading ? 'loading' : (currDocData !== undefined ? 'ready' : 'failed')),
-    sourceError: error,
-    viewerReady,
-    viewerError,
-  });
-  const readerReady = !loadState.blocking;
-
   useEffect(() => {
-    if (!readerReady) return;
-    enableProgressPersistence();
-  }, [enableProgressPersistence, readerReady]);
-
-  useEffect(() => {
-    if (!routeDocumentId || !readerReady || !isPlaybackReady || sentences.length === 0) return;
+    if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;
     scheduleProgress({
       documentId: routeDocumentId,
       readerType: 'html',
@@ -178,30 +141,12 @@ export default function HTMLPage() {
   }, [
     currDocPage,
     currentSentenceOrdinal,
-    readerReady,
+    rendererReady,
     isPlaybackReady,
     routeDocumentId,
     scheduleProgress,
     sentences.length,
   ]);
-
-  const retryLoad = useCallback(() => {
-    setError(null);
-    if (loadState.retryKind === 'bootstrap') {
-      setIsLoading(true);
-      void bootstrap.retry();
-      return;
-    }
-    if (loadState.retryKind === 'render') {
-      setViewerError(null);
-      setViewerReady(false);
-      setViewerRevision((revision) => revision + 1);
-      return;
-    }
-    loadedDocIdRef.current = null;
-    inFlightDocIdRef.current = null;
-    setIsLoading(true);
-  }, [bootstrap, loadState.retryKind]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -232,7 +177,7 @@ export default function HTMLPage() {
       window.clearTimeout(settleT1);
       window.clearTimeout(settleT2);
     };
-  }, [readerReady, activeSidebar]);
+  }, [rendererReady, activeSidebar]);
 
   return (
     <>
@@ -245,8 +190,8 @@ export default function HTMLPage() {
             Documents
           </ButtonLink>
         }
-        title={currDocName || (result.status === 'ready' ? result.payload.document.name : 'Opening document')}
-        right={readerReady ? (
+        title={currDocName || payload.document.name}
+        right={rendererReady ? (
           <div className="flex items-center gap-3">
             <DocumentHeaderMenu
               zoomLevel={padPct}
@@ -266,40 +211,29 @@ export default function HTMLPage() {
       <div className="relative overflow-hidden" style={{ height: containerHeight }}>
         {currDocData !== undefined ? (
           <div
-            className={readerReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
-            aria-hidden={!readerReady}
+            className={rendererReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
+            aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
           >
             <HTMLViewer
-              key={viewerRevision}
               className="h-full"
               blocks={blocks}
               isTxt={isTxt}
-              onReady={() => setViewerReady(true)}
-              onError={setViewerError}
+              onReady={onReady}
+              onError={onError}
             />
           </div>
         ) : null}
-        {loadState.blocking ? (
-          <div className="absolute inset-0 z-10">
-            {loadState.error ? (
-              <ReaderError
-                error={loadState.error}
-                onRetry={loadState.retryKind ? retryLoad : undefined}
-              />
-            ) : <ReaderLoader />}
-          </div>
-        ) : null}
       </div>
-      {canExportAudiobook && readerReady && (
+      {canExportAudiobook && rendererReady && (
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
           documentType="html"
-          documentId={id as string}
+          documentId={routeDocumentId}
         />
       )}
-      {readerReady && (isAtLimit ? (
+      {rendererReady && (isAtLimit ? (
         <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
           <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
             <RateLimitPauseButton />
@@ -311,16 +245,16 @@ export default function HTMLPage() {
       ))}
       <DocumentSettings
         html
-        isOpen={readerReady && activeSidebar === 'settings'}
+        isOpen={rendererReady && activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
-        documentId={id as string}
+        documentId={routeDocumentId}
         language={language}
         onLanguageChange={(nextLanguage) => {
           void bootstrap.updateSettings({
             ...documentSettings,
             schemaVersion: 1,
             language: nextLanguage,
-          }).then(() => invalidatePlaybackPlan());
+          });
         }}
       />
     </>

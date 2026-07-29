@@ -1,5 +1,6 @@
 export const queryKeys = {
   documents: (sessionId: string) => ['documents', sessionId] as const,
+  readerBootstraps: () => ['reader-bootstrap'] as const,
   readerBootstrap: (sessionId: string, documentId: string) => ['reader-bootstrap', sessionId, documentId] as const,
   libraryDocuments: (sessionId: string) => ['documents', sessionId, 'library'] as const,
   preferences: (sessionId: string) => ['preferences', sessionId] as const,
@@ -7,7 +8,6 @@ export const queryKeys = {
   folders: (sessionId: string) => ['folders', sessionId] as const,
   sharedProviders: (sessionId: string) => ['tts-shared-providers', sessionId] as const,
   ttsVoices: (sessionId: string, providerRef: string, model: string) => ['tts-voices', sessionId, providerRef, model] as const,
-  parsedDocument: (sessionId: string, documentId: string) => ['parsed-document', sessionId, documentId] as const,
   claimCounts: (sessionId: string) => ['claim-counts', sessionId] as const,
   rateLimit: (sessionId: string) => ['rate-limit', sessionId] as const,
   admin: (sessionId: string, scope: string) => ['admin', sessionId, scope] as const,

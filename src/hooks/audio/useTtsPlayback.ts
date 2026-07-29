@@ -32,7 +32,7 @@ export type TtsPlaybackSessionRequest = TtsPlaybackPlanRequest & {
 type PlaybackController = {
   buildPlaybackPlanRequest: () => TtsPlaybackPlanRequest | null;
   buildPlaybackSessionRequest: () => TtsPlaybackSessionRequest | null;
-  createAndApplyPlaybackPlan: (request: TtsPlaybackPlanRequest, signal?: AbortSignal) => Promise<TtsPlaybackPlan | null>;
+  getPlaybackPlan: () => TtsPlaybackPlan | null;
   applyPlaybackPlan: (plan: TtsPlaybackPlan) => TtsPlaybackPlan;
 };
 
@@ -456,10 +456,10 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     }
 
     try {
-      const plan = await controller.createAndApplyPlaybackPlan(request);
+      const plan = controller.getPlaybackPlan();
       if (runId !== playbackRunIdRef.current) return;
       if (!plan?.planObjectKey) {
-        throw new Error('TTS playback plan was not ready in time');
+        throw new Error('The bootstrap playback plan is not ready');
       }
       const sessionRequest = controller.buildPlaybackSessionRequest();
       const selectedOrdinal = sessionRequest?.selectedOrdinal;

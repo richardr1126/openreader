@@ -8,7 +8,6 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { normalizeLocator } from '@openreader/tts/locator';
-import { normalizePlaybackPlan, type TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
   const response = await fetch('/api/tts/voices', {
@@ -156,93 +155,6 @@ export type TtsPlaybackSessionPayload = TtsPlaybackPlanPayload & {
   planSignature?: string;
   generationExtent?: 'window' | 'document';
 };
-
-export const createTtsPlaybackPlan = async (
-  payload: TtsPlaybackPlanPayload,
-  headers: TTSRequestHeaders,
-  signal?: AbortSignal,
-): Promise<{
-  planId: string;
-  operation: unknown;
-  planUrl: string;
-  seekLayoutUrl: string;
-}> => {
-  const response = await fetch('/api/tts/playback/plans', {
-    method: 'POST',
-    headers: headers as HeadersInit,
-    body: JSON.stringify(payload),
-    signal,
-  });
-
-  if (!response.ok) {
-    let problem: unknown = null;
-    try {
-      problem = await response.json();
-    } catch {
-      problem = null;
-    }
-    const err = new Error(`TTS playback plan failed with status ${response.status}`) as TTSRequestError;
-    err.status = response.status;
-    if (typeof problem === 'object' && problem !== null) {
-      const rec = problem as Record<string, unknown>;
-      if (typeof rec.code === 'string') err.code = rec.code;
-      if (typeof rec.type === 'string') err.type = rec.type;
-      if (typeof rec.title === 'string') err.title = rec.title;
-      if (typeof rec.detail === 'string') err.detail = rec.detail;
-    }
-    throw err;
-  }
-
-  return await response.json();
-};
-
-export type TtsPlaybackPlanOperationStatus = 'queued' | 'running';
-
-export type TtsPlaybackPlanResolution =
-  | { status: TtsPlaybackPlanOperationStatus; retryAfterMs: number }
-  | { status: 'ready'; plan: TtsPlaybackPlan };
-
-/**
- * Resolve one snapshot of a worker-backed canonical plan operation.
- * A 202 response is an active operation, not an absent artifact. Terminal
- * failures are surfaced as request errors so callers can enter a blocking
- * failed state rather than silently deriving a local plan.
- */
-export async function resolveTtsPlaybackPlan(
-  planUrl: string,
-  signal?: AbortSignal,
-): Promise<TtsPlaybackPlanResolution> {
-  const response = await fetch(planUrl, { cache: 'no-store', signal });
-  if (response.status === 202) {
-    const snapshot = (await response.json().catch(() => null)) as { status?: unknown } | null;
-    const status: TtsPlaybackPlanOperationStatus = snapshot?.status === 'running' ? 'running' : 'queued';
-    const retryAfterSeconds = Number(response.headers.get('retry-after'));
-    return {
-      status,
-      retryAfterMs: Number.isFinite(retryAfterSeconds)
-        ? Math.max(250, retryAfterSeconds * 1_000)
-        : 750,
-    };
-  }
-  if (!response.ok) {
-    let problem: unknown = null;
-    try {
-      problem = await response.json();
-    } catch {
-      problem = null;
-    }
-    const rec = problem && typeof problem === 'object' ? problem as Record<string, unknown> : null;
-    const error = new Error(
-      typeof rec?.error === 'string'
-        ? rec.error
-        : `TTS playback plan failed with status ${response.status}`,
-    ) as TTSRequestError;
-    error.status = response.status;
-    if (typeof rec?.code === 'string') error.code = rec.code;
-    throw error;
-  }
-  return { status: 'ready', plan: normalizePlaybackPlan(await response.json()) };
-}
 
 export type TtsPlaybackSeekLayoutSegment = {
   ordinal: number;

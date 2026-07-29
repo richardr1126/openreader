@@ -80,12 +80,18 @@ export function createReaderBootstrapEventStream(
         }
         if (!cancelled) controller.close();
       })().catch(() => {
-        if (!cancelled) controller.close();
+        if (!cancelled) {
+          try {
+            controller.close();
+          } catch {
+            // The response may already have been aborted by the client.
+          }
+        }
       });
     },
     cancel() {
       cancelled = true;
-      void activeReader?.cancel();
+      void activeReader?.cancel().catch(() => undefined);
       activeReader = null;
     },
   });

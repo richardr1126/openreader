@@ -34,20 +34,20 @@ describe('reader server-state ownership', () => {
     expect(existsSync(resolve(root, 'src/components/reader/ReaderPhaseLoader.tsx'))).toBe(false);
     expect(existsSync(resolve(root, 'src/components/reader/PdfLayoutScan.tsx'))).toBe(false);
     const loader = source('src/components/reader/ReaderLoader.tsx');
+    const shell = source('src/components/reader/ReaderShell.tsx');
     expect(loader).toContain('progress?: ReaderBootstrapProgress');
+    expect(shell).toContain('<ReaderLoader progress={result.progress} />');
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
       'src/app/(app)/epub/[id]/page.tsx',
       'src/app/(app)/html/[id]/page.tsx',
     ]) {
-      expect(source(path)).toContain('ReaderLoader');
+      expect(source(path)).toContain('<ReaderShell');
+      expect(source(path)).not.toContain('ReaderLoader');
     }
-    expect(source('src/app/(app)/pdf/[id]/page.tsx')).toContain(
-      "result.status === 'pending' ? result.progress : undefined",
-    );
   });
 
-  test('disables and flushes progress before reader cleanup can reset location state', () => {
+  test('disables progress and releases load guards before reader cleanup resets state', () => {
     const bootstrap = source('src/hooks/useReaderBootstrap.ts');
     expect(bootstrap).toContain('progressPersistenceEnabled.current = false');
     expect(bootstrap).toContain('flushProgress()');
@@ -58,21 +58,25 @@ describe('reader server-state ownership', () => {
       'src/app/(app)/html/[id]/page.tsx',
     ]) {
       const page = source(path);
-      expect(page).toMatch(/disableProgressPersistence\(\);\s+clearCurrDoc\(\);/);
+      expect(page).toMatch(
+        /disableProgressPersistence\(\);\s+inFlightDocIdRef\.current = null;\s+loadedDocIdRef\.current = null;\s+clearCurrDoc\(\);/,
+      );
     }
   });
 
-  test('does not restart reader sessions when live playback callbacks change', () => {
+  test('keys renderer sessions to the authoritative bootstrap surface', () => {
+    const shell = source('src/components/reader/ReaderShell.tsx');
+    expect(shell).toContain('result.payload.plan.planId');
+    expect(shell).toContain('key={`${surfaceKey}:${rendererAttempt}`}');
+    expect(shell).toContain('enableProgressPersistence()');
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
       'src/app/(app)/epub/[id]/page.tsx',
       'src/app/(app)/html/[id]/page.tsx',
     ]) {
       const page = source(path);
-      expect(page).toContain('const stopRef = useLatestRef(stop)');
-      expect(page).toContain('const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence)');
-      expect(page).toMatch(/disableProgressPersistenceRef\.current\(\);\s+stopRef\.current\(\);/);
-      expect(page).not.toMatch(/\}, \[disableProgressPersistence, (?:id|routeDocumentId), stop\]\);/);
+      expect(page).not.toContain('useLatestRef');
+      expect(page).not.toContain('useReaderBootstrap');
     }
   });
 
@@ -125,13 +129,16 @@ describe('reader server-state ownership', () => {
     expect(locationController).not.toContain('export {');
   });
 
-  test('keeps EPUB and HTML on committed surfaces while PDF is reset to its working baseline', () => {
+  test('commits each renderer through its real initial surface boundary', () => {
     const playbackModel = source('src/hooks/audio/useTtsPlaybackModel.ts');
     expect(playbackModel).toContain('model.selectedOrdinal === null');
 
     const planController = source('src/hooks/audio/useTtsPlanController.ts');
-    expect(planController).toContain('requestKeyRef.current = requestKey');
-    expect(planController).toContain('requestKeyRef.current !== operationKey');
+    expect(planController).toContain('getPlaybackPlan');
+    expect(planController).not.toContain('preparedRequestKeyRef');
+    expect(planController).not.toContain('requestKeyRef');
+    expect(planController).not.toContain('createTtsPlaybackPlan');
+    expect(planController).not.toContain('resolveTtsPlaybackPlan');
 
     const epubViewer = source('src/components/views/EPUBViewer.tsx');
     const epubHighlighting = source('src/hooks/epub/useEPUBHighlighting.ts');
@@ -152,16 +159,22 @@ describe('reader server-state ownership', () => {
     const pdfPage = source('src/app/(app)/pdf/[id]/page.tsx');
     const pdfHighlighting = source('src/lib/client/pdf.ts');
     const htmlViewer = source('src/components/views/HTMLViewer.tsx');
-    // PDF deliberately remains at the last working pre-c00 baseline until the
-    // identity-based state-machine hard cut. Do not reintroduce the rejected
-    // geometry-as-readiness/error-feedback implementation while it is reset.
-    expect(pdfViewer).not.toContain('failedSurfaceCommitKeyRef');
-    expect(pdfViewer).not.toContain('reportSurfaceCommitError');
+    expect(pdfViewer).toContain("parts.has('canvas')");
+    expect(pdfViewer).toContain("parts.has('text')");
+    expect(pdfViewer).toContain("parts.has('highlight')");
+    expect(pdfViewer).toContain('reportSurfaceCommitError');
+    expect(pdfViewer).toContain('playbackPlanSegmentCount === 0');
+    expect(pdfViewer).not.toContain('markViewerReady');
     expect(pdfPage).not.toContain('deriveReaderLoadState');
     expect(pdfPage).not.toContain('viewerError');
-    expect(pdfHighlighting).toContain('runHighlightTokenMatch');
+    expect(pdfPage).not.toContain('await new Promise((resolve) => setTimeout(resolve, 250))');
+    expect(pdfHighlighting).toContain('findBestHighlightTokenMatch');
+    expect(pdfHighlighting).not.toContain('new Worker(');
     expect(pdfHighlighting).toContain('useBlockGeometryOnly');
-    expect(existsSync(resolve(root, 'src/lib/client/pdf-highlight-worker.ts'))).toBe(true);
+    expect(existsSync(resolve(root, 'src/lib/client/pdf-highlight-worker.ts'))).toBe(false);
+    const epubPage = source('src/app/(app)/epub/[id]/page.tsx');
+    expect(epubPage).toContain('failPlacement(error)');
+    expect(epubPage).toContain('onError(error)');
     expect(htmlViewer).not.toContain('scheduleSentence');
     expect(htmlViewer).not.toContain('scheduleWord');
   });

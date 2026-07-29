@@ -114,7 +114,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
     htmlWordHighlightEnabled,
     ttsModel,
   } = useConfig();
-  const { voice, resolvedLanguage, invalidatePlaybackPlan, clearSegmentCaches } = useTTS();
+  const { voice, resolvedLanguage, reacquirePlaybackPlan, clearSegmentCaches } = useTTS();
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     voice,
@@ -317,9 +317,8 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
               onChange={(value) => {
                 const next = clampTtsSegmentMaxBlockLength(value);
                 setLocalMaxBlockLength(next);
-                void updateConfigKey('ttsSegmentMaxBlockLength', next);
-                // Block length changes segmentation; drop the stale cached plan.
-                invalidatePlaybackPlan();
+                void updateConfigKey('ttsSegmentMaxBlockLength', next)
+                  .then(reacquirePlaybackPlan);
               }}
             />
           </div>

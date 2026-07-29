@@ -347,9 +347,11 @@ export type WorkerOperationKind =
  *
  * `reusesSucceeded`: whether a succeeded operation record satisfies a new
  * request for the same opKey. Kinds marked `false` treat durable artifacts
- * (playback plans/segments, previews, conversions) as the reusable cache and
- * replace terminal operation records so each request re-verifies current
- * artifact/sidecar state.
+ * (playback segments, previews, conversions) as the reusable cache and replace
+ * terminal operation records so each request re-verifies current artifact or
+ * sidecar state. Playback-plan operations are reusable because their result is
+ * the stable pointer to the plan artifact; cache clearing invalidates matching
+ * operations before deleting that artifact.
  *
  * `slowJobLogThresholdMs`: compute duration above which the worker loop logs
  * the job as slow.
@@ -360,7 +362,7 @@ export const WORKER_OPERATION_KIND_POLICY: Record<WorkerOperationKind, {
 }> = {
   pdf_layout: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
   tts_playback: { reusesSucceeded: false, slowJobLogThresholdMs: 30_000 },
-  tts_playback_plan: { reusesSucceeded: false, slowJobLogThresholdMs: 30_000 },
+  tts_playback_plan: { reusesSucceeded: true, slowJobLogThresholdMs: 30_000 },
   tts_playback_export: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
   document_preview: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
   document_conversion: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },

@@ -24,10 +24,6 @@ type UseTtsDocumentExportInput = {
   playbackPlanRef: MutableRefObject<TtsPlaybackPlan | null>;
   applyWorkerPlan: (plan: TtsPlaybackPlan) => CanonicalTtsSegment[];
   buildPlaybackPlanRequest: () => TtsPlaybackPlanRequest | null;
-  ensurePlaybackPlan: (
-    request: TtsPlaybackPlanRequest,
-    signal?: AbortSignal,
-  ) => Promise<TtsPlaybackPlan | null>;
 };
 
 export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
@@ -35,7 +31,6 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
     playbackPlanRef,
     applyWorkerPlan,
     buildPlaybackPlanRequest,
-    ensurePlaybackPlan,
   } = input;
 
   const resolveDocumentAudioExportInternal = useCallback(async (
@@ -48,12 +43,9 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       throw new Error('No document is ready for audio export.');
     }
 
-    const existingPlan = playbackPlanRef.current;
-    const plan = existingPlan?.planObjectKey && existingPlan.segments.length > 0
-      ? existingPlan
-      : await ensurePlaybackPlan(request, signal);
+    const plan = playbackPlanRef.current;
     if (!plan?.planObjectKey || plan.segments.length === 0) {
-      throw new Error('The worker playback plan was not ready for export.');
+      throw new Error('The bootstrap playback plan is not ready for export.');
     }
 
     const canonicalPlan = applyWorkerPlan(plan);
@@ -104,7 +96,7 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       plannedCount,
       completedCount,
     };
-  }, [applyWorkerPlan, buildPlaybackPlanRequest, ensurePlaybackPlan, playbackPlanRef]);
+  }, [applyWorkerPlan, buildPlaybackPlanRequest, playbackPlanRef]);
 
   const resolveDocumentAudioExport = useCallback((
     options: { format: 'mp3' | 'm4b'; speed: number },

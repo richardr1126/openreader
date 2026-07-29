@@ -74,7 +74,7 @@ describe('state-machine decisions', () => {
     })).toBe('kind_mismatch');
   });
 
-  test('does not reuse terminal playback plan operations', () => {
+  test('reuses terminal playback plan operations', () => {
     const current = runningState({
       kind: 'tts_playback_plan',
       status: 'succeeded',
@@ -85,6 +85,6 @@ describe('state-machine decisions', () => {
       requestKind: 'tts_playback_plan',
       now: 2_100,
       opStaleMs: 10_000,
-    })).toBe(false);
+    })).toBe(true);
   });
 });

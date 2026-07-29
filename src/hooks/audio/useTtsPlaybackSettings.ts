@@ -19,6 +19,7 @@ type UseTtsPlaybackSettingsInput = {
   setSpeed: (speed: number) => void;
   setVoice: (voice: string) => void;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
+  reacquirePlaybackPlan: () => Promise<void>;
 };
 
 export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
@@ -36,28 +37,30 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     setSpeed,
     setVoice,
     updateConfigKey,
+    reacquirePlaybackPlan,
   } = input;
 
   const clearSegmentCaches = useCallback(() => {
     const wasPlaying = isPlaying;
-    const sequence = ++restartSeqRef.current;
+    restartSeqRef.current += 1;
     resetPlaybackPlan({ resetSelection: false });
     abortAudio();
     sentenceAlignmentCacheRef.current.clear();
     setCurrentSentenceAlignment(undefined);
     setCurrentWordIndex(null);
-    if (!wasPlaying) return;
-    setIsProcessing(true);
-    setIsPlaying(false);
-    window.setTimeout(() => {
+    if (wasPlaying) {
+      setIsProcessing(true);
+      setIsPlaying(false);
+    }
+    void reacquirePlaybackPlan().finally(() => {
       setIsProcessing(false);
-      if (sequence === restartSeqRef.current) setIsPlaying(true);
-    }, 0);
+    });
   }, [
     abortAudio,
     isPlaying,
     resetPlaybackPlan,
     restartSeqRef,
+    reacquirePlaybackPlan,
     sentenceAlignmentCacheRef,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
@@ -78,11 +81,15 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     if (options.resetPlan) resetPlaybackPlan({ resetSelection: false });
     applyLocalState();
     await update();
+    if (options.resetPlan) await reacquirePlaybackPlan();
     setIsProcessing(false);
-    if (wasPlaying && sequence === restartSeqRef.current) setIsPlaying(true);
+    if (!options.resetPlan && wasPlaying && sequence === restartSeqRef.current) {
+      setIsPlaying(true);
+    }
   }, [
     abortAudio,
     isPlaying,
+    reacquirePlaybackPlan,
     resetPlaybackPlan,
     restartSeqRef,
     setIsPlaying,
@@ -113,23 +120,8 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     );
   }, [restartAfterConfigUpdate, setAudioSpeed, updateConfigKey]);
 
-  const invalidatePlaybackPlan = useCallback(() => {
-    const wasPlaying = isPlaying;
-    const sequence = ++restartSeqRef.current;
-    resetPlaybackPlan({ resetSelection: false });
-    if (!wasPlaying) return;
-    setIsProcessing(true);
-    setIsPlaying(false);
-    abortAudio();
-    window.setTimeout(() => {
-      setIsProcessing(false);
-      if (sequence === restartSeqRef.current) setIsPlaying(true);
-    }, 0);
-  }, [abortAudio, isPlaying, resetPlaybackPlan, restartSeqRef, setIsPlaying, setIsProcessing]);
-
   return {
     clearSegmentCaches,
-    invalidatePlaybackPlan,
     setAudioPlayerSpeedAndRestart,
     setSpeedAndRestart,
     setVoiceAndRestart,

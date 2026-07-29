@@ -32,8 +32,7 @@ import {
   type DocumentSettings,
 } from '@/types/document-settings';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
-import type { ParsedPdfDocument, ParsedPdfPage, PdfParseStatus } from '@/types/parsed-pdf';
-import { useParsedPdfDocument } from '@/hooks/useParsedPdfDocument';
+import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 
 import type {
   TTSSentenceAlignment,
@@ -64,12 +63,10 @@ export interface PdfDocumentState {
   isPlaybackReady: boolean;
   pdfDocument: PDFDocumentProxy | undefined;
   parsedDocument: ParsedPdfDocument | null;
-  parseStatus: PdfParseStatus | null;
   documentSettings: DocumentSettings;
   updateDocumentSettings: (settings: DocumentSettings) => Promise<void>;
   parsedOverlayEnabled: boolean;
   setParsedOverlayEnabled: (enabled: boolean) => void;
-  forceReparseParsedPdf: () => Promise<void>;
   setCurrentDocument: (metadata: BaseDocument) => Promise<SetCurrentDocumentResult>;
   clearCurrDoc: () => void;
 
@@ -84,7 +81,7 @@ export interface PdfDocumentState {
       useBlockGeometryOnly?: boolean;
       language?: string;
     },
-  ) => void;
+  ) => boolean;
   clearHighlights: () => void;
   clearWordHighlights: () => void;
   highlightWordIndex: (
@@ -99,8 +96,8 @@ export interface PdfDocumentState {
  * Main PDF route hook.
  */
 export function usePdfDocument(
-  documentId: string | undefined,
   serverDocumentSettings: DocumentSettings | null,
+  parsedDocument: ParsedPdfDocument,
   persistDocumentSettings: (settings: DocumentSettings) => Promise<unknown>,
 ): PdfDocumentState {
   const {
@@ -112,8 +109,6 @@ export function usePdfDocument(
     setIsEPUB,
     setDocumentLanguage,
   } = useTTS();
-  const parsedPdf = useParsedPdfDocument(documentId);
-
   // Current document state
   const [currDocId, setCurrDocId] = useState<string>();
   const [currDocData, setCurrDocData] = useState<ArrayBuffer>();
@@ -121,8 +116,6 @@ export function usePdfDocument(
   const [currDocText, setCurrDocText] = useState<string>();
   const [isPlaybackReady, setIsPlaybackReady] = useState(false);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy>();
-  const parsedDocument = parsedPdf.query.data?.document ?? null;
-  const parseStatus = parsedPdf.query.data?.parseStatus ?? (parsedPdf.query.isError ? 'failed' : null);
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   useEffect(() => {
     if (!serverDocumentSettings) return;
@@ -185,13 +178,6 @@ export function usePdfDocument(
       const pageFromParsed = (pageNum: number): ParsedPdfPage | undefined =>
         parsedDocument?.pages.find((page) => page.pageNumber === pageNum);
 
-      if (parseStatus !== 'ready' || !parsedDocument) {
-        lastPreparedPlaybackPageRef.current = null;
-        setCurrDocText(undefined);
-        setDocumentPlaybackAnchor(currDocPageNumber, false);
-        return;
-      }
-
       const getPageText = async (pageNumber: number): Promise<string> => {
         // Ignore stale/in-flight work if the document or worker changed.
         if (generation !== pdfDocGenerationRef.current || pdfDocumentRef.current !== currentPdf) {
@@ -237,7 +223,6 @@ export function usePdfDocument(
     setDocumentPlaybackAnchor,
     currDocText,
     parsedDocument,
-    parseStatus,
     documentSettings,
   ]);
 
@@ -333,19 +318,6 @@ export function usePdfDocument(
     }
   }, [currDocId, persistDocumentSettings]);
 
-  const forceReparseParsedPdf = useCallback(async (): Promise<void> => {
-    if (!currDocId) return;
-    try {
-      await parsedPdf.forceReparseMutation.mutateAsync();
-      loadSeqRef.current += 1;
-      setCurrDocText(undefined);
-      setIsPlaybackReady(false);
-      lastPreparedPlaybackPageRef.current = null;
-    } catch (error) {
-      console.error('Failed to force PDF reparse:', error);
-    }
-  }, [currDocId, parsedPdf.forceReparseMutation]);
-
   /**
    * Clears the current document state
    * Resets all document-related states and stops any ongoing TTS playback
@@ -395,12 +367,10 @@ export function usePdfDocument(
       currDocText,
       isPlaybackReady,
       parsedDocument,
-      parseStatus,
       documentSettings,
       updateDocumentSettings,
       parsedOverlayEnabled,
       setParsedOverlayEnabled,
-      forceReparseParsedPdf,
       clearCurrDoc,
       highlightPattern,
       clearHighlights,
@@ -419,12 +389,10 @@ export function usePdfDocument(
       currDocText,
       isPlaybackReady,
       parsedDocument,
-      parseStatus,
       documentSettings,
       updateDocumentSettings,
       parsedOverlayEnabled,
       setParsedOverlayEnabled,
-      forceReparseParsedPdf,
       clearCurrDoc,
       pdfDocument,
     ]

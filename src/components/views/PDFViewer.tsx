@@ -13,7 +13,8 @@ import type { ParsedPdfBlock, ParsedPdfPage } from '@/types/parsed-pdf';
 
 interface PDFViewerProps {
   zoomLevel: number;
-  onDocumentReady?: () => void;
+  onReady?: () => void;
+  onError?: (error: Error) => void;
   pdfState: Pick<
     PdfDocumentState,
     | 'highlightPattern'
@@ -36,16 +37,14 @@ interface PDFOnLinkClickArgs {
   dest?: Dest;
 }
 
-export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerProps) {
+export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
   const [textLayerRenderRevision, setTextLayerRenderRevision] = useState(0);
-  const hasSignaledReadyRef = useRef(false);
   const scaleRef = useRef<number>(1);
   const { containerWidth, containerHeight } = usePDFResize(containerRef);
   const sentenceHighlightSeqRef = useRef(0);
   const wordHighlightSeqRef = useRef(0);
-  const sentenceHighlightTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wordHighlightTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const lastSentenceLayoutKeyRef = useRef<string>('');
   const lastWordLayoutKeyRef = useRef<string>('');
@@ -61,6 +60,8 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     currentSegment,
     skipToLocation,
     resolvedLanguage,
+    playbackPlanReady,
+    playbackPlanSegmentCount,
   } = useTTS();
 
   const {
@@ -93,6 +94,39 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
   }, [currDocId, currDocData]);
 
   const layoutKey = `${zoomLevel}:${containerWidth}:${containerHeight}:${viewType}:${currDocPage}`;
+  const selectedSegmentKey = playbackPlanSegmentCount === 0
+    ? 'empty'
+    : currentSegment
+      ? `${currentSegment.ordinal}:${currentSegment.key}`
+      : null;
+  const surfaceKey = currDocId && playbackPlanReady && selectedSegmentKey
+    ? `${currDocId}:${layoutKey}:${selectedSegmentKey}`
+    : null;
+  const activeSurfaceKeyRef = useRef<string | null>(surfaceKey);
+  const committedSurfacePartsRef = useRef(new Map<string, Set<'canvas' | 'text' | 'highlight'>>());
+  const readySurfaceKeyRef = useRef<string | null>(null);
+  const failedSurfaceKeyRef = useRef<string | null>(null);
+  activeSurfaceKeyRef.current = surfaceKey;
+
+  const commitSurfacePart = useCallback((
+    key: string | null,
+    part: 'canvas' | 'text' | 'highlight',
+  ) => {
+    if (!key || activeSurfaceKeyRef.current !== key || readySurfaceKeyRef.current) return;
+    const parts = committedSurfacePartsRef.current.get(key) ?? new Set();
+    parts.add(part);
+    committedSurfacePartsRef.current.set(key, parts);
+    if (!parts.has('canvas') || !parts.has('text') || !parts.has('highlight')) return;
+    readySurfaceKeyRef.current = key;
+    onReady?.();
+  }, [onReady]);
+
+  const reportSurfaceCommitError = useCallback((error: Error) => {
+    const key = activeSurfaceKeyRef.current;
+    if (!key || readySurfaceKeyRef.current || failedSurfaceKeyRef.current === key) return;
+    failedSurfaceKeyRef.current = key;
+    onError?.(error);
+  }, [onError]);
 
   // Track page turns so we can keep the previous canvas visible until the new one paints.
   const lastRenderedLayoutKeyRef = useRef<string>('');
@@ -102,33 +136,28 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     }
   }, [layoutKey]);
 
-  const markViewerReady = useCallback(() => {
-    if (hasSignaledReadyRef.current) return;
-    hasSignaledReadyRef.current = true;
-    onDocumentReady?.();
-  }, [onDocumentReady]);
+  const handlePageRenderSuccess = useCallback((pageNumber: number, key: string | null) => {
+    if (pageNumber !== currDocPage) return;
+    lastRenderedLayoutKeyRef.current = layoutKey;
+    setIsPageRendering(false);
+    commitSurfacePart(key, 'canvas');
+  }, [commitSurfacePart, currDocPage, layoutKey]);
 
-  const handleTextLayerRenderSuccess = useCallback(() => {
+  const handleTextLayerRenderSuccess = useCallback((pageNumber: number, key: string | null) => {
+    if (pageNumber !== currDocPage) return;
     setTextLayerRenderRevision((revision) => revision + 1);
-  }, []);
+    commitSurfacePart(key, 'text');
+  }, [commitSurfacePart, currDocPage]);
 
   useEffect(() => {
-    hasSignaledReadyRef.current = false;
+    committedSurfacePartsRef.current.clear();
+    readySurfaceKeyRef.current = null;
+    failedSurfaceKeyRef.current = null;
   }, [currDocId, currDocData]);
-
-  const clearSentenceHighlightTimeouts = useCallback(() => {
-    for (const t of sentenceHighlightTimeoutsRef.current) clearTimeout(t);
-    sentenceHighlightTimeoutsRef.current = [];
-  }, []);
 
   const clearWordHighlightTimeouts = useCallback(() => {
     for (const t of wordHighlightTimeoutsRef.current) clearTimeout(t);
     wordHighlightTimeoutsRef.current = [];
-  }, []);
-
-  const scheduleSentenceTimeout = useCallback((fn: () => void, ms: number) => {
-    const t = setTimeout(fn, ms);
-    sentenceHighlightTimeoutsRef.current.push(t);
   }, []);
 
   const scheduleWordTimeout = useCallback((fn: () => void, ms: number) => {
@@ -144,27 +173,13 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
   }, [clearHighlights, clearWordHighlights]);
 
   useEffect(() => {
-    /*
-     * Handles highlighting the current sentence being read by TTS.
-     * Includes a small delay for smooth highlighting and cleans up on unmount.
-     * 
-     * Dependencies:
-     * - pdfText: Re-run when the text content changes
-     * - currentSentence: Re-run when the TTS position changes
-     * - highlightPattern: Function from context that could change
-     * - clearHighlights: Function from context that could change
-     */
-
-    if (!currDocText || !pdfHighlightEnabled) {
+    if (!pdfHighlightEnabled || playbackPlanSegmentCount === 0) {
       clearHighlights();
+      commitSurfacePart(surfaceKey, 'highlight');
       return;
     }
 
-    clearSentenceHighlightTimeouts();
-
-    if (!currentSentence) {
-      // Cancel any in-flight retry loops and ensure stale highlights don't remain
-      // when the current sentence becomes null/undefined.
+    if (!currentSentence || !currentSegment || !currDocText) {
       sentenceHighlightSeqRef.current += 1;
       clearHighlights();
       return;
@@ -183,6 +198,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     const hasParsedBlockLocator =
       !!parsedDocument
       && activeLocator?.readerType === 'pdf'
+      && activeLocator.page === currDocPage
       && typeof activeLocator.blockId === 'string'
       && activeLocator.blockId.length > 0;
 
@@ -191,39 +207,43 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     }
 
     if (!hasParsedBlockLocator) {
+      reportSurfaceCommitError(
+        new Error('The selected worker-plan segment did not contain a PDF block locator.'),
+      );
       return;
     }
 
     const useBlockGeometryOnly = !pdfWordHighlightEnabled;
 
-    const tryApply = (attempt: number) => {
-      if (seq !== sentenceHighlightSeqRef.current) return;
-      const container = containerRef.current;
-      if (!container) return;
-
-      if (!useBlockGeometryOnly) {
-        const spans = container.querySelectorAll('.react-pdf__Page__textContent span');
-        if (!spans.length) {
-          if (attempt < 1) scheduleSentenceTimeout(() => tryApply(attempt + 1), 90);
-          return;
-        }
-      }
-
-      highlightPattern(currentSentence, containerRef as RefObject<HTMLDivElement>, {
+    try {
+      const didCommitHighlight = highlightPattern(
+        currentSentence,
+        containerRef as RefObject<HTMLDivElement>,
+        {
         parsedDocument,
         locator: activeLocator,
         useBlockGeometryOnly,
         language: resolvedLanguage,
-      });
-    };
-
-    scheduleSentenceTimeout(() => tryApply(0), useBlockGeometryOnly ? 80 : 120);
-
-    return () => {
-      clearSentenceHighlightTimeouts();
-    };
+        },
+      );
+      if (seq !== sentenceHighlightSeqRef.current) return;
+      if (activeSurfaceKeyRef.current !== surfaceKey) return;
+      if (!didCommitHighlight) {
+        reportSurfaceCommitError(
+          new Error('The selected worker-plan segment did not map to the rendered PDF surface.'),
+        );
+        return;
+      }
+      commitSurfacePart(surfaceKey, 'highlight');
+    } catch (error) {
+      if (seq !== sentenceHighlightSeqRef.current) return;
+      reportSurfaceCommitError(
+        error instanceof Error ? error : new Error('Failed to highlight the initial PDF surface.'),
+      );
+    }
   }, [
     currDocText,
+    currDocPage,
     currentSentence,
     currentSegment,
     highlightPattern,
@@ -232,11 +252,13 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     pdfWordHighlightEnabled,
     parsedDocument,
     resolvedLanguage,
+    playbackPlanSegmentCount,
     layoutKey,
+    surfaceKey,
     textLayerRenderRevision,
     isPageRendering,
-    clearSentenceHighlightTimeouts,
-    scheduleSentenceTimeout
+    commitSurfacePart,
+    reportSurfaceCommitError,
   ]);
 
   // Word-level highlight layered on top of the block highlight
@@ -519,6 +541,8 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
         loading={null}
         noData={null}
         file={documentFile}
+        onLoadError={reportSurfaceCommitError}
+        onSourceError={reportSurfaceCommitError}
         onLoadSuccess={(pdf) => {
           onDocumentLoadSuccess(pdf);
         }}
@@ -548,12 +572,10 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                     renderTextLayer={i + 1 === currDocPage}
                     className="shadow-elev-2"
                     scale={currentScale()}
-                    onRenderSuccess={() => {
-                      lastRenderedLayoutKeyRef.current = layoutKey;
-                      setIsPageRendering(false);
-                      markViewerReady();
-                    }}
-                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
+                    onRenderSuccess={() => handlePageRenderSuccess(i + 1, surfaceKey)}
+                    onRenderError={reportSurfaceCommitError}
+                    onRenderTextLayerSuccess={() => handleTextLayerRenderSuccess(i + 1, surfaceKey)}
+                    onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
@@ -575,12 +597,10 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                     renderTextLayer={leftPage === currDocPage}
                     className="shadow-elev-2"
                     scale={currentScale()}
-                    onRenderSuccess={() => {
-                      lastRenderedLayoutKeyRef.current = layoutKey;
-                      setIsPageRendering(false);
-                      markViewerReady();
-                    }}
-                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
+                    onRenderSuccess={() => handlePageRenderSuccess(leftPage, surfaceKey)}
+                    onRenderError={reportSurfaceCommitError}
+                    onRenderTextLayerSuccess={() => handleTextLayerRenderSuccess(leftPage, surfaceKey)}
+                    onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
@@ -598,12 +618,10 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                     renderTextLayer={rightPage === currDocPage}
                     className="shadow-elev-2"
                     scale={currentScale()}
-                    onRenderSuccess={() => {
-                      lastRenderedLayoutKeyRef.current = layoutKey;
-                      setIsPageRendering(false);
-                      markViewerReady();
-                    }}
-                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
+                    onRenderSuccess={() => handlePageRenderSuccess(rightPage, surfaceKey)}
+                    onRenderError={reportSurfaceCommitError}
+                    onRenderTextLayerSuccess={() => handleTextLayerRenderSuccess(rightPage, surfaceKey)}
+                    onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);

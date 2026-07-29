@@ -1,3 +1,4 @@
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import {
@@ -15,7 +16,8 @@ import type { NextRequest } from 'next/server';
 import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import type { BaseDocument } from '@/types/documents';
-import type { DocumentProgressRecord, ReaderType } from '@/types/user-state';
+import type { DocumentProgressRecord } from '@/types/user-state';
+import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type {
   ReaderBootstrapProgress,
   ReaderBootstrapResult,
@@ -45,6 +47,7 @@ import {
   recordJobEvent,
 } from '@/lib/server/rate-limit/job-rate-limiter';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 import {
   buildTtsPlaybackPlanningInput,
   toTtsPlaybackPlanRequest,
@@ -133,7 +136,7 @@ function pendingPdfProgress(
 async function ensurePdfReady(
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
-): Promise<ReaderBootstrapResolution | null> {
+): Promise<ReaderBootstrapResolution | { parsedDocument: ParsedPdfDocument }> {
   const input = {
     documentId,
     namespace: scope.testNamespace,
@@ -156,7 +159,29 @@ async function ensurePdfReady(
     await recordJobEvent(scope.userId, 'pdf_layout', operation.opId, rateConfig);
     resolved = { artifact: null, operation };
   }
-  if (resolved.artifact) return null;
+  if (resolved.artifact) {
+    try {
+      const object = await getS3InternalClient().send(new GetObjectCommand({
+        Bucket: getS3Config().bucket,
+        Key: resolved.artifact.objectKey,
+      }));
+      const body = await object.Body?.transformToString();
+      if (!body) throw new Error('Parsed PDF artifact is empty');
+      const parsedDocument = JSON.parse(body) as ParsedPdfDocument;
+      if (!Array.isArray(parsedDocument.pages)) {
+        throw new Error('Parsed PDF artifact does not contain pages');
+      }
+      return { parsedDocument };
+    } catch {
+      return {
+        result: {
+          status: 'error',
+          message: 'PDF preparation completed without a readable artifact.',
+          retryable: true,
+        },
+      };
+    }
+  }
   const operation = resolved.operation;
   if (!operation) {
     return { result: { status: 'pending', progress: pendingPdfProgress('pending', null) } };
@@ -329,9 +354,11 @@ export async function resolveReaderBootstrapState(
 ): Promise<ReaderBootstrapResolution | Response> {
   const scope = await resolveSegmentDocumentScope(request, documentId);
   if (scope instanceof Response) return scope;
+  let parsedPdfDocument: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
     const pdfState = await ensurePdfReady(documentId, scope);
-    if (pdfState) return pdfState;
+    if ('result' in pdfState) return pdfState;
+    parsedPdfDocument = pdfState.parsedDocument;
   }
 
   const [documentRows, settingsRows, progressRows, preferenceRows] = await Promise.all([
@@ -391,17 +418,49 @@ export async function resolveReaderBootstrapState(
     eq(documents.id, documentId),
     eq(documents.userId, scope.storageUserId),
   ));
+  let payload: ReaderPayload;
+  if (row.type === 'pdf') {
+    if (!parsedPdfDocument) {
+      return {
+        result: {
+          status: 'error',
+          message: 'PDF preparation completed without a readable artifact.',
+          retryable: true,
+        },
+      };
+    }
+    payload = {
+      documentId,
+      readerType: 'pdf',
+      document: { ...document, type: 'pdf' },
+      settings,
+      plan: planResult.plan,
+      initialPosition: parseReaderInitialPosition('pdf', progress),
+      parsedDocument: parsedPdfDocument,
+    };
+  } else if (row.type === 'epub') {
+    payload = {
+      documentId,
+      readerType: 'epub',
+      document: { ...document, type: 'epub' },
+      settings,
+      plan: planResult.plan,
+      initialPosition: parseReaderInitialPosition('epub', progress),
+    };
+  } else {
+    payload = {
+      documentId,
+      readerType: 'html',
+      document: { ...document, type: 'html' },
+      settings,
+      plan: planResult.plan,
+      initialPosition: parseReaderInitialPosition('html', progress),
+    };
+  }
   return {
     result: {
       status: 'ready',
-      payload: {
-        documentId,
-        readerType: row.type,
-        document: document as BaseDocument & { type: ReaderType },
-        settings,
-        plan: planResult.plan,
-        initialPosition: parseReaderInitialPosition(row.type, progress),
-      } as ReaderPayload,
+      payload,
     },
   };
 }

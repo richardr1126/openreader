@@ -10,12 +10,12 @@ describe('query keys', () => {
   });
 
   test('defines centralized keys for migrated server-state domains', () => {
+    expect(queryKeys.readerBootstraps()).toEqual(['reader-bootstrap']);
     expect(queryKeys.preferences('user')).toEqual(['preferences', 'user']);
     expect(queryKeys.onboarding('user')).toEqual(['onboarding', 'user']);
     expect(queryKeys.folders('user')).toEqual(['folders', 'user']);
     expect(queryKeys.sharedProviders('user')).toEqual(['tts-shared-providers', 'user']);
     expect(queryKeys.ttsVoices('user', 'shared', 'model')).toEqual(['tts-voices', 'user', 'shared', 'model']);
-    expect(queryKeys.parsedDocument('user', 'doc')).toEqual(['parsed-document', 'user', 'doc']);
     expect(queryKeys.claimCounts('user')).toEqual(['claim-counts', 'user']);
     expect(queryKeys.rateLimit('user')).toEqual(['rate-limit', 'user']);
     expect(queryKeys.admin('user', 'settings')).toEqual(['admin', 'user', 'settings']);

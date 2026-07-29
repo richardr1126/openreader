@@ -3,7 +3,10 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EPUBViewer } from '@/components/views/EPUBViewer';
-import { ReaderError, ReaderLoader } from '@/components/reader/ReaderLoader';
+import {
+  ReaderShell,
+  type ReaderRendererProps,
+} from '@/components/reader/ReaderShell';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
@@ -14,24 +17,34 @@ import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { useLatestRef } from '@/hooks/useLatestRef';
 import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
-import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
-import { deriveReaderLoadState } from '@/lib/client/reader-load';
 import { useEpubDocument } from './useEpubDocument';
 
 export default function EPUBPage() {
-  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const { id } = useParams();
   const routeDocumentId = typeof id === 'string' ? id : undefined;
-  const bootstrap = useReaderBootstrap(routeDocumentId);
-  const { result } = bootstrap;
+
+  return (
+    <ReaderShell documentId={routeDocumentId} readerType="epub">
+      {(props) => <EpubReader {...props} />}
+    </ReaderShell>
+  );
+}
+
+function EpubReader({
+  payload,
+  bootstrap,
+  rendererReady,
+  onReady,
+  onError,
+}: ReaderRendererProps<'epub'>) {
+  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
+  const routeDocumentId = payload.documentId;
   const {
     disableProgressPersistence,
-    enableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
   const epubState = useEpubDocument(routeDocumentId, scheduleProgress);
@@ -39,31 +52,22 @@ export default function EPUBPage() {
     setCurrentDocument,
     currDocName,
     isPlaybackReady,
-    placementLifecycle,
-    retryPlacement,
     failPlacement,
     clearCurrDoc,
     metadataLanguage,
-    isMetadataReady,
   } = epubState;
   const {
-    stop,
     documentLanguage,
     setDocumentLanguage,
     sentences,
-    invalidatePlaybackPlan,
     acceptBootstrapPlaybackPlan,
   } = useTTS();
-  const disableProgressPersistenceRef = useLatestRef(disableProgressPersistence);
-  const stopRef = useLatestRef(stop);
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
-    result.status === 'ready' ? result.payload.settings : null,
+    payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
-  const [error, setError] = useState<Error | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
@@ -71,34 +75,17 @@ export default function EPUBPage() {
   const inFlightDocIdRef = useRef<string | null>(null);
   const loadedDocIdRef = useRef<string | null>(null);
   const didInitPadPctRef = useRef(false);
-
-  useEffect(() => {
-    disableProgressPersistenceRef.current();
-    stopRef.current();
-    setIsLoading(true);
-    setError(null);
-    setActiveSidebar(null);
-    inFlightDocIdRef.current = null;
-    loadedDocIdRef.current = null;
-  }, [disableProgressPersistenceRef, routeDocumentId, stopRef]);
-
-  useEffect(() => {
-    if (result.status !== 'error') return;
-    setError(new Error(result.message));
-    setIsLoading(false);
-  }, [result]);
+  const handleRendererError = useCallback((error: Error) => {
+    if (!rendererReady) failPlacement(error);
+    onError(error);
+  }, [failPlacement, onError, rendererReady]);
 
   const loadDocument = useCallback(async () => {
     console.log('Loading new epub (from page.tsx)');
     if (documentLanguage !== language) return;
     let startedLoad = false;
-    let loadSucceeded = false;
     try {
-      if (result.status !== 'ready') return;
-      if (result.payload.readerType !== 'epub') {
-        throw new Error(`Expected an EPUB document, received ${result.payload.readerType}`);
-      }
-      const resolved = result.payload.document.id;
+      const resolved = payload.document.id;
 
       if (loadedDocIdRef.current === resolved) {
         return;
@@ -109,34 +96,30 @@ export default function EPUBPage() {
 
       startedLoad = true;
       inFlightDocIdRef.current = resolved;
-      const initialLocator = result.payload.initialPosition?.readerType === 'epub'
-        ? result.payload.initialPosition.locator
+      const initialLocator = payload.initialPosition?.readerType === 'epub'
+        ? payload.initialPosition.locator
         : null;
-      await acceptBootstrapPlaybackPlan(result.payload.plan);
-      await setCurrentDocument(result.payload.document, initialLocator);
+      await acceptBootstrapPlaybackPlan(payload.plan);
+      await setCurrentDocument(payload.document, initialLocator);
       loadedDocIdRef.current = resolved;
-      loadSucceeded = true;
     } catch (err) {
       console.error('Error loading document:', err);
-      setError(err instanceof Error ? err : new Error('Failed to load document'));
+      onError(err instanceof Error ? err : new Error('Failed to load document'));
     } finally {
       if (startedLoad) {
         inFlightDocIdRef.current = null;
       }
-      if (startedLoad && loadSucceeded) {
-        setIsLoading(false);
-      }
     }
-  }, [acceptBootstrapPlaybackPlan, documentLanguage, language, result, setCurrentDocument]);
+  }, [acceptBootstrapPlaybackPlan, documentLanguage, language, onError, payload, setCurrentDocument]);
 
   useEffect(() => {
-    if (!isLoading) return;
-
-    loadDocument();
-  }, [loadDocument, isLoading]);
+    void loadDocument();
+  }, [loadDocument]);
 
   const clearReaderSession = useCallback(() => {
     disableProgressPersistence();
+    inFlightDocIdRef.current = null;
+    loadedDocIdRef.current = null;
     clearCurrDoc();
   }, [clearCurrDoc, disableProgressPersistence]);
   useUnmountCleanupRef(clearReaderSession);
@@ -144,36 +127,6 @@ export default function EPUBPage() {
   useEffect(() => {
     setDocumentLanguage(language);
   }, [language, setDocumentLanguage]);
-
-  const loadState = deriveReaderLoadState({
-    bootstrap: result,
-    sourceStatus: error ? 'failed' : (isLoading ? 'loading' : (epubState.currDocData ? 'ready' : 'failed')),
-    sourceError: error,
-    parseStatus: isMetadataReady ? 'ready' : 'pending',
-    viewerReady: isPlaybackReady,
-    viewerError: placementLifecycle.error,
-  });
-  const readerReady = !loadState.blocking;
-
-  useEffect(() => {
-    if (readerReady) enableProgressPersistence();
-  }, [enableProgressPersistence, readerReady]);
-
-  const retryLoad = useCallback(() => {
-    setError(null);
-    if (loadState.retryKind === 'bootstrap') {
-      setIsLoading(true);
-      void bootstrap.retry();
-      return;
-    }
-    if (loadState.retryKind === 'render') {
-      retryPlacement();
-      return;
-    }
-    loadedDocIdRef.current = null;
-    inFlightDocIdRef.current = null;
-    setIsLoading(true);
-  }, [bootstrap, loadState.retryKind, retryPlacement]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -205,7 +158,7 @@ export default function EPUBPage() {
       window.clearTimeout(settleT1);
       window.clearTimeout(settleT2);
     };
-  }, [readerReady, activeSidebar]);
+  }, [rendererReady, activeSidebar]);
 
   // Nudge EPUB renderer to reflow on horizontal padding changes
   useEffect(() => {
@@ -230,8 +183,8 @@ export default function EPUBPage() {
             Documents
           </ButtonLink>
         }
-        title={currDocName || (result.status === 'ready' ? result.payload.document.name : 'Opening document')}
-        right={readerReady ? (
+        title={currDocName || payload.document.name}
+        right={rendererReady ? (
           <div className="flex items-center gap-3">
             <DocumentHeaderMenu
               zoomLevel={padPct}
@@ -251,29 +204,20 @@ export default function EPUBPage() {
       <div className="relative overflow-hidden" style={{ height: containerHeight }}>
         {epubState.currDocData ? (
           <div
-            className={readerReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
-            aria-hidden={!readerReady}
+            className={rendererReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
+            aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
           >
             <EPUBViewer
               className="h-full"
               epubState={epubState}
-              onError={failPlacement}
+              onError={handleRendererError}
+              onReady={onReady}
             />
           </div>
         ) : null}
-        {loadState.blocking ? (
-          <div className="absolute inset-0 z-10">
-            {loadState.error ? (
-              <ReaderError
-                error={loadState.error}
-                onRetry={loadState.retryKind ? retryLoad : undefined}
-              />
-            ) : <ReaderLoader />}
-          </div>
-        ) : null}
       </div>
-      {canExportAudiobook && readerReady && (
+      {canExportAudiobook && rendererReady && (
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
@@ -281,7 +225,7 @@ export default function EPUBPage() {
           documentId={routeDocumentId || ''}
         />
       )}
-      {readerReady && (isAtLimit ? (
+      {rendererReady && (isAtLimit ? (
         <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
           <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
             <RateLimitPauseButton />
@@ -293,7 +237,7 @@ export default function EPUBPage() {
       ))}
       <DocumentSettings
         epub
-        isOpen={readerReady && activeSidebar === 'settings'}
+        isOpen={rendererReady && activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId || ''}
         language={language}
@@ -303,7 +247,7 @@ export default function EPUBPage() {
             ...documentSettings,
             schemaVersion: 1,
             language: nextLanguage,
-          }).then(() => invalidatePlaybackPlan());
+          });
         }}
       />
     </>

@@ -12,13 +12,15 @@ import { ToolbarButton } from '@/components/ui';
 
 interface EPUBViewerProps {
   className?: string;
+  onReady?: () => void;
   onError?: (error: Error) => void;
   epubState: Pick<
     EpubDocumentState,
     | 'currDocData'
     | 'currDocPage'
     | 'currDocPages'
-    | 'renditionAttempt'
+    | 'isPlaybackReady'
+    | 'placementLifecycle'
     | 'renderedTextRevision'
     | 'handleLocationChanged'
     | 'bookRef'
@@ -35,13 +37,11 @@ interface EPUBViewerProps {
 
 function EpubRenditionHost({
   data,
-  attempt,
   onError,
   onRendition,
   onToc,
 }: {
   data: ArrayBuffer;
-  attempt: number;
   onError?: (error: Error) => void;
   onRendition: (rendition: Rendition) => void;
   onToc: (toc: NavItem[]) => void;
@@ -84,18 +84,19 @@ function EpubRenditionHost({
         // Already closed renditions are safe to discard.
       }
     };
-  }, [attempt, data, onError, onRendition, onToc]);
+  }, [data, onError, onRendition, onToc]);
 
   return <div ref={hostRef} className="h-full w-full" />;
 }
 
-export function EPUBViewer({ className = '', epubState, onError }: EPUBViewerProps) {
+export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUBViewerProps) {
   const [isTocOpen, setIsTocOpen] = useState(false);
   const {
     currDocData,
     currDocPage,
     currDocPages,
-    renditionAttempt,
+    isPlaybackReady,
+    placementLifecycle,
     renderedTextRevision,
     handleLocationChanged,
     bookRef,
@@ -160,14 +161,29 @@ export function EPUBViewer({ className = '', epubState, onError }: EPUBViewerPro
 
   // Handle highlighting
   useLayoutEffect(() => {
+    if (!isPlaybackReady) return;
     if (currentSegment) {
       if (!highlightSegment(currentSegment)) {
         onError?.(new Error('The selected worker-plan segment did not map to the rendered EPUB.'));
+        return;
       }
     } else {
       clearHighlights();
     }
-  }, [currentSegment, renderedTextRevision, highlightSegment, clearHighlights, onError]);
+    onReady?.();
+  }, [
+    currentSegment,
+    renderedTextRevision,
+    highlightSegment,
+    clearHighlights,
+    isPlaybackReady,
+    onError,
+    onReady,
+  ]);
+
+  useEffect(() => {
+    if (placementLifecycle.error) onError?.(placementLifecycle.error);
+  }, [onError, placementLifecycle.error]);
 
   // Word-level highlight layered on top of the block highlight
   useEffect(() => {
@@ -204,7 +220,11 @@ export function EPUBViewer({ className = '', epubState, onError }: EPUBViewerPro
   if (!currDocData) return null;
 
   return (
-    <div className={`h-full flex flex-col relative z-0 ${className}`} ref={containerRef}>
+    <div
+      className={`h-full flex flex-col relative z-0 ${className}`}
+      data-placement-status={placementLifecycle.status}
+      ref={containerRef}
+    >
       <div className="flex items-center justify-between px-2 py-1 border-b border-line-soft bg-surface text-xs text-soft">
         <div className="flex items-center gap-2">
           <ToolbarButton
@@ -264,7 +284,6 @@ export function EPUBViewer({ className = '', epubState, onError }: EPUBViewerPro
       <div className="flex-1 min-h-0">
         <EpubRenditionHost
           data={currDocData}
-          attempt={renditionAttempt}
           onError={onError}
           onRendition={handleRendition}
           onToc={handleToc}

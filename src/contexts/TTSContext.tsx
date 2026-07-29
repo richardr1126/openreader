@@ -25,6 +25,7 @@ import {
   ReactElement
 } from 'react';
 import { useParams, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
@@ -65,6 +66,7 @@ import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
+import { queryKeys } from '@/lib/client/query-keys';
 
 // Media globals
 declare global {
@@ -109,8 +111,8 @@ interface TTSContextType extends TTSPlaybackState {
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   setVoiceAndRestart: (voice: string) => void;
-  /** Drop the cached playback plan after a segmentation change (block kinds / language). */
-  invalidatePlaybackPlan: () => void;
+  /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
+  reacquirePlaybackPlan: () => Promise<void>;
   acceptBootstrapPlaybackPlan: (plan: TtsPlaybackPlan) => Promise<TtsPlaybackPlan>;
   playbackPlanReady: boolean;
   setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
@@ -138,6 +140,7 @@ const TTSContext = createContext<TTSContextType | undefined>(undefined);
  * @returns {JSX.Element} TTSProvider component
  */
 export function TTSProvider({ children }: { children: ReactNode }): ReactElement {
+  const queryClient = useQueryClient();
   // Configuration context consumption
   const {
     isLoading: configIsLoading,
@@ -343,21 +346,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     applyPlaybackPlan,
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
-    createAndApplyPlaybackPlan,
-    ensurePlaybackPlan,
-    invalidatePlaybackPlanLifecycle,
-    planLifecycle: playbackPlanLifecycle,
+    getPlaybackPlan,
   } = useTtsPlanController({
     activeReaderType,
     currentLocation: currDocPage,
     currentPdfPage: currDocPageNumber,
     playbackAnchorRef,
     playbackPlanRef,
-    playbackSeekLayout,
     request: playbackPlanRequest,
     selectedOrdinalRef,
     applyWorkerPlan,
-    resetPlaybackPlan,
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   });
@@ -365,18 +363,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef,
     applyWorkerPlan,
     buildPlaybackPlanRequest,
-    ensurePlaybackPlan,
   });
   const playbackController = useMemo(() => ({
     applyPlaybackPlan,
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
-    createAndApplyPlaybackPlan,
+    getPlaybackPlan,
   }), [
     applyPlaybackPlan,
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
-    createAndApplyPlaybackPlan,
+    getPlaybackPlan,
   ]);
 
   const {
@@ -438,7 +435,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     isPlayingRef,
     pauseEpochRef,
     playbackAnchorRef,
-    playbackPlanReady: playbackPlanLifecycle.status === 'ready',
+    playbackPlanReady: Boolean(playbackPlan?.planObjectKey),
     playbackPlanRef,
     playbackSegmentsRef,
     playbackSyncNavigationRef,
@@ -543,9 +540,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentWordIndex(null);
   }, [abortAudio, invalidatePlaybackRun, publishPlaybackTimeSec, resetPlaybackPlan]);
 
+  const reacquirePlaybackPlan = useCallback(async () => {
+    if (!documentId) return;
+    await queryClient.refetchQueries({
+      queryKey: queryKeys.readerBootstraps(),
+      type: 'active',
+    });
+  }, [documentId, queryClient]);
+
   const {
     clearSegmentCaches,
-    invalidatePlaybackPlan: invalidatePlaybackPlanSettings,
     setAudioPlayerSpeedAndRestart,
     setSpeedAndRestart,
     setVoiceAndRestart,
@@ -563,12 +567,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeed,
     setVoice,
     updateConfigKey,
+    reacquirePlaybackPlan,
   });
-
-  const invalidatePlaybackPlan = useCallback(() => {
-    invalidatePlaybackPlanSettings();
-    invalidatePlaybackPlanLifecycle();
-  }, [invalidatePlaybackPlanLifecycle, invalidatePlaybackPlanSettings]);
 
 
   /**
@@ -607,9 +607,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
-    invalidatePlaybackPlan,
+    reacquirePlaybackPlan,
     acceptBootstrapPlaybackPlan,
-    playbackPlanReady: playbackPlanLifecycle.status === 'ready',
+    playbackPlanReady: Boolean(playbackPlan?.planObjectKey),
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
@@ -650,9 +650,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
-    invalidatePlaybackPlan,
+    reacquirePlaybackPlan,
     acceptBootstrapPlaybackPlan,
-    playbackPlanLifecycle.status,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
