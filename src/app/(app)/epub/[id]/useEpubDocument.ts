@@ -15,7 +15,6 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { useEPUBHighlighting } from '@/hooks/epub/useEPUBHighlighting';
 import { useEPUBLocationController } from '@/hooks/epub/useEPUBLocationController';
-import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { createRangeCfi } from '@/lib/client/epub';
 import {
   buildRenderedTextMaps,
@@ -35,7 +34,7 @@ import { buildEpubRangeStartAnchor } from '@/lib/client/epub/spine-coordinates';
 import { normalizeTtsLocationKey } from '@openreader/tts/locator';
 import { normalizeOptionalLanguageTag } from '@openreader/tts/language';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
-import type { BaseDocument } from '@/types/documents';
+import type { EPUBDocument } from '@/types/documents';
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ScheduleDocumentProgress } from '@/types/user-state';
@@ -61,8 +60,6 @@ export interface EpubDocumentState {
   isPlaybackReady: boolean;
   placementLifecycle: EpubPlacementLifecycle;
   renderedTextRevision: number;
-  setCurrentDocument: (metadata: BaseDocument, initialLocator: EpubProgressLocator | null) => Promise<void>;
-  clearCurrDoc: () => void;
   refreshRenderedPlacement: RefreshRenderedPlacement;
   failPlacement: (error: Error) => void;
   bookRef: RefObject<Book | null>;
@@ -86,9 +83,11 @@ export interface EpubDocumentState {
  * spine anchor resolves to an ordinal from that already-applied plan.
  */
 export function useEpubDocument(
-  documentId: string | undefined,
+  document: EPUBDocument,
+  initialLocator: EpubProgressLocator | null,
   scheduleProgress: ScheduleDocumentProgress,
 ): EpubDocumentState {
+  const documentId = document.id;
   const {
     currDocPage,
     currDocPages,
@@ -96,14 +95,12 @@ export function useEpubDocument(
     playbackPlanSegmentCount,
     reconcileEpubRenderedAnchor,
     resolveEpubPlanLocator,
-    setCurrDocPages,
     setIsEPUB,
-    stop,
   } = useTTS();
   const { epubHighlightEnabled } = useConfig();
 
-  const [currDocData, setCurrDocData] = useState<ArrayBuffer>();
-  const [currDocName, setCurrDocName] = useState<string>();
+  const currDocData = document.data;
+  const currDocName = document.name;
   const [metadataLanguage, setMetadataLanguage] = useState<string | null>(null);
   const [placementLifecycle, setPlacementLifecycle] = useState<EpubPlacementLifecycle>(IDLE_EPUB_PLACEMENT);
   const [renderedTextRevision, setRenderedTextRevision] = useState(0);
@@ -122,7 +119,7 @@ export function useEpubDocument(
   const initialPlacementCommittedRef = useRef(false);
   const playbackPlanReadyRef = useRef(false);
   const requestPlacementRef = useRef<RequestCommittedPlacement | null>(null);
-  const initialLocatorRef = useRef<EpubProgressLocator | null>(null);
+  const initialLocatorRef = useRef<EpubProgressLocator | null>(initialLocator);
   const startupDisplayStartedRef = useRef(false);
   const startupDisplayOwnerRef = useRef(0);
 
@@ -132,72 +129,22 @@ export function useEpubDocument(
     clearWordHighlights,
     highlightWordIndex,
     setRenderedTextMaps,
-    resetHighlightState,
   } = useEPUBHighlighting({
     epubHighlightEnabled,
     renderedTextMapsRef,
   });
 
-  const resetPlacement = useCallback((status: EpubPlacementLifecycle['status'] = 'idle') => {
+  useEffect(() => () => {
+    // Imperative teardown only. The route-local provider and keyed renderer own
+    // React state lifetime; Strict Mode cleanup must not write startup state.
     placementOwnerRef.current += 1;
-    completedPlacementCfiRef.current = null;
-    committedLocationRef.current = null;
     startupDisplayOwnerRef.current += 1;
-    startupDisplayStartedRef.current = false;
-    initialPlacementCommittedRef.current = false;
-    setPlacementLifecycle({ status, error: null });
-  }, []);
-
-  const clearCurrDoc = useCallback(() => {
-    setCurrDocData(undefined);
-    setCurrDocName(undefined);
-    setMetadataLanguage(null);
-    setCurrDocPages(undefined);
-    isEPUBSetOnce.current = false;
-    shouldPauseRef.current = true;
-    clearEpubWindowIndex(bookRef.current);
-    bookRef.current = null;
     renditionEventsCleanupRef.current?.();
     renditionEventsCleanupRef.current = null;
+    clearEpubWindowIndex(bookRef.current);
+    bookRef.current = null;
     renditionRef.current = undefined;
-    setIsRenditionReady(false);
-    initialLocatorRef.current = null;
-    tocRef.current = [];
-    resetPlacement();
-    setRenderedTextRevision(0);
-    resetHighlightState();
-    stop();
-  }, [resetHighlightState, resetPlacement, setCurrDocPages, stop]);
-
-  const setCurrentDocument = useCallback(async (
-    meta: BaseDocument,
-    initialLocator: EpubProgressLocator | null,
-  ): Promise<void> => {
-    try {
-      setMetadataLanguage(null);
-      clearEpubWindowIndex(bookRef.current);
-      bookRef.current = null;
-      renditionEventsCleanupRef.current?.();
-      renditionEventsCleanupRef.current = null;
-      renditionRef.current = undefined;
-      setIsRenditionReady(false);
-      initialLocatorRef.current = initialLocator;
-      isEPUBSetOnce.current = false;
-      shouldPauseRef.current = true;
-      resetPlacement();
-
-      const doc = await ensureCachedDocument(meta);
-      if (doc.type !== 'epub') throw new Error('Document is not an EPUB');
-      if (doc.data.byteLength === 0) throw new Error('Empty document data');
-
-      setCurrDocName(doc.name);
-      setCurrDocData(doc.data);
-    } catch (error) {
-      console.error('Failed to get EPUB document:', error);
-      clearCurrDoc();
-      throw error;
-    }
-  }, [clearCurrDoc, resetPlacement]);
+  }, []);
 
   const runRenderedPlacement = useCallback(async (
     owner: number,
@@ -510,7 +457,6 @@ export function useEpubDocument(
     || placementLifecycle.status === 'empty-plan';
 
   return useMemo(() => ({
-    setCurrentDocument,
     currDocData,
     currDocName,
     currDocPages,
@@ -519,7 +465,6 @@ export function useEpubDocument(
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
-    clearCurrDoc,
     refreshRenderedPlacement,
     failPlacement,
     bookRef,
@@ -532,7 +477,6 @@ export function useEpubDocument(
     highlightWordIndex,
     clearWordHighlights,
   }), [
-    setCurrentDocument,
     currDocData,
     currDocName,
     currDocPages,
@@ -541,7 +485,6 @@ export function useEpubDocument(
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
-    clearCurrDoc,
     refreshRenderedPlacement,
     failPlacement,
     handleLocationChanged,

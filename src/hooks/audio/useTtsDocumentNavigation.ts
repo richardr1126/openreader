@@ -4,6 +4,7 @@ import { useCallback, useEffect, type MutableRefObject } from 'react';
 
 import {
   pdfAnchorPage,
+  resolveDocumentAnchorSelectionOrdinal,
   resolveEpubPlanBackedSelection,
   resolveFirstPlanIndexForDocumentAnchor,
   type PlaybackAnchor,
@@ -48,6 +49,7 @@ type UseTtsDocumentNavigationInput = {
   playbackPlanReady: boolean;
   playbackPlanRef: MutableRefObject<TtsPlaybackPlan | null>;
   playbackSegmentsRef: MutableRefObject<CanonicalTtsSegment[]>;
+  selectedOrdinalRef: MutableRefObject<number | null>;
   playbackSyncNavigationRef: MutableRefObject<boolean>;
   resumeAfterLocationChangeRef: MutableRefObject<boolean>;
   abortAudio: () => void;
@@ -76,6 +78,7 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackPlanReady,
     playbackPlanRef,
     playbackSegmentsRef,
+    selectedOrdinalRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
     abortAudio,
@@ -148,13 +151,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     setIsPlaying,
   ]);
 
-  const prepareInitialPosition = useCallback((location: TTSLocation, segmentOrdinal?: number) => {
-    if (typeof segmentOrdinal === 'number' && Number.isFinite(segmentOrdinal)) {
-      setSelectedOrdinal(Math.max(0, Math.floor(segmentOrdinal)));
-    }
-    skipToLocation(location, true);
-  }, [setSelectedOrdinal, skipToLocation]);
-
   const advance = useCallback(async (backwards = false) => {
     const nextIndex = currentIndex + (backwards ? -1 : 1);
     if (nextIndex < sentences.length && nextIndex >= 0) {
@@ -205,13 +201,16 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
       return;
     }
 
-    const planIndex = resolveFirstPlanIndexForDocumentAnchor(
-      playbackSegmentsRef.current,
-      activeReaderType,
-      resolvedLocation,
-    );
-    if (planIndex >= 0) {
-      selectPlaybackSegment(playbackSegmentsRef.current[planIndex]);
+    const selectedOrdinal = activeReaderType === 'pdf' || activeReaderType === 'html'
+      ? resolveDocumentAnchorSelectionOrdinal({
+        plan: playbackSegmentsRef.current,
+        readerType: activeReaderType,
+        location: resolvedLocation,
+        selectedOrdinal: selectedOrdinalRef.current,
+      })
+      : null;
+    if (selectedOrdinal !== null) {
+      setSelectedOrdinal(selectedOrdinal);
     } else if (playbackPlanRef.current) {
       setSelectedOrdinal(null);
     }
@@ -222,7 +221,7 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackPlanRef,
     playbackSegmentsRef,
     playbackSyncNavigationRef,
-    selectPlaybackSegment,
+    selectedOrdinalRef,
     setCurrDocPage,
     setIsProcessing,
     setPlaybackAnchor,
@@ -358,7 +357,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
 
   return {
     pause,
-    prepareInitialPosition,
     reconcileEpubRenderedAnchor,
     resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,

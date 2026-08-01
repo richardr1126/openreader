@@ -45,6 +45,7 @@ import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import {
   pdfLocatorPage,
+  resolveDocumentAnchorSelectionOrdinal,
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
 import {
@@ -66,6 +67,7 @@ import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
+import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
 import { queryKeys } from '@/lib/client/query-keys';
 
 // Media globals
@@ -113,15 +115,18 @@ interface TTSContextType extends TTSPlaybackState {
   setVoiceAndRestart: (voice: string) => void;
   /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
   reacquirePlaybackPlan: () => Promise<void>;
-  acceptBootstrapPlaybackPlan: (plan: TtsPlaybackPlan) => Promise<TtsPlaybackPlan>;
+  initializeReaderSession: (input: {
+    readerType: ReaderType;
+    language: string;
+    plan: TtsPlaybackPlan;
+    initialPosition: ReaderInitialPosition;
+  }) => void;
   playbackPlanReady: boolean;
   setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
-  setDocumentLanguage: (language: string) => void;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
-  prepareInitialPosition: (location: TTSLocation, segmentOrdinal?: number) => void;
   registerLocationChangeHandler: (handler: ((location: TTSLocation | TTSSegmentLocator) => void) | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
   /** Effective reader type used for worker playback/session scoping. */
@@ -419,7 +424,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const {
     pause,
-    prepareInitialPosition,
     reconcileEpubRenderedAnchor,
     resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
@@ -438,6 +442,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanReady: Boolean(playbackPlan?.planObjectKey),
     playbackPlanRef,
     playbackSegmentsRef,
+    selectedOrdinalRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
     abortAudio,
@@ -540,6 +545,43 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentWordIndex(null);
   }, [abortAudio, invalidatePlaybackRun, publishPlaybackTimeSec, resetPlaybackPlan]);
 
+  const initializeReaderSession = useCallback((input: {
+    readerType: ReaderType;
+    language: string;
+    plan: TtsPlaybackPlan;
+    initialPosition: ReaderInitialPosition;
+  }) => {
+    stop();
+    setDocumentLanguage(input.language);
+    setIsEPUB(input.readerType === 'epub');
+    acceptBootstrapPlaybackPlan(input.plan);
+
+    if (input.readerType === 'epub') {
+      // EPUB establishes its cursor only after its saved stable locator has
+      // committed in the rendition.
+      setSelectedOrdinal(null);
+      return;
+    }
+
+    const matchingPosition = input.initialPosition?.readerType === input.readerType
+      ? input.initialPosition
+      : null;
+    const location = matchingPosition?.location ?? 1;
+    const requestedOrdinal = matchingPosition?.segmentOrdinal ?? null;
+    setCurrDocPage(location);
+    setSelectedOrdinal(resolveDocumentAnchorSelectionOrdinal({
+      plan: playbackSegmentsRef.current,
+      readerType: input.readerType,
+      location,
+      selectedOrdinal: requestedOrdinal,
+    }));
+  }, [
+    acceptBootstrapPlaybackPlan,
+    playbackSegmentsRef,
+    setSelectedOrdinal,
+    stop,
+  ]);
+
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;
     await queryClient.refetchQueries({
@@ -608,15 +650,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
     reacquirePlaybackPlan,
-    acceptBootstrapPlaybackPlan,
+    initializeReaderSession,
     playbackPlanReady: Boolean(playbackPlan?.planObjectKey),
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
-    setDocumentLanguage,
     clearSegmentCaches,
     skipToLocation,
-    prepareInitialPosition,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
@@ -651,13 +691,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setAudioPlayerSpeedAndRestart,
     setVoiceAndRestart,
     reacquirePlaybackPlan,
-    acceptBootstrapPlaybackPlan,
+    initializeReaderSession,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
-    prepareInitialPosition,
     registerLocationChangeHandler,
     setIsEPUB,
     currentSentenceAlignment,

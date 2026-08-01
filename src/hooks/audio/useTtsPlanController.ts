@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject } from 'react';
 
 import {
   getTtsPlaybackSeekLayout,
@@ -49,6 +49,7 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   } = input;
+  const requestedSeekLayoutPlanIdRef = useRef<string | null>(null);
   const buildPlaybackPlanRequest = useCallback(
     (): TtsPlaybackPlanRequest | null => request,
     [request],
@@ -63,24 +64,6 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
       selectedOrdinal: Math.max(0, Math.floor(ordinal)),
     };
   }, [buildPlaybackPlanRequest, selectedOrdinalRef]);
-
-  const fetchPlaybackSeekLayoutUntilReady = useCallback(async (
-    seekLayoutUrl: string,
-    signal?: AbortSignal,
-  ): Promise<TtsPlaybackSeekLayout | null> => {
-    const fetchLayout = async () => {
-      const layout = await getTtsPlaybackSeekLayout(seekLayoutUrl, signal).catch(() => null);
-      return layout && layout.durationMs > 0 && layout.segments.length > 0 ? layout : null;
-    };
-
-    let layout = await fetchLayout();
-    for (let attempt = 0; !layout && attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (signal?.aborted) return null;
-      layout = await fetchLayout();
-    }
-    return layout;
-  }, []);
 
   const applyPlaybackPlan = useCallback((plan: TtsPlaybackPlan): TtsPlaybackPlan => {
     const canonicalPlan = applyWorkerPlan(plan);
@@ -132,29 +115,41 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     request,
   ]);
 
-  const acceptBootstrapPlaybackPlan = useCallback(async (
+  const acceptBootstrapPlaybackPlan = useCallback((
     value: TtsPlaybackPlan,
-  ): Promise<TtsPlaybackPlan> => {
+  ): TtsPlaybackPlan => {
     const plan = assertAuthoritativePlaybackPlan(value, {
       documentId: request?.payload.documentId ?? value.documentId,
       readerType: activeReaderType,
     });
     const applied = applyPlaybackPlan(plan);
-    if (plan.planId && plan.segments.length > 0) {
+    if (
+      plan.planId
+      && plan.segments.length > 0
+      && requestedSeekLayoutPlanIdRef.current !== plan.planId
+    ) {
       const planId = plan.planId;
-      void fetchPlaybackSeekLayoutUntilReady(
+      requestedSeekLayoutPlanIdRef.current = planId;
+      // A plan-only seek layout is immutable once the authoritative plan is
+      // ready. Fetch it once for the idle scrubber; session-owned layout polling
+      // begins only after playback creates a session. Retrying here can never
+      // change the result and previously multiplied into a request storm.
+      void getTtsPlaybackSeekLayout(
         `/api/tts/playback/plans/${encodeURIComponent(planId)}/seek-layout`,
       ).then((layout) => {
-        if (layout && playbackPlanRef.current?.planId === planId) {
+        if (
+          layout.durationMs > 0
+          && layout.segments.length > 0
+          && playbackPlanRef.current?.planId === planId
+        ) {
           setPlaybackSeekLayout(layout);
         }
-      });
+      }).catch(() => undefined);
     }
     return applied;
   }, [
     activeReaderType,
     applyPlaybackPlan,
-    fetchPlaybackSeekLayoutUntilReady,
     playbackPlanRef,
     request,
     setPlaybackSeekLayout,

@@ -7,6 +7,10 @@ describe('query keys', () => {
     expect(queryKeys.libraryDocuments('user-a')).not.toEqual(queryKeys.libraryDocuments('user-b'));
     expect(queryKeys.readerBootstrap('user-a', 'doc-a')).not.toEqual(queryKeys.readerBootstrap('user-a', 'doc-b'));
     expect(queryKeys.readerBootstrap('user-a', 'doc-a')).not.toEqual(queryKeys.readerBootstrap('user-b', 'doc-a'));
+    expect(queryKeys.readerDocumentSource('user-a', 'doc-a', 'v1'))
+      .not.toEqual(queryKeys.readerDocumentSource('user-a', 'doc-a', 'v2'));
+    expect(queryKeys.readerDocumentSource('user-a', 'doc-a', 'v1'))
+      .not.toEqual(queryKeys.readerDocumentSource('user-b', 'doc-a', 'v1'));
   });
 
   test('defines centralized keys for migrated server-state domains', () => {

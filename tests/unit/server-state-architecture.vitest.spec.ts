@@ -368,7 +368,10 @@ describe('server-state architecture', () => {
     expect(playbackHook).toContain('createTtsPlaybackSession');
     expect(planController).not.toContain('createTtsPlaybackPlan');
     expect(planController).toContain('getPlaybackPlan');
-    expect(planController).toContain('fetchPlaybackSeekLayoutUntilReady');
+    expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
+    expect(planController).toContain('requestedSeekLayoutPlanIdRef.current !== plan.planId');
+    expect(planController).not.toContain('attempt < 20');
+    expect(planController.match(/getTtsPlaybackSeekLayout\(/g) ?? []).toHaveLength(1);
     expect(playbackHook).toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');
     expect(planController).toContain('applyPlaybackPlan(plan)');
     expect(clientTts).not.toContain("fetch('/api/tts/playback/plans'");

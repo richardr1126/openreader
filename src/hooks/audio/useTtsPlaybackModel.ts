@@ -68,6 +68,15 @@ export function useTtsPlaybackModel() {
   }, []);
 
   const applyWorkerPlan = useCallback((plan: ReturnType<typeof normalizePlaybackPlan>) => {
+    const currentPlan = playbackPlanRef.current;
+    if (
+      currentPlan
+      && currentPlan.planId === plan.planId
+      && currentPlan.planObjectKey === plan.planObjectKey
+      && currentPlan.planSignature === plan.planSignature
+    ) {
+      return playbackSegmentsRef.current;
+    }
     const canonicalPlan = playbackPlanToCanonicalSegments(plan);
     playbackPlanRef.current = plan;
     playbackSegmentsRef.current = canonicalPlan;

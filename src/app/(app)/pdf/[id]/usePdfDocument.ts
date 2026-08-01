@@ -1,8 +1,9 @@
 /**
  * Route-local PDF document hook.
  *
- * This module owns PDF document loading, text extraction, highlighting, and
- * playback anchors for the `/pdf/[id]` route.
+ * This module owns the loaded PDF's renderer proxy, text extraction,
+ * highlighting, and playback anchors for the `/pdf/[id]` route. Immutable
+ * source acquisition is owned by the shared reader bootstrap hook.
  */
 
 'use client';
@@ -18,7 +19,6 @@ import {
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
-import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { useTTS } from '@/contexts/TTSContext';
 import {
   highlightPattern,
@@ -38,16 +38,7 @@ import type {
   TTSSentenceAlignment,
 } from '@/types/tts';
 import type { TTSSegmentLocator } from '@/types/client';
-import type { BaseDocument } from '@/types/documents';
-
-/**
- * Outcome of a `setCurrentDocument` call.
- * - `loaded`: the document was fetched and is now the active document.
- * - `superseded`: the load was aborted/replaced by a newer load (or unmount).
- *    A newer load is authoritative; callers must NOT treat this as an error.
- * - `failed`: a genuine failure (not found, wrong type, network error).
- */
-export type SetCurrentDocumentResult = 'loaded' | 'superseded' | 'failed';
+import type { PDFDocument } from '@/types/documents';
 
 /**
  * Interface defining all available methods and properties for the PDF route.
@@ -67,8 +58,6 @@ export interface PdfDocumentState {
   updateDocumentSettings: (settings: DocumentSettings) => Promise<void>;
   parsedOverlayEnabled: boolean;
   setParsedOverlayEnabled: (enabled: boolean) => void;
-  setCurrentDocument: (metadata: BaseDocument) => Promise<SetCurrentDocumentResult>;
-  clearCurrDoc: () => void;
 
   // PDF functionality
   onDocumentLoadSuccess: (pdf: PDFDocumentProxy) => void;
@@ -96,37 +85,32 @@ export interface PdfDocumentState {
  * Main PDF route hook.
  */
 export function usePdfDocument(
+  document: PDFDocument,
   serverDocumentSettings: DocumentSettings | null,
   parsedDocument: ParsedPdfDocument,
   persistDocumentSettings: (settings: DocumentSettings) => Promise<unknown>,
 ): PdfDocumentState {
   const {
     setDocumentPlaybackAnchor,
-    stop,
     currDocPageNumber,
     currDocPages,
     setCurrDocPages,
-    setIsEPUB,
-    setDocumentLanguage,
   } = useTTS();
-  // Current document state
-  const [currDocId, setCurrDocId] = useState<string>();
-  const [currDocData, setCurrDocData] = useState<ArrayBuffer>();
-  const [currDocName, setCurrDocName] = useState<string>();
+  const currDocId = document.id;
+  const currDocData = document.data;
+  const currDocName = document.name;
   const [currDocText, setCurrDocText] = useState<string>();
   const [isPlaybackReady, setIsPlaybackReady] = useState(false);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy>();
-  const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
+  const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(() => (
+    mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings)
+  ));
   useEffect(() => {
     if (!serverDocumentSettings) return;
     setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings));
   }, [serverDocumentSettings]);
-  useEffect(() => {
-    setDocumentLanguage(documentSettings.language ?? 'auto');
-    lastPreparedPlaybackPageRef.current = null;
-  }, [documentSettings.language, setDocumentLanguage]);
   const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
-  const [currDocPage, setCurrDocPage] = useState<number>(currDocPageNumber);
+  const currDocPage = currDocPageNumber;
 
   // Used to cancel/ignore in-flight text extraction when the document changes
   // or when react-pdf tears down and recreates its internal worker.
@@ -134,19 +118,11 @@ export function usePdfDocument(
   const pdfDocumentRef = useRef<PDFDocumentProxy | undefined>(undefined);
   const loadSeqRef = useRef(0);
 
-  // Guards for setCurrentDocument to prevent stale loads from overwriting newer selections.
-  const docLoadSeqRef = useRef(0);
-  const docLoadAbortRef = useRef<AbortController | null>(null);
   const lastPreparedPlaybackPageRef = useRef<number | null>(null);
 
   useEffect(() => {
     pdfDocumentRef.current = pdfDocument;
   }, [pdfDocument]);
-
-  useEffect(() => {
-    setCurrDocPage(currDocPageNumber);
-    setIsPlaybackReady(false);
-  }, [currDocPageNumber]);
 
   /**
    * Handles successful PDF document load
@@ -236,78 +212,6 @@ export function usePdfDocument(
     }
   }, [currDocPageNumber, currDocData, pdfDocument, loadCurrDocText]);
 
-  /**
-   * Sets the current document based on its ID
-   * Retrieves document from server metadata and the browser blob cache.
-   * 
-   * @param {BaseDocument} meta - Resolved server metadata for the document
-   * @returns {Promise<void>}
-   */
-  const setCurrentDocument = useCallback(async (meta: BaseDocument): Promise<SetCurrentDocumentResult> => {
-    const id = meta.id;
-    // --- race-condition guard ---
-    const seq = ++docLoadSeqRef.current;
-    docLoadAbortRef.current?.abort();
-    const controller = new AbortController();
-    docLoadAbortRef.current = controller;
-
-    try {
-      // Reset any state tied to the previously loaded PDF. This prevents calling
-      // `getPage()` on a stale/destroyed PDFDocumentProxy after login redirects
-      // or fast refresh.
-      pdfDocGenerationRef.current += 1;
-      loadSeqRef.current += 1;
-      setPdfDocument(undefined);
-      setCurrDocPages(undefined);
-      setCurrDocText(undefined);
-      setIsPlaybackReady(false);
-      lastPreparedPlaybackPageRef.current = null;
-      setCurrDocId(id);
-      setCurrDocName(undefined);
-      setCurrDocData(undefined);
-      setDocumentSettings(mergeDocumentSettings(
-        DEFAULT_DOCUMENT_SETTINGS,
-        serverDocumentSettings,
-      ));
-
-      if (meta.type !== 'pdf') {
-        console.error('Document is not a PDF');
-        return 'failed';
-      }
-      const doc = await ensureCachedDocument(meta, { signal: controller.signal });
-      if (seq !== docLoadSeqRef.current) return 'superseded'; // a newer load took over
-      if (doc.type !== 'pdf') {
-        console.error('Document is not a PDF');
-        return 'failed';
-      }
-
-      setCurrDocName(doc.name);
-      // IMPORTANT: keep an immutable copy. pdf.js may transfer/detach the
-      // buffer passed into the worker; we always pass clones to react-pdf.
-      setCurrDocData(doc.data.slice(0));
-      return 'loaded';
-    } catch (error) {
-      // An aborted load means a newer selection (or unmount) took over; not a failure.
-      if (error instanceof DOMException && error.name === 'AbortError') return 'superseded';
-      if (controller.signal.aborted) return 'superseded';
-      console.error('Failed to get document:', error);
-      return 'failed';
-    } finally {
-      // Clean up the controller only if it's still ours (a newer call hasn't replaced it).
-      if (docLoadAbortRef.current === controller) {
-        docLoadAbortRef.current = null;
-      }
-    }
-  }, [
-    setCurrDocId,
-    setCurrDocName,
-    setCurrDocData,
-    setCurrDocPages,
-    setCurrDocText,
-    setPdfDocument,
-    serverDocumentSettings,
-  ]);
-
   const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {
     if (!currDocId) return;
     setDocumentSettings(settings);
@@ -318,47 +222,9 @@ export function usePdfDocument(
     }
   }, [currDocId, persistDocumentSettings]);
 
-  /**
-   * Clears the current document state
-   * Resets all document-related states and stops any ongoing TTS playback
-   */
-  const clearCurrDoc = useCallback(() => {
-    pdfDocGenerationRef.current += 1;
-    pdfDocumentRef.current = undefined;
-    loadSeqRef.current += 1;
-    // Invalidate any in-flight setCurrentDocument load.
-    docLoadSeqRef.current += 1;
-    docLoadAbortRef.current?.abort();
-    docLoadAbortRef.current = null;
-    setCurrDocId(undefined);
-    setCurrDocName(undefined);
-    setCurrDocData(undefined);
-    setCurrDocText(undefined);
-    setIsPlaybackReady(false);
-    setCurrDocPages(undefined);
-    setPdfDocument(undefined);
-    setDocumentSettings(DEFAULT_DOCUMENT_SETTINGS);
-    lastPreparedPlaybackPageRef.current = null;
-    stop();
-  }, [setCurrDocId, setCurrDocName, setCurrDocData, setCurrDocPages, setCurrDocText, setPdfDocument, stop]);
-
-  /**
-   * Effect hook to initialize TTS as non-EPUB mode
-   */
-  useEffect(() => {
-    setIsEPUB(false);
-  }, [setIsEPUB]);
-
-  // The local currDocPage is a read-only mirror of the TTS context page (synced
-  // by the effect above). The context is the single source of truth: manual
-  // navigation calls skipToLocation (which sets the context page) and playback
-  // advances the context page directly as audio crosses page boundaries, so the
-  // viewer always turns. There is no independent local page setter to diverge.
-
   return useMemo(
     () => ({
       onDocumentLoadSuccess,
-      setCurrentDocument,
       currDocId,
       currDocData,
       currDocName,
@@ -371,7 +237,6 @@ export function usePdfDocument(
       updateDocumentSettings,
       parsedOverlayEnabled,
       setParsedOverlayEnabled,
-      clearCurrDoc,
       highlightPattern,
       clearHighlights,
       clearWordHighlights,
@@ -380,7 +245,6 @@ export function usePdfDocument(
     }),
     [
       onDocumentLoadSuccess,
-      setCurrentDocument,
       currDocId,
       currDocData,
       currDocName,
@@ -393,7 +257,6 @@ export function usePdfDocument(
       updateDocumentSettings,
       parsedOverlayEnabled,
       setParsedOverlayEnabled,
-      clearCurrDoc,
       pdfDocument,
     ]
   );

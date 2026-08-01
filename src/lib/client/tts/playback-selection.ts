@@ -63,6 +63,36 @@ export function resolveFirstPlanIndexForDocumentAnchor(
   return -1;
 }
 
+/**
+ * Resolve the selection for a committed PDF/HTML document anchor without
+ * discarding a saved ordinal that already belongs to that same anchor.
+ */
+export function resolveDocumentAnchorSelectionOrdinal(input: {
+  plan: CanonicalTtsSegment[];
+  readerType: 'pdf' | 'html';
+  location: TTSLocation;
+  selectedOrdinal: number | null;
+}): number | null {
+  const selected = input.selectedOrdinal === null
+    ? null
+    : input.plan.find((segment) => segment.ordinal === input.selectedOrdinal) ?? null;
+  if (selected) {
+    const locator = selected.ownerLocator;
+    const belongsToAnchor = input.readerType === 'pdf'
+      ? pdfLocatorPage(locator) === pdfAnchorPage(input.location)
+      : locator?.readerType === 'html'
+        && String(locator.location || '1') === String(input.location || '1');
+    if (belongsToAnchor) return selected.ordinal;
+  }
+
+  const firstIndex = resolveFirstPlanIndexForDocumentAnchor(
+    input.plan,
+    input.readerType,
+    input.location,
+  );
+  return input.plan[firstIndex]?.ordinal ?? null;
+}
+
 export function resolvePlaybackAnchorLocation(input: {
   anchor: PlaybackAnchor | null;
   readerType: ReaderType;

@@ -17,7 +17,6 @@ import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
@@ -36,6 +35,7 @@ export default function EPUBPage() {
 
 function EpubReader({
   payload,
+  document: sourceDocument,
   bootstrap,
   rendererReady,
   onReady,
@@ -44,23 +44,20 @@ function EpubReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const {
-    disableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
-  const epubState = useEpubDocument(routeDocumentId, scheduleProgress);
+  const initialLocator = payload.initialPosition?.readerType === 'epub'
+    ? payload.initialPosition.locator
+    : null;
+  const epubState = useEpubDocument(sourceDocument, initialLocator, scheduleProgress);
   const {
-    setCurrentDocument,
     currDocName,
     isPlaybackReady,
     failPlacement,
-    clearCurrDoc,
     metadataLanguage,
   } = epubState;
   const {
-    documentLanguage,
-    setDocumentLanguage,
     sentences,
-    acceptBootstrapPlaybackPlan,
   } = useTTS();
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
@@ -72,61 +69,11 @@ function EpubReader({
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
-  const inFlightDocIdRef = useRef<string | null>(null);
-  const loadedDocIdRef = useRef<string | null>(null);
   const didInitPadPctRef = useRef(false);
   const handleRendererError = useCallback((error: Error) => {
     if (!rendererReady) failPlacement(error);
     onError(error);
   }, [failPlacement, onError, rendererReady]);
-
-  const loadDocument = useCallback(async () => {
-    console.log('Loading new epub (from page.tsx)');
-    if (documentLanguage !== language) return;
-    let startedLoad = false;
-    try {
-      const resolved = payload.document.id;
-
-      if (loadedDocIdRef.current === resolved) {
-        return;
-      }
-      if (inFlightDocIdRef.current === resolved) {
-        return;
-      }
-
-      startedLoad = true;
-      inFlightDocIdRef.current = resolved;
-      const initialLocator = payload.initialPosition?.readerType === 'epub'
-        ? payload.initialPosition.locator
-        : null;
-      await acceptBootstrapPlaybackPlan(payload.plan);
-      await setCurrentDocument(payload.document, initialLocator);
-      loadedDocIdRef.current = resolved;
-    } catch (err) {
-      console.error('Error loading document:', err);
-      onError(err instanceof Error ? err : new Error('Failed to load document'));
-    } finally {
-      if (startedLoad) {
-        inFlightDocIdRef.current = null;
-      }
-    }
-  }, [acceptBootstrapPlaybackPlan, documentLanguage, language, onError, payload, setCurrentDocument]);
-
-  useEffect(() => {
-    void loadDocument();
-  }, [loadDocument]);
-
-  const clearReaderSession = useCallback(() => {
-    disableProgressPersistence();
-    inFlightDocIdRef.current = null;
-    loadedDocIdRef.current = null;
-    clearCurrDoc();
-  }, [clearCurrDoc, disableProgressPersistence]);
-  useUnmountCleanupRef(clearReaderSession);
-
-  useEffect(() => {
-    setDocumentLanguage(language);
-  }, [language, setDocumentLanguage]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {

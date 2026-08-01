@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
 import {
   ReaderShell,
@@ -17,7 +17,6 @@ import { RateLimitBanner } from '@/components/auth/RateLimitBanner';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { ButtonLink } from '@/components/ui';
 import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
@@ -37,6 +36,7 @@ export default function HTMLPage() {
 
 function HtmlReader({
   payload,
+  document: sourceDocument,
   bootstrap,
   rendererReady,
   onReady,
@@ -45,27 +45,20 @@ function HtmlReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const {
-    disableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
-  const htmlState = useHtmlDocument();
+  const htmlState = useHtmlDocument(sourceDocument);
   const {
-    setCurrentDocument,
     currDocData,
     currDocName,
     isPlaybackReady,
     blocks,
     isTxt,
-    clearCurrDoc,
   } = htmlState;
   const {
     currDocPage,
     currentSentenceOrdinal,
-    prepareInitialPosition,
     sentences,
-    documentLanguage,
-    setDocumentLanguage,
-    acceptBootstrapPlaybackPlan,
   } = useTTS();
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
@@ -77,59 +70,6 @@ function HtmlReader({
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
-  const inFlightDocIdRef = useRef<string | null>(null);
-  const loadedDocIdRef = useRef<string | null>(null);
-
-  const loadDocument = useCallback(async () => {
-    if (documentLanguage !== language) return;
-    console.log('Loading new HTML document (from page.tsx)');
-    let startedLoad = false;
-    try {
-      const resolved = payload.document.id;
-
-      if (loadedDocIdRef.current === resolved) {
-        return;
-      }
-      if (inFlightDocIdRef.current === resolved) {
-        return;
-      }
-
-      startedLoad = true;
-      inFlightDocIdRef.current = resolved;
-      if (payload.initialPosition?.readerType === 'html') {
-        prepareInitialPosition(
-          payload.initialPosition.location,
-          payload.initialPosition.segmentOrdinal,
-        );
-      }
-      await acceptBootstrapPlaybackPlan(payload.plan);
-      await setCurrentDocument(payload.document);
-      loadedDocIdRef.current = resolved;
-    } catch (err) {
-      console.error('Error loading document:', err);
-      onError(err instanceof Error ? err : new Error('Failed to load document'));
-    } finally {
-      if (startedLoad) {
-        inFlightDocIdRef.current = null;
-      }
-    }
-  }, [acceptBootstrapPlaybackPlan, documentLanguage, language, onError, payload, prepareInitialPosition, setCurrentDocument]);
-
-  useEffect(() => {
-    void loadDocument();
-  }, [loadDocument]);
-
-  const clearReaderSession = useCallback(() => {
-    disableProgressPersistence();
-    inFlightDocIdRef.current = null;
-    loadedDocIdRef.current = null;
-    clearCurrDoc();
-  }, [clearCurrDoc, disableProgressPersistence]);
-  useUnmountCleanupRef(clearReaderSession);
-
-  useEffect(() => {
-    setDocumentLanguage(language);
-  }, [language, setDocumentLanguage]);
 
   useEffect(() => {
     if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;

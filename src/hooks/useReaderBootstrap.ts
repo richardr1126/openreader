@@ -7,12 +7,19 @@ import {
   getReaderBootstrap,
   subscribeReaderBootstrap,
 } from '@/lib/client/api/reader-bootstrap';
+import { ensureCachedDocument } from '@/lib/client/cache/documents';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { putDocumentProgress } from '@/lib/client/api/user-state';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { DocumentSettings } from '@/types/document-settings';
 import type { ReaderBootstrapResult } from '@/types/reader-bootstrap';
+import type { ReaderDocument } from '@/types/documents';
 import type { DocumentProgressPayload } from '@/types/user-state';
+
+export type ReaderDocumentSourceResult =
+  | { status: 'idle' | 'pending' }
+  | { status: 'ready'; document: ReaderDocument }
+  | { status: 'error'; error: Error };
 
 export function useReaderBootstrap(documentId: string | undefined) {
   const { data: session, isPending: sessionPending } = useAuthSession();
@@ -26,7 +33,10 @@ export function useReaderBootstrap(documentId: string | undefined) {
 
   const query = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) => getReaderBootstrap(documentId!, { signal }),
+    // Bootstrap ensures durable server work. Development Strict Mode may
+    // briefly remove every observer, but that must not abort the request that
+    // creates/reconnects the operation or surface an ECONNRESET on the server.
+    queryFn: () => getReaderBootstrap(documentId!),
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
@@ -36,6 +46,31 @@ export function useReaderBootstrap(documentId: string | undefined) {
   });
   const progressMutation = useMutation({ mutationFn: putDocumentProgress });
   const mutateProgress = progressMutation.mutate;
+
+  const result: ReaderBootstrapResult = !documentId
+    ? { status: 'error', message: 'Document not found.', retryable: false }
+    : query.error
+      ? {
+        status: 'error',
+        message: query.error instanceof Error ? query.error.message : 'Failed to prepare reader.',
+        retryable: true,
+      }
+      : query.data ?? { status: 'pending' };
+  const sourceMetadata = result.status === 'ready' ? result.payload.document : null;
+  const sourceQuery = useQuery({
+    queryKey: queryKeys.readerDocumentSource(
+      sessionId,
+      sourceMetadata?.id ?? '',
+      sourceMetadata?.contentVersion ?? sourceMetadata?.id ?? '',
+    ),
+    // Do not consume the observer-lifetime AbortSignal. React development
+    // Strict Mode briefly unsubscribes and resubscribes; useful immutable
+    // same-key work must be allowed to finish and populate the shared query.
+    queryFn: () => ensureCachedDocument(sourceMetadata!),
+    enabled: Boolean(sourceMetadata),
+    retry: false,
+    gcTime: 0,
+  });
 
   const flushProgress = useCallback(() => {
     if (progressTimer.current) clearTimeout(progressTimer.current);
@@ -71,6 +106,9 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const retry = useCallback(async () => {
     await query.refetch();
   }, [query]);
+  const retryDocumentSource = useCallback(async () => {
+    await sourceQuery.refetch();
+  }, [sourceQuery]);
 
   useEffect(() => {
     progressPersistenceEnabled.current = false;
@@ -86,19 +124,24 @@ export function useReaderBootstrap(documentId: string | undefined) {
     });
   }, [documentId, query.data?.status, queryClient, sessionId]);
 
-  const result: ReaderBootstrapResult = !documentId
-    ? { status: 'error', message: 'Document not found.', retryable: false }
-    : query.error
+  const documentSource: ReaderDocumentSourceResult = result.status !== 'ready'
+    ? { status: 'idle' }
+    : sourceQuery.error
       ? {
         status: 'error',
-        message: query.error instanceof Error ? query.error.message : 'Failed to prepare reader.',
-        retryable: true,
+        error: sourceQuery.error instanceof Error
+          ? sourceQuery.error
+          : new Error('Failed to load document source.'),
       }
-      : query.data ?? { status: 'pending' };
+      : sourceQuery.data
+        ? { status: 'ready', document: sourceQuery.data }
+        : { status: 'pending' };
 
   return {
     result,
+    documentSource,
     retry,
+    retryDocumentSource,
     updateSettings,
     scheduleProgress,
     enableProgressPersistence,

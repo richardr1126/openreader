@@ -27,6 +27,8 @@ export interface EPUBDocument extends BaseDocument {
   data: ArrayBuffer;
 }
 
+export type ReaderDocument = PDFDocument | EPUBDocument | HTMLDocument;
+
 export interface DocumentListDocument extends BaseDocument {
   type: DocumentType;
 }

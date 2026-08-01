@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   pdfAnchorPage,
+  resolveDocumentAnchorSelectionOrdinal,
   resolveEpubPlanBackedSelection,
   resolveFirstPlanIndexForDocumentAnchor,
   resolvePlanBackedSelectionIndex,
@@ -48,6 +49,37 @@ describe('playback plan selection', () => {
       selectedOrdinal: 7,
       anchorLocation: { page: 'intro' },
     })).toBe(1);
+  });
+
+  test('preserves a saved ordinal on the committed PDF/HTML anchor', () => {
+    const pdfPlan = [
+      segment(3, { readerType: 'pdf', page: 2 }),
+      segment(4, { readerType: 'pdf', page: 2 }),
+      segment(5, { readerType: 'pdf', page: 3 }),
+    ];
+    expect(resolveDocumentAnchorSelectionOrdinal({
+      plan: pdfPlan,
+      readerType: 'pdf',
+      location: 2,
+      selectedOrdinal: 4,
+    })).toBe(4);
+    expect(resolveDocumentAnchorSelectionOrdinal({
+      plan: pdfPlan,
+      readerType: 'pdf',
+      location: 2,
+      selectedOrdinal: 5,
+    })).toBe(3);
+
+    const htmlPlan = [
+      segment(8, { readerType: 'html', location: 'body' }),
+      segment(9, { readerType: 'html', location: 'body' }),
+    ];
+    expect(resolveDocumentAnchorSelectionOrdinal({
+      plan: htmlPlan,
+      readerType: 'html',
+      location: 'body',
+      selectedOrdinal: 9,
+    })).toBe(9);
   });
 
   test('resolves EPUB starts from stable spine coordinates', () => {

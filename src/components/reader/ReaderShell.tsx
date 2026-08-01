@@ -3,16 +3,23 @@
 import {
   Fragment,
   useCallback,
+  useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
+import { useTTS } from '@/contexts/TTSContext';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
+import { useReaderSurfaceAdoption } from '@/hooks/useReaderSurfaceAdoption';
+import { readerSurfaceKey } from '@/lib/client/reader-readiness/surface-key';
 import type { ReaderPayload } from '@/types/reader-bootstrap';
+import type { ReaderDocument } from '@/types/documents';
 import type { ReaderType } from '@/types/user-state';
 import { ReaderError, ReaderLoader } from './ReaderLoader';
 
 export type ReaderRendererProps<T extends ReaderType> = {
   payload: Extract<ReaderPayload, { readerType: T }>;
+  document: Extract<ReaderDocument, { type: T }>;
   bootstrap: ReturnType<typeof useReaderBootstrap>;
   rendererReady: boolean;
   onReady: () => void;
@@ -30,41 +37,72 @@ export function ReaderShell<T extends ReaderType>({
 }) {
   const bootstrap = useReaderBootstrap(documentId);
   const { result } = bootstrap;
+  const { initializeReaderSession } = useTTS();
   const {
     disableProgressPersistence,
     enableProgressPersistence,
   } = bootstrap;
   const surfaceKey = result.status === 'ready'
-    ? `${result.payload.documentId}:${result.payload.plan.planId}`
+    ? readerSurfaceKey(result.payload)
     : documentId ?? '';
-  const [readySurfaceKey, setReadySurfaceKey] = useState<string | null>(null);
+  const [readyAttemptKey, setReadyAttemptKey] = useState<string | null>(null);
   const [rendererFailure, setRendererFailure] = useState<{
-    surfaceKey: string;
+    attemptKey: string;
     error: Error;
   } | null>(null);
   const [rendererAttempt, setRendererAttempt] = useState(0);
-  const rendererReady = readySurfaceKey === surfaceKey;
-  const rendererError = rendererFailure?.surfaceKey === surfaceKey
-    ? rendererFailure.error
+  const disableProgressPersistenceRef = useRef(disableProgressPersistence);
+  disableProgressPersistenceRef.current = disableProgressPersistence;
+  const attemptKey = `${surfaceKey}:${rendererAttempt}`;
+  const rendererReady = readyAttemptKey === attemptKey;
+  const payload = result.status === 'ready' && result.payload.readerType === readerType
+    ? result.payload as Extract<ReaderPayload, { readerType: T }>
     : null;
+  const sourceDocument = bootstrap.documentSource.status === 'ready'
+    && bootstrap.documentSource.document.type === readerType
+    ? bootstrap.documentSource.document as Extract<ReaderDocument, { type: T }>
+    : null;
+  const adoption = useReaderSurfaceAdoption({
+    attemptKey,
+    enabled: Boolean(payload && sourceDocument),
+    adopt: () => {
+      if (!payload) return;
+      initializeReaderSession({
+        readerType,
+        language: payload.settings.language ?? 'auto',
+        plan: payload.plan,
+        initialPosition: payload.initialPosition,
+      });
+    },
+  });
+  const initializationError = adoption.failure?.attemptKey === attemptKey
+    ? adoption.failure.error
+    : null;
+  const rendererError = rendererFailure?.attemptKey === attemptKey
+    ? rendererFailure.error
+    : initializationError;
+
+  useEffect(() => {
+    disableProgressPersistenceRef.current();
+  }, [attemptKey]);
 
   const handleReady = useCallback(() => {
-    setReadySurfaceKey(surfaceKey);
+    setReadyAttemptKey(attemptKey);
     setRendererFailure(null);
     enableProgressPersistence();
-  }, [enableProgressPersistence, surfaceKey]);
+  }, [attemptKey, enableProgressPersistence]);
 
   const handleError = useCallback((error: Error) => {
     // The shell owns initial reveal only. Renderer mechanics after the first
     // usable surface must not restart bootstrap or hide an established reader.
-    if (readySurfaceKey === surfaceKey) return;
+    if (readyAttemptKey === attemptKey) return;
     disableProgressPersistence();
-    setRendererFailure({ surfaceKey, error });
-  }, [disableProgressPersistence, readySurfaceKey, surfaceKey]);
+    setRendererFailure({ attemptKey, error });
+  }, [attemptKey, disableProgressPersistence, readyAttemptKey]);
 
   const retryRenderer = useCallback(() => {
     disableProgressPersistence();
-    setReadySurfaceKey(null);
+    setReadyAttemptKey(null);
     setRendererFailure(null);
     setRendererAttempt((attempt) => attempt + 1);
   }, [disableProgressPersistence]);
@@ -98,7 +136,50 @@ export function ReaderShell<T extends ReaderType>({
     );
   }
 
-  const payload = result.payload as Extract<ReaderPayload, { readerType: T }>;
+  if (bootstrap.documentSource.status === 'error') {
+    return (
+      <main className="min-h-screen">
+        <ReaderError
+          error={bootstrap.documentSource.error}
+          onRetry={() => void bootstrap.retryDocumentSource()}
+        />
+      </main>
+    );
+  }
+
+  if (bootstrap.documentSource.status !== 'ready') {
+    return (
+      <main className="min-h-screen">
+        <ReaderLoader />
+      </main>
+    );
+  }
+
+  if (!sourceDocument) {
+    return (
+      <main className="min-h-screen">
+        <ReaderError
+          error={new Error(`Expected ${readerType.toUpperCase()} source data, received ${bootstrap.documentSource.document.type}.`)}
+        />
+      </main>
+    );
+  }
+
+  if (initializationError) {
+    return (
+      <main className="min-h-screen">
+        <ReaderError error={initializationError} onRetry={retryRenderer} />
+      </main>
+    );
+  }
+
+  if (!payload || adoption.adoptedAttemptKey !== attemptKey) {
+    return (
+      <main className="min-h-screen">
+        <ReaderLoader />
+      </main>
+    );
+  }
 
   return (
     <>
@@ -106,9 +187,10 @@ export function ReaderShell<T extends ReaderType>({
         className={rendererReady ? undefined : 'pointer-events-none opacity-0'}
         aria-hidden={!rendererReady}
       >
-        <Fragment key={`${surfaceKey}:${rendererAttempt}`}>
+        <Fragment key={attemptKey}>
           {children({
             payload,
+            document: sourceDocument,
             bootstrap,
             rendererReady,
             onReady: handleReady,

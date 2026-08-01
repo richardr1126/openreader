@@ -1,8 +1,9 @@
 # Unified Reader Bootstrap and Readiness
 
-Status: implementation complete. The unified bootstrap, renderer surface
-contract, server-owned post-settings plan flow, and bounded production browser
-verification are complete.
+Status: corrective implementation complete. Server bootstrap, client document
+source acquisition, playback-session adoption, and renderer readiness now have
+one owner each across PDF, EPUB, and HTML. The duplicated route startup effects
+that caused the development Strict Mode initialization loop have been removed.
 
 This document completely supersedes the previous reader-readiness state-machine
 proposal. The filename is retained so existing references continue to find the
@@ -317,6 +318,145 @@ by the bootstrap SSE route.
 Query results, plans, positions, and readiness are passed as data. They are not
 copied into another context and synchronized with effects.
 
+## Corrective Client Initialization Contract
+
+The original hard cut unified server bootstrap and renderer readiness, but it
+left one application lifecycle duplicated in `pdf/[id]/page.tsx`,
+`epub/[id]/page.tsx`, and `html/[id]/page.tsx`: each route still acquires the
+document source, mutates shared playback state, restores the initial position,
+and resets that work from an unmount cleanup. Those effects depend on callback
+and payload identities that their own state updates can change. PDF makes the
+feedback loop most visible because its loader resets the PDF proxy, page count,
+text, playback readiness, metadata, and bytes on every invocation, but the
+ownership bug applies to every reader type.
+
+The corrective implementation uses the following reader-wide contract.
+
+### 1. One stable surface identity
+
+Every ready payload has one client surface key composed only from immutable
+server identities:
+
+```text
+readerType + documentId + contentVersion + planId + planSignature
+```
+
+React object identity, callback identity, current playback state, container
+dimensions, and renderer callbacks are not part of this key. A renderer retry
+adds an explicit attempt number. A plan-affecting settings change produces a
+new authoritative plan identity and therefore a new surface. Ordinary
+rerenders do not create a new surface.
+
+### 2. One source-acquisition query
+
+`useReaderBootstrap` owns a second, private query for the immutable document
+source after the aggregate bootstrap reaches `ready`. The source query is keyed
+by session, document ID, and content version and calls `ensureCachedDocument`
+once for that key.
+
+- The aggregate bootstrap POST also ignores observer-lifetime cancellation;
+  ensuring/reconnecting durable server work must complete through Strict Mode
+  subscription churn.
+- TanStack Query shares the same in-flight promise across Strict Mode
+  subscription churn and all consumers.
+- The query does not consume TanStack Query's observer-lifetime abort signal;
+  a development cleanup cannot cancel useful same-key work.
+- A changed document/content version uses a different key, so stale completion
+  cannot overwrite the active source.
+- Automatic retries are disabled. A failure remains terminal in the shared
+  error UI until the user explicitly retries.
+- The ready source is passed to the renderer as data. Route hooks do not fetch,
+  cache, or adopt a document.
+
+This is client source acquisition, not a second server preparation lifecycle.
+The aggregate bootstrap remains the sole owner of parsing and plan creation.
+
+### 3. One shared playback-session adoption
+
+`ReaderShell` adopts the bootstrap payload into the route-local `TTSProvider`
+once per surface-attempt key. The adoption is a synchronous, idempotent command
+that:
+
+1. pauses any previous playback intent;
+2. installs the authoritative playback plan;
+3. sets the document language and reader type;
+4. restores PDF/HTML location and canonical segment ordinal, or leaves EPUB
+   placement to its stable locator;
+5. clears stale document anchors without invoking general user navigation.
+
+Initial position restoration must not call `skipToLocation`. That function is
+an interactive navigation command with pause/resume and plan-selection side
+effects. Bootstrap adoption writes the initial cursor directly and validates
+the saved ordinal against the supplied plan. Later renderer anchor commits
+preserve that selected ordinal when it belongs to the committed PDF page or
+HTML location.
+
+The shell records the surface-attempt key before issuing the adoption command.
+Consequently, state changes caused by adoption may rerender the provider but
+cannot repeat the transaction. React development Strict Mode's extra effect
+setup observes the already-adopted key and is a no-op.
+
+### 4. Renderers receive source data; routes do not orchestrate startup
+
+The shared renderer props include the type-narrowed loaded document:
+
+```ts
+type ReaderRendererProps<T extends ReaderType> = {
+  payload: Extract<ReaderPayload, { readerType: T }>;
+  document: Extract<ReaderDocument, { type: T }>;
+  // existing renderer-ready/error/bootstrap fields
+};
+```
+
+PDF, EPUB, and HTML hooks initialize their route-local renderer mechanics from
+that value. The following route-level concepts are deleted for all three
+readers:
+
+- `loadDocument` effects;
+- `inFlightDocIdRef` and `loadedDocIdRef`;
+- `setCurrentDocument` methods;
+- language-equality gates used to retrigger loading;
+- calls to `acceptBootstrapPlaybackPlan` and `prepareInitialPosition`;
+- state-setting `clearCurrDoc` unmount cleanup.
+
+The route-local `TTSProvider` is itself the state lifetime boundary. Renderer
+libraries retain only imperative teardown: abort/destroy work, unsubscribe
+events, and invalidate ownership refs. Cleanup must not call React setters or
+restart initialization.
+
+### 5. Shared gating and explicit retry
+
+The shell shows `ReaderLoader` until all three conditions hold:
+
+```text
+aggregate bootstrap ready
+  + immutable document source ready
+  + playback session adopted for this surface attempt
+```
+
+Only then is the renderer mounted. A bootstrap failure, source failure,
+session-adoption failure, or pre-ready renderer failure reaches the same
+`ReaderError` boundary. Retrying a source failure refetches the same source key;
+retrying session/renderer initialization increments the explicit attempt key.
+Neither failure retries because a provider rerendered.
+
+### 6. Required regression coverage
+
+The corrective implementation is incomplete without behavioral checks proving:
+
+- one source request and one session adoption for PDF, EPUB, and HTML;
+- React Strict Mode setup/cleanup/setup does not duplicate either operation;
+- at least 50 unrelated TTS/provider rerenders do not repeat initialization;
+- a deferred same-key source request is shared rather than aborted/restarted;
+- a rejected source request stays failed until explicit retry;
+- changing document/content/plan identity initializes exactly one new surface;
+- saved PDF/HTML ordinals survive the renderer's first anchor commit;
+- development Turbopack opens representative PDF, EPUB, and HTML documents
+  without maximum-depth errors, request storms, or a loader regression.
+
+Source-text assertions may enforce deletion boundaries, but they are not
+evidence for lifecycle behavior and cannot substitute for these tests.
+
 ## Deletion Targets
 
 The hard cut should remove the replaced instances of:
@@ -442,35 +582,34 @@ Focused architecture, contract, unit, and bounded browser coverage now includes:
 
 ## Verification
 
-Until the known Playwright infrastructure failures are repaired separately,
-this branch uses:
+The corrective implementation is verified with:
 
 - TypeScript checking;
-- focused unit tests for bootstrap result handling;
+- React Strict Mode unit tests for surface adoption and source acquisition;
 - existing compute and playback-plan tests;
 - production builds;
-- bounded manual smoke checks for PDF, EPUB, and HTML.
+- bounded in-app browser smoke checks against the normal Turbopack development
+  server for PDF, EPUB, and HTML.
 
-Playwright failures that predate this work are recorded but are not used to add
-client lifecycle machinery.
+The Strict Mode regressions exercise all three reader types with fifty provider
+rerenders and deliberately unstable command identities. Each stable surface
+performs exactly one adoption. Source acquisition likewise performs one
+request, does not auto-retry failures, retries only after an explicit attempt,
+and reacquires when the immutable content version changes.
 
-The completed smoke passes covered:
+The completed corrective smoke pass covered:
 
-- fixture upload and first open for TXT, EPUB, and PDF;
-- fresh PDF parsing through aggregate bootstrap;
+- clean navigation to local TXT, EPUB, and PDF fixtures;
 - initial renderer reveal for all three reader types;
 - an enabled playback control backed by the supplied plan;
-- stable operation identity when aggregate bootstrap re-resolves after worker
-  completion;
+- exactly one aggregate bootstrap transaction and one seek-layout request per
+  reader in the development server logs;
+- PDF canvas, text layer, and initial highlight overlay;
+- restored PDF position, page turns, and zoom without returning to the loader;
+- EPUB post-ready relocation without restarting initialization;
 - absence of browser console errors;
-- removal of the fixture documents after verification.
-
-The final production-browser pass additionally covered:
-
-- EPUB post-ready relocation while playback remained enabled;
-- PDF initial canvas, text-layer, and highlight commit;
-- PDF page turns and zoom without returning to the shared loader;
-- enabled playback controls for PDF, EPUB, and HTML;
+- absence of maximum-update-depth, failed-PDF-load, or request-cancellation
+  failures;
 - removal of all three local smoke fixtures after verification.
 
 ## Definition of Done

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
@@ -25,7 +25,6 @@ import {
   FORCE_REPARSE_CONFIRM_TITLE,
 } from '@/lib/client/pdf/force-reparse';
 import { forceReparsePdfDocument } from '@/lib/client/api/documents';
-import { useUnmountCleanupRef } from '@/hooks/useUnmountCleanupRef';
 import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
@@ -52,6 +51,7 @@ export default function PDFViewerPage() {
 
 function PdfReader({
   payload,
+  document: sourceDocument,
   bootstrap,
   rendererReady,
   onReady,
@@ -69,14 +69,13 @@ function PdfReader({
     await bootstrap.retry();
   }, [bootstrap, routeDocumentId]);
   const pdfState = usePdfDocument(
+    sourceDocument,
     payload.settings,
     payload.parsedDocument,
     bootstrap.updateSettings,
   );
   const {
-    setCurrentDocument,
     currDocName,
-    clearCurrDoc,
     currDocPage,
     currDocPages,
     isPlaybackReady,
@@ -87,79 +86,19 @@ function PdfReader({
   } = pdfState;
   const {
     currentSentenceOrdinal,
-    prepareInitialPosition,
     sentences,
     stop,
     setPdfSkipBlockKinds,
-    acceptBootstrapPlaybackPlan,
-    documentLanguage,
   } = useTTS();
   const { isAtLimit } = useAuthRateLimit();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
-  const inFlightDocIdRef = useRef<string | null>(null);
-  const loadedDocIdRef = useRef<string | null>(null);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   useEffect(() => {
     setPdfSkipBlockKinds(documentSettings.pdf?.skipBlockKinds ?? []);
-    return () => setPdfSkipBlockKinds(null);
   }, [documentSettings.pdf?.skipBlockKinds, setPdfSkipBlockKinds]);
-
-  const loadDocument = useCallback(async () => {
-    if (documentLanguage !== (payload.settings.language ?? 'auto')) return;
-    console.log('Loading new document (from page.tsx)');
-    let startedLoad = false;
-    let loadSucceeded = false;
-    try {
-      const resolved = payload.document.id;
-
-      if (loadedDocIdRef.current === resolved) {
-        return;
-      }
-      if (inFlightDocIdRef.current === resolved) {
-        return;
-      }
-
-      startedLoad = true;
-      inFlightDocIdRef.current = resolved;
-      if (payload.initialPosition?.readerType === 'pdf') {
-        prepareInitialPosition(payload.initialPosition.location);
-      }
-      await acceptBootstrapPlaybackPlan(payload.plan);
-      const loadResult = await setCurrentDocument(payload.document);
-      if (loadResult === 'loaded') {
-        loadSucceeded = true;
-        loadedDocIdRef.current = resolved;
-      } else if (loadResult === 'superseded') {
-        // A newer load (or unmount) is authoritative and owns the lifecycle.
-        return;
-      }
-      if (!loadSucceeded) {
-        throw new Error(`Failed to load PDF document ${resolved}`);
-      }
-    } catch (err) {
-      console.error('Error loading document:', err);
-      onError(err instanceof Error ? err : new Error('Failed to load document'));
-    } finally {
-      if (startedLoad) {
-        inFlightDocIdRef.current = null;
-      }
-    }
-  }, [acceptBootstrapPlaybackPlan, documentLanguage, onError, payload, prepareInitialPosition, setCurrentDocument]);
-
-  useEffect(() => {
-    void loadDocument();
-  }, [loadDocument]);
-
-  const clearReaderSession = useCallback(() => {
-    disableProgressPersistence();
-    inFlightDocIdRef.current = null;
-    loadedDocIdRef.current = null;
-    clearCurrDoc();
-  }, [clearCurrDoc, disableProgressPersistence]);
-  useUnmountCleanupRef(clearReaderSession);
 
   useEffect(() => {
     if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;

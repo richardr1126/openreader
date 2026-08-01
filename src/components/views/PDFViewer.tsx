@@ -40,7 +40,7 @@ interface PDFOnLinkClickArgs {
 export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
-  const [textLayerRenderRevision, setTextLayerRenderRevision] = useState(0);
+  const [textLayerReadyLayoutKey, setTextLayerReadyLayoutKey] = useState('');
   const scaleRef = useRef<number>(1);
   const { containerWidth, containerHeight } = usePDFResize(containerRef);
   const sentenceHighlightSeqRef = useRef(0);
@@ -93,7 +93,43 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     }
   }, [currDocId, currDocData]);
 
-  const layoutKey = `${zoomLevel}:${containerWidth}:${containerHeight}:${viewType}:${currDocPage}`;
+  const [pageWidth, setPageWidth] = useState<number>(595); // default A4 width
+  const [pageHeight, setPageHeight] = useState<number>(842); // default A4 height
+
+  const calculateScale = useCallback((width = pageWidth, height = pageHeight): number => {
+    const margin = viewType === 'dual' ? 48 : 24;
+    const effectiveContainerWidth = containerWidth
+      || containerRef.current?.clientWidth
+      || width + margin;
+    const effectiveContainerHeight = containerHeight
+      || containerRef.current?.clientHeight
+      || window.innerHeight;
+    const targetWidth = viewType === 'dual'
+      ? (effectiveContainerWidth - margin) / 2
+      : effectiveContainerWidth - margin;
+    const targetHeight = effectiveContainerHeight - margin;
+    const scaleByWidth = Math.max(0.1, targetWidth / width);
+
+    if (viewType === 'scroll') {
+      return scaleByWidth * 0.75 * (zoomLevel / 100);
+    }
+
+    const scaleByHeight = Math.max(0.1, targetHeight / height);
+    return Math.min(scaleByWidth, scaleByHeight) * (zoomLevel / 100);
+  }, [containerWidth, containerHeight, zoomLevel, pageWidth, pageHeight, viewType]);
+
+  const renderScale = useMemo(() => {
+    const nextScale = calculateScale();
+    if (Math.abs(nextScale - scaleRef.current) > 0.01) {
+      scaleRef.current = nextScale;
+    }
+    return scaleRef.current;
+  }, [calculateScale]);
+
+  // Renderer readiness follows the props that can actually make React-PDF
+  // repaint. Raw container dimensions are deliberately excluded: if they
+  // change without changing the stabilized scale, no render callback will fire.
+  const layoutKey = `${renderScale}:${viewType}:${currDocPage}`;
   const selectedSegmentKey = playbackPlanSegmentCount === 0
     ? 'empty'
     : currentSegment
@@ -106,7 +142,9 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const committedSurfacePartsRef = useRef(new Map<string, Set<'canvas' | 'text' | 'highlight'>>());
   const readySurfaceKeyRef = useRef<string | null>(null);
   const failedSurfaceKeyRef = useRef<string | null>(null);
+  const activeLayoutKeyRef = useRef(layoutKey);
   activeSurfaceKeyRef.current = surfaceKey;
+  activeLayoutKeyRef.current = layoutKey;
 
   const commitSurfacePart = useCallback((
     key: string | null,
@@ -136,18 +174,22 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     }
   }, [layoutKey]);
 
-  const handlePageRenderSuccess = useCallback((pageNumber: number, key: string | null) => {
-    if (pageNumber !== currDocPage) return;
-    lastRenderedLayoutKeyRef.current = layoutKey;
+  // Keep these callbacks stable. React-PDF includes them in the canvas/text
+  // render effects, so allocating a new callback during the state update below
+  // causes the layer to render again and can form an infinite callback loop.
+  const handlePageRenderSuccess = useCallback(() => {
+    lastRenderedLayoutKeyRef.current = activeLayoutKeyRef.current;
     setIsPageRendering(false);
-    commitSurfacePart(key, 'canvas');
-  }, [commitSurfacePart, currDocPage, layoutKey]);
+    commitSurfacePart(activeSurfaceKeyRef.current, 'canvas');
+  }, [commitSurfacePart]);
 
-  const handleTextLayerRenderSuccess = useCallback((pageNumber: number, key: string | null) => {
-    if (pageNumber !== currDocPage) return;
-    setTextLayerRenderRevision((revision) => revision + 1);
-    commitSurfacePart(key, 'text');
-  }, [commitSurfacePart, currDocPage]);
+  const handleTextLayerRenderSuccess = useCallback(() => {
+    const readyLayoutKey = activeLayoutKeyRef.current;
+    setTextLayerReadyLayoutKey((currentKey) => (
+      currentKey === readyLayoutKey ? currentKey : readyLayoutKey
+    ));
+    commitSurfacePart(activeSurfaceKeyRef.current, 'text');
+  }, [commitSurfacePart]);
 
   useEffect(() => {
     committedSurfacePartsRef.current.clear();
@@ -187,7 +229,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
 
     // Root-cause guard: do not repaint highlights while react-pdf is still
     // replacing page/text layers for a new page or viewport layout.
-    if (isPageRendering) {
+    if (isPageRendering || textLayerReadyLayoutKey !== layoutKey) {
       return;
     }
 
@@ -255,7 +297,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     playbackPlanSegmentCount,
     layoutKey,
     surfaceKey,
-    textLayerRenderRevision,
+    textLayerReadyLayoutKey,
     isPageRendering,
     commitSurfacePart,
     reportSurfaceCommitError,
@@ -286,7 +328,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       return;
     }
 
-    if (isPageRendering) {
+    if (isPageRendering || textLayerReadyLayoutKey !== layoutKey) {
       return;
     }
 
@@ -337,15 +379,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     clearWordHighlights,
     highlightWordIndex,
     layoutKey,
-    textLayerRenderRevision,
+    textLayerReadyLayoutKey,
     clearWordHighlightTimeouts,
     scheduleWordTimeout,
     isPageRendering
   ]);
-
-  // Add page dimensions state
-  const [pageWidth, setPageWidth] = useState<number>(595); // default A4 width
-  const [pageHeight, setPageHeight] = useState<number>(842); // default A4 height
 
   // Calculate which pages to show based on viewType
   const leftPage = viewType === 'dual'
@@ -354,38 +392,6 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const rightPage = viewType === 'dual'
     ? (currDocPage % 2 === 0 ? currDocPage : currDocPage + 1)
     : null;
-
-  // Modify scale calculation to be more efficient
-  const calculateScale = useCallback((width = pageWidth, height = pageHeight): number => {
-    const margin = viewType === 'dual' ? 48 : 24; // adjust margin based on view type
-    const effectiveContainerHeight = containerHeight || (containerRef.current?.clientHeight ?? window.innerHeight);
-    const targetWidth = viewType === 'dual'
-      ? (containerWidth - margin) / 2 // divide by 2 for dual pages
-      : containerWidth - margin;
-    const targetHeight = effectiveContainerHeight - margin;
-
-    if (viewType === 'scroll') {
-      // For scroll mode, use a more comfortable width-based scale
-      // Use 75% of the width-based scale to make it less zoomed in
-      const scaleByWidth = (targetWidth / width) * 0.75;
-      return scaleByWidth * (zoomLevel / 100);
-    }
-
-    const scaleByWidth = targetWidth / width;
-    const scaleByHeight = targetHeight / height;
-
-    const baseScale = Math.min(scaleByWidth, scaleByHeight);
-    return baseScale * (zoomLevel / 100);
-  }, [containerWidth, containerHeight, zoomLevel, pageWidth, pageHeight, viewType]);
-
-  // Add memoized scale to prevent unnecessary recalculations
-  const currentScale = useCallback(() => {
-    const newScale = calculateScale();
-    if (Math.abs(newScale - scaleRef.current) > 0.01) {
-      scaleRef.current = newScale;
-    }
-    return scaleRef.current;
-  }, [calculateScale]);
 
   const parsedPageByNumber = useMemo(() => {
     const map = new Map<number, ParsedPdfPage>();
@@ -571,10 +577,10 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                     renderAnnotationLayer={true}
                     renderTextLayer={i + 1 === currDocPage}
                     className="shadow-elev-2"
-                    scale={currentScale()}
-                    onRenderSuccess={() => handlePageRenderSuccess(i + 1, surfaceKey)}
+                    scale={renderScale}
+                    onRenderSuccess={i + 1 === currDocPage ? handlePageRenderSuccess : undefined}
                     onRenderError={reportSurfaceCommitError}
-                    onRenderTextLayerSuccess={() => handleTextLayerRenderSuccess(i + 1, surfaceKey)}
+                    onRenderTextLayerSuccess={i + 1 === currDocPage ? handleTextLayerRenderSuccess : undefined}
                     onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
@@ -596,10 +602,10 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                     renderAnnotationLayer={true}
                     renderTextLayer={leftPage === currDocPage}
                     className="shadow-elev-2"
-                    scale={currentScale()}
-                    onRenderSuccess={() => handlePageRenderSuccess(leftPage, surfaceKey)}
+                    scale={renderScale}
+                    onRenderSuccess={leftPage === currDocPage ? handlePageRenderSuccess : undefined}
                     onRenderError={reportSurfaceCommitError}
-                    onRenderTextLayerSuccess={() => handleTextLayerRenderSuccess(leftPage, surfaceKey)}
+                    onRenderTextLayerSuccess={leftPage === currDocPage ? handleTextLayerRenderSuccess : undefined}
                     onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
@@ -617,10 +623,10 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                     renderAnnotationLayer={true}
                     renderTextLayer={rightPage === currDocPage}
                     className="shadow-elev-2"
-                    scale={currentScale()}
-                    onRenderSuccess={() => handlePageRenderSuccess(rightPage, surfaceKey)}
+                    scale={renderScale}
+                    onRenderSuccess={rightPage === currDocPage ? handlePageRenderSuccess : undefined}
                     onRenderError={reportSurfaceCommitError}
-                    onRenderTextLayerSuccess={() => handleTextLayerRenderSuccess(rightPage, surfaceKey)}
+                    onRenderTextLayerSuccess={rightPage === currDocPage ? handleTextLayerRenderSuccess : undefined}
                     onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);

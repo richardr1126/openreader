@@ -47,10 +47,15 @@ describe('reader server-state ownership', () => {
     }
   });
 
-  test('disables progress and releases load guards before reader cleanup resets state', () => {
+  test('centralizes immutable source acquisition and deletes route startup effects', () => {
     const bootstrap = source('src/hooks/useReaderBootstrap.ts');
+    const shell = source('src/components/reader/ReaderShell.tsx');
     expect(bootstrap).toContain('progressPersistenceEnabled.current = false');
     expect(bootstrap).toContain('flushProgress()');
+    expect(bootstrap).toContain('ensureCachedDocument(sourceMetadata!)');
+    expect(bootstrap).toContain('retry: false');
+    expect(shell).toContain('initializeReaderSession({');
+    expect(existsSync(resolve(root, 'src/hooks/useUnmountCleanupRef.ts'))).toBe(false);
 
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
@@ -58,16 +63,26 @@ describe('reader server-state ownership', () => {
       'src/app/(app)/html/[id]/page.tsx',
     ]) {
       const page = source(path);
-      expect(page).toMatch(
-        /disableProgressPersistence\(\);\s+inFlightDocIdRef\.current = null;\s+loadedDocIdRef\.current = null;\s+clearCurrDoc\(\);/,
-      );
+      expect(page).not.toContain('loadDocument');
+      expect(page).not.toContain('inFlightDocIdRef');
+      expect(page).not.toContain('loadedDocIdRef');
+      expect(page).not.toContain('setCurrentDocument');
+      expect(page).not.toContain('prepareInitialPosition');
+      expect(page).not.toContain('acceptBootstrapPlaybackPlan');
+      expect(page).not.toContain('useUnmountCleanupRef');
     }
   });
 
   test('keys renderer sessions to the authoritative bootstrap surface', () => {
     const shell = source('src/components/reader/ReaderShell.tsx');
-    expect(shell).toContain('result.payload.plan.planId');
-    expect(shell).toContain('key={`${surfaceKey}:${rendererAttempt}`}');
+    const surfaceKey = source('src/lib/client/reader-readiness/surface-key.ts');
+    expect(surfaceKey).toContain('payload.plan.planId');
+    expect(surfaceKey).toContain('payload.plan.planSignature');
+    expect(surfaceKey).toContain('payload.document.contentVersion');
+    expect(shell).toContain('const attemptKey = `${surfaceKey}:${rendererAttempt}`');
+    expect(shell).toContain('<Fragment key={attemptKey}>');
+    expect(source('src/hooks/useReaderSurfaceAdoption.ts'))
+      .toContain('claimedAttemptKeyRef.current = input.attemptKey');
     expect(shell).toContain('enableProgressPersistence()');
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
@@ -139,6 +154,9 @@ describe('reader server-state ownership', () => {
     expect(planController).not.toContain('requestKeyRef');
     expect(planController).not.toContain('createTtsPlaybackPlan');
     expect(planController).not.toContain('resolveTtsPlaybackPlan');
+    expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
+    expect(planController).not.toContain('setTimeout(resolve, 300)');
+    expect(playbackModel).toContain('currentPlan.planId === plan.planId');
 
     const epubViewer = source('src/components/views/EPUBViewer.tsx');
     const epubHighlighting = source('src/hooks/epub/useEPUBHighlighting.ts');
@@ -164,6 +182,12 @@ describe('reader server-state ownership', () => {
     expect(pdfViewer).toContain("parts.has('highlight')");
     expect(pdfViewer).toContain('reportSurfaceCommitError');
     expect(pdfViewer).toContain('playbackPlanSegmentCount === 0');
+    expect(pdfViewer).toContain('textLayerReadyLayoutKey !== layoutKey');
+    expect(pdfViewer).not.toContain('setTextLayerRenderRevision');
+    expect(pdfViewer).not.toContain('onRenderSuccess={() =>');
+    expect(pdfViewer).not.toContain('onRenderTextLayerSuccess={() =>');
+    expect(pdfViewer).toContain('const layoutKey = `${renderScale}:${viewType}:${currDocPage}`');
+    expect(pdfViewer).not.toContain('`${zoomLevel}:${containerWidth}:${containerHeight}');
     expect(pdfViewer).not.toContain('markViewerReady');
     expect(pdfPage).not.toContain('deriveReaderLoadState');
     expect(pdfPage).not.toContain('viewerError');
