@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
@@ -54,6 +55,7 @@ function PdfReader({
   document: sourceDocument,
   bootstrap,
   rendererReady,
+  restartBootstrap,
   onReady,
   onError,
 }: ReaderRendererProps<'pdf'>) {
@@ -65,9 +67,11 @@ function PdfReader({
     scheduleProgress,
   } = bootstrap;
   const forceReparseParsedPdf = useCallback(async () => {
-    await forceReparsePdfDocument(routeDocumentId);
-    await bootstrap.retry();
-  }, [bootstrap, routeDocumentId]);
+    const operation = await forceReparsePdfDocument(routeDocumentId);
+    const pdfOperationId = operation.opId?.trim();
+    if (!pdfOperationId) throw new Error('PDF reparse started without an operation ID.');
+    await restartBootstrap({ pdfOperationId });
+  }, [restartBootstrap, routeDocumentId]);
   const pdfState = usePdfDocument(
     sourceDocument,
     payload.settings,
@@ -94,6 +98,7 @@ function PdfReader({
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
+  const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   useEffect(() => {
@@ -161,10 +166,18 @@ function PdfReader({
 
   const confirmForceReparse = useCallback(() => {
     setShowForceReparseConfirm(false);
-    void forceReparseParsedPdf().catch((error) => {
-      onError(error instanceof Error ? error : new Error('Failed to reparse PDF'));
-    });
-  }, [forceReparseParsedPdf, onError]);
+    setIsForceReparseStarting(true);
+    const toastId = toast.loading('Starting PDF reparse…');
+    void forceReparseParsedPdf()
+      .then(() => toast.success('PDF reparse started.', { id: toastId }))
+      .catch((error) => {
+        toast.error(
+          error instanceof Error ? error.message : 'Failed to reparse PDF',
+          { id: toastId },
+        );
+      })
+      .finally(() => setIsForceReparseStarting(false));
+  }, [forceReparseParsedPdf]);
 
   return (
     <>
@@ -237,7 +250,7 @@ function PdfReader({
           void updateDocumentSettings(nextSettings);
         }}
         pdf={{
-          parseStatus: 'ready',
+          parseStatus: isForceReparseStarting ? 'running' : 'ready',
           parsedOverlayEnabled,
           skipBlockKinds: documentSettings.pdf?.skipBlockKinds ?? [],
           onToggleOverlay: (enabled) => setParsedOverlayEnabled(enabled),

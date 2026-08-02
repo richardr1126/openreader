@@ -87,19 +87,29 @@ describe('reader bootstrap aggregate event stream', () => {
     const request = new NextRequest(
       'http://localhost/api/documents/doc-1/reader-bootstrap/events',
     );
+    const resolveOptions = { pdfOperationId: 'parse-op' };
     const body = await new Response(
-      createReaderBootstrapEventStream(request, 'doc-1', initial),
+      createReaderBootstrapEventStream(request, 'doc-1', initial, resolveOptions),
     ).text();
     const snapshots = body
       .split('\n')
       .filter((line) => line.startsWith('data: '))
-      .map((line) => JSON.parse(line.slice(6)) as { status: string });
+      .map((line) => JSON.parse(line.slice(6)) as {
+        status: string;
+        progress?: { kind: string; pagesParsed: number; totalPages: number };
+      });
 
     expect(snapshots.map((snapshot) => snapshot.status)).toEqual([
       'pending',
       'pending',
       'ready',
     ]);
+    expect(snapshots[0]?.progress).toEqual({
+      kind: 'pdf-parse',
+      phase: 'parsing',
+      pagesParsed: 4,
+      totalPages: 10,
+    });
     expect(hoisted.openOperationEvents).toHaveBeenNthCalledWith(
       1,
       'parse-op',
@@ -109,6 +119,18 @@ describe('reader bootstrap aggregate event stream', () => {
       2,
       'plan-op',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(hoisted.resolveReaderBootstrapState).toHaveBeenNthCalledWith(
+      1,
+      request,
+      'doc-1',
+      resolveOptions,
+    );
+    expect(hoisted.resolveReaderBootstrapState).toHaveBeenNthCalledWith(
+      2,
+      request,
+      'doc-1',
+      resolveOptions,
     );
   });
 });

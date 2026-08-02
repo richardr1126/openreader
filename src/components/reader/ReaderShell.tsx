@@ -10,7 +10,11 @@ import {
 } from 'react';
 import { useTTS } from '@/contexts/TTSContext';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
-import { useReaderSurfaceAdoption } from '@/hooks/useReaderSurfaceAdoption';
+import type { ReaderBootstrapRetryOptions } from '@/hooks/useReaderBootstrap';
+import {
+  useReaderSurfaceAdoption,
+  useReaderSurfaceAttempt,
+} from '@/hooks/useReaderSurfaceAdoption';
 import { readerSurfaceKey } from '@/lib/client/reader-readiness/surface-key';
 import type { ReaderPayload } from '@/types/reader-bootstrap';
 import type { ReaderDocument } from '@/types/documents';
@@ -22,6 +26,7 @@ export type ReaderRendererProps<T extends ReaderType> = {
   document: Extract<ReaderDocument, { type: T }>;
   bootstrap: ReturnType<typeof useReaderBootstrap>;
   rendererReady: boolean;
+  restartBootstrap: (options?: ReaderBootstrapRetryOptions) => Promise<void>;
   onReady: () => void;
   onError: (error: Error) => void;
 };
@@ -50,9 +55,22 @@ export function ReaderShell<T extends ReaderType>({
     attemptKey: string;
     error: Error;
   } | null>(null);
-  const [rendererAttempt, setRendererAttempt] = useState(0);
   const disableProgressPersistenceRef = useRef(disableProgressPersistence);
   disableProgressPersistenceRef.current = disableProgressPersistence;
+  const {
+    attempt: rendererAttempt,
+    isRestarting: restartingBootstrap,
+    restartOptions,
+    advance: advanceRendererAttempt,
+    restart: restartBootstrap,
+  } = useReaderSurfaceAttempt({
+    restartBootstrap: bootstrap.retry,
+    onRestart: () => {
+      disableProgressPersistenceRef.current();
+      setReadyAttemptKey(null);
+      setRendererFailure(null);
+    },
+  });
   const attemptKey = `${surfaceKey}:${rendererAttempt}`;
   const rendererReady = readyAttemptKey === attemptKey;
   const payload = result.status === 'ready' && result.payload.readerType === readerType
@@ -64,7 +82,7 @@ export function ReaderShell<T extends ReaderType>({
     : null;
   const adoption = useReaderSurfaceAdoption({
     attemptKey,
-    enabled: Boolean(payload && sourceDocument),
+    enabled: Boolean(payload && sourceDocument && !restartingBootstrap),
     adopt: () => {
       if (!payload) return;
       initializeReaderSession({
@@ -104,8 +122,21 @@ export function ReaderShell<T extends ReaderType>({
     disableProgressPersistence();
     setReadyAttemptKey(null);
     setRendererFailure(null);
-    setRendererAttempt((attempt) => attempt + 1);
-  }, [disableProgressPersistence]);
+    advanceRendererAttempt();
+  }, [advanceRendererAttempt, disableProgressPersistence]);
+
+  if (restartingBootstrap) {
+    return (
+      <main className="min-h-screen">
+        <ReaderLoader progress={restartOptions?.pdfOperationId ? {
+          kind: 'pdf-parse',
+          phase: 'queued',
+          pagesParsed: 0,
+          totalPages: 0,
+        } : undefined} />
+      </main>
+    );
+  }
 
   if (result.status === 'pending') {
     return (
@@ -120,7 +151,7 @@ export function ReaderShell<T extends ReaderType>({
       <main className="min-h-screen">
         <ReaderError
           error={new Error(result.message)}
-          onRetry={result.retryable ? () => void bootstrap.retry() : undefined}
+          onRetry={result.retryable ? () => void restartBootstrap() : undefined}
         />
       </main>
     );
@@ -193,6 +224,7 @@ export function ReaderShell<T extends ReaderType>({
             document: sourceDocument,
             bootstrap,
             rendererReady,
+            restartBootstrap,
             onReady: handleReady,
             onError: handleError,
           })}

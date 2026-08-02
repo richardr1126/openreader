@@ -4,7 +4,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { useReaderSurfaceAdoption } from '@/hooks/useReaderSurfaceAdoption';
+import {
+  useReaderSurfaceAdoption,
+  useReaderSurfaceAttempt,
+} from '@/hooks/useReaderSurfaceAdoption';
 import type { ReaderType } from '@/types/user-state';
 
 function AdoptionProbe({
@@ -29,6 +32,39 @@ function AdoptionProbe({
     'data-error': state.failure?.error.message ?? '',
     'data-nonce': nonce,
   });
+}
+
+function RestartProbe({
+  adopt,
+  restartBootstrap,
+  onRestart,
+  captureRestart,
+}: {
+  adopt: () => void;
+  restartBootstrap: () => Promise<void>;
+  onRestart: () => void;
+  captureRestart: (restart: () => Promise<void>) => void;
+}) {
+  const surfaceAttempt = useReaderSurfaceAttempt({ restartBootstrap, onRestart });
+  const state = useReaderSurfaceAdoption({
+    attemptKey: `pdf:same-surface:${surfaceAttempt.attempt}`,
+    enabled: !surfaceAttempt.isRestarting,
+    adopt,
+  });
+  captureRestart(surfaceAttempt.restart);
+  return createElement('div', {
+    'data-attempt': surfaceAttempt.attempt,
+    'data-restarting': String(surfaceAttempt.isRestarting),
+    'data-adopted': state.adoptedAttemptKey ?? '',
+  });
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
 }
 
 let root: Root;
@@ -115,6 +151,45 @@ describe('reader surface adoption', () => {
     expect(adopt).toHaveBeenCalledTimes(1);
 
     await act(async () => root.render(render('pdf:surface:1')));
+    expect(adopt).toHaveBeenCalledTimes(2);
+  });
+
+  test('reopens adoption for an equal-identity surface after aggregate restart settles', async () => {
+    const pendingRestart = deferred();
+    const adopt = vi.fn();
+    const onRestart = vi.fn();
+    const restartBootstrap = vi.fn(() => pendingRestart.promise);
+    let restart!: () => Promise<void>;
+
+    await act(async () => root.render(createElement(
+      StrictMode,
+      null,
+      createElement(RestartProbe, {
+        adopt,
+        restartBootstrap,
+        onRestart,
+        captureRestart: (value) => {
+          restart = value;
+        },
+      }),
+    )));
+    expect(adopt).toHaveBeenCalledTimes(1);
+
+    let restartPromise!: Promise<void>;
+    act(() => {
+      restartPromise = restart();
+    });
+    expect(onRestart).toHaveBeenCalledTimes(1);
+    expect(restartBootstrap).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-restarting]')?.getAttribute('data-restarting')).toBe('true');
+    expect(container.querySelector('[data-attempt]')?.getAttribute('data-attempt')).toBe('1');
+    expect(adopt).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingRestart.resolve();
+      await restartPromise;
+    });
+    expect(container.querySelector('[data-restarting]')?.getAttribute('data-restarting')).toBe('false');
     expect(adopt).toHaveBeenCalledTimes(2);
   });
 });

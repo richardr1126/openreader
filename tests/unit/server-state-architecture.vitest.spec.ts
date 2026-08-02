@@ -370,6 +370,7 @@ describe('server-state architecture', () => {
     expect(planController).toContain('getPlaybackPlan');
     expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
     expect(planController).toContain('requestedSeekLayoutPlanIdRef.current !== plan.planId');
+    expect(planController).toContain('|| !wasAlreadyApplied');
     expect(planController).not.toContain('attempt < 20');
     expect(planController.match(/getTtsPlaybackSeekLayout\(/g) ?? []).toHaveLength(1);
     expect(playbackHook).toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');

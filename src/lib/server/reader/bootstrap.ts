@@ -35,11 +35,18 @@ import {
   ComputeWorkerClient,
   isComputeWorkerAvailable,
 } from '@/lib/server/compute-worker/client';
-import type { TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
+import type {
+  ComputeOperation,
+  PdfLayoutResult,
+  TtsPlaybackPlanResult,
+} from '@/lib/server/compute-worker/protocol';
 import {
   createOrReuseCurrentPdfParseOperation,
+  fetchPdfParseOperation,
+  isPdfParseOperationForDocument,
   resolveCurrentPdfParse,
 } from '@/lib/server/pdf-parse/operation';
+import { shouldPreferCurrentPdfParseOperation } from '@/lib/server/pdf-parse/readiness';
 import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
 import {
   checkJobRate,
@@ -78,6 +85,10 @@ type DocumentRow = {
 export type ReaderBootstrapResolution = {
   result: ReaderBootstrapResult;
   operationId?: string;
+};
+
+export type ReaderBootstrapResolveOptions = {
+  pdfOperationId?: string | null;
 };
 
 function storedRecord(value: unknown): Record<string, unknown> {
@@ -133,14 +144,59 @@ function pendingPdfProgress(
   };
 }
 
+function resolvePdfOperationReadiness(
+  operation: ComputeOperation<PdfLayoutResult>,
+): ReaderBootstrapResolution | null {
+  const snapshot = pdfParseSnapshotFromWorkerState(operation);
+  if (snapshot.parseStatus === 'ready') return null;
+  if (snapshot.parseStatus === 'failed') {
+    return {
+      result: {
+        status: 'error',
+        message: snapshot.error || 'PDF structure could not be prepared.',
+        retryable: true,
+      },
+    };
+  }
+  return {
+    result: {
+      status: 'pending',
+      progress: pendingPdfProgress(
+        snapshot.parseStatus === 'running' ? 'running' : 'pending',
+        snapshot.parseProgress,
+      ),
+    },
+    operationId: operation.opId,
+  };
+}
+
 async function ensurePdfReady(
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
+  options: ReaderBootstrapResolveOptions,
 ): Promise<ReaderBootstrapResolution | { parsedDocument: ParsedPdfDocument }> {
   const input = {
     documentId,
     namespace: scope.testNamespace,
   };
+  const requestedOperationId = options.pdfOperationId?.trim();
+  if (requestedOperationId) {
+    const requestedOperation = await fetchPdfParseOperation(requestedOperationId);
+    if (
+      !requestedOperation
+      || !isPdfParseOperationForDocument(requestedOperation, input)
+    ) {
+      return {
+        result: {
+          status: 'error',
+          message: 'The requested PDF reparse operation is unavailable.',
+          retryable: false,
+        },
+      };
+    }
+    const requestedReadiness = resolvePdfOperationReadiness(requestedOperation);
+    if (requestedReadiness) return requestedReadiness;
+  }
   let resolved = await resolveCurrentPdfParse(input);
   if (!resolved.artifact && !resolved.operation) {
     const runtimeConfig = await getResolvedRuntimeConfig();
@@ -158,6 +214,11 @@ async function ensurePdfReady(
     const operation = await createOrReuseCurrentPdfParseOperation(input);
     await recordJobEvent(scope.userId, 'pdf_layout', operation.opId, rateConfig);
     resolved = { artifact: null, operation };
+  }
+  const currentOperation = resolved.operation;
+  if (currentOperation && shouldPreferCurrentPdfParseOperation(resolved)) {
+    const readiness = resolvePdfOperationReadiness(currentOperation);
+    if (readiness) return readiness;
   }
   if (resolved.artifact) {
     try {
@@ -182,7 +243,7 @@ async function ensurePdfReady(
       };
     }
   }
-  const operation = resolved.operation;
+  const operation = currentOperation;
   if (!operation) {
     return { result: { status: 'pending', progress: pendingPdfProgress('pending', null) } };
   }
@@ -351,12 +412,13 @@ async function resolvePlan(
 export async function resolveReaderBootstrapState(
   request: NextRequest,
   documentId: string,
+  options: ReaderBootstrapResolveOptions = {},
 ): Promise<ReaderBootstrapResolution | Response> {
   const scope = await resolveSegmentDocumentScope(request, documentId);
   if (scope instanceof Response) return scope;
   let parsedPdfDocument: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
-    const pdfState = await ensurePdfReady(documentId, scope);
+    const pdfState = await ensurePdfReady(documentId, scope, options);
     if ('result' in pdfState) return pdfState;
     parsedPdfDocument = pdfState.parsedDocument;
   }
@@ -468,7 +530,8 @@ export async function resolveReaderBootstrapState(
 export async function resolveReaderBootstrap(
   request: NextRequest,
   documentId: string,
+  options: ReaderBootstrapResolveOptions = {},
 ): Promise<ReaderBootstrapResult | Response> {
-  const resolution = await resolveReaderBootstrapState(request, documentId);
+  const resolution = await resolveReaderBootstrapState(request, documentId, options);
   return resolution instanceof Response ? resolution : resolution.result;
 }

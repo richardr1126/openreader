@@ -9,6 +9,7 @@ import {
   createOrReuseCurrentPdfParseOperation,
   resolveCurrentPdfParse,
 } from '@/lib/server/pdf-parse/operation';
+import { shouldPreferCurrentPdfParseOperation } from '@/lib/server/pdf-parse/readiness';
 import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
 import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
@@ -82,11 +83,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const namespace = getOpenReaderTestNamespace(req.headers);
     const resolved = await resolveCurrentPdfParse({ documentId: id, namespace });
+    const currentOp = resolved.operation;
+    if (currentOp && shouldPreferCurrentPdfParseOperation(resolved)) {
+      return jsonSnapshot(pdfParseSnapshotFromWorkerState(currentOp));
+    }
     if (resolved.artifact) {
       return jsonSnapshot({ parseStatus: 'ready', parseProgress: null, opId: null }, 200);
     }
 
-    const currentOp = resolved.operation;
     if (!currentOp) {
       return jsonSnapshot({
         parseStatus: 'pending',
@@ -157,6 +161,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     if (!replace) {
       const resolved = await resolveCurrentPdfParse({ documentId: id, namespace });
+      const currentOp = resolved.operation;
+      if (currentOp && shouldPreferCurrentPdfParseOperation(resolved)) {
+        const snapshot = pdfParseSnapshotFromWorkerState(currentOp);
+        if (snapshot.parseStatus === 'failed') {
+          return jsonSnapshot(snapshot);
+        }
+        return jsonSnapshot(snapshot, 202);
+      }
       if (resolved.artifact) {
         return jsonSnapshot({
           parseStatus: 'ready',
@@ -165,7 +177,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         }, 200);
       }
 
-      const currentOp = resolved.operation;
       if (currentOp) {
         const snapshot = pdfParseSnapshotFromWorkerState(currentOp);
         if (snapshot.parseStatus === 'failed') {

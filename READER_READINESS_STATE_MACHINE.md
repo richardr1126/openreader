@@ -440,6 +440,17 @@ session-adoption failure, or pre-ready renderer failure reaches the same
 retrying session/renderer initialization increments the explicit attempt key.
 Neither failure retries because a provider rerendered.
 
+PDF force reparse is an explicit aggregate restart, not an ordinary query
+refresh. The force endpoint's replacement operation ID is passed to aggregate
+bootstrap, validated against the document and namespace, and retained in the
+aggregate SSE URL. That exact operation remains authoritative over the
+still-readable previous artifact, so its queued/running page progress is shown
+by the shared `ReaderLoader`. `ReaderShell.restartBootstrap` closes the ready
+gate, advances the surface attempt, and refetches aggregate bootstrap. The
+regenerated PDF must therefore pass session adoption and the renderer's
+canvas/text/highlight readiness contract again even when deterministic parsing
+produces the same content, plan ID, and plan signature.
+
 ### 6. Required regression coverage
 
 The corrective implementation is incomplete without behavioral checks proving:
@@ -450,6 +461,8 @@ The corrective implementation is incomplete without behavioral checks proving:
 - a deferred same-key source request is shared rather than aborted/restarted;
 - a rejected source request stays failed until explicit retry;
 - changing document/content/plan identity initializes exactly one new surface;
+- force reparse prefers its replacement operation over the previous artifact
+  and advances readiness even when the regenerated surface identity is equal;
 - saved PDF/HTML ordinals survive the renderer's first anchor commit;
 - development Turbopack opens representative PDF, EPUB, and HTML documents
   without maximum-depth errors, request storms, or a loader regression.

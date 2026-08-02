@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import {
   resolveReaderBootstrapState,
+  type ReaderBootstrapResolveOptions,
   type ReaderBootstrapResolution,
 } from '@/lib/server/reader/bootstrap';
 
@@ -15,6 +16,7 @@ export function createReaderBootstrapEventStream(
   request: NextRequest,
   documentId: string,
   initial: ReaderBootstrapResolution,
+  resolveOptions: ReaderBootstrapResolveOptions = {},
 ): ReadableStream<Uint8Array> {
   let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   let cancelled = false;
@@ -56,7 +58,11 @@ export function createReaderBootstrapEventStream(
               const upstreamFrame = buffer.slice(0, boundary);
               buffer = buffer.slice(boundary + 2);
               if (/^event:\s*snapshot\s*$/m.test(upstreamFrame)) {
-                const next = await resolveReaderBootstrapState(request, documentId);
+                const next = await resolveReaderBootstrapState(
+                  request,
+                  documentId,
+                  resolveOptions,
+                );
                 if (next instanceof Response) throw new Error('Reader bootstrap authorization changed');
                 resolution = next;
                 const changedOperation = resolution.operationId !== operationId;

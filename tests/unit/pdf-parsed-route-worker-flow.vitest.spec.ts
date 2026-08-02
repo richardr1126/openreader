@@ -127,6 +127,34 @@ describe('GET/POST /api/documents/[id]/parsed worker flow', () => {
     await expect(response.json()).resolves.toMatchObject({ parseStatus: 'ready' });
   });
 
+  test('GET reports the current replacement operation instead of the previous artifact', async () => {
+    hoisted.resolveCurrentPdfParse.mockResolvedValue({
+      artifact: { objectKey: 'parsed-key.json' },
+      operation: {
+        opId: 'op-force-1',
+        opKey: 'pdf_layout|v1|parser|doc-1||doc-key|force',
+        kind: 'pdf_layout',
+        jobId: 'job-force-1',
+        status: 'running',
+        queuedAt: Date.now() - 1000,
+        updatedAt: Date.now(),
+        progress: { phase: 'infer', pagesParsed: 1, totalPages: 4 },
+      },
+    });
+
+    const { GET } = await import('../../src/app/api/documents/[id]/parsed/route');
+    const response = await GET(new NextRequest('http://localhost/api/documents/doc-1/parsed'), {
+      params: Promise.resolve({ id: 'doc-1' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      parseStatus: 'running',
+      opId: 'op-force-1',
+      parseProgress: { pagesParsed: 1, totalPages: 4 },
+    });
+  });
+
   test('POST creates a worker op when replace is requested', async () => {
     hoisted.createOrReuseCurrentPdfParseOperation.mockResolvedValue({
       opId: 'op-force-1',

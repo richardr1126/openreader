@@ -21,6 +21,10 @@ export type ReaderDocumentSourceResult =
   | { status: 'ready'; document: ReaderDocument }
   | { status: 'error'; error: Error };
 
+export type ReaderBootstrapRetryOptions = {
+  pdfOperationId?: string | null;
+};
+
 export function useReaderBootstrap(documentId: string | undefined) {
   const { data: session, isPending: sessionPending } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
@@ -30,13 +34,16 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const pendingProgress = useRef<DocumentProgressPayload | null>(null);
   const lastProgressTimestamp = useRef(0);
   const progressPersistenceEnabled = useRef(false);
+  const activePdfOperationId = useRef<string | null>(null);
 
   const query = useQuery({
     queryKey: key,
     // Bootstrap ensures durable server work. Development Strict Mode may
     // briefly remove every observer, but that must not abort the request that
     // creates/reconnects the operation or surface an ECONNRESET on the server.
-    queryFn: () => getReaderBootstrap(documentId!),
+    queryFn: () => getReaderBootstrap(documentId!, {
+      pdfOperationId: activePdfOperationId.current,
+    }),
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
@@ -103,8 +110,12 @@ export function useReaderBootstrap(documentId: string | undefined) {
     await settingsMutation.mutateAsync(settings);
     await query.refetch({ throwOnError: true });
   }, [query, settingsMutation]);
-  const retry = useCallback(async () => {
-    await query.refetch();
+  const retry = useCallback(async (options?: ReaderBootstrapRetryOptions) => {
+    activePdfOperationId.current = options?.pdfOperationId?.trim() || null;
+    const response = await query.refetch();
+    if (response.data?.status !== 'pending') {
+      activePdfOperationId.current = null;
+    }
   }, [query]);
   const retryDocumentSource = useCallback(async () => {
     await sourceQuery.refetch();
@@ -116,12 +127,14 @@ export function useReaderBootstrap(documentId: string | undefined) {
   useEffect(() => () => flushProgress(), [flushProgress]);
   useEffect(() => {
     if (!documentId || query.data?.status !== 'pending') return;
+    const pdfOperationId = activePdfOperationId.current;
     return subscribeReaderBootstrap(documentId, (snapshot) => {
+      if (snapshot.status !== 'pending') activePdfOperationId.current = null;
       queryClient.setQueryData<ReaderBootstrapResult>(
         queryKeys.readerBootstrap(sessionId, documentId),
         snapshot,
       );
-    });
+    }, { pdfOperationId });
   }, [documentId, query.data?.status, queryClient, sessionId]);
 
   const documentSource: ReaderDocumentSourceResult = result.status !== 'ready'

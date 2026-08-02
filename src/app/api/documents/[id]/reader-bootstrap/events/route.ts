@@ -26,11 +26,13 @@ export async function GET(
         { status: 400 },
       );
     }
-    const initial = await resolveReaderBootstrapState(request, documentId);
+    const pdfOperationId = request.nextUrl.searchParams.get('pdfOperationId')?.trim() || null;
+    const resolveOptions = { pdfOperationId };
+    const initial = await resolveReaderBootstrapState(request, documentId, resolveOptions);
     if (initial instanceof Response) return initial;
 
     return new NextResponse(
-      createReaderBootstrapEventStream(request, documentId, initial),
+      createReaderBootstrapEventStream(request, documentId, initial, resolveOptions),
       {
         headers: {
           'Content-Type': 'text/event-stream; charset=utf-8',
