@@ -1,4 +1,8 @@
-import type { PdfLayoutResult, ComputeOperation } from '@/lib/server/compute-worker/protocol';
+import type {
+  ComputeOperation,
+  PdfLayoutResolution,
+  PdfLayoutResult,
+} from '@/lib/server/compute-worker/protocol';
 import type { PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { PdfParseSnapshot } from '@/lib/server/pdf-parse/types';
 
@@ -37,4 +41,14 @@ export function pdfParseSnapshotFromWorkerState(
     opId: state.opId?.trim() || null,
     ...(parseStatus === 'failed' && state.error?.message ? { error: state.error.message } : {}),
   };
+}
+
+/**
+ * A current replacement supersedes the previous artifact until it succeeds.
+ * Failed operations remain authoritative so the reader surfaces their error.
+ */
+export function isCurrentPdfParseOperationAuthoritative(
+  resolution: PdfLayoutResolution,
+): boolean {
+  return Boolean(resolution.operation && resolution.operation.status !== 'succeeded');
 }

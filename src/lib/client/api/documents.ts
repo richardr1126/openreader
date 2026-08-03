@@ -1,6 +1,6 @@
 import type { BaseDocument, DocumentType } from '@/types/documents';
-import type { ParsedPdfDocument, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { DocumentSettings } from '@/types/document-settings';
+import type { ReaderBootstrapRestart } from '@/types/reader-bootstrap';
 import { parseApiError } from '@/lib/client/api/http';
 
 export type UploadSource = {
@@ -146,200 +146,46 @@ export async function markDocumentOpened(
   return (await res.json()) as { documentId: string; recentlyOpenedAt: number };
 }
 
-export class ParsedPdfNotReadyError extends Error {
-  readonly parseStatus: PdfParseStatus;
-  readonly parseProgress: PdfParseProgress | null;
-  readonly opId: string | null;
-  readonly details: string | null;
-
-  constructor(input: {
-    parseStatus: PdfParseStatus;
-    parseProgress: PdfParseProgress | null;
-    opId?: string | null;
-    details?: string | null;
-  }) {
-    super(`Parsed PDF is not ready (${input.parseStatus})`);
-    this.name = 'ParsedPdfNotReadyError';
-    this.parseStatus = input.parseStatus;
-    this.parseProgress = input.parseProgress;
-    this.opId = input.opId?.trim() || null;
-    this.details = input.details?.trim() || null;
-  }
-}
-
-export async function getParsedPdfDocument(
+export async function forceReparsePdfDocument(
   id: string,
   options?: { signal?: AbortSignal },
-): Promise<ParsedPdfDocument> {
-  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
-    signal: options?.signal,
-    cache: 'no-store',
-  });
-
-  if (res.status === 409) {
-    const data = (await res.json().catch(() => null)) as {
-      parseStatus?: string;
-      parseProgress?: PdfParseProgress | null;
-      opId?: string | null;
-      error?: string;
-    } | null;
-    throw new ParsedPdfNotReadyError({
-      parseStatus: data?.parseStatus === 'running'
-        ? 'running'
-        : data?.parseStatus === 'ready'
-          ? 'ready'
-          : data?.parseStatus === 'failed'
-            ? 'failed'
-            : 'pending',
-      parseProgress: data?.parseProgress ?? null,
-      opId: data?.opId ?? null,
-      details: data?.error ?? null,
-    });
-  }
-
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to load parsed PDF');
-  }
-
-  const snapshot = (await res.json().catch(() => null)) as { parseStatus?: string; error?: string } | null;
-  if (snapshot?.parseStatus !== 'ready') {
-    throw new Error(snapshot?.error || 'Parsed PDF is not ready');
-  }
-
-  const artifactRes = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed/download`, {
-    signal: options?.signal,
-    cache: 'no-store',
-  });
-  if (!artifactRes.ok) {
-    const data = (await artifactRes.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to load parsed PDF artifact');
-  }
-  return (await artifactRes.json()) as ParsedPdfDocument;
-}
-
-export function subscribeParsedPdfDocumentEvents(
-  id: string,
-  options: {
-    opId: string;
-  },
-  handlers: {
-    onSnapshot: (snapshot: {
-      parseStatus: PdfParseStatus;
-      parseProgress: PdfParseProgress | null;
-      opId?: string | null;
-      error?: string | null;
-    }) => void;
-    onError?: (error: Event) => void;
-  },
-): () => void {
-  const params = new URLSearchParams();
-  params.set('opId', options.opId);
-  const query = params.size > 0 ? `?${params.toString()}` : '';
-  const source = new EventSource(`/api/documents/${encodeURIComponent(id)}/parsed/events${query}`);
-  source.addEventListener('snapshot', (event) => {
-    if (!(event instanceof MessageEvent)) return;
-    try {
-      const payload = JSON.parse(event.data) as {
-        snapshot?: {
-          opId: string;
-          status: 'queued' | 'running' | 'succeeded' | 'failed';
-          progress?: PdfParseProgress | null;
-          error?: { message?: string } | null;
-        };
-      };
-      const snapshot = payload?.snapshot;
-      if (!snapshot?.opId || !snapshot.status) return;
-      handlers.onSnapshot({
-        parseStatus: snapshot.status === 'running'
-          ? 'running'
-          : snapshot.status === 'succeeded'
-            ? 'ready'
-            : snapshot.status === 'failed'
-              ? 'failed'
-              : 'pending',
-        parseProgress: snapshot.status === 'running' ? (snapshot.progress ?? null) : null,
-        opId: snapshot.opId,
-        ...(snapshot.status === 'failed' && snapshot.error?.message
-          ? { error: snapshot.error.message }
-          : {}),
-      });
-    } catch {
-      // Ignore malformed payloads to avoid breaking active streams.
-    }
-  });
-  source.addEventListener('error', (event) => {
-    handlers.onError?.(event);
-  });
-  return () => {
-    source.close();
-  };
-}
-
-function normalizeParsedPdfOperationResponse(
-  data: { parseStatus?: string; parseProgress?: PdfParseProgress | null; opId?: string | null; error?: string } | null,
-): {
-  parseStatus: PdfParseStatus;
-  parseProgress: PdfParseProgress | null;
-  opId: string | null;
-  error?: string | null;
-} {
-  return {
-    parseStatus: data?.parseStatus === 'running'
-      ? 'running'
-      : data?.parseStatus === 'ready'
-        ? 'ready'
-        : data?.parseStatus === 'failed'
-          ? 'failed'
-          : 'pending',
-    parseProgress: data?.parseProgress ?? null,
-    opId: data?.opId?.trim() || null,
-    ...(data?.error ? { error: data.error } : {}),
-  };
-}
-
-export async function ensureParsedPdfDocumentOperation(
-  id: string,
-  options?: { signal?: AbortSignal; replace?: boolean },
-): Promise<{
-  parseStatus: PdfParseStatus;
-  parseProgress: PdfParseProgress | null;
-  opId: string | null;
-  error?: string | null;
-}> {
+): Promise<ReaderBootstrapRestart> {
   const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ replace: options?.replace === true }),
+    body: JSON.stringify({ replace: true }),
     signal: options?.signal,
     cache: 'no-store',
   });
 
   const data = (await res.json().catch(() => null)) as {
     parseStatus?: string;
-    parseProgress?: PdfParseProgress | null;
+    parseProgress?: {
+      phase?: string;
+      pagesParsed?: number;
+      totalPages?: number;
+    } | null;
     opId?: string | null;
     error?: string;
+    detail?: string;
   } | null;
 
-  if (!res.ok && res.status !== 409) {
-    throw new Error(data?.error || 'Failed to ensure parsed PDF operation');
+  if (!res.ok) {
+    throw new Error(data?.error || data?.detail || 'Failed to start PDF reparse');
   }
-
-  return normalizeParsedPdfOperationResponse(data);
-}
-
-export async function forceReparsePdfDocument(
-  id: string,
-  options?: { signal?: AbortSignal },
-): Promise<{ status: 'pending' | 'running'; opId?: string | null }> {
-  const data = await ensureParsedPdfDocumentOperation(id, {
-    signal: options?.signal,
-    replace: true,
-  });
+  const operationId = data?.opId?.trim();
+  if (!operationId) throw new Error('PDF reparse started without an operation ID.');
+  const progress = data?.parseProgress;
   return {
-    status: data.parseStatus === 'running' ? 'running' : 'pending',
-    opId: data.opId,
+    operationId,
+    progress: {
+      kind: 'pdf-parse',
+      phase: data?.parseStatus === 'running'
+        ? progress?.phase === 'merge' ? 'merging' : 'parsing'
+        : 'queued',
+      pagesParsed: Math.max(0, Number(progress?.pagesParsed ?? 0)),
+      totalPages: Math.max(0, Number(progress?.totalPages ?? 0)),
+    },
   };
 }
 

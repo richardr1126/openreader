@@ -5,7 +5,7 @@ import {
   FORCE_REPARSE_CONFIRM_TITLE,
   isForceReparseDisabled,
 } from '../../src/lib/client/pdf/force-reparse';
-import { shouldPreferCurrentPdfParseOperation } from '../../src/lib/server/pdf-parse/readiness';
+import { isCurrentPdfParseOperationAuthoritative } from '../../src/lib/server/pdf-parse/snapshot';
 import type { PdfLayoutResolution } from '../../src/lib/server/compute-worker/protocol';
 
 describe('pdf force reparse controls', () => {
@@ -30,11 +30,11 @@ describe('pdf force reparse controls', () => {
       operation: { status } as NonNullable<PdfLayoutResolution['operation']>,
     });
 
-    expect(shouldPreferCurrentPdfParseOperation(resolution('queued'))).toBe(true);
-    expect(shouldPreferCurrentPdfParseOperation(resolution('running'))).toBe(true);
-    expect(shouldPreferCurrentPdfParseOperation(resolution('failed'))).toBe(true);
-    expect(shouldPreferCurrentPdfParseOperation(resolution('succeeded'))).toBe(false);
-    expect(shouldPreferCurrentPdfParseOperation({
+    expect(isCurrentPdfParseOperationAuthoritative(resolution('queued'))).toBe(true);
+    expect(isCurrentPdfParseOperationAuthoritative(resolution('running'))).toBe(true);
+    expect(isCurrentPdfParseOperationAuthoritative(resolution('failed'))).toBe(true);
+    expect(isCurrentPdfParseOperationAuthoritative(resolution('succeeded'))).toBe(false);
+    expect(isCurrentPdfParseOperationAuthoritative({
       artifact: { objectKey: 'parsed/existing.json' },
       operation: null,
     })).toBe(false);

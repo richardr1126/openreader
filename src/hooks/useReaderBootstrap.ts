@@ -12,7 +12,10 @@ import { putDocumentSettings } from '@/lib/client/api/documents';
 import { putDocumentProgress } from '@/lib/client/api/user-state';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { DocumentSettings } from '@/types/document-settings';
-import type { ReaderBootstrapResult } from '@/types/reader-bootstrap';
+import type {
+  ReaderBootstrapRestart,
+  ReaderBootstrapResult,
+} from '@/types/reader-bootstrap';
 import type { ReaderDocument } from '@/types/documents';
 import type { DocumentProgressPayload } from '@/types/user-state';
 
@@ -20,10 +23,6 @@ export type ReaderDocumentSourceResult =
   | { status: 'idle' | 'pending' }
   | { status: 'ready'; document: ReaderDocument }
   | { status: 'error'; error: Error };
-
-export type ReaderBootstrapRetryOptions = {
-  pdfOperationId?: string | null;
-};
 
 export function useReaderBootstrap(documentId: string | undefined) {
   const { data: session, isPending: sessionPending } = useAuthSession();
@@ -34,16 +33,12 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const pendingProgress = useRef<DocumentProgressPayload | null>(null);
   const lastProgressTimestamp = useRef(0);
   const progressPersistenceEnabled = useRef(false);
-  const activePdfOperationId = useRef<string | null>(null);
-
   const query = useQuery({
     queryKey: key,
     // Bootstrap ensures durable server work. Development Strict Mode may
     // briefly remove every observer, but that must not abort the request that
     // creates/reconnects the operation or surface an ECONNRESET on the server.
-    queryFn: () => getReaderBootstrap(documentId!, {
-      pdfOperationId: activePdfOperationId.current,
-    }),
+    queryFn: () => getReaderBootstrap(documentId!),
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
@@ -110,12 +105,18 @@ export function useReaderBootstrap(documentId: string | undefined) {
     await settingsMutation.mutateAsync(settings);
     await query.refetch({ throwOnError: true });
   }, [query, settingsMutation]);
-  const retry = useCallback(async (options?: ReaderBootstrapRetryOptions) => {
-    activePdfOperationId.current = options?.pdfOperationId?.trim() || null;
-    const response = await query.refetch();
-    if (response.data?.status !== 'pending') {
-      activePdfOperationId.current = null;
-    }
+  const restart = useCallback((input: ReaderBootstrapRestart) => {
+    const operationId = input.operationId.trim();
+    if (!operationId) throw new Error('Reader restart requires an operation ID.');
+    const pending: ReaderBootstrapResult = {
+      status: 'pending',
+      operationId,
+      ...(input.progress ? { progress: input.progress } : {}),
+    };
+    queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
+  }, [key, queryClient]);
+  const retry = useCallback(async () => {
+    await query.refetch();
   }, [query]);
   const retryDocumentSource = useCallback(async () => {
     await sourceQuery.refetch();
@@ -125,17 +126,21 @@ export function useReaderBootstrap(documentId: string | undefined) {
     progressPersistenceEnabled.current = false;
   }, [documentId]);
   useEffect(() => () => flushProgress(), [flushProgress]);
+  const pendingOperationId = query.data?.status === 'pending'
+    ? query.data.operationId
+    : undefined;
   useEffect(() => {
     if (!documentId || query.data?.status !== 'pending') return;
-    const pdfOperationId = activePdfOperationId.current;
+    const operationId = pendingOperationId;
     return subscribeReaderBootstrap(documentId, (snapshot) => {
-      if (snapshot.status !== 'pending') activePdfOperationId.current = null;
       queryClient.setQueryData<ReaderBootstrapResult>(
         queryKeys.readerBootstrap(sessionId, documentId),
-        snapshot,
+        snapshot.status === 'pending' && operationId
+          ? { ...snapshot, operationId }
+          : snapshot,
       );
-    }, { pdfOperationId });
-  }, [documentId, query.data?.status, queryClient, sessionId]);
+    }, { operationId });
+  }, [documentId, pendingOperationId, query.data?.status, queryClient, sessionId]);
 
   const documentSource: ReaderDocumentSourceResult = result.status !== 'ready'
     ? { status: 'idle' }
@@ -153,6 +158,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
   return {
     result,
     documentSource,
+    restart,
     retry,
     retryDocumentSource,
     updateSettings,

@@ -46,8 +46,10 @@ import {
   isPdfParseOperationForDocument,
   resolveCurrentPdfParse,
 } from '@/lib/server/pdf-parse/operation';
-import { shouldPreferCurrentPdfParseOperation } from '@/lib/server/pdf-parse/readiness';
-import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
+import {
+  isCurrentPdfParseOperationAuthoritative,
+  pdfParseSnapshotFromWorkerState,
+} from '@/lib/server/pdf-parse/snapshot';
 import {
   checkJobRate,
   getPdfLayoutRateConfig,
@@ -88,7 +90,7 @@ export type ReaderBootstrapResolution = {
 };
 
 export type ReaderBootstrapResolveOptions = {
-  pdfOperationId?: string | null;
+  preparationOperationId?: string | null;
 };
 
 function storedRecord(value: unknown): Record<string, unknown> {
@@ -179,7 +181,7 @@ async function ensurePdfReady(
     documentId,
     namespace: scope.testNamespace,
   };
-  const requestedOperationId = options.pdfOperationId?.trim();
+  const requestedOperationId = options.preparationOperationId?.trim();
   if (requestedOperationId) {
     const requestedOperation = await fetchPdfParseOperation(requestedOperationId);
     if (
@@ -216,7 +218,7 @@ async function ensurePdfReady(
     resolved = { artifact: null, operation };
   }
   const currentOperation = resolved.operation;
-  if (currentOperation && shouldPreferCurrentPdfParseOperation(resolved)) {
+  if (currentOperation && isCurrentPdfParseOperationAuthoritative(resolved)) {
     const readiness = resolvePdfOperationReadiness(currentOperation);
     if (readiness) return readiness;
   }
@@ -243,38 +245,12 @@ async function ensurePdfReady(
       };
     }
   }
-  const operation = currentOperation;
-  if (!operation) {
-    return { result: { status: 'pending', progress: pendingPdfProgress('pending', null) } };
-  }
-  const snapshot = pdfParseSnapshotFromWorkerState(operation);
-  if (snapshot.parseStatus === 'failed') {
-    return {
-      result: {
-        status: 'error',
-        message: snapshot.error || 'PDF structure could not be prepared.',
-        retryable: true,
-      },
-    };
-  }
-  if (snapshot.parseStatus === 'ready') {
-    return {
-      result: {
-        status: 'error',
-        message: 'PDF preparation completed without a readable artifact.',
-        retryable: true,
-      },
-    };
-  }
   return {
     result: {
-      status: 'pending',
-      progress: pendingPdfProgress(
-        snapshot.parseStatus === 'running' ? 'running' : 'pending',
-        snapshot.parseProgress,
-      ),
+      status: 'error',
+      message: 'PDF preparation completed without a readable artifact.',
+      retryable: true,
     },
-    operationId: operation.opId,
   };
 }
 
@@ -416,6 +392,15 @@ export async function resolveReaderBootstrapState(
 ): Promise<ReaderBootstrapResolution | Response> {
   const scope = await resolveSegmentDocumentScope(request, documentId);
   if (scope instanceof Response) return scope;
+  if (options.preparationOperationId && scope.readerType !== 'pdf') {
+    return {
+      result: {
+        status: 'error',
+        message: 'The requested preparation operation does not apply to this reader.',
+        retryable: false,
+      },
+    };
+  }
   let parsedPdfDocument: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
     const pdfState = await ensurePdfReady(documentId, scope, options);

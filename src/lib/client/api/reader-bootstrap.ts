@@ -3,17 +3,11 @@ import type { ReaderBootstrapResult } from '@/types/reader-bootstrap';
 
 export async function getReaderBootstrap(
   documentId: string,
-  options?: { signal?: AbortSignal; pdfOperationId?: string | null },
 ): Promise<ReaderBootstrapResult> {
   const response = await fetch(
     `/api/documents/${encodeURIComponent(documentId)}/reader-bootstrap`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...(options?.pdfOperationId ? { pdfOperationId: options.pdfOperationId } : {}),
-      }),
-      signal: options?.signal,
       cache: 'no-store',
     },
   );
@@ -34,10 +28,10 @@ export async function getReaderBootstrap(
 export function subscribeReaderBootstrap(
   documentId: string,
   onSnapshot: (result: ReaderBootstrapResult) => void,
-  options?: { pdfOperationId?: string | null },
+  options?: { operationId?: string | null },
 ): () => void {
   const params = new URLSearchParams();
-  if (options?.pdfOperationId) params.set('pdfOperationId', options.pdfOperationId);
+  if (options?.operationId) params.set('operationId', options.operationId);
   const query = params.size > 0 ? `?${params.toString()}` : '';
   const source = new EventSource(
     `/api/documents/${encodeURIComponent(documentId)}/reader-bootstrap/events${query}`,

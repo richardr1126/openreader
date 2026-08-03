@@ -50,6 +50,9 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     setSelectedOrdinal,
   } = input;
   const requestedSeekLayoutPlanIdRef = useRef<string | null>(null);
+  const resetBootstrapPlanAdoption = useCallback(() => {
+    requestedSeekLayoutPlanIdRef.current = null;
+  }, []);
   const buildPlaybackPlanRequest = useCallback(
     (): TtsPlaybackPlanRequest | null => request,
     [request],
@@ -122,17 +125,11 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
       documentId: request?.payload.documentId ?? value.documentId,
       readerType: activeReaderType,
     });
-    const wasAlreadyApplied = playbackPlanRef.current?.planId === plan.planId;
     const applied = applyPlaybackPlan(plan);
     if (
       plan.planId
       && plan.segments.length > 0
-      && (
-        requestedSeekLayoutPlanIdRef.current !== plan.planId
-        // Explicit reader restart resets the playback model before adopting
-        // the regenerated surface. Reacquire the same plan's cleared layout.
-        || !wasAlreadyApplied
-      )
+      && requestedSeekLayoutPlanIdRef.current !== plan.planId
     ) {
       const planId = plan.planId;
       requestedSeekLayoutPlanIdRef.current = planId;
@@ -167,5 +164,6 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
     getPlaybackPlan,
+    resetBootstrapPlanAdoption,
   };
 }

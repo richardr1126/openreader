@@ -352,6 +352,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
     getPlaybackPlan,
+    resetBootstrapPlanAdoption,
   } = useTtsPlanController({
     activeReaderType,
     currentLocation: currDocPage,
@@ -552,6 +553,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     initialPosition: ReaderInitialPosition;
   }) => {
     stop();
+    resetBootstrapPlanAdoption();
     setDocumentLanguage(input.language);
     setIsEPUB(input.readerType === 'epub');
     acceptBootstrapPlaybackPlan(input.plan);
@@ -578,6 +580,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [
     acceptBootstrapPlaybackPlan,
     playbackSegmentsRef,
+    resetBootstrapPlanAdoption,
     setSelectedOrdinal,
     stop,
   ]);

@@ -26,8 +26,8 @@ export async function GET(
         { status: 400 },
       );
     }
-    const pdfOperationId = request.nextUrl.searchParams.get('pdfOperationId')?.trim() || null;
-    const resolveOptions = { pdfOperationId };
+    const preparationOperationId = request.nextUrl.searchParams.get('operationId')?.trim() || null;
+    const resolveOptions = { preparationOperationId };
     const initial = await resolveReaderBootstrapState(request, documentId, resolveOptions);
     if (initial instanceof Response) return initial;
 

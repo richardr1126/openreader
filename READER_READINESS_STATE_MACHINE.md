@@ -441,15 +441,18 @@ retrying session/renderer initialization increments the explicit attempt key.
 Neither failure retries because a provider rerendered.
 
 PDF force reparse is an explicit aggregate restart, not an ordinary query
-refresh. The force endpoint's replacement operation ID is passed to aggregate
-bootstrap, validated against the document and namespace, and retained in the
-aggregate SSE URL. That exact operation remains authoritative over the
-still-readable previous artifact, so its queued/running page progress is shown
-by the shared `ReaderLoader`. `ReaderShell.restartBootstrap` closes the ready
-gate, advances the surface attempt, and refetches aggregate bootstrap. The
-regenerated PDF must therefore pass session adoption and the renderer's
-canvas/text/highlight readiness contract again even when deterministic parsing
-produces the same content, plan ID, and plan signature.
+refresh. The force endpoint returns one generic restart command containing the
+replacement operation ID and its initial progress. The bootstrap hook replaces
+the ready cache entry with that pending snapshot immediately, and the aggregate
+SSE validates the operation against the document and namespace before following
+it through parsing and playback-plan readiness. That exact operation remains
+authoritative over the still-readable previous artifact, so queued/running page
+progress stays on the shared `ReaderLoader`. `ReaderShell.restartBootstrap`
+closes the ready gate and advances the surface attempt without a second
+bootstrap POST or PDF-specific shell state. The regenerated PDF must therefore
+pass session adoption and the renderer's canvas/text/highlight readiness
+contract again even when deterministic parsing produces the same content, plan
+ID, and plan signature.
 
 ### 6. Required regression coverage
 
@@ -515,6 +518,8 @@ Implemented:
   `onReady`/`onError` renderer boundary;
 - the ready PDF payload includes its immutable parsed document, eliminating the
   second parsed-artifact query, SSE subscription, cache key, and retry loop;
+- the obsolete parsed-artifact download/event routes and client adapters have
+  been deleted; `/parsed` remains only as the explicit force-reparse command;
 - playback-plan operations reuse a succeeded artifact pointer; cache clearing
   invalidates the matching operation before deleting that artifact;
 - reader cleanup releases route load guards before clearing shared playback

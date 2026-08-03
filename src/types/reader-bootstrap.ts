@@ -12,6 +12,11 @@ export type ReaderBootstrapProgress = {
   totalPages: number;
 };
 
+export type ReaderBootstrapRestart = {
+  operationId: string;
+  progress?: ReaderBootstrapProgress;
+};
+
 type ReaderPayloadBase<T extends ReaderType> = {
   documentId: string;
   readerType: T;
@@ -31,6 +36,6 @@ export type ReaderPayload =
   | ReaderPayloadBase<'html'>;
 
 export type ReaderBootstrapResult =
-  | { status: 'pending'; progress?: ReaderBootstrapProgress }
+  | { status: 'pending'; progress?: ReaderBootstrapProgress; operationId?: string }
   | { status: 'ready'; payload: ReaderPayload }
   | { status: 'error'; message: string; retryable: boolean };

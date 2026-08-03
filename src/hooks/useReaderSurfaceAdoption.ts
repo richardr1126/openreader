@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type ReaderSurfaceAdoptionState = {
   adoptedAttemptKey: string | null;
@@ -48,41 +48,4 @@ export function useReaderSurfaceAdoption(input: {
   }, [input.attemptKey, input.enabled]);
 
   return state;
-}
-
-/**
- * Owns the explicit attempt counter shared by renderer retry and aggregate
- * bootstrap restart. Restart closes the caller's ready gate before advancing
- * the attempt and keeps adoption disabled until the refetch has settled.
- */
-export function useReaderSurfaceAttempt<TOptions = never>(input: {
-  restartBootstrap: (options?: TOptions) => Promise<unknown>;
-  onRestart: () => void;
-}) {
-  const restartBootstrapRef = useRef(input.restartBootstrap);
-  restartBootstrapRef.current = input.restartBootstrap;
-  const onRestartRef = useRef(input.onRestart);
-  onRestartRef.current = input.onRestart;
-  const [attempt, setAttempt] = useState(0);
-  const [isRestarting, setIsRestarting] = useState(false);
-  const [restartOptions, setRestartOptions] = useState<TOptions | null>(null);
-
-  const advance = useCallback(() => {
-    setAttempt((current) => current + 1);
-  }, []);
-
-  const restart = useCallback(async (options?: TOptions) => {
-    setIsRestarting(true);
-    setRestartOptions(options ?? null);
-    onRestartRef.current();
-    advance();
-    try {
-      await restartBootstrapRef.current(options);
-    } finally {
-      setIsRestarting(false);
-      setRestartOptions(null);
-    }
-  }, [advance]);
-
-  return { attempt, isRestarting, restartOptions, advance, restart };
 }

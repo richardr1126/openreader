@@ -66,12 +66,6 @@ function PdfReader({
     disableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
-  const forceReparseParsedPdf = useCallback(async () => {
-    const operation = await forceReparsePdfDocument(routeDocumentId);
-    const pdfOperationId = operation.opId?.trim();
-    if (!pdfOperationId) throw new Error('PDF reparse started without an operation ID.');
-    await restartBootstrap({ pdfOperationId });
-  }, [restartBootstrap, routeDocumentId]);
   const pdfState = usePdfDocument(
     sourceDocument,
     payload.settings,
@@ -164,20 +158,23 @@ function PdfReader({
     setShowForceReparseConfirm(true);
   }, []);
 
-  const confirmForceReparse = useCallback(() => {
+  const confirmForceReparse = useCallback(async () => {
     setShowForceReparseConfirm(false);
     setIsForceReparseStarting(true);
     const toastId = toast.loading('Starting PDF reparse…');
-    void forceReparseParsedPdf()
-      .then(() => toast.success('PDF reparse started.', { id: toastId }))
-      .catch((error) => {
-        toast.error(
-          error instanceof Error ? error.message : 'Failed to reparse PDF',
-          { id: toastId },
-        );
-      })
-      .finally(() => setIsForceReparseStarting(false));
-  }, [forceReparseParsedPdf]);
+    try {
+      const restart = await forceReparsePdfDocument(routeDocumentId);
+      setIsForceReparseStarting(false);
+      toast.success('PDF reparse started.', { id: toastId });
+      restartBootstrap(restart);
+    } catch (error) {
+      setIsForceReparseStarting(false);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to reparse PDF',
+        { id: toastId },
+      );
+    }
+  }, [restartBootstrap, routeDocumentId]);
 
   return (
     <>
@@ -274,7 +271,7 @@ function PdfReader({
       <ConfirmDialog
         isOpen={showForceReparseConfirm}
         onClose={() => setShowForceReparseConfirm(false)}
-        onConfirm={confirmForceReparse}
+        onConfirm={() => void confirmForceReparse()}
         title={FORCE_REPARSE_CONFIRM_TITLE}
         message={FORCE_REPARSE_CONFIRM_MESSAGE}
         confirmText={FORCE_REPARSE_CONFIRM_TEXT}

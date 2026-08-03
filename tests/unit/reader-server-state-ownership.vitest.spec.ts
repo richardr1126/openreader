@@ -13,7 +13,8 @@ describe('reader server-state ownership', () => {
     const bootstrap = source('src/hooks/useReaderBootstrap.ts');
     expect(bootstrap).toContain('getReaderBootstrap(documentId!');
     expect(bootstrap).toContain('subscribeReaderBootstrap(documentId');
-    expect(bootstrap).toContain('pdfOperationId: activePdfOperationId.current');
+    expect(bootstrap).toContain('queryClient.setQueryData<ReaderBootstrapResult>(key');
+    expect(bootstrap).not.toContain('activePdfOperationId');
     expect(bootstrap).not.toContain('refetchInterval');
     expect(bootstrap).not.toContain('useDocumentProgress');
     expect(bootstrap).not.toContain('useDocumentSettings');
@@ -87,13 +88,12 @@ describe('reader server-state ownership', () => {
     expect(surfaceKey).toContain('payload.document.contentVersion');
     expect(shell).toContain('const attemptKey = `${surfaceKey}:${rendererAttempt}`');
     expect(shell).toContain('restartBootstrap,');
-    expect(shell).toContain('enabled: Boolean(payload && sourceDocument && !restartingBootstrap)');
-    expect(shell).toContain('restartOptions?.pdfOperationId');
+    expect(shell).toContain('enabled: Boolean(payload && sourceDocument)');
     expect(shell).toContain('<Fragment key={attemptKey}>');
     const surfaceAdoption = source('src/hooks/useReaderSurfaceAdoption.ts');
     expect(surfaceAdoption).toContain('claimedAttemptKeyRef.current = input.attemptKey');
-    expect(surfaceAdoption).toContain('await restartBootstrapRef.current(options)');
-    expect(surfaceAdoption).toContain('setAttempt((current) => current + 1)');
+    expect(shell).toContain('restartBootstrapQuery(command)');
+    expect(shell).toContain('setRendererAttempt((current) => current + 1)');
     expect(shell).toContain('enableProgressPersistence()');
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
@@ -167,7 +167,7 @@ describe('reader server-state ownership', () => {
     expect(planController).not.toContain('resolveTtsPlaybackPlan');
     expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
     expect(planController).not.toContain('setTimeout(resolve, 300)');
-    expect(planController).toContain('|| !wasAlreadyApplied');
+    expect(planController).toContain('resetBootstrapPlanAdoption');
     expect(playbackModel).toContain('currentPlan.planId === plan.planId');
 
     const epubViewer = source('src/components/views/EPUBViewer.tsx');
@@ -204,7 +204,7 @@ describe('reader server-state ownership', () => {
     expect(pdfPage).not.toContain('deriveReaderLoadState');
     expect(pdfPage).not.toContain('viewerError');
     expect(pdfPage).not.toContain('await new Promise((resolve) => setTimeout(resolve, 250))');
-    expect(pdfPage).toContain('await restartBootstrap({ pdfOperationId })');
+    expect(pdfPage).toContain('restartBootstrap(restart)');
     expect(pdfPage).not.toContain('await bootstrap.retry()');
     expect(pdfPage).toContain("toast.error(");
     expect(pdfPage).toContain("isForceReparseStarting ? 'running' : 'ready'");

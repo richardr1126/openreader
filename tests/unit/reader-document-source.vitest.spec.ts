@@ -12,6 +12,7 @@ import { queryKeys } from '@/lib/client/query-keys';
 
 const mocks = vi.hoisted(() => ({
   getReaderBootstrap: vi.fn(),
+  subscribeReaderBootstrap: vi.fn(),
   ensureCachedDocument: vi.fn(),
 }));
 
@@ -20,7 +21,7 @@ vi.mock('@/hooks/useAuthSession', () => ({
 }));
 vi.mock('@/lib/client/api/reader-bootstrap', () => ({
   getReaderBootstrap: (...args: unknown[]) => mocks.getReaderBootstrap(...args),
-  subscribeReaderBootstrap: vi.fn(() => () => undefined),
+  subscribeReaderBootstrap: (...args: unknown[]) => mocks.subscribeReaderBootstrap(...args),
 }));
 vi.mock('@/lib/client/cache/documents', () => ({
   ensureCachedDocument: (...args: unknown[]) => mocks.ensureCachedDocument(...args),
@@ -156,6 +157,8 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   latest = null;
   mocks.getReaderBootstrap.mockReset();
+  mocks.subscribeReaderBootstrap.mockReset();
+  mocks.subscribeReaderBootstrap.mockReturnValue(() => undefined);
   mocks.ensureCachedDocument.mockReset();
 });
 
@@ -180,6 +183,61 @@ function renderProbe(readerType: ReaderType, nonce: number) {
 }
 
 describe('reader document source acquisition', () => {
+  test('replaces ready state with force-operation progress without a second bootstrap POST', async () => {
+    const readyPayload = payload('pdf');
+    mocks.getReaderBootstrap.mockResolvedValue({ status: 'ready', payload: readyPayload });
+    mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+
+    await act(async () => renderProbe('pdf', 0));
+    await waitFor(() => latest?.documentSource.status === 'ready');
+
+    await act(async () => latest?.restart({
+      operationId: 'parse-op',
+      progress: {
+        kind: 'pdf-parse',
+        phase: 'queued',
+        pagesParsed: 0,
+        totalPages: 0,
+      },
+    }));
+    await waitFor(() => latest?.result.status === 'pending');
+    expect(latest?.result).toMatchObject({
+      status: 'pending',
+      operationId: 'parse-op',
+      progress: { phase: 'queued' },
+    });
+    expect(mocks.getReaderBootstrap).toHaveBeenCalledTimes(1);
+    expect(mocks.subscribeReaderBootstrap).toHaveBeenCalledWith(
+      'doc-pdf',
+      expect.any(Function),
+      { operationId: 'parse-op' },
+    );
+
+    const onSnapshot = mocks.subscribeReaderBootstrap.mock.calls.at(-1)?.[1] as
+      | ((snapshot: unknown) => void)
+      | undefined;
+    await act(async () => onSnapshot?.({
+      status: 'pending',
+      progress: {
+        kind: 'pdf-parse',
+        phase: 'parsing',
+        pagesParsed: 2,
+        totalPages: 5,
+      },
+    }));
+    await waitFor(() => latest?.result.status === 'pending'
+      && latest.result.progress?.phase === 'parsing');
+    expect(latest?.result).toMatchObject({
+      status: 'pending',
+      operationId: 'parse-op',
+      progress: { phase: 'parsing', pagesParsed: 2 },
+    });
+
+    await act(async () => onSnapshot?.({ status: 'ready', payload: readyPayload }));
+    await waitFor(() => latest?.result.status === 'ready');
+    expect(latest?.result.status).toBe('ready');
+  });
+
   for (const readerType of ['pdf', 'epub', 'html'] as const) {
     test(`shares one deferred ${readerType} source request across Strict Mode and rerenders`, async () => {
       const pendingSource = deferred<ReaderDocument>();

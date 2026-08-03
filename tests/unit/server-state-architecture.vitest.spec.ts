@@ -151,10 +151,13 @@ describe('server-state architecture', () => {
   test('supplies the parsed PDF artifact through the aggregate bootstrap payload', () => {
     const pdf = source('src/app/(app)/pdf/[id]/usePdfDocument.ts');
     const bootstrap = source('src/lib/server/reader/bootstrap.ts');
+    const documentsApi = source('src/lib/client/api/documents.ts');
     expect(pdf).toContain('parsedDocument: ParsedPdfDocument');
     expect(pdf).not.toContain('useParsedPdfDocument');
     expect(pdf).not.toContain('subscribeParsedPdfDocumentEvents');
     expect(bootstrap).toContain('parsedDocument: parsedPdfDocument');
+    expect(documentsApi).not.toContain('getParsedPdfDocument');
+    expect(documentsApi).not.toContain('subscribeParsedPdfDocumentEvents');
     expect(existsSync(path.resolve(root, 'src/hooks/useParsedPdfDocument.ts'))).toBe(false);
   });
 
@@ -248,8 +251,6 @@ describe('server-state architecture', () => {
       '/api/documents',
       '/api/documents/[id]/opened',
       '/api/documents/[id]/parsed',
-      '/api/documents/[id]/parsed/download',
-      '/api/documents/[id]/parsed/events',
       '/api/documents/[id]/reader-bootstrap',
       '/api/documents/[id]/reader-bootstrap/events',
       '/api/documents/[id]/settings',
@@ -370,7 +371,8 @@ describe('server-state architecture', () => {
     expect(planController).toContain('getPlaybackPlan');
     expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
     expect(planController).toContain('requestedSeekLayoutPlanIdRef.current !== plan.planId');
-    expect(planController).toContain('|| !wasAlreadyApplied');
+    expect(planController).toContain('resetBootstrapPlanAdoption');
+    expect(context).toContain('resetBootstrapPlanAdoption();');
     expect(planController).not.toContain('attempt < 20');
     expect(planController.match(/getTtsPlaybackSeekLayout\(/g) ?? []).toHaveLength(1);
     expect(playbackHook).toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');

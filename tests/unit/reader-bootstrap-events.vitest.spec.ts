@@ -87,7 +87,7 @@ describe('reader bootstrap aggregate event stream', () => {
     const request = new NextRequest(
       'http://localhost/api/documents/doc-1/reader-bootstrap/events',
     );
-    const resolveOptions = { pdfOperationId: 'parse-op' };
+    const resolveOptions = { preparationOperationId: 'parse-op' };
     const body = await new Response(
       createReaderBootstrapEventStream(request, 'doc-1', initial, resolveOptions),
     ).text();
