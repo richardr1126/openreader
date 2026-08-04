@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useId, type ReactNode } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -77,8 +77,23 @@ export function DocumentUploader({
     }
   }, [uploadDocuments, emitBatchState]);
 
+  const onDropRejected = useCallback((rejections: FileRejection[]) => {
+    if (rejections.length === 0) return;
+
+    const supportedFormats = enableDocx
+      ? 'PDF, EPUB, TXT, MD, or DOCX'
+      : 'PDF, EPUB, TXT, or MD';
+    const firstFileName = rejections[0]?.file.name ?? 'This file';
+    const rejectedLabel = rejections.length === 1
+      ? `${firstFileName} is not supported.`
+      : `${rejections.length} files are not supported.`;
+
+    setError(`${rejectedLabel} Choose a ${supportedFormats} file.`);
+  }, [enableDocx]);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    onDropRejected,
     accept: {
       'application/pdf': ['.pdf'],
       'application/epub+zip': ['.epub'],
@@ -115,7 +130,7 @@ export function DocumentUploader({
                   : 'Accepts PDF, EPUB, TXT, or MD'}
               </p>
               {error && (
-                <p className="mt-3 text-sm text-danger">
+                <p className="mt-3 text-sm text-danger" role="alert">
                   Upload failed: {error} — try again.
                 </p>
               )}
@@ -123,7 +138,10 @@ export function DocumentUploader({
           </div>
         )}
         {!isDragActive && error && (
-          <div className="absolute inset-x-4 bottom-4 z-40 rounded-md border border-danger bg-danger-wash px-3 py-2 text-center text-sm text-danger pointer-events-none">
+          <div
+            className="absolute inset-x-4 bottom-4 z-40 rounded-md border border-danger bg-danger-wash px-3 py-2 text-center text-sm text-danger pointer-events-none"
+            role="alert"
+          >
             Upload failed: {error} — try again.
           </div>
         )}
@@ -161,7 +179,7 @@ export function DocumentUploader({
               <p className="text-[12px] truncate flex-1">
                 {isDragActive ? 'Drop files here' : 'Upload documents'}
               </p>
-              {error && <p className="text-[10px] text-danger truncate shrink-0">{error}</p>}
+              {error && <p className="text-[10px] text-danger truncate shrink-0" role="alert">{error}</p>}
             </div>
           )}
         </div>
@@ -178,7 +196,7 @@ export function DocumentUploader({
               <p className="text-xs sm:text-sm text-soft">
                 {enableDocx ? 'PDF, EPUB, TXT, MD, or DOCX files are accepted' : 'PDF, EPUB, TXT, or MD files are accepted'}
               </p>
-              {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+              {error && <p className="mt-2 text-sm text-danger" role="alert">{error}</p>}
             </>
           )}
         </div>

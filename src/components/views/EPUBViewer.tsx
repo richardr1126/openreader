@@ -47,6 +47,8 @@ function EpubRenditionHost({
   onToc: (toc: NavItem[]) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const callbacksRef = useRef({ onError, onRendition, onToc });
+  callbacksRef.current = { onError, onRendition, onToc };
 
   useEffect(() => {
     let active = true;
@@ -59,16 +61,18 @@ function EpubRenditionHost({
         const [, navigation] = await Promise.all([book.opened, book.loaded.navigation]);
         if (!active || !hostRef.current || !book.isOpen) return;
 
-        onToc(navigation.toc);
+        callbacksRef.current.onToc(navigation.toc);
         rendition = book.renderTo(hostRef.current, { width: '100%', height: '100%' });
-        onRendition(rendition);
+        callbacksRef.current.onRendition(rendition);
         // Deliberately do not call display here. The document controller waits
         // for the authoritative plan, resolves its stable locator to one CFI,
         // and owns the single startup display command.
       })
       .catch((error) => {
         if (!active) return;
-        onError?.(error instanceof Error ? error : new Error('Failed to render EPUB'));
+        callbacksRef.current.onError?.(
+          error instanceof Error ? error : new Error('Failed to render EPUB'),
+        );
       });
 
     return () => {
@@ -84,7 +88,7 @@ function EpubRenditionHost({
         // Already closed renditions are safe to discard.
       }
     };
-  }, [data, onError, onRendition, onToc]);
+  }, [data]);
 
   return <div ref={hostRef} className="h-full w-full" />;
 }

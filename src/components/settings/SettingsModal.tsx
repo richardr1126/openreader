@@ -151,7 +151,6 @@ export function SettingsModal({
           Privacy
         </Button>
       }
-      showCloseButton={false}
       sections={visibleSections}
       activeSectionId={activeSection}
       onSectionChange={setActiveSection}

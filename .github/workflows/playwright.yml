@@ -56,7 +56,7 @@ jobs:
         env:
           API_BASE: https://api.deepinfra.com/v1/openai
           API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
-        run: pnpm test:e2e --max-failures=5 --reporter=list,github,html --pass-with-no-tests
+        run: pnpm test:e2e --max-failures=5 --reporter=list,github,html
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:

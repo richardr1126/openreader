@@ -263,28 +263,91 @@ number of tests.
 The walkthroughs may merge or remove these, but no journey may be added without
 observing it first.
 
-1. Public landing and anonymous protected-route behavior.
-2. Application entry/onboarding until the library is interactable.
-3. Upload supported documents and observe them in the library.
-4. Reject an unsupported upload with useful visible feedback.
-5. Open and visibly read a PDF.
-6. Open and visibly read an EPUB.
-7. Open TXT and Markdown and observe their meaningful rendering difference.
-8. Upload DOCX, observe conversion to PDF, and open it.
-9. Navigate PDF view modes and pages.
-10. Create a folder with drag-and-drop and verify persistence after reload.
-11. Delete a document through the confirmation dialog.
-12. Start and pause playback, including visible state and keyboard access.
-13. Change voice and speed, then resume playback.
-14. Verify responsive behavior that materially changes PDF or EPUB interaction.
-15. Verify authenticated routing when a controlled authenticated state is
+1. Public landing and anonymous app-entry/onboarding until the library is
+   interactable. Accepted in Phase 2.
+2. Upload supported documents and observe them in the library.
+3. Reject an unsupported upload with useful visible feedback.
+4. Open and visibly read a PDF.
+5. Open and visibly read an EPUB.
+6. Open TXT and Markdown and observe their meaningful rendering difference.
+7. Upload DOCX, observe conversion to PDF, and open it.
+8. Navigate PDF view modes and pages.
+9. Create a folder with drag-and-drop and verify persistence after reload.
+10. Delete a document through the confirmation dialog.
+11. Start and pause playback, including visible state and keyboard access.
+12. Change voice and speed, then resume playback.
+13. Verify responsive behavior that materially changes PDF or EPUB interaction.
+14. Verify authenticated routing when a controlled authenticated state is
     available.
+
+### Core replacement suite
+
+The core suite is intentionally smaller than the complete replacement
+inventory. It proves that a new user can enter the product, add supported
+content, read the principal document types, recover from invalid input, manage
+the library, and use the primary playback control. Each item still requires its
+own computer-use walkthrough before implementation.
+
+| Priority | User-visible contract | Browser owner | Deterministic owner outside Playwright |
+|---:|---|---|---|
+| 1 | Anonymous first-run entry reaches a usable library | Accepted `anonymous-entry.spec.ts` | Consent persistence, onboarding ordering, and anonymous-session policy remain in Vitest |
+| 2 | PDF, EPUB, and TXT uploads appear in the library | Accepted `supported-upload.spec.ts`: one multi-file upload journey using the visible file chooser | Presigning, hashing, canonical IDs, storage writes, and per-format validation remain in Vitest |
+| 3 | Unsupported input produces useful visible feedback and no library item | Accepted `unsupported-upload.spec.ts`: one visible rejection journey with an unchanged empty library | MIME/extension policy and route error mappings remain in Vitest |
+| 4 | A PDF opens, reaches a visible ready state, and exposes readable page content | Accepted `pdf-reader.spec.ts`: upload, open, readable content and controls, then return to the library | Parsing, layout artifacts, bootstrap events, and storage leases remain in Vitest |
+| 5 | An EPUB opens, reaches a visible ready state, and exposes readable chapter content | Accepted `epub-reader.spec.ts`: upload, open, reader controls, and actual rendered book content | Spine coordinates, placement, locations, and bootstrap state remain in Vitest |
+| 6 | TXT and Markdown open with a meaningful visible rendering difference | One comparison journey only if the walkthrough shows a durable user-facing distinction | Text decoding, Markdown transformation, and HTML block rules remain in Vitest |
+| 7 | DOCX visibly converts to PDF and the result opens | One conversion smoke journey | Conversion lifecycle, retries, finalization, and cleanup remain in Vitest |
+| 8 | A user confirms deletion and the document disappears from the library | One dialog-and-library-update journey with keyboard/focus assertions | Blob cleanup, leases, and account ownership remain in Vitest |
+| 9 | A user starts and pauses reading and sees both control and progress state | One primary-format playback journey with keyboard access | Provider protocol, segment planning, audio alignment, caching, and token contracts remain in Vitest |
+
+The core gate does not require PDF view-mode depth, folder drag-and-drop,
+responsive reader behavior, voice/speed customization, provider-specific
+coverage, or authenticated routing. Those remain valuable follow-on journeys
+in Phases 4 and 6 and must not be used to delay acceptance of the core suite.
 
 ---
 
 ## Phase 2: Create the First Replacement Browser Test
 
-Status: pending; begins only after the Phase 1 clean checkpoint.
+Status: complete.
+
+### Walkthrough 1: Anonymous first-run entry
+
+Observed with computer use on 2026-08-03 against the production build at
+`http://localhost:3003` after clearing browser data.
+
+- Purpose: enter OpenReader anonymously from the public landing page and reach
+  an interactable empty library after completing the first-run privacy flow.
+- Initial state: no authenticated account, cookies, local storage, or existing
+  anonymous browser state.
+- Public route: `/` visibly renders the OpenReader marketing page with the
+  heading `Hear every document, highlighted word by word.` and the link
+  `Open the reader`.
+- Visible actions and states:
+  1. Activate the `Open the reader` link.
+  2. Observe navigation to `/app` and the modal dialog
+     `Privacy & Data Usage` over the empty library.
+  3. Check `I have read and agree to the` and observe that `Continue` becomes
+     enabled.
+  4. Activate `Continue` and observe the changelog inside the Settings dialog.
+  5. Activate `Back to settings`, then activate the visible `Close dialog`
+     button to close Settings.
+  6. Activate `Decline Non-Essential` on the cookie notice.
+- Final visible success: the URL remains `/app`; the `OpenReader` heading,
+  `Choose File` upload controls, accepted-format hint, and `0 items` library
+  status are visible with no modal or cookie notice remaining.
+- Recovery behavior observed: the privacy `Continue` button is disabled until
+  the agreement checkbox is selected. No application error appeared.
+- Screenshots: none required; the accessible DOM states fully described the
+  journey.
+- Vitest ownership: anonymous-session persistence, consent storage, changelog
+  version comparison, and request policy remain deterministic non-browser
+  concerns. Playwright owns only the visible first-run path and usable-library
+  result.
+- Inventory correction: the current product does not redirect anonymous `/app`
+  visitors to sign-in. The public landing remains at `/`, while anonymous users
+  may enter the library at `/app` and are offered `Connect` and
+  `Create account` links there.
 
 After the first computer-use walkthrough identifies the first accepted journey:
 
@@ -312,13 +375,239 @@ Gate:
 - `pnpm test` continues to run Vitest and `pnpm test:e2e` explicitly runs the
   new browser suite.
 
+### Phase 2 acceptance evidence
+
+- The browser walkthrough above was completed before the spec was created.
+- `tests/e2e/anonymous-entry.spec.ts` contains the observed journey inline and
+  introduces no shared helper, namespace, teardown, or API-level shortcut.
+- `pnpm exec playwright test tests/e2e/anonymous-entry.spec.ts --reporter=list`
+  ran Chromium, Firefox, and WebKit together using three workers: all three
+  projects passed in 3.7 seconds.
+- The first diagnostic run exposed a test-boundary error: the Headless UI
+  dialog wrapper has no visible box although its panel is visible. The accepted
+  test asserts the visible dialog headings while keeping actions scoped to the
+  accessible dialog roles.
+- CI no longer uses `--pass-with-no-tests` now that an accepted replacement
+  spec exists.
+- `pnpm test` remains the Vitest command: 110 files and 553 tests passed after
+  the browser spec was added.
+- `pnpm exec tsc --noEmit` passed with the new spec included.
+
 ## Phase 3: Rebuild Core Reading Journeys
 
-Status: pending.
+Status: in progress; supported upload is accepted and the unsupported-input,
+PDF-reader, and EPUB-reader walkthroughs are complete.
+
+### Walkthrough 2: Upload supported documents into the library
+
+Observed with computer use on 2026-08-03 against the production build at
+`http://localhost:3003`.
+
+- Purpose: select representative PDF, EPUB, and TXT documents together through
+  the visible library upload surface and confirm that each becomes an
+  independently accessible library item.
+- Initial state: an anonymous, onboarded session at an empty `/app` library.
+  A fresh automated context must establish that same state through the already
+  accepted first-run UI rather than through an API or stored-state injection.
+- Controlled files:
+  - `tests/files/sample.pdf` (`PDF document, version 1.7`);
+  - `tests/files/sample.epub` (valid EPUB);
+  - `tests/files/multilingual-sample.txt` (UTF-8 multilingual text).
+- Visible actions and states:
+  1. Use the large upload surface labelled by `Drop your file(s) here, or click
+     to select` and the accepted-format hint.
+  2. Open its real file chooser. The observed chooser accepts multiple files.
+  3. Select the PDF, EPUB, and TXT fixtures in one user action.
+  4. Observe the visible upload state: `Uploading`, `0/3`, `Upload progress 0%`,
+     the current filename, and `Uploading file...` in the main surface.
+  5. Observe the upload state disappear and the library populate without route
+     navigation.
+- Final visible success:
+  - document links `sample.pdf`, `sample.epub`, and
+    `multilingual-sample.txt` are visible;
+  - type filters report `PDF 1`, `EPUB 1`, and `Text 1`;
+  - the library status reports `1 PDF • 1 EPUB • 1 Text Doc` and `3 items`;
+  - each format exposes its expected reader route through a visible document
+    link: `/pdf/...`, `/epub/...`, and `/html/...` respectively.
+- Visible failure or recovery: none appeared for supported input. The transient
+  upload status is useful progress feedback, but the durable test completion
+  signal is the three visible library links and final item/type summary.
+- Screenshots: none required; the accessible DOM captured both the upload and
+  completed-library states.
+- Vitest ownership: extension/MIME validation, presign/finalize behavior,
+  hashing, canonical identity, blob persistence, preview generation, and route
+  error mappings remain outside Playwright. The browser test owns only file
+  selection, visible progress, and visible library arrival.
+
+#### Walkthrough 2 acceptance evidence
+
+- `tests/e2e/supported-upload.spec.ts` repeats the accepted first-run setup
+  inline, then clicks the observed large upload surface and uses the resulting
+  multi-file chooser. It introduces no helper, namespace, teardown, or direct
+  application API call.
+- The test asserts the observed upload indicator, the three durable document
+  links, their reader-route families, the per-type counts, and the final
+  three-item summary.
+- `pnpm exec playwright test tests/e2e/supported-upload.spec.ts --reporter=list`
+  ran Chromium, Firefox, and WebKit together using three workers: all three
+  projects passed in 3.3 seconds.
+- The parallel run used three independent anonymous sessions to upload the same
+  canonical fixtures without a test namespace or cross-session collision.
+- The first combined-suite run showed that the unchanged Settings heading was
+  not a valid readiness signal after activating `Back to settings`; under load,
+  Escape could arrive while the view was still transitioning. A later
+  seven-worker run proved that keyboard-only dismissal could still leave the
+  modal covering the library. The product now exposes an accessible
+  `Close dialog` button, and every accepted test waits for and activates that
+  observed control before asserting that Settings is hidden.
+- `pnpm exec playwright test --reporter=list` then ran both accepted specs in
+  Chromium, Firefox, and WebKit together using six workers: all six cases passed
+  in 5.2 seconds.
+- After adding the upload journey, `pnpm test` still passed all 110 Vitest files
+  and 553 tests, and `pnpm exec tsc --noEmit` passed.
+- With two accepted specs now repeating the same first-run setup, a narrow
+  onboarding fixture is eligible for Phase 5 review. It has not been extracted
+  yet because the accepted journey remains readable inline.
+
+### Walkthrough 3: Reject an unsupported file with useful feedback
+
+Observed with computer use on 2026-08-04 against the production build at
+`http://localhost:3003`, first before and then after correcting the product.
+
+- Purpose: select an unsupported file through the visible upload interface and
+  understand why it was not added to the library.
+- Initial state: an anonymous, onboarded session at `/app`. The walkthrough used
+  an existing three-item library to prove that rejection did not change its
+  contents; the automated journey will use an empty isolated library so the
+  unchanged result is unambiguous.
+- Controlled file: `tests/files/unsupported.xyz`, a harmless text fixture whose
+  extension is outside the accepted format list.
+- Visible actions and states:
+  1. Activate the sidebar `Choose File` control and observe the `Add Documents`
+     dialog.
+  2. Observe the `Upload Files` view, its `Choose File` button, drop target, and
+     accepted-format hint.
+  3. Use the real file chooser to select `unsupported.xyz`.
+- Product defect found: the original build silently ignored the rejected file.
+  The dialog remained open and the library stayed unchanged, but no visible or
+  accessible explanation appeared. This was treated as a product bug rather
+  than accepted as the test contract.
+- Product correction: the upload component now handles rejected dropzone files
+  and exposes the message as an alert. The rebuilt application visibly reports
+  `unsupported.xyz is not supported. Choose a PDF, EPUB, TXT, MD, or DOCX file.`
+- Final visible success: the alert is present, the upload dialog remains usable,
+  the unsupported filename does not appear as a library link, and the library
+  item count is unchanged.
+- Screenshots: none required; the accessible DOM captured the dialog, alert,
+  accepted formats, and unchanged library summary.
+- Vitest ownership: extension and MIME policy details remain deterministic
+  validation concerns. Playwright owns the user's visible rejection and the
+  absence of an added library item.
+
+### Walkthrough 4: Open and visibly read a PDF
+
+Observed with computer use on 2026-08-04 against the rebuilt production build
+at `http://localhost:3003`.
+
+- Purpose: open a PDF from the library and confirm that the reader becomes
+  useful rather than merely reaching a reader route.
+- Initial state: an anonymous, onboarded session at `/app` with `sample.pdf`
+  already visible. The automated journey will create that state through the
+  visible upload chooser in its own fresh browser context.
+- Visible actions and states:
+  1. Activate the exact document link `sample.pdf`.
+  2. Observe navigation to `/pdf/<document-id>`.
+  3. Observe the intermediate `Opening document` preparation state and its
+     progress bar.
+  4. Observe the preparation state disappear and the reader become visible.
+- Final visible success:
+  - the reader heading is `sample.pdf`;
+  - extracted page text begins with `Chapter One` and includes the stable
+    integration-test sentence;
+  - playback controls and the `Playback position` slider are available;
+  - PDF navigation reports `1 / 2`, with `Previous page` disabled and
+    `Next page` available;
+  - `Back to documents` returns visibly to `/app`.
+- Visible failure or recovery: none appeared on the rebuilt product.
+- Screenshots: none required; the accessible DOM captured the preparation and
+  ready states plus the readable page content.
+- Vitest ownership: parsing, extracted artifacts, pagination algorithms,
+  bootstrap events, and storage lifecycle remain outside Playwright. The
+  browser journey owns upload, navigation, visible readiness, readable content,
+  and return navigation.
+
+### Walkthrough 5: Open and visibly read an EPUB
+
+Observed with computer use on 2026-08-04 against the production build at
+`http://localhost:3003`, first before and then after correcting the product.
+
+- Purpose: open an EPUB from the library and confirm that real book content is
+  rendered, not only the surrounding reader controls.
+- Initial state: an anonymous, onboarded session at `/app` with `sample.epub`
+  already visible. The automated journey will upload the fixture through the
+  visible chooser in its own fresh browser context.
+- Visible actions and states:
+  1. Activate the exact document link `sample.epub`.
+  2. Observe navigation to `/epub/<document-id>` and the intermediate
+     `Opening document` preparation state.
+  3. Observe the reader heading, zoom, chapter, section, and playback controls.
+  4. Inspect the visible book surface for readable EPUB content.
+- Product defect found: the original build showed a blank book surface after
+  preparation even though the reader controls and table of contents existed.
+  Changing parent callback identities caused the rendition-host effect to tear
+  down the newly ready rendition and replace it with one that never received
+  the authoritative startup display command.
+- Product correction: the rendition host now keeps the latest callbacks in a
+  ref and recreates the EPUB rendition only when the document data changes.
+  The rebuilt application visibly renders the EPUB iframe content.
+- Final visible success:
+  - the reader heading is `sample.epub`;
+  - `Show chapters`, `Previous section`, and `Next section` are available;
+  - the rendered book shows `The Project Gutenberg eBook of The Wonderful
+    Wizard of Oz`, its title and author, and a chapter table beginning with
+    `Chapter I. The Cyclone`;
+  - playback controls and the `Playback position` slider are available.
+- Visible failure or recovery: the blank-reader defect was corrected before a
+  test was written. The replacement test must assert readable book content so
+  the broken controls-only state cannot pass.
+- Screenshots: a visual inspection confirmed the original blank book surface;
+  after rebuilding, the accessible DOM exposed the complete rendered book
+  content and chapter table.
+- Vitest ownership: EPUB parsing, spine coordinates, location mapping,
+  placement, and controller state remain deterministic non-browser concerns.
+  Playwright owns navigation and actual visible book readiness.
+
+#### Walkthroughs 3–5 acceptance evidence
+
+- `DocumentUploader` now handles rejected files and renders rejection messages
+  with alert semantics; `unsupported-upload.spec.ts` proves the exact visible
+  feedback and unchanged zero-item library.
+- `EpubRenditionHost` no longer destroys and recreates a ready rendition when a
+  parent callback identity changes; `epub-reader.spec.ts` proves that rendered
+  book headings, author text, and the first chapter link are visible inside the
+  book surface.
+- `pdf-reader.spec.ts` proves the PDF route, title, two independently rendered
+  text-layer strings, playback controls, page navigation, and visible return to
+  the library.
+- The Settings modal now exposes its standard accessible close button. All five
+  accepted journeys use it and assert that the modal is gone before interacting
+  with the library.
+- The three-test batch ran as nine cases across Chromium, Firefox, and WebKit
+  using seven workers; all nine passed in 19.2 seconds.
+- The complete five-spec suite ran as 15 cases across the three browsers using
+  seven workers; all 15 passed in 10.5 seconds. This is the configured 50%
+  worker cap on the 14-logical-CPU development machine.
+- A diagnostic full-suite attempt used a manually started server without the
+  config's `DISABLE_AUTH_RATE_LIMIT=true` environment and visibly reached
+  `Unable to start an anonymous session (rate limited or network error).` The
+  accepted run used the production server configuration declared by the
+  Playwright harness; no retry logic or serialized execution was added.
+- `pnpm test` passed all 110 Vitest files and 553 tests, `pnpm exec tsc
+  --noEmit` passed, `pnpm build` passed, and `git diff --check` passed after the
+  product fixes and three new specs.
 
 Walk through and then create tests for:
 
-- application entry and library readiness;
 - supported and unsupported uploads;
 - PDF readiness and visible content;
 - EPUB readiness and visible content;
@@ -430,8 +719,8 @@ Status: pending.
 |---:|---|---|
 | 0 | Record replacement inventory | Complete |
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
-| 2 | Computer-use walkthrough and first replacement test | Pending |
-| 3 | Rebuild core reading journeys | Pending |
+| 2 | Computer-use walkthrough and first replacement test | Complete |
+| 3 | Rebuild core reading journeys | In progress: priorities 1–5 accepted |
 | 4 | Rebuild interaction journeys | Pending |
 | 5 | Extract only proven shared support | Pending |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |
