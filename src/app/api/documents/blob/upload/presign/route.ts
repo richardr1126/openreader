@@ -5,7 +5,6 @@ import {
   presignTempPut,
 } from '@/lib/server/documents/blobstore';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { getBrowserStorageTransport, isS3Configured } from '@/lib/server/storage/s3';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -72,12 +71,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const namespace = getOpenReaderTestNamespace(req.headers);
     // Expired temp uploads are swept by the cleanup-temp-uploads scheduled task.
     const signed = await Promise.all(
       uploads.map(async (upload) => {
         const token = randomUUID();
-        const res = await presignTempPut(token, userId, upload.contentType, namespace, {
+        const res = await presignTempPut(token, userId, upload.contentType, null, {
           contentLength: upload.size,
         });
         return {

@@ -4,7 +4,7 @@ import { auth } from '@/lib/server/auth/auth';
 import { db } from '@openreader/database';
 import { documentSettings, documents, userDocumentProgress, userFolders, userOnboarding, userPreferences } from '@openreader/database/schema';
 import { count, eq, ne } from 'drizzle-orm';
-import { getOpenReaderTestNamespace, getUnclaimedUserIdForNamespace } from '@/lib/server/testing/test-namespace';
+import { UNCLAIMED_USER_ID } from '@/lib/server/storage/docstore-legacy';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -57,9 +57,7 @@ export async function GET(req: NextRequest) {
     const readiness = await checkClaimMigrationReadiness();
     if (readiness) return readiness;
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
-    const counts = await getClaimableCounts(unclaimedUserId);
+    const counts = await getClaimableCounts(UNCLAIMED_USER_ID);
     return NextResponse.json({ success: true, ...counts });
   } catch (error) {
     serverLogger.error({
@@ -83,11 +81,9 @@ export async function POST(req: NextRequest) {
     const readiness = await checkClaimMigrationReadiness();
     if (readiness) return readiness;
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
-    const unclaimedUserId = getUnclaimedUserIdForNamespace(testNamespace);
     const userId = session.user.id;
 
-    const result = await claimAnonymousData(userId, unclaimedUserId, testNamespace);
+    const result = await claimAnonymousData(userId);
 
     return NextResponse.json({
       success: true,

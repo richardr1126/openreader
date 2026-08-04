@@ -3,7 +3,6 @@ import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/c
 import { proxyOperationEvents } from '@/lib/server/compute-worker/operation-events-proxy';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { auth } from '@/lib/server/auth/auth';
 
 export const runtime = 'nodejs';
@@ -39,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
     if (
       operation.subject.storageUserId !== session.user.id
-      || operation.subject.namespace !== getOpenReaderTestNamespace(request.headers)
+      || operation.subject.namespace !== null
     ) {
       return NextResponse.json({ error: 'Operation does not belong to this account export' }, { status: 403 });
     }

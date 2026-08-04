@@ -39,7 +39,6 @@ describe('GET /api/documents/blob/preview/events worker event proxy', () => {
         type: 'pdf',
         lastModified: 123,
       },
-      testNamespace: null,
       id: 'doc-1',
     });
     hoisted.getOperation.mockReset();

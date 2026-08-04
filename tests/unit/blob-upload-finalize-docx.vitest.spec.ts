@@ -57,10 +57,6 @@ vi.mock('@/lib/server/documents/blobstore', () => ({
   tempDocumentUploadKey: hoisted.tempDocumentUploadKey,
 }));
 
-vi.mock('@/lib/server/testing/test-namespace', () => ({
-  getOpenReaderTestNamespace: vi.fn(() => null),
-}));
-
 vi.mock('@/lib/server/storage/s3', () => ({
   isS3Configured: vi.fn(() => true),
 }));

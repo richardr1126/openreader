@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     }
     const validation = await validatePreviewRequest(req);
     if (validation.errorResponse) return validation.errorResponse;
-    const { doc, testNamespace } = validation;
+    const { doc } = validation;
 
     const preview = await ensureDocumentPreview(
       {
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
         type: doc.type,
         lastModified: Number(doc.lastModified),
       },
-      testNamespace,
+      null,
     );
 
     if (preview.state !== 'ready') {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const directUrl = await presignDocumentPreviewGet(doc.id, testNamespace);
+    const directUrl = await presignDocumentPreviewGet(doc.id, null);
 
     return NextResponse.redirect(directUrl, {
       status: 307,

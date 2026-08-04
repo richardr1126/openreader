@@ -190,7 +190,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
       try {
         const client = getAuthClient(baseUrl);
 
-        // In Playwright/`next start` we sometimes hit 429s on anonymous sign-in.
+        // Under concurrent production-server requests we can hit 429s on anonymous sign-in.
         // Keep using better-auth client so its session hook updates correctly,
         // but add retry/backoff around the call.
         const maxAttempts = 6;
@@ -214,7 +214,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
 
             console.info(`${attemptTag} (success)`, result ? { hasResult: true } : { hasResult: false });
 
-            // In some environments (notably Playwright against `next start`),
+            // In some production-server environments,
             // the session signal does not immediately update after setting the
             // session cookie. Force an explicit session refetch.
             if (typeof refetchSession === 'function') {

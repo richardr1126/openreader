@@ -1,11 +1,10 @@
 /**
  * Cleans up user-scoped storage that the orphaned-blob reaper cannot reach.
  *
- * Called from Better Auth's `beforeDelete` hook (canonical pass) and the
- * account-delete route (test-namespaced pass). Shared, content-addressed
- * document blobs + previews are NOT deleted here on the canonical pass — they
- * are reclaimed by the `reap-orphaned-blobs` task once their ownership rows are
- * gone. Per-user storage (TTS segments, temp uploads) is keyed by
+ * Called from Better Auth's `beforeDelete` hook. Shared, content-addressed
+ * document blobs and previews are reclaimed by the `reap-orphaned-blobs` task
+ * once their ownership rows are gone. Per-user storage (TTS segments, temp
+ * uploads) is keyed by
  * userId and would be unreachable after the cascade, so the compute worker
  * deletes it before deletion is allowed to proceed.
  */

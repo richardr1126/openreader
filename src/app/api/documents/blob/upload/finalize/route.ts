@@ -30,7 +30,6 @@ import type {
 } from '@/lib/server/compute-worker/protocol';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 
@@ -373,7 +372,7 @@ export async function POST(req: NextRequest) {
     if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const userId = ctxOrRes.userId;
 
-    const namespace = getOpenReaderTestNamespace(req.headers);
+    const namespace = null;
     const uploads = parseFinalizePayload(await req.json().catch(() => null));
     if (uploads.length === 0) {
       return NextResponse.json({ error: 'No valid uploads provided' }, { status: 400 });

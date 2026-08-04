@@ -1,9 +1,9 @@
 name: Playwright Tests
 on:
   push:
-    branches: [ main, master ]  
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   e2e-testing:
@@ -11,58 +11,57 @@ jobs:
     runs-on: ubuntu-latest
     env:
       USE_EMBEDDED_WEED_MINI: true
-      ENABLE_TEST_NAMESPACE: true
       BASE_URL: http://127.0.0.1:3003
       AUTH_SECRET: ci-auth-secret-change-me
       USE_ANONYMOUS_AUTH_SESSIONS: true
       S3_INTERNAL_ENDPOINT: http://127.0.0.1:8333
     steps:
-    - uses: actions/checkout@v5
-    - uses: actions/setup-node@v5
-      with:
-        node-version: lts/*
-        package-manager-cache: false
-    - uses: pnpm/action-setup@v6
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libreoffice-writer ffmpeg
-    - name: Install SeaweedFS weed binary
-      run: |
-        WEED_PATH=$(docker run --rm --entrypoint sh chrislusf/seaweedfs:4.18 -lc 'command -v weed')
-        CID=$(docker create chrislusf/seaweedfs:4.18)
-        docker cp "${CID}:${WEED_PATH}" ./weed
-        docker rm "${CID}"
-        sudo install -m 0755 ./weed /usr/local/bin/weed
-        rm -f ./weed
-        weed version
-    - name: Install NATS server binary
-      run: |
-        curl -fsSL -o /tmp/nats-server.tar.gz \
-          https://github.com/nats-io/nats-server/releases/download/v2.12.1/nats-server-v2.12.1-linux-amd64.tar.gz
-        tar -xzf /tmp/nats-server.tar.gz -C /tmp
-        sudo install -m 0755 /tmp/nats-server-v2.12.1-linux-amd64/nats-server /usr/local/bin/nats-server
-        nats-server -v
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-    - name: Build app and enforce bundle guard
-      run: |
-        pnpm build
-        pnpm build:bundle-guard
-    - name: Verify ffprobe
-      run: ffprobe -version
-    - name: Install Playwright Browsers
-      run: pnpm exec playwright install --with-deps
-    - name: Run Playwright tests
-      env:
-        API_BASE: https://api.deepinfra.com/v1/openai
-        API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
-      run: pnpm exec playwright test --max-failures=5 --reporter=list,github,html
-    - uses: actions/upload-artifact@v7
-      if: ${{ always() }}
-      with:
-        name: playwright-report
-        path: |
-          playwright-report/
-          tests/results/
-        retention-days: 30
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-writer ffmpeg
+      - name: Install SeaweedFS weed binary
+        run: |
+          WEED_PATH=$(docker run --rm --entrypoint sh chrislusf/seaweedfs:4.18 -lc 'command -v weed')
+          CID=$(docker create chrislusf/seaweedfs:4.18)
+          docker cp "${CID}:${WEED_PATH}" ./weed
+          docker rm "${CID}"
+          sudo install -m 0755 ./weed /usr/local/bin/weed
+          rm -f ./weed
+          weed version
+      - name: Install NATS server binary
+        run: |
+          curl -fsSL -o /tmp/nats-server.tar.gz \
+            https://github.com/nats-io/nats-server/releases/download/v2.12.1/nats-server-v2.12.1-linux-amd64.tar.gz
+          tar -xzf /tmp/nats-server.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/nats-server-v2.12.1-linux-amd64/nats-server /usr/local/bin/nats-server
+          nats-server -v
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build app and enforce bundle guard
+        run: |
+          pnpm build
+          pnpm build:bundle-guard
+      - name: Verify ffprobe
+        run: ffprobe -version
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+      - name: Run Playwright tests
+        env:
+          API_BASE: https://api.deepinfra.com/v1/openai
+          API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+        run: pnpm test:e2e --max-failures=5 --reporter=list,github,html --pass-with-no-tests
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            tests/results/
+          retention-days: 30

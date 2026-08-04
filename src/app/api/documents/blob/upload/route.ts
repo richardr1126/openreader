@@ -4,7 +4,6 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { putTempDocumentBlob, isValidTempUploadToken, presignTempPut } from '@/lib/server/documents/blobstore';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { getBrowserStorageTransport, isS3Configured } from '@/lib/server/storage/s3';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
 type UploadRequest = { contentType: string; size: number };
@@ -43,7 +42,6 @@ export async function POST(req: NextRequest) {
     const userId = auth.userId;
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const transport = getBrowserStorageTransport();
-    const namespace = getOpenReaderTestNamespace(req.headers);
 
     if (!req.headers.get('content-type')?.includes('application/json')) {
       return NextResponse.json({ error: 'Upload preparation requires application/json.' }, { status: 400 });
@@ -63,7 +61,7 @@ export async function POST(req: NextRequest) {
           headers: { 'Content-Type': upload.contentType },
         };
       }
-      const signed = await presignTempPut(uploadToken, userId, upload.contentType, namespace, { contentLength: upload.size });
+      const signed = await presignTempPut(uploadToken, userId, upload.contentType, null, { contentLength: upload.size });
       return { token: uploadToken, url: signed.url, headers: signed.headers };
     }));
     return NextResponse.json({ transport, uploads: prepared }, { headers: { 'Cache-Control': 'no-store' } });
@@ -100,8 +98,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const contentType = req.headers.get('content-type') || 'application/octet-stream';
-    const namespace = getOpenReaderTestNamespace(req.headers);
-    await putTempDocumentBlob(token, userId, bytes, contentType, namespace);
+    await putTempDocumentBlob(token, userId, bytes, contentType, null);
     return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return errorResponse(error, {

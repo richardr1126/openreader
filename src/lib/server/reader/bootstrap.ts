@@ -179,7 +179,7 @@ async function ensurePdfReady(
 ): Promise<ReaderBootstrapResolution | { parsedDocument: ParsedPdfDocument }> {
   const input = {
     documentId,
-    namespace: scope.testNamespace,
+    namespace: null,
   };
   const requestedOperationId = options.preparationOperationId?.trim();
   if (requestedOperationId) {

@@ -27,10 +27,6 @@ vi.mock('@/lib/server/storage/s3', () => ({
   isS3Configured: vi.fn(() => true),
 }));
 
-vi.mock('@/lib/server/testing/test-namespace', () => ({
-  getOpenReaderTestNamespace: vi.fn(() => null),
-}));
-
 describe('/api/documents/blob/upload proxy flow', () => {
   beforeEach(() => {
     hoisted.requireAuthContext.mockReset();

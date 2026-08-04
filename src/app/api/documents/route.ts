@@ -7,7 +7,6 @@ import { toDocumentTypeFromName } from '@/lib/server/documents/utils';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { deleteOwnedDocument } from '@/lib/server/documents/delete-owned';
 import type { BaseDocument, DocumentType } from '@/types/documents';
@@ -104,7 +103,6 @@ export async function DELETE(req: NextRequest) {
     if (ctxOrRes instanceof Response) return ctxOrRes;
     if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
     const storageUserId = ctxOrRes.userId;
 
     const url = new URL(req.url);
@@ -147,7 +145,7 @@ export async function DELETE(req: NextRequest) {
       if (await deleteOwnedDocument({
         userId: row.userId,
         documentId: row.id,
-        namespace: testNamespace,
+        namespace: null,
       })) {
         deleted += 1;
       }

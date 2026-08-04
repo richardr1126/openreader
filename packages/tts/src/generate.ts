@@ -34,8 +34,6 @@ import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from './upstream-resp
 import { normalizeToMp3 } from './audio-format';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
-import { access, readFile } from 'fs/promises';
-import { resolve } from 'path';
 import {
   getLanguageDisplayName,
   resolveReplicateKokoroLanguageCode,
@@ -53,7 +51,6 @@ export interface ServerTTSRequest {
   provider: string;
   apiKey: string;
   baseUrl?: string;
-  testNamespace?: string | null;
 }
 
 type CustomVoice = string;
@@ -74,7 +71,6 @@ type ResolvedServerTTSRequest = {
   provider: string;
   apiKey: string;
   baseUrl?: string;
-  testNamespace?: string | null;
 };
 
 type InflightEntry = {
@@ -174,9 +170,6 @@ function ensureTtsAudioCache(settings: ResolvedTtsUpstreamRuntimeSettings): void
 }
 
 const inflightRequests = new Map<string, InflightEntry>();
-
-const TEST_TTS_MOCK_PATH = resolve(process.cwd(), 'tests/files/sample.mp3');
-let testMockTtsBufferPromise: Promise<Buffer | null> | null = null;
 
 function sleep(ms: number) {
   return new Promise((res) => setTimeout(res, ms));
@@ -386,7 +379,6 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
     provider,
     apiKey: input.apiKey,
     baseUrl: input.baseUrl,
-    testNamespace: input.testNamespace || null,
   };
 }
 
@@ -399,7 +391,6 @@ function makeCacheKey(input: {
   text: string;
   instructions?: string;
   language?: string;
-  testNamespace?: string | null;
 }) {
   const canonical = {
     provider: input.provider,
@@ -410,7 +401,6 @@ function makeCacheKey(input: {
     text: input.text,
     instructions: input.instructions || undefined,
     language: input.language || undefined,
-    testNamespace: input.testNamespace || undefined,
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
@@ -426,23 +416,7 @@ export function buildTTSCacheKey(request: ServerTTSRequest): string {
     text: resolved.text,
     instructions: resolved.instructions,
     language: resolved.language,
-    testNamespace: resolved.testNamespace,
   });
-}
-
-async function getTestMockTtsBuffer(testNamespace?: string | null): Promise<Buffer | null> {
-  if (!testNamespace) return null;
-  if (!testMockTtsBufferPromise) {
-    testMockTtsBufferPromise = (async () => {
-      try {
-        await access(TEST_TTS_MOCK_PATH);
-      } catch {
-        return null;
-      }
-      return readFile(TEST_TTS_MOCK_PATH);
-    })();
-  }
-  return testMockTtsBufferPromise;
 }
 
 async function fetchTTSBufferWithRetry(
@@ -735,9 +709,6 @@ async function runProviderRequest(
   signal: AbortSignal,
   upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
 ): Promise<Buffer> {
-  const mockBuffer = await getTestMockTtsBuffer(request.testNamespace);
-  if (mockBuffer) return mockBuffer;
-
   const raw = request.provider === 'replicate'
     ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
     : request.provider === 'speech-sdk'
@@ -849,7 +820,6 @@ export async function generateTTSBuffer(
     text: resolved.text,
     instructions: resolved.instructions,
     language: resolved.language,
-    testNamespace: resolved.testNamespace,
   });
 
   const cachedBuffer = ttsAudioCache.get(cacheKey);

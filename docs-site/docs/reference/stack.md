@@ -64,6 +64,7 @@ Standalone worker package:
 
 - ESLint
 - TypeScript
-- [Playwright](https://playwright.dev/) end-to-end tests
+- [Vitest](https://vitest.dev/) unit and integration tests
+- [Playwright](https://playwright.dev/) cross-browser end-to-end test harness
 - Drizzle migration/generation scripts
 - [Docusaurus](https://docusaurus.io/) documentation site (`docs-site/`)

@@ -21,7 +21,6 @@ import { documentKey } from '@/lib/server/documents/blobstore';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
 import { getS3Client, getS3Config, isS3Configured } from '@/lib/server/storage/s3';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import {
   ACCOUNT_EXPORT_SCHEMA_VERSION,
   buildUserExportManifest,
@@ -87,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     const userId = session.user.id;
     const storageUserId = userId;
-    const namespace = getOpenReaderTestNamespace(req.headers);
+    const namespace = null;
 
     const existingArtifactId = typeof bodyRecord.artifactId === 'string' ? bodyRecord.artifactId.trim() : '';
     const existingManifestHash = typeof bodyRecord.manifestHash === 'string' ? bodyRecord.manifestHash.trim() : '';

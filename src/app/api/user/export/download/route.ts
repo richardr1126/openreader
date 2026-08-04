@@ -5,7 +5,6 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
 import { sendStorageArtifact } from '@/lib/server/storage/artifact-download';
 import { isS3Configured } from '@/lib/server/storage/s3';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { ACCOUNT_EXPORT_SCHEMA_VERSION } from '@/lib/server/user/data-export';
 
 export const dynamic = 'force-dynamic';
@@ -50,7 +49,7 @@ export async function GET(req: NextRequest) {
     const resolved = await new ComputeWorkerClient().resolveAccountExport({
       artifactId,
       storageUserId: session.user.id,
-      namespace: getOpenReaderTestNamespace(req.headers),
+      namespace: null,
       schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
       manifestHash,
     });

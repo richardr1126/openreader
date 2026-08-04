@@ -5,7 +5,6 @@ import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { isPreviewableDocumentType } from '@/lib/server/documents/previews';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 
 export function s3NotConfiguredResponse(): NextResponse {
@@ -22,12 +21,10 @@ export type ValidatedPreviewRequest = {
     type: string;
     lastModified: number;
   };
-  testNamespace: string | null;
   id: string;
   errorResponse?: undefined;
 } | {
   doc?: undefined;
-  testNamespace?: undefined;
   id?: undefined;
   errorResponse: NextResponse | Response;
 };
@@ -39,7 +36,6 @@ export async function validatePreviewRequest(req: NextRequest): Promise<Validate
   if (ctxOrRes instanceof Response) return { errorResponse: ctxOrRes };
   if (!ctxOrRes.userId) return { errorResponse: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
 
-  const testNamespace = getOpenReaderTestNamespace(req.headers);
   const storageUserId = ctxOrRes.userId;
   const allowedUserIds = [storageUserId];
 
@@ -77,7 +73,6 @@ export async function validatePreviewRequest(req: NextRequest): Promise<Validate
 
   return {
     doc,
-    testNamespace,
     id
   };
 }

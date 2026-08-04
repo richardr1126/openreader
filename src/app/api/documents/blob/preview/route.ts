@@ -12,9 +12,9 @@ export async function GET(req: NextRequest) {
     if (getBrowserStorageTransport() !== 'proxy') return NextResponse.json({ error: 'Proxy preview delivery is disabled when S3_BROWSER_TRANSPORT=presigned.' }, { status: 409 });
     const validation = await validatePreviewRequest(req);
     if (validation.errorResponse) return validation.errorResponse;
-    const preview = await ensureDocumentPreview({ id: validation.doc.id, type: validation.doc.type, lastModified: Number(validation.doc.lastModified) }, validation.testNamespace);
+    const preview = await ensureDocumentPreview({ id: validation.doc.id, type: validation.doc.type, lastModified: Number(validation.doc.lastModified) }, null);
     if (preview.state !== 'ready') return NextResponse.json({ status: preview.status, opId: preview.opId }, { status: 202, headers: { 'Cache-Control': 'no-store' } });
-    const body = await getDocumentPreviewBuffer(validation.doc.id, validation.testNamespace);
+    const body = await getDocumentPreviewBuffer(validation.doc.id, null);
     return new NextResponse(body as unknown as BodyInit, { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': String(body.byteLength), 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     return errorResponse(error, { apiErrorMessage: 'Failed to deliver document preview', normalize: { code: 'DOCUMENTS_PREVIEW_GET_FAILED', errorClass: 'storage' } });

@@ -1,382 +1,426 @@
-# Test Migration Plan
+# Playwright Clean-Slate Replacement Plan
+
+## Decision
+
+The existing Playwright tests will not be migrated, repaired, or used as the
+foundation of the replacement suite. Their specs, shared helpers, teardown,
+fixtures, reports, and Playwright-only application scaffolding will be removed.
+The Playwright dependency, cross-browser configuration, package script, report
+ignores, README badge, and CI workflow stay in place for the replacement suite.
+
+The reset has an intentional intermediate state: **the repository contains only
+Vitest test cases and no Playwright specs or helpers**. The empty Playwright
+harness remains ready for the new browser suite, which is introduced one
+observed user journey at a time.
+
+The old Playwright files may be used once to inventory the behavior they were
+trying to cover. Their selectors, helper implementations, waits, request-level
+assertions, and test structure must not be copied into the new suite.
 
 ## Goals
 
-1. Make failures identify the boundary that actually broke.
-2. Move backend lifecycle behavior out of browser tests when a closer test layer
-   can cover it more deterministically.
-3. Keep Playwright focused on browser-visible behavior and essential full-stack
-   smoke coverage.
-4. Simplify the test support layer instead of accumulating compatibility
-   helpers for historical UI states.
-5. Finish with a green suite that is already the intended long-term suite.
-6. Preserve meaningful behavior while removing obsolete, duplicated, or
-   misleading assertions.
+1. Remove all existing Playwright specs, helpers, teardown, fixtures, and
+   test-only application paths before creating replacement browser tests.
+2. Preserve meaningful unit and integration coverage in Vitest.
+3. Observe every replacement journey with computer use against the running
+   application before writing its test.
+4. Make each new Playwright test reproduce the observed user actions through
+   the visible interface.
+5. Assert outcomes a user can see or perceive: content, controls, routes,
+   dialogs, focus, progress, and actionable errors.
+6. Build a small suite of independent journeys rather than recreating the old
+   suite test-for-test.
+7. Add shared support only after repeated new tests prove that an abstraction
+   is necessary.
+8. Run every replacement journey in Chromium, Firefox, and WebKit concurrently
+   with the worker pool capped at 50% of the machine's logical CPUs.
+9. Prove that independent users and browser sessions can use the application at
+   the same time without test data, authentication, or storage collisions.
 
 ## Non-Goals
 
-- Do not make every existing test pass unchanged before improving its design.
-- Do not create a second complete E2E suite and maintain both indefinitely.
-- Do not preserve a Playwright test when its contract belongs to a unit or
-  integration test.
-- Do not treat longer timeouts as a general solution to missing observability.
-- Do not run the complete cross-browser suite after every edit.
-- Do not combine unrelated test domains into one unreviewable change.
+- Do not make the old Playwright suite green before deleting it.
+- Do not run the old suite as a baseline.
+- Do not preserve an old test merely because it exists.
+- Do not copy `tests/helpers.ts` into smaller files.
+- Do not use the old suite as the source of selectors or timing behavior.
+- Do not recreate backend protocol, hashing, storage, retry, or lifecycle tests
+  in a browser when Vitest can own them deterministically.
+- Do not write a replacement test before completing its computer-use
+  walkthrough.
+- Do not serialize browser projects or test files to hide shared-state defects.
+- Do not reduce the browser matrix because one engine exposes a product defect.
 
 ---
 
-## Core Migration Rule
+## Mandatory Creation Rule
 
-Work one domain at a time. Changes may be substantial within that domain, but
-the phase must not simultaneously redesign unrelated helpers, application
-behavior, assertions, and execution policy elsewhere.
-
-Examples of valid domain-scoped work:
-
-- rewriting upload actions and assertions while fixing DOCX finalization;
-- consolidating reader readiness while fixing an EPUB render/plan race;
-- replacing playback-state helpers while correcting playback behavior.
-
-Examples of invalid mixed work:
-
-- changing uploads, reader readiness, playback assertions, folder timing, and
-  serial execution in the same batch;
-- strengthening every playback test while also changing the playback model;
-- removing broad failure-cascade behavior before the affected tests are
-  individually understood.
-
----
-
-## The Execution Loop Within Every Phase
-
-Every domain phase follows this loop:
+Every new browser test follows this sequence without exception:
 
 ```text
-Inspect the existing failures and traces
+Choose one replacement journey
         ↓
-Choose the final owner for each behavior
+Start the current application with controlled test data
         ↓
-Rewrite or move the tests for that domain
+Use computer use to perform the journey through the visible UI
         ↓
-Fix actual product defects in that domain
+Record the actual controls, labels, route changes, visible states, and errors
         ↓
-Run one representative test in one browser
+Decide which assertions belong in Playwright and which belong in Vitest
         ↓
-Inspect the result and correct the implementation
+Create one small Playwright test from the observed journey
         ↓
-Run the complete domain spec
+Run that exact test in Chromium, Firefox, and WebKit concurrently
         ↓
-Run the domain in every browser that materially matters
+Inspect the page, trace, screenshot, console, and requests if it fails
         ↓
-Record the ownership decisions and finish the phase green
+Correct the product or the test at the boundary that is actually wrong
+        ↓
+Accept the test only when it independently passes
 ```
 
-The representative test is a diagnostic tool, not the final validation. The
-domain spec is the primary phase gate. Cross-browser execution happens after
-the domain passes in the first browser.
+Computer use is the discovery step. Playwright is the repeatable automation
+step. A test is not allowed to be designed from source inspection alone.
 
-If the representative test fails, do not immediately run the full suite. Read
-its trace, screenshot, requests, console output, and current application state.
-Change one causal boundary, then rerun the same test.
+### Computer-use walkthrough record
 
-If a phase reveals a failure owned by another domain, record it and defer it
-unless it blocks the current domain. Do not expand the phase casually.
+Before creating a test, record:
 
----
+- the journey name and user-visible purpose;
+- the initial data and authentication state;
+- every visible control used, preferably by accessible role and name;
+- the route changes and important intermediate states;
+- the final user-visible success condition;
+- any visible failure or recovery state;
+- screenshots for states that are difficult to describe;
+- behavior that was considered but assigned to Vitest instead.
 
-## Test Ownership Decision
+The walkthrough must use the same kind of interaction a user performs. Click
+buttons and links, type into fields, select options, use keyboard navigation,
+upload through the file input, and use real drag gestures where drag-and-drop is
+the contract. Direct API calls or `page.evaluate(fetch(...))` are not substitutes
+for a user journey.
 
-Each existing logical scenario receives one of four decisions:
+### Rules for new tests
 
-| Decision | Meaning |
-|---|---|
-| Keep | The test already belongs at its current layer and needs little or no redesign |
-| Rewrite | The browser-visible contract is valuable, but the setup, helpers, or assertions are misleading |
-| Move | The behavior belongs in a unit or integration test; retain only a smaller browser smoke contract if needed |
-| Delete | The behavior is obsolete, duplicated, or an implementation detail with no useful contract |
-
-Moving or deleting a test is not weakening coverage when its meaningful
-contract has a clearer final owner. The ownership decision must be documented
-before the old assertion disappears.
-
-### Appropriate ownership by layer
-
-Unit tests should own:
-
-- reader load-state derivation;
-- plan and locator selection;
-- retry/backoff policy as pure logic;
-- state transitions and formatting;
-- deterministic error normalization.
-
-Integration tests should own:
-
-- upload preparation and finalization;
-- DOCX `202` to completed-PDF lifecycle;
-- worker operation creation and resolution;
-- authoritative plan creation and retrieval;
-- cancellation, retry, timeout, and explicit backend failure;
-- route/client protocol contracts.
-
-Playwright should own:
-
-- the application becomes interactable;
-- a supported upload appears in the library;
-- a user can open each supported reader;
-- the reader visibly reaches ready or exposes an actionable error;
-- essential PDF and EPUB browser interaction;
-- playback controls expose the correct user-visible state;
-- important accessibility and routing behavior;
-- a small number of deliberate full-stack smoke journeys.
+- Prefer accessible roles, names, labels, and visible text observed during the
+  walkthrough.
+- Use a test id only when the state has no suitable accessible representation.
+- Do not use CSS implementation details as readiness signals.
+- Do not use arbitrary sleeps as proof that an operation completed.
+- Keep action and assertion code local to the first test that needs it.
+- Extract a helper only after at least two accepted tests repeat the same action
+  with the same contract.
+- A helper performs one action or observes one state; it does not hide an entire
+  journey.
+- Each test owns its data and can run by itself.
+- Each test uses a unique user/session and unique data identifiers so the same
+  journey can run in all browser projects at once.
+- Tests and projects remain fully parallel unless a scenario is inherently
+  serial and that product constraint is explicitly documented.
+- Test titles describe what the user can accomplish, not internal machinery.
+- A timeout must report the last visible application state.
 
 ---
 
-## Final Test Support Design
+## Phase 0: Record the Replacement Inventory
 
-The monolithic `tests/helpers.ts` should evolve toward explicit support owners:
+Status: complete.
 
-```text
-tests/support/
-  fixture.ts       # namespace, session, navigation, onboarding
-  actions.ts       # upload, open, play, pause, navigate
-  readers.ts       # reader readiness and reader failure diagnostics
-  playback.ts      # playback-specific observations and assertions
-  diagnostics.ts   # phase, URL, network, console, and visible-state evidence
-```
-
-Migration into this structure happens only as a domain is processed. Do not
-move every helper mechanically before its contract is understood.
-
-### Helper rules
-
-- Action helpers perform one user action and return useful handles or results.
-- Action helpers do not silently assert unrelated downstream outcomes.
-- Assertion helpers describe one product contract in their name.
-- Negative scenarios must be able to use actions without inheriting positive
-  assertions.
-- Reader readiness must distinguish loading, ready, explicit error, render
-  failure, and timeout.
-- Playback started, playback progressed, and playback paused are separate
-  contracts.
-- CSS implementation details are not readiness signals when a stable product
-  state or test identifier exists.
-- A timeout failure must report the last observed domain state.
-
----
-
-## Artifact and Run Policy
-
-### Baseline
-
-Start with one clean full run from the current source. Existing results created
-from reverted code are evidence about that reverted experiment, not a valid
-baseline for the current worktree.
-
-The baseline must use alternate output paths so it does not unintentionally
-replace an accepted canonical report:
-
-```bash
-PLAYWRIGHT_HTML_OUTPUT_DIR=/tmp/openreader-test-baseline-report \
-pnpm exec playwright test \
-  --output=/tmp/openreader-test-baseline-results
-```
-
-Record logical scenarios separately from per-browser executions. A single
-scenario failing in three projects is one failure family with three browser
-observations, not automatically three unrelated defects.
-
-### Focused runs
-
-During a phase, use unique temporary artifact paths for every diagnostic run.
-Run in this order:
-
-1. exact representative test in one browser;
-2. complete domain spec in that browser;
-3. domain spec in relevant additional browsers;
-4. related-domain checks only when the changed boundary is shared.
-
-### Full runs
-
-Run the entire suite only:
-
-- once to establish the clean baseline;
-- when a cross-domain support boundary changes;
-- at major phase checkpoints when the affected domains are green;
-- for final acceptance.
-
-Replace the canonical report only after a run is intentionally accepted.
-
----
-
-## Phase 0: Clean Baseline and Contract Inventory
-
-Status: pending.
-
-1. Confirm the worktree and source revision.
-2. Preserve or separately identify reports generated from reverted code.
-3. Run the clean suite once into alternate artifact directories.
-4. Group failures by logical scenario, symptom, and responsible boundary.
-5. Create the Keep/Rewrite/Move/Delete inventory.
-6. Select the representative test and first browser for every domain.
+Use the old spec titles only to create the inventory below. Do not execute the
+old suite and do not diagnose or repair its failures.
 
 Gate:
 
-- every failure belongs to a named family or is explicitly marked unknown;
-- no implementation changes have been made from an unclassified timeout;
-- the initial ownership inventory exists.
+- every old browser scenario is represented in the inventory;
+- each scenario is marked Replace, Vitest, Merge, or Drop;
+- no old helper or selector has been adopted by the new design.
 
-## Phase 1: Upload and Conversion
+## Phase 1: Remove the Existing Playwright Suite
 
-Status: pending.
+Status: complete.
 
-Scope:
+Delete the existing browser test implementation:
 
-- supported and unsupported upload actions;
-- document appearance in the library;
-- duplicate/canonical identity behavior;
-- DOCX asynchronous conversion;
-- opening the converted PDF;
-- upload error presentation.
+- `tests/accessibility.spec.ts`;
+- `tests/delete.spec.ts`;
+- `tests/folders.spec.ts`;
+- `tests/landing-routing.spec.ts`;
+- `tests/navigation.spec.ts`;
+- `tests/play.spec.ts`;
+- `tests/upload.spec.ts`;
+- `tests/helpers.ts`;
+- `tests/global-teardown.ts`;
+- `tests/support/s3-prefix-cleanup.ts` if it has no non-Playwright owner;
+- generated Playwright result and report directories;
+- the old `test` script that currently invokes Playwright.
 
-Expected ownership changes:
+Retain and clean up the empty replacement harness:
 
-- move detailed `202` conversion lifecycle, retry, cancellation, and failure
-  behavior to integration tests;
-- retain one Playwright DOCX smoke journey proving the converted PDF appears
-  and opens;
-- ensure unsupported uploads can use the upload action without inheriting a
-  positive document-listed assertion.
+- keep `playwright.config.ts` with Chromium, Firefox, and WebKit;
+- keep `fullyParallel: true` and `workers: '50%'`;
+- keep the direct `@playwright/test` development dependency;
+- keep `pnpm test:e2e` for the replacement browser suite;
+- keep `.github/workflows/playwright.yml`, the README badge, and report ignores;
+- remove namespace headers and teardown references from the retained harness;
+- allow the CI job to pass with no tests during the intentional reset
+  checkpoint.
 
-Gate:
+Make `pnpm test` run the retained Vitest suite. Regenerate the lockfile through
+the package manager rather than editing it by hand.
 
-- upload and conversion integration tests pass;
-- the upload Playwright spec passes in its primary browser;
-- upload scenarios pass in every browser where upload behavior is materially
-  different;
-- upload support code has final ownership and no obsolete compatibility path.
+Remove the `x-openreader-test-namespace` request header,
+`ENABLE_TEST_NAMESPACE`, their route wiring, the namespace-specific account
+cleanup pass, and the namespace-triggered mock TTS response. The rebuilt suite
+will rely on real user/session ownership and canonical storage concurrency.
 
-## Phase 2: Reader Loading and Document Opening
+This phase does not remove the generic nullable `namespace` field from the
+compute-worker and storage protocols. That is a separate cross-service schema
+and artifact-layout decision, not required to remove the old Playwright suite.
+Normal application requests no longer have a path that supplies a test
+namespace.
 
-Status: pending.
-
-Scope:
-
-- PDF, EPUB, and HTML reader navigation;
-- shared reader preparation phases;
-- source, parse, plan, and viewer readiness;
-- reader retry and error presentation;
-- first rendered position.
-
-Expected ownership changes:
-
-- keep load-state derivation in unit tests;
-- keep worker/plan lifecycle protocol in integration tests;
-- keep one explicit browser-visible readiness contract per reader type;
-- replace container-only and generic network-idle waits with reader-domain
-  observations that report the last preparation phase.
+Audit `tests/files/` by reference. Keep fixtures used by Vitest or compute-worker
+tests. Delete Playwright-only fixtures at the reset boundary; add a fixture back
+later only when an observed replacement journey needs it.
 
 Gate:
 
-- reader state and protocol tests pass;
-- each reader opens successfully in the primary browser;
-- PDF and EPUB pass in browsers with meaningful rendering differences;
-- failures identify source, parse, plan, render, or timeout rather than only
-  reporting a generic `loading` value.
+- no old Playwright spec, helper, fixture, teardown, or namespace wiring
+  remains;
+- `pnpm test` invokes Vitest and `pnpm test:e2e` invokes Playwright;
+- the retained config defines Chromium, Firefox, and WebKit with full
+  parallelism and a 50% worker cap;
+- the `tests/` tree contains only Vitest tests, their support, and fixtures they
+  actually reference;
+- `pnpm test` (or the documented Vitest command) passes;
+- the empty Playwright harness exits successfully with `--pass-with-no-tests`;
+- type checking and the relevant build checks pass;
+- no replacement browser spec exists yet.
 
-## Phase 3: Playback
+This clean checkpoint must be completed and reviewed before the first
+replacement Playwright spec is added.
+
+### Phase 1 acceptance evidence
+
+- Pre-existing reader/playback work was isolated first in commit `89293420`.
+- `pnpm test` runs Vitest: 110 files and 553 tests passed.
+- `pnpm exec playwright test --pass-with-no-tests` passed with the retained
+  empty three-browser harness.
+- `pnpm exec tsc --noEmit` passed.
+- `pnpm build` passed.
+- `pnpm build:bundle-guard` passed.
+- `pnpm check:compute-boundary` passed.
+- `pnpm docs:build` passed.
+- The old browser specs, helpers, teardown, Playwright-only fixtures,
+  request-namespace entry point, and namespace-triggered TTS mock are removed.
+- The Playwright dependency, configuration, `test:e2e` script, CI workflow,
+  README badge, and artifact ignores remain for the replacement suite.
+
+---
+
+## Replacement Inventory
+
+The decisions below describe coverage intent, not a promise to preserve the old
+number of tests.
+
+| Existing coverage | Decision | Replacement owner |
+|---|---|---|
+| Upload PDF, EPUB, and TXT individually | Merge | One computer-observed supported-upload library journey, with format-specific reader journeys below |
+| Reuse canonical ID for identical uploads | Vitest | Document/storage integration test; no browser API inspection |
+| UTF-8 stored-content hashing | Vitest | Blob/document integration test |
+| DOCX upload and conversion | Replace + Vitest | Vitest owns conversion lifecycle; one browser smoke journey observes upload, converted PDF appearance, and open |
+| Display PDF | Replace | Observed PDF open/readiness journey |
+| Display EPUB | Replace | Observed EPUB open/readiness journey |
+| Display TXT | Replace | Observed text open/readiness journey |
+| Display DOCX as converted PDF | Merge | Covered by the DOCX smoke journey |
+| Upload several formats and open each | Drop as a combined test | Covered by independent upload and reader journeys without a long cascade |
+| Markdown rendering and TXT formatting | Replace + Vitest | Browser checks meaningful rendered differences; detailed transformation rules stay in Vitest |
+| Unsupported file is ignored | Replace | Observed rejection journey asserting the actual visible response; add product feedback if none exists |
+| Play and pause PDF, EPUB, DOCX, and TXT separately | Merge | One primary playback journey plus only format-specific smoke cases shown necessary by walkthroughs |
+| Change single voice and resume | Replace | Observed settings/playback journey |
+| Preserve selected voice | Vitest + optional browser smoke | State persistence belongs in Vitest; browser test only if the walkthrough exposes a critical user regression |
+| Select multiple Kokoro voices | Replace only when runnable | Observed provider-specific journey in an explicitly configured environment |
+| Change native speed and resume | Replace | Observed speed/playback journey |
+| Route to PDF, EPUB, and HTML viewers | Merge | Covered by independent reader journeys and their visible URLs |
+| Restore PDF highlight after viewport narrowing | Replace | Observed responsive PDF/highlight journey |
+| PDF Single, Dual, Scroll, and Navigator behavior | Replace | Observed PDF navigation journey; split only if independent failures require it |
+| EPUB resize pauses playback | Replace | Observed responsive EPUB/playback journey |
+| Public landing without anonymous bootstrap request | Vitest + Replace | Request policy belongs in Vitest; browser journey verifies the public landing visibly renders |
+| Authenticated `/` redirects to `/app` | Replace | Observed authenticated routing journey |
+| Reader back link returns to `/app` | Replace | Fold into one reader journey if it remains a visible navigation contract |
+| Protected routes redirect anonymous users | Replace + Vitest | Browser verifies visible redirect/sign-in result; route policy remains in Vitest |
+| Accessible upload control and hint | Replace | Fold into keyboard/accessibility smoke journey |
+| Accessible document links | Replace | Fold into library accessibility smoke journey |
+| Delete confirmation dialog semantics | Merge | Covered by observed delete journey with keyboard and focus assertions |
+| TTS labels and keyboard focus | Merge | Covered by observed playback accessibility journey |
+| Folder creation by drag-and-drop and persistence | Replace | Observed pointer drag, reload, and visible persistence journey |
+| Dismiss folder hint and persist | Replace if still present | Observe current UI first; drop if obsolete |
+| Delete a document and update the list | Replace | Observed confirmation and library-update journey |
+
+### Proposed new browser journeys
+
+The walkthroughs may merge or remove these, but no journey may be added without
+observing it first.
+
+1. Public landing and anonymous protected-route behavior.
+2. Application entry/onboarding until the library is interactable.
+3. Upload supported documents and observe them in the library.
+4. Reject an unsupported upload with useful visible feedback.
+5. Open and visibly read a PDF.
+6. Open and visibly read an EPUB.
+7. Open TXT and Markdown and observe their meaningful rendering difference.
+8. Upload DOCX, observe conversion to PDF, and open it.
+9. Navigate PDF view modes and pages.
+10. Create a folder with drag-and-drop and verify persistence after reload.
+11. Delete a document through the confirmation dialog.
+12. Start and pause playback, including visible state and keyboard access.
+13. Change voice and speed, then resume playback.
+14. Verify responsive behavior that materially changes PDF or EPUB interaction.
+15. Verify authenticated routing when a controlled authenticated state is
+    available.
+
+---
+
+## Phase 2: Create the First Replacement Browser Test
+
+Status: pending; begins only after the Phase 1 clean checkpoint.
+
+After the first computer-use walkthrough identifies the first accepted journey:
+
+1. Add the first spec under the retained `tests/e2e` directory.
+2. Use a fresh browser context and real user/session ownership; do not recreate
+   the deleted namespace header.
+3. Give every test execution unique account and document identities so parallel
+   work cannot collide.
+4. Keep actions and assertions inline in the first test.
+5. Use the retained per-project screenshots, traces, and result artifacts for
+   diagnostics.
+6. Run the test in Chromium, Firefox, and WebKit during the same parallel run.
+7. Remove `--pass-with-no-tests` from CI once the first accepted spec exists.
+
+Do not restore the old global teardown, namespace contract, mock TTS response,
+or monolithic helper module.
+
+Gate:
+
+- the first journey has a completed computer-use record;
+- the harness contains no copied old suite code;
+- the first test passes in Chromium, Firefox, and WebKit in one concurrent run;
+- the run uses the configured 50% worker pool and has no accidental serial test
+  groups or project dependencies;
+- `pnpm test` continues to run Vitest and `pnpm test:e2e` explicitly runs the
+  new browser suite.
+
+## Phase 3: Rebuild Core Reading Journeys
 
 Status: pending.
 
-Scope:
+Walk through and then create tests for:
 
-- Play and Pause controls;
-- processing and buffering presentation;
-- actual progress where the scenario promises audio playback;
-- skip behavior;
+- application entry and library readiness;
+- supported and unsupported uploads;
+- PDF readiness and visible content;
+- EPUB readiness and visible content;
+- TXT and Markdown readiness and meaningful rendering;
+- DOCX conversion and opening the resulting PDF.
+
+For each journey, first decide whether setup and lifecycle details belong in
+Vitest. Browser coverage should begin at the visible user action and end at the
+visible user result.
+
+Gate:
+
+- every accepted test has its own walkthrough record;
+- every reader failure distinguishes a visible error from a timeout;
+- no test queries application APIs to prove its main user outcome;
+- each test passes independently and as part of a concurrent Chromium, Firefox,
+  and WebKit run.
+
+## Phase 4: Rebuild Interaction Journeys
+
+Status: pending.
+
+Walk through and then create tests for:
+
+- PDF page and view-mode navigation;
+- folder drag-and-drop and persistence;
+- deletion and confirmation behavior;
+- playback start and pause;
 - voice and speed changes;
-- playback-driven highlights and reader navigation.
+- responsive PDF and EPUB behavior;
+- keyboard, focus, labels, dialogs, and important routing behavior.
 
-Expected ownership changes:
-
-- test plan/segment selection and playback state logic below the browser layer;
-- use Playwright for visible controls and a small number of real playback smoke
-  journeys;
-- do not use skip-button enabled state as a generic processing boundary;
-- do not require real audio progress in accessibility tests that only promise
-  labels and focus behavior;
-- assert progress only where actual playback is part of the named contract.
+Do not create provider-specific playback tests until the required provider is
+available and the journey succeeds with computer use in that environment.
 
 Gate:
 
-- playback logic tests pass;
-- the primary Play/Pause journey passes in one browser;
-- browser-specific media journeys pass where meaningful;
-- navigation and highlighting scenarios pass without depending on unrelated
-  control state.
+- UI actions match the computer-use walkthroughs;
+- persistence is proven by a visible reload result;
+- playback control state and actual playback progress are separate assertions;
+- accessibility assertions are attached to real journeys rather than a second
+  duplicate suite.
 
-## Phase 4: Library, Folders, Routing, and Accessibility
+## Phase 5: Introduce Only Proven Shared Support
 
 Status: pending.
 
-Scope:
+Review accepted tests for genuine repetition. A small fixture or helper may be
+extracted only when:
 
-- document-list presentation and deletion;
-- folder creation, movement, filtering, and persistence;
-- landing and protected-route behavior;
-- dialogs, labels, focus, and keyboard interaction.
+1. at least two accepted tests perform the same action;
+2. the action has the same preconditions and result in both tests;
+3. extraction does not hide the journey's meaningful assertion;
+4. failures can still identify the last visible state.
 
-Expected ownership changes:
+Likely small owners, if the rebuilt suite proves they are needed:
 
-- use domain-visible persistence results instead of generic network-idle waits;
-- keep accessibility tests focused on semantics and interaction;
-- remove duplicated cross-browser coverage where browser behavior is not
-  materially different.
+```text
+browser-tests/
+  support/
+    fixture.ts      # isolated browser context and explicit onboarding only
+    upload.ts       # one upload action, no downstream reader assertion
+    diagnostics.ts  # visible state, route, console, and request evidence
+```
 
-Gate:
+There is no planned replacement for the old `tests/helpers.ts`. Shared reader,
+playback, and navigation abstractions must earn their existence from repeated
+new code.
 
-- each UI domain passes in its primary browser;
-- cross-browser cases are intentional rather than automatic duplication;
-- no helper from another domain determines these tests' success.
-
-## Phase 5: Execution and Coverage Audit
-
-Status: pending.
-
-This phase occurs only after all behavioral domains are green.
-
-1. Review serial groups and shared-state assumptions.
-2. Separate deterministic UI tests from deliberate real-worker smoke tests.
-3. Assign browser coverage per scenario based on actual browser risk.
-4. Remove obsolete tests whose contracts already have final owners.
-5. Remove unused legacy helpers and flatten accidental indirection.
-6. Confirm that a single failure does not create misleading cascade skips unless
-   a serial dependency is intentional and documented.
-
-Gate:
-
-- every retained scenario has a stated purpose and owner;
-- every cross-browser duplication has a reason;
-- execution modes reflect real state dependencies;
-- there is no legacy suite waiting to be scrapped later.
-
-## Phase 6: Full Acceptance
+## Phase 6: Parallel Browser Matrix and CI
 
 Status: pending.
 
-1. Run the complete unit and integration suites.
-2. Run the complete Playwright suite into temporary artifacts.
-3. Investigate any cross-domain failures using the same ownership rules.
-4. Run static checks and builds required by the repository validation ladder.
-5. Intentionally accept the final Playwright report.
-6. Update this plan with the final scenario counts, browser matrix, and
-   validation evidence.
+1. Keep Chromium as the computer-use authoring and first diagnostic browser.
+2. Run every accepted test in Chromium, Firefox, and WebKit by default.
+3. Set the suite and projects to full parallel execution with
+   `workers: '50%'`; do not raise the cap to 100%.
+4. Verify that separate browser projects actively overlap in time during a full
+   run; a configured matrix that executes sequentially does not satisfy this
+   requirement.
+5. Treat collisions between browsers, users, sessions, documents, workers, or
+   storage prefixes as application or isolation defects, not reasons to reduce
+   concurrency.
+6. Permit a browser-specific exclusion only for an externally imposed engine
+   limitation, with an explicit documented reason and user approval.
+7. Add CI with explicit Vitest and fully parallel replacement-browser jobs.
+8. Publish artifacts with browser, test, retry, and worker identity so parallel
+   failures cannot overwrite each other.
 
-Gate:
+## Phase 7: Final Coverage Audit
 
-- the final suite is green;
-- failures are diagnostic at the responsible boundary;
-- the tests in the repository are already the long-term suite;
-- no follow-up scrapping or parallel replacement project is required.
+Status: pending.
+
+1. Compare the accepted replacement journeys with the inventory in this plan.
+2. Confirm that every old scenario is replaced, merged, assigned to Vitest, or
+   intentionally dropped.
+3. Confirm there is no old Playwright code or compatibility helper left in the
+   repository.
+4. Run the full Vitest suite.
+5. Run the complete replacement browser suite.
+6. Run type checking, linting, and build checks required by the repository.
+7. Record final scenario counts, browser assignments, and validation commands.
 
 ---
 
@@ -384,30 +428,32 @@ Gate:
 
 | Phase | Work | Status |
 |---:|---|---|
-| 0 | Clean baseline and contract inventory | Pending |
-| 1 | Upload and conversion | Pending |
-| 2 | Reader loading and document opening | Pending |
-| 3 | Playback | Pending |
-| 4 | Library, folders, routing, and accessibility | Pending |
-| 5 | Execution and coverage audit | Pending |
-| 6 | Full acceptance | Pending |
-
----
+| 0 | Record replacement inventory | Complete |
+| 1 | Remove old Playwright tests; retain the empty harness | Complete |
+| 2 | Computer-use walkthrough and first replacement test | Pending |
+| 3 | Rebuild core reading journeys | Pending |
+| 4 | Rebuild interaction journeys | Pending |
+| 5 | Extract only proven shared support | Pending |
+| 6 | Enforce the parallel three-browser matrix and CI | Pending |
+| 7 | Final coverage audit | Pending |
 
 ## Definition of Done
 
-The migration is complete when:
+The replacement is complete when:
 
-1. Every meaningful behavior has one clear test owner.
-2. Backend lifecycle correctness is not inferred only through browser timeouts.
-3. Playwright tests assert browser-visible contracts rather than internal
-   implementation transitions.
-4. Test actions and assertions are separated enough that negative scenarios do
-   not inherit positive expectations.
-5. Reader failures report their last preparation phase and explicit error.
-6. Playback tests distinguish control state from actual progress.
-7. Browser coverage is intentional and proportional to browser-specific risk.
-8. Obsolete and duplicated tests and helpers have been removed during their
-   owning phase.
-9. The full validation ladder passes.
-10. The resulting suite requires no later scrap-and-rewrite phase.
+1. The former Playwright specs, helpers, teardown, fixtures, and test-only
+   application scaffolding are gone while the clean harness remains.
+2. There was a verified checkpoint where only Vitest test cases remained.
+3. Every new browser test has a preceding computer-use walkthrough record.
+4. New tests reproduce user actions through the visible interface.
+5. No new test was copied or structurally translated from an old spec.
+6. Backend and pure-state behavior has a deterministic Vitest owner.
+7. Browser assertions describe visible behavior and actionable failure states.
+8. Shared helpers exist only for repeated, narrow, proven contracts.
+9. Every replacement test passes independently in Chromium, Firefox, and
+   WebKit.
+10. All three browser projects run concurrently within the intentional 50%
+    worker cap and with isolated state.
+11. The full Vitest and fully parallel replacement browser suites pass in CI.
+12. The final coverage audit accounts for every old scenario without requiring
+    the old suite to remain in the repository.

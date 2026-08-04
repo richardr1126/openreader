@@ -202,7 +202,7 @@ export async function buildTtsPlaybackPlanningInput(
     enforceSourceBoundaries,
     skipBlockKinds,
     isPlainText,
-    namespace: scope.testNamespace,
+    namespace: null,
   });
 
   return {
@@ -214,7 +214,7 @@ export async function buildTtsPlaybackPlanningInput(
       ...(parsed.language ? { language: parsed.language } : {}),
       enforceSourceBoundaries,
       documentSource: {
-        namespace: scope.testNamespace,
+        namespace: null,
         skipBlockKinds,
         extent: planExtent,
         isPlainText,

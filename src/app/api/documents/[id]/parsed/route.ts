@@ -7,7 +7,6 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { createOrReuseCurrentPdfParseOperation } from '@/lib/server/pdf-parse/operation';
 import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -77,8 +76,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: 'Document is not a PDF' }, { status: 400 });
     }
 
-    const namespace = getOpenReaderTestNamespace(req.headers);
-
     const rateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
     const rateDecision = await checkJobRate(authCtxOrRes.userId, 'pdf_layout', rateConfig);
     if (!rateDecision.allowed) {
@@ -87,7 +84,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const workerState = await createOrReuseCurrentPdfParseOperation({
       documentId: id,
-      namespace,
+      namespace: null,
       forceToken: randomUUID(),
     });
     await recordJobEvent(authCtxOrRes.userId, 'pdf_layout', workerState.opId, rateConfig);

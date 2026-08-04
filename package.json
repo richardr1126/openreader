@@ -12,7 +12,7 @@
     "start": "pnpm --filter @openreader/bootstrap start pnpm start:raw",
     "start:raw": "next start -p 3003",
     "lint": "next lint",
-    "test": "playwright test",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "test:unit": "vitest run",
     "test:compute": "vitest run --project compute-worker",

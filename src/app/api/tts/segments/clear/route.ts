@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -37,7 +36,7 @@ export async function POST(request: NextRequest) {
       documentId: parsed.documentId,
       documentVersion: scope.documentVersion,
       readerType: scope.readerType,
-      namespace: getOpenReaderTestNamespace(request.headers),
+      namespace: null,
     });
 
     return NextResponse.json({

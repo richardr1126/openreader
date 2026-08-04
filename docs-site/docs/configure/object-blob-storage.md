@@ -99,7 +99,6 @@ Worker-owned TTS playback artifacts are stored under dedicated playback keyspace
 Typical key layout:
 
 - `${S3_PREFIX}/tts_playback_segments_audio_v1/users/<url-encoded-user-id>/docs/<document-id>/<document-version>/<settings-hash>/<audio-content-hash>.mp3`
-- `${S3_PREFIX}/tts_playback_segments_audio_v1/ns/<test-namespace>/users/<url-encoded-user-id>/docs/...` (test namespace mode)
 - `${S3_PREFIX}/tts_playback_segments_v1/users/<user-hash>/docs/<document-id>/<document-version>/<settings-hash>/segments/<ordinal>.json`
 - `${S3_PREFIX}/tts_playback_plan_v1/...`
 - `${S3_PREFIX}/tts_playback_v1/...`

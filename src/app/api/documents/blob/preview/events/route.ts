@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     const validation = await validatePreviewRequest(req);
     if (validation.errorResponse) return validation.errorResponse;
-    const { id, testNamespace } = validation;
+    const { id } = validation;
 
     const opId = (req.nextUrl.searchParams.get('opId') || '').trim();
     if (!opId) {
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     if (
       operation.subject.kind !== 'document_preview'
       || operation.subject.documentId !== id
-      || operation.subject.namespace !== testNamespace
+      || operation.subject.namespace !== null
       || operation.subject.previewKind !== 'card'
     ) {
       return NextResponse.json({ error: 'Operation does not belong to this preview' }, { status: 403 });

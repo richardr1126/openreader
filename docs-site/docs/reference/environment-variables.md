@@ -77,7 +77,6 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | unset | Required for signed worker-owned playback audio URLs |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
-| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor `x-openreader-test-namespace` header in production builds |
 | `RUN_DRIZZLE_MIGRATIONS` | DB migrations | `true` | Set `false` to skip startup Drizzle migrations |
 | `RUN_V4_DECOMMISSION` | Storage decommission | `true` | Set `false` to skip startup v4 legacy object-prefix purge |
 | `RUNTIME_SEED_JSON_PATH` | Runtime JSON seed | unset | Absolute path to first-boot JSON seed document |
@@ -480,10 +479,6 @@ Disables Better Auth request rate limiting.
 
 - Default: `false`
 
-### ENABLE_TEST_NAMESPACE
-
-Enables the `x-openreader-test-namespace` header path in production builds.
-
 ## Migration Controls
 
 ### RUN_DRIZZLE_MIGRATIONS
@@ -582,7 +577,7 @@ These values are read by OpenReader but owned by Node.js, Next.js, the hosting p
 
 | Variable | Owner | OpenReader use |
 | --- | --- | --- |
-| `NODE_ENV` | Node.js / Next.js | Production cookie security and test-namespace defaults |
+| `NODE_ENV` | Node.js / Next.js | Production cookie security and runtime behavior |
 | `NEXT_RUNTIME` | Next.js | Loads Node-only instrumentation in the Node runtime |
 | `VERCEL` | Vercel | Selects scheduled-task behavior, request IP handling, and rejects proxy browser storage on request-duration hosting |
 | `CI` | CI runner | Test retries, server reuse, and reporter selection |

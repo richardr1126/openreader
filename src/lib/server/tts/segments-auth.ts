@@ -3,11 +3,9 @@ import type { NextRequest } from 'next/server';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import type { ReaderType } from '@/types/user-state';
 
 export type ResolvedSegmentDocumentScope = {
-  testNamespace: string | null;
   storageUserId: string;
   userId: string;
   isAnonymousUser: boolean;
@@ -30,7 +28,6 @@ export async function resolveSegmentDocumentScope(
   if (ctxOrRes instanceof Response) return ctxOrRes;
   if (!ctxOrRes.userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const testNamespace = getOpenReaderTestNamespace(request.headers);
   const storageUserId = ctxOrRes.userId;
   const allowedUserIds = [storageUserId];
 
@@ -55,7 +52,6 @@ export async function resolveSegmentDocumentScope(
   }
 
   return {
-    testNamespace,
     storageUserId: doc.userId,
     userId: ctxOrRes.userId,
     isAnonymousUser: Boolean(ctxOrRes.user?.isAnonymous),

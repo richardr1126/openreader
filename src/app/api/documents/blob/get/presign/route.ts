@@ -4,7 +4,6 @@ import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignGet } from '@/lib/server/documents/blobstore';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import { getBrowserStorageTransport, isS3Configured } from '@/lib/server/storage/s3';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -28,7 +27,6 @@ export async function GET(req: NextRequest) {
     if (ctxOrRes instanceof Response) return ctxOrRes;
     if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
     const storageUserId = ctxOrRes.userId;
     const allowedUserIds = [storageUserId];
 
@@ -51,7 +49,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const directUrl = await presignGet(doc.id, testNamespace);
+    const directUrl = await presignGet(doc.id, null);
 
     return NextResponse.redirect(directUrl, {
       status: 307,

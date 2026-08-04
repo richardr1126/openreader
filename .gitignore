@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+node_modules/
 /.pnpm-store
 /.pnp
 .pnp.*
@@ -46,8 +47,7 @@ next-env.d.ts
 # documents
 /docstore
 
-# Playwright
-node_modules/
+# Playwright artifacts
 /tests/results/
 /playwright-report/
 /blob-report/
