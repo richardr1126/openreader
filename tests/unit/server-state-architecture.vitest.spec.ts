@@ -177,6 +177,18 @@ describe('server-state architecture', () => {
     expect(operationEventsProxy).toContain('openOperationEvents');
   });
 
+  test('keeps DOCX conversion completion on authenticated operation SSE instead of polling', () => {
+    const documentsApi = source('src/lib/client/api/documents.ts');
+    const uploadEventsRoute = source('src/app/api/documents/blob/upload/events/route.ts');
+    expect(documentsApi).toContain('new EventSource(documentConversionEventsUrl(conversion))');
+    expect(documentsApi).toContain('/api/documents/blob/upload/events');
+    expect(documentsApi).not.toContain('Retry-After');
+    expect(documentsApi).not.toContain('conversionRetryDelayMs');
+    expect(uploadEventsRoute).toContain("operation.subject.kind !== 'document_conversion'");
+    expect(uploadEventsRoute).toContain('buildDocxConversionRequest');
+    expect(uploadEventsRoute).toContain('proxyOperationEvents');
+  });
+
   test('loads TTS voice metadata and claims through centralized query hooks', () => {
     const voiceHook = source('src/hooks/audio/useVoiceManagement.ts');
     expect(voiceHook).toContain('queryKeys.ttsVoices');
@@ -261,6 +273,7 @@ describe('server-state architecture', () => {
       '/api/documents/blob/preview/events',
       '/api/documents/blob/preview/presign',
       '/api/documents/blob/upload',
+      '/api/documents/blob/upload/events',
       '/api/documents/blob/upload/finalize',
       '/api/documents/blob/upload/presign',
       '/api/documents/folders',

@@ -295,8 +295,8 @@ own computer-use walkthrough before implementation.
 | 3 | Unsupported input produces useful visible feedback and no library item | Accepted `unsupported-upload.spec.ts`: one visible rejection journey with an unchanged empty library | MIME/extension policy and route error mappings remain in Vitest |
 | 4 | A PDF opens, reaches a visible ready state, and exposes readable page content | Accepted `pdf-reader.spec.ts`: upload, open, readable content and controls, then return to the library | Parsing, layout artifacts, bootstrap events, and storage leases remain in Vitest |
 | 5 | An EPUB opens, reaches a visible ready state, and exposes readable chapter content | Accepted `epub-reader.spec.ts`: upload, open, reader controls, and actual rendered book content | Spine coordinates, placement, locations, and bootstrap state remain in Vitest |
-| 6 | TXT and Markdown open with a meaningful visible rendering difference | One comparison journey only if the walkthrough shows a durable user-facing distinction | Text decoding, Markdown transformation, and HTML block rules remain in Vitest |
-| 7 | DOCX visibly converts to PDF and the result opens | One conversion smoke journey | Conversion lifecycle, retries, finalization, and cleanup remain in Vitest |
+| 6 | TXT and Markdown open with a meaningful visible rendering difference | Accepted `text-markdown-reader.spec.ts`: one literal-text and semantic-Markdown comparison journey | Text decoding, Markdown transformation, and HTML block rules remain in Vitest |
+| 7 | DOCX visibly converts to PDF and the result opens | Accepted `docx-conversion.spec.ts`: source progress, converted PDF arrival, and readable result | Conversion lifecycle, event completion, finalization, and cleanup remain in Vitest |
 | 8 | A user confirms deletion and the document disappears from the library | One dialog-and-library-update journey with keyboard/focus assertions | Blob cleanup, leases, and account ownership remain in Vitest |
 | 9 | A user starts and pauses reading and sees both control and progress state | One primary-format playback journey with keyboard access | Provider protocol, segment planning, audio alignment, caching, and token contracts remain in Vitest |
 
@@ -395,8 +395,7 @@ Gate:
 
 ## Phase 3: Rebuild Core Reading Journeys
 
-Status: in progress; supported upload is accepted and the unsupported-input,
-PDF-reader, and EPUB-reader walkthroughs are complete.
+Status: complete; priorities 1–7 are accepted.
 
 ### Walkthrough 2: Upload supported documents into the library
 
@@ -606,7 +605,115 @@ Observed with computer use on 2026-08-04 against the production build at
   --noEmit` passed, `pnpm build` passed, and `git diff --check` passed after the
   product fixes and three new specs.
 
-Walk through and then create tests for:
+### Walkthrough 6: Read plain text and semantic Markdown
+
+Observed with computer use on 2026-08-04 against the production build at
+`http://localhost:3003`.
+
+- Purpose: confirm that TXT remains literal readable text while Markdown is
+  rendered with meaningful document structure and inline semantics.
+- Initial state: an anonymous, onboarded session at `/app` with
+  `multilingual-sample.txt` already present. The walkthrough then uploaded the
+  controlled `tests/files/sample.md` fixture through the visible file chooser.
+  The automated journey will upload both fixtures in its own fresh context.
+- Visible actions and states:
+  1. Activate the exact `multilingual-sample.txt` document link.
+  2. Observe navigation to `/html/<document-id>`, the filename heading, literal
+     language-labelled text blocks, and playback controls.
+  3. Activate `Back to documents`.
+  4. Upload `sample.md` through the `Add Documents` dialog's real file chooser.
+  5. Observe the Markdown preview already exposing structured content, then
+     activate the exact `sample.md` document link.
+  6. Observe navigation to `/html/<document-id>` and the rendered Markdown.
+- Final visible success:
+  - TXT visibly preserves its English, French, Spanish, Arabic, Hindi,
+    Japanese, Chinese, and Thai text as literal blocks;
+  - Markdown visibly renders `Sample Markdown` as a level-one heading,
+    `Section One` as a level-two heading, `Item 1` and `Item 2` as a list,
+    `OpenAI` as a real link, `strong` as bold text, `emphasis` as emphasized
+    text, and the JavaScript line as code;
+  - both readers expose playback controls and the `Playback position` slider.
+- Visible failure or recovery: none appeared. The semantic distinction is
+  durable enough for one combined browser journey rather than separate shallow
+  route tests.
+- Screenshots: none required; the accessible DOM captured literal TXT blocks
+  and each semantic Markdown element.
+- Vitest ownership: decoding, Markdown-to-block transformation, inline-markup
+  rules, and highlight mapping remain in deterministic tests. Playwright owns
+  the visible formatting distinction and usable reader result.
+
+### Walkthrough 7: Convert DOCX to PDF and read the result
+
+Observed with computer use on 2026-08-04 against the production build at
+`http://localhost:3003`, first before and then after correcting the product.
+
+- Purpose: upload a Word document, observe that conversion completes as a PDF
+  library item, and open readable converted content.
+- Initial state: an anonymous, onboarded session at `/app`. The walkthrough used
+  the restored controlled fixture `tests/files/sample.docx`; the automated
+  journey will use an empty isolated library so the converted item is unique.
+- Visible actions and states:
+  1. Open `Add Documents` from the sidebar `Choose File` control.
+  2. Select `sample.docx` through the real file chooser.
+  3. Observe `Uploading`, `0/1`, `Upload progress 0%`, the source filename
+     `sample.docx`, and `Uploading file...` while the operation is active.
+  4. Wait for the durable library result rather than treating disappearance of
+     transient progress as conversion success.
+- Product defect found: the compute worker completed DOCX conversion
+  successfully, but the upload client treated the server's `202` conversion
+  response as a terminal error. The progress UI disappeared and no converted
+  document appeared even after the worker produced the PDF artifact.
+- Product correction: the initial `202` response now leads the client to an
+  authenticated, operation-scoped SSE stream for each pending conversion. The
+  upload remains active until the worker reports success, failure, cancellation,
+  or the bounded timeout. After success the client makes one idempotent finalize
+  request to register the durable PDF; it does not poll the finalize endpoint.
+- Rebuilt result: the progress state remained active until the converted item
+  appeared; the library gained a PDF named `sample.pdf`, its PDF count and total
+  item count increased, and the new document linked to `/pdf/<document-id>`.
+- Final visible success after opening the converted item:
+  - the reader heading is `sample.pdf`;
+  - readable first-page content begins `Demonstration of DOCX support in
+    calibre` and describes the calibre DOCX input plugin;
+  - PDF navigation reports `1 / 8`, with `Previous page` disabled and
+    `Next page` available;
+  - playback controls and the `Playback position` slider are visible.
+- Screenshots: none required; the accessible DOM and worker log captured the
+  original missing-library defect, and the rebuilt DOM captured the converted
+  item and readable PDF.
+- Vitest ownership: conversion IDs, operation state, artifact persistence,
+  leases, idempotent finalize receipts, timeout/abort behavior, and cleanup
+  remain deterministic concerns. Playwright owns the visible source upload,
+  converted PDF arrival, navigation, and readable result.
+
+#### Walkthroughs 6–7 acceptance evidence
+
+- `text-markdown-reader.spec.ts` uploads TXT and Markdown together, opens both
+  through their visible links, proves the TXT content remains literal, and
+  asserts the observed Markdown headings, list content, link, code, and reader
+  controls.
+- `docx-conversion.spec.ts` observes the DOCX source filename and active upload
+  state, verifies that the browser opens the operation SSE request, waits for
+  the durable converted `sample.pdf` link, then proves the eight-page PDF reader
+  exposes converted Word content and playback controls.
+- `uploadDocumentSources` now follows the returned worker operation through the
+  authenticated `/api/documents/blob/upload/events` SSE proxy, then makes one
+  idempotent finalize call after success. `document-upload-client.vitest.spec.ts`
+  proves the event-driven client lifecycle, and
+  `document-upload-events-route-worker-proxy.vitest.spec.ts` proves that the
+  proxy re-derives conversion ownership before exposing the worker stream.
+- The two-test batch ran as six cases across Chromium, Firefox, and WebKit using
+  six workers; all six passed in 23.5 seconds. The three DOCX conversions
+  overlapped, and the slowest conversion plus reader preparation completed in
+  21.9 seconds without serializing the browser matrix.
+- The complete seven-spec suite ran as 21 cases across the three browsers using
+  the configured seven-worker cap; all 21 passed after the SSE correction in
+  54.4 seconds, including three concurrent DOCX conversions.
+- `pnpm test` passed all 112 Vitest files and 558 tests, `pnpm exec tsc
+  --noEmit` passed, `pnpm build` passed, and `git diff --check` passed after the
+  DOCX lifecycle correction and two new specs.
+
+Completed in this phase:
 
 - supported and unsupported uploads;
 - PDF readiness and visible content;
@@ -720,7 +827,7 @@ Status: pending.
 | 0 | Record replacement inventory | Complete |
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
-| 3 | Rebuild core reading journeys | In progress: priorities 1–5 accepted |
+| 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
 | 4 | Rebuild interaction journeys | Pending |
 | 5 | Extract only proven shared support | Pending |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |

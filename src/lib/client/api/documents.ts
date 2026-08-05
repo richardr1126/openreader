@@ -36,6 +36,8 @@ type FinalizeResponse = {
   error?: string;
 };
 
+const DOCUMENT_CONVERSION_TIMEOUT_MS = 5 * 60 * 1000;
+
 export class DocumentConversionPendingError extends Error {
   readonly conversions: NonNullable<FinalizeResponse['conversions']>;
   readonly stored: BaseDocument[];
@@ -57,26 +59,127 @@ function toUploadBody(body: UploadSource['body']): BodyInit {
   return body as unknown as BodyInit;
 }
 
-async function finalizeUploadedSources(
+type PendingDocumentConversion = NonNullable<FinalizeResponse['conversions']>[number];
+
+function documentConversionEventsUrl(conversion: PendingDocumentConversion): string {
+  const params = new URLSearchParams();
+  params.set('opId', conversion.opId ?? '');
+  params.set('token', conversion.token);
+  return `/api/documents/blob/upload/events?${params.toString()}`;
+}
+
+function waitForDocumentConversion(
+  conversion: PendingDocumentConversion,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!conversion.opId) {
+    return Promise.reject(new Error(`DOCX conversion did not provide an operation for ${conversion.name}`));
+  }
+  if (signal?.aborted) {
+    return Promise.reject(
+      signal.reason instanceof Error ? signal.reason : new Error('Document upload aborted'),
+    );
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const source = new EventSource(documentConversionEventsUrl(conversion));
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new DocumentConversionPendingError({ conversions: [conversion], stored: [] }));
+    }, DOCUMENT_CONVERSION_TIMEOUT_MS);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', handleAbort);
+      source.close();
+    };
+    const handleAbort = () => {
+      cleanup();
+      reject(signal?.reason instanceof Error ? signal.reason : new Error('Document upload aborted'));
+    };
+    const handleSnapshot = (event: Event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as {
+          snapshot?: {
+            status?: 'queued' | 'running' | 'succeeded' | 'failed';
+            error?: { message?: string } | null;
+          };
+        };
+        const snapshot = payload.snapshot;
+        if (snapshot?.status === 'succeeded') {
+          cleanup();
+          resolve();
+        } else if (snapshot?.status === 'failed') {
+          cleanup();
+          reject(new Error(snapshot.error?.message || `DOCX conversion failed for ${conversion.name}`));
+        }
+      } catch {
+        // Ignore malformed frames so EventSource can reconnect and continue.
+      }
+    };
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    source.addEventListener('snapshot', handleSnapshot);
+  });
+}
+
+async function waitForDocumentConversions(
+  conversions: PendingDocumentConversion[],
+  signal?: AbortSignal,
+): Promise<void> {
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', forwardAbort, { once: true });
+  if (signal?.aborted) forwardAbort();
+
+  try {
+    await Promise.all(conversions.map((conversion) => (
+      waitForDocumentConversion(conversion, controller.signal)
+    )));
+  } catch (error) {
+    controller.abort(error);
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', forwardAbort);
+  }
+}
+
+async function requestUploadFinalization(
   uploads: FinalizeUploadPayload[],
   options?: UploadOptions,
-): Promise<BaseDocument[]> {
-  const finalizeRes = await fetch('/api/documents/blob/upload/finalize', {
+): Promise<{ response: Response; data: FinalizeResponse | null }> {
+  const response = await fetch('/api/documents/blob/upload/finalize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uploads }),
     signal: options?.signal,
   });
-  const data = (await finalizeRes.json().catch(() => null)) as FinalizeResponse | null;
+  const data = (await response.json().catch(() => null)) as FinalizeResponse | null;
+  return { response, data };
+}
 
-  if (finalizeRes.status === 202) {
+async function finalizeUploadedSources(
+  uploads: FinalizeUploadPayload[],
+  options?: UploadOptions,
+): Promise<BaseDocument[]> {
+  let { response, data } = await requestUploadFinalization(uploads, options);
+
+  if (response.status === 202) {
+    const conversions = data?.conversions ?? [];
+    if (conversions.length === 0) {
+      throw new Error('Pending DOCX conversion response did not include any operations');
+    }
+    await waitForDocumentConversions(conversions, options?.signal);
+    ({ response, data } = await requestUploadFinalization(uploads, options));
+  }
+
+  if (response.status === 202) {
     throw new DocumentConversionPendingError({
       conversions: data?.conversions ?? [],
       stored: data?.stored ?? [],
     });
   }
-
-  if (finalizeRes.ok) {
+  if (response.ok) {
     return data?.stored || [];
   }
 
