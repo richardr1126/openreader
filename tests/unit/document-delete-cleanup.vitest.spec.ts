@@ -77,4 +77,22 @@ describe('owned document cleanup', () => {
       namespace: null,
     })).resolves.toBe(true);
   });
+
+  test('can defer best-effort TTS cleanup until after the delete response', async () => {
+    mocks.deleteResults = [[{ id: 'doc-1', userId: 'user-1' }]];
+    let scheduledCleanup: (() => Promise<void>) | undefined;
+
+    await expect(deleteOwnedDocument({
+      userId: 'user-1',
+      documentId: 'doc-1',
+      namespace: null,
+      scheduleCleanup: (task) => {
+        scheduledCleanup = task;
+      },
+    })).resolves.toBe(true);
+
+    expect(mocks.deleteDocumentTtsSegmentCache).not.toHaveBeenCalled();
+    await scheduledCleanup?.();
+    expect(mocks.deleteDocumentTtsSegmentCache).toHaveBeenCalledOnce();
+  });
 });

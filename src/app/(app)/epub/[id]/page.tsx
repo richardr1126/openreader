@@ -1,7 +1,7 @@
 'use client';
 
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { EPUBViewer } from '@/components/views/EPUBViewer';
 import {
   ReaderShell,
@@ -43,7 +43,9 @@ function EpubReader({
 }: ReaderRendererProps<'epub'>) {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
+  const router = useRouter();
   const {
+    disableProgressPersistence,
     scheduleProgress,
   } = bootstrap;
   const initialLocator = payload.initialPosition?.readerType === 'epub'
@@ -58,6 +60,7 @@ function EpubReader({
   } = epubState;
   const {
     sentences,
+    stop,
   } = useTTS();
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
@@ -119,11 +122,19 @@ function EpubReader({
     window.dispatchEvent(new Event('resize'));
   }, [padPct]);
 
+  const handleBackToDocuments = useCallback((event: MouseEvent) => {
+    event.preventDefault();
+    disableProgressPersistence();
+    stop();
+    setActiveSidebar(null);
+    router.push('/app');
+  }, [disableProgressPersistence, router, stop]);
+
   return (
     <>
       <Header
         left={
-          <ButtonLink href="/app" variant="secondary" size="sm" className="gap-2" aria-label="Back to documents">
+          <ButtonLink href="/app" variant="secondary" size="sm" className="gap-2" aria-label="Back to documents" onClick={handleBackToDocuments}>
             <svg className="w-3 h-3" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>

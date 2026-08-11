@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { and, inArray } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
@@ -146,6 +146,7 @@ export async function DELETE(req: NextRequest) {
         userId: row.userId,
         documentId: row.id,
         namespace: null,
+        scheduleCleanup: after,
       })) {
         deleted += 1;
       }

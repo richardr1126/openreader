@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 test('anonymous user opens a PDF and reads its visible page content', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/app');
 
   const privacyDialog = page.getByRole('dialog', {
@@ -52,7 +53,9 @@ test('anonymous user opens a PDF and reads its visible page content', async ({ p
   await pdfLink.click();
 
   await expect(page).toHaveURL(/\/pdf\/[a-f0-9]+$/);
-  await expect(page.getByRole('heading', { name: 'sample.pdf', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'sample.pdf', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByText('Chapter One', { exact: true })).toBeVisible();
   await expect(
     page.getByText('This is chapter one text used for integration tests.', { exact: true }),

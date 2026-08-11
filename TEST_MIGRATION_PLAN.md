@@ -297,8 +297,8 @@ own computer-use walkthrough before implementation.
 | 5 | An EPUB opens, reaches a visible ready state, and exposes readable chapter content | Accepted `epub-reader.spec.ts`: upload, open, reader controls, and actual rendered book content | Spine coordinates, placement, locations, and bootstrap state remain in Vitest |
 | 6 | TXT and Markdown open with a meaningful visible rendering difference | Accepted `text-markdown-reader.spec.ts`: one literal-text and semantic-Markdown comparison journey | Text decoding, Markdown transformation, and HTML block rules remain in Vitest |
 | 7 | DOCX visibly converts to PDF and the result opens | Accepted `docx-conversion.spec.ts`: source progress, converted PDF arrival, and readable result | Conversion lifecycle, event completion, finalization, and cleanup remain in Vitest |
-| 8 | A user confirms deletion and the document disappears from the library | One dialog-and-library-update journey with keyboard/focus assertions | Blob cleanup, leases, and account ownership remain in Vitest |
-| 9 | A user starts and pauses reading and sees both control and progress state | One primary-format playback journey with keyboard access | Provider protocol, segment planning, audio alignment, caching, and token contracts remain in Vitest |
+| 8 | A user confirms deletion and the document disappears from the library | Accepted `document-deletion.spec.ts`: cancel by keyboard, confirm visibly, and observe the empty library | Blob cleanup, leases, and account ownership remain in Vitest |
+| 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: one minimal keyboard control cycle for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
 
 The core gate does not require PDF view-mode depth, folder drag-and-drop,
 responsive reader behavior, voice/speed customization, provider-specific
@@ -735,7 +735,98 @@ Gate:
 
 ## Phase 4: Rebuild Interaction Journeys
 
-Status: pending.
+Status: in progress; deletion and minimal per-document playback are accepted.
+
+### Walkthrough 8: Cancel and confirm document deletion
+
+Observed with computer use on 2026-08-04 against the production build at
+`http://localhost:3003`.
+
+- Purpose: prove that deletion is reversible at the confirmation boundary and
+  removes the selected document only after explicit confirmation.
+- Initial state: an anonymous, onboarded library containing five documents.
+  The automated journey creates an isolated one-document library by uploading
+  `sample.md` through the visible chooser.
+- Visible actions and states:
+  1. Activate `Delete sample.md` and observe the `Delete Document` dialog and
+     the question `Are you sure you want to delete sample.md?`.
+  2. Press Escape. The dialog closes, `sample.md` remains, and keyboard focus
+     returns to `Delete sample.md`.
+  3. Reopen the dialog and activate its `Delete` button.
+- Final visible success: the document link disappears, the library changes to
+  `0 items`, the zero-count `All Documents` and `Text` filters remain usable,
+  and the empty-library upload surface returns.
+- Product defect found and corrected: deletion waited for best-effort TTS cache
+  cleanup before returning the durable library result. Under concurrent load
+  that background work could hold the dialog open after ownership had already
+  been removed. Ownership deletion now completes first and cache cleanup is
+  scheduled after the response; the journey still observes both the durable
+  library state and the dialog closing as separate outcomes.
+- Vitest ownership: ownership checks, blob cleanup, leases, and storage
+  lifecycle remain deterministic tests.
+
+### Walkthrough 9: Minimal playback controls for every document journey
+
+Observed with computer use on 2026-08-04 against the production build at
+`http://localhost:3003`.
+
+- Purpose: keep playback coverage shallow while proving that every accepted
+  reader journey can expose and operate the shared Play/Pause control.
+- Initial state: an anonymous, onboarded library containing TXT, Markdown,
+  EPUB, PDF, and a DOCX-converted PDF.
+- Visible actions and states:
+  1. Open each document through its library link and wait for its reader title
+     and enabled `Play` button.
+  2. Focus `Play`, press Enter, and observe the control become `Pause` while
+     retaining focus.
+  3. Press Space and observe the control return to focused `Play`.
+  4. Activate `Back to documents` before opening the next document.
+- Actual progress check: the manual TXT walkthrough allowed real synthesis to
+  finish and observed the playback slider advance from 0 to 9 and then 16.25.
+  The per-document automated smoke deliberately asserts only the control cycle;
+  detailed timing, alignment, and progress remain separate from this minimal
+  cross-format contract.
+- Format results: TXT, Markdown, EPUB, native PDF, and the converted DOCX PDF
+  all exposed the expected controls. Full background synthesis of the sample
+  EPUB section took roughly 187 seconds locally, confirming that repeating a
+  progress assertion for every format would turn a smoke journey into an
+  expensive provider test.
+- Product defects found and corrected:
+  - Pause during playback startup did not invalidate the pending request, so a
+    stale session could continue starting after the UI had returned to Play.
+    Pending session creation is now abortable and request cancellation is
+    propagated to the worker call.
+  - HTML and EPUB returned to the library through plain links and skipped the
+    playback cleanup used by PDF. Their Back actions now stop playback and
+    disable progress persistence before navigating.
+- Automated setup uses a real four-file chooser action, followed by a DOCX
+  upload through the observed `Add Documents` dialog. The native and converted
+  PDFs intentionally appear as two same-named `sample.pdf` entries and both are
+  exercised.
+
+#### Walkthroughs 8–9 acceptance evidence
+
+- `document-deletion.spec.ts` passed in Chromium, Firefox, and WebKit as three
+  concurrent cases in 5.0 seconds during its focused acceptance run.
+- `playback-controls.spec.ts` passed in Chromium, Firefox, and WebKit together
+  as three concurrent cases in 1.7 minutes. Each case exercised all five
+  accepted document journeys using keyboard Play/Pause interaction.
+- The full harness keeps `fullyParallel: true` and `workers: '50%'`. The 24 core
+  reader/library cases run first; after that gate succeeds, the three playback
+  browser projects run together. This preserves the three-engine concurrency
+  requirement without allowing intentionally long synthesis work to obscure
+  unrelated core failures.
+- A clean full-core diagnostic run used the configured seven-worker cap and all
+  24 core cases passed before the playback stage began.
+- The complete replacement suite then passed all 27 cases in 3.0 minutes: all
+  24 core cases passed across Chromium, Firefox, and WebKit before the three
+  playback projects ran concurrently and passed across the same browser matrix.
+- That full run exposed and verified one additional product fix: supported
+  native uploads had finished storing every byte but their finalize response
+  waited for best-effort preview generation through the single compute worker.
+  Preview enqueueing is now scheduled after the response, while user-requested
+  DOCX conversion remains awaited. The formerly stalled WebKit three-document
+  upload completed in 4.5 seconds in the accepted run.
 
 Walk through and then create tests for:
 
@@ -828,7 +919,7 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | Pending |
+| 4 | Rebuild interaction journeys | In progress: deletion and playback accepted |
 | 5 | Extract only proven shared support | Pending |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |
 | 7 | Final coverage audit | Pending |

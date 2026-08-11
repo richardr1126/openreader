@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         : { generationRunId: `initial:${selectedOrdinal}` }),
       ...(parsed.generationExtent === 'document' ? { generationExtent: 'document' as const } : {}),
       planning,
-    });
+    }, { signal: request.signal });
 
     const responseBase = {
       sessionId,

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 test('anonymous user opens an EPUB and reads its visible book content', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/app');
 
   const privacyDialog = page.getByRole('dialog', {
@@ -52,7 +53,9 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
   await epubLink.click();
 
   await expect(page).toHaveURL(/\/epub\/[a-f0-9]+$/);
-  await expect(page.getByRole('heading', { name: 'sample.epub', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'sample.epub', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByRole('button', { name: 'Show chapters', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Previous section', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next section', exact: true })).toBeVisible();

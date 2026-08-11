@@ -1,6 +1,6 @@
 import path from 'path';
 import { createHash } from 'node:crypto';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import {
   TEMP_DOCUMENT_UPLOAD_TTL_MS,
@@ -146,6 +146,7 @@ async function registerConvertedDocx(input: {
   userId: string;
   namespace: string | null;
   artifact: DocumentConversionArtifactMetadata;
+  schedulePreview: (task: () => Promise<void>) => void;
 }): Promise<BaseDocument> {
   const finalizedName = safeDocumentName(`${path.parse(input.upload.name).name}.pdf`, 'upload.pdf');
   const documentId = input.artifact.documentId;
@@ -177,6 +178,7 @@ async function registerConvertedDocx(input: {
       type: 'pdf',
       size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : input.artifact.byteLength,
       lastModified: input.upload.lastModified,
+      schedulePreview: input.schedulePreview,
     });
   });
 
@@ -205,6 +207,7 @@ async function finalizeDocx(input: {
   upload: FinalizeUpload;
   userId: string;
   namespace: string | null;
+  schedulePreview: (task: () => Promise<void>) => void;
 }): Promise<FinalizeResult> {
   if (!isComputeWorkerAvailable()) {
     throw new Error('Compute worker is required for DOCX conversion.');
@@ -237,6 +240,7 @@ async function finalizeDocx(input: {
         userId: input.userId,
         namespace: input.namespace,
         artifact: resolved.artifact,
+        schedulePreview: input.schedulePreview,
       }),
     };
   }
@@ -274,6 +278,7 @@ async function finalizeOne(input: {
   upload: FinalizeUpload;
   userId: string;
   namespace: string | null;
+  schedulePreview: (task: () => Promise<void>) => void;
 }): Promise<FinalizeResult> {
   const existingReceipt = await getTempDocumentFinalizeReceipt<FinalizeReceipt>(
     input.upload.token,
@@ -339,6 +344,7 @@ async function finalizeOne(input: {
       type: finalizedType,
       size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
       lastModified: input.upload.lastModified,
+      schedulePreview: input.schedulePreview,
     });
   });
 
@@ -383,6 +389,7 @@ export async function POST(req: NextRequest) {
         upload,
         userId,
         namespace,
+        schedulePreview: after,
       })),
     );
     const stored = results

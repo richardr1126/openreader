@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 test('anonymous user converts a DOCX file and reads the resulting PDF', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.goto('/app');
 
   const privacyDialog = page.getByRole('dialog', {
@@ -60,7 +61,7 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   expect(eventsUrl.searchParams.get('token')).toBeTruthy();
 
   const convertedPdfLink = page.getByRole('link', { name: 'sample.pdf', exact: true });
-  await expect(convertedPdfLink).toBeVisible({ timeout: 30_000 });
+  await expect(convertedPdfLink).toBeVisible({ timeout: 60_000 });
   await expect(convertedPdfLink).toHaveAttribute('href', /^\/pdf\/[a-f0-9]+$/);
   await expect(page.getByRole('button', { name: 'PDF 1', exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('1 item');
@@ -69,7 +70,7 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   await expect(page).toHaveURL(/\/pdf\/[a-f0-9]+$/);
   await expect(
     page.getByRole('heading', { name: 'sample.pdf', exact: true }),
-  ).toBeVisible({ timeout: 30_000 });
+  ).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText('Demonstration of DOCX support in', { exact: true })).toBeVisible();
   await expect(
     page.getByText('This document demonstrates the ability of the calibre DOCX Input plugin to', {

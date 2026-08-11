@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import 'dotenv/config';
 
+const playbackTest = /playback-controls\.spec\.ts/;
+const coreProjects = ['chromium', 'firefox', 'webkit'];
+
 export default defineConfig({
   testDir: './tests/e2e',
   tsconfig: './tsconfig.json',
@@ -25,14 +28,35 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: playbackTest,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
+      testIgnore: playbackTest,
       use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
+      testIgnore: playbackTest,
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'playback-chromium',
+      testMatch: playbackTest,
+      dependencies: coreProjects,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'playback-firefox',
+      testMatch: playbackTest,
+      dependencies: coreProjects,
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'playback-webkit',
+      testMatch: playbackTest,
+      dependencies: coreProjects,
       use: { ...devices['Desktop Safari'] },
     },
   ],

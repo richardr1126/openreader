@@ -102,6 +102,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const pendingResyncRef = useRef<{ ordinal: number } | null>(null);
   const resyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playbackRequestHeadersRef = useRef<TTSRequestHeaders | null>(null);
+  const playbackRequestAbortRef = useRef<AbortController | null>(null);
   const playbackPhaseRef = useRef<TtsPlaybackPhase>('idle');
 
   const setPlaybackPhase = useCallback((phase: TtsPlaybackPhase) => {
@@ -156,6 +157,8 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const invalidatePlaybackRun = useCallback(() => {
     playbackRunIdRef.current += 1;
     playbackInFlightRef.current = false;
+    playbackRequestAbortRef.current?.abort();
+    playbackRequestAbortRef.current = null;
   }, [playbackRunIdRef]);
 
   const isAbortLikeError = useCallback((err: unknown): boolean => {
@@ -256,6 +259,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   ]);
 
   const pauseActivePlayback = useCallback(() => {
+    if (!playbackActiveRef.current) invalidatePlaybackRun();
     const audio = unlockedAudioRef.current;
     if (audio) {
       try {
@@ -272,7 +276,13 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'paused';
     }
-  }, [setIsProcessing, setPlaybackPhase, stopPlaybackForegroundSync, stopPlaybackProjectionLoop]);
+  }, [
+    invalidatePlaybackRun,
+    setIsProcessing,
+    setPlaybackPhase,
+    stopPlaybackForegroundSync,
+    stopPlaybackProjectionLoop,
+  ]);
 
   const startSeekResync = useCallback((ordinal: number) => {
     pendingResyncRef.current = { ordinal };
@@ -442,9 +452,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       return;
     }
 
+    resetPlaybackRefs();
     setIsProcessing(true);
     setPlaybackPhase('planning');
-    resetPlaybackRefs();
     if (unlockedAudioRef.current) {
       try {
         unlockedAudioRef.current.pause();
@@ -476,7 +486,18 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         planObjectKey: plan.planObjectKey,
         ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
       };
-      const session = await createTtsPlaybackSession(sessionPayload, headers);
+      const requestController = new AbortController();
+      playbackRequestAbortRef.current?.abort();
+      playbackRequestAbortRef.current = requestController;
+      const session = await (async () => {
+        try {
+          return await createTtsPlaybackSession(sessionPayload, headers, requestController.signal);
+        } finally {
+          if (playbackRequestAbortRef.current === requestController) {
+            playbackRequestAbortRef.current = null;
+          }
+        }
+      })();
       if (runId !== playbackRunIdRef.current) return;
 
       playbackSessionRef.current = {

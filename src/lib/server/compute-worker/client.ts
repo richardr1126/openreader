@@ -124,8 +124,11 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/account-exports/resolve', input);
   }
 
-  createTtsPlaybackOperation(input: TtsPlaybackRequest): Promise<ComputeOperation> {
-    return this.requestJson('POST', '/v1/tts-playback/sessions/jobs', input);
+  createTtsPlaybackOperation(
+    input: TtsPlaybackRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/tts-playback/sessions/jobs', input, init);
   }
 
   createTtsPlaybackPlanOperation(input: TtsPlaybackPlanRequest): Promise<ComputeOperation> {
