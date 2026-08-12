@@ -1,5 +1,5 @@
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react';
-import type { ComponentProps } from 'react';
+import { forwardRef, type ComponentProps } from 'react';
 import { cn } from './cn';
 import { IconButton } from './icon-button';
 
@@ -13,17 +13,16 @@ const popoverTriggerClass = cn(
   'inline-flex items-center rounded-md text-foreground hover:bg-accent-wash hover:text-accent focus:outline-none transition-colors duration-fast ease-standard',
 );
 
-export function PopoverTrigger({
-  className,
-  children,
-  ...props
-}: ComponentProps<typeof PopoverButton>) {
+export const PopoverTrigger = forwardRef<
+  HTMLButtonElement,
+  ComponentProps<typeof PopoverButton>
+>(function PopoverTrigger({ className, children, ...props }, ref) {
   return (
-    <PopoverButton className={cn(popoverTriggerClass, className)} {...props}>
+    <PopoverButton ref={ref} className={cn(popoverTriggerClass, className)} {...props}>
       {children}
     </PopoverButton>
   );
-}
+});
 
 export function PopoverIconTrigger({
   children,

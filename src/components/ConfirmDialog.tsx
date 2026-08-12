@@ -23,9 +23,10 @@ export function ConfirmDialog({
   isDangerous = false,
 }: ConfirmDialogProps) {
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Escape') {
       e.preventDefault();
-      onConfirm();
+      e.stopPropagation();
+      onClose();
     }
   };
 
@@ -37,7 +38,7 @@ export function ConfirmDialog({
       </div>
 
       <div className="mt-6 flex justify-end space-x-3">
-        <Button variant="outline" size="sm" onClick={onClose}>
+        <Button autoFocus variant="outline" size="sm" onClick={onClose}>
           {cancelText}
         </Button>
         <Button

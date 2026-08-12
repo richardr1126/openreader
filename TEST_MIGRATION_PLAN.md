@@ -299,9 +299,10 @@ own computer-use walkthrough before implementation.
 | 7 | DOCX visibly converts to PDF and the result opens | Accepted `docx-conversion.spec.ts`: source progress, converted PDF arrival, and readable result | Conversion lifecycle, event completion, finalization, and cleanup remain in Vitest |
 | 8 | A user confirms deletion and the document disappears from the library | Accepted `document-deletion.spec.ts`: cancel by keyboard, confirm visibly, and observe the empty library | Blob cleanup, leases, and account ownership remain in Vitest |
 | 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: one minimal keyboard control cycle for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
+| 10 | A user navigates PDF pages and changes the visible page mode | Accepted `pdf-navigation.spec.ts`: buttons, direct page entry, zoom, Two Pages, Continuous Scroll, scroll tracking, and return | Page calculations, preference normalization, PDF rendering internals, and layout artifacts remain in Vitest |
 
-The core gate does not require PDF view-mode depth, folder drag-and-drop,
-responsive reader behavior, voice/speed customization, provider-specific
+The core gate does not require folder drag-and-drop, responsive reader
+behavior, voice/speed customization, provider-specific
 coverage, or authenticated routing. Those remain valuable follow-on journeys
 in Phases 4 and 6 and must not be used to delay acceptance of the core suite.
 
@@ -735,7 +736,8 @@ Gate:
 
 ## Phase 4: Rebuild Interaction Journeys
 
-Status: in progress; deletion and minimal per-document playback are accepted.
+Status: in progress; deletion, minimal per-document playback, and PDF navigation
+are accepted.
 
 ### Walkthrough 8: Cancel and confirm document deletion
 
@@ -762,6 +764,10 @@ Observed with computer use on 2026-08-04 against the production build at
   been removed. Ownership deletion now completes first and cache cleanup is
   scheduled after the response; the journey still observes both the durable
   library state and the dialog closing as separate outcomes.
+- Dialog keyboard behavior now makes the safe Cancel action the initial focus,
+  closes explicitly on Escape, and leaves Enter to the focused native button.
+  This removes the previous path where Enter on Cancel could also invoke the
+  dialog-wide confirmation handler.
 - Vitest ownership: ownership checks, blob cleanup, leases, and storage
   lifecycle remain deterministic tests.
 
@@ -828,12 +834,65 @@ Observed with computer use on 2026-08-04 against the production build at
   DOCX conversion remains awaited. The formerly stalled WebKit three-document
   upload completed in 4.5 seconds in the accepted run.
 
+### Walkthrough 10: Navigate PDF pages and page modes
+
+Observed with computer use on 2026-08-11 against the rebuilt production build
+at `http://localhost:3003`.
+
+- Purpose: prove that the visible PDF surface follows page navigation and that
+  Single Page, Two Pages, and Continuous Scroll behave as distinct usable
+  reader modes.
+- Initial state: an anonymous, onboarded library containing the two-page
+  `sample.pdf`. The automated journey uploads the fixture through the visible
+  chooser in a fresh browser context.
+- Visible actions and states:
+  1. Move from page one to page two and observe both the distinct `Chapter Two`
+     surface and the `2 / 2` navigator state.
+  2. Open direct page entry, enter page one with the keyboard, and observe the
+     popover close, focus return to `1 / 2`, and `Chapter One` return.
+  3. Increase zoom from 100% to 110% and return it to 100%.
+  4. Select Two Pages and observe both labelled PDF page regions in the
+     viewport.
+  5. Select Continuous Scroll, navigate to page two, and observe page two move
+     into the viewport. Scroll back to page one and observe the navigator track
+     the visible page.
+  6. Return visibly to the library.
+- Product defects found and corrected:
+  - Continuous Scroll changed the current-page state without moving the scroll
+    surface, so Previous, Next, and direct page entry could report one page
+    while another remained visible. Page commands now scroll the matching page
+    region into view, and manual scrolling updates the current-page state from
+    the page with the greatest visible area.
+  - Direct page entry remained open after Enter in Chromium, Firefox, and
+    WebKit even after the page changed. Confirmation now closes and remounts the
+    popover in its closed state and restores focus to the page trigger.
+  - PDF page wrappers previously had no page-level semantics. Each rendered
+    page is now a labelled `PDF page N` region, allowing both assistive
+    navigation and a user-visible viewport assertion without screenshot
+    baselines or private application state.
+  - Under parallel WebKit load, Continuous Scroll could briefly align page two
+    and then synchronize back to page one while its text layer reflowed. A
+    programmatic page change now holds scroll synchronization through text-layer
+    readiness and aligns from live element geometry before manual scrolling
+    resumes control.
+- Focused acceptance: `pdf-navigation.spec.ts` passed concurrently in Chromium,
+  Firefox, and WebKit as three cases in 37.0 seconds, with each browser journey
+  itself completing in under four seconds after startup.
+- Loaded-browser stress acceptance: five concurrent WebKit repetitions of the
+  PDF navigation journey passed in 34.0 seconds, and five concurrent Chromium
+  repetitions of the deletion journey passed in 32.9 seconds.
+- All accepted onboarding setups now wait for the visible Settings panel to
+  finish entering and then detach after closing. This matches the computer-use
+  pace and prevents an invisible transition portal from intercepting the next
+  visible action.
+- Full-suite acceptance: all 30 cases passed in 1.7 minutes with the configured
+  seven-worker cap. The 27 core cases passed across Chromium, Firefox, and
+  WebKit before the three dependent playback projects passed concurrently
+  across the same browser matrix.
+
 Walk through and then create tests for:
 
-- PDF page and view-mode navigation;
 - folder drag-and-drop and persistence;
-- deletion and confirmation behavior;
-- playback start and pause;
 - voice and speed changes;
 - responsive PDF and EPUB behavior;
 - keyboard, focus, labels, dialogs, and important routing behavior.
@@ -851,7 +910,7 @@ Gate:
 
 ## Phase 5: Introduce Only Proven Shared Support
 
-Status: pending.
+Status: complete.
 
 Review accepted tests for genuine repetition. A small fixture or helper may be
 extracted only when:
@@ -874,6 +933,22 @@ browser-tests/
 There is no planned replacement for the old `tests/helpers.ts`. Shared reader,
 playback, and navigation abstractions must earn their existence from repeated
 new code.
+
+### Phase 5 acceptance evidence
+
+- `tests/e2e/support/onboarding.ts` owns only the repeated visible path from a
+  fresh anonymous `/app` context to an interactable empty library. Nine setup
+  consumers use it; `anonymous-entry.spec.ts` remains fully inline as the
+  canonical owner of the onboarding journey and its meaningful assertions.
+- `tests/e2e/support/upload.ts` owns only opening the visible library chooser
+  and selecting caller-provided files. Eight journeys use it when upload is
+  setup; `supported-upload.spec.ts` keeps the chooser and multiple-file
+  assertions inline because upload is that test's primary behavior.
+- Neither helper injects storage, cookies, sessions, API state, reader state, or
+  downstream assertions. Failures still identify the last visible action.
+- Reader navigation, playback, document readiness, conversion, deletion, and
+  PDF interaction remain readable in their owning specs rather than moving
+  into a replacement monolithic helper.
 
 ## Phase 6: Parallel Browser Matrix and CI
 
@@ -919,8 +994,8 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | In progress: deletion and playback accepted |
-| 5 | Extract only proven shared support | Pending |
+| 4 | Rebuild interaction journeys | In progress: deletion, playback, and PDF navigation accepted |
+| 5 | Extract only proven shared support | Complete: onboarding and library upload only |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |
 | 7 | Final coverage audit | Pending |
 

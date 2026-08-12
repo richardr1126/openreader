@@ -1,6 +1,6 @@
 'use client';
 
-import { RefObject, useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { RefObject, useCallback, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Document, Page } from 'react-pdf';
 import type { Dest } from 'react-pdf/src/shared/types.js';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -39,6 +39,10 @@ interface PDFOnLinkClickArgs {
 
 export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollPageRefs = useRef(new Map<number, HTMLDivElement>());
+  const scrollSyncedPageRef = useRef<number | null>(null);
+  const programmaticScrollPageRef = useRef<number | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
   const [textLayerReadyLayoutKey, setTextLayerReadyLayoutKey] = useState('');
   const scaleRef = useRef<number>(1);
@@ -393,6 +397,101 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     ? (currDocPage % 2 === 0 ? currDocPage : currDocPage + 1)
     : null;
 
+  // React-PDF can resize the active page again when its text layer commits.
+  // Keep commanded navigation authoritative through that reflow, then let
+  // ordinary scroll events resume synchronizing the visible page to playback.
+  useLayoutEffect(() => {
+    if (viewType !== 'scroll') {
+      programmaticScrollPageRef.current = null;
+      return;
+    }
+    if (scrollSyncedPageRef.current === currDocPage) {
+      scrollSyncedPageRef.current = null;
+      return;
+    }
+
+    const container = containerRef.current;
+    const page = scrollPageRefs.current.get(currDocPage);
+    if (!container || !page) return;
+
+    programmaticScrollPageRef.current = currDocPage;
+    let frame: number | null = null;
+    let remainingAttempts = 300;
+    const alignRequestedPage = () => {
+      if (programmaticScrollPageRef.current !== currDocPage) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const pageRect = page.getBoundingClientRect();
+      container.scrollTo({
+        top: container.scrollTop + pageRect.top - containerRect.top,
+        behavior: 'auto',
+      });
+
+      const alignedPageRect = page.getBoundingClientRect();
+      const overlap = Math.max(
+        0,
+        Math.min(containerRect.bottom, alignedPageRect.bottom)
+          - Math.max(containerRect.top, alignedPageRect.top),
+      );
+      if (
+        alignedPageRect.height > 0
+        && overlap > 0
+        && textLayerReadyLayoutKey === layoutKey
+      ) {
+        programmaticScrollPageRef.current = null;
+        return;
+      }
+
+      remainingAttempts -= 1;
+      if (remainingAttempts > 0) {
+        frame = window.requestAnimationFrame(alignRequestedPage);
+      } else {
+        programmaticScrollPageRef.current = null;
+      }
+    };
+
+    alignRequestedPage();
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [currDocPage, layoutKey, textLayerReadyLayoutKey, viewType]);
+
+  useEffect(() => () => {
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (viewType !== 'scroll' || scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (programmaticScrollPageRef.current !== null) return;
+      const container = containerRef.current;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      let visiblePage = currDocPage;
+      let visibleHeight = -1;
+      for (const [pageNumber, page] of scrollPageRefs.current) {
+        const pageRect = page.getBoundingClientRect();
+        const overlap = Math.max(
+          0,
+          Math.min(containerRect.bottom, pageRect.bottom)
+            - Math.max(containerRect.top, pageRect.top),
+        );
+        if (overlap > visibleHeight) {
+          visibleHeight = overlap;
+          visiblePage = pageNumber;
+        }
+      }
+
+      if (visiblePage === currDocPage) return;
+      scrollSyncedPageRef.current = visiblePage;
+      skipToLocation(visiblePage, true);
+    });
+  }, [currDocPage, skipToLocation, viewType]);
+
   const parsedPageByNumber = useMemo(() => {
     const map = new Map<number, ParsedPdfPage>();
     for (const page of parsedDocument?.pages ?? []) {
@@ -540,6 +639,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   return (
     <div
       ref={containerRef}
+      onScroll={handleScroll}
       className="flex flex-col items-center overflow-auto w-full px-6 h-full pdf-viewer"
     >
       <Document
@@ -570,7 +670,16 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
             // Scroll mode: render all pages
             <div className="flex flex-col gap-4">
               {currDocPages && [...Array(currDocPages)].map((_, i) => (
-                <div key={`page_wrap_${i + 1}`} className="relative">
+                <div
+                  key={`page_wrap_${i + 1}`}
+                  ref={(node) => {
+                    if (node) scrollPageRefs.current.set(i + 1, node);
+                    else scrollPageRefs.current.delete(i + 1);
+                  }}
+                  role="region"
+                  aria-label={`PDF page ${i + 1}`}
+                  className="relative"
+                >
                   <Page
                     key={`page_${i + 1}`}
                     pageNumber={i + 1}
@@ -595,7 +704,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
             // Single/Dual page mode
             <div className="flex justify-center gap-4">
               {currDocPages && leftPage > 0 && (
-                <div className="relative">
+                <div role="region" aria-label={`PDF page ${leftPage}`} className="relative">
                   <Page
                     key={`page_${leftPage}`}
                     pageNumber={leftPage}
@@ -616,7 +725,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                 </div>
               )}
               {currDocPages && rightPage && rightPage <= currDocPages && viewType === 'dual' && (
-                <div className="relative">
+                <div role="region" aria-label={`PDF page ${rightPage}`} className="relative">
                   <Page
                     key={`page_${rightPage}`}
                     pageNumber={rightPage}

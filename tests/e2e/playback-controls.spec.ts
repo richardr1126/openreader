@@ -1,6 +1,8 @@
 import { resolve } from 'node:path';
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { enterAnonymousLibrary } from './support/onboarding';
+import { uploadLibraryFiles } from './support/upload';
 
 async function togglePlayback(
   page: Page,
@@ -31,49 +33,9 @@ async function togglePlayback(
 
 test('anonymous user starts and pauses playback in every accepted document journey', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto('/app');
+  await enterAnonymousLibrary(page);
 
-  const privacyDialog = page.getByRole('dialog', {
-    name: 'Privacy & Data Usage',
-    exact: true,
-  });
-  await privacyDialog
-    .getByRole('checkbox', {
-      name: 'I have read and agree to the',
-      exact: true,
-    })
-    .check();
-  await privacyDialog.getByRole('button', { name: 'Continue', exact: true }).click();
-
-  const backToSettings = page.getByRole('button', {
-    name: 'Back to settings',
-    exact: true,
-  });
-  await expect(backToSettings).toBeVisible();
-  await backToSettings.click();
-
-  const settingsDialog = page.getByRole('dialog', { name: /^Settings/ });
-  const closeSettings = settingsDialog.getByRole('button', {
-    name: 'Close dialog',
-    exact: true,
-  });
-  await expect(closeSettings).toBeVisible();
-  await closeSettings.click();
-  await expect(settingsDialog).toBeHidden();
-
-  const declineOptionalCookies = page.getByRole('button', {
-    name: 'Decline Non-Essential',
-    exact: true,
-  });
-  await declineOptionalCookies.click();
-  await expect(declineOptionalCookies).toBeHidden();
-
-  const chooserPromise = page.waitForEvent('filechooser');
-  await page
-    .getByText('Drop your file(s) here, or click to select', { exact: true })
-    .click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles([
+  await uploadLibraryFiles(page, [
     resolve('tests/files/multilingual-sample.txt'),
     resolve('tests/files/sample.md'),
     resolve('tests/files/sample.epub'),
