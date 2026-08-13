@@ -5,7 +5,7 @@ import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
 test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await enterAnonymousLibrary(page);
 
   await uploadLibraryFiles(page, resolve('tests/files/sample.pdf'));
@@ -16,7 +16,7 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
 
   await expect(page).toHaveURL(/\/pdf\/[a-f0-9]+$/);
   await expect(page.getByRole('heading', { name: 'sample.pdf', exact: true })).toBeVisible({
-    timeout: 30_000,
+    timeout: 60_000,
   });
 
   const previousPage = page.getByRole('button', { name: 'Previous page', exact: true });

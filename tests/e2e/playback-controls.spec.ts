@@ -8,7 +8,7 @@ async function togglePlayback(
   page: Page,
   documentLink: Locator,
   documentName: string,
-  readyTimeout = 30_000,
+  readyTimeout = 60_000,
 ) {
   await documentLink.click();
   await expect(page.getByRole('heading', { name: documentName, exact: true })).toBeVisible({
@@ -32,7 +32,7 @@ async function togglePlayback(
 }
 
 test('anonymous user starts and pauses playback in every accepted document journey', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await enterAnonymousLibrary(page);
 
   await uploadLibraryFiles(page, [
@@ -66,7 +66,7 @@ test('anonymous user starts and pauses playback in every accepted document journ
   await docxChooser.setFiles(resolve('tests/files/sample.docx'));
 
   const pdfLinks = page.getByRole('link', { name: 'sample.pdf', exact: true });
-  await expect(pdfLinks).toHaveCount(2, { timeout: 30_000 });
+  await expect(pdfLinks).toHaveCount(2, { timeout: 60_000 });
 
   await togglePlayback(
     page,

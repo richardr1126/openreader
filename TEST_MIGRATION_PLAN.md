@@ -300,6 +300,7 @@ own computer-use walkthrough before implementation.
 | 8 | A user confirms deletion and the document disappears from the library | Accepted `document-deletion.spec.ts`: cancel by keyboard, confirm visibly, and observe the empty library | Blob cleanup, leases, and account ownership remain in Vitest |
 | 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: one minimal keyboard control cycle for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
 | 10 | A user navigates PDF pages and changes the visible page mode | Accepted `pdf-navigation.spec.ts`: buttons, direct page entry, zoom, Two Pages, Continuous Scroll, scroll tracking, and return | Page calculations, preference normalization, PDF rendering internals, and layout artifacts remain in Vitest |
+| 11 | A user creates a folder by dragging documents together and finds it after reload | Accepted `folder-persistence.spec.ts`: visible document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
 
 The core gate does not require folder drag-and-drop, responsive reader
 behavior, voice/speed customization, provider-specific
@@ -736,8 +737,8 @@ Gate:
 
 ## Phase 4: Rebuild Interaction Journeys
 
-Status: in progress; deletion, minimal per-document playback, and PDF navigation
-are accepted.
+Status: in progress; deletion, minimal per-document playback, PDF navigation,
+and folder drag-and-drop persistence are accepted.
 
 ### Walkthrough 8: Cancel and confirm document deletion
 
@@ -890,9 +891,57 @@ at `http://localhost:3003`.
   WebKit before the three dependent playback projects passed concurrently
   across the same browser matrix.
 
+### Walkthrough 11: Create and persist a folder by dragging documents together
+
+Observed with computer use on 2026-08-12 against the rebuilt production build
+at `http://localhost:3003`.
+
+- Purpose: prove that the library's visible document-on-document drag gesture
+  creates a named folder and that both membership and the active folder survive
+  a reload.
+- Initial state: an anonymous, onboarded library containing distinct TXT,
+  EPUB, and PDF documents. The automated journey uploads all three through the
+  visible chooser in a fresh browser context; the third document distinguishes
+  a real two-document folder filter from an unfiltered library.
+- Visible actions and states:
+  1. Observe the instruction `Drag files onto each other to make folders. Drop
+     into the sidebar to move.` and all three uploaded document cards.
+  2. Drag the `multilingual-sample.txt` card onto the `sample.epub` card with a
+     real mouse pointer sequence.
+  3. Observe the focused `Create New Folder` dialog, enter `Reading List`, and
+     press Enter.
+  4. Observe the `Reading List 2` folder, the TXT and EPUB cards, and the PDF
+     card hidden by the selected folder filter.
+  5. Reload and observe the same two-item folder membership and filtered
+     document surface.
+- Browser-authoring finding: Playwright's HTML5 `dragTo` helper does not model
+  this product interaction because OpenReader deliberately uses the React DnD
+  touch backend with mouse events so mouse and touch share one behavior. The
+  accepted test uses visible card geometry and a normal mouse down, movement,
+  and mouse up sequence matching the successful computer-use walkthrough; it
+  does not dispatch synthetic application events or mutate internal state.
+- No product defect was observed in the accepted path.
+- Focused acceptance: `folder-persistence.spec.ts` passed concurrently in
+  Chromium, Firefox, and WebKit as three cases in 8.8 seconds.
+- The first enlarged full-matrix run exposed a cold-start expectation defect in
+  existing reader tests: a successful local PDF layout occupied the configured
+  compute threads for 41 seconds while Firefox visibly remained on `Opening
+  document`. Reader readiness now has a 60-second assertion budget while still
+  requiring the final heading, content, and controls; retries, worker count,
+  and the 50% parallel cap remain unchanged.
+- The dependent playback smoke now uses the dedicated DOCX journey's accepted
+  60-second conversion budget before requiring the second `sample.pdf`. It
+  still requires the converted document and exercises its playback controls;
+  the change does not accept upload progress or a pending conversion as
+  success. Its five sequential readers use the same 60-second readiness
+  contract, within an explicit three-minute journey budget.
+- Full-suite acceptance after these additions: all 33 cases passed in 3.0
+  minutes with the configured seven-worker (`50%`) cap. The 30 core cases
+  passed across Chromium, Firefox, and WebKit before all three dependent
+  playback projects ran concurrently and passed.
+
 Walk through and then create tests for:
 
-- folder drag-and-drop and persistence;
 - voice and speed changes;
 - responsive PDF and EPUB behavior;
 - keyboard, focus, labels, dialogs, and important routing behavior.
@@ -994,7 +1043,7 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | In progress: deletion, playback, and PDF navigation accepted |
+| 4 | Rebuild interaction journeys | In progress: deletion, playback, PDF navigation, and folder persistence accepted |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |
 | 7 | Final coverage audit | Pending |

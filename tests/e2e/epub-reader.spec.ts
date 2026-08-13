@@ -5,7 +5,7 @@ import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
 test('anonymous user opens an EPUB and reads its visible book content', async ({ page }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(75_000);
   await enterAnonymousLibrary(page);
 
   await uploadLibraryFiles(page, resolve('tests/files/sample.epub'));
@@ -16,7 +16,7 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
 
   await expect(page).toHaveURL(/\/epub\/[a-f0-9]+$/);
   await expect(page.getByRole('heading', { name: 'sample.epub', exact: true })).toBeVisible({
-    timeout: 30_000,
+    timeout: 60_000,
   });
   await expect(page.getByRole('button', { name: 'Show chapters', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Previous section', exact: true })).toBeVisible();
