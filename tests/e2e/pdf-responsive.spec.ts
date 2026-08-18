@@ -5,21 +5,23 @@ import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
 async function expectHighlightInsidePage(highlight: Locator, pdfPage: Locator) {
-  const [highlightBox, pageBox] = await Promise.all([
-    highlight.boundingBox(),
-    pdfPage.boundingBox(),
-  ]);
+  await expect(async () => {
+    const [highlightBox, pageBox] = await Promise.all([
+      highlight.boundingBox(),
+      pdfPage.boundingBox(),
+    ]);
 
-  expect(highlightBox).not.toBeNull();
-  expect(pageBox).not.toBeNull();
-  expect(highlightBox!.x).toBeGreaterThanOrEqual(pageBox!.x);
-  expect(highlightBox!.y).toBeGreaterThanOrEqual(pageBox!.y);
-  expect(highlightBox!.x + highlightBox!.width).toBeLessThanOrEqual(
-    pageBox!.x + pageBox!.width,
-  );
-  expect(highlightBox!.y + highlightBox!.height).toBeLessThanOrEqual(
-    pageBox!.y + pageBox!.height,
-  );
+    expect(highlightBox).not.toBeNull();
+    expect(pageBox).not.toBeNull();
+    expect(highlightBox!.x).toBeGreaterThanOrEqual(pageBox!.x);
+    expect(highlightBox!.y).toBeGreaterThanOrEqual(pageBox!.y);
+    expect(highlightBox!.x + highlightBox!.width).toBeLessThanOrEqual(
+      pageBox!.x + pageBox!.width,
+    );
+    expect(highlightBox!.y + highlightBox!.height).toBeLessThanOrEqual(
+      pageBox!.y + pageBox!.height,
+    );
+  }).toPass({ timeout: 10_000 });
 }
 
 test('PDF sentence highlight survives narrowing and widening the reader', async ({ page }) => {

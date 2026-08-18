@@ -52,10 +52,7 @@ jobs:
         run: ffprobe -version
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
-      - name: Run Playwright tests
-        env:
-          API_BASE: https://api.deepinfra.com/v1/openai
-          API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      - name: Run deterministic Playwright tests
         run: pnpm test:e2e --max-failures=5 --reporter=list,github,html
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}

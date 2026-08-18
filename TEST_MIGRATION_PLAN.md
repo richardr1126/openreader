@@ -276,8 +276,9 @@ observing it first.
 10. Delete a document through the confirmation dialog.
 11. Start and pause playback, including visible state and keyboard access.
 12. Change voice and speed, then resume playback.
-13. Verify responsive behavior that materially changes PDF or EPUB interaction.
-14. Verify authenticated routing when a controlled authenticated state is
+13. Verify responsive behavior that materially changes PDF interaction.
+14. Verify responsive behavior that materially changes EPUB interaction.
+15. Verify authenticated routing when a controlled authenticated state is
     available.
 
 ### Core replacement suite
@@ -298,11 +299,12 @@ own computer-use walkthrough before implementation.
 | 6 | TXT and Markdown open with a meaningful visible rendering difference | Accepted `text-markdown-reader.spec.ts`: one literal-text and semantic-Markdown comparison journey | Text decoding, Markdown transformation, and HTML block rules remain in Vitest |
 | 7 | DOCX visibly converts to PDF and the result opens | Accepted `docx-conversion.spec.ts`: source progress, converted PDF arrival, and readable result | Conversion lifecycle, event completion, finalization, and cleanup remain in Vitest |
 | 8 | A user confirms deletion and the document disappears from the library | Accepted `document-deletion.spec.ts`: cancel by keyboard, confirm visibly, and observe the empty library | Blob cleanup, leases, and account ownership remain in Vitest |
-| 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: one minimal keyboard control cycle for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
+| 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: the single synthesis-dependent journey per browser covers keyboard control for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
 | 10 | A user navigates PDF pages and changes the visible page mode | Accepted `pdf-navigation.spec.ts`: buttons, direct page entry, zoom, Two Pages, Continuous Scroll, scroll tracking, and return | Page calculations, preference normalization, PDF rendering internals, and layout artifacts remain in Vitest |
 | 11 | A user creates a folder by dragging documents together and finds it after reload | Accepted `folder-persistence.spec.ts`: visible document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
-| 12 | A user changes voice and speed, resumes playback, and keeps those choices | Accepted `playback-settings.spec.ts`: visible F1-to-F2 selection, keyboard speed changes, resume/pause, and reload persistence | Playback-plan recreation, config update ordering, audio-rate application, provider policies, and voice resolution remain in Vitest |
+| 12 | A user changes voice and speed, resumes playback, and keeps those choices | Merged into `playback-controls.spec.ts`: visible F1-to-F2 selection, keyboard speed changes, resume/pause, and reload persistence run in the existing TXT portion | Playback-plan recreation, config update ordering, audio-rate application, provider policies, and voice resolution remain in Vitest |
 | 13 | A visible PDF sentence highlight remains correctly positioned after responsive layout changes | Accepted `pdf-responsive.spec.ts`: narrow to the mobile reader, widen again, and require the same readable page, navigator state, and in-page sentence highlight after each repaint | PDF scaling, text-layer geometry, block matching, and highlight rectangle calculations remain in Vitest |
+| 14 | An EPUB remains readable and stops active playback when its reader layout changes | Merged into `playback-controls.spec.ts`: the existing EPUB start narrows to the mobile reader, requires playback to stop and the menu and book content to remain usable, then widens again | EPUB rendition resizing, placement mapping, and playback state transitions remain in Vitest |
 
 The initial core gate did not require folder drag-and-drop, responsive reader
 behavior, voice/speed customization, provider-specific coverage, or
@@ -741,8 +743,8 @@ Gate:
 ## Phase 4: Rebuild Interaction Journeys
 
 Status: in progress; deletion, minimal per-document playback, PDF navigation,
-folder drag-and-drop persistence, voice/speed persistence, and responsive PDF
-highlighting are accepted.
+folder drag-and-drop persistence, voice/speed persistence, responsive PDF
+highlighting, and responsive EPUB playback are accepted.
 
 ### Walkthrough 8: Cancel and confirm document deletion
 
@@ -999,7 +1001,7 @@ Observed with computer use on 2026-08-13 against the rebuilt production app at
   visibly cover the `Open the reader` CTA in WebKit. The first-entry journey
   now declines optional cookies before activating that link, matching the
   actual visible UI instead of racing the banner animation.
-- Focused acceptance: `playback-settings.spec.ts` passed concurrently in
+- Initial focused acceptance: `playback-settings.spec.ts` passed concurrently in
   Chromium, Firefox, and WebKit as three cases in 37.0 seconds. The corrected
   anonymous first-entry journey passed in the same three browsers in 34.4
   seconds.
@@ -1062,9 +1064,101 @@ Observed with computer use on 2026-08-18 against the production build at
   Playwright owns the visible page and highlight surviving real viewport
   changes.
 
+### Walkthrough 14: Keep an EPUB usable and stop playback during resizing
+
+Observed with computer use on 2026-08-18 against the production build at
+`http://localhost:3003`.
+
+- Purpose: prove that an EPUB remains readable while its desktop reader changes
+  to the mobile layout, and that active playback safely stops during the
+  rendition resize.
+- Initial state: an anonymous library containing `sample.epub`, opened at a
+  1280 by 900 desktop viewport with the title page, contents, section controls,
+  and playback controls visible. The automated journey uploads the same fixture
+  in a fresh browser context.
+- Visible actions and states:
+  1. Observe the rendered `The Wonderful Wizard of Oz` book content and desktop
+     settings control.
+  2. Activate `Play` and observe the control change to `Pause`.
+  3. Narrow the actual browser viewport to 600 by 800 pixels.
+  4. Observe that the control returns to `Play`, the same book title remains
+     visible, and the mobile `Menu` replaces the desktop settings controls.
+  5. Open `Menu` and observe the visible Zoom / Padding, Export Audiobook, and
+     Settings actions.
+  6. Widen the viewport to 1280 by 900 pixels and observe the desktop settings
+     control, stopped playback, and readable book content again.
+- Product accessibility defect found during three-browser acceptance and
+  corrected: the Settings icon's internal filename-like SVG title leaked into
+  the mobile menu item's accessible name, so assistive technology announced
+  `file-settings-solid Settings`. The icon is now decorative within both
+  explicitly labelled settings controls, leaving the mobile action named
+  `Settings` and the desktop button named `Open settings`.
+- The existing resize behavior itself was correct: it stopped active playback,
+  kept the EPUB rendition readable, and exposed the reader actions in the
+  mobile menu.
+- Initial test scheduling: `epub-responsive.spec.ts` belonged to the dependent
+  playback project group because it started real playback before resizing.
+- Initial focused acceptance: `epub-responsive.spec.ts` passed concurrently in
+  Chromium, Firefox, and WebKit as three cases in 7.7 seconds after the
+  accessibility correction.
+- Full-load follow-up: the first 42-case matrix exposed an existing upload
+  dialog exit defect in one Chromium playback journey. The dialog was visibly
+  transparent after its automatic close, but its Headless UI portal remained
+  in the accessibility tree and its sidebar intercepted document clicks until
+  the test timed out. The shared modal frame now disables pointer events for
+  the complete closing portal immediately while retaining its exit animation;
+  its backdrop and panel also remain pointer-transparent at the end of their
+  leave transitions.
+- Regression acceptance: the previously failing Chromium per-document playback
+  journey passed in 17.7 seconds after the modal fix. The complete matrix then
+  passed all 42 cases in 1.4 minutes with the configured seven-worker (`50%`)
+  cap: all 33 core cases completed before the nine playback-dependent cases
+  ran across Chromium, Firefox, and WebKit.
+- Repository verification: `pnpm test` passed 112 Vitest files and 559 tests;
+  `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm build`, and `git diff --check`
+  all passed.
+- Playback-suite consolidation: after the three browser-observed playback
+  journeys were accepted independently, their assertions were merged into
+  `playback-controls.spec.ts`. The TXT portion owns voice/speed changes and
+  reload persistence, while the existing EPUB start now owns the responsive
+  stop and mobile-menu assertions. The standalone `playback-settings.spec.ts`
+  and `epub-responsive.spec.ts` files were removed without dropping a visible
+  contract or a supported document format.
+- Final scheduling: only `playback-controls.spec.ts` matches the dependent
+  playback projects. The suite therefore contains exactly one true playback
+  case in Chromium, Firefox, and WebKit: 33 core cases followed by three
+  playback cases, with `fullyParallel` retained and workers capped at `50%`.
+- Consolidated acceptance: the three playback cases passed together in 1.1
+  minutes. The complete reduced matrix passed all 36 cases in 1.8 minutes.
+- CI boundary: the three consolidated playback cases require a real external
+  TTS provider and are intentionally local-only. When `CI` is set, Playwright
+  does not create the playback projects at all, so the core projects continue
+  to ignore `playback-controls.spec.ts` and GitHub collects exactly the 33
+  deterministic cases. The GitHub workflow no longer receives a provider API
+  secret. Local `pnpm test:e2e` continues to collect all 36 cases.
+- CI-mode diagnostic: the first local `CI=true` run collected only the expected
+  33 core cases. One WebKit PDF-responsive attempt raced the highlight overlay
+  repaint between its visible-state assertion and geometry read, then passed
+  on the configured retry. The journey remains in CI; its geometry assertion
+  now retries the complete visible bounding-box contract through the real
+  repaint window instead of treating one transient detached overlay as the
+  final state.
+- Product-versus-test audit: the PDF viewer already keeps the page in its
+  rendering state until the replacement canvas and text layer report ready,
+  then clears and rebuilds the sentence overlay for the new geometry. Keeping
+  the old overlay would expose visibly incorrect coordinates during resizing,
+  so no product change was made for this normal repaint boundary.
+- CI acceptance: five concurrent WebKit repetitions of the corrected responsive
+  journey passed in 34.4 seconds. A subsequent full `CI=true` matrix collected
+  and passed all 33 deterministic cases in 1.2 minutes with no retry and no
+  playback project.
+- Vitest ownership: rendition resize calculations, placement restoration, and
+  playback state transitions remain deterministic tests. Playwright owns the
+  user-visible layout change, stopped control state, usable menu, and readable
+  book surface.
+
 Walk through and then create tests for:
 
-- responsive EPUB behavior;
 - keyboard, focus, labels, dialogs, and important routing behavior.
 
 Do not create provider-specific playback tests until the required provider is
@@ -1122,10 +1216,13 @@ new code.
 
 ## Phase 6: Parallel Browser Matrix and CI
 
-Status: pending.
+Status: in progress; the deterministic three-browser CI boundary is configured,
+while an actual GitHub run and artifact audit remain pending.
 
 1. Keep Chromium as the computer-use authoring and first diagnostic browser.
-2. Run every accepted test in Chromium, Firefox, and WebKit by default.
+2. Run every deterministic accepted test in Chromium, Firefox, and WebKit in
+   CI. Keep the three real-generation playback cases local-only until CI has a
+   deliberately provisioned provider environment.
 3. Set the suite and projects to full parallel execution with
    `workers: '50%'`; do not raise the cap to 100%.
 4. Verify that separate browser projects actively overlap in time during a full
@@ -1135,7 +1232,10 @@ Status: pending.
    storage prefixes as application or isolation defects, not reasons to reduce
    concurrency.
 6. Permit a browser-specific exclusion only for an externally imposed engine
-   limitation, with an explicit documented reason and user approval.
+   limitation, with an explicit documented reason and user approval. Permit an
+   environment-specific exclusion only at project collection for a documented
+   external dependency; currently this applies only to real TTS generation in
+   CI.
 7. Add CI with explicit Vitest and fully parallel replacement-browser jobs.
 8. Publish artifacts with browser, test, retry, and worker identity so parallel
    failures cannot overwrite each other.
@@ -1164,9 +1264,9 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | In progress: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF highlighting, and folder persistence accepted |
+| 4 | Rebuild interaction journeys | In progress: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, and folder persistence accepted |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | Pending |
+| 6 | Enforce the parallel three-browser matrix and CI | In progress: deterministic CI boundary locally accepted; actual GitHub run and artifact audit pending |
 | 7 | Final coverage audit | Pending |
 
 ## Definition of Done
@@ -1186,6 +1286,7 @@ The replacement is complete when:
    WebKit.
 10. All three browser projects run concurrently within the intentional 50%
     worker cap and with isolated state.
-11. The full Vitest and fully parallel replacement browser suites pass in CI.
+11. The full Vitest and deterministic parallel replacement browser suites pass
+    in CI; provider-dependent local journeys pass in every supported browser.
 12. The final coverage audit accounts for every old scenario without requiring
     the old suite to remain in the repository.

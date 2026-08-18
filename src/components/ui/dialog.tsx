@@ -45,7 +45,13 @@ export function ModalFrame({
 }) {
   return (
     <Transition appear show={open} as={Fragment} afterLeave={afterLeave}>
-      <Dialog as="div" role={undefined} className={cn('relative z-50', className)} onClose={onClose} onKeyDown={onKeyDown}>
+      <Dialog
+        as="div"
+        role={undefined}
+        className={cn('relative z-50', !open && 'pointer-events-none', className)}
+        onClose={onClose}
+        onKeyDown={onKeyDown}
+      >
         <TransitionChild
           as={Fragment}
           enter="ease-standard duration-slow"
@@ -53,7 +59,7 @@ export function ModalFrame({
           enterTo="opacity-100"
           leave="ease-standard duration-base"
           leaveFrom="opacity-100"
-          leaveTo="opacity-0"
+          leaveTo="pointer-events-none opacity-0"
         >
           <div className="fixed inset-0 overlay-dim backdrop-blur-sm" />
         </TransitionChild>
@@ -67,7 +73,7 @@ export function ModalFrame({
               enterTo="opacity-100 scale-100"
               leave="ease-standard duration-base"
               leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
+              leaveTo="pointer-events-none opacity-0 scale-95"
             >
               <DialogPanel data-testid={panelTestId} className={dialogPanelStyles({ size, className: panelClassName })}>
                 {children}

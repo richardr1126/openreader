@@ -57,7 +57,10 @@ export function DocumentHeaderMenu({
         aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
         title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
       >
-        <FileSettingsIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
+        <FileSettingsIcon
+          aria-hidden="true"
+          className="w-4 h-4 transform transition-transform duration-base ease-standard"
+        />
       </ToolbarButton>
       <UserMenu />
     </div>
@@ -100,7 +103,7 @@ export function DocumentHeaderMenu({
                 </MenuActionItem>
               )}
               <MenuActionItem onClick={onOpenSettings} activeOverride={isSettingsOpen}>
-                <FileSettingsIcon className="h-4 w-4" />
+                <FileSettingsIcon aria-hidden="true" className="h-4 w-4" />
                 {isSettingsOpen ? 'Hide Settings' : 'Settings'}
               </MenuActionItem>
             </div>
