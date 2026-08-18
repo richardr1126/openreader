@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import 'dotenv/config';
 
-const playbackTest = /playback-controls\.spec\.ts/;
+const playbackTest = /playback-(?:controls|settings)\.spec\.ts/;
 const coreProjects = ['chromium', 'firefox', 'webkit'];
 
 export default defineConfig({

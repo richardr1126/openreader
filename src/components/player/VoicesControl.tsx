@@ -7,8 +7,9 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { InfoIcon } from '@/components/icons/Icons';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 
-export const VoicesControl = ({ availableVoices, setVoiceAndRestart }: {
+export const VoicesControl = ({ availableVoices, disabled = false, setVoiceAndRestart }: {
   availableVoices: string[];
+  disabled?: boolean;
   setVoiceAndRestart: (voice: string) => void;
 }) => {
   const { ttsModel, providerType } = useConfig();
@@ -24,6 +25,7 @@ export const VoicesControl = ({ availableVoices, setVoiceAndRestart }: {
     <div className="flex items-center gap-1">
       <VoicesControlBase
         availableVoices={availableVoices}
+        disabled={disabled}
         voice={voice || ''}
         onChangeVoice={onChangeVoice}
         providerType={providerType}

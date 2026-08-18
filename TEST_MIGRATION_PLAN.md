@@ -301,11 +301,12 @@ own computer-use walkthrough before implementation.
 | 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: one minimal keyboard control cycle for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
 | 10 | A user navigates PDF pages and changes the visible page mode | Accepted `pdf-navigation.spec.ts`: buttons, direct page entry, zoom, Two Pages, Continuous Scroll, scroll tracking, and return | Page calculations, preference normalization, PDF rendering internals, and layout artifacts remain in Vitest |
 | 11 | A user creates a folder by dragging documents together and finds it after reload | Accepted `folder-persistence.spec.ts`: visible document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
+| 12 | A user changes voice and speed, resumes playback, and keeps those choices | Accepted `playback-settings.spec.ts`: visible F1-to-F2 selection, keyboard speed changes, resume/pause, and reload persistence | Playback-plan recreation, config update ordering, audio-rate application, provider policies, and voice resolution remain in Vitest |
 
 The core gate does not require folder drag-and-drop, responsive reader
-behavior, voice/speed customization, provider-specific
-coverage, or authenticated routing. Those remain valuable follow-on journeys
-in Phases 4 and 6 and must not be used to delay acceptance of the core suite.
+behavior, voice/speed customization, provider-specific coverage, or
+authenticated routing. Those remain valuable follow-on journeys in Phases 4
+and 6 and must not be used to delay acceptance of the core suite.
 
 ---
 
@@ -940,9 +941,65 @@ at `http://localhost:3003`.
   passed across Chromium, Firefox, and WebKit before all three dependent
   playback projects ran concurrently and passed.
 
+### Walkthrough 12: Change voice and speed, then resume playback
+
+Observed with computer use on 2026-08-13 against the rebuilt production app at
+`http://localhost:3003`.
+
+- Purpose: prove that an anonymous user can customize the shared playback
+  controls, explicitly resume after settings that rebuild the playback plan,
+  and find the same selections after reloading the reader.
+- Initial state: an anonymous, onboarded library containing
+  `multilingual-sample.txt`, opened in the TXT reader with voice F1 and both
+  speed controls at 1x.
+- Visible actions and states:
+  1. Start playback, observe `Play` become `Pause`, then pause explicitly so
+     this settings journey does not compete with the separate synthesis smoke.
+  2. Open the voice list, choose F2, and observe the control return visibly as
+     F2 while playback is stopped for the new plan.
+  3. Open the speed popover and use the keyboard to move Native model speed
+     from 1x to 1.1x. The popover closes while the plan is reacquired, and the
+     trigger visibly changes to 1.1x.
+  4. Reopen the speed popover and use the keyboard to move Audio player speed
+     from 1x to 1.1x. The trigger visibly changes to `1.1x • 1.1x`.
+  5. Resume playback, observe `Pause`, then pause explicitly.
+  6. Reload and observe voice F2, `1.1x • 1.1x`, and an enabled `Play` control.
+- Product accessibility defect found and corrected: both speed inputs exposed
+  only the generic role `slider`, and the compact voice button's accessible
+  name was only its selected value. The speed inputs now expose `Native model
+  speed` and `Audio player speed`; the voice control exposes `Voice: <value>`.
+  These names are part of the real journey rather than a separate duplicate
+  accessibility suite.
+- Product interaction defect found under full concurrent load and corrected:
+  speed and voice controls remained clickable while a prior settings change
+  was rebuilding the playback plan. Their visible value could update before
+  the control was ready to reopen, so a user's click could be discarded. Both
+  controls now expose and honor the same disabled processing state as the
+  playback controls; the journey waits for the visible trigger to become
+  enabled rather than sleeping or retaining a detached slider.
+- Browser-authoring finding: a native-speed key change commits immediately and
+  closes the popover while the new playback plan is acquired. The accepted
+  journey requires the changed trigger before reopening the popover for the
+  audio-rate change; it does not retain or query a detached slider.
+- Provider scope: the walkthrough uses the locally available F1/F2 voices and
+  a single selected voice. Multi-voice Kokoro and other provider-specific
+  behavior remains deferred until that exact environment succeeds through
+  computer use.
+- A full-matrix diagnostic also found that the landing-page cookie banner can
+  visibly cover the `Open the reader` CTA in WebKit. The first-entry journey
+  now declines optional cookies before activating that link, matching the
+  actual visible UI instead of racing the banner animation.
+- Focused acceptance: `playback-settings.spec.ts` passed concurrently in
+  Chromium, Firefox, and WebKit as three cases in 37.0 seconds. The corrected
+  anonymous first-entry journey passed in the same three browsers in 34.4
+  seconds.
+- Full-suite acceptance: all 36 cases passed in 1.8 minutes with the configured
+  seven-worker (`50%`) cap. All 30 core cases passed first; both playback
+  journeys then passed in Chromium, Firefox, and WebKit, with the six playback
+  cases scheduled concurrently.
+
 Walk through and then create tests for:
 
-- voice and speed changes;
 - responsive PDF and EPUB behavior;
 - keyboard, focus, labels, dialogs, and important routing behavior.
 
@@ -1043,7 +1100,7 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | In progress: deletion, playback, PDF navigation, and folder persistence accepted |
+| 4 | Rebuild interaction journeys | In progress: deletion, playback, voice/speed persistence, PDF navigation, and folder persistence accepted |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |
 | 7 | Final coverage audit | Pending |

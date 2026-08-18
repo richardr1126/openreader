@@ -7,9 +7,11 @@ import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
 
 export const SpeedControl = ({ 
+  disabled = false,
   setSpeedAndRestart, 
   setAudioPlayerSpeedAndRestart 
 }: {
+  disabled?: boolean;
   setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
 }) => {
@@ -88,7 +90,10 @@ export const SpeedControl = ({
 
   return (
     <PopoverRoot className="relative">
-      <PopoverTrigger className="space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm">
+      <PopoverTrigger
+        disabled={disabled}
+        className="space-x-0.5 px-1.5 py-0.5 text-xs sm:space-x-1 sm:px-2 sm:py-1 sm:text-sm disabled:cursor-wait disabled:opacity-60"
+      >
         <SpeedometerIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         <span className="sm:hidden">{compactTriggerLabel}</span>
         <span className="hidden sm:inline">{triggerLabel}</span>
@@ -113,6 +118,7 @@ export const SpeedControl = ({
                 <span className="text-xs">{max.toFixed(1)}x</span>
               </div>
               <RangeInput
+                aria-label="Native model speed"
                 min={min}
                 max={max}
                 step={step}
@@ -135,6 +141,7 @@ export const SpeedControl = ({
               <span className="text-xs">{max.toFixed(1)}x</span>
             </div>
             <RangeInput
+              aria-label="Audio player speed"
               min={min}
               max={max}
               step={step}

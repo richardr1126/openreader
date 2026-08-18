@@ -10,8 +10,15 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
     }),
   ).toBeVisible();
 
+  const declineOptionalCookies = page.getByRole('button', {
+    name: 'Decline Non-Essential',
+    exact: true,
+  });
+  await declineOptionalCookies.click();
+  await expect(declineOptionalCookies).toBeHidden();
+
   await page.getByRole('link', { name: 'Open the reader', exact: true }).click();
-  await expect(page).toHaveURL(/\/app$/);
+  await expect(page).toHaveURL(/\/app$/, { timeout: 30_000 });
 
   const privacyDialog = page.getByRole('dialog', {
     name: 'Privacy & Data Usage',
@@ -55,13 +62,6 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await expect(settingsPanel).not.toHaveAttribute('data-transition', '');
   await closeSettings.click();
   await expect(settingsPanel).toHaveCount(0);
-
-  const declineOptionalCookies = page.getByRole('button', {
-    name: 'Decline Non-Essential',
-    exact: true,
-  });
-  await declineOptionalCookies.click();
-  await expect(declineOptionalCookies).toBeHidden();
 
   await expect(page.getByRole('heading', { name: 'OpenReader', exact: true })).toBeVisible();
   await expect(

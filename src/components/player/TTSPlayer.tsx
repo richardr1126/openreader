@@ -120,10 +120,15 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
         {/* Left side: Speed control & Voice control */}
         <div className="flex items-center gap-1 flex-1 min-w-0 justify-start">
           <SpeedControl
+            disabled={isProcessing}
             setSpeedAndRestart={setSpeedAndRestart}
             setAudioPlayerSpeedAndRestart={setAudioPlayerSpeedAndRestart}
           />
-          <VoicesControl availableVoices={availableVoices} setVoiceAndRestart={setVoiceAndRestart} />
+          <VoicesControl
+            availableVoices={availableVoices}
+            disabled={isProcessing}
+            setVoiceAndRestart={setVoiceAndRestart}
+          />
         </div>
 
         {/* Center: Primary playback controls */}
