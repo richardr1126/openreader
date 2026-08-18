@@ -19,7 +19,9 @@ export async function enterAnonymousLibrary(page: Page) {
     name: 'Back to settings',
     exact: true,
   });
+  const settingsPanel = page.getByTestId('settings-modal');
   await expect(backToSettings).toBeVisible();
+  await expect(settingsPanel).not.toHaveAttribute('data-transition', '');
   await backToSettings.click();
 
   const settingsDialog = page.getByRole('dialog', { name: /^Settings/ });
@@ -27,7 +29,6 @@ export async function enterAnonymousLibrary(page: Page) {
     name: 'Close dialog',
     exact: true,
   });
-  const settingsPanel = page.getByTestId('settings-modal');
   await expect(closeSettings).toBeVisible();
   await expect(settingsPanel).not.toHaveAttribute('data-transition', '');
   await closeSettings.click();

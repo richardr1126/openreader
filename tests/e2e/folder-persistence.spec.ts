@@ -47,8 +47,14 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   };
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
+  // The shared touch/mouse backend arms mouse input on its next task. Holding
+  // briefly models a physical press before movement instead of streaming an
+  // impossible down-and-drag sequence inside the same browser task.
+  await page.waitForTimeout(25);
   await page.mouse.move(start.x + 16, start.y, { steps: 4 });
+  await expect(textTile).toHaveAttribute('aria-selected', 'true');
   await page.mouse.move(end.x, end.y, { steps: 12 });
+  await expect(epubTile).toHaveAttribute('data-drop-target', 'true');
   await page.mouse.up();
 
   const folderDialog = page.getByRole('dialog', {

@@ -192,6 +192,7 @@ function highlightParsedBlockGeometry(
 
     const highlight = document.createElement('div');
     highlight.className = 'pdf-text-highlight-overlay';
+    highlight.dataset.testid = 'pdf-sentence-highlight';
     highlight.style.position = 'absolute';
     highlight.style.backgroundColor = 'grey';
     highlight.style.opacity = '0.4';
@@ -494,6 +495,7 @@ export function highlightPattern(
         rects.forEach((rect) => {
           const highlight = document.createElement('div');
           highlight.className = 'pdf-text-highlight-overlay';
+          highlight.dataset.testid = 'pdf-sentence-highlight';
           highlight.style.position = 'absolute';
           highlight.style.backgroundColor = 'grey';
           highlight.style.opacity = '0.4';

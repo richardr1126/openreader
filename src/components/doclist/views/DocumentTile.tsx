@@ -150,6 +150,7 @@ export function DocumentTile({
     <div
       ref={setRefs}
       data-doc-tile
+      data-drop-target={isDropTarget ? 'true' : 'false'}
       aria-selected={isSelected}
       className={
         'group relative flex flex-col rounded-md overflow-hidden border transition duration-base ease-standard ' +

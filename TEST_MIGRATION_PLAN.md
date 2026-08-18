@@ -302,11 +302,13 @@ own computer-use walkthrough before implementation.
 | 10 | A user navigates PDF pages and changes the visible page mode | Accepted `pdf-navigation.spec.ts`: buttons, direct page entry, zoom, Two Pages, Continuous Scroll, scroll tracking, and return | Page calculations, preference normalization, PDF rendering internals, and layout artifacts remain in Vitest |
 | 11 | A user creates a folder by dragging documents together and finds it after reload | Accepted `folder-persistence.spec.ts`: visible document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
 | 12 | A user changes voice and speed, resumes playback, and keeps those choices | Accepted `playback-settings.spec.ts`: visible F1-to-F2 selection, keyboard speed changes, resume/pause, and reload persistence | Playback-plan recreation, config update ordering, audio-rate application, provider policies, and voice resolution remain in Vitest |
+| 13 | A visible PDF sentence highlight remains correctly positioned after responsive layout changes | Accepted `pdf-responsive.spec.ts`: narrow to the mobile reader, widen again, and require the same readable page, navigator state, and in-page sentence highlight after each repaint | PDF scaling, text-layer geometry, block matching, and highlight rectangle calculations remain in Vitest |
 
-The core gate does not require folder drag-and-drop, responsive reader
+The initial core gate did not require folder drag-and-drop, responsive reader
 behavior, voice/speed customization, provider-specific coverage, or
-authenticated routing. Those remain valuable follow-on journeys in Phases 4
-and 6 and must not be used to delay acceptance of the core suite.
+authenticated routing. The first three are now accepted follow-on journeys;
+provider-specific coverage and authenticated routing remain deferred and must
+not retroactively delay acceptance of the core suite.
 
 ---
 
@@ -739,7 +741,8 @@ Gate:
 ## Phase 4: Rebuild Interaction Journeys
 
 Status: in progress; deletion, minimal per-document playback, PDF navigation,
-and folder drag-and-drop persistence are accepted.
+folder drag-and-drop persistence, voice/speed persistence, and responsive PDF
+highlighting are accepted.
 
 ### Walkthrough 8: Cancel and confirm document deletion
 
@@ -921,6 +924,13 @@ at `http://localhost:3003`.
   accepted test uses visible card geometry and a normal mouse down, movement,
   and mouse up sequence matching the successful computer-use walkthrough; it
   does not dispatch synthetic application events or mutate internal state.
+- Full-load follow-up: the touch backend arms mouse input on its next browser
+  task even though its configured mouse delay is zero. A synthetic
+  down-and-move sequence completed inside that task and occasionally never
+  began a drag. The journey now models a brief physical press, requires the
+  source card's visible selected state, requires the target card's visible drop
+  feedback, and only then releases. Five concurrent Chromium repetitions
+  passed in 31.3 seconds; no retry or worker reduction was added.
 - No product defect was observed in the accepted path.
 - Focused acceptance: `folder-persistence.spec.ts` passed concurrently in
   Chromium, Firefox, and WebKit as three cases in 8.8 seconds.
@@ -998,9 +1008,63 @@ Observed with computer use on 2026-08-13 against the rebuilt production app at
   journeys then passed in Chromium, Firefox, and WebKit, with the six playback
   cases scheduled concurrently.
 
+### Walkthrough 13: Keep a PDF highlight aligned through responsive resizing
+
+Observed with computer use on 2026-08-18 against the production build at
+`http://localhost:3003`.
+
+- Purpose: prove that a visible PDF sentence highlight is restored on the same
+  readable page after the PDF canvas and text layer repaint for narrow and wide
+  reader layouts.
+- Initial state: an anonymous library containing the two-page `sample.pdf`,
+  opened on page two in Single Page mode with `Chapter Two` visibly
+  highlighted. The automated journey uploads the same fixture in a fresh
+  browser context and begins on its default first page.
+- Visible actions and states:
+  1. Observe the selected PDF page, its readable chapter text, navigator state,
+     and gray sentence highlight at a 1280-pixel-wide desktop layout.
+  2. Narrow the actual browser viewport to 600 by 800 pixels.
+  3. Observe the mobile `Menu` control, the same selected page and navigator,
+     readable chapter text, and the sentence highlight still contained within
+     the PDF page after the responsive repaint.
+  4. Widen the viewport to 1280 by 900 pixels and observe the desktop settings
+     control plus the same page, text, navigator, and in-page highlight again.
+- Persistence correction before observation: the walkthrough browser had
+  retained Continuous Scroll from the earlier navigation journey. It was
+  explicitly returned to Single Page through the visible Document Settings
+  dialog before judging the responsive contract; the automated journey uses a
+  fresh anonymous session whose default is Single Page.
+- Testability boundary: sentence highlighting is a graphical overlay with no
+  suitable accessible role. The product exposes a narrow
+  `pdf-sentence-highlight` test id on that visible overlay; the test does not
+  use the PDF CSS class or private reader state and additionally requires the
+  highlight rectangle to remain inside the labelled PDF page region.
+- No product defect was observed. The highlight remained visibly anchored to
+  `Chapter Two` after narrowing and after widening again.
+- Focused acceptance: `pdf-responsive.spec.ts` passed concurrently in
+  Chromium, Firefox, and WebKit as three cases in 34.0 seconds. The individual
+  journeys completed in 2.0, 2.8, and 3.1 seconds respectively.
+- Full-load follow-up: the first enlarged matrix exposed that the repeated
+  onboarding helper could activate `Back to settings` while the Settings panel
+  was still entering. Firefox visibly remained on the changelog. The helper
+  now requires the existing transition to finish before the Back action and
+  again before closing Settings. Five concurrent Firefox upload/onboarding
+  repetitions passed in 35.1 seconds.
+- Full-suite acceptance: all 39 cases passed in 1.7 minutes with the configured
+  seven-worker (`50%`) cap. All 33 core cases passed across Chromium, Firefox,
+  and WebKit before the six dependent playback cases ran across the same three
+  engines and passed.
+- Repository verification: `pnpm test` passed 112 Vitest files and 559 tests;
+  `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm build`, and `git diff --check`
+  all passed.
+- Vitest ownership: scaling calculations, text-layer geometry, parsed-block
+  matching, and highlight rectangle algorithms remain deterministic tests.
+  Playwright owns the visible page and highlight surviving real viewport
+  changes.
+
 Walk through and then create tests for:
 
-- responsive PDF and EPUB behavior;
+- responsive EPUB behavior;
 - keyboard, focus, labels, dialogs, and important routing behavior.
 
 Do not create provider-specific playback tests until the required provider is
@@ -1100,7 +1164,7 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | In progress: deletion, playback, voice/speed persistence, PDF navigation, and folder persistence accepted |
+| 4 | Rebuild interaction journeys | In progress: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF highlighting, and folder persistence accepted |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
 | 6 | Enforce the parallel three-browser matrix and CI | Pending |
 | 7 | Final coverage audit | Pending |
