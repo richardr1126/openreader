@@ -23,11 +23,13 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(epubLink).toBeVisible();
   await expect(pdfLink).toBeVisible();
   await expect(page.getByRole('button', { name: 'All Documents 3', exact: true })).toBeVisible();
-  await expect(
-    page.getByText('Drag files onto each other to make folders. Drop into the sidebar to move.', {
-      exact: true,
-    }),
-  ).toBeVisible();
+  const folderHint = page.getByText(
+    'Drag files onto each other to make folders. Drop into the sidebar to move.',
+    { exact: true },
+  );
+  await expect(folderHint).toBeVisible();
+  await page.getByRole('button', { name: 'Dismiss hint', exact: true }).click();
+  await expect(folderHint).toBeHidden();
 
   const textTile = page.locator('[data-doc-tile]').filter({ has: textLink });
   const epubTile = page.locator('[data-doc-tile]').filter({ has: epubLink });
@@ -82,5 +84,6 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(textLink).toBeVisible();
   await expect(epubLink).toBeVisible();
   await expect(pdfLink).toBeHidden();
+  await expect(folderHint).toBeHidden();
   await expect(page.getByRole('status')).toContainText('3 items');
 });

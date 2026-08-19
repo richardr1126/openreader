@@ -34,6 +34,19 @@ test('anonymous user reads literal text and semantic Markdown', async ({ page })
   await expect(page.getByRole('heading', { name: 'English', exact: true })).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
 
+  const textReaderUrl = page.url();
+  await page.reload();
+  await expect(page).toHaveURL(textReaderUrl);
+  await expect(
+    page.getByRole('heading', { name: 'multilingual-sample.txt', exact: true }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page.getByText(
+      /English\s+OpenReader should split this sentence correctly\. This is the second sentence\./,
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('link', { name: 'sample.md', exact: true }).click();

@@ -57,8 +57,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
-          name: playwright-report
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             playwright-report/
             tests/results/
+          if-no-files-found: error
           retention-days: 30

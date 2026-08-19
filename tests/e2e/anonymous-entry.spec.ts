@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('anonymous visitor completes first-run entry and reaches the library', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto('/');
 
   await expect(
@@ -34,7 +35,7 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
       name: 'Privacy & Data Usage',
       exact: true,
     }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30_000 });
   await expect(privacyContinue).toBeDisabled();
   await privacyDialog
     .getByRole('checkbox', {
@@ -71,4 +72,22 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
     page.getByText('PDF, EPUB, TXT, MD, or DOCX files are accepted', { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('status')).toContainText('0 items');
+
+  const settingsTrigger = page.getByRole('button', { name: 'Settings', exact: true });
+  await settingsTrigger.focus();
+  await expect(settingsTrigger).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  await expect(settingsPanel).toBeVisible();
+  await expect(settingsDialog).toBeFocused();
+  await expect(
+    settingsDialog.getByRole('button', { name: 'Appearance', exact: true }),
+  ).toBeVisible();
+  await expect(
+    settingsDialog.getByRole('button', { name: 'Documents', exact: true }),
+  ).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(settingsPanel).toHaveCount(0);
+  await expect(settingsTrigger).toBeFocused();
 });

@@ -255,7 +255,7 @@ number of tests.
 | Delete confirmation dialog semantics | Merge | Covered by observed delete journey with keyboard and focus assertions |
 | TTS labels and keyboard focus | Merge | Covered by observed playback accessibility journey |
 | Folder creation by drag-and-drop and persistence | Replace | Observed pointer drag, reload, and visible persistence journey |
-| Dismiss folder hint and persist | Replace if still present | Observe current UI first; drop if obsolete |
+| Dismiss folder hint and persist | Merge | Accepted in `folder-persistence.spec.ts`: dismiss the visible hint before dragging, then require it to remain absent after the journey's existing reload |
 | Delete a document and update the list | Replace | Observed confirmation and library-update journey |
 
 ### Proposed new browser journeys
@@ -301,10 +301,11 @@ own computer-use walkthrough before implementation.
 | 8 | A user confirms deletion and the document disappears from the library | Accepted `document-deletion.spec.ts`: cancel by keyboard, confirm visibly, and observe the empty library | Blob cleanup, leases, and account ownership remain in Vitest |
 | 9 | A user starts and pauses reading in every accepted document journey | Accepted `playback-controls.spec.ts`: the single synthesis-dependent journey per browser covers keyboard control for TXT, Markdown, EPUB, PDF, and converted DOCX | Provider protocol, segment planning, audio alignment, caching, token contracts, and detailed progress remain in Vitest or a separate focused journey |
 | 10 | A user navigates PDF pages and changes the visible page mode | Accepted `pdf-navigation.spec.ts`: buttons, direct page entry, zoom, Two Pages, Continuous Scroll, scroll tracking, and return | Page calculations, preference normalization, PDF rendering internals, and layout artifacts remain in Vitest |
-| 11 | A user creates a folder by dragging documents together and finds it after reload | Accepted `folder-persistence.spec.ts`: visible document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
+| 11 | A user dismisses the folder hint, creates a folder by dragging documents together, and finds both preferences after reload | Accepted `folder-persistence.spec.ts`: visible hint dismissal, document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
 | 12 | A user changes voice and speed, resumes playback, and keeps those choices | Merged into `playback-controls.spec.ts`: visible F1-to-F2 selection, keyboard speed changes, resume/pause, and reload persistence run in the existing TXT portion | Playback-plan recreation, config update ordering, audio-rate application, provider policies, and voice resolution remain in Vitest |
 | 13 | A visible PDF sentence highlight remains correctly positioned after responsive layout changes | Accepted `pdf-responsive.spec.ts`: narrow to the mobile reader, widen again, and require the same readable page, navigator state, and in-page sentence highlight after each repaint | PDF scaling, text-layer geometry, block matching, and highlight rectangle calculations remain in Vitest |
 | 14 | An EPUB remains readable and stops active playback when its reader layout changes | Merged into `playback-controls.spec.ts`: the existing EPUB start narrows to the mobile reader, requires playback to stop and the menu and book content to remain usable, then widens again | EPUB rendition resizing, placement mapping, and playback state transitions remain in Vitest |
+| 15 | A keyboard user can operate Settings, and a direct reader route survives reload and returns to the library | Merged into `anonymous-entry.spec.ts` and `text-markdown-reader.spec.ts`: keyboard activation, dialog focus entry and restoration, labelled controls, direct-route reload, readable content, and visible return | Focus primitives, route policy, and reader-state restoration remain in Vitest; authenticated routing stays deferred until a controlled authenticated state exists |
 
 The initial core gate did not require folder drag-and-drop, responsive reader
 behavior, voice/speed customization, provider-specific coverage, or
@@ -742,9 +743,11 @@ Gate:
 
 ## Phase 4: Rebuild Interaction Journeys
 
-Status: in progress; deletion, minimal per-document playback, PDF navigation,
-folder drag-and-drop persistence, voice/speed persistence, responsive PDF
-highlighting, and responsive EPUB playback are accepted.
+Status: complete for the accepted anonymous interaction scope; deletion,
+minimal per-document playback, PDF navigation, folder drag-and-drop
+persistence, voice/speed persistence, responsive PDF and EPUB behavior, and
+keyboard/dialog and direct-reader routing are accepted. Authenticated routing
+remains explicitly deferred until a controlled authenticated state exists.
 
 ### Walkthrough 8: Cancel and confirm document deletion
 
@@ -911,15 +914,17 @@ at `http://localhost:3003`.
   a real two-document folder filter from an unfiltered library.
 - Visible actions and states:
   1. Observe the instruction `Drag files onto each other to make folders. Drop
-     into the sidebar to move.` and all three uploaded document cards.
-  2. Drag the `multilingual-sample.txt` card onto the `sample.epub` card with a
+     into the sidebar to move.`, its `Dismiss hint` control, and all three
+     uploaded document cards.
+  2. Activate `Dismiss hint` and observe the instruction disappear.
+  3. Drag the `multilingual-sample.txt` card onto the `sample.epub` card with a
      real mouse pointer sequence.
-  3. Observe the focused `Create New Folder` dialog, enter `Reading List`, and
+  4. Observe the focused `Create New Folder` dialog, enter `Reading List`, and
      press Enter.
-  4. Observe the `Reading List 2` folder, the TXT and EPUB cards, and the PDF
+  5. Observe the `Reading List 2` folder, the TXT and EPUB cards, and the PDF
      card hidden by the selected folder filter.
-  5. Reload and observe the same two-item folder membership and filtered
-     document surface.
+  6. Reload and observe the same two-item folder membership and filtered
+     document surface, with the dismissed instruction still absent.
 - Browser-authoring finding: Playwright's HTML5 `dragTo` helper does not model
   this product interaction because OpenReader deliberately uses the React DnD
   touch backend with mouse events so mouse and touch share one behavior. The
@@ -934,6 +939,12 @@ at `http://localhost:3003`.
   feedback, and only then releases. Five concurrent Chromium repetitions
   passed in 31.3 seconds; no retry or worker reduction was added.
 - No product defect was observed in the accepted path.
+- Final-inventory follow-up: a fresh-origin computer-use walkthrough confirmed
+  that `Dismiss hint` removes the instruction immediately and that it remains
+  absent after reload without affecting either uploaded document. The
+  assertions were merged into this existing journey rather than adding a
+  separate preference test. Chromium, Firefox, and WebKit passed the updated
+  journey concurrently as three cases in 4.8 seconds.
 - Focused acceptance: `folder-persistence.spec.ts` passed concurrently in
   Chromium, Firefox, and WebKit as three cases in 8.8 seconds.
 - The first enlarged full-matrix run exposed a cold-start expectation defect in
@@ -1157,9 +1168,65 @@ Observed with computer use on 2026-08-18 against the production build at
   user-visible layout change, stopped control state, usable menu, and readable
   book surface.
 
-Walk through and then create tests for:
+### Walkthrough 15: Operate Settings by keyboard and preserve a direct reader route
 
-- keyboard, focus, labels, dialogs, and important routing behavior.
+Observed with computer use on 2026-08-18 against the production build at
+`http://localhost:3003`, then accepted through the same existing journeys in
+Chromium, Firefox, and WebKit.
+
+- Purpose: cover the remaining anonymous accessibility and routing contracts
+  without creating a duplicate accessibility spec or a shallow route-only
+  test.
+- Initial state: an onboarded anonymous library with
+  `multilingual-sample.txt` available. The canonical entry test reaches an
+  empty library through the complete public first-run flow; the text journey
+  uploads its own fixture in an isolated browser context.
+- Visible keyboard and dialog actions:
+  1. Move focus to the sidebar button named `Settings` and activate it with
+     Enter.
+  2. Observe the Settings panel, the labelled `Appearance` and `Documents`
+     section controls, and keyboard focus inside the dialog.
+  3. Press Escape, observe the panel leave the page, and require focus to
+     return to the `Settings` trigger.
+- Visible routing actions:
+  1. Open the exact `multilingual-sample.txt` library link and observe its
+     `/html/<document-id>` route, title, literal text, and playback-position
+     control.
+  2. Reload that direct reader URL and require the URL, title, readable text,
+     and playback-position control to remain available.
+  3. Activate `Back to documents` and observe the `/app` library before opening
+     the Markdown document already owned by the same journey.
+- Browser-authoring finding: Headless UI's outer dialog element intentionally
+  has no visual box even while its panel is open. The visible contract is the
+  Settings panel and its labelled controls; the dialog element remains the
+  correct focus owner. The first focused run incorrectly asked the outer
+  wrapper to be visible, and the accepted assertion was corrected without a
+  product change.
+- Load finding: one WebKit diagnostic remained visibly on `Starting anonymous
+  session...` beyond the default five-second assertion while the local compute
+  queue was draining. The canonical first-entry journey now gives that real
+  startup state a bounded 30-second readiness budget inside a 45-second test;
+  it still requires the Privacy dialog and complete first-run flow.
+- No product defect remained after the assertion boundary was corrected. The
+  native Settings button opened from Enter in all three Playwright browsers,
+  Escape restored focus, the direct text route survived reload, and the back
+  link returned to the library.
+- Focused acceptance: the two owning specs ran as six concurrent cases across
+  Chromium, Firefox, and WebKit; all six passed in 20.3 seconds. No new test
+  case, helper, test id, retry, worker reduction, or serialized project was
+  added.
+- Matrix acceptance: the clean `CI=true` run collected and passed all 33
+  deterministic cases in 1.2 minutes with seven workers and no playback
+  project. The complete local run then passed all 36 cases in 1.9 minutes,
+  including exactly one consolidated true-playback case in Chromium, Firefox,
+  and WebKit.
+- Repository verification: `pnpm test` passed 112 Vitest files and 559 tests;
+  `pnpm exec tsc --noEmit`, `pnpm lint`, the production build started by each
+  full Playwright run, and `git diff --check` all passed.
+- Vitest ownership: focus-trap primitives, route authorization policy,
+  anonymous-session persistence, and reader-state reducers remain
+  deterministic non-browser concerns. Playwright owns the visible keyboard,
+  dialog, reload, readable-content, and return-navigation result.
 
 Do not create provider-specific playback tests until the required provider is
 available and the journey succeeds with computer use in that environment.
@@ -1216,8 +1283,9 @@ new code.
 
 ## Phase 6: Parallel Browser Matrix and CI
 
-Status: in progress; the deterministic three-browser CI boundary is configured,
-while an actual GitHub run and artifact audit remain pending.
+Status: in progress; the deterministic three-browser CI boundary and local
+artifact configuration are audited, while an actual GitHub run of the current
+uncommitted suite remains pending.
 
 1. Keep Chromium as the computer-use authoring and first diagnostic browser.
 2. Run every deterministic accepted test in Chromium, Firefox, and WebKit in
@@ -1237,12 +1305,37 @@ while an actual GitHub run and artifact audit remain pending.
    external dependency; currently this applies only to real TTS generation in
    CI.
 7. Add CI with explicit Vitest and fully parallel replacement-browser jobs.
-8. Publish artifacts with browser, test, retry, and worker identity so parallel
+8. Publish one run-attempt-specific artifact bundle whose internal Playwright
+   paths retain browser project, test, retry, and repeat identity so parallel
    failures cannot overwrite each other.
+
+### Phase 6 audit evidence
+
+- `.github/workflows/vitest.yml` independently runs `pnpm test:unit`; the
+  Playwright workflow is therefore not responsible for duplicating Vitest.
+- `.github/workflows/playwright.yml` builds the app, enforces the bundle guard,
+  installs LibreOffice, FFmpeg, SeaweedFS, NATS, and all three Playwright
+  browsers, then runs `pnpm test:e2e` with GitHub's `CI` environment. The
+  Playwright config consequently collects exactly the 33 deterministic cases
+  and creates no provider-dependent playback project.
+- The workflow uploads `playwright-report/` and `tests/results/` even on
+  failure. Its artifact name now includes `github.run_id` and
+  `github.run_attempt`, and missing diagnostics fail the upload step. Internal
+  Playwright result paths retain the test and browser-project identity plus
+  retry/repeat suffixes.
+- The latest remotely visible historical Playwright run audited on 2026-08-18
+  was GitHub Actions run `28686427606` for main commit `e9b4ac8b...`; it
+  succeeded and uploaded a 2,489,058-byte `playwright-report` artifact. That
+  artifact expired normally after its configured 30-day retention.
+- Historical success proves the upload mechanism has worked, but it does not
+  validate the current uncommitted replacement suite or the new artifact name.
+  The Phase 6 external gate remains open until these changes are committed,
+  pushed, and observed in their own GitHub Actions run.
 
 ## Phase 7: Final Coverage Audit
 
-Status: pending.
+Status: in progress; the static inventory is complete, with two authenticated
+routing decisions still explicitly deferred.
 
 1. Compare the accepted replacement journeys with the inventory in this plan.
 2. Confirm that every old scenario is replaced, merged, assigned to Vitest, or
@@ -1254,6 +1347,33 @@ Status: pending.
 6. Run type checking, linting, and build checks required by the repository.
 7. Record final scenario counts, browser assignments, and validation commands.
 
+### Phase 7 audit evidence
+
+- The seven deleted browser specs contained 35 named test cases at the reset
+  boundary: 4 accessibility, 1 deletion, 2 folder, 4 landing/routing, 4 reader
+  navigation, 7 playback, and 13 upload/reader cases.
+- Thirty-three of those cases are now replaced or merged into the accepted
+  visible journeys, assigned to deterministic Vitest owners, or intentionally
+  dropped as redundant combined coverage. The folder-hint persistence row was
+  the only gap found during this audit and is now merged into the accepted
+  folder journey.
+- Two old cases remain deferred rather than silently dropped: authenticated
+  `/` redirecting to `/app`, and protected routes redirecting to sign-in when
+  anonymous sessions are disabled. They require a controlled authenticated
+  browser state and an explicit non-anonymous deployment mode respectively.
+- No deleted spec, monolithic helper, global teardown, request namespace
+  header, namespace feature flag, or namespace-triggered TTS mock remains in
+  active source or test code. References under `docs-site/versioned_docs/` are
+  immutable historical documentation snapshots, not live application wiring.
+- Current assignment is 11 deterministic spec files across Chromium, Firefox,
+  and WebKit (33 CI cases), plus one consolidated provider-dependent spec with
+  one case in each browser (3 local-only cases), for 36 local cases total.
+- Final local validation so far: the latest CI-mode matrix passed 33/33 in 1.1
+  minutes after the folder-hint addition; the complete local matrix passed
+  36/36 in 1.9 minutes. Vitest passed 112 files and 559 tests, along with
+  TypeScript, lint, production build, and diff hygiene. The updated folder
+  journey additionally passed 3/3 in its focused matrix.
+
 ---
 
 ## Phase Status
@@ -1264,10 +1384,10 @@ Status: pending.
 | 1 | Remove old Playwright tests; retain the empty harness | Complete |
 | 2 | Computer-use walkthrough and first replacement test | Complete |
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
-| 4 | Rebuild interaction journeys | In progress: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, and folder persistence accepted |
+| 4 | Rebuild interaction journeys | Complete for the accepted anonymous scope: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, folder persistence, keyboard/dialog access, and direct-reader routing accepted; authenticated routing deferred pending controlled auth |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | In progress: deterministic CI boundary locally accepted; actual GitHub run and artifact audit pending |
-| 7 | Final coverage audit | Pending |
+| 6 | Enforce the parallel three-browser matrix and CI | In progress: deterministic boundary, artifact configuration, and historical remote artifact audited; current GitHub run pending commit/push |
+| 7 | Final coverage audit | In progress: 33 of 35 deleted cases resolved; two authenticated-routing cases remain explicitly deferred |
 
 ## Definition of Done
 
