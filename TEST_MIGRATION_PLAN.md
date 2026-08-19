@@ -1317,7 +1317,10 @@ uncommitted suite remains pending.
   installs LibreOffice, FFmpeg, SeaweedFS, NATS, and all three Playwright
   browsers, then runs `pnpm test:e2e` with GitHub's `CI` environment. The
   Playwright config consequently collects exactly the 33 deterministic cases
-  and creates no provider-dependent playback project.
+  and creates no provider-dependent playback project. Pushes to `main` or
+  `master` and pull requests targeting those branches run automatically;
+  `workflow_dispatch` permits an explicit run for an unmerged feature branch
+  without making every feature-branch push start the expensive browser job.
 - The workflow uploads `playwright-report/` and `tests/results/` even on
   failure. Its artifact name now includes `github.run_id` and
   `github.run_attempt`, and missing diagnostics fail the upload step. Internal
