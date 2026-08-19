@@ -14,6 +14,10 @@ RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-wo
 
 FROM node:lts
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libreoffice-writer-nogui && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 COPY --from=deploy-stage /opt/compute-worker ./

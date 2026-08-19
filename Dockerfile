@@ -51,10 +51,10 @@ RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
 FROM node:lts-slim AS runner
 
 # Add runtime OS dependencies:
-# - libreoffice-writer: required for DOCX → PDF conversion
+# - libreoffice-writer-nogui: required for headless DOCX → PDF conversion
 # ffmpeg is provided by ffmpeg-static from node_modules.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates libreoffice-writer && \
+    apt-get install -y --no-install-recommends ca-certificates libreoffice-writer-nogui && \
     rm -rf /var/lib/apt/lists/*
 
 # App runtime directory

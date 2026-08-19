@@ -1359,8 +1359,23 @@ to a fix for a clean-run storage bootstrap defect; a green rerun remains.
   fixture as nine pages while the local installation renders eight. The DOCX
   journey now requires a visible multi-page counter and enabled next-page
   control instead of treating an OS-dependent pagination count as product
-  behavior. The Phase 6 external gate remains open until these corrections are
-  committed, pushed, and a rerun passes.
+  behavior.
+- Feature-branch dispatch `32285175847` ran the committed cold-start fixes in
+  `1bebcfbc...`, but GitHub never reached dependency installation, build, or
+  Playwright. The `ubuntu-24.04` runner's Azure apt mirror downloaded the 20.3
+  MB `libreoffice-common` package in roughly four minutes, then spent more than
+  23 minutes trying to download the 43 MB GUI `libreoffice-core` package. The
+  job hit its 30-minute limit in that download, proving that removing FFmpeg
+  did not address the independent LibreOffice installation bottleneck.
+- CI now pins `ubuntu-24.04`, uses Canonical's general archive instead of the
+  overloaded runner-local Azure mirror, retries transient apt downloads, and
+  installs the smaller server-oriented `libreoffice-writer-nogui` package. The
+  primary application image uses the same headless package. The standalone
+  compute-worker image now installs it too; without that correction, a
+  separately deployed worker accepted DOCX conversion jobs but lacked the
+  `soffice` runtime needed to complete them. The Phase 6 external gate remains
+  open until this installation correction is committed, pushed, and a rerun
+  passes.
 
 ## Phase 7: Final Coverage Audit
 
@@ -1419,7 +1434,7 @@ routing decisions still explicitly deferred.
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
 | 4 | Rebuild interaction journeys | Complete for the accepted anonymous scope: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, folder persistence, keyboard/dialog access, and direct-reader routing accepted; authenticated routing deferred pending controlled auth |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | In progress: two feature-branch dispatches exposed and documented fresh-storage and cold-model CI defects; corrections pass locally and await commit/push/rerun |
+| 6 | Enforce the parallel three-browser matrix and CI | In progress: three feature-branch dispatches exposed fresh-storage, cold-model, and runner apt-mirror defects; the latest installation correction awaits validation and rerun |
 | 7 | Final coverage audit | In progress: 33 of 35 deleted cases resolved; two authenticated-routing cases remain explicitly deferred |
 
 ## Definition of Done
