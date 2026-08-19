@@ -1314,11 +1314,13 @@ to a fix for a clean-run storage bootstrap defect; a green rerun remains.
 - `.github/workflows/vitest.yml` independently runs `pnpm test:unit`; the
   Playwright workflow is therefore not responsible for duplicating Vitest.
 - `.github/workflows/playwright.yml` builds the app, enforces the bundle guard,
-  installs LibreOffice, FFmpeg, SeaweedFS, NATS, and all three Playwright
-  browsers, then runs `pnpm test:e2e` with GitHub's `CI` environment. The
-  Playwright config consequently collects exactly the 33 deterministic cases
-  and creates no provider-dependent playback project. Pushes to `main` or
-  `master` and pull requests targeting those branches run automatically;
+  installs LibreOffice, SeaweedFS, NATS, and all three Playwright browsers,
+  prepares the PDF layout model, then runs `pnpm test:e2e` with GitHub's `CI`
+  environment. The application uses its bundled `ffmpeg-static` binary, so the
+  redundant system FFmpeg installation and unrelated `ffprobe` check are gone.
+  The Playwright config consequently collects exactly the 33 deterministic
+  cases and creates no provider-dependent playback project. Pushes to `main`
+  or `master` and pull requests targeting those branches run automatically;
   `workflow_dispatch` permits an explicit run for an unmerged feature branch
   without making every feature-branch push start the expensive browser job.
 - The workflow uploads `playwright-report/` and `tests/results/` even on
@@ -1339,8 +1341,26 @@ to a fix for a clean-run storage bootstrap defect; a green rerun remains.
   migrations, NATS, and compute worker initialized in the correct order.
 - The failed dispatch still uploaded the expected 194,654-byte
   `playwright-report-32275245438-1` diagnostic artifact, validating the
-  run-attempt-specific name and failure-path upload. The Phase 6 external gate
-  remains open until the bootstrap fix is committed, pushed, and a rerun passes.
+  run-attempt-specific name and failure-path upload.
+- Feature-branch dispatch `32279226700` ran commit `711ed29a...`; attempt 2
+  confirmed the storage fix and reached the browser matrix. GitHub's package
+  mirror took about 14 minutes to install 195 MB across 158 LibreOffice and
+  FFmpeg packages. Once Playwright began, the clean runner downloaded and
+  initialized the uncached 142 MB PDF layout model while the single layout gate
+  held the converted DOCX job. Sixty-second reader assertions and their retries
+  then queued behind that cold start. The run was cancelled after preserving a
+  21,841,858-byte `playwright-report-32279226700-2` artifact.
+- The workflow now caches the checksum-verified PDF model using its manifest as
+  the cache key and explicitly prepares it before Playwright. This keeps the
+  real model boundary while preventing test timeouts and retries from becoming
+  the model download mechanism. System dependencies now install only
+  `libreoffice-writer` without recommended extras.
+- The cancelled-run artifact also proved that CI LibreOffice renders the DOCX
+  fixture as nine pages while the local installation renders eight. The DOCX
+  journey now requires a visible multi-page counter and enabled next-page
+  control instead of treating an OS-dependent pagination count as product
+  behavior. The Phase 6 external gate remains open until these corrections are
+  committed, pushed, and a rerun passes.
 
 ## Phase 7: Final Coverage Audit
 
@@ -1378,8 +1398,10 @@ routing decisions still explicitly deferred.
 - Current assignment is 11 deterministic spec files across Chromium, Firefox,
   and WebKit (33 CI cases), plus one consolidated provider-dependent spec with
   one case in each browser (3 local-only cases), for 36 local cases total.
-- Final local validation so far: the latest CI-mode matrix passed 33/33 in 1.1
-  minutes after the folder-hint addition; the complete local matrix passed
+- Final local validation so far: after the CI cold-start corrections, the
+  CI-mode matrix passed 33/33 in 1.0 minute with seven workers; the corrected
+  DOCX journey separately passed 3/3 across Chromium, Firefox, and WebKit. The
+  complete local matrix passed
   36/36 in 1.9 minutes. After the clean-run bootstrap fix, Vitest passed 112
   files and 562 tests, along with TypeScript, lint, production build, diff
   hygiene, and a fresh-data production startup smoke test. The updated folder
@@ -1397,7 +1419,7 @@ routing decisions still explicitly deferred.
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
 | 4 | Rebuild interaction journeys | Complete for the accepted anonymous scope: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, folder persistence, keyboard/dialog access, and direct-reader routing accepted; authenticated routing deferred pending controlled auth |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | In progress: feature-branch dispatch validated setup and diagnostics but exposed a fresh-storage bootstrap defect; fix verified locally and awaiting commit/push/rerun |
+| 6 | Enforce the parallel three-browser matrix and CI | In progress: two feature-branch dispatches exposed and documented fresh-storage and cold-model CI defects; corrections pass locally and await commit/push/rerun |
 | 7 | Final coverage audit | In progress: 33 of 35 deleted cases resolved; two authenticated-routing cases remain explicitly deferred |
 
 ## Definition of Done

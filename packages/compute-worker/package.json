@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "model:ensure-pdf": "tsx scripts/ensure-pdf-model.ts",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

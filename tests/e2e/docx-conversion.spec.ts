@@ -42,6 +42,6 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Previous page', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '1 / 8', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^1 \/ (?:[2-9]|\d{2,})$/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
 });

@@ -23,10 +23,20 @@ jobs:
           node-version: lts/*
           package-manager-cache: false
       - uses: pnpm/action-setup@v6
+      - name: Restore PDF layout model
+        uses: actions/cache@v6
+        with:
+          path: |
+            docstore/model/PP-DocLayoutV3.onnx
+            docstore/model/PP-DocLayoutV3.onnx.data
+            docstore/model/pp-doclayoutv3.config.json
+            docstore/model/pp-doclayoutv3.preprocessor_config.json
+            docstore/model/pp-doclayoutv3.LICENSE.txt
+          key: pdf-layout-model-${{ runner.os }}-${{ hashFiles('packages/compute-worker/src/inference/pdf/assets/manifest.json') }}
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libreoffice-writer ffmpeg
+          sudo apt-get install --no-install-recommends -y libreoffice-writer
       - name: Install SeaweedFS weed binary
         run: |
           WEED_PATH=$(docker run --rm --entrypoint sh chrislusf/seaweedfs:4.18 -lc 'command -v weed')
@@ -45,12 +55,12 @@ jobs:
           nats-server -v
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Prepare PDF layout model
+        run: pnpm --filter @openreader/compute-worker model:ensure-pdf
       - name: Build app and enforce bundle guard
         run: |
           pnpm build
           pnpm build:bundle-guard
-      - name: Verify ffprobe
-        run: ffprobe -version
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
       - name: Run deterministic Playwright tests
