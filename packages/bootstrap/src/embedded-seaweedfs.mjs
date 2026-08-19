@@ -3,6 +3,48 @@ import fs from 'node:fs';
 import os from 'node:os';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
+import {
+  CreateBucketCommand,
+  HeadBucketCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+
+function isMissingBucketError(error) {
+  if (!error || typeof error !== 'object') return false;
+  if (error.$metadata?.httpStatusCode === 404) return true;
+  return error.name === 'NotFound' || error.name === 'NoSuchBucket';
+}
+
+function createEmbeddedS3Client(env) {
+  return new S3Client({
+    region: env.S3_REGION,
+    endpoint: env.S3_INTERNAL_ENDPOINT,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    },
+  });
+}
+
+export async function ensureEmbeddedS3Bucket(env, client = createEmbeddedS3Client(env)) {
+  const bucket = env.S3_BUCKET?.trim();
+  if (!bucket) throw new Error('Embedded S3 bucket name is required.');
+
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }));
+    return { bucket, created: false };
+  } catch (error) {
+    if (!isMissingBucketError(error)) throw error;
+  }
+
+  const createInput = { Bucket: bucket };
+  if (env.S3_REGION && env.S3_REGION !== 'us-east-1') {
+    createInput.CreateBucketConfiguration = { LocationConstraint: env.S3_REGION };
+  }
+  await client.send(new CreateBucketCommand(createInput));
+  return { bucket, created: true };
+}
 
 function isPrivateIPv4(address) {
   if (!address) return false;

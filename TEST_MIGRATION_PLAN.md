@@ -1283,9 +1283,9 @@ new code.
 
 ## Phase 6: Parallel Browser Matrix and CI
 
-Status: in progress; the deterministic three-browser CI boundary and local
-artifact configuration are audited, while an actual GitHub run of the current
-uncommitted suite remains pending.
+Status: in progress; the deterministic three-browser CI boundary and artifact
+configuration are audited. The first feature-branch dispatch exposed and led
+to a fix for a clean-run storage bootstrap defect; a green rerun remains.
 
 1. Keep Chromium as the computer-use authoring and first diagnostic browser.
 2. Run every deterministic accepted test in Chromium, Firefox, and WebKit in
@@ -1326,14 +1326,21 @@ uncommitted suite remains pending.
   `github.run_attempt`, and missing diagnostics fail the upload step. Internal
   Playwright result paths retain the test and browser-project identity plus
   retry/repeat suffixes.
-- The latest remotely visible historical Playwright run audited on 2026-08-18
-  was GitHub Actions run `28686427606` for main commit `e9b4ac8b...`; it
-  succeeded and uploaded a 2,489,058-byte `playwright-report` artifact. That
-  artifact expired normally after its configured 30-day retention.
-- Historical success proves the upload mechanism has worked, but it does not
-  validate the current uncommitted replacement suite or the new artifact name.
-  The Phase 6 external gate remains open until these changes are committed,
-  pushed, and observed in their own GitHub Actions run.
+- Feature-branch dispatch `32275245438` ran commit `7700f6af...` on 2026-08-19.
+  Setup, production build, bundle enforcement, and browser installation passed,
+  but the Playwright step stopped before test collection because a fresh
+  embedded SeaweedFS instance did not yet contain the configured S3 bucket.
+  This was a product bootstrap defect hidden by existing local storage, not a
+  reason to weaken or special-case the browser tests.
+- The bootstrap now checks for and creates the embedded bucket after SeaweedFS
+  becomes reachable and before the v4 storage cleanup runs. Unit coverage
+  verifies the existing, missing, and unexpected-error paths; a clean temporary
+  data-directory smoke test reached a ready production server with the bucket,
+  migrations, NATS, and compute worker initialized in the correct order.
+- The failed dispatch still uploaded the expected 194,654-byte
+  `playwright-report-32275245438-1` diagnostic artifact, validating the
+  run-attempt-specific name and failure-path upload. The Phase 6 external gate
+  remains open until the bootstrap fix is committed, pushed, and a rerun passes.
 
 ## Phase 7: Final Coverage Audit
 
@@ -1373,8 +1380,9 @@ routing decisions still explicitly deferred.
   one case in each browser (3 local-only cases), for 36 local cases total.
 - Final local validation so far: the latest CI-mode matrix passed 33/33 in 1.1
   minutes after the folder-hint addition; the complete local matrix passed
-  36/36 in 1.9 minutes. Vitest passed 112 files and 559 tests, along with
-  TypeScript, lint, production build, and diff hygiene. The updated folder
+  36/36 in 1.9 minutes. After the clean-run bootstrap fix, Vitest passed 112
+  files and 562 tests, along with TypeScript, lint, production build, diff
+  hygiene, and a fresh-data production startup smoke test. The updated folder
   journey additionally passed 3/3 in its focused matrix.
 
 ---
@@ -1389,7 +1397,7 @@ routing decisions still explicitly deferred.
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
 | 4 | Rebuild interaction journeys | Complete for the accepted anonymous scope: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, folder persistence, keyboard/dialog access, and direct-reader routing accepted; authenticated routing deferred pending controlled auth |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | In progress: deterministic boundary, artifact configuration, and historical remote artifact audited; current GitHub run pending commit/push |
+| 6 | Enforce the parallel three-browser matrix and CI | In progress: feature-branch dispatch validated setup and diagnostics but exposed a fresh-storage bootstrap defect; fix verified locally and awaiting commit/push/rerun |
 | 7 | Final coverage audit | In progress: 33 of 35 deleted cases resolved; two authenticated-routing cases remain explicitly deferred |
 
 ## Definition of Done

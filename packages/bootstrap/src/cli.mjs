@@ -12,6 +12,7 @@ import { resolveStorageTransport } from '@openreader/runtime-config/storage-tran
 import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
+  ensureEmbeddedS3Bucket,
   hasWeedBinary,
   resolveWeedMiniAdvertiseHost,
   waitForEndpoint,
@@ -339,6 +340,10 @@ async function main() {
       console.log('Starting embedded SeaweedFS weed mini...');
       launchWeed();
       await waitForEndpoint(`http://127.0.0.1:${runtimeEnv.WEED_MINI_PORT}`, waitTimeout, 'Embedded SeaweedFS');
+      const embeddedBucket = await ensureEmbeddedS3Bucket(runtimeEnv);
+      if (embeddedBucket.created) {
+        console.log(`Created embedded S3 bucket ${embeddedBucket.bucket}.`);
+      }
       console.log(`Embedded SeaweedFS is ready at ${runtimeEnv.S3_INTERNAL_ENDPOINT}`);
     }
 
