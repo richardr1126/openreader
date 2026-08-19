@@ -1373,9 +1373,21 @@ to a fix for a clean-run storage bootstrap defect; a green rerun remains.
   primary application image uses the same headless package. The standalone
   compute-worker image now installs it too; without that correction, a
   separately deployed worker accepted DOCX conversion jobs but lacked the
-  `soffice` runtime needed to complete them. The Phase 6 external gate remains
-  open until this installation correction is committed, pushed, and a rerun
-  passes.
+  `soffice` runtime needed to complete them.
+- Feature-branch dispatch `32297572823` ran commit `1e43afb3...` and completed
+  successfully in 12 minutes 24 seconds. Headless LibreOffice, SeaweedFS,
+  NATS, and workspace dependencies were all installed by the four-minute
+  checkpoint; the cold layout model was explicitly ready one minute later.
+  The run exercised all 33 deterministic cases with two workers and uploaded
+  the expected 9,537,303-byte `playwright-report-32297572823-1` artifact. It
+  reported 32 passed and one flaky because WebKit's DOCX reader reached all
+  nine parsed pages and `Finishing document structure`, but crossed the
+  assertion's exact 60-second readiness limit before passing on its 56-second
+  retry. The suite now gives only that compute-bound reader transition 90
+  seconds within a 180-second test budget, avoiding the more expensive retry
+  on a progressing shared runner. CI also enables Playwright's
+  `failOnFlakyTests`, so a retry can no longer make the required gate green.
+  The Phase 6 external gate remains open until a no-flake rerun passes.
 
 ## Phase 7: Final Coverage Audit
 
@@ -1434,7 +1446,7 @@ routing decisions still explicitly deferred.
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
 | 4 | Rebuild interaction journeys | Complete for the accepted anonymous scope: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, folder persistence, keyboard/dialog access, and direct-reader routing accepted; authenticated routing deferred pending controlled auth |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | In progress: three feature-branch dispatches exposed fresh-storage, cold-model, and runner apt-mirror defects; the latest installation correction awaits validation and rerun |
+| 6 | Enforce the parallel three-browser matrix and CI | In progress: four feature-branch dispatches exposed fresh-storage, cold-model, apt-mirror, and shared-runner readiness defects; the latest run is green but its one retry must be eliminated before acceptance |
 | 7 | Final coverage audit | In progress: 33 of 35 deleted cases resolved; two authenticated-routing cases remain explicitly deferred |
 
 ## Definition of Done

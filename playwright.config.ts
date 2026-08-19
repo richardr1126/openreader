@@ -11,6 +11,7 @@ export default defineConfig({
   timeout: 30 * 1000,
   outputDir: './tests/results',
   fullyParallel: true,
+  failOnFlakyTests: !!process.env.CI,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: '50%',

@@ -5,7 +5,7 @@ import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
 test('anonymous user converts a DOCX file and reads the resulting PDF', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await enterAnonymousLibrary(page);
 
   const conversionEventsRequest = page.waitForRequest((request) => (
@@ -32,7 +32,7 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   await expect(page).toHaveURL(/\/pdf\/[a-f0-9]+$/);
   await expect(
     page.getByRole('heading', { name: 'sample.pdf', exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
+  ).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('Demonstration of DOCX support in', { exact: true })).toBeVisible();
   await expect(
     page.getByText('This document demonstrates the ability of the calibre DOCX Input plugin to', {
