@@ -1283,9 +1283,9 @@ new code.
 
 ## Phase 6: Parallel Browser Matrix and CI
 
-Status: in progress; the deterministic three-browser CI boundary and artifact
-configuration are audited. The first feature-branch dispatch exposed and led
-to a fix for a clean-run storage bootstrap defect; a green rerun remains.
+Status: complete. The deterministic three-browser CI boundary, 50% worker cap,
+strict no-flake gate, cold-start preparation, and diagnostic artifact have all
+been exercised successfully on a clean GitHub runner.
 
 1. Keep Chromium as the computer-use authoring and first diagnostic browser.
 2. Run every deterministic accepted test in Chromium, Firefox, and WebKit in
@@ -1354,7 +1354,7 @@ to a fix for a clean-run storage bootstrap defect; a green rerun remains.
   the cache key and explicitly prepares it before Playwright. This keeps the
   real model boundary while preventing test timeouts and retries from becoming
   the model download mechanism. System dependencies now install only
-  `libreoffice-writer` without recommended extras.
+  `libreoffice-writer-nogui` without recommended extras.
 - The cancelled-run artifact also proved that CI LibreOffice renders the DOCX
   fixture as nine pages while the local installation renders eight. The DOCX
   journey now requires a visible multi-page counter and enabled next-page
@@ -1387,12 +1387,21 @@ to a fix for a clean-run storage bootstrap defect; a green rerun remains.
   seconds within a 180-second test budget, avoiding the more expensive retry
   on a progressing shared runner. CI also enables Playwright's
   `failOnFlakyTests`, so a retry can no longer make the required gate green.
-  The Phase 6 external gate remains open until a no-flake rerun passes.
+- Feature-branch dispatch `32311695096` ran commit `81136987...` with the
+  strict no-flake gate and passed in 8 minutes 25 seconds. The manifest-keyed
+  layout-model cache restored successfully; LibreOffice was ready 44 seconds
+  later, the model preparation check completed at 1 minute 27 seconds, and
+  Playwright began at the four-minute checkpoint. All 33 deterministic cases
+  passed with two concurrent workers in 5.1 minutes, with no failure, retry,
+  or flaky annotation. The expected run-attempt-specific
+  `playwright-report-32311695096-1` artifact was finalized at 273,243 bytes.
+  This closes the Phase 6 external gate.
 
 ## Phase 7: Final Coverage Audit
 
-Status: in progress; the static inventory is complete, with two authenticated
-routing decisions still explicitly deferred.
+Status: complete for the accepted migration scope. The complete old-suite
+inventory is assigned or intentionally deferred, and both local and GitHub
+acceptance gates pass.
 
 1. Compare the accepted replacement journeys with the inventory in this plan.
 2. Confirm that every old scenario is replaced, merged, assigned to Vitest, or
@@ -1432,7 +1441,9 @@ routing decisions still explicitly deferred.
   36/36 in 1.9 minutes. After the clean-run bootstrap fix, Vitest passed 112
   files and 562 tests, along with TypeScript, lint, production build, diff
   hygiene, and a fresh-data production startup smoke test. The updated folder
-  journey additionally passed 3/3 in its focused matrix.
+  journey additionally passed 3/3 in its focused matrix. After the strict
+  no-flake change, the focused DOCX journey again passed 3/3 concurrently and
+  the final GitHub matrix passed all 33 deterministic cases without a retry.
 
 ---
 
@@ -1446,8 +1457,8 @@ routing decisions still explicitly deferred.
 | 3 | Rebuild core reading journeys | Complete: priorities 1–7 accepted |
 | 4 | Rebuild interaction journeys | Complete for the accepted anonymous scope: deletion, playback, voice/speed persistence, PDF navigation, responsive PDF and EPUB behavior, folder persistence, keyboard/dialog access, and direct-reader routing accepted; authenticated routing deferred pending controlled auth |
 | 5 | Extract only proven shared support | Complete: onboarding and library upload only |
-| 6 | Enforce the parallel three-browser matrix and CI | In progress: four feature-branch dispatches exposed fresh-storage, cold-model, apt-mirror, and shared-runner readiness defects; the latest run is green but its one retry must be eliminated before acceptance |
-| 7 | Final coverage audit | In progress: 33 of 35 deleted cases resolved; two authenticated-routing cases remain explicitly deferred |
+| 6 | Enforce the parallel three-browser matrix and CI | Complete: final dispatch passed 33/33 with two workers, no retries or flakes, a restored model cache, and the expected artifact |
+| 7 | Final coverage audit | Complete for the accepted scope: 33 of 35 deleted cases resolved; two authenticated-routing cases explicitly deferred with owners and prerequisites |
 
 ## Definition of Done
 
