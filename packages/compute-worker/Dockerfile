@@ -6,9 +6,13 @@ WORKDIR /workspace
 
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/compute-worker/package.json packages/compute-worker/package.json
+COPY packages/database/package.json packages/database/package.json
 COPY packages/runtime-config/package.json packages/runtime-config/package.json
+COPY packages/tts/package.json packages/tts/package.json
 COPY packages/compute-worker packages/compute-worker
+COPY packages/database packages/database
 COPY packages/runtime-config packages/runtime-config
+COPY packages/tts packages/tts
 
 RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy /opt/compute-worker
 
