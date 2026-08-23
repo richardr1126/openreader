@@ -95,6 +95,9 @@ Compose file: [`docker/examples/compose.local-full.yml`](https://github.com/rich
 On first boot, `RUNTIME_SEED_JSON` creates an enabled Kokoro shared provider and selects it as the
 default TTS provider.
 
+The full examples also opt into `S3_AUTO_CREATE_BUCKET`, allowing the app to create the configured
+SeaweedFS bucket before startup storage cleanup when the stack uses a new data volume.
+
 ## Endpoints
 
 - OpenReader: `http://localhost:3003`

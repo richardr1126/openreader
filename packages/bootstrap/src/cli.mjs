@@ -12,7 +12,7 @@ import { resolveStorageTransport } from '@openreader/runtime-config/storage-tran
 import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
-  ensureEmbeddedS3Bucket,
+  ensureS3Bucket,
   hasWeedBinary,
   resolveWeedMiniAdvertiseHost,
   waitForEndpoint,
@@ -340,7 +340,7 @@ async function main() {
       console.log('Starting embedded SeaweedFS weed mini...');
       launchWeed();
       await waitForEndpoint(`http://127.0.0.1:${runtimeEnv.WEED_MINI_PORT}`, waitTimeout, 'Embedded SeaweedFS');
-      const embeddedBucket = await ensureEmbeddedS3Bucket(runtimeEnv);
+      const embeddedBucket = await ensureS3Bucket(runtimeEnv);
       if (embeddedBucket.created) {
         console.log(`Created embedded S3 bucket ${embeddedBucket.bucket}.`);
       }
@@ -350,6 +350,16 @@ async function main() {
     const storageTransport = applyStorageTransportEnv(runtimeEnv, { embedded: useEmbeddedWeed });
     if (storageTransport.usesDeprecatedEndpoint) {
       console.warn('S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in OpenReader 5.0.');
+    }
+
+    if (!useEmbeddedWeed && resolveBooleanEnv(runtimeEnv, 'S3_AUTO_CREATE_BUCKET', false)) {
+      if (!hasS3Config(runtimeEnv)) {
+        throw new Error('S3_AUTO_CREATE_BUCKET=true requires complete S3 configuration.');
+      }
+      const externalBucket = await ensureS3Bucket(runtimeEnv);
+      if (externalBucket.created) {
+        console.log(`Created S3 bucket ${externalBucket.bucket}.`);
+      }
     }
 
     const shouldRunV4Decommission = resolveBooleanEnv(runtimeEnv, 'RUN_V4_DECOMMISSION', true);

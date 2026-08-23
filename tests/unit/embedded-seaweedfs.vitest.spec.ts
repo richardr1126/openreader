@@ -2,7 +2,7 @@ import { CreateBucketCommand, HeadBucketCommand, type S3Client } from '@aws-sdk/
 import { describe, expect, test, vi } from 'vitest';
 
 import {
-  ensureEmbeddedS3Bucket,
+  ensureS3Bucket,
   resolveWeedMiniAdvertiseHost,
 } from '../../packages/bootstrap/src/embedded-seaweedfs.mjs';
 
@@ -32,7 +32,7 @@ describe('embedded SeaweedFS addressing', () => {
     const send = vi.fn().mockResolvedValue({});
     const client = { send } as unknown as S3Client;
 
-    await expect(ensureEmbeddedS3Bucket(embeddedS3Env, client)).resolves.toEqual({
+    await expect(ensureS3Bucket(embeddedS3Env, client)).resolves.toEqual({
       bucket: 'openreader-documents',
       created: false,
     });
@@ -50,7 +50,7 @@ describe('embedded SeaweedFS addressing', () => {
       .mockResolvedValueOnce({});
     const client = { send } as unknown as S3Client;
 
-    await expect(ensureEmbeddedS3Bucket(embeddedS3Env, client)).resolves.toEqual({
+    await expect(ensureS3Bucket(embeddedS3Env, client)).resolves.toEqual({
       bucket: 'openreader-documents',
       created: true,
     });
@@ -64,7 +64,7 @@ describe('embedded SeaweedFS addressing', () => {
     const send = vi.fn().mockRejectedValue(storageFailure);
     const client = { send } as unknown as S3Client;
 
-    await expect(ensureEmbeddedS3Bucket(embeddedS3Env, client)).rejects.toBe(storageFailure);
+    await expect(ensureS3Bucket(embeddedS3Env, client)).rejects.toBe(storageFailure);
     expect(send).toHaveBeenCalledTimes(1);
   });
 });

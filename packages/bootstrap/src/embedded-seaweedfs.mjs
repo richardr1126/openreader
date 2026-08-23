@@ -15,11 +15,16 @@ function isMissingBucketError(error) {
   return error.name === 'NotFound' || error.name === 'NoSuchBucket';
 }
 
-function createEmbeddedS3Client(env) {
+function parseBoolean(value, fallback = false) {
+  if (value == null || String(value).trim() === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function createS3Client(env) {
   return new S3Client({
     region: env.S3_REGION,
     endpoint: env.S3_INTERNAL_ENDPOINT,
-    forcePathStyle: true,
+    forcePathStyle: parseBoolean(env.S3_FORCE_PATH_STYLE),
     credentials: {
       accessKeyId: env.S3_ACCESS_KEY_ID,
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
@@ -27,9 +32,9 @@ function createEmbeddedS3Client(env) {
   });
 }
 
-export async function ensureEmbeddedS3Bucket(env, client = createEmbeddedS3Client(env)) {
+export async function ensureS3Bucket(env, client = createS3Client(env)) {
   const bucket = env.S3_BUCKET?.trim();
-  if (!bucket) throw new Error('Embedded S3 bucket name is required.');
+  if (!bucket) throw new Error('S3 bucket name is required.');
 
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }));

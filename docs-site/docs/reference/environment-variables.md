@@ -46,6 +46,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `S3_BROWSER_TRANSPORT` | Storage | `auto` | Browser transfer mode: `auto`, `proxy`, or `presigned` |
 | `S3_ENDPOINT` | Storage | deprecated | Compatibility alias; replace with explicit internal/public endpoints |
 | `S3_FORCE_PATH_STYLE` | Storage | `true` in embedded mode | Set per provider requirement |
+| `S3_AUTO_CREATE_BUCKET` | Storage | `false` | Create a missing external bucket during startup; intended for self-contained deployments |
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
 | `IMPORT_LIBRARY_DIRS` | App library import | `docstore/library` fallback | Set one or more roots (comma/colon/semicolon separated) |
 | `EMBEDDED_COMPUTE_WORKER_PORT` | Compute | `8081` | Override embedded worker bind port |
@@ -277,6 +278,12 @@ Deprecated compatibility alias for `S3_INTERNAL_ENDPOINT`; when `presigned` is e
 Force path-style S3 URLs.
 
 - Embedded default: `true`
+
+### S3_AUTO_CREATE_BUCKET
+
+Create `S3_BUCKET` during startup when it does not exist. This is disabled by default for externally
+managed storage; enable it only when the configured credentials may create buckets. The full Docker
+Compose examples enable it so a new SeaweedFS volume can boot without a separate initialization step.
 
 ### S3_PREFIX
 
