@@ -209,6 +209,10 @@ async function main() {
 
   const runtimeEnv = { ...process.env };
   runtimeEnv.LOG_FORMAT = withDefault(runtimeEnv.LOG_FORMAT, 'pretty');
+  runtimeEnv.SQLITE_DB_PATH = withDefault(
+    runtimeEnv.SQLITE_DB_PATH,
+    path.join(workspaceRoot, 'docstore', 'sqlite3.db'),
+  );
   requireAuthEnv(runtimeEnv);
   let weedProc = null;
   let weedExitPromise = Promise.resolve();

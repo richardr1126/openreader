@@ -7,9 +7,11 @@ import type { ReaderType } from '@/types/user-state';
 
 export type ReaderBootstrapProgress = {
   kind: 'pdf-parse';
-  phase: 'queued' | 'parsing' | 'merging';
+  phase: 'queued' | 'downloading-model' | 'parsing' | 'merging';
   pagesParsed: number;
   totalPages: number;
+  downloadedBytes?: number;
+  totalBytes?: number;
 };
 
 export type ReaderBootstrapRestart = {

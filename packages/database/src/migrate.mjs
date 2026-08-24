@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
+import { resolveSqliteDatabasePath } from './sqlite-path.js';
 
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -49,7 +50,7 @@ export async function runMigrations({ cwd = process.cwd(), env = process.env } =
     return;
   }
 
-  const dbPath = path.join(workspaceRoot, 'docstore', 'sqlite3.db');
+  const dbPath = resolveSqliteDatabasePath(workspaceRoot, env);
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const [{ drizzle }, { migrate }, { default: BetterSqlite3 }] = await Promise.all([
     import('drizzle-orm/better-sqlite3'),
@@ -65,4 +66,3 @@ export async function runMigrations({ cwd = process.cwd(), env = process.env } =
     sqlite.close();
   }
 }
-

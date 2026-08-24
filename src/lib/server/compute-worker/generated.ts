@@ -274,11 +274,17 @@ export interface paths {
                                     pagesParsed: number;
                                     currentPage?: number;
                                     /** @enum {string} */
-                                    phase: "infer" | "merge";
+                                    phase: "download_model" | "infer" | "merge";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                    /** @enum {string} */
+                                    phase?: "downloading_model" | "generating";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -298,6 +304,10 @@ export interface paths {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | null;
                         };
                     };
@@ -1155,11 +1165,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1301,11 +1317,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1444,11 +1466,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1610,11 +1638,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1767,11 +1801,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1910,11 +1950,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -2071,11 +2117,17 @@ export interface paths {
                                     pagesParsed: number;
                                     currentPage?: number;
                                     /** @enum {string} */
-                                    phase: "infer" | "merge";
+                                    phase: "download_model" | "infer" | "merge";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                    /** @enum {string} */
+                                    phase?: "downloading_model" | "generating";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -2222,11 +2274,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -2392,11 +2450,17 @@ export interface paths {
                                     pagesParsed: number;
                                     currentPage?: number;
                                     /** @enum {string} */
-                                    phase: "infer" | "merge";
+                                    phase: "download_model" | "infer" | "merge";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                    /** @enum {string} */
+                                    phase?: "downloading_model" | "generating";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -2536,11 +2600,17 @@ export interface paths {
                                     pagesParsed: number;
                                     currentPage?: number;
                                     /** @enum {string} */
-                                    phase: "infer" | "merge";
+                                    phase: "download_model" | "infer" | "merge";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                    /** @enum {string} */
+                                    phase?: "downloading_model" | "generating";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -2707,11 +2777,17 @@ export interface paths {
                                     pagesParsed: number;
                                     currentPage?: number;
                                     /** @enum {string} */
-                                    phase: "infer" | "merge";
+                                    phase: "download_model" | "infer" | "merge";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                    /** @enum {string} */
+                                    phase?: "downloading_model" | "generating";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -2872,11 +2948,17 @@ export interface paths {
                                     pagesParsed: number;
                                     currentPage?: number;
                                     /** @enum {string} */
-                                    phase: "infer" | "merge";
+                                    phase: "download_model" | "infer" | "merge";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
                                     plannedCount: number;
+                                    /** @enum {string} */
+                                    phase?: "downloading_model" | "generating";
+                                    downloadedBytes?: number;
+                                    totalBytes?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -3004,11 +3086,17 @@ export interface paths {
                                 pagesParsed: number;
                                 currentPage?: number;
                                 /** @enum {string} */
-                                phase: "infer" | "merge";
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
                                 plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -3190,7 +3278,9 @@ export interface components {
             pagesParsed: number;
             currentPage?: number;
             /** @enum {string} */
-            phase: "infer" | "merge";
+            phase: "download_model" | "infer" | "merge";
+            downloadedBytes?: number;
+            totalBytes?: number;
         };
         TtsPlaybackExportProgress: {
             /** @enum {string} */
@@ -3360,11 +3450,17 @@ export interface components {
                 pagesParsed: number;
                 currentPage?: number;
                 /** @enum {string} */
-                phase: "infer" | "merge";
+                phase: "download_model" | "infer" | "merge";
+                downloadedBytes?: number;
+                totalBytes?: number;
             } | {
                 completedThroughOrdinal: number;
                 completedCount: number;
                 plannedCount: number;
+                /** @enum {string} */
+                phase?: "downloading_model" | "generating";
+                downloadedBytes?: number;
+                totalBytes?: number;
             } | {
                 /** @enum {string} */
                 phase: "assembling" | "transcoding" | "uploading";
@@ -3446,11 +3542,17 @@ export interface components {
                     pagesParsed: number;
                     currentPage?: number;
                     /** @enum {string} */
-                    phase: "infer" | "merge";
+                    phase: "download_model" | "infer" | "merge";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                    /** @enum {string} */
+                    phase?: "downloading_model" | "generating";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -3535,11 +3637,17 @@ export interface components {
                     pagesParsed: number;
                     currentPage?: number;
                     /** @enum {string} */
-                    phase: "infer" | "merge";
+                    phase: "download_model" | "infer" | "merge";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                    /** @enum {string} */
+                    phase?: "downloading_model" | "generating";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -3646,11 +3754,17 @@ export interface components {
                     pagesParsed: number;
                     currentPage?: number;
                     /** @enum {string} */
-                    phase: "infer" | "merge";
+                    phase: "download_model" | "infer" | "merge";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                    /** @enum {string} */
+                    phase?: "downloading_model" | "generating";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -3756,11 +3870,17 @@ export interface components {
                     pagesParsed: number;
                     currentPage?: number;
                     /** @enum {string} */
-                    phase: "infer" | "merge";
+                    phase: "download_model" | "infer" | "merge";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                    /** @enum {string} */
+                    phase?: "downloading_model" | "generating";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -3862,11 +3982,17 @@ export interface components {
                     pagesParsed: number;
                     currentPage?: number;
                     /** @enum {string} */
-                    phase: "infer" | "merge";
+                    phase: "download_model" | "infer" | "merge";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                    /** @enum {string} */
+                    phase?: "downloading_model" | "generating";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -3967,11 +4093,17 @@ export interface components {
                     pagesParsed: number;
                     currentPage?: number;
                     /** @enum {string} */
-                    phase: "infer" | "merge";
+                    phase: "download_model" | "infer" | "merge";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
                     plannedCount: number;
+                    /** @enum {string} */
+                    phase?: "downloading_model" | "generating";
+                    downloadedBytes?: number;
+                    totalBytes?: number;
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";

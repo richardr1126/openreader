@@ -2,8 +2,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
-import { access, copyFile, mkdir, readFile, rename, unlink, writeFile } from 'fs/promises';
+import { access, copyFile, mkdir, readFile, rename, unlink } from 'fs/promises';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
+import {
+  downloadModelArtifact,
+  type ModelDownloadProgressHandler,
+} from '../model-download';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const MODEL_DIR = path.join(DOCSTORE_DIR, 'model', 'whisper-base_timestamped');
@@ -126,26 +130,19 @@ async function verifyFile(filePath: string, expected: { sha256?: string; size?: 
   return verifyBytes(bytes, expected);
 }
 
-async function downloadToFile(fetchImpl: WhisperFetch, url: string, outPath: string): Promise<void> {
-  const res = await fetchImpl(url);
-  if (!res.ok) {
-    throw new Error(`Download failed for ${url}: ${res.status} ${res.statusText}`);
-  }
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  await writeFile(outPath, bytes);
-}
-
 export async function ensureWhisperArtifacts(options: {
   modelDir: string;
   artifacts: WhisperArtifactSpec[];
   staticArtifacts?: WhisperStaticArtifactSpec[];
   fetchImpl?: WhisperFetch;
+  onProgress?: ModelDownloadProgressHandler;
 }): Promise<void> {
   const {
     modelDir,
     artifacts,
     staticArtifacts = [],
     fetchImpl = fetch,
+    onProgress,
   } = options;
 
   try {
@@ -172,18 +169,33 @@ export async function ensureWhisperArtifacts(options: {
     // Continue to repair/download.
   }
 
+  const totalBytes = artifacts.reduce((sum, artifact) => sum + Math.max(0, Number(artifact.size ?? 0)), 0);
+  let completedBytes = 0;
+  await onProgress?.({ downloadedBytes: 0, totalBytes });
+
   for (const artifact of artifacts) {
     const target = resolvePath(artifact.path, modelDir);
     const targetDir = path.dirname(target);
     const tmp = `${target}.tmp`;
 
     await mkdir(targetDir, { recursive: true });
-    await downloadToFile(fetchImpl, artifact.url, tmp);
+    const expectedBytes = Math.max(0, Number(artifact.size ?? 0));
+    const actualBytes = await downloadModelArtifact({
+      fetchImpl,
+      url: artifact.url,
+      outPath: tmp,
+      expectedBytes,
+      onProgress: ({ downloadedBytes }) => onProgress?.({
+        downloadedBytes: Math.min(totalBytes || Number.MAX_SAFE_INTEGER, completedBytes + downloadedBytes),
+        totalBytes,
+      }),
+    });
     if (!(await verifyFile(tmp, artifact))) {
       await unlink(tmp).catch(() => undefined);
       throw new Error(`Whisper artifact checksum verification failed: ${artifact.path}`);
     }
     await rename(tmp, target);
+    completedBytes += expectedBytes || actualBytes;
   }
 
   for (const artifact of staticArtifacts) {
@@ -208,7 +220,7 @@ export function createSingleflightRunner<T>(work: () => Promise<T>): () => Promi
   };
 }
 
-async function ensureModelInternal(): Promise<string> {
+async function ensureModelInternal(onProgress?: ModelDownloadProgressHandler): Promise<string> {
   if (process.env[WHISPER_MODEL_BASE_URL_ENV]?.trim()) {
     for (const relativePath of MODEL_RELATIVE_PATHS) {
       if (!(relativePath in DEFAULT_URLS)) {
@@ -237,13 +249,27 @@ async function ensureModelInternal(): Promise<string> {
     modelDir: MODEL_DIR,
     artifacts,
     staticArtifacts,
+    onProgress,
   });
 
   return WHISPER_ENCODER_MODEL_PATH;
 }
 
-const ensureWhisperModelSingleflight = createSingleflightRunner(ensureModelInternal);
+let ensureWhisperModelInflight: Promise<string> | null = null;
+const progressListeners = new Set<ModelDownloadProgressHandler>();
 
-export async function ensureWhisperModel(): Promise<string> {
-  return ensureWhisperModelSingleflight();
+export async function ensureWhisperModel(options: { onProgress?: ModelDownloadProgressHandler } = {}): Promise<string> {
+  if (options.onProgress) progressListeners.add(options.onProgress);
+  if (!ensureWhisperModelInflight) {
+    ensureWhisperModelInflight = ensureModelInternal(async (progress) => {
+      await Promise.all([...progressListeners].map((listener) => listener(progress)));
+    }).finally(() => {
+      ensureWhisperModelInflight = null;
+    });
+  }
+  try {
+    return await ensureWhisperModelInflight;
+  } finally {
+    if (options.onProgress) progressListeners.delete(options.onProgress);
+  }
 }

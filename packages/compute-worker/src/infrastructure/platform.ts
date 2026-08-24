@@ -14,6 +14,9 @@ function findMonorepoRoot(startDir: string): string | null {
 }
 
 function resolveDocstoreDir(): string {
+  const sqliteDbPath = process.env.SQLITE_DB_PATH?.trim();
+  if (sqliteDbPath) return path.dirname(path.resolve(sqliteDbPath));
+
   // 1. Try to find the monorepo root (works in local development)
   const repoRoot = findMonorepoRoot(process.cwd());
   if (repoRoot) return path.join(repoRoot, 'docstore');

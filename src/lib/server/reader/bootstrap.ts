@@ -136,13 +136,27 @@ function toProgress(row: {
 
 function pendingPdfProgress(
   status: 'pending' | 'running',
-  progress: { phase: 'infer' | 'merge'; pagesParsed: number; totalPages: number } | null,
+  progress: {
+    phase: 'download_model' | 'infer' | 'merge';
+    pagesParsed: number;
+    totalPages: number;
+    downloadedBytes?: number;
+    totalBytes?: number;
+  } | null,
 ): ReaderBootstrapProgress {
   return {
     kind: 'pdf-parse',
-    phase: status === 'pending' ? 'queued' : progress?.phase === 'merge' ? 'merging' : 'parsing',
+    phase: status === 'pending'
+      ? 'queued'
+      : progress?.phase === 'download_model'
+        ? 'downloading-model'
+        : progress?.phase === 'merge' ? 'merging' : 'parsing',
     pagesParsed: Math.max(0, Number(progress?.pagesParsed ?? 0)),
     totalPages: Math.max(0, Number(progress?.totalPages ?? 0)),
+    ...(progress?.phase === 'download_model' ? {
+      downloadedBytes: Math.max(0, Number(progress.downloadedBytes ?? 0)),
+      totalBytes: Math.max(0, Number(progress.totalBytes ?? 0)),
+    } : {}),
   };
 }
 

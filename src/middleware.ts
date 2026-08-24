@@ -131,10 +131,13 @@ export function middleware(request: NextRequest) {
 }
 
 /**
- * Match all routes except static assets and Next.js internals.
+ * Match all routes except static assets, Next.js internals, and the raw
+ * same-origin blob transfer. The upload route authenticates both methods
+ * itself; excluding it here also prevents Next middleware from buffering and
+ * truncating request bodies at its independent 10 MB default.
  */
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json).*)',
+    '/((?!api/documents/blob/upload$|_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json).*)',
   ],
 };

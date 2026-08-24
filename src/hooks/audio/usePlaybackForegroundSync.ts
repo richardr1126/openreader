@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, type MutableRefObject } from 'react';
+import toast from 'react-hot-toast';
 
 import {
   getTtsPlaybackSeekLayout,
@@ -20,6 +21,8 @@ type UsePlaybackForegroundSyncInput = {
   setPlaybackSeekLayout: (layout: TtsPlaybackSeekLayout | null) => void;
 };
 
+const MODEL_DOWNLOAD_TOAST_ID = 'tts-model-download';
+
 export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput) {
   const {
     playbackCursorOrdinalRef,
@@ -32,6 +35,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPlaybackForegroundSync = useCallback(() => {
+    toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
     if (playbackCursorIntervalRef.current) {
       clearInterval(playbackCursorIntervalRef.current);
       playbackCursorIntervalRef.current = null;
@@ -54,7 +58,19 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     void refreshPlaybackTimeline(activeSession.timelineUrl).catch(() => undefined);
     playbackEventsUnsubRef.current = subscribeTtsPlaybackEvents(activeSession.sessionId, {
       onSnapshot: (snapshot) => {
-        if (runId !== playbackRunIdRef.current || snapshot.status === 'failed') return;
+        if (runId !== playbackRunIdRef.current) return;
+        if (snapshot.phase === 'downloading_model') {
+          const percent = snapshot.totalBytes && snapshot.downloadedBytes !== null
+            ? Math.round((snapshot.downloadedBytes / snapshot.totalBytes) * 100)
+            : null;
+          toast.loading(
+            percent === null ? 'Downloading playback model…' : `Downloading playback model… ${percent}%`,
+            { id: MODEL_DOWNLOAD_TOAST_ID },
+          );
+        } else {
+          toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
+        }
+        if (snapshot.status === 'failed') return;
         const currentSession = playbackSessionRef.current;
         if (!currentSession) return;
         void refreshPlaybackTimeline(currentSession.timelineUrl).catch(() => undefined);

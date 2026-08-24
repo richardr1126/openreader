@@ -10,6 +10,7 @@ import {
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,12 @@ export async function GET(
       throw new Error('TTS playback timeline requires a canonical plan artifact');
     }
 
-    const segments = await listCompletedTtsPlaybackSegments(session);
+    const cursorOrdinal = Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)));
+    const minOrdinal = Math.max(0, cursorOrdinal - 1);
+    const segments = await listCompletedTtsPlaybackSegments(session, {
+      minOrdinal,
+      limit: TTS_PLAYBACK_AHEAD_WINDOW + 2,
+    });
     const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
       alignment: parseAlignment(segment.alignmentJson),
       updatedAt: segment.updatedAt,

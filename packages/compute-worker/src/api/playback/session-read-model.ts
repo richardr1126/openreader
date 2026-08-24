@@ -24,7 +24,10 @@ export type PlaybackSegmentManifestRow = {
 export interface PlaybackSessionReadModel {
   readSession(sessionId: string): Promise<PlaybackSessionRow | null>;
   readPlanSegments(planObjectKey: string): Promise<Array<{ ordinal: number; text: string }> | null>;
-  readSegmentIndexRows(session: PlaybackSessionRow): Promise<PlaybackSegmentManifestRow[]>;
+  readSegmentIndexRows(
+    session: PlaybackSessionRow,
+    options?: { minOrdinal?: number; limit?: number },
+  ): Promise<PlaybackSegmentManifestRow[]>;
   readSegmentState(session: PlaybackSessionRow, ordinal: number): Promise<PlaybackSegmentState>;
   listCompletedDurations(session: PlaybackSessionRow, planLength: number): Promise<Map<number, number>>;
   forgetCachedSidecar(session: PlaybackSessionRow, ordinal: number): Promise<void>;
@@ -185,14 +188,25 @@ export function createPlaybackSessionReadModel(input: {
       return await playbackStorage?.sessions.getSession(sessionId) ?? null;
     },
     readPlanSegments,
-    async readSegmentIndexRows(session) {
+    async readSegmentIndexRows(session, options) {
       if (!session.planObjectKey) return [];
       const planSegments = await readPlanSegments(session.planObjectKey);
       if (!planSegments?.length) return [];
+      const minOrdinal = Math.max(0, Math.floor(Number(options?.minOrdinal ?? 0)));
+      const limit = Math.max(1, Math.min(Math.floor(Number(options?.limit ?? 500)), 10000));
+      // Sidecars are immutable objects rather than rows in an indexed database.
+      // Bound reads to the requested ordinal window so a timeline refresh does
+      // not issue one object-store miss for every segment in a long document.
+      const requestedSegments = planSegments
+        .filter((segment) => segment.ordinal >= minOrdinal)
+        .slice(0, limit);
+      const requestedOrdinals = new Set(requestedSegments.map((segment) => segment.ordinal));
       const cacheEpoch = await getScopeEpoch(session);
       const cache = getSidecarScope(session, cacheEpoch);
-      const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(cache);
-      const missing = planSegments
+      const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(
+        [...cache].filter(([ordinal]) => requestedOrdinals.has(ordinal)),
+      );
+      const missing = requestedSegments
         .map((segment) => segment.ordinal)
         .filter((ordinal) => cache.get(ordinal)?.status !== 'completed');
       for (let index = 0; index < missing.length; index += SIDECAR_FETCH_BATCH) {

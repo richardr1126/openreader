@@ -8,6 +8,7 @@ import { PDF_PARSER_VERSION } from '../../operations/contracts';
 import { stitchCrossPageBlocks } from './stitch';
 import { renderPage } from './render';
 import { normalizeTextItemsForLayout } from './normalize-text';
+import type { ModelDownloadProgressHandler } from '../model-download';
 
 interface ParsePdfInput {
   documentId: string;
@@ -21,12 +22,13 @@ interface ParsePdfInput {
     totalPages: number;
     pageMs: number;
   }) => void | Promise<void>;
+  onModelDownloadProgress?: ModelDownloadProgressHandler;
 }
 
 const LAYOUT_RENDER_SCALE = 1.5;
 
 export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument> {
-  await ensureModel();
+  await ensureModel({ onProgress: input.onModelDownloadProgress });
 
   // Keep independent byte copies for text extraction and page rendering. pdf.js
   // can detach buffers passed to getDocument().

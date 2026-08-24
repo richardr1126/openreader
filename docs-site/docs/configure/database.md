@@ -11,7 +11,7 @@ This page covers database mode selection for OpenReader.
 
 ## Database mode
 
-- SQLite (default): embedded DB at `docstore/sqlite3.db`; good for local/self-host single-instance setups.
+- SQLite (default): embedded DB at `docstore/sqlite3.db`; good for local/self-host single-instance setups. Set `SQLITE_DB_PATH` to override the file location.
 - Postgres: enabled when `POSTGRES_URL` is set; recommended for production/distributed deployments.
 
 ## What the database stores
@@ -38,6 +38,7 @@ Those payloads live in object storage. SQL stores the metadata, references, and 
 ## Related variables
 
 - `POSTGRES_URL`
+- `SQLITE_DB_PATH` (SQLite mode only; relative paths resolve from the app workspace)
 
 For database variable behavior, see [Environment Variables](../reference/environment-variables#database-and-object-blob-storage).
 

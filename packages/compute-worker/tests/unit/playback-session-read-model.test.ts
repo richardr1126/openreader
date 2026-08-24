@@ -51,9 +51,13 @@ function completedSidecar(ordinal: number, cacheEpoch = 0): TtsPlaybackSegmentMe
 }
 
 function createFixture() {
+  const planSegments = Array.from({ length: 100 }, (_, ordinal) => ({
+    ordinal,
+    text: `Segment ${ordinal}.`,
+  }));
   const objects = new Map<string, Buffer>([[
     session.planObjectKey!,
-    Buffer.from(JSON.stringify({ segments: [{ ordinal: 0, text: 'Hello world.' }] })),
+    Buffer.from(JSON.stringify({ segments: planSegments })),
   ]]);
   let epoch = 0;
   const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
@@ -120,6 +124,19 @@ describe('playback session read model', () => {
     expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
   });
 
+  test('bounds sidecar reads to the requested ordinal window', async () => {
+    const fixture = createFixture();
+    fixture.sidecars.set(41, completedSidecar(41));
+
+    await expect(fixture.model.readSegmentIndexRows(session, {
+      minOrdinal: 40,
+      limit: 3,
+    })).resolves.toMatchObject([{ ordinal: 41 }]);
+
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(3);
+    expect(fixture.readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal)).toEqual([40, 41, 42]);
+  });
+
   test('invalidates cached sidecars by exact scope and parsed plans by prefix', async () => {
     const fixture = createFixture();
     fixture.sidecars.set(0, completedSidecar(0));
@@ -133,9 +150,9 @@ describe('playback session read model', () => {
     await fixture.model.readSegmentState(session, 0);
     expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
 
-    await expect(fixture.model.readPlanSegments(session.planObjectKey!)).resolves.toHaveLength(1);
+    await expect(fixture.model.readPlanSegments(session.planObjectKey!)).resolves.toHaveLength(100);
     fixture.objects.set(session.planObjectKey!, Buffer.from(JSON.stringify({ segments: [{ ordinal: 1, text: 'New.' }] })));
-    await expect(fixture.model.readPlanSegments(session.planObjectKey!)).resolves.toMatchObject([{ ordinal: 0 }]);
+    await expect(fixture.model.readPlanSegments(session.planObjectKey!)).resolves.toHaveLength(100);
     expect(fixture.model.invalidatePlansUnderPrefix('openreader/plans/')).toBe(1);
     await expect(fixture.model.readPlanSegments(session.planObjectKey!)).resolves.toMatchObject([{ ordinal: 1 }]);
   });

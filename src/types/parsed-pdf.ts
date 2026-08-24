@@ -33,10 +33,12 @@ export const PARSED_PDF_BLOCK_KINDS: ParsedPdfBlockKind[] = [
 ];
 
 export type PdfParseStatus = 'pending' | 'running' | 'ready' | 'failed';
-export type PdfParsePhase = 'infer' | 'merge';
+export type PdfParsePhase = 'download_model' | 'infer' | 'merge';
 export interface PdfParseProgress {
   totalPages: number;
   pagesParsed: number;
   currentPage?: number;
   phase: PdfParsePhase;
+  downloadedBytes?: number;
+  totalBytes?: number;
 }

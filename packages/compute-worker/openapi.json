@@ -260,9 +260,16 @@
           "phase": {
             "type": "string",
             "enum": [
+              "download_model",
               "infer",
               "merge"
             ]
+          },
+          "downloadedBytes": {
+            "type": "number"
+          },
+          "totalBytes": {
+            "type": "number"
           }
         },
         "required": [
@@ -1009,9 +1016,16 @@
                   "phase": {
                     "type": "string",
                     "enum": [
+                      "download_model",
                       "infer",
                       "merge"
                     ]
+                  },
+                  "downloadedBytes": {
+                    "type": "number"
+                  },
+                  "totalBytes": {
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -1031,6 +1045,19 @@
                     "type": "number"
                   },
                   "plannedCount": {
+                    "type": "number"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "downloading_model",
+                      "generating"
+                    ]
+                  },
+                  "downloadedBytes": {
+                    "type": "number"
+                  },
+                  "totalBytes": {
                     "type": "number"
                   }
                 },
@@ -1413,9 +1440,16 @@
                       "phase": {
                         "type": "string",
                         "enum": [
+                          "download_model",
                           "infer",
                           "merge"
                         ]
+                      },
+                      "downloadedBytes": {
+                        "type": "number"
+                      },
+                      "totalBytes": {
+                        "type": "number"
                       }
                     },
                     "required": [
@@ -1435,6 +1469,19 @@
                         "type": "number"
                       },
                       "plannedCount": {
+                        "type": "number"
+                      },
+                      "phase": {
+                        "type": "string",
+                        "enum": [
+                          "downloading_model",
+                          "generating"
+                        ]
+                      },
+                      "downloadedBytes": {
+                        "type": "number"
+                      },
+                      "totalBytes": {
                         "type": "number"
                       }
                     },
@@ -1842,9 +1889,16 @@
                           "phase": {
                             "type": "string",
                             "enum": [
+                              "download_model",
                               "infer",
                               "merge"
                             ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -1864,6 +1918,19 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "downloading_model",
+                              "generating"
+                            ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
                             "type": "number"
                           }
                         },
@@ -2363,9 +2430,16 @@
                           "phase": {
                             "type": "string",
                             "enum": [
+                              "download_model",
                               "infer",
                               "merge"
                             ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -2385,6 +2459,19 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "downloading_model",
+                              "generating"
+                            ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
                             "type": "number"
                           }
                         },
@@ -2898,9 +2985,16 @@
                           "phase": {
                             "type": "string",
                             "enum": [
+                              "download_model",
                               "infer",
                               "merge"
                             ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -2920,6 +3014,19 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "downloading_model",
+                              "generating"
+                            ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
                             "type": "number"
                           }
                         },
@@ -3411,9 +3518,16 @@
                           "phase": {
                             "type": "string",
                             "enum": [
+                              "download_model",
                               "infer",
                               "merge"
                             ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -3433,6 +3547,19 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "downloading_model",
+                              "generating"
+                            ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
                             "type": "number"
                           }
                         },
@@ -3913,9 +4040,16 @@
                           "phase": {
                             "type": "string",
                             "enum": [
+                              "download_model",
                               "infer",
                               "merge"
                             ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -3935,6 +4069,19 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string",
+                            "enum": [
+                              "downloading_model",
+                              "generating"
+                            ]
+                          },
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
                             "type": "number"
                           }
                         },
@@ -4640,9 +4787,16 @@
                                     "phase": {
                                       "type": "string",
                                       "enum": [
+                                        "download_model",
                                         "infer",
                                         "merge"
                                       ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": [
@@ -4662,6 +4816,19 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
                                       "type": "number"
                                     }
                                   },
@@ -4767,6 +4934,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -6125,9 +6305,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -6147,6 +6334,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -6624,9 +6824,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -6646,6 +6853,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -7121,9 +7341,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -7143,6 +7370,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -7713,9 +7953,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -7735,6 +7982,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -8264,9 +8524,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -8286,6 +8553,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -8755,9 +9035,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -8777,6 +9064,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -9326,9 +9626,16 @@
                                     "phase": {
                                       "type": "string",
                                       "enum": [
+                                        "download_model",
                                         "infer",
                                         "merge"
                                       ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": [
@@ -9348,6 +9655,19 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
                                       "type": "number"
                                     }
                                   },
@@ -9854,9 +10174,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -9876,6 +10203,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },
@@ -10452,9 +10792,16 @@
                                     "phase": {
                                       "type": "string",
                                       "enum": [
+                                        "download_model",
                                         "infer",
                                         "merge"
                                       ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": [
@@ -10474,6 +10821,19 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
                                       "type": "number"
                                     }
                                   },
@@ -10956,9 +11316,16 @@
                                     "phase": {
                                       "type": "string",
                                       "enum": [
+                                        "download_model",
                                         "infer",
                                         "merge"
                                       ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": [
@@ -10978,6 +11345,19 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
                                       "type": "number"
                                     }
                                   },
@@ -11587,9 +11967,16 @@
                                     "phase": {
                                       "type": "string",
                                       "enum": [
+                                        "download_model",
                                         "infer",
                                         "merge"
                                       ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": [
@@ -11609,6 +11996,19 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
                                       "type": "number"
                                     }
                                   },
@@ -12199,9 +12599,16 @@
                                     "phase": {
                                       "type": "string",
                                       "enum": [
+                                        "download_model",
                                         "infer",
                                         "merge"
                                       ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": [
@@ -12221,6 +12628,19 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
                                       "type": "number"
                                     }
                                   },
@@ -12652,9 +13072,16 @@
                             "phase": {
                               "type": "string",
                               "enum": [
+                                "download_model",
                                 "infer",
                                 "merge"
                               ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
                             }
                           },
                           "required": [
@@ -12674,6 +13101,19 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
                               "type": "number"
                             }
                           },

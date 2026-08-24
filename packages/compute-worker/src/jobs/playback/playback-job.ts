@@ -103,6 +103,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           completedThroughOrdinal: lastCompletedThrough,
           completedCount: completedOrdinals.size,
           plannedCount: plannedSegments.length,
+          phase: 'generating',
         });
       };
       await emitProgress();
@@ -143,6 +144,8 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const generationSegments = forceDocumentExtent
         ? plannedSegments
         : plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
+      let lastModelProgressAt = 0;
+      let lastModelProgressBytes = -1;
       await generateExplicitTtsPlaybackSegments({
         request: parsed,
         s3Prefix: input.s3Prefix,
@@ -158,6 +161,24 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         onBeforeSegment,
         onSegmentCompleted,
         onSegmentErrored: emitProgress,
+        onModelDownloadProgress: async ({ downloadedBytes, totalBytes }) => {
+          const now = Date.now();
+          const shouldPublish = lastModelProgressBytes < 0
+            || downloadedBytes >= totalBytes
+            || downloadedBytes - lastModelProgressBytes >= 1024 * 1024
+            || now - lastModelProgressAt >= 500;
+          if (!shouldPublish) return;
+          lastModelProgressAt = now;
+          lastModelProgressBytes = downloadedBytes;
+          await hooks?.onProgress?.({
+            completedThroughOrdinal: lastCompletedThrough,
+            completedCount: completedOrdinals.size,
+            plannedCount: plannedSegments.length,
+            phase: 'downloading_model',
+            downloadedBytes,
+            totalBytes,
+          });
+        },
       });
       const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
       if (!finalSession || (finalSession.status !== 'queued' && finalSession.status !== 'running')) stoppedEarly = true;

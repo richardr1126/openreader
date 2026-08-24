@@ -27,6 +27,11 @@ async function fetchPreviewSource(docId: string, signal?: AbortSignal): Promise<
   return fetch(documentPreviewPresignUrl(docId), { signal, cache: 'no-store' });
 }
 
+function isReadyPreviewImage(response: Response): boolean {
+  return response.status === 200
+    && response.headers.get('content-type')?.toLowerCase().startsWith('image/') === true;
+}
+
 export async function getPersistedDocumentPreviewUrl(
   docId: string,
   previewVersion: string | number,
@@ -51,7 +56,10 @@ export async function primeDocumentPreviewCache(
       previewBlobCacheKey(docId, previewVersion),
       () => fetchPreviewSource(docId, options?.signal),
     ).catch(() => null);
-    if (!response?.ok) return null;
+    // A preview that is still generating responds with 202 JSON. Treating any
+    // 2xx response as an image creates a broken blob URL and prevents the
+    // caller from subscribing to the completion event stream.
+    if (!response || !isReadyPreviewImage(response)) return null;
     const blob = await response.blob();
     if (blob.size === 0) return null;
     const url = URL.createObjectURL(blob);

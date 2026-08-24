@@ -11,6 +11,7 @@ import {
 } from '@/lib/server/tts/playback-plans';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
+import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,10 @@ export async function GET(
     const completedSegments = session
       ? await listCompletedTtsPlaybackSegments(
         session,
-        artifact.segments.length > 0 ? { limit: artifact.segments.length } : undefined,
+        {
+          minOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal)),
+          limit: TTS_PLAYBACK_AHEAD_WINDOW + 1,
+        },
       )
       : [];
     const completedDurations = new Map(completedSegments.map((segment) => [segment.ordinal, segment.durationMs]));

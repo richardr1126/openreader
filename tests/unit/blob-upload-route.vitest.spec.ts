@@ -52,7 +52,10 @@ describe('/api/documents/blob/upload proxy flow', () => {
       transport: 'proxy',
       uploads: [{
         url: expect.stringMatching(/^\/api\/documents\/blob\/upload\?token=[0-9a-f-]{36}$/),
-        headers: { 'Content-Type': 'application/pdf' },
+        headers: {
+          'Content-Type': 'application/pdf',
+          'X-OpenReader-Upload-Size': '5',
+        },
       }],
     });
     expect(hoisted.presignTempPut).not.toHaveBeenCalled();
@@ -65,7 +68,10 @@ describe('/api/documents/blob/upload proxy flow', () => {
       `http://localhost/api/documents/blob/upload?token=${token}`,
       {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/pdf' },
+        headers: {
+          'Content-Type': 'application/pdf',
+          'X-OpenReader-Upload-Size': '5',
+        },
         body: 'hello',
       },
     ));
@@ -79,5 +85,27 @@ describe('/api/documents/blob/upload proxy flow', () => {
       'application/pdf',
       null,
     );
+  });
+
+  test('rejects a truncated proxy transfer instead of storing corrupt bytes', async () => {
+    const token = '123e4567-e89b-12d3-a456-426614174000';
+    const { PUT } = await import('../../src/app/api/documents/blob/upload/route');
+    const response = await PUT(new NextRequest(
+      `http://localhost/api/documents/blob/upload?token=${token}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/epub+zip',
+          'X-OpenReader-Upload-Size': '6',
+        },
+        body: 'short',
+      },
+    ));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Incomplete upload: expected 6 bytes but received 5',
+    });
+    expect(hoisted.putTempDocumentBlob).not.toHaveBeenCalled();
   });
 });

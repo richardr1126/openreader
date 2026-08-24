@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./migrate": "./src/migrate.mjs",
+    "./sqlite-path": "./src/sqlite-path.js",
     "./schema": "./src/schema.ts",
     "./schema-postgres": "./src/schema_postgres.ts",
     "./schema-sqlite": "./src/schema_sqlite.ts",

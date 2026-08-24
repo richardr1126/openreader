@@ -238,13 +238,18 @@ export const pdfLayoutProgressSchema = z.object({
   totalPages: z.number(),
   pagesParsed: z.number(),
   currentPage: z.number().optional(),
-  phase: z.enum(['infer', 'merge']),
+  phase: z.enum(['download_model', 'infer', 'merge']),
+  downloadedBytes: z.number().optional(),
+  totalBytes: z.number().optional(),
 });
 
 export const ttsPlaybackProgressSchema = z.object({
   completedThroughOrdinal: z.number(),
   completedCount: z.number(),
   plannedCount: z.number(),
+  phase: z.enum(['downloading_model', 'generating']).optional(),
+  downloadedBytes: z.number().optional(),
+  totalBytes: z.number().optional(),
 });
 
 export const ttsPlaybackExportProgressSchema = z.object({

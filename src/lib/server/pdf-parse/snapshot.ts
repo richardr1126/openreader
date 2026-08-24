@@ -27,7 +27,7 @@ function isPdfParseProgress(value: unknown): value is PdfParseProgress {
   const rec = value as Record<string, unknown>;
   return Number.isFinite(Number(rec.totalPages))
     && Number.isFinite(Number(rec.pagesParsed))
-    && (rec.phase === 'infer' || rec.phase === 'merge');
+    && (rec.phase === 'download_model' || rec.phase === 'infer' || rec.phase === 'merge');
 }
 
 export function pdfParseSnapshotFromWorkerState(

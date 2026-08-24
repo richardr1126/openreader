@@ -19,6 +19,7 @@ import type { TtsPlaybackStorage } from '../../playback/storage';
 import { resolveTtsCredentials } from '../tts-credentials';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
 import type { TtsPlaybackRequest } from './schemas';
+import type { ModelDownloadProgressHandler } from '../../inference/model-download';
 
 const SEGMENT_MAX_ATTEMPTS = 2;
 const GENERATION_LEASE_MIN_MS = 60_000;
@@ -104,6 +105,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
   onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
   onSegmentErrored?: (planOrdinal: number) => Promise<void>;
+  onModelDownloadProgress?: ModelDownloadProgressHandler;
 }): Promise<void> {
   if (input.segments.length === 0) return;
 
@@ -185,6 +187,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     text: segment.text,
     lang: effectiveSettings.language,
     cacheKey: audioKey,
+    onModelDownloadProgress: input.onModelDownloadProgress,
   }).then((result) => {
     const first = result.alignments[0];
     return first ? { ...first, sentenceIndex: segment.original.ordinal } : null;

@@ -122,10 +122,10 @@ export function registerPlaybackSessionRoutes(
     }
     const minOrdinal = Math.max(0, Math.floor(Number(query.minOrdinal ?? 0)));
     const limit = Math.max(1, Math.min(Math.floor(Number(query.limit ?? 500)), 10000));
-    const rows = await readModel.readSegmentIndexRows(session);
+    const rows = await readModel.readSegmentIndexRows(session, { minOrdinal, limit });
     return {
       sessionId,
-      segments: rows.filter((row) => row.ordinal >= minOrdinal).slice(0, limit),
+      segments: rows,
     };
   });
 

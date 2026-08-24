@@ -286,13 +286,15 @@ export interface WorkerJobTiming {
   computeMs?: number;
 }
 
-export type PdfLayoutProgressPhase = 'infer' | 'merge';
+export type PdfLayoutProgressPhase = 'download_model' | 'infer' | 'merge';
 
 export interface PdfLayoutProgress {
   totalPages: number;
   pagesParsed: number;
   currentPage?: number;
   phase: PdfLayoutProgressPhase;
+  downloadedBytes?: number;
+  totalBytes?: number;
 }
 
 /**
@@ -306,6 +308,9 @@ export interface TtsPlaybackProgress {
   completedThroughOrdinal: number;
   completedCount: number;
   plannedCount: number;
+  phase?: 'downloading_model' | 'generating';
+  downloadedBytes?: number;
+  totalBytes?: number;
 }
 
 export interface TtsPlaybackExportProgress {

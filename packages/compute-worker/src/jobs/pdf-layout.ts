@@ -24,6 +24,8 @@ export function createPdfLayoutHandler(input: JobHandlerContext) {
     const s3FetchMs = Date.now() - s3FetchStartedAt;
     let lastTotalPages = 0;
     let lastPagesParsed = 0;
+    let lastModelProgressAt = 0;
+    let lastModelProgressBytes = -1;
     const computeStartedAt = Date.now();
     const result = await withIdleTimeoutAndHardCap({
       idleTimeoutMs: Math.max(input.pdfTimeoutMs, 1_000),
@@ -32,6 +34,24 @@ export function createPdfLayoutHandler(input: JobHandlerContext) {
       run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
         documentId: parsed.documentId,
         pdfBytes,
+        onModelDownloadProgress: async ({ downloadedBytes, totalBytes }) => {
+          touchProgress();
+          const now = Date.now();
+          const shouldPublish = lastModelProgressBytes < 0
+            || downloadedBytes >= totalBytes
+            || downloadedBytes - lastModelProgressBytes >= 1024 * 1024
+            || now - lastModelProgressAt >= 500;
+          if (!shouldPublish) return;
+          lastModelProgressAt = now;
+          lastModelProgressBytes = downloadedBytes;
+          await hooks?.onProgress?.({
+            phase: 'download_model',
+            totalPages: 0,
+            pagesParsed: 0,
+            downloadedBytes,
+            totalBytes,
+          });
+        },
         onPageStarted: async ({ pageNumber, totalPages }) => {
           touchProgress();
           lastTotalPages = totalPages;

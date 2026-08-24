@@ -2,8 +2,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
-import { access, mkdir, rename, writeFile, readFile, unlink, copyFile } from 'fs/promises';
+import { access, mkdir, rename, readFile, unlink, copyFile } from 'fs/promises';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
+import {
+  downloadModelArtifact,
+  type ModelDownloadProgressHandler,
+} from '../model-download';
 
 const DEFAULT_MODEL_BASE_URL = 'https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main';
 const PDF_LAYOUT_MODEL_BASE_URL_ENV = 'PDF_LAYOUT_MODEL_BASE_URL';
@@ -32,19 +36,11 @@ function loadManifest(): { files: ManifestEntry[] } {
 const manifest = loadManifest();
 
 let inflight: Promise<string> | null = null;
+const progressListeners = new Set<ModelDownloadProgressHandler>();
 
 async function sha256Hex(filePath: string): Promise<string> {
   const bytes = await readFile(filePath);
   return createHash('sha256').update(bytes).digest('hex');
-}
-
-async function downloadToFile(url: string, outPath: string): Promise<void> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Download failed for ${url}: ${res.status} ${res.statusText}`);
-  }
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  await writeFile(outPath, bytes);
 }
 
 function joinModelUrl(baseUrl: string, relativePath: string): string {
@@ -78,6 +74,10 @@ async function ensureLicense(): Promise<void> {
   }
 }
 
+async function publishProgress(downloadedBytes: number, totalBytes: number): Promise<void> {
+  await Promise.all([...progressListeners].map((listener) => listener({ downloadedBytes, totalBytes })));
+}
+
 async function ensureModelInternal(): Promise<string> {
   try {
     await access(MODEL_PATH);
@@ -109,22 +109,46 @@ async function ensureModelInternal(): Promise<string> {
   const configUrl = joinModelUrl(modelBaseUrl, 'config.json');
   const preprocessorUrl = joinModelUrl(modelBaseUrl, 'preprocessor_config.json');
 
-  await downloadToFile(modelUrl, modelTmpPath);
+  const downloads = [
+    { url: modelUrl, outPath: modelTmpPath, manifestPath: 'model.onnx' },
+    { url: modelDataUrl, outPath: modelDataTmpPath, manifestPath: 'model.onnx.data' },
+    { url: configUrl, outPath: configTmpPath, manifestPath: 'config.json' },
+    { url: preprocessorUrl, outPath: preprocessorTmpPath, manifestPath: 'preprocessor_config.json' },
+  ];
+  const totalBytes = downloads.reduce((sum, item) => sum + (manifestEntry(item.manifestPath)?.size ?? 0), 0);
+  let completedBytes = 0;
+  await publishProgress(0, totalBytes);
+
+  const download = async (item: (typeof downloads)[number]) => {
+    const expectedBytes = manifestEntry(item.manifestPath)?.size ?? 0;
+    const actualBytes = await downloadModelArtifact({
+      url: item.url,
+      outPath: item.outPath,
+      expectedBytes,
+      onProgress: ({ downloadedBytes }) => publishProgress(
+        Math.min(totalBytes || Number.MAX_SAFE_INTEGER, completedBytes + downloadedBytes),
+        totalBytes,
+      ),
+    });
+    completedBytes += expectedBytes || actualBytes;
+  };
+
+  await download(downloads[0]);
   if (!(await verifyFile(modelTmpPath, 'model.onnx'))) {
     await unlink(modelTmpPath).catch(() => undefined);
     throw new Error('PDF layout model checksum verification failed');
   }
-  await downloadToFile(modelDataUrl, modelDataTmpPath);
+  await download(downloads[1]);
   if (!(await verifyFile(modelDataTmpPath, 'model.onnx.data'))) {
     await unlink(modelDataTmpPath).catch(() => undefined);
     throw new Error('PDF layout model external data checksum verification failed');
   }
-  await downloadToFile(configUrl, configTmpPath);
+  await download(downloads[2]);
   if (!(await verifyFile(configTmpPath, 'config.json'))) {
     await unlink(configTmpPath).catch(() => undefined);
     throw new Error('PDF layout model config checksum verification failed');
   }
-  await downloadToFile(preprocessorUrl, preprocessorTmpPath);
+  await download(downloads[3]);
   if (!(await verifyFile(preprocessorTmpPath, 'preprocessor_config.json'))) {
     await unlink(preprocessorTmpPath).catch(() => undefined);
     throw new Error('PDF layout model preprocessor checksum verification failed');
@@ -138,10 +162,16 @@ async function ensureModelInternal(): Promise<string> {
   return MODEL_PATH;
 }
 
-export async function ensureModel(): Promise<string> {
-  if (inflight) return inflight;
-  inflight = ensureModelInternal().finally(() => {
-    inflight = null;
-  });
-  return inflight;
+export async function ensureModel(options: { onProgress?: ModelDownloadProgressHandler } = {}): Promise<string> {
+  if (options.onProgress) progressListeners.add(options.onProgress);
+  if (!inflight) {
+    inflight = ensureModelInternal().finally(() => {
+      inflight = null;
+    });
+  }
+  try {
+    return await inflight;
+  } finally {
+    if (options.onProgress) progressListeners.delete(options.onProgress);
+  }
 }

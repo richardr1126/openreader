@@ -267,6 +267,8 @@ export async function forceReparsePdfDocument(
       phase?: string;
       pagesParsed?: number;
       totalPages?: number;
+      downloadedBytes?: number;
+      totalBytes?: number;
     } | null;
     opId?: string | null;
     error?: string;
@@ -284,10 +286,16 @@ export async function forceReparsePdfDocument(
     progress: {
       kind: 'pdf-parse',
       phase: data?.parseStatus === 'running'
-        ? progress?.phase === 'merge' ? 'merging' : 'parsing'
+        ? progress?.phase === 'download_model'
+          ? 'downloading-model'
+          : progress?.phase === 'merge' ? 'merging' : 'parsing'
         : 'queued',
       pagesParsed: Math.max(0, Number(progress?.pagesParsed ?? 0)),
       totalPages: Math.max(0, Number(progress?.totalPages ?? 0)),
+      ...(progress?.phase === 'download_model' ? {
+        downloadedBytes: Math.max(0, Number(progress.downloadedBytes ?? 0)),
+        totalBytes: Math.max(0, Number(progress.totalBytes ?? 0)),
+      } : {}),
     },
   };
 }

@@ -261,6 +261,9 @@ export type TtsPlaybackEventSnapshot = {
   completedThroughOrdinal: number | null;
   completedCount: number | null;
   plannedCount: number | null;
+  phase: 'downloading_model' | 'generating' | null;
+  downloadedBytes: number | null;
+  totalBytes: number | null;
 };
 
 /**
@@ -286,6 +289,9 @@ export const subscribeTtsPlaybackEvents = (
             completedThroughOrdinal?: number;
             completedCount?: number;
             plannedCount?: number;
+            phase?: 'downloading_model' | 'generating';
+            downloadedBytes?: number;
+            totalBytes?: number;
           } | null;
         };
       };
@@ -302,6 +308,15 @@ export const subscribeTtsPlaybackEvents = (
           : null,
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)
+          : null,
+        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating'
+          ? progress.phase
+          : null,
+        downloadedBytes: progress && Number.isFinite(Number(progress.downloadedBytes))
+          ? Number(progress.downloadedBytes)
+          : null,
+        totalBytes: progress && Number.isFinite(Number(progress.totalBytes))
+          ? Number(progress.totalBytes)
           : null,
       });
     } catch {
@@ -336,6 +351,9 @@ export const subscribeTtsExportGenerationEvents = (
             completedThroughOrdinal?: number;
             completedCount?: number;
             plannedCount?: number;
+            phase?: 'downloading_model' | 'generating';
+            downloadedBytes?: number;
+            totalBytes?: number;
           } | null;
         };
       };
@@ -352,6 +370,15 @@ export const subscribeTtsExportGenerationEvents = (
           : null,
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)
+          : null,
+        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating'
+          ? progress.phase
+          : null,
+        downloadedBytes: progress && Number.isFinite(Number(progress.downloadedBytes))
+          ? Number(progress.downloadedBytes)
+          : null,
+        totalBytes: progress && Number.isFinite(Number(progress.totalBytes))
+          ? Number(progress.totalBytes)
           : null,
       });
     } catch {

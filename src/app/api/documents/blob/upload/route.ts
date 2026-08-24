@@ -58,7 +58,10 @@ export async function POST(req: NextRequest) {
         return {
           token: uploadToken,
           url: `/api/documents/blob/upload?token=${encodeURIComponent(uploadToken)}`,
-          headers: { 'Content-Type': upload.contentType },
+          headers: {
+            'Content-Type': upload.contentType,
+            'X-OpenReader-Upload-Size': String(upload.size),
+          },
         };
       }
       const signed = await presignTempPut(uploadToken, userId, upload.contentType, null, { contentLength: upload.size });
@@ -92,9 +95,22 @@ export async function PUT(req: NextRequest) {
     }
 
     const { maxUploadMb } = await getResolvedRuntimeConfig();
+    const expectedSizeHeader = req.headers.get('x-openreader-upload-size');
+    const expectedSize = expectedSizeHeader === null ? null : Number(expectedSizeHeader);
+    if (expectedSize !== null && (!Number.isSafeInteger(expectedSize) || expectedSize < 0)) {
+      return NextResponse.json({ error: 'Invalid expected upload size' }, { status: 400 });
+    }
+    if (expectedSize !== null && expectedSize > maxUploadMb * 1024 * 1024) {
+      return NextResponse.json({ error: 'Upload exceeds the configured maximum size' }, { status: 413 });
+    }
     const bytes = Buffer.from(await req.arrayBuffer());
     if (bytes.byteLength > maxUploadMb * 1024 * 1024) {
       return NextResponse.json({ error: 'Upload exceeds the configured maximum size' }, { status: 413 });
+    }
+    if (expectedSize !== null && bytes.byteLength !== expectedSize) {
+      return NextResponse.json({
+        error: `Incomplete upload: expected ${expectedSize} bytes but received ${bytes.byteLength}`,
+      }, { status: 400 });
     }
 
     const contentType = req.headers.get('content-type') || 'application/octet-stream';

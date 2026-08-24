@@ -103,11 +103,11 @@ SeaweedFS bucket before startup storage cleanup when the stack uses a new data v
 - OpenReader: `http://localhost:3003`
 - SeaweedFS S3: `http://localhost:8333`
 - Kokoro-FastAPI: `http://localhost:8880`
-- Compute worker playback audio in full stacks: `http://localhost:8081`
+- Compute worker playback audio: `http://localhost:8081`
 
-In the full examples, PostgreSQL and NATS remain internal to the Compose network. The compute
-worker API still uses the internal `http://compute-worker:8081` URL from the app, but port `8081`
-is also published so browsers can load signed worker-owned TTS playback audio.
+All examples publish port `8081` so browsers can load signed worker-owned TTS playback audio. In
+the full examples, the app still reaches the worker over the internal `http://compute-worker:8081`
+URL; PostgreSQL and NATS remain internal to the Compose network.
 
 ## LAN access
 
@@ -118,6 +118,7 @@ Set `BASE_URL` to the Docker host's LAN IP for the default same-origin proxy top
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.yml up
 # Repository convenience command: pnpm compose
 ```
@@ -137,6 +138,7 @@ docker compose -f docker/examples/compose.full.yml up
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
 ```
@@ -154,8 +156,8 @@ docker compose -f docker/examples/compose.local-full.yml up --build
 </TabItem>
 </Tabs>
 
-Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP port `3003`, plus
-`8081` when using full stacks with the standalone compute worker. The embedded/proxy storage endpoint does not need browser access.
+Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP ports `3003` and `8081`.
+The embedded/proxy storage endpoint does not need browser access.
 
 :::info Internal full-stack endpoint
 The full and local-full app and compute workers use `http://seaweedfs:8333` internally.

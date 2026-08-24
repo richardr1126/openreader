@@ -451,6 +451,15 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
     expect(streamSessionRoute).not.toContain('downloadUrl');
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/audio/route.ts'))).toBe(false);
+    for (const composePath of [
+      'docker/examples/compose.yml',
+      'docker/examples/compose.local-slim.yml',
+    ]) {
+      const slimCompose = source(composePath);
+      expect(slimCompose, composePath).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
+      expect(slimCompose, composePath).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
+      expect(slimCompose, composePath).toContain('- "8081:8081"');
+    }
     expect(clientTts).toContain("fetch('/api/tts/export/resolve'");
     expect(exportResolveRoute).toContain('buildTtsPlaybackExportArtifactId');
     expect(exportResolveRoute).toContain('createTtsPlaybackExportArtifactOperation');
@@ -639,13 +648,14 @@ describe('server-state architecture', () => {
     expect(ttsApi).toContain("throw new Error('TTS playback seek layout response was missing required numeric fields')");
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
-    expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('buildPlaybackGrid');
-    expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('artifact.segments.length > 0 ? { limit: artifact.segments.length }');
+    expect(seekLayoutRoute).toContain('buildPlaybackGrid');
+    expect(seekLayoutRoute).toContain('minOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal))');
+    expect(seekLayoutRoute).toContain('limit: TTS_PLAYBACK_AHEAD_WINDOW + 1');
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');
     expect(streamTimelineRoute).toContain("throw new Error('TTS playback timeline requires a canonical plan artifact')");
     expect(streamTimelineRoute).toContain('segments: layout.segments');
     expect(streamTimelineRoute).toContain('completedSegments');
-    expect(source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts')).toContain('segments: layout.segments');
+    expect(seekLayoutRoute).toContain('segments: layout.segments');
     expect(streamTimelineRoute).not.toContain('let cursorMs');
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/media.m3u8/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/lib/client/tts/hls-audio-controller.ts'))).toBe(false);

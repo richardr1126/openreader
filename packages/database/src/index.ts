@@ -5,6 +5,7 @@ import fs from 'fs';
 import * as schema from './schema';
 import * as authSchemaSqlite from './schema_auth_sqlite';
 import * as authSchemaPostgres from './schema_auth_postgres';
+import { resolveSqliteDatabasePath } from './sqlite-path.js';
 
 // Database driver modules are loaded lazily via require() inside getDrizzleDB()
 // to avoid loading the unused driver (~15-20 MB each) in every serverless function.
@@ -97,7 +98,7 @@ function getDrizzleDB() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require('better-sqlite3');
     const workspaceRoot = findWorkspaceRoot(process.cwd());
-    const dbPath = path.join(workspaceRoot, 'docstore', 'sqlite3.db');
+    const dbPath = resolveSqliteDatabasePath(workspaceRoot);
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

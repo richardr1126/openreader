@@ -31,6 +31,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `CRON_SECRET` | Scheduled tasks | unset | Required for Vercel cron invocations |
 | `RICHARDRDEV_PRODUCTION` | Official hosted instance | `false`; enabled only by exact `true` | Enables the official-instance label, privacy notice, and US region gate |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
+| `SQLITE_DB_PATH` | Database | `docstore/sqlite3.db` | Override the SQLite file path; relative values resolve from the app workspace |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
 | `WEED_MINI_DIR` | Storage | `docstore/seaweedfs` | Override embedded SeaweedFS data directory |
 | `WEED_MINI_WAIT_SEC` | Storage | `20` | Tune SeaweedFS startup wait timeout |

@@ -81,6 +81,7 @@ const documentedEnvironmentVariables = [
   'S3_PUBLIC_ENDPOINT',
   'S3_REGION',
   'S3_SECRET_ACCESS_KEY',
+  'SQLITE_DB_PATH',
   'TTS_PLAYBACK_TOKEN_SECRET',
   'USE_ANONYMOUS_AUTH_SESSIONS',
   'USE_EMBEDDED_WEED_MINI',
@@ -124,6 +125,10 @@ describe('shared runtime configuration boundary', () => {
     const rootExample = source('.env.example');
     const workerExample = source('packages/compute-worker/.env.example');
     const fullCompose = source('docker/examples/compose.full.yml');
+    const slimComposeFiles = [
+      source('docker/examples/compose.yml'),
+      source('docker/examples/compose.local-slim.yml'),
+    ];
 
     for (const variable of documentedEnvironmentVariables) {
       expect(reference, `${variable} is missing from the environment reference`).toContain(`\`${variable}\``);
@@ -133,5 +138,10 @@ describe('shared runtime configuration boundary', () => {
     expect(reference).not.toContain('### IMPORT_LIBRARY_DIR\n');
     expect(workerExample).toContain('AUTH_SECRET=local-openreader-auth-secret-change-me');
     expect(fullCompose).toContain('AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}');
+    for (const slimCompose of slimComposeFiles) {
+      expect(slimCompose).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
+      expect(slimCompose).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
+      expect(slimCompose).toContain('- "8081:8081"');
+    }
   });
 });
