@@ -1,6 +1,7 @@
 import { hashOpKey } from '../../infrastructure/nats-adapters';
 import type { WorkerOperationRequest } from '../../operations/contracts';
 import { buildTtsPlaybackOperationKey } from '../../operations/keys';
+import { generationFloorForCursor } from '../../playback/generation-window';
 import { ttsPlaybackOperationCreateSchema } from '../schemas';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import { isTerminalStatus, toErrorMessage } from '../route-context';
@@ -9,7 +10,11 @@ import type { PlaybackSessionReadModel, PlaybackSessionRow } from './session-rea
 const DEFAULT_TTS_PLAYBACK_SESSION_TTL_MS = 30 * 60 * 1000;
 
 export interface PlaybackSessionController {
-  updateCursor(sessionId: string, ordinal: number): Promise<void>;
+  updateCursor(
+    sessionId: string,
+    ordinal: number,
+    options?: { ensureGeneration?: boolean },
+  ): Promise<void>;
   enqueueContinuationIfNeeded(
     session: PlaybackSessionRow,
     now: number,
@@ -35,7 +40,24 @@ export function createPlaybackSessionController(
   ) => {
     if (!playbackStorage) return;
     if (session.status !== 'queued' && session.status !== 'running') return;
+    if (session.playbackActive === false) return;
     if (now > session.expiresAt || !session.planObjectKey) return;
+    const cursorOrdinal = Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)));
+    const aheadWindow = Math.max(1, Math.floor(Number(session.aheadWindow ?? 8)));
+    const refillThreshold = Math.max(1, Math.floor(aheadWindow / 2));
+    const satisfiedFrom = session.generationSatisfiedFromOrdinal == null
+      ? null
+      : Math.max(0, Math.floor(Number(session.generationSatisfiedFromOrdinal)));
+    const satisfiedThrough = session.generationSatisfiedThroughOrdinal == null
+      ? null
+      : Math.max(0, Math.floor(Number(session.generationSatisfiedThroughOrdinal)));
+    if (
+      satisfiedFrom !== null
+      && satisfiedThrough !== null
+      && satisfiedFrom <= generationFloorForCursor(cursorOrdinal)
+      && satisfiedThrough >= cursorOrdinal + refillThreshold
+      && reason !== 'stream'
+    ) return;
 
     if (session.workerOpId) {
       const current = await getOpState(session.workerOpId).catch((error) => {
@@ -48,6 +70,10 @@ export function createPlaybackSessionController(
       if (current && !isTerminalStatus(current.status)) return;
     }
 
+    // Cursor heartbeats and audio consumption are two signals for the same
+    // active cursor, not two independent generation runs. Sharing the token
+    // lets operation idempotency collapse races between both drivers.
+    const generationRunId = `active:${cursorOrdinal}`;
     const requestBody: typeof ttsPlaybackOperationCreateSchema._output = {
       sessionId: session.sessionId,
       userId: session.userId,
@@ -58,7 +84,7 @@ export function createPlaybackSessionController(
       settingsHash: session.settingsHash,
       settingsJson: session.settingsJson,
       planObjectKey: session.planObjectKey,
-      generationRunId: `${reason}:${Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)))}`,
+      generationRunId,
       expiresAt: session.expiresAt,
       ...(session.aheadWindow == null ? {} : { aheadWindow: session.aheadWindow }),
       ...(session.backgroundExtent == null ? {} : { backgroundExtent: session.backgroundExtent }),
@@ -72,6 +98,15 @@ export function createPlaybackSessionController(
       opKey: buildTtsPlaybackOperationKey(requestBody),
       payload: requestBody,
     };
+    // Claim the canonical session for this deterministic continuation before
+    // enqueueing it. A superseded worker observes the changed run id at its next
+    // segment boundary and exits without mutating the new run's terminal state.
+    await playbackStorage.sessions.patchSession(session.sessionId, {
+      generationRunId,
+      updatedAt: now,
+    });
+    const claimedSession = await readModel.readSession(session.sessionId);
+    if (!claimedSession || claimedSession.playbackActive === false) return;
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
     await playbackStorage.sessions.patchSession(session.sessionId, {
@@ -96,12 +131,16 @@ export function createPlaybackSessionController(
 
   return {
     enqueueContinuationIfNeeded,
-    async updateCursor(sessionId, ordinal) {
+    async updateCursor(sessionId, ordinal, options) {
       const now = Date.now();
       await playbackStorage?.sessions.updateCursor(sessionId, ordinal, now).catch((error) => {
         app.log.warn({ sessionId, error: toErrorMessage(error) }, 'tts.playback.cursor_kv_update_failed');
       });
+      if (!options?.ensureGeneration) return;
       const session = await readModel.readSession(sessionId);
+      // Only a stream that is seeking or blocked on missing audio may force a
+      // continuation. Ordinary segment delivery updates the cursor without
+      // spawning one worker operation per spoken segment.
       if (session) await enqueueContinuationIfNeeded(session, now, 'stream');
     },
     async putSessionState(requestBody, status, workerOpId) {
@@ -122,6 +161,10 @@ export function createPlaybackSessionController(
         aheadWindow: requestBody.aheadWindow ?? null,
         backgroundExtent: requestBody.backgroundExtent ?? null,
         generationExtent: requestBody.generationExtent ?? null,
+        playbackActive: true,
+        generationRunId: requestBody.generationRunId ?? null,
+        generationSatisfiedFromOrdinal: null,
+        generationSatisfiedThroughOrdinal: null,
         planning: requestBody.planning,
         generationStartOrdinal: startOrdinal,
         cursorOrdinal: startOrdinal,

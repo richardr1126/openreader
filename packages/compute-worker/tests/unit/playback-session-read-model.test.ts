@@ -137,6 +137,28 @@ describe('playback session read model', () => {
     expect(fixture.readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal)).toEqual([40, 41, 42]);
   });
 
+  test('keeps a bounded whole-document cache view across cursor and chapter changes', async () => {
+    const fixture = createFixture();
+    fixture.sidecars.set(2, completedSidecar(2));
+    fixture.sidecars.set(80, completedSidecar(80));
+
+    const nearStartSession = { ...session, cursorOrdinal: 0 };
+    await expect(fixture.model.readSegmentIndexRows(nearStartSession))
+      .resolves.toMatchObject([{ ordinal: 2 }]);
+    expect(fixture.readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal))
+      .toEqual(Array.from({ length: 65 }, (_, ordinal) => ordinal));
+
+    // Discover a later cached chapter, then move the cursor back. The next
+    // whole-document read must retain both cached regions and extend its bounded
+    // scan from the highest discovered sidecar instead of hiding that cache.
+    await expect(fixture.model.readSegmentState(session, 80))
+      .resolves.toMatchObject({ status: 'completed', ordinal: 80 });
+    fixture.readSegmentMetadata.mockClear();
+    await expect(fixture.model.readSegmentIndexRows(nearStartSession))
+      .resolves.toMatchObject([{ ordinal: 2 }, { ordinal: 80 }]);
+    expect(fixture.readSegmentMetadata.mock.calls.some(([scope]) => scope.ordinal === 99)).toBe(true);
+  });
+
   test('invalidates cached sidecars by exact scope and parsed plans by prefix', async () => {
     const fixture = createFixture();
     fixture.sidecars.set(0, completedSidecar(0));

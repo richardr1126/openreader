@@ -455,12 +455,17 @@ export const postTtsPlaybackCursor = async (
   sessionId: string,
   ordinal: number,
   headers: TTSRequestHeaders,
-  options?: { keepalive?: boolean; signal?: AbortSignal },
+  options?: { keepalive?: boolean; signal?: AbortSignal; playbackActive?: boolean },
 ): Promise<void> => {
   await fetch(`/api/tts/stream/${encodeURIComponent(sessionId)}/cursor`, {
     method: 'POST',
     headers: headers as HeadersInit,
-    body: JSON.stringify({ ordinal }),
+    body: JSON.stringify({
+      ordinal,
+      ...(options?.playbackActive === undefined
+        ? {}
+        : { playbackActive: options.playbackActive }),
+    }),
     keepalive: options?.keepalive ?? false,
     signal: options?.signal,
   }).catch(() => undefined);

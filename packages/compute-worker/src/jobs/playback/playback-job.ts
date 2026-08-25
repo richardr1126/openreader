@@ -28,8 +28,23 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
     const playbackStorage = input.playbackStorage;
     const kvSession = await playbackStorage.sessions.getSession(parsed.sessionId);
     if (!kvSession) throw new Error('TTS playback session no longer exists');
+    const generationRunId = parsed.generationRunId ?? null;
+    if ((kvSession.generationRunId ?? null) !== generationRunId) {
+      return {
+        sessionId: parsed.sessionId,
+        planObjectKey: parsed.planObjectKey,
+        timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+      };
+    }
     if (kvSession.status !== 'queued' && kvSession.status !== 'running') {
       throw new Error(kvSession.lastError || `TTS playback session is ${kvSession.status}`);
+    }
+    if (parsed.generationExtent !== 'document' && kvSession.playbackActive === false) {
+      return {
+        sessionId: parsed.sessionId,
+        planObjectKey: parsed.planObjectKey,
+        timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+      };
     }
     try {
       const { planObjectKey, plannedSegments, startOrdinal } = await resolveAndPersistTtsPlaybackPlan({
@@ -38,14 +53,26 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         s3Prefix: input.s3Prefix,
         requireStartOrdinal: true,
       });
+      const currentSession = await playbackStorage.sessions.getSession(parsed.sessionId);
+      if (
+        !currentSession
+        || (currentSession.generationRunId ?? null) !== generationRunId
+        || (parsed.generationExtent !== 'document' && currentSession.playbackActive === false)
+      ) {
+        return {
+          sessionId: parsed.sessionId,
+          planObjectKey,
+          timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+        };
+      }
       const isContinuationRun = Boolean(parsed.generationRunId);
-      const sessionCursorOrdinal = Math.max(0, Math.floor(Number(kvSession.cursorOrdinal ?? startOrdinal)));
-      const sessionCursorUpdatedAt = kvSession.cursorUpdatedAt == null ? null : Number(kvSession.cursorUpdatedAt);
+      const sessionCursorOrdinal = Math.max(0, Math.floor(Number(currentSession.cursorOrdinal ?? startOrdinal)));
+      const sessionCursorUpdatedAt = currentSession.cursorUpdatedAt == null ? null : Number(currentSession.cursorUpdatedAt);
       await playbackStorage.sessions.patchSession(parsed.sessionId, {
         status: 'running',
         planObjectKey,
         generationStartOrdinal: isContinuationRun
-          ? Math.max(0, Math.floor(Number(kvSession.generationStartOrdinal ?? startOrdinal)))
+          ? Math.max(0, Math.floor(Number(currentSession.generationStartOrdinal ?? startOrdinal)))
           : startOrdinal,
         cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal,
         cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
@@ -97,6 +124,9 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       };
 
       let stoppedEarly = false;
+      const satisfaction: {
+        value: { fromOrdinal: number; throughOrdinal: number } | null;
+      } = { value: null };
       let lastCompletedThrough = completedOrdinals.size > 0 ? Math.max(...completedOrdinals) : -1;
       const emitProgress = async (): Promise<void> => {
         await hooks?.onProgress?.({
@@ -112,6 +142,8 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         const kvCursor = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
         const cursor = kvCursor ? {
           status: kvCursor.status,
+          playbackActive: kvCursor.playbackActive,
+          generationRunId: kvCursor.generationRunId ?? null,
           cursorOrdinal: Math.max(0, Math.floor(Number(kvCursor.cursorOrdinal ?? 0))),
           cursorUpdatedAt: kvCursor.cursorUpdatedAt == null ? null : Number(kvCursor.cursorUpdatedAt),
           expiresAt: Number(kvCursor.expiresAt),
@@ -121,6 +153,10 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           return 'stop';
         }
         if (forceDocumentExtent) return 'continue';
+        if (cursor.playbackActive === false || cursor.generationRunId !== generationRunId) {
+          stoppedEarly = true;
+          return 'stop';
+        }
         if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal)) {
           stoppedEarly = true;
           return 'stop';
@@ -128,10 +164,19 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         const fresh = cursor.cursorUpdatedAt != null && Date.now() - cursor.cursorUpdatedAt <= CURSOR_STALE_MS;
         if (fresh) {
           if (planOrdinal <= cursor.cursorOrdinal + aheadWindow) return 'continue';
+          satisfaction.value = {
+            fromOrdinal: generationFloorForCursor(cursor.cursorOrdinal),
+            throughOrdinal: cursor.cursorOrdinal + aheadWindow,
+          };
           stoppedEarly = true;
           return 'stop';
         }
-        if (planOrdinal <= backgroundTargetFor(cursor.cursorOrdinal)) return 'continue';
+        const backgroundTarget = backgroundTargetFor(cursor.cursorOrdinal);
+        if (planOrdinal <= backgroundTarget) return 'continue';
+        satisfaction.value = {
+          fromOrdinal: generationFloorForCursor(cursor.cursorOrdinal),
+          throughOrdinal: backgroundTarget,
+        };
         stoppedEarly = true;
         return 'stop';
       };
@@ -182,14 +227,31 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       });
       const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
       if (!finalSession || (finalSession.status !== 'queued' && finalSession.status !== 'running')) stoppedEarly = true;
+      if ((finalSession?.generationRunId ?? null) !== generationRunId) stoppedEarly = true;
+      if (!forceDocumentExtent && finalSession?.playbackActive === false) stoppedEarly = true;
       if (await readCurrentCacheEpoch() !== cacheEpoch) stoppedEarly = true;
+      const satisfiedWindow = satisfaction.value;
+      if (
+        stoppedEarly
+        && satisfiedWindow
+        && finalSession?.playbackActive !== false
+        && (finalSession?.generationRunId ?? null) === generationRunId
+      ) {
+        await playbackStorage.sessions.patchSession(parsed.sessionId, {
+          generationSatisfiedFromOrdinal: satisfiedWindow.fromOrdinal,
+          generationSatisfiedThroughOrdinal: satisfiedWindow.throughOrdinal,
+        });
+      }
       if (!stoppedEarly) {
         await playbackStorage.sessions.patchSession(parsed.sessionId, { status: 'succeeded', planObjectKey, lastError: null });
       }
       return { sessionId: parsed.sessionId, planObjectKey, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     } catch (error) {
       const latest = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
-      if (latest?.status === 'queued' || latest?.status === 'running') {
+      if (
+        (latest?.status === 'queued' || latest?.status === 'running')
+        && (latest.generationRunId ?? null) === generationRunId
+      ) {
         await playbackStorage.sessions.patchSession(parsed.sessionId, {
           status: 'failed',
           lastError: error instanceof Error ? error.message : String(error),

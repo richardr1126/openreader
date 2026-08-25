@@ -138,12 +138,13 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(epubPlayButton).toBeEnabled({ timeout: 30_000 });
   await epubPlayButton.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeFocused();
+  const epubPauseButton = page.getByRole('button', { name: 'Pause', exact: true });
+  await expect(epubPauseButton).toBeFocused();
 
   await page.setViewportSize({ width: 600, height: 800 });
 
   await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
-  await expect(epubPlayButton).toBeVisible();
+  await expect(epubPauseButton).toBeVisible();
   await expect(bookTitle).toBeVisible();
 
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
@@ -154,8 +155,10 @@ test('anonymous user controls playback across every accepted document journey', 
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await expect(page.getByRole('button', { name: 'Open settings', exact: true })).toBeVisible();
-  await expect(epubPlayButton).toBeVisible();
+  await expect(epubPauseButton).toBeVisible();
   await expect(bookTitle).toBeVisible();
+  await epubPauseButton.click();
+  await expect(epubPlayButton).toBeVisible();
   await returnToLibrary(page);
 
   await openDocument(page, pdfLinks.nth(0), 'sample.pdf');

@@ -22,6 +22,16 @@ export const TTS_PLAYBACK_AHEAD_WINDOW = 8;
  */
 export const TTS_PLAYBACK_CURSOR_HEARTBEAT_MS = 4_000;
 
+export type TtsPlaybackPhase =
+  | 'idle'
+  | 'planning'
+  | 'ready'
+  | 'playing'
+  | 'seeking'
+  | 'buffering'
+  | 'ended'
+  | 'failed';
+
 // Core playback state exposed by the TTS context
 export interface TTSPlaybackState {
   isPlaying: boolean;

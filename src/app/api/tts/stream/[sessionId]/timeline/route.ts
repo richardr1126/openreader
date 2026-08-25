@@ -10,7 +10,6 @@ import {
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import type { TTSSentenceAlignment } from '@/types/tts';
-import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,12 +39,11 @@ export async function GET(
       throw new Error('TTS playback timeline requires a canonical plan artifact');
     }
 
-    const cursorOrdinal = Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)));
-    const minOrdinal = Math.max(0, cursorOrdinal - 1);
-    const segments = await listCompletedTtsPlaybackSegments(session, {
-      minOrdinal,
-      limit: TTS_PLAYBACK_AHEAD_WINDOW + 2,
-    });
+    // No explicit window: the worker read model owns the documented bounded
+    // whole-document scan (0..max(highest cached, cursor)+64). Keeping that
+    // policy at the sidecar cache boundary prevents chapter changes from
+    // making already-generated audio disappear from the timeline.
+    const segments = await listCompletedTtsPlaybackSegments(session);
     const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
       alignment: parseAlignment(segment.alignmentJson),
       updatedAt: segment.updatedAt,

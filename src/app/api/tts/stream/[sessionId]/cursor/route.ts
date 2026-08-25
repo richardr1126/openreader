@@ -10,11 +10,16 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function parseOrdinal(value: unknown): number | null {
+function parseCursorUpdate(value: unknown): { ordinal: number; playbackActive?: boolean } | null {
   if (!value || typeof value !== 'object') return null;
-  const ordinal = Number((value as Record<string, unknown>).ordinal);
+  const record = value as Record<string, unknown>;
+  const ordinal = Number(record.ordinal);
   if (!Number.isFinite(ordinal)) return null;
-  return Math.max(0, Math.floor(ordinal));
+  if (record.playbackActive !== undefined && typeof record.playbackActive !== 'boolean') return null;
+  return {
+    ordinal: Math.max(0, Math.floor(ordinal)),
+    ...(typeof record.playbackActive === 'boolean' ? { playbackActive: record.playbackActive } : {}),
+  };
 }
 
 /**
@@ -36,8 +41,8 @@ export async function POST(
     const session = await resolveTtsPlaybackSession(request, sessionId);
     if (session instanceof Response) return session;
 
-    const ordinal = parseOrdinal(await request.json().catch(() => null));
-    if (ordinal === null) {
+    const cursorUpdate = parseCursorUpdate(await request.json().catch(() => null));
+    if (cursorUpdate === null) {
       return NextResponse.json({ error: 'Invalid cursor ordinal' }, { status: 400 });
     }
 
@@ -45,11 +50,19 @@ export async function POST(
     const expiresAt = now + TTS_PLAYBACK_SESSION_TTL_MS;
     await getComputeWorkerClient().updateTtsPlaybackCursor({
       sessionId: session.sessionId,
-      ordinal,
+      ordinal: cursorUpdate.ordinal,
+      ...(cursorUpdate.playbackActive === undefined
+        ? {}
+        : { playbackActive: cursorUpdate.playbackActive }),
       expiresAt,
     });
 
-    return NextResponse.json({ sessionId: session.sessionId, cursorOrdinal: ordinal, expiresAt });
+    return NextResponse.json({
+      sessionId: session.sessionId,
+      cursorOrdinal: cursorUpdate.ordinal,
+      playbackActive: cursorUpdate.playbackActive ?? session.playbackActive ?? true,
+      expiresAt,
+    });
   } catch (error) {
     return errorResponse(error, {
       logger,

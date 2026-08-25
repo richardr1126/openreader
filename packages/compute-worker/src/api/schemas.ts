@@ -135,6 +135,7 @@ export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSc
 
 export const ttsPlaybackCursorUpdateSchema = z.object({
   ordinal: z.number().int().nonnegative(),
+  playbackActive: z.boolean().optional(),
   expiresAt: z.number().int().positive().optional(),
 });
 

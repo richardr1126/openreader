@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { EPUBViewer } from '@/components/views/EPUBViewer';
 import {
   ReaderShell,
@@ -69,7 +69,7 @@ function EpubReader({
   const language = documentSettings.language ?? 'auto';
   const { isAtLimit } = useAuthRateLimit();
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
-  const [containerHeight, setContainerHeight] = useState<string>('auto');
+  const [containerHeight, setContainerHeight] = useState<string | null>(null);
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
   const didInitPadPctRef = useRef(false);
@@ -79,7 +79,7 @@ function EpubReader({
   }, [failPlacement, onError, rendererReady]);
 
   // Compute available height = viewport - (header height + tts bar height)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const compute = () => {
       const header = document.querySelector('[data-app-header]') as HTMLElement | null;
       const ttsbar = document.querySelector('[data-app-ttsbar]') as HTMLElement | null;
@@ -108,7 +108,7 @@ function EpubReader({
       window.clearTimeout(settleT1);
       window.clearTimeout(settleT2);
     };
-  }, [rendererReady, activeSidebar]);
+  }, [rendererReady, isAtLimit, activeSidebar]);
 
   // Nudge EPUB renderer to reflow on horizontal padding changes
   useEffect(() => {
@@ -159,8 +159,8 @@ function EpubReader({
           </div>
         ) : null}
       />
-      <div className="relative overflow-hidden" style={{ height: containerHeight }}>
-        {epubState.currDocData ? (
+      <div className="relative overflow-hidden" style={{ height: containerHeight ?? 0 }}>
+        {epubState.currDocData && containerHeight !== null ? (
           <div
             className={rendererReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
             aria-hidden={!rendererReady}
@@ -183,7 +183,7 @@ function EpubReader({
           documentId={routeDocumentId || ''}
         />
       )}
-      {rendererReady && (isAtLimit ? (
+      {isAtLimit ? (
         <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface" data-app-ttsbar>
           <div className="px-2 md:px-3 pt-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-1 min-h-10">
             <RateLimitPauseButton />
@@ -192,7 +192,7 @@ function EpubReader({
         </div>
       ) : (
         <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} />
-      ))}
+      )}
       <DocumentSettings
         epub
         isOpen={rendererReady && activeSidebar === 'settings'}

@@ -192,8 +192,24 @@ export function createPlaybackSessionReadModel(input: {
       if (!session.planObjectKey) return [];
       const planSegments = await readPlanSegments(session.planObjectKey);
       if (!planSegments?.length) return [];
-      const minOrdinal = Math.max(0, Math.floor(Number(options?.minOrdinal ?? 0)));
-      const limit = Math.max(1, Math.min(Math.floor(Number(options?.limit ?? 500)), 10000));
+      if (!options) {
+        const sidecars = await collectScopeSidecars(session, planSegments.length);
+        return [...sidecars.values()]
+          .filter((sidecar): sidecar is TtsPlaybackSegmentMetadata & { status: 'completed'; audioKey: string } => (
+            sidecar.status === 'completed' && Boolean(sidecar.audioKey)
+          ))
+          .map((sidecar) => ({
+            ordinal: sidecar.ordinal,
+            segmentKey: sidecar.segmentKey,
+            audioKey: sidecar.audioKey,
+            durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
+            alignmentJson: sidecar.alignment ? JSON.stringify(sidecar.alignment) : null,
+            updatedAt: sidecar.updatedAt ?? null,
+          }))
+          .sort((left, right) => left.ordinal - right.ordinal);
+      }
+      const minOrdinal = Math.max(0, Math.floor(Number(options.minOrdinal ?? 0)));
+      const limit = Math.max(1, Math.min(Math.floor(Number(options.limit ?? 500)), 10000));
       // Sidecars are immutable objects rather than rows in an indexed database.
       // Bound reads to the requested ordinal window so a timeline refresh does
       // not issue one object-store miss for every segment in a long document.

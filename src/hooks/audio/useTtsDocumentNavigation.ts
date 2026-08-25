@@ -20,6 +20,7 @@ export type EpubRenderedAnchorInput = {
   locator: TTSSegmentLocator | null;
   hasReadableText: boolean;
   shouldPause?: boolean;
+  preservePlaybackCursor?: boolean;
 };
 
 export type EpubRenderedAnchorResult =
@@ -57,6 +58,7 @@ type UseTtsDocumentNavigationInput = {
   invalidatePlaybackRun: () => void;
   pauseActivePlayback: () => void;
   seekPlaybackToOrdinal: (ordinal: number) => boolean;
+  syncActivePlaybackToOrdinal: (ordinal: number) => boolean;
   selectPlaybackSegment: (segment: CanonicalTtsSegment | null | undefined) => boolean;
   setCurrDocPage: (location: TTSLocation) => void;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -86,6 +88,7 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     invalidatePlaybackRun,
     pauseActivePlayback,
     seekPlaybackToOrdinal,
+    syncActivePlaybackToOrdinal,
     selectPlaybackSegment,
     setCurrDocPage,
     setIsPlaying,
@@ -248,6 +251,10 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
 
     if (!rendered.hasReadableText) {
       playbackSyncNavigationRef.current = false;
+      if (rendered.preservePlaybackCursor) {
+        setIsProcessing(false);
+        return { status: 'non-text' };
+      }
       resumeAfterLocationChangeRef.current = false;
       pauseActivePlayback();
       setIsPlaying(false);
@@ -262,31 +269,32 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     });
     const playbackDrivenNavigation = playbackSyncNavigationRef.current;
     playbackSyncNavigationRef.current = false;
+    const preservePlaybackCursor = rendered.preservePlaybackCursor === true
+      || playbackDrivenNavigation;
     if (resolution.status === 'invalid-anchor' || resolution.status === 'unmapped-anchor') {
       return resolution;
     }
 
-    if (rendered.shouldPause) {
+    if (rendered.shouldPause && !preservePlaybackCursor) {
       resumeAfterLocationChangeRef.current = false;
       pauseActivePlayback();
       setIsPlaying(false);
     }
 
     if (resolution.status === 'empty-plan') {
-      setSelectedOrdinal(null);
+      if (!preservePlaybackCursor) setSelectedOrdinal(null);
       setIsProcessing(false);
       return resolution;
     }
 
-    setSelectedOrdinal(resolution.ordinal);
-    if (!rendered.shouldPause && !playbackDrivenNavigation && isPlayingRef.current) {
-      seekPlaybackToOrdinal(resolution.ordinal);
+    if (!preservePlaybackCursor) {
+      setSelectedOrdinal(resolution.ordinal);
+      if (!rendered.shouldPause) syncActivePlaybackToOrdinal(resolution.ordinal);
     }
     resumeAfterLocationChangeRef.current = false;
     setIsProcessing(false);
     return { status: 'selected', ordinal: resolution.ordinal };
   }, [
-    isPlayingRef,
     pauseActivePlayback,
     playbackAnchorRef,
     playbackPlanReady,
@@ -294,7 +302,7 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackSegmentsRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
-    seekPlaybackToOrdinal,
+    syncActivePlaybackToOrdinal,
     setCurrDocPage,
     setIsPlaying,
     setIsProcessing,

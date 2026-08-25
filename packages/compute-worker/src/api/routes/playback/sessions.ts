@@ -120,9 +120,11 @@ export function registerPlaybackSessionRoutes(
       reply.code(404);
       return { error: 'Playback session not found' };
     }
-    const minOrdinal = Math.max(0, Math.floor(Number(query.minOrdinal ?? 0)));
-    const limit = Math.max(1, Math.min(Math.floor(Number(query.limit ?? 500)), 10000));
-    const rows = await readModel.readSegmentIndexRows(session, { minOrdinal, limit });
+    const hasExplicitWindow = query.minOrdinal !== undefined || query.limit !== undefined;
+    const rows = await readModel.readSegmentIndexRows(session, hasExplicitWindow ? {
+      minOrdinal: Math.max(0, Math.floor(Number(query.minOrdinal ?? 0))),
+      limit: Math.max(1, Math.min(Math.floor(Number(query.limit ?? 500)), 10000)),
+    } : undefined);
     return {
       sessionId,
       segments: rows,
@@ -159,19 +161,27 @@ export function registerPlaybackSessionRoutes(
     await playbackStorage?.sessions.patchSession(sessionId, {
       cursorOrdinal: parsed.data.ordinal,
       cursorUpdatedAt: now,
+      ...(parsed.data.playbackActive === undefined
+        ? {}
+        : { playbackActive: parsed.data.playbackActive }),
       ...(parsed.data.expiresAt === undefined ? {} : { expiresAt: parsed.data.expiresAt }),
       updatedAt: now,
     });
-    await controller.enqueueContinuationIfNeeded({
+    const nextSession = {
       ...session,
       cursorOrdinal: parsed.data.ordinal,
       cursorUpdatedAt: now,
+      playbackActive: parsed.data.playbackActive ?? session.playbackActive,
       expiresAt: parsed.data.expiresAt ?? session.expiresAt,
       updatedAt: now,
-    }, now, 'cursor');
+    };
+    if (nextSession.playbackActive !== false) {
+      await controller.enqueueContinuationIfNeeded(nextSession, now, 'cursor');
+    }
     return {
       sessionId,
       cursorOrdinal: parsed.data.ordinal,
+      playbackActive: nextSession.playbackActive !== false,
       expiresAt: parsed.data.expiresAt ?? session.expiresAt,
     };
   });

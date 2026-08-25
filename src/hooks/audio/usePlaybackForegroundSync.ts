@@ -15,6 +15,7 @@ import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
 
 type UsePlaybackForegroundSyncInput = {
   playbackCursorOrdinalRef: MutableRefObject<number | null>;
+  playbackRequestHeadersRef: MutableRefObject<TTSRequestHeaders | null>;
   playbackRunIdRef: MutableRefObject<number>;
   playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
   refreshPlaybackTimeline: (timelineUrl: string, signal?: AbortSignal) => Promise<unknown>;
@@ -26,6 +27,7 @@ const MODEL_DOWNLOAD_TOAST_ID = 'tts-model-download';
 export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput) {
   const {
     playbackCursorOrdinalRef,
+    playbackRequestHeadersRef,
     playbackRunIdRef,
     playbackSessionRef,
     refreshPlaybackTimeline,
@@ -33,6 +35,21 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   } = input;
   const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playbackActivityWriteRef = useRef<Promise<void>>(Promise.resolve());
+
+  const setWorkerPlaybackActive = useCallback((playbackActive: boolean) => {
+    const session = playbackSessionRef.current;
+    const headers = playbackRequestHeadersRef.current;
+    const ordinal = playbackCursorOrdinalRef.current;
+    if (!session || !headers || ordinal == null) return;
+    // Serialize fast pause/resume writes so stale intent cannot arrive last.
+    playbackActivityWriteRef.current = playbackActivityWriteRef.current.then(() => (
+      postTtsPlaybackCursor(session.sessionId, Math.max(0, ordinal), headers, {
+        playbackActive,
+        keepalive: !playbackActive,
+      })
+    ));
+  }, [playbackCursorOrdinalRef, playbackRequestHeadersRef, playbackSessionRef]);
 
   const stopPlaybackForegroundSync = useCallback(() => {
     toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
@@ -105,5 +122,5 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     stopPlaybackForegroundSync,
   ]);
 
-  return { startPlaybackForegroundSync, stopPlaybackForegroundSync };
+  return { setWorkerPlaybackActive, startPlaybackForegroundSync, stopPlaybackForegroundSync };
 }

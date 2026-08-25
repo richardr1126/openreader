@@ -92,6 +92,8 @@ describe('TTS playback storage', () => {
       status: 'queued',
       settingsHash: 'settings-hash',
       settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'initial:0',
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
       cursorUpdatedAt: null,
@@ -111,7 +113,28 @@ describe('TTS playback storage', () => {
       sessionId: 'session-1',
       cursorOrdinal: 42,
       cursorUpdatedAt: 200,
+      playbackActive: true,
+      generationRunId: 'initial:0',
       updatedAt: 100,
+    });
+
+    await store.patchSession('session-1', { playbackActive: false, updatedAt: 300 });
+    expect(await store.getSession('session-1')).toMatchObject({
+      cursorOrdinal: 42,
+      playbackActive: false,
+      generationRunId: 'initial:0',
+      // Activity is client-owned hot state and does not rewrite the worker's
+      // session record.
+      updatedAt: 100,
+    });
+
+    await store.patchSession('session-1', { status: 'running', updatedAt: 400 });
+    await store.updateCursor('session-1', 43, 500);
+    expect(await store.getSession('session-1')).toMatchObject({
+      status: 'running',
+      cursorOrdinal: 43,
+      playbackActive: false,
+      updatedAt: 400,
     });
   });
 

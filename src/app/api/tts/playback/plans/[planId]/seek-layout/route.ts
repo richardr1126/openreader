@@ -11,7 +11,6 @@ import {
 } from '@/lib/server/tts/playback-plans';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,14 +48,11 @@ export async function GET(
     if (session instanceof Response) return session;
     const startOrdinal = 0;
     const settingsJson = session?.settingsJson ?? artifact.settingsJson;
+    // Seek layout and timeline share the same whole-document cache view. The
+    // worker bounds object-store reads while retaining every completed sidecar
+    // it has discovered for this document/settings scope.
     const completedSegments = session
-      ? await listCompletedTtsPlaybackSegments(
-        session,
-        {
-          minOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal)),
-          limit: TTS_PLAYBACK_AHEAD_WINDOW + 1,
-        },
-      )
+      ? await listCompletedTtsPlaybackSegments(session)
       : [];
     const completedDurations = new Map(completedSegments.map((segment) => [segment.ordinal, segment.durationMs]));
     const layout = buildPlaybackGrid({

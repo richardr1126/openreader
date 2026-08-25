@@ -23,6 +23,12 @@ export interface TtsPlaybackSessionState {
   aheadWindow?: number | null;
   backgroundExtent?: 'section' | 'document' | null;
   generationExtent?: 'window' | 'document' | null;
+  /** Whether the live client currently wants generation to continue. */
+  playbackActive?: boolean;
+  /** Identifies the generation run that currently owns this canonical session. */
+  generationRunId?: string | null;
+  generationSatisfiedFromOrdinal?: number | null;
+  generationSatisfiedThroughOrdinal?: number | null;
   planning?: unknown;
   generationStartOrdinal: number;
   cursorOrdinal: number;
@@ -122,6 +128,14 @@ function cursorKvKey(sessionId: string): string {
   return `tts_playback.cursor.${hashScope(sessionId)}`;
 }
 
+// Explicit play/pause intent is client-owned hot state like the cursor, but it
+// has its own key so an audio-stream cursor update cannot race with and revive
+// a paused session. Plain put gives the latest user intent last-write-wins
+// semantics without contending with worker status writes.
+function activityKvKey(sessionId: string): string {
+  return `tts_playback.activity.${hashScope(sessionId)}`;
+}
+
 function epochKvKey(scope: TtsPlaybackResetScope & { settingsHash?: string }): string {
   const version = typeof scope.documentVersion === 'number' && Number.isFinite(scope.documentVersion)
     ? Math.max(0, Math.floor(scope.documentVersion))
@@ -156,11 +170,17 @@ interface TtsPlaybackCacheEpochRecord {
   updatedAt: number;
 }
 
+interface TtsPlaybackActivityRecord {
+  playbackActive: boolean;
+  updatedAt: number;
+}
+
 export function createTtsPlaybackKvStore(input: {
   getKv: () => Promise<KvStoreLike>;
 }): TtsPlaybackSessionStore {
   const sessionCodec = createJsonCodec<TtsPlaybackSessionState>();
   const cursorCodec = createJsonCodec<TtsPlaybackCursorRecord>();
+  const activityCodec = createJsonCodec<TtsPlaybackActivityRecord>();
   const listSessions = async (scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]> => {
     const kv = await input.getKv();
     const keys: string[] = [];
@@ -183,6 +203,10 @@ export function createTtsPlaybackKvStore(input: {
           session.cursorOrdinal = cursor.cursorOrdinal;
           session.cursorUpdatedAt = cursor.cursorUpdatedAt;
         }
+        const activityEntry = await kv.get(activityKvKey(session.sessionId));
+        if (isKvPut(activityEntry)) {
+          session.playbackActive = activityCodec.decode(activityEntry.value).playbackActive;
+        }
       }));
     }
     return sessions;
@@ -202,6 +226,10 @@ export function createTtsPlaybackKvStore(input: {
         session.cursorOrdinal = cursor.cursorOrdinal;
         session.cursorUpdatedAt = cursor.cursorUpdatedAt;
       }
+      const activityEntry = await kv.get(activityKvKey(sessionId));
+      if (isKvPut(activityEntry)) {
+        session.playbackActive = activityCodec.decode(activityEntry.value).playbackActive;
+      }
       return session;
     },
 
@@ -212,10 +240,20 @@ export function createTtsPlaybackKvStore(input: {
         cursorOrdinal: Math.max(0, Math.floor(state.cursorOrdinal)),
         cursorUpdatedAt: state.cursorUpdatedAt,
       }));
+      await kv.put(activityKvKey(state.sessionId), activityCodec.encode({
+        playbackActive: state.playbackActive !== false,
+        updatedAt: state.updatedAt,
+      }));
     },
 
     async patchSession(sessionId, patch) {
       const kv = await input.getKv();
+      if (patch.playbackActive !== undefined) {
+        await kv.put(activityKvKey(sessionId), activityCodec.encode({
+          playbackActive: patch.playbackActive,
+          updatedAt: patch.updatedAt ?? Date.now(),
+        }));
+      }
       // Cursor fields go to the cursor key — never the record — so this write
       // never collides with the playhead heartbeat. Plain put, last-write-wins.
       if (patch.cursorOrdinal !== undefined && patch.cursorUpdatedAt !== undefined) {
@@ -227,6 +265,7 @@ export function createTtsPlaybackKvStore(input: {
       const recordPatch: Partial<TtsPlaybackSessionState> = { ...patch };
       delete recordPatch.cursorOrdinal;
       delete recordPatch.cursorUpdatedAt;
+      delete recordPatch.playbackActive;
       // A bare `updatedAt` bump (the per-second cursor POST) doesn't justify
       // rewriting the record — the cursor key already carries a fresh timestamp.
       const meaningful = Object.keys(recordPatch).filter((field) => field !== 'updatedAt');

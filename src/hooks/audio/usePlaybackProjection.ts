@@ -33,6 +33,13 @@ function locatorProjectionKey(locator: TTSSegmentLocator | null): string {
   ].join('|');
 }
 
+export function shouldSyncPlaybackLocator(
+  previousLocatorKey: string | null | undefined,
+  nextLocatorKey: string,
+): boolean {
+  return nextLocatorKey.length > 0 && previousLocatorKey !== nextLocatorKey;
+}
+
 type UsePlaybackProjectionInput = {
   playbackRunIdRef: MutableRefObject<number>;
   playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
@@ -141,6 +148,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
     const locatorKey = locatorProjectionKey(locator);
     const previous = lastProjectionRef.current;
+    const shouldSyncLocator = shouldSyncPlaybackLocator(previous?.locatorKey, locatorKey);
     const alignment = projection.segment.alignment ?? undefined;
     if (
       previous
@@ -161,7 +169,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     setCurrentWordIndex(projection.wordIndex);
 
     if (page !== null) setCurrDocPage(page);
-    if (locator) syncPlaybackLocator?.(locator);
+    if (locator && shouldSyncLocator) syncPlaybackLocator?.(locator);
   }, [
     playbackSessionRef,
     refreshPlaybackTimeline,

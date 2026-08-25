@@ -196,10 +196,12 @@ export class ComputeWorkerClient {
   updateTtsPlaybackCursor(input: {
     sessionId: string;
     ordinal: number;
+    playbackActive?: boolean;
     expiresAt?: number;
-  }): Promise<{ sessionId: string; cursorOrdinal: number; expiresAt: number }> {
+  }): Promise<{ sessionId: string; cursorOrdinal: number; playbackActive: boolean; expiresAt: number }> {
     return this.requestJson('PUT', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/cursor`, {
       ordinal: input.ordinal,
+      ...(input.playbackActive === undefined ? {} : { playbackActive: input.playbackActive }),
       ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
     });
   }

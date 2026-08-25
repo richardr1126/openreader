@@ -121,6 +121,9 @@ describe('reader server-state ownership', () => {
     expect(epubDocument).not.toContain('setTimeout');
     expect(epubDocument).not.toContain('Promise.resolve().then(requestFromRelocated)');
     expect(epubDocument).toContain('reconcileEpubRenderedAnchor({');
+    expect(epubDocument).toContain('shouldPreserveEpubPlaybackCursor(placementIntentRef.current)');
+    expect(epubDocument).toContain('shouldPause: false');
+    expect(epubDocument).not.toContain('shouldPauseRef');
     expect(epubDocument).not.toContain('setTTSText');
   });
 

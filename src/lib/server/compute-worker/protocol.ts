@@ -92,6 +92,10 @@ export type TtsPlaybackSessionState = {
   aheadWindow?: number | null;
   backgroundExtent?: 'section' | 'document' | null;
   generationExtent?: 'window' | 'document' | null;
+  playbackActive?: boolean;
+  generationRunId?: string | null;
+  generationSatisfiedFromOrdinal?: number | null;
+  generationSatisfiedThroughOrdinal?: number | null;
   planning?: unknown;
   generationStartOrdinal: number;
   cursorOrdinal: number;

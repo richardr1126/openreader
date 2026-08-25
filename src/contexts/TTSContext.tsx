@@ -58,6 +58,7 @@ import type {
   TTSLocation,
   TTSPlaybackState,
   TTSSentenceAlignment,
+  TtsPlaybackPhase,
 } from '@/types/tts';
 import type {
   TTSRequestHeaders,
@@ -69,6 +70,12 @@ import type { ReaderType } from '@/types/user-state';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
 import { queryKeys } from '@/lib/client/query-keys';
+import type { EpubLocationChangeIntent } from '@/lib/client/epub/location-controller';
+
+type EpubLocationChangeHandler = (
+  location: TTSLocation | TTSSegmentLocator,
+  intent?: EpubLocationChangeIntent,
+) => void;
 
 // Media globals
 declare global {
@@ -88,6 +95,7 @@ interface TTSContextType extends TTSPlaybackState {
   // Current playback plan text and cursor
   sentences: string[];
   currentSentenceOrdinal: number | null;
+  playbackPhase: TtsPlaybackPhase;
   playbackTimeSec: number;
   playbackDurationSec: number;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
@@ -127,7 +135,7 @@ interface TTSContextType extends TTSPlaybackState {
   resolvedLanguage: string;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
-  registerLocationChangeHandler: (handler: ((location: TTSLocation | TTSSegmentLocator) => void) | null) => void;  // EPUB-only: Handles chapter navigation
+  registerLocationChangeHandler: (handler: EpubLocationChangeHandler | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
   /** Effective reader type used for worker playback/session scoping. */
   activeReaderType: ReaderType;
@@ -184,7 +192,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [pathname]);
 
   // Add ref for location change handler
-  const locationChangeHandlerRef = useRef<((location: TTSLocation | TTSSegmentLocator) => void) | null>(null);
+  const locationChangeHandlerRef = useRef<EpubLocationChangeHandler | null>(null);
 
   /**
    * Registers a handler function for location changes in EPUB documents
@@ -192,7 +200,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    *
    * @param {Function} handler - Function to handle location changes
    */
-  const registerLocationChangeHandler = useCallback((handler: ((location: TTSLocation | TTSSegmentLocator) => void) | null) => {
+  const registerLocationChangeHandler = useCallback((handler: EpubLocationChangeHandler | null) => {
     locationChangeHandlerRef.current = handler;
   }, []);
 
@@ -293,8 +301,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     if (locator.readerType === 'epub') {
       const handler = locationChangeHandlerRef.current;
       if (!handler) return;
-      playbackSyncNavigationRef.current = true;
-      handler(locator);
+      handler(locator, 'playback-follow');
     }
   }, []);
 
@@ -384,6 +391,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const {
     unlockedAudioRef,
+    playbackPhase,
     playbackTimeSec,
     publishPlaybackTimeSec,
     abortAudio: controllerAbortAudio,
@@ -392,6 +400,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     pauseActivePlayback: controllerPauseActivePlayback,
     seekPlaybackTo: controllerSeekPlaybackTo,
     seekPlaybackToOrdinal: controllerSeekPlaybackToOrdinal,
+    syncActivePlaybackToOrdinal,
     togglePlay: controllerTogglePlay,
   } = useTtsPlayback({
     audioContext: audioContext ?? null,
@@ -451,6 +460,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     invalidatePlaybackRun,
     pauseActivePlayback,
     seekPlaybackToOrdinal,
+    syncActivePlaybackToOrdinal,
     selectPlaybackSegment,
     setCurrDocPage,
     setIsPlaying,
@@ -626,6 +636,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSegment,
     sentences,
     currentSentenceOrdinal: selectedOrdinal,
+    playbackPhase,
     playbackTimeSec,
     playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
     playbackSeekLayout,
@@ -675,6 +686,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolveDocumentAudioExport,
     startDocumentAudioExport,
     selectedOrdinal,
+    playbackPhase,
     currDocPage,
     currDocPageNumber,
     currDocPages,

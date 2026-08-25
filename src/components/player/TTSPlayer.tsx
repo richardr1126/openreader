@@ -14,6 +14,7 @@ import { SpeedControl } from '@/components/player/SpeedControl';
 import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
+import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 
 export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = true, hasReadableContent = true }: {
   currentPage?: number;
@@ -23,6 +24,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
 }) {
   const {
     isPlaying,
+    playbackPhase,
     togglePlay,
     skipForward,
     skipBackward,
@@ -40,6 +42,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
+  const playbackControl = resolvePlaybackControlPresentation(isPlaying, playbackPhase);
   const scrubberTrackBackground = useMemo(() => {
     if (!playbackSeekLayout || playbackSeekLayout.durationMs <= 0 || playbackSeekLayout.segments.length === 0) {
       return 'color-mix(in srgb, var(--foreground) 14%, transparent)';
@@ -144,13 +147,16 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
 
           <IconButton
             onClick={togglePlay}
-            aria-label={isPlaying ? 'Pause' : 'Play'}
+            aria-label={playbackControl.ariaLabel}
+            aria-busy={playbackControl.isPending}
             disabled={!isPlaying && (!isPlaybackReady || isProcessing || !hasReadableContent)}
             className="relative"
           >
             {!hasReadableContent
               ? <PlayIcon className="w-5 h-5" />
               : !isPlaying && !isPlaybackReady
+              ? <LoadingSpinner />
+              : playbackControl.isPending
               ? <LoadingSpinner />
               : (isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />)}
           </IconButton>
@@ -176,7 +182,8 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           )}
           <div className="text-[11px] text-soft font-mono tabular-nums select-none whitespace-nowrap">
             {hasReadableContent
-              ? `${formatPlaybackTime(shownSec)} / ${formatPlaybackTime(playbackDurationSec)}`
+              ? playbackControl.statusText
+                ?? `${formatPlaybackTime(shownSec)} / ${formatPlaybackTime(playbackDurationSec)}`
               : 'No readable text'}
           </div>
         </div>

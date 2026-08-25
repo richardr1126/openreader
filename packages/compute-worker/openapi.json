@@ -5153,6 +5153,9 @@
                     "minimum": 0,
                     "maximum": 9007199254740991
                   },
+                  "playbackActive": {
+                    "type": "boolean"
+                  },
                   "expiresAt": {
                     "type": "integer",
                     "exclusiveMinimum": 0,

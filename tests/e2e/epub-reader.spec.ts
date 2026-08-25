@@ -34,4 +34,13 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
   await expect(book.getByRole('heading', { name: 'The Wonderful Wizard of Oz', exact: true })).toBeVisible();
   await expect(book.getByText('by L. Frank Baum', { exact: true })).toBeVisible();
   await expect(book.getByRole('link', { name: 'Chapter I. The Cyclone', exact: true })).toBeVisible();
+
+  await expect.poll(async () => {
+    const [container, frame] = await Promise.all([
+      page.locator('.epub-container').boundingBox(),
+      page.locator('.epub-container iframe').first().boundingBox(),
+    ]);
+    if (!container || !frame) return Number.POSITIVE_INFINITY;
+    return Math.abs(container.height - frame.height);
+  }).toBeLessThanOrEqual(1);
 });

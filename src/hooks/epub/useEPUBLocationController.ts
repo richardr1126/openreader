@@ -7,14 +7,17 @@ import type { TTSSegmentLocator } from '@/types/client';
 import { isStableEpubLocator } from '@/types/client';
 
 import {
+  isCfiWithinRenderedRange,
   isDirectionalEpubLocation,
   shouldNavigateToDifferentCfi,
+  type EpubLocationChangeIntent,
   type EpubLocation,
+  type EpubPlacementIntent,
 } from '@/lib/client/epub/location-controller';
 
 type UseEpubLocationControllerParams = {
   isEpubSetOnceRef: MutableRefObject<boolean>;
-  shouldPauseRef: MutableRefObject<boolean>;
+  placementIntentRef: MutableRefObject<EpubPlacementIntent>;
   setIsEpub: (isEpub: boolean) => void;
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
@@ -27,12 +30,15 @@ function isEpubLocatorTarget(value: EpubLocation | TTSSegmentLocator): value is 
 
 export function useEPUBLocationController({
   isEpubSetOnceRef,
-  shouldPauseRef,
+  placementIntentRef,
   setIsEpub,
   bookRef,
   renditionRef,
   resolveLocatorToCfi,
-}: UseEpubLocationControllerParams): (location: EpubLocation | TTSSegmentLocator) => void {
+}: UseEpubLocationControllerParams): (
+  location: EpubLocation | TTSSegmentLocator,
+  intent?: EpubLocationChangeIntent,
+) => void {
   const safeRenditionNavigate = useCallback((navigation: 'next' | 'prev' | 'display', location?: string) => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
@@ -63,27 +69,41 @@ export function useEPUBLocationController({
     }
   }, [bookRef, renditionRef]);
 
-  const handleLocationChanged = useCallback((location: EpubLocation | TTSSegmentLocator) => {
+  const handleLocationChanged = useCallback((
+    location: EpubLocation | TTSSegmentLocator,
+    intent: EpubLocationChangeIntent = 'manual',
+  ) => {
     if (isEpubLocatorTarget(location)) {
       if (!isEpubSetOnceRef.current) {
         setIsEpub(true);
         isEpubSetOnceRef.current = true;
       }
-      shouldPauseRef.current = false;
       void resolveLocatorToCfi(location)
         .then((cfi) => {
           if (!cfi) {
             console.warn('Unable to resolve EPUB locator to CFI:', location);
             return;
           }
-          console.log('[cursor-follow] display cfi', {
-            spineIndex: location.spineIndex,
-            charOffset: location.charOffset,
-            resolvedCfi: cfi,
-          });
-          safeRenditionNavigate('display', cfi);
+          const rendition = renditionRef.current;
+          if (
+            intent === 'playback-follow'
+            && rendition
+            && isCfiWithinRenderedRange(
+              cfi,
+              rendition.location?.start?.cfi,
+              rendition.location?.end?.cfi,
+              (left, right) => rendition.epubcfi.compare(left, right),
+            )
+          ) {
+            return;
+          }
+          placementIntentRef.current = intent;
+          if (!safeRenditionNavigate('display', cfi)) {
+            placementIntentRef.current = 'renderer';
+          }
         })
         .catch((error) => {
+          placementIntentRef.current = 'renderer';
           console.warn('EPUB locator navigation failed:', error);
         });
       return;
@@ -96,7 +116,7 @@ export function useEPUBLocationController({
         setIsEpub(true);
         isEpubSetOnceRef.current = true;
       }
-      shouldPauseRef.current = false;
+      placementIntentRef.current = 'manual';
       safeRenditionNavigate(location === 'next' ? 'next' : 'prev');
       return;
     }
@@ -110,7 +130,7 @@ export function useEPUBLocationController({
       if (shouldNavigateToDifferentCfi(location, currentStartCfi)) {
         // Programmatic cross-location jumps (segments sidebar / TTS navigation)
         // should keep autoplay intent after the rendition finishes navigating.
-        shouldPauseRef.current = false;
+        placementIntentRef.current = 'manual';
         safeRenditionNavigate('display', location);
         return;
       }
@@ -118,12 +138,12 @@ export function useEPUBLocationController({
 
     // Handle special 'next' and 'prev' cases
     if (location === 'next' && renditionRef.current) {
-      shouldPauseRef.current = false;
+      placementIntentRef.current = 'manual';
       safeRenditionNavigate('next');
       return;
     }
     if (location === 'prev' && renditionRef.current) {
-      shouldPauseRef.current = false;
+      placementIntentRef.current = 'manual';
       safeRenditionNavigate('prev');
       return;
     }
@@ -132,9 +152,9 @@ export function useEPUBLocationController({
     bookRef,
     isEpubSetOnceRef,
     renditionRef,
+    placementIntentRef,
     safeRenditionNavigate,
     setIsEpub,
-    shouldPauseRef,
     resolveLocatorToCfi,
   ]);
 

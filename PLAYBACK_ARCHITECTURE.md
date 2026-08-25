@@ -1512,3 +1512,43 @@ and is not acceptance evidence for Step 24. EPUB and HTML retain their focused
 coverage. PDF must pass the reset smoke test and the automated and signed-in
 acceptance matrix in `READER_READINESS_STATE_MACHINE.md` before this step can be
 marked complete.
+
+---
+
+### 25. Restore Document-Wide Cache Visibility and Explicit Live Generation Intent
+
+Status: complete. Long-document metadata bounding introduced in `10515f8f`
+incorrectly made the visible cache relative to the current cursor/session
+window. The underlying per-ordinal MP3 objects and sidecars remained durable,
+but timeline and seek-layout callers omitted cached sidecars outside that
+window. Live pause was also only a browser-media action: it stopped the audio
+element and cursor heartbeat without revoking worker generation intent.
+
+- Timeline and seek layout again use the worker read model's bounded
+  whole-document scan from ordinal zero through
+  `max(highestCachedCompletedOrdinal, cursorOrdinal) + 64`. Completed sidecars
+  remain in the scoped immutable cache, so a chapter change cannot turn exact
+  cached durations back into estimates or remove their generated coloring.
+- Live activity is explicit client-owned KV state, separate from both the
+  worker-owned session record and last-write-wins cursor. Pause, teardown,
+  natural end, and playback failure publish inactive intent; resume publishes
+  active intent. Generation observes inactive intent at every segment boundary.
+- Each canonical session records its current deterministic generation run id.
+  A superseded run exits at the next segment boundary and cannot mark the newer
+  run terminal or failed.
+- Bounded runs publish the ordinal window they satisfied. Cursor heartbeats do
+  not enqueue while the remaining generated-ahead window is above its low-water
+  mark, and cursor/seek races collapse onto the same deterministic operation key.
+- Audio HTTP delivery no longer advances the generation cursor for every byte
+  range segment. Browser prefetch can run far ahead of audible playback, so only
+  the projected client heartbeat and the start ordinal of an explicit range seek
+  may drive generation. A response blocked at the generation frontier waits for
+  the real playhead instead of generating at network-download speed.
+
+Verified with the complete 590-test Vitest suite, application and worker
+TypeScript checks, the production build, and a preserved-volume
+`compose.local-slim.yml` smoke stack. Browser acceptance reopened the signed-in
+long EPUB at Chapter Twenty-Three, retained the document-wide cached timeline,
+started playback at its canonical document time, and paused cleanly. Final
+worker logs showed one initial playback job, no prefetch-driven
+`tts.playback.resume_enqueued` cascade, and a clean audio client close on pause.

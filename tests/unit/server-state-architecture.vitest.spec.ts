@@ -357,6 +357,7 @@ describe('server-state architecture', () => {
     const planController = source('src/hooks/audio/useTtsPlanController.ts');
     const playbackProjection = source('src/hooks/audio/usePlaybackProjection.ts');
     const playbackForegroundSync = source('src/hooks/audio/usePlaybackForegroundSync.ts');
+    const playbackControl = source('src/lib/client/tts/playback-control.ts');
     const playbackSelection = source('src/lib/client/tts/playback-selection.ts');
     const documentNavigation = source('src/hooks/audio/useTtsDocumentNavigation.ts');
     const epubHighlighting = source('src/hooks/epub/useEPUBHighlighting.ts');
@@ -536,10 +537,14 @@ describe('server-state architecture', () => {
     // A run abandons ordinals that fell below the live floor (forward seek) so a
     // continuation re-anchors at the cursor instead of grinding through the gap.
     expect(workerHandlers).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
-    // The stream re-anchors generation to the ordinal it is blocked on so the
-    // continuation starts promptly after a seek (not at the next heartbeat).
-    expect(workerRoutes).toContain('await controller.updateCursor(sessionId, ordinal).catch((error) => {');
-    expect(workerRoutes).toContain('tts.playback.cursor_reanchor_failed');
+    expect(workerHandlers).toContain('cursor.playbackActive === false');
+    expect(workerHandlers).toContain('cursor.generationRunId !== generationRunId');
+    expect(workerRoutes).toContain('session.playbackActive === false');
+    expect(workerRoutes).toContain('session.generationSatisfiedThroughOrdinal');
+    // Only the requested range start may re-anchor generation. Ordinary audio
+    // download/prefetch must not impersonate audible playhead progress.
+    expect(workerRoutes).toContain('controller.updateCursor(sessionId, rangeStartOrdinal, { ensureGeneration: true })');
+    expect(workerRoutes).not.toContain('controller.updateCursor(sessionId, ordinal');
     expect(workerHandlers).toMatch(/status: 'running',\s*planObjectKey,\s*generationStartOrdinal/);
     expect(workerHandlers).not.toContain('status: \'running\',\n        lastError: null');
     expect(workerHandlers).not.toMatch(/planObjectKey,\s*startOrdinal,\s*generationStartOrdinal/);
@@ -614,6 +619,8 @@ describe('server-state architecture', () => {
     expect(playbackHook).toContain('setAudioDocumentTime(audio, targetSec');
     expect(playbackProjection).toContain('const targetOrdinal = projection.segment.ordinal;');
     expect(playbackProjection).toContain('setSelectedOrdinal(targetOrdinal)');
+    expect(playbackProjection).toContain('shouldSyncPlaybackLocator(previous?.locatorKey, locatorKey)');
+    expect(playbackProjection).toContain('if (locator && shouldSyncLocator) syncPlaybackLocator?.(locator)');
     expect(playbackProjection).not.toContain('ordinalIndexCacheRef');
     expect(playbackProjection).not.toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
     expect(playbackProjection).not.toContain('segment.key === segmentKey');
@@ -629,7 +636,8 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('stopAndPlayFromIndex');
     expect(context).not.toContain('playFromSegment');
     expect(context).toContain('currentSentenceOrdinal');
-    expect(playbackHook).toContain("layout?.status === 'running' || layout?.status === 'succeeded'");
+    expect(playbackHook).toContain('waitForPlaybackStartBuffer({');
+    expect(playbackControl).toContain("layout.status === 'running' || layout.status === 'succeeded'");
     expect(playbackHook).toContain('initialSeekLayout.generationStartOrdinal');
     expect(playbackHook).toContain('playbackStreamBaseSecRef.current = initialStartSec');
     expect(playbackProjection).toContain('mediaTimeToDocumentTime');
@@ -640,6 +648,13 @@ describe('server-state architecture', () => {
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('segment.generated ? ready : estimated');
     expect(context).toContain('playbackSyncNavigationRef');
     expect(context).toContain('syncPlaybackLocator');
+    expect(context).toContain("handler(locator, 'playback-follow')");
+    expect(documentNavigation).toContain('if (!preservePlaybackCursor) {');
+    expect(documentNavigation).toContain('setSelectedOrdinal(resolution.ordinal)');
+    expect(documentNavigation).toContain('syncActivePlaybackToOrdinal(resolution.ordinal)');
+    const epubViewer = source('src/components/views/EPUBViewer.tsx');
+    expect(epubViewer).toContain('refreshRenderedPlacement({ preservePlaybackCursor: true })');
+    expect(epubViewer).not.toContain('pause();\n      void refreshRenderedPlacement');
     expect(planController).toContain('setSelectedOrdinal(null)');
     expect(context).not.toContain('startOrdinal: startSegment.ordinal');
     expect(source('src/lib/client/api/tts.ts')).not.toContain('startOrdinal?: number');
@@ -649,9 +664,10 @@ describe('server-state architecture', () => {
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(seekLayoutRoute).toContain('buildPlaybackGrid');
-    expect(seekLayoutRoute).toContain('minOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal))');
-    expect(seekLayoutRoute).toContain('limit: TTS_PLAYBACK_AHEAD_WINDOW + 1');
+    expect(seekLayoutRoute).toContain('listCompletedTtsPlaybackSegments(session)');
+    expect(seekLayoutRoute).not.toContain('minOrdinal');
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');
+    expect(streamTimelineRoute).toContain('listCompletedTtsPlaybackSegments(session)');
     expect(streamTimelineRoute).toContain("throw new Error('TTS playback timeline requires a canonical plan artifact')");
     expect(streamTimelineRoute).toContain('segments: layout.segments');
     expect(streamTimelineRoute).toContain('completedSegments');
@@ -662,8 +678,10 @@ describe('server-state architecture', () => {
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/extend/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/tts/playback/plans/[planId]/events/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/plan/route.ts'))).toBe(false);
-    expect(streamSessions).toContain('Math.floor(options?.minOrdinal ?? 0)');
-    expect(streamSessions).toContain('Math.floor(options?.limit ?? 500), 10000');
+    expect(streamSessions).toContain('options?.minOrdinal === undefined');
+    expect(streamSessions).toContain('Math.floor(options.minOrdinal)');
+    expect(streamSessions).toContain('options?.limit === undefined');
+    expect(streamSessions).toContain('Math.floor(options.limit), 10000');
     expect(streamSessions).not.toContain('Math.max(session.startOrdinal');
     expect(streamSessions).not.toContain('readStreamPlanSegments(session)');
     expect(streamSessions).not.toContain('locatorIdentityKey(plan.locator)');

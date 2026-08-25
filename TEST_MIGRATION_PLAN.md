@@ -245,7 +245,7 @@ number of tests.
 | Route to PDF, EPUB, and HTML viewers | Merge | Covered by independent reader journeys and their visible URLs |
 | Restore PDF highlight after viewport narrowing | Replace | Observed responsive PDF/highlight journey |
 | PDF Single, Dual, Scroll, and Navigator behavior | Replace | Observed PDF navigation journey; split only if independent failures require it |
-| EPUB resize pauses playback | Replace | Observed responsive EPUB/playback journey |
+| EPUB resize preserves playback | Replace | Observed responsive EPUB/playback journey |
 | Public landing without anonymous bootstrap request | Vitest + Replace | Request policy belongs in Vitest; browser journey verifies the public landing visibly renders |
 | Authenticated `/` redirects to `/app` | Replace | Observed authenticated routing journey |
 | Reader back link returns to `/app` | Replace | Fold into one reader journey if it remains a visible navigation contract |
@@ -304,7 +304,7 @@ own computer-use walkthrough before implementation.
 | 11 | A user dismisses the folder hint, creates a folder by dragging documents together, and finds both preferences after reload | Accepted `folder-persistence.spec.ts`: visible hint dismissal, document-card pointer drag, named folder creation, filtered contents, and reload persistence | Folder API ownership, model derivation, and preference serialization remain in Vitest |
 | 12 | A user changes voice and speed, resumes playback, and keeps those choices | Merged into `playback-controls.spec.ts`: visible F1-to-F2 selection, keyboard speed changes, resume/pause, and reload persistence run in the existing TXT portion | Playback-plan recreation, config update ordering, audio-rate application, provider policies, and voice resolution remain in Vitest |
 | 13 | A visible PDF sentence highlight remains correctly positioned after responsive layout changes | Accepted `pdf-responsive.spec.ts`: narrow to the mobile reader, widen again, and require the same readable page, navigator state, and in-page sentence highlight after each repaint | PDF scaling, text-layer geometry, block matching, and highlight rectangle calculations remain in Vitest |
-| 14 | An EPUB remains readable and stops active playback when its reader layout changes | Merged into `playback-controls.spec.ts`: the existing EPUB start narrows to the mobile reader, requires playback to stop and the menu and book content to remain usable, then widens again | EPUB rendition resizing, placement mapping, and playback state transitions remain in Vitest |
+| 14 | An EPUB remains readable and keeps active playback selected when its reader layout changes | Merged into `playback-controls.spec.ts`: the existing EPUB start narrows to the mobile reader, requires `Pause` to remain visible while the menu and book content stay usable, then widens again without stopping; the browser-first long-book walkthrough separately observed time advancing throughout | EPUB rendition resizing, placement intent, and playback cursor preservation remain in Vitest |
 | 15 | A keyboard user can operate Settings, and a direct reader route survives reload and returns to the library | Merged into `anonymous-entry.spec.ts` and `text-markdown-reader.spec.ts`: keyboard activation, dialog focus entry and restoration, labelled controls, direct-route reload, readable content, and visible return | Focus primitives, route policy, and reader-state restoration remain in Vitest; authenticated routing stays deferred until a controlled authenticated state exists |
 
 The initial core gate did not require folder drag-and-drop, responsive reader
@@ -1075,14 +1075,15 @@ Observed with computer use on 2026-08-18 against the production build at
   Playwright owns the visible page and highlight surviving real viewport
   changes.
 
-### Walkthrough 14: Keep an EPUB usable and stop playback during resizing
+### Walkthrough 14: Keep an EPUB usable and playback active during resizing
 
-Observed with computer use on 2026-08-18 against the production build at
-`http://localhost:3003`.
+Originally observed with computer use on 2026-08-18 and corrected through a
+second browser-first investigation on 2026-08-24 against the production build
+at `http://localhost:3003`.
 
 - Purpose: prove that an EPUB remains readable while its desktop reader changes
-  to the mobile layout, and that active playback safely stops during the
-  rendition resize.
+  to the mobile layout, and that renderer-owned reflow does not interrupt active
+  playback or move its canonical cursor.
 - Initial state: an anonymous library containing `sample.epub`, opened at a
   1280 by 900 desktop viewport with the title page, contents, section controls,
   and playback controls visible. The automated journey uploads the same fixture
@@ -1092,21 +1093,35 @@ Observed with computer use on 2026-08-18 against the production build at
      settings control.
   2. Activate `Play` and observe the control change to `Pause`.
   3. Narrow the actual browser viewport to 600 by 800 pixels.
-  4. Observe that the control returns to `Play`, the same book title remains
-     visible, and the mobile `Menu` replaces the desktop settings controls.
+  4. Observe that the control remains `Pause`, playback time continues advancing,
+     the same book title remains visible, and the mobile `Menu` replaces the
+     desktop settings controls.
   5. Open `Menu` and observe the visible Zoom / Padding, Export Audiobook, and
      Settings actions.
   6. Widen the viewport to 1280 by 900 pixels and observe the desktop settings
-     control, stopped playback, and readable book content again.
+     control, uninterrupted playback, and readable book content again.
 - Product accessibility defect found during three-browser acceptance and
   corrected: the Settings icon's internal filename-like SVG title leaked into
   the mobile menu item's accessible name, so assistive technology announced
   `file-settings-solid Settings`. The icon is now decorative within both
   explicitly labelled settings controls, leaving the mobile action named
   `Settings` and the desktop button named `Open settings`.
-- The existing resize behavior itself was correct: it stopped active playback,
-  kept the EPUB rendition readable, and exposed the reader actions in the
-  mobile menu.
+- Regression correction: the earlier walkthrough accepted resize-induced
+  stopping, but the playback architecture requires post-readiness rendition
+  resize and relocation to be ordinary renderer mechanics. The live long-book
+  reproduction showed that these callbacks could also cancel playback startup
+  before audio was requested. Renderer reflow now preserves the playback cursor;
+  explicit Next, Previous, and chapter navigation remain manual placement and
+  re-anchor playback without ending the session.
+- Corrected browser-first acceptance: the long EPUB remained actively playing
+  through desktop-to-mobile-to-desktop viewport changes, its playback position
+  advanced on both sides of the reflow, and Next Section re-anchored playback
+  while leaving the session active.
+- Corrected focused automation: the single true-playback journey passed in
+  Chromium and WebKit in 33.5 seconds with `Pause` preserved across both viewport
+  changes. Local Firefox Nightly could not launch on macOS because its headless
+  software compositor failed to map a framebuffer before any page opened; the
+  Linux CI Firefox project remains the authoritative engine check.
 - Initial test scheduling: `epub-responsive.spec.ts` belonged to the dependent
   playback project group because it started real playback before resizing.
 - Initial focused acceptance: `epub-responsive.spec.ts` passed concurrently in
@@ -1227,6 +1242,42 @@ Chromium, Firefox, and WebKit.
   anonymous-session persistence, and reader-state reducers remain
   deterministic non-browser concerns. Playwright owns the visible keyboard,
   dialog, reload, readable-content, and return-navigation result.
+
+### Walkthrough 16: Preserve EPUB cache visibility and stop obsolete generation
+
+Observed with computer use on 2026-08-25 against the preserved-volume local
+slim Compose stack at `http://localhost:3003` using the signed-in long EPUB.
+
+- Purpose: reproduce the reported Chapter Twenty-Two/Chapter Twenty-Three cache
+  disappearance and prove that pause and browser prefetch no longer leave
+  obsolete generation running.
+- The EPUB reopened visibly at Chapter Twenty-Three with its canonical worker
+  plan and the full-document playback control. Starting playback replaced the
+  estimated 15:58:34 grid with the exact cached 15:41:52 grid and positioned the
+  playhead at roughly 4:40:32, rather than creating a chapter-local timeline.
+- The cached region remained visibly colored in the same document-wide bar and
+  playback reached `Pause` with word highlighting on the rendered chapter.
+- Pausing returned the control to `Play` without resetting the document time or
+  plan. The local stack was left running and the browser was left on the paused
+  EPUB for manual follow-up.
+- Product defects corrected during the walkthrough:
+  - timeline and seek-layout metadata had been bounded around the cursor and
+    hid durable completed sidecars outside that window;
+  - pause stopped only the browser audio/SSE heartbeat and did not publish
+    inactive worker intent;
+  - audio HTTP prefetch advanced the worker cursor as quickly as bytes were
+    downloaded, producing continuation jobs unrelated to audible progress;
+  - completed bounded runs did not retain a satisfied-ahead window, allowing
+    cursor signals to enqueue redundant work.
+- Final log acceptance: one initial `tts_playback` job started and terminated,
+  the audio route emitted its first byte, no
+  `tts.playback.resume_enqueued` event followed from network prefetch, and pause
+  produced `tts.playback.audio.client_closed` with no later playback job.
+- Deterministic ownership: worker read-model tests cover document-wide cache
+  retention; storage/controller tests cover explicit activity, deterministic
+  run identity, ordinary stream-cursor non-enqueueing, and refill low-water
+  behavior; architecture assertions prevent audio delivery from regaining
+  playhead ownership.
 
 Do not create provider-specific playback tests until the required provider is
 available and the journey succeeds with computer use in that environment.

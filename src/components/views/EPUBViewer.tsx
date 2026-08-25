@@ -115,7 +115,6 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   } = epubState;
   const {
     registerLocationChangeHandler,
-    pause,
     currentSegment,
     currentSentenceAlignment,
     currentWordIndex
@@ -137,17 +136,17 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
 
   const checkResize = useCallback(() => {
     if (isResizing && dimensions && bookRef.current?.isOpen && renditionRef.current) {
-      pause();
-      void refreshRenderedPlacement(true);
+      void refreshRenderedPlacement({ preservePlaybackCursor: true });
       setIsResizing(false);
 
       return true;
     } else {
       return false;
     }
-  }, [isResizing, setIsResizing, dimensions, pause, bookRef, renditionRef, refreshRenderedPlacement]);
+  }, [isResizing, setIsResizing, dimensions, bookRef, renditionRef, refreshRenderedPlacement]);
 
-  // Check for isResizing to pause TTS and re-extract text
+  // Re-extract rendered text after a responsive reflow without changing the
+  // canonical playback cursor or disabling active audio.
   useEffect(() => {
     if (checkResize()) return;
   }, [checkResize]);

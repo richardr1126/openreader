@@ -262,7 +262,7 @@ export function registerPlaybackAudioRoutes(
       // relies on scaffolding silence to complete instantly.
       const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].ordinal : 0;
       if (rangeStartOrdinal > 0) {
-        await controller.updateCursor(sessionId, rangeStartOrdinal).catch((error) => {
+        await controller.updateCursor(sessionId, rangeStartOrdinal, { ensureGeneration: true }).catch((error) => {
           app.log.warn({ sessionId, ordinal: rangeStartOrdinal, error: toErrorMessage(error) }, 'tts.playback.cursor_seed_failed');
         });
       }
@@ -322,9 +322,6 @@ export function registerPlaybackAudioRoutes(
               skipWithin = 0;
               paddedErrorSegment = true;
               app.log.info({ sessionId, ordinal }, 'tts.playback.audio.skipped_error_segment');
-              await controller.updateCursor(sessionId, ordinal).catch((error) => {
-                app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
-              });
               break;
             }
             // Scaffolding silence for the never-generated prefix below the current
@@ -367,14 +364,11 @@ export function registerPlaybackAudioRoutes(
             // jumps there; we wait (brief buffering) rather than silencing the rest of
             // the response, which the browser would never re-request.
             //
-            // Re-anchor generation to the ordinal we're blocked on: this drives the
-            // cursor here and (re)enqueues a continuation. After a forward seek the
-            // prior run abandons the skipped gap (its onBeforeSegment floor check),
-            // and this re-anchor starts a fresh run AT the target the moment that run
-            // frees — so re-centering is prompt instead of waiting for the heartbeat.
-            await controller.updateCursor(sessionId, ordinal).catch((error) => {
-              app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_reanchor_failed');
-            });
+            // The response may download far ahead of audible playback. Waiting
+            // here must not promote this prefetched ordinal to the playhead or it
+            // would drive unbounded generation at network speed. The projected
+            // client heartbeat refills the bounded window as playback advances;
+            // an explicit range start above already handles real seeks.
             markActivity('tts_playback_audio_wait');
             await sleep(400);
           }
@@ -383,9 +377,6 @@ export function registerPlaybackAudioRoutes(
             break;
           }
 
-          await controller.updateCursor(sessionId, ordinal).catch((error) => {
-            app.log.warn({ sessionId, ordinal, error: toErrorMessage(error) }, 'tts.playback.cursor_update_failed');
-          });
           // Serve the segment's real CBR audio gaplessly — each segment is a whole
           // number of MP3 frames, so concatenation keeps the stream byte↔time linear
           // (and live highlighting accurate). NEVER pad/trim mid-segment: a mid-frame
@@ -404,9 +395,6 @@ export function registerPlaybackAudioRoutes(
               audioKey,
               error: toErrorMessage(error),
             }, 'tts.playback.audio.stale_sidecar_missing_audio');
-            await controller.updateCursor(sessionId, ordinal).catch((cursorError) => {
-              app.log.warn({ sessionId, ordinal, error: toErrorMessage(cursorError) }, 'tts.playback.cursor_reanchor_failed');
-            });
             markActivity('tts_playback_audio_wait_missing_audio');
             await sleep(400);
             slotIdx -= 1;

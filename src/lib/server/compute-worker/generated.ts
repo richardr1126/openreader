@@ -478,6 +478,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         ordinal: number;
+                        playbackActive?: boolean;
                         expiresAt?: number;
                     };
                 };
