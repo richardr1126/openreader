@@ -16,18 +16,123 @@ async function openDocument(
   });
 }
 
-async function startAndPausePlayback(page: Page) {
+async function startAndCancelPlayback(page: Page) {
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
   await expect(playButton).toBeEnabled({ timeout: 30_000 });
   await playButton.focus();
   await page.keyboard.press('Enter');
 
+  const cancelButton = page.getByRole('button', {
+    name: 'Cancel playback loading',
+    exact: true,
+  });
   const pauseButton = page.getByRole('button', { name: 'Pause', exact: true });
-  await expect(pauseButton).toBeVisible();
-  await expect(pauseButton).toBeFocused();
+  const stopButton = cancelButton.or(pauseButton);
+  await expect(stopButton).toBeVisible({ timeout: 30_000 });
+  await expect(stopButton).toBeFocused();
   await page.keyboard.press('Space');
   await expect(playButton).toBeVisible();
   await expect(playButton).toBeFocused();
+}
+
+type PlaybackSessionResponse = {
+  seekLayoutUrl: string;
+};
+
+type PlaybackSeekLayout = {
+  durationMs: number;
+  segments: Array<{ generated?: boolean; audioState?: string }>;
+};
+
+async function readPlaybackPosition(page: Page) {
+  return Number(await page.getByRole('slider', {
+    name: 'Playback position',
+    exact: true,
+  }).inputValue());
+}
+
+async function readGeneratedSegmentCount(page: Page, seekLayoutUrl: string) {
+  return await page.evaluate(async (url) => {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Seek layout request failed: ${response.status}`);
+    const layout = await response.json() as PlaybackSeekLayout;
+    return layout.segments.filter((segment) => (
+      segment.generated === true || segment.audioState === 'ready'
+    )).length;
+  }, seekLayoutUrl);
+}
+
+async function readEpubWordHighlight(page: Page) {
+  return await page.frameLocator('iframe').locator('body').evaluate((body) => {
+    type HighlightRegistry = {
+      get: (name: string) => Iterable<Range> | undefined;
+    };
+    const view = body.ownerDocument.defaultView as (Window & {
+      CSS: typeof CSS & { highlights?: HighlightRegistry };
+    }) | null;
+    const highlight = view?.CSS?.highlights?.get('openreader-epub-word');
+    return highlight
+      ? Array.from(highlight).map((range) => range.toString()).join(' ').trim()
+      : '';
+  });
+}
+
+async function verifyEpubPlayback(page: Page) {
+  const playButton = page.getByRole('button', { name: 'Play', exact: true });
+  const position = page.getByRole('slider', { name: 'Playback position', exact: true });
+  const documentDuration = Number(await position.getAttribute('max'));
+  expect(documentDuration).toBeGreaterThan(0);
+
+  const sessionResponsePromise = page.waitForResponse((response) => (
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/tts/stream/sessions'
+  ));
+
+  await playButton.click();
+  const loadingButton = page.getByRole('button', {
+    name: 'Cancel playback loading',
+    exact: true,
+  });
+  await expect(loadingButton).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/^(Preparing|Loading) audio…$/)).toBeVisible();
+
+  const sessionResponse = await sessionResponsePromise;
+  expect(sessionResponse.ok()).toBe(true);
+  const session = await sessionResponse.json() as PlaybackSessionResponse;
+  expect(session.seekLayoutUrl).toBeTruthy();
+
+  const pauseButton = page.getByRole('button', { name: 'Pause', exact: true });
+  await expect(pauseButton).toBeVisible({ timeout: 60_000 });
+  const startedAt = await readPlaybackPosition(page);
+  await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 })
+    .toBeGreaterThan(startedAt + 1);
+
+  await expect.poll(() => readEpubWordHighlight(page), { timeout: 15_000 })
+    .not.toBe('');
+  const firstHighlightedWord = await readEpubWordHighlight(page);
+  await expect.poll(() => readEpubWordHighlight(page), { timeout: 15_000 })
+    .not.toBe(firstHighlightedWord);
+
+  await pauseButton.click();
+  await expect(playButton).toBeVisible();
+  const pausedAt = await readPlaybackPosition(page);
+  await page.waitForTimeout(1_500);
+  expect(await readPlaybackPosition(page)).toBeCloseTo(pausedAt, 0);
+
+  // A segment that was already synthesizing may finish after pause. Once that
+  // boundary settles, no further background generation should continue.
+  await page.waitForTimeout(4_000);
+  const settledGeneratedCount = await readGeneratedSegmentCount(page, session.seekLayoutUrl);
+  await page.waitForTimeout(4_000);
+  expect(await readGeneratedSegmentCount(page, session.seekLayoutUrl))
+    .toBe(settledGeneratedCount);
+
+  await page.getByRole('button', { name: 'Next section', exact: true }).click();
+  await expect.poll(async () => Number(await position.getAttribute('max')))
+    .toBeGreaterThan(documentDuration * 0.9);
+  expect(await readGeneratedSegmentCount(page, session.seekLayoutUrl))
+    .toBeGreaterThanOrEqual(settledGeneratedCount);
+  await page.getByRole('button', { name: 'Previous section', exact: true }).click();
 }
 
 async function returnToLibrary(page: Page) {
@@ -77,7 +182,7 @@ test('anonymous user controls playback across every accepted document journey', 
     page.getByRole('link', { name: 'multilingual-sample.txt', exact: true }),
     'multilingual-sample.txt',
   );
-  await startAndPausePlayback(page);
+  await startAndCancelPlayback(page);
 
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
   await page.getByRole('button', { name: 'Voice: F1', exact: true }).click();
@@ -99,9 +204,7 @@ test('anonymous user controls playback across every accepted document journey', 
   await audioSpeed.press('ArrowRight');
   await expect(page.getByRole('button', { name: '1.1x • 1.1x', exact: true })).toBeVisible();
 
-  await playButton.click();
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await startAndCancelPlayback(page);
 
   await page.reload();
   await expect(
@@ -119,7 +222,7 @@ test('anonymous user controls playback across every accepted document journey', 
     page.getByRole('link', { name: 'sample.md', exact: true }),
     'sample.md',
   );
-  await startAndPausePlayback(page);
+  await startAndCancelPlayback(page);
   await returnToLibrary(page);
 
   await openDocument(
@@ -134,17 +237,12 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(bookTitle).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open settings', exact: true })).toBeVisible();
 
-  const epubPlayButton = page.getByRole('button', { name: 'Play', exact: true });
-  await expect(epubPlayButton).toBeEnabled({ timeout: 30_000 });
-  await epubPlayButton.focus();
-  await page.keyboard.press('Enter');
-  const epubPauseButton = page.getByRole('button', { name: 'Pause', exact: true });
-  await expect(epubPauseButton).toBeFocused();
+  await verifyEpubPlayback(page);
 
   await page.setViewportSize({ width: 600, height: 800 });
 
   await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
-  await expect(epubPauseButton).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   await expect(bookTitle).toBeVisible();
 
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
@@ -155,17 +253,15 @@ test('anonymous user controls playback across every accepted document journey', 
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await expect(page.getByRole('button', { name: 'Open settings', exact: true })).toBeVisible();
-  await expect(epubPauseButton).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   await expect(bookTitle).toBeVisible();
-  await epubPauseButton.click();
-  await expect(epubPlayButton).toBeVisible();
   await returnToLibrary(page);
 
   await openDocument(page, pdfLinks.nth(0), 'sample.pdf');
-  await startAndPausePlayback(page);
+  await startAndCancelPlayback(page);
   await returnToLibrary(page);
 
   await openDocument(page, pdfLinks.nth(1), 'sample.pdf', 60_000);
-  await startAndPausePlayback(page);
+  await startAndCancelPlayback(page);
   await returnToLibrary(page);
 });

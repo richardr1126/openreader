@@ -1279,6 +1279,45 @@ slim Compose stack at `http://localhost:3003` using the signed-in long EPUB.
   behavior; architecture assertions prevent audio delivery from regaining
   playhead ownership.
 
+### Walkthrough 17: Require audible EPUB progress, moving highlights, and a quiet pause
+
+Observed with computer use on 2026-08-25 against the preserved-volume local
+slim Compose stack and then encoded in the provider-dependent playback journey.
+
+- The old playback assertion stopped at the control changing from `Play` to
+  `Pause`. That proved only React state and could pass while audio was still
+  silent, the media clock never advanced, highlighting was stale, cache
+  metadata disappeared, or generation continued after pause.
+- A live cached EPUB start first exposed `Preparing audio…`, became `Pause`
+  only after the media element emitted `playing`, advanced the absolute
+  document timeline, and moved the named EPUB word highlight through the
+  rendered iframe.
+- The consolidated local-only playback case now uses EPUB as the one true
+  playback journey in each browser. TXT, Markdown, source PDF, and converted
+  DOCX retain lightweight visible play/cancel wiring coverage without waiting
+  for additional real generations.
+- The EPUB acceptance boundary now requires:
+  - a visible pending/loading state before `Pause`;
+  - more than one second of real playback-position advancement;
+  - a non-empty named word highlight that changes while playback advances;
+  - a stable media position after pause;
+  - no additional completed segments after the in-flight segment boundary has
+    settled;
+  - a document-wide timeline after moving to the next EPUB section, with the
+    previously generated sidecars still present.
+- Chromium and WebKit passed the strengthened real-generation case locally.
+  The full pre-change baseline also passed all 22 deterministic Chromium and
+  WebKit cases. Local macOS Firefox Nightly could not initialize its software
+  compositor and timed out in `browserType.launch` before any test code ran;
+  this is a host-browser failure, not a skipped assertion or increased test
+  timeout. Linux GitHub CI remains the authoritative Firefox environment for
+  the 33 deterministic cases, while provider-dependent generation remains
+  intentionally local-only.
+- The configured `workers: '50%'`, three-browser projects, and CI exclusions
+  are unchanged. Targeted one-worker commands were used only to diagnose the
+  local Firefox launcher after the normal seven-worker matrix exposed the host
+  failure.
+
 Do not create provider-specific playback tests until the required provider is
 available and the journey succeeds with computer use in that environment.
 
