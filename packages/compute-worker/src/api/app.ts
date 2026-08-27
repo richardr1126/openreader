@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import {
   credsAuthenticator,
@@ -187,7 +187,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const app = Fastify({
     logger: buildLoggerConfig(),
-    disableRequestLogging: true,
+    logController: new LogController({ disableRequestLogging: true }),
   });
   await app.register(swagger, {
     openapi: {

@@ -19,5 +19,7 @@ overrides:
   '@xmldom/xmldom': ^0.9.8
   kysely: 0.28.17
   lodash: ^4.17.23
+  postcss: 8.5.26
+  vite: 8.2.2
 
 strictDepBuilds: false
