@@ -7,6 +7,7 @@ import {
   stripId3Tag,
 } from '../../src/jobs/playback/ffmpeg-export';
 import { classifySegmentError } from '../../src/jobs/playback/segment-generation';
+import { requestedPlaybackSegmentFailed } from '../../src/jobs/playback/playback-job';
 
 describe('worker job composition', () => {
   test('composes the exhaustive worker-loop handler surface', () => {
@@ -46,6 +47,32 @@ describe('TTS playback segment retry classification', () => {
       info: { message: 'bad voice', code: 'UPSTREAM_ERROR', upstreamStatus: 400 },
       retryable: false,
     });
+  });
+});
+
+describe('TTS playback requested-segment failures', () => {
+  test('fails an active run when its required segment has only an error artifact', () => {
+    expect(requestedPlaybackSegmentFailed({
+      generationRunIsCurrent: true,
+      requiredOrdinal: 24,
+      completedOrdinals: new Set([0, 1, 2]),
+      erroredOrdinals: new Set([24, 25]),
+    })).toBe(true);
+  });
+
+  test('does not fail stale runs or a required segment that is already complete', () => {
+    expect(requestedPlaybackSegmentFailed({
+      generationRunIsCurrent: false,
+      requiredOrdinal: 24,
+      completedOrdinals: new Set<number>(),
+      erroredOrdinals: new Set([24]),
+    })).toBe(false);
+    expect(requestedPlaybackSegmentFailed({
+      generationRunIsCurrent: true,
+      requiredOrdinal: 24,
+      completedOrdinals: new Set([24]),
+      erroredOrdinals: new Set([24]),
+    })).toBe(false);
   });
 });
 

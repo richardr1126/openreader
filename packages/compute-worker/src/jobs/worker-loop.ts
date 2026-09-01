@@ -23,6 +23,7 @@ import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 import { toErrorMessage } from '../infrastructure/errors';
+import { TtsCredentialBrokerClientError } from './tts-credential-broker-error';
 
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
@@ -256,7 +257,12 @@ export function createWorkerLoopController(input: {
       const errorLog = toErrorLog(error);
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
-      const action = decideRetryAction({ kind, deliveryCount, pdfAttempts: input.pdfAttempts });
+      const action = decideRetryAction({
+        kind,
+        deliveryCount,
+        pdfAttempts: input.pdfAttempts,
+        retryable: error instanceof TtsCredentialBrokerClientError ? error.retryable : undefined,
+      });
       const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
       if (context) {
         const update = action === 'nak_retry'

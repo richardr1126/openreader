@@ -172,7 +172,10 @@ your shell environment before using them beyond local development.
 
 :::warning Protect public deployments
 Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, compute-worker token,
-and `TTS_PLAYBACK_TOKEN_SECRET` before exposing a stack outside your trusted local network.
+credential-broker token and `TTS_PLAYBACK_TOKEN_SECRET` before
+exposing a stack outside your trusted local network. The full worker receives neither
+`AUTH_SECRET` nor application database credentials; it resolves enabled TTS providers through the
+private app-owned credential broker.
 :::
 
 For the complete configuration reference, see

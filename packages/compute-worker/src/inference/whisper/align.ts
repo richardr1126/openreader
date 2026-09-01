@@ -901,10 +901,16 @@ export async function alignAudioWithText(
   })();
 
   alignmentInFlight.set(inFlightKey, run);
-  run.finally(() => {
+  const clearInFlight = () => {
     if (alignmentInFlight.get(inFlightKey) === run) {
       alignmentInFlight.delete(inFlightKey);
     }
-  });
+  };
+  // `finally()` creates a second promise that rejects when `run` rejects. If
+  // nobody observes that derived promise, a best-effort alignment timeout can
+  // become a process-fatal unhandled rejection even when the caller catches
+  // `run`. Handle both outcomes explicitly so cleanup never changes failure
+  // ownership.
+  void run.then(clearInFlight, clearInFlight);
   return run;
 }

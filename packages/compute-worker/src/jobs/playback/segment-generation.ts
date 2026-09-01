@@ -1,6 +1,5 @@
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
-import { isBuiltInTtsProviderId } from '@openreader/tts/provider-catalog';
 import { resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import {
   buildTtsPlaybackAudioContentHash,
@@ -15,8 +14,9 @@ import type { TTSSegmentSettings } from '@openreader/tts/types';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
 import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
 import { withTimeout } from '../../infrastructure/config';
+import { requireTtsSegmentTextHashSecret } from '../../infrastructure/credential-broker-config';
 import type { TtsPlaybackStorage } from '../../playback/storage';
-import { resolveTtsCredentials } from '../tts-credentials';
+import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
 import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
@@ -66,10 +66,6 @@ async function withAbortableTimeout<T>(
   }
 }
 
-function textHmacSecret(): string {
-  return process.env.AUTH_SECRET?.trim() || 'openreader-default-tts-segment-secret';
-}
-
 export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; retryable: boolean } {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof TtsPlaybackSegmentTimeoutError) {
@@ -110,20 +106,19 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   if (input.segments.length === 0) return;
 
   const settings = parseTtsSettings(input.request.settingsJson);
-  const requestCreds = await resolveTtsCredentials({ providerHeader: settings.providerRef });
-  if ('error' in requestCreds) {
-    throw new Error(`Unable to resolve TTS provider credentials: ${requestCreds.error}`);
-  }
-
-  const effectiveProviderRef = requestCreds.adminRecord?.slug || settings.providerRef;
-  const resolvedProviderType = isBuiltInTtsProviderId(requestCreds.provider)
-    ? requestCreds.provider
-    : 'unknown';
+  const requestCreds = await resolveTtsCredentialsFromBroker(settings.providerRef);
+  const effectiveProviderRef = requestCreds.providerRef;
+  const resolvedProviderType = requestCreds.providerType;
   const effectiveModel = resolveTtsModelForProvider({
     providerRef: effectiveProviderRef,
     providerType: resolvedProviderType,
     model: settings.ttsModel,
-    sharedProviders: requestCreds.adminRecord ? [requestCreds.adminRecord] : [],
+    sharedProviders: [{
+      slug: requestCreds.providerRef,
+      providerType: requestCreds.providerType,
+      defaultModel: requestCreds.defaultModel,
+      defaultInstructions: requestCreds.defaultInstructions,
+    }],
     fallbackProviderRef: '',
     showAllProviderModels: true,
   });
@@ -135,11 +130,11 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     ttsInstructions: resolveEffectiveTtsInstructions({
       model: effectiveModel,
       requestInstructions: settings.ttsInstructions,
-      sharedDefaultInstructions: requestCreds.adminRecord?.defaultInstructions,
+      sharedDefaultInstructions: requestCreds.defaultInstructions,
     }) ?? '',
   };
 
-  const secret = textHmacSecret();
+  const secret = requireTtsSegmentTextHashSecret();
   const normalized = input.segments.map((segment) => {
     const text = normalizeSegmentText(segment.text);
     const locator = normalizeLocator(segment.locator as never);
@@ -192,6 +187,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     const first = result.alignments[0];
     return first ? { ...first, sentenceIndex: segment.original.ordinal } : null;
   }).catch(() => null);
+
+  type PendingAlignment = {
+    segment: (typeof normalized)[number];
+    audio: Buffer;
+    audioKey: string;
+    durationMs: number;
+  };
+  const pendingAlignments: PendingAlignment[] = [];
 
   const persistSegmentMetadata = async (
     segment: (typeof normalized)[number],
@@ -285,11 +288,11 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       let durationMs = existing?.status === 'completed' ? existing.durationMs : null;
       let alignment = existing?.alignment ?? null;
       const needsRebuild = existing?.status !== 'completed' || durationMs == null || !alignment;
+      let storedAudio: Buffer | null = null;
       if (needsRebuild && input.readAudioObject) {
         try {
-          const storedAudio = await input.readAudioObject(audioKey);
+          storedAudio = await input.readAudioObject(audioKey);
           if (durationMs == null) durationMs = await probeAudioDurationMsFromBuffer(storedAudio).catch(() => 0);
-          if (!alignment) alignment = await computeAlignment(storedAudio, segment, audioKey);
         } catch {
           // A future generation pass retries this best-effort sidecar self-heal.
         }
@@ -303,6 +306,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         }).catch(() => undefined);
       }
       await input.onSegmentCompleted?.(planOrdinal);
+      if (!alignment && storedAudio) {
+        pendingAlignments.push({
+          segment,
+          audio: storedAudio,
+          audioKey,
+          durationMs: Math.max(1, Number(durationMs ?? 1000)),
+        });
+      }
       continue;
     }
 
@@ -357,9 +368,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
             model: effectiveSettings.ttsModel,
             instructions: effectiveSettings.ttsInstructions,
             language: effectiveSettings.language,
-            provider: requestCreds.provider,
+            provider: requestCreds.providerType,
             apiKey: requestCreds.apiKey,
-            baseUrl: requestCreds.baseUrl,
+            baseUrl: requestCreds.baseUrl ?? undefined,
           }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
           input.synthesisTimeoutMs,
           'tts playback segment synthesis',
@@ -371,14 +382,19 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           return;
         }
         const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
-        const alignment = await computeAlignment(audioBuffer, segment, audioKey);
         if (!await shouldContinueWrites(planOrdinal)) return;
         await persistSegmentMetadata(segment, 'completed', {
           audioKey,
           durationMs,
-          alignment,
+          alignment: null,
           updatedAt: Date.now(),
         }).catch(() => undefined);
+        pendingAlignments.push({
+          segment,
+          audio: audioBuffer,
+          audioKey,
+          durationMs: Math.max(1, durationMs),
+        });
         completed = true;
         break;
       } catch (error) {
@@ -400,5 +416,27 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       updatedAt: Date.now(),
     }).catch(() => undefined);
     await input.onSegmentErrored?.(planOrdinal);
+  }
+
+  // Alignment improves word highlighting, but it must never gate playable
+  // audio. Generate the requested buffer first, then backfill timings while
+  // the same run is still current. A paused, superseded, or cleared run stops
+  // this best-effort work through the same ownership checks as synthesis.
+  for (const pending of pendingAlignments) {
+    const planOrdinal = pending.segment.original.ordinal;
+    if (!await shouldContinueWrites(planOrdinal)) break;
+    const existing = await freshSidecar(pending.segment);
+    if (existing?.status !== 'completed' || existing.alignment) continue;
+    const alignment = await computeAlignment(pending.audio, pending.segment, pending.audioKey);
+    if (!alignment || !await shouldContinueWrites(planOrdinal)) continue;
+    await persistSegmentMetadata(pending.segment, 'completed', {
+      audioKey: pending.audioKey,
+      durationMs: pending.durationMs,
+      alignment,
+      updatedAt: Date.now(),
+    }).catch(() => undefined);
+    // Emit another snapshot so a live client refreshes the sidecar and begins
+    // using exact word timing without waiting for a new playback session.
+    await input.onSegmentCompleted?.(planOrdinal);
   }
 }

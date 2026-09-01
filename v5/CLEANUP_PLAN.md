@@ -91,8 +91,9 @@ Bad extraction boundaries:
 
 - Next remains the authenticated control plane.
 - The compute worker remains the heavy/long-running data plane.
-- SQL remains app-owned except for the existing narrow, read-only worker access
-  to provider credentials.
+- SQL and provider credential storage remain app-owned. Workers obtain one
+  execution configuration through the authenticated credential broker and
+  never query application tables.
 - Worker operation-key parsing belongs beside operation-key construction.
 - Storage transport rules have one shared resolver.
 - React providers should expose the smallest stable consumer-facing surface;
@@ -749,13 +750,15 @@ templates, active deployment docs, Docker build contexts, Compose examples, and
 Playwright CI now use the same names and defaults.
 
 The unregistered singular `IMPORT_LIBRARY_DIR` alias was removed in favor of
-`IMPORT_LIBRARY_DIRS`. Standalone worker examples and full Compose deployments
-now pass the app's `AUTH_SECRET`, which the worker requires to decrypt
-app-managed shared-provider credentials. The registered `S3_ENDPOINT` alias,
-warnings, test, and OpenReader 5.0 removal condition remain; current CI and
-locally present ignored worker configuration now use `S3_INTERNAL_ENDPOINT`.
-Ignored env files were reconciled by variable name without printing, committing,
-or documenting their secret values.
+`IMPORT_LIBRARY_DIRS`. The later v5 authentication hard cut supersedes the
+temporary standalone-worker `AUTH_SECRET` configuration recorded by this
+cleanup history: the app-owned credential broker now replaces worker SQL and
+provider decryption, and active worker examples no longer receive
+`AUTH_SECRET`. The registered `S3_ENDPOINT` alias, warnings, test, and
+OpenReader 5.0 removal condition remain; current CI and locally present ignored
+worker configuration now use `S3_INTERNAL_ENDPOINT`. Ignored env files were
+reconciled by variable name without printing, committing, or documenting their
+secret values.
 
 Validation:
 

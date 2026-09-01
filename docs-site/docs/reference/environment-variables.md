@@ -22,7 +22,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `API_BASE` | TTS provider bootstrap seed | unset | Optional first-boot base URL for `default-openai` |
 | `API_KEY` | TTS provider bootstrap seed | unset | Optional first-boot API key for `default-openai` |
 | `BASE_URL` | Auth | unset | Required at startup |
-| `AUTH_SECRET` | App auth + worker provider credentials | unset | Required on the app; standalone workers must use the same value |
+| `AUTH_SECRET` | App auth + provider encryption | unset | Required on the app; never configure it on a standalone worker |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
 | `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
@@ -76,6 +76,9 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `COMPUTE_WORKER_URL` | External compute mode | unset | Set only for standalone external worker mode |
 | `COMPUTE_WORKER_PUBLIC_URL` | TTS playback | `COMPUTE_WORKER_URL` | Set when browsers need a different worker URL for audio |
 | `COMPUTE_WORKER_TOKEN` | External compute mode | unset | Required for standalone external worker auth |
+| `COMPUTE_CREDENTIAL_BROKER_URL` | Standalone worker | unset | HTTPS app endpoint used to resolve TTS provider execution credentials |
+| `COMPUTE_CREDENTIAL_BROKER_TOKEN` | App + worker | generated for embedded startup | Authenticates worker-to-app credential resolution |
+| `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS` | Standalone worker | `5000` | Credential-broker request timeout |
 | `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | unset | Required for signed worker-owned playback audio URLs |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
@@ -132,7 +135,7 @@ Required external base URL for this OpenReader instance.
 Required secret key used by auth/session handling.
 
 - Required at startup
-- Required on standalone workers and must match the app value so encrypted shared-provider credentials can be decrypted
+- App-only: standalone workers resolve provider credentials through the authenticated credential broker and must not receive this secret
 - Generate with `openssl rand -base64 32`
 
 ### AUTH_TRUSTED_ORIGINS
@@ -461,6 +464,33 @@ Shared token for app-to-external-worker requests.
 
 - Required when `COMPUTE_WORKER_URL` points at a standalone worker.
 - Never expose this token to browsers.
+
+### COMPUTE_CREDENTIAL_BROKER_URL
+
+App-owned credential endpoint used by a standalone worker when TTS generation begins.
+
+- Required on standalone workers
+- Use `https://<app-origin>/api/internal/compute/tts-credentials` for remote deployments
+- Full Compose uses the private `http://openreader:3003/api/internal/compute/tts-credentials` service URL
+- Never point this at `COMPUTE_WORKER_PUBLIC_URL`
+
+### COMPUTE_CREDENTIAL_BROKER_TOKEN
+
+Dedicated bearer token for worker-to-app TTS credential resolution.
+
+- Required on the app and every standalone worker, with the same value
+- Generated automatically for an embedded worker when unset
+- Separate from `COMPUTE_WORKER_TOKEN` because the request direction and permitted route differ
+- Never sent to browsers, NATS, operation state, or storage
+- Generate with `openssl rand -base64 32`
+
+### COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS
+
+Timeout for a worker credential-broker request.
+
+- Default: `5000`
+- Positive integer milliseconds
+- Transient broker failures use a bounded worker-side retry
 
 ### TTS_PLAYBACK_TOKEN_SECRET
 

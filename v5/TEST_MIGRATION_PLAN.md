@@ -1,5 +1,12 @@
 # Playwright Clean-Slate Replacement Plan
 
+> **Temporary browser scope:** Firefox projects remain commented out in the
+> Playwright configuration because Playwright Firefox hangs and leaves a
+> 100%-CPU process on macOS 27. Local and CI runs currently exercise Chromium
+> and WebKit with the existing 50% worker cap. The completed three-browser
+> results below remain historical acceptance evidence; restore the commented
+> Firefox projects when the upstream compatibility problem is resolved.
+
 ## Decision
 
 The existing Playwright tests will not be migrated, repaired, or used as the

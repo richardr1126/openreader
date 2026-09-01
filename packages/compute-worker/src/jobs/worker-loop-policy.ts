@@ -11,6 +11,8 @@ export function decideRetryAction(input: {
   kind: WorkerOperationKind;
   deliveryCount: number;
   pdfAttempts: number;
+  retryable?: boolean;
 }): RetryAction {
+  if (input.retryable === false) return 'term_fail';
   return input.deliveryCount < input.pdfAttempts ? 'nak_retry' : 'term_fail';
 }

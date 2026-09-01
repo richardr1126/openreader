@@ -26,6 +26,9 @@ const documentedEnvironmentVariables = [
   'CHANGELOG_REPO',
   'CI',
   'COMPUTE_EVENTS_STREAM_MAX_BYTES',
+  'COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS',
+  'COMPUTE_CREDENTIAL_BROKER_TOKEN',
+  'COMPUTE_CREDENTIAL_BROKER_URL',
   'COMPUTE_JOB_CONCURRENCY',
   'COMPUTE_JOB_STATES_MAX_BYTES',
   'COMPUTE_JOBS_STREAM_MAX_BYTES',
@@ -136,12 +139,30 @@ describe('shared runtime configuration boundary', () => {
 
     expect(rootExample).not.toContain('IMPORT_LIBRARY_DIR=');
     expect(reference).not.toContain('### IMPORT_LIBRARY_DIR\n');
-    expect(workerExample).toContain('AUTH_SECRET=local-openreader-auth-secret-change-me');
+    expect(workerExample).not.toContain('AUTH_SECRET=');
+    expect(workerExample).not.toContain('POSTGRES_URL=');
+    expect(workerExample).not.toContain('SQLITE_DB_PATH=');
+    expect(workerExample).toContain('COMPUTE_CREDENTIAL_BROKER_URL=');
+    expect(workerExample).toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN=');
     expect(fullCompose).toContain('AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}');
+    expect(fullCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
+    const fullWorker = fullCompose.slice(fullCompose.indexOf('\n  compute-worker:'));
+    expect(fullWorker).not.toContain('AUTH_SECRET:');
+    expect(fullWorker).not.toContain('POSTGRES_URL:');
+    expect(fullWorker).not.toContain('SQLITE_DB_PATH:');
+    expect(fullWorker).toContain('COMPUTE_CREDENTIAL_BROKER_URL: http://openreader:3003/api/internal/compute/tts-credentials');
+    expect(fullWorker).toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN:');
     for (const slimCompose of slimComposeFiles) {
       expect(slimCompose).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
+      expect(slimCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
       expect(slimCompose).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
       expect(slimCompose).toContain('- "8081:8081"');
+      expect(slimCompose).toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN:');
     }
+
+    const dockerfile = source('Dockerfile');
+    const bootstrap = source('packages/bootstrap/src/cli.mjs');
+    expect(dockerfile).toContain('ENV HOSTNAME=0.0.0.0');
+    expect(bootstrap).toContain("return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials'");
   });
 });

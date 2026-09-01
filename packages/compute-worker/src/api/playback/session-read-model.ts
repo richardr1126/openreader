@@ -1,3 +1,4 @@
+import { buildProportionalAlignment } from '@openreader/tts/segments';
 import type { ArtifactStorage } from '../../infrastructure/storage';
 import type {
   TtsPlaybackSegmentMetadata,
@@ -46,6 +47,35 @@ const SIDECAR_SCOPE_CACHE_MAX = 8;
 const SIDECAR_SCAN_AHEAD = 64;
 const SIDECAR_FETCH_BATCH = 32;
 const PLAN_CACHE_MAX = 4;
+
+function isStableCompletedSidecar(
+  sidecar: TtsPlaybackSegmentMetadata | null | undefined,
+): sidecar is TtsPlaybackSegmentMetadata {
+  return sidecar?.status === 'completed' && Boolean(sidecar.alignment);
+}
+
+function readSessionLanguage(settingsJson: unknown): string | undefined {
+  if (!settingsJson || typeof settingsJson !== 'object') return undefined;
+  const language = Reflect.get(settingsJson, 'language');
+  return typeof language === 'string' && language.trim() ? language : undefined;
+}
+
+function serializeTimelineAlignment(input: {
+  sidecar: TtsPlaybackSegmentMetadata;
+  text: string | undefined;
+  language: string | undefined;
+}): string | null {
+  if (input.sidecar.alignment) return JSON.stringify(input.sidecar.alignment);
+  const durationMs = Number(input.sidecar.durationMs);
+  if (!input.text || !Number.isFinite(durationMs) || durationMs <= 0) return null;
+  const alignment = buildProportionalAlignment({
+    sentence: input.text,
+    sentenceIndex: input.sidecar.ordinal,
+    durationMs,
+    language: input.language,
+  });
+  return alignment.words.length > 0 ? JSON.stringify(alignment) : null;
+}
 
 function scopeCacheKey(session: PlaybackSessionRow, cacheEpoch: number): string {
   return `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}\0${Math.max(0, Math.floor(cacheEpoch))}`;
@@ -121,7 +151,10 @@ export function createPlaybackSessionReadModel(input: {
     const cached = cache.get(ordinal);
     if (cached) return cached;
     const sidecar = await fetchSidecar(session, ordinal, cacheEpoch);
-    if (sidecar?.status === 'completed') cache.set(ordinal, sidecar);
+    // A completed audio sidecar may still receive its best-effort alignment.
+    // Cache it only after word timing is present so a live timeline can observe
+    // the backfill instead of retaining the audio-first snapshot indefinitely.
+    if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
     return sidecar;
   };
 
@@ -138,7 +171,7 @@ export function createPlaybackSessionReadModel(input: {
     const bandEnd = Math.min(planLength - 1, Math.max(highestCached, cursor) + SIDECAR_SCAN_AHEAD);
     const ordinals: number[] = [];
     for (let ordinal = 0; ordinal <= bandEnd; ordinal += 1) {
-      if (cache.get(ordinal)?.status !== 'completed') ordinals.push(ordinal);
+      if (!isStableCompletedSidecar(cache.get(ordinal))) ordinals.push(ordinal);
     }
     for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
       const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
@@ -147,7 +180,7 @@ export function createPlaybackSessionReadModel(input: {
         const sidecar = fetched[batchIndex];
         if (!sidecar) return;
         result.set(ordinal, sidecar);
-        if (sidecar.status === 'completed') cache.set(ordinal, sidecar);
+        if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
       });
     }
     return result;
@@ -192,6 +225,8 @@ export function createPlaybackSessionReadModel(input: {
       if (!session.planObjectKey) return [];
       const planSegments = await readPlanSegments(session.planObjectKey);
       if (!planSegments?.length) return [];
+      const planTextByOrdinal = new Map(planSegments.map((segment) => [segment.ordinal, segment.text]));
+      const language = readSessionLanguage(session.settingsJson);
       if (!options) {
         const sidecars = await collectScopeSidecars(session, planSegments.length);
         return [...sidecars.values()]
@@ -203,7 +238,11 @@ export function createPlaybackSessionReadModel(input: {
             segmentKey: sidecar.segmentKey,
             audioKey: sidecar.audioKey,
             durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
-            alignmentJson: sidecar.alignment ? JSON.stringify(sidecar.alignment) : null,
+            alignmentJson: serializeTimelineAlignment({
+              sidecar,
+              text: planTextByOrdinal.get(sidecar.ordinal),
+              language,
+            }),
             updatedAt: sidecar.updatedAt ?? null,
           }))
           .sort((left, right) => left.ordinal - right.ordinal);
@@ -224,7 +263,7 @@ export function createPlaybackSessionReadModel(input: {
       );
       const missing = requestedSegments
         .map((segment) => segment.ordinal)
-        .filter((ordinal) => cache.get(ordinal)?.status !== 'completed');
+        .filter((ordinal) => !isStableCompletedSidecar(cache.get(ordinal)));
       for (let index = 0; index < missing.length; index += SIDECAR_FETCH_BATCH) {
         const batch = missing.slice(index, index + SIDECAR_FETCH_BATCH);
         const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
@@ -232,7 +271,7 @@ export function createPlaybackSessionReadModel(input: {
           const sidecar = fetched[batchIndex];
           if (!sidecar) return;
           sidecars.set(ordinal, sidecar);
-          if (sidecar.status === 'completed') cache.set(ordinal, sidecar);
+          if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
         });
       }
       return [...sidecars.values()]
@@ -244,7 +283,11 @@ export function createPlaybackSessionReadModel(input: {
           segmentKey: sidecar.segmentKey,
           audioKey: sidecar.audioKey,
           durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
-          alignmentJson: sidecar.alignment ? JSON.stringify(sidecar.alignment) : null,
+          alignmentJson: serializeTimelineAlignment({
+            sidecar,
+            text: planTextByOrdinal.get(sidecar.ordinal),
+            language,
+          }),
           updatedAt: sidecar.updatedAt ?? null,
         }))
         .sort((left, right) => left.ordinal - right.ordinal);

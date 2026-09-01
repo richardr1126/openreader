@@ -25,27 +25,43 @@ export async function GET(
   });
   try {
     const { planId } = await context.params;
-    const operation = await resolveTtsPlaybackPlanOperation(planId);
-    if (!operation) return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
-    const subject = operation.subject;
-    if (subject.kind !== 'tts_playback_plan') {
-      return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
+    const sessionId = request.nextUrl.searchParams.get('sessionId')?.trim() || '';
+    const session = sessionId ? await resolveTtsPlaybackSession(request, sessionId) : null;
+    if (session instanceof Response) return session;
+
+    // A playback session owns the durable plan artifact it was created from.
+    // Prefer that reference so an active/cached session remains seekable after
+    // the worker operation store is restarted or pruned. Plan-only callers
+    // still resolve through the operation while the plan is being prepared.
+    let documentId: string;
+    let planObjectKey: string;
+    if (session) {
+      if (!session.planObjectKey) {
+        throw new Error('TTS playback seek layout requires a canonical plan artifact');
+      }
+      documentId = session.documentId;
+      planObjectKey = session.planObjectKey;
+    } else {
+      const operation = await resolveTtsPlaybackPlanOperation(planId);
+      if (!operation) return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
+      const subject = operation.subject;
+      if (subject.kind !== 'tts_playback_plan') {
+        return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
+      }
+      if (operation.status !== 'succeeded' || !operation.result?.planObjectKey) {
+        return NextResponse.json({ error: 'Playback plan not ready' }, { status: 404 });
+      }
+      documentId = subject.documentId;
+      planObjectKey = operation.result.planObjectKey;
     }
 
-    const scope = await resolveSegmentDocumentScope(request, subject.documentId);
+    const scope = await resolveSegmentDocumentScope(request, documentId);
     if (scope instanceof Response) return scope;
-    if (operation.status !== 'succeeded' || !operation.result?.planObjectKey) {
-      return NextResponse.json({ error: 'Playback plan not ready' }, { status: 404 });
-    }
-
-    const { artifact } = await readTtsPlaybackPlanArtifact(operation.result.planObjectKey);
+    const { artifact } = await readTtsPlaybackPlanArtifact(planObjectKey);
     if (artifact.storageUserId && artifact.storageUserId !== scope.storageUserId) {
       return NextResponse.json({ error: 'Playback plan scope mismatch' }, { status: 403 });
     }
 
-    const sessionId = request.nextUrl.searchParams.get('sessionId')?.trim() || '';
-    const session = sessionId ? await resolveTtsPlaybackSession(request, sessionId) : null;
-    if (session instanceof Response) return session;
     const startOrdinal = 0;
     const settingsJson = session?.settingsJson ?? artifact.settingsJson;
     // Seek layout and timeline share the same whole-document cache view. The

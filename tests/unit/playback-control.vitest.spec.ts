@@ -4,6 +4,7 @@ import {
   isPlaybackAbortError,
   isPlaybackStartBufferReady,
   measurePlaybackStartBuffer,
+  resumePlaybackMedia,
   resolvePlaybackControlPresentation,
   waitForPlaybackStartBuffer,
 } from '../../src/lib/client/tts/playback-control';
@@ -13,6 +14,26 @@ describe('playback request cancellation', () => {
     expect(isPlaybackAbortError(new DOMException('Aborted', 'AbortError'))).toBe(true);
     expect(isPlaybackAbortError({ message: 'request canceled' })).toBe(true);
     expect(isPlaybackAbortError(new Error('provider failed'))).toBe(false);
+  });
+});
+
+describe('playback media resume', () => {
+  test('reconnects only a stale resume that still owns playback intent', async () => {
+    const staleError = new Error('media source disconnected');
+    await expect(resumePlaybackMedia(
+      () => Promise.reject(staleError),
+      () => true,
+    )).resolves.toEqual({ status: 'stale', error: staleError });
+
+    await expect(resumePlaybackMedia(
+      () => Promise.reject(staleError),
+      () => false,
+    )).resolves.toEqual({ status: 'cancelled' });
+
+    await expect(resumePlaybackMedia(
+      () => Promise.resolve(),
+      () => true,
+    )).resolves.toEqual({ status: 'resumed' });
   });
 });
 
@@ -134,5 +155,18 @@ describe('playback start buffer', () => {
       playbackRate: 1,
       pollMs: 0,
     })).toBeNull();
+  });
+
+  test('fails immediately when generation reaches a terminal failure', async () => {
+    await expect(waitForPlaybackStartBuffer({
+      loadLayout: async () => ({
+        status: 'failed',
+        generationStartOrdinal: 60,
+        segments: [segment(60, 8_000, false)],
+      }),
+      isCurrent: () => true,
+      playbackRate: 1,
+      pollMs: 0,
+    })).rejects.toThrow('TTS playback generation failed before audio became ready');
   });
 });

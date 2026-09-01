@@ -4,10 +4,11 @@ import {
   resolvePreferredEnabledAdminProvider,
   type AdminProviderRecord,
 } from '@/lib/server/admin/providers';
+import { isBuiltInTtsProviderId, type TtsProviderId } from '@openreader/tts/provider-catalog';
 
 export interface ResolvedTtsCredentials {
-  /** Provider id passed downstream to TTS generation (one of the 4 built-in IDs). */
-  provider: string;
+  /** Provider id passed downstream to TTS generation. */
+  provider: TtsProviderId;
   /** Decrypted API key from the selected admin-managed provider. */
   apiKey: string;
   /** Base URL, or undefined to fall through to provider defaults. */
@@ -18,11 +19,21 @@ export interface ResolvedTtsCredentials {
   adminRecord?: AdminProviderRecord;
 }
 
+export class ProviderCredentialDecryptionError extends Error {
+  readonly code = 'PROVIDER_DECRYPT_FAILED';
+
+  constructor(options?: { cause?: unknown }) {
+    super('Unable to decrypt the selected TTS provider credential', options);
+    this.name = 'ProviderCredentialDecryptionError';
+  }
+}
+
 /**
  * Resolve TTS credentials for an incoming request.
  *
  * Only admin-managed shared providers can supply credentials. Built-in
- * provider ids select the preferred enabled shared provider of that type.
+ * provider ids select the preferred enabled shared provider under the existing
+ * legacy selection policy.
  *
  * Returns `null` when the request references a slug that exists but is
  * disabled — callers should reject with a 4xx.
@@ -33,7 +44,7 @@ export async function resolveTtsCredentials(opts: {
 }): Promise<ResolvedTtsCredentials | { error: 'provider_disabled' | 'provider_unknown' | 'no_shared_provider_configured'; slug: string }> {
   const requestedProvider = opts.providerHeader || opts.fallbackProvider || 'openai';
 
-  const admin = isBuiltInProviderId(requestedProvider)
+  const admin = isBuiltInTtsProviderId(requestedProvider)
     ? await resolvePreferredEnabledAdminProvider({
       requestedSlug: null,
       runtimeDefaultSlug: opts.fallbackProvider || '',
@@ -43,7 +54,12 @@ export async function resolveTtsCredentials(opts: {
     return { error: 'no_shared_provider_configured', slug: requestedProvider };
   }
 
-  const apiKey = await decryptedKeyFor(admin);
+  let apiKey: string;
+  try {
+    apiKey = await decryptedKeyFor(admin);
+  } catch (error) {
+    throw new ProviderCredentialDecryptionError({ cause: error });
+  }
   return {
     provider: admin.providerType,
     apiKey,
@@ -51,10 +67,4 @@ export async function resolveTtsCredentials(opts: {
     fromAdmin: true,
     adminRecord: admin,
   };
-}
-
-const BUILT_IN_IDS = new Set(['custom-openai', 'replicate', 'deepinfra', 'openai', 'speech-sdk']);
-
-function isBuiltInProviderId(value: string): boolean {
-  return BUILT_IN_IDS.has(value);
 }

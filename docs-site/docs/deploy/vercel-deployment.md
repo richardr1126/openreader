@@ -45,6 +45,7 @@ COMPUTE_WORKER_URL=https://<railway-worker-domain>
 # Optional when browsers need a different public worker URL for playback audio
 # COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>
 COMPUTE_WORKER_TOKEN=...
+COMPUTE_CREDENTIAL_BROKER_TOKEN=... # generate separately; set the same value on the worker
 TTS_PLAYBACK_TOKEN_SECRET=... # generate with: openssl rand -base64 32; set the same value on the worker
 
 # Logging (recommended for Vercel log ingestion)
@@ -56,11 +57,14 @@ LOG_LEVEL=info
 # API_BASE only needed for OpenAI-compatible self-hosted providers
 ```
 
-If you also run an external worker service (for example Railway), set these there too:
+If you also run an external worker service (for example Railway), configure it with:
 
-- `AUTH_SECRET` to the same value as the app, for shared-provider credential decryption
+- `COMPUTE_CREDENTIAL_BROKER_URL=https://<your-app-domain>/api/internal/compute/tts-credentials`
+- the matching `COMPUTE_CREDENTIAL_BROKER_TOKEN`
 - `LOG_FORMAT=json`
 - `COMPUTE_LOG_LEVEL=info`
+
+Do not set the app's `AUTH_SECRET` or `POSTGRES_URL` on the worker. Provider lookup and decryption remain app-owned.
 
 :::note Env vars vs. admin panel (important for Vercel)
 `API_KEY` / `API_BASE` are one-shot bootstrap seeds on first deploy. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
@@ -76,7 +80,8 @@ If your Vercel app uses an external compute worker on Railway with Synadia Cloud
    - `COMPUTE_WORKER_URL=https://<railway-worker-domain>` (in Vercel)
    - `COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>` (in Vercel) if browsers cannot reach `COMPUTE_WORKER_URL` directly
 3. Use the same `COMPUTE_WORKER_TOKEN` value in both Vercel and Railway worker env vars.
-4. Use the same `TTS_PLAYBACK_TOKEN_SECRET` value in both Vercel and Railway worker env vars.
+4. Use the same `COMPUTE_CREDENTIAL_BROKER_TOKEN` value in both Vercel and Railway worker env vars, and point the worker broker URL at the Vercel app.
+5. Use the same `TTS_PLAYBACK_TOKEN_SECRET` value in both Vercel and Railway worker env vars. The worker derives a domain-separated private-text fingerprint key from it; no additional text-hash secret is configured.
 
 For complete Railway worker env vars (`NATS_*`, `S3_*`, health checks, and Synadia `.creds` guidance), see [Compute Worker (NATS JetStream)](./compute-worker).
 

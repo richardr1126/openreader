@@ -138,8 +138,9 @@ need to hold the provider credential during synthesis.
 
 ## Current Problem
 
-The worker currently imports the application database and duplicates provider
-lookup and `AUTH_SECRET`-based decryption logic. This creates several problems:
+Before this migration, the worker imported the application database and
+duplicated provider lookup and `AUTH_SECRET`-based decryption logic. That
+created several problems:
 
 1. Standalone workers silently fall back to their own SQLite database when
    `POSTGRES_URL` is absent.
@@ -316,6 +317,11 @@ POSTGRES_URL
 SQLITE_DB_PATH
 ```
 
+The worker derives a domain-separated segment-text fingerprint subkey from
+`TTS_PLAYBACK_TOKEN_SECRET`. This replaces the former incidental use of
+`AUTH_SECRET` without adding another deployment secret or reusing the playback
+token directly as the text HMAC key.
+
 ### Embedded worker
 
 Bootstrap supplies the embedded worker child process with the local broker URL
@@ -381,7 +387,7 @@ Redaction tests must cover:
 
 ### Phase 0: Lock the boundary with tests
 
-Status: pending.
+Status: complete (2026-08-27).
 
 Before changing runtime ownership, add focused assertions for the intended hard
 cut:
@@ -401,7 +407,7 @@ Gate:
 
 ### Phase 1: Add the app-owned broker
 
-Status: pending.
+Status: complete (2026-08-27).
 
 1. Extract or reuse one canonical app-owned provider-execution resolver.
 2. Add the authenticated internal broker route.
@@ -420,7 +426,7 @@ Gate:
 
 ### Phase 2: Move worker execution to the broker
 
-Status: pending.
+Status: complete (2026-08-27).
 
 1. Add a small worker broker client with bounded timeout and abort support.
 2. Resolve the provider immediately before segment synthesis.
@@ -439,7 +445,7 @@ Gate:
 
 ### Phase 3: Delete worker database ownership
 
-Status: pending.
+Status: complete (2026-08-27).
 
 Delete in the same change:
 
@@ -464,7 +470,7 @@ Gate:
 
 ### Phase 4: Wire every deployment topology
 
-Status: pending.
+Status: complete (2026-08-27).
 
 Update:
 
@@ -491,7 +497,7 @@ Gate:
 
 ### Phase 5: Fresh-stack and upgrade verification
 
-Status: pending.
+Status: complete (2026-08-30).
 
 Use fresh volumes for the first pass, then verify an upgrade-shaped database
 containing a v4-encrypted shared provider.
@@ -527,7 +533,7 @@ Gate:
 
 ### Phase 6: Documentation and final audit
 
-Status: pending.
+Status: in progress.
 
 Update active documentation to explain:
 
@@ -617,7 +623,7 @@ Each secret has a distinct operational effect:
 | `AUTH_SECRET` | Existing Better Auth sessions and stored provider ciphertext are affected under the existing v4 contract |
 | `COMPUTE_WORKER_TOKEN` | App-to-worker control calls fail until app and worker agree |
 | `COMPUTE_CREDENTIAL_BROKER_TOKEN` | Worker credential resolution fails until app and worker agree |
-| `TTS_PLAYBACK_TOKEN_SECRET` | Existing signed playback URLs become invalid until new sessions issue new URLs |
+| `TTS_PLAYBACK_TOKEN_SECRET` | Existing signed playback URLs become invalid until new sessions issue new URLs; segment text fingerprints also rotate and may be regenerated |
 
 For v5, rotation is coordinated configuration replacement followed by app and
 worker restart. Dual-token acceptance is not added preemptively. If zero-downtime
@@ -654,9 +660,140 @@ true:
 
 ## Completed Work
 
-None yet. This document records the agreed v5 target before implementation.
+Implementation checkpoint on 2026-08-27:
+
+- Added one shared, strict credential-broker contract and the authenticated
+  `POST /api/internal/compute/tts-credentials` app route. The route authenticates
+  before reading its bounded body, delegates to the canonical app resolver,
+  returns no-store responses, and emits only stable redacted failures.
+- Preserved the v4 provider ciphertext contract. Route tests decrypt a provider
+  created through the existing app `AUTH_SECRET` implementation and cover
+  missing/wrong auth, invalid and oversized input, disabled providers,
+  decryption failure, and unavailable app dependencies.
+- Replaced worker SQL lookup/decryption with one bounded broker client. It
+  enforces the canonical route, rejects public plain HTTP, supports cancellation
+  and timeout, retries only transient failures, and never includes response
+  bodies or credentials in errors.
+- Deleted the worker credential resolver and removed direct database/Drizzle
+  dependencies, Docker copies, `AUTH_SECRET`, `POSTGRES_URL`, and
+  `SQLITE_DB_PATH`. A boundary test and built-image inspection enforce the cut.
+- Replaced the worker's incidental `AUTH_SECRET` use for private segment text
+  fingerprints with a domain-separated subkey derived from the already-required
+  playback-signing secret, avoiding another configuration variable.
+- Wired embedded bootstrap, all four Compose examples, standalone worker
+  templates, and active deployment/reference documentation. Compose now also
+  forwards the already documented anonymous-session switch with a secure
+  `false` default.
+- Updated the hard-cut Next route inventory and the cleanup/playback architecture
+  documents so none retain the old provider-SQL exception.
+
+Verification recorded at this checkpoint:
+
+- focused broker/boundary coverage passed: 7 files, 31 tests, followed by the
+  expanded broker and route-map coverage: 3 files, 34 tests;
+- the final full Vitest suite passed: 122 files, 612 tests;
+- root and compute-worker TypeScript checks passed;
+- route-error, compute-boundary, OpenAPI, and server-bundle guards passed;
+- active documentation and Next.js production builds passed;
+- both local-full Docker images built successfully and all four Compose files
+  passed configuration validation;
+- a fresh local-full stack migrated and seeded Postgres, rejected an
+  unauthenticated broker request with `401`, resolved the seeded provider from
+  the built worker, and synthesized a 43,093-byte MP3 through Kokoro;
+- the running built worker contained neither database packages nor app
+  auth/database environment variables.
+
+Live browser checkpoint on 2026-08-28:
+
+- Rebuilt and ran exactly one local-full Compose project, uploaded the repository
+  sample EPUB, and observed visible broker-backed playback transition from
+  `Preparing audio…` to Pause with a moving global timeline.
+- Disabled the seeded Kokoro provider while the worker remained running. The
+  next uncached Chapter XXIV job failed closed with `PROVIDER_UNAVAILABLE` and
+  emitted no credential or response-body data.
+- Fixed the client start-buffer loop so a terminal failed seek layout immediately
+  clears loading, returns the control to Play, and displays the existing paused-
+  playback error instead of polling for 60 seconds.
+- Changed the provider's default model while the worker remained running and
+  verified the broker returned the edited non-secret configuration. Kokoro's
+  resulting `400` responses proved the job consumed the edit rather than a
+  worker cache; the original provider values were restored afterward.
+- Fixed playback generation so an active run whose required segment has only an
+  error artifact is terminal failed instead of incorrectly succeeding with no
+  playable buffer. Stale or cancelled runs remain unaffected.
+- Fixed alignment in-flight cleanup so a caught, best-effort Whisper timeout no
+  longer creates a second unhandled rejection and crashes the worker. A cold
+  model run reached 100%, survived the alignment deadline, completed, and then
+  played Chapter XXIV from the restored provider.
+- Paused playback after verification and left the single local-full stack
+  running for inspection.
+- Inserted a temporary upgrade-shaped provider using the unchanged v4
+  AES-256-GCM ciphertext and IV contract, derived from the running app's
+  existing `AUTH_SECRET`. The running worker resolved it through the v5 broker
+  with the expected provider configuration and credential, proving that no
+  provider schema or re-encryption migration is required. The temporary row was
+  removed immediately after the check.
+
+Fresh slim and dependency-upgrade checkpoint on 2026-08-29:
+
+- A genuinely fresh local-slim SQLite volume exposed Better Auth 1.7's required
+  account `issuer` identity field during signup. Added deterministic SQLite and
+  Postgres migrations: credential accounts backfill to `local:credential`, the
+  only configured social provider backfills to `local:oauth:github`, and an
+  unknown legacy provider fails closed instead of receiving a guessed identity.
+  This account-schema migration is a consequence of the dependency upgrade; it
+  is unrelated to provider encryption and does not alter v4 provider rows.
+- Verified fresh signup after the account migration. The disposable account,
+  seeded Kokoro provider, document upload, EPUB reader, and broker-backed
+  synthesis all worked in the built local-slim image.
+- Fixed the embedded image's Next.js bind address so the same-container worker
+  can reach the private loopback broker URL. The public `BASE_URL` remains the
+  browser/auth origin, while Next.js listens on `0.0.0.0`; an unauthenticated
+  internal broker request remains reachable but correctly returns `401`.
+- A true zero-model browser run reached audible EPUB playback in 2.8 seconds
+  while the UI simultaneously reported the cold Whisper download. Playback
+  audio now becomes ready before best-effort word alignment, and the worker
+  backfills exact word timing and emits a refresh when alignment completes.
+  The live job succeeded in 15.9 seconds with no broker or playback error.
+- Added a worker regression proving completed audio is published while
+  alignment is still pending and exact timing is persisted afterward. The
+  playback read model deliberately avoids caching that transitional sidecar so
+  a live timeline can observe the alignment backfill.
+- Reused and recreated only the single
+  `openreader-local-slim-fresh-20260828` Compose project throughout this check;
+  no competing stack or Playwright web server was started. Its volumes remain
+  preserved after the project was stopped for the subsequent full-stack check.
+
+Postgres upgrade and standalone-worker checkpoint on 2026-08-30:
+
+- Confirmed the preserved local-full Postgres database predated the Better Auth
+  account change: the `account` table had no `issuer` column. Inserted one
+  clearly synthetic pre-migration credential account, started the new image,
+  and verified the migration produced `issuer=local:credential`, rewrote
+  `accountId` to the linked user ID, and created the unique
+  `(issuer, accountId)` index. The synthetic pre-migration row and user were
+  removed immediately afterward.
+- Created a disposable account through the visible signup UI after that real
+  Postgres upgrade, proving the upgraded Better Auth schema works beyond the
+  migration fixture. Uploaded the sample EPUB through the library UI and
+  observed broker-backed playback reach Pause with a moving timeline.
+- The standalone worker synthesized four MP3 segments, served the first audio
+  byte, and completed the playback job successfully in 21.3 seconds. Its logs
+  contained no `admin_providers`, broker, or playback error.
+- Final verification passed: 124 Vitest files / 616 tests, root and worker type
+  checks, ESLint, route-error and compute-boundary guards, generated OpenAPI,
+  Next.js production build and bundle guard, documentation build, both local
+  Docker images, and Compose service health.
+- Exactly one OpenReader project is running: `openreader-local-full-build` on
+  port 3003. Playback is paused and the upgraded EPUB reader remains open for
+  inspection; the slim project is stopped with its volume preserved.
 
 ## Remaining Work
 
-All phases are pending. Begin with Phase 0 boundary tests, then implement the
-broker and remove the old worker database path as one reviewed migration.
+- Repeat the provider edit/disable controls through an authenticated admin UI
+  session if the UI interaction itself remains a release acceptance requirement;
+  the broker's live no-restart behavior and failure semantics are verified.
+- Run the applicable Playwright matrix and repeat the final repository audit
+  after the remaining live journeys.
+- Stop or leave the single Compose stack running according to the active test
+  session request; never start a Playwright-owned stack on the same ports.

@@ -280,6 +280,7 @@ describe('server-state architecture', () => {
       '/api/documents/import-url',
       '/api/folders',
       '/api/folders/[id]',
+      '/api/internal/compute/tts-credentials',
       '/api/local-library',
       '/api/local-library/content',
       '/api/rate-limit/status',
@@ -664,6 +665,9 @@ describe('server-state architecture', () => {
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(seekLayoutRoute).toContain('buildPlaybackGrid');
+    expect(seekLayoutRoute).toContain('planObjectKey = session.planObjectKey');
+    expect(seekLayoutRoute.indexOf('resolveTtsPlaybackSession(request, sessionId)'))
+      .toBeLessThan(seekLayoutRoute.indexOf('resolveTtsPlaybackPlanOperation(planId)'));
     expect(seekLayoutRoute).toContain('listCompletedTtsPlaybackSegments(session)');
     expect(seekLayoutRoute).not.toContain('minOrdinal');
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');

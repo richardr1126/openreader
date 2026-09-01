@@ -44,7 +44,17 @@ function completedSidecar(ordinal: number, cacheEpoch = 0): TtsPlaybackSegmentMe
     audioKey: `audio-${ordinal}.mp3`,
     audioFormat: 'mp3',
     durationMs: 1200,
-    alignment: null,
+    alignment: {
+      sentenceIndex: ordinal,
+      sentence: `Segment ${ordinal}.`,
+      words: [{
+        text: 'Segment',
+        startSec: 0,
+        endSec: 0.5,
+        charStart: 0,
+        charEnd: 7,
+      }],
+    },
     error: null,
     updatedAt: 10,
   };
@@ -121,6 +131,28 @@ describe('playback session read model', () => {
 
     fixture.setEpoch(1);
     await expect(fixture.model.readSegmentState(session, 0)).resolves.toEqual({ status: 'pending', ordinal: 0 });
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  test('serves proportional timing for audio-first sidecars until exact alignment is visible', async () => {
+    const fixture = createFixture();
+    const audioFirst = { ...completedSidecar(0), alignment: null };
+    fixture.sidecars.set(0, audioFirst);
+
+    const audioFirstRows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 0, limit: 1 });
+    const proportional = JSON.parse(audioFirstRows[0]?.alignmentJson ?? 'null') as {
+      words?: Array<{ text?: string; endSec?: number }>;
+    } | null;
+    expect(proportional?.words).toHaveLength(2);
+    expect(proportional?.words?.map((word) => word.text)).toEqual(['Segment', '0']);
+    expect(proportional?.words?.at(-1)?.endSec).toBe(1.2);
+
+    fixture.sidecars.set(0, completedSidecar(0));
+    const exactRows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 0, limit: 1 });
+    const exact = JSON.parse(exactRows[0]?.alignmentJson ?? 'null') as {
+      words?: Array<{ text?: string; endSec?: number }>;
+    } | null;
+    expect(exact?.words).toEqual([expect.objectContaining({ text: 'Segment', endSec: 0.5 })]);
     expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
   });
 

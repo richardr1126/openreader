@@ -64,7 +64,10 @@ jobs:
           pnpm build
           pnpm build:bundle-guard
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
+        run: |
+          # firefox is temporarily disabled because Playwright Firefox hangs on macOS 27.
+          pnpm exec playwright install --with-deps chromium webkit
+          # pnpm exec playwright install --with-deps firefox
       - name: Run deterministic Playwright tests
         run: pnpm test:e2e --max-failures=5 --reporter=list,github,html
       - uses: actions/upload-artifact@v7

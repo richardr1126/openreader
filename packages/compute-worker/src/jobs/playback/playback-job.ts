@@ -16,6 +16,17 @@ function playbackSectionKey(locator: unknown, readerType: 'pdf' | 'epub' | 'html
   return null;
 }
 
+export function requestedPlaybackSegmentFailed(input: {
+  generationRunIsCurrent: boolean;
+  requiredOrdinal: number;
+  completedOrdinals: ReadonlySet<number>;
+  erroredOrdinals: ReadonlySet<number>;
+}): boolean {
+  return input.generationRunIsCurrent
+    && input.erroredOrdinals.has(input.requiredOrdinal)
+    && !input.completedOrdinals.has(input.requiredOrdinal);
+}
+
 export function createTtsPlaybackHandler(input: JobHandlerContext) {
   return async function runTtsPlayback(
     payload: TtsPlaybackJobRequest,
@@ -91,6 +102,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       });
       const cacheEpoch = await readCurrentCacheEpoch();
       const completedOrdinals = new Set<number>();
+      const erroredOrdinals = new Set<number>();
       for (let index = 0; index < plannedSegments.length; index += 32) {
         const sidecars = await Promise.all(plannedSegments.slice(index, index + 32).map((segment) =>
           playbackStorage.artifacts.readSegmentMetadata({
@@ -186,6 +198,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         await emitProgress();
       };
       const generationFloor = generationFloorForCursor(isContinuationRun ? sessionCursorOrdinal : startOrdinal);
+      const requiredPlaybackOrdinal = isContinuationRun ? sessionCursorOrdinal : startOrdinal;
       const generationSegments = forceDocumentExtent
         ? plannedSegments
         : plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
@@ -205,7 +218,10 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
         onBeforeSegment,
         onSegmentCompleted,
-        onSegmentErrored: emitProgress,
+        onSegmentErrored: async (planOrdinal) => {
+          erroredOrdinals.add(planOrdinal);
+          await emitProgress();
+        },
         onModelDownloadProgress: async ({ downloadedBytes, totalBytes }) => {
           const now = Date.now();
           const shouldPublish = lastModelProgressBytes < 0
@@ -226,10 +242,23 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         },
       });
       const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
-      if (!finalSession || (finalSession.status !== 'queued' && finalSession.status !== 'running')) stoppedEarly = true;
-      if ((finalSession?.generationRunId ?? null) !== generationRunId) stoppedEarly = true;
-      if (!forceDocumentExtent && finalSession?.playbackActive === false) stoppedEarly = true;
-      if (await readCurrentCacheEpoch() !== cacheEpoch) stoppedEarly = true;
+      const cacheEpochStillCurrent = await readCurrentCacheEpoch() === cacheEpoch;
+      const generationRunIsCurrent = Boolean(
+        finalSession
+        && (finalSession.status === 'queued' || finalSession.status === 'running')
+        && (finalSession.generationRunId ?? null) === generationRunId
+        && (forceDocumentExtent || finalSession.playbackActive !== false)
+        && cacheEpochStillCurrent,
+      );
+      if (!generationRunIsCurrent) stoppedEarly = true;
+      if (requestedPlaybackSegmentFailed({
+        generationRunIsCurrent,
+        requiredOrdinal: requiredPlaybackOrdinal,
+        completedOrdinals,
+        erroredOrdinals,
+      })) {
+        throw new Error('TTS playback could not generate the requested segment');
+      }
       const satisfiedWindow = satisfaction.value;
       if (
         stoppedEarly

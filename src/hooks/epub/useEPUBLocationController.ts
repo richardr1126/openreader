@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject, type RefObject } from 'react';
 import type { Book, Rendition } from 'epubjs';
 
 import type { TTSSegmentLocator } from '@/types/client';
 import { isStableEpubLocator } from '@/types/client';
 
 import {
+  drainLatestNavigation,
   isCfiWithinRenderedRange,
   isDirectionalEpubLocation,
   shouldNavigateToDifferentCfi,
@@ -28,6 +29,11 @@ function isEpubLocatorTarget(value: EpubLocation | TTSSegmentLocator): value is 
   return !!value && typeof value === 'object' && isStableEpubLocator(value);
 }
 
+type PendingLocatorNavigation = {
+  location: TTSSegmentLocator;
+  intent: EpubLocationChangeIntent;
+};
+
 export function useEPUBLocationController({
   isEpubSetOnceRef,
   placementIntentRef,
@@ -39,6 +45,11 @@ export function useEPUBLocationController({
   location: EpubLocation | TTSSegmentLocator,
   intent?: EpubLocationChangeIntent,
 ) => void {
+  const locatorNavigationStateRef = useRef({
+    pending: null as PendingLocatorNavigation | null,
+    running: false,
+  });
+
   const safeRenditionNavigate = useCallback((navigation: 'next' | 'prev' | 'display', location?: string) => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
@@ -69,6 +80,36 @@ export function useEPUBLocationController({
     }
   }, [bookRef, renditionRef]);
 
+  const drainLocatorNavigation = useCallback(async () => {
+    await drainLatestNavigation(
+      locatorNavigationStateRef.current,
+      async (pending) => {
+        const cfi = await resolveLocatorToCfi(pending.location);
+        if (!cfi) console.warn('Unable to resolve EPUB locator to CFI:', pending.location);
+        return cfi;
+      },
+      async (cfi, pending) => {
+        const book = bookRef.current;
+        const rendition = renditionRef.current;
+        if (!book?.isOpen || !rendition) return;
+        if (
+          pending.intent === 'playback-follow'
+          && isCfiWithinRenderedRange(
+            cfi,
+            rendition.location?.start?.cfi,
+            rendition.location?.end?.cfi,
+            (left, right) => rendition.epubcfi.compare(left, right),
+          )
+        ) {
+          return;
+        }
+
+        placementIntentRef.current = pending.intent;
+        await Promise.resolve(rendition.display(cfi));
+      },
+    );
+  }, [bookRef, placementIntentRef, renditionRef, resolveLocatorToCfi]);
+
   const handleLocationChanged = useCallback((
     location: EpubLocation | TTSSegmentLocator,
     intent: EpubLocationChangeIntent = 'manual',
@@ -78,34 +119,11 @@ export function useEPUBLocationController({
         setIsEpub(true);
         isEpubSetOnceRef.current = true;
       }
-      void resolveLocatorToCfi(location)
-        .then((cfi) => {
-          if (!cfi) {
-            console.warn('Unable to resolve EPUB locator to CFI:', location);
-            return;
-          }
-          const rendition = renditionRef.current;
-          if (
-            intent === 'playback-follow'
-            && rendition
-            && isCfiWithinRenderedRange(
-              cfi,
-              rendition.location?.start?.cfi,
-              rendition.location?.end?.cfi,
-              (left, right) => rendition.epubcfi.compare(left, right),
-            )
-          ) {
-            return;
-          }
-          placementIntentRef.current = intent;
-          if (!safeRenditionNavigate('display', cfi)) {
-            placementIntentRef.current = 'renderer';
-          }
-        })
-        .catch((error) => {
-          placementIntentRef.current = 'renderer';
-          console.warn('EPUB locator navigation failed:', error);
-        });
+      locatorNavigationStateRef.current.pending = { location, intent };
+      void drainLocatorNavigation().catch((error) => {
+        placementIntentRef.current = 'renderer';
+        console.warn('EPUB locator navigation failed:', error);
+      });
       return;
     }
 
@@ -150,12 +168,12 @@ export function useEPUBLocationController({
 
   }, [
     bookRef,
+    drainLocatorNavigation,
     isEpubSetOnceRef,
     renditionRef,
     placementIntentRef,
     safeRenditionNavigate,
     setIsEpub,
-    resolveLocatorToCfi,
   ]);
 
   return handleLocationChanged;

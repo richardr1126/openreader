@@ -18,6 +18,10 @@ import {
   readPositiveIntEnv,
   requireEnv,
 } from '../infrastructure/config';
+import {
+  getTtsCredentialBrokerConfig,
+  requireTtsSegmentTextHashSecret,
+} from '../infrastructure/credential-broker-config';
 import { OperationOrchestrator } from '../operations/service';
 import type {
   AccountExportJobRequest,
@@ -118,7 +122,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const disableWorkers = options.disableWorkers ?? false;
   // Test/control-plane instances intentionally disable all object access. A
   // real worker validates the shared browser/server storage contract at startup.
-  if (!disableWorkers) resolveStorageTransport(process.env);
+  if (!disableWorkers) {
+    resolveStorageTransport(process.env);
+    getTtsCredentialBrokerConfig();
+    requireTtsSegmentTextHashSecret();
+  }
   const natsUrl = requireEnv('NATS_URL');
   const timeoutConfig = getComputeTimeoutConfig();
 

@@ -27,6 +27,9 @@ const PUBLIC_PATH_PREFIXES = [
   '/signup',
   '/privacy',
 ];
+const SERVICE_AUTHENTICATED_PATHS = new Set([
+  '/api/internal/compute/tts-credentials',
+]);
 
 function isPublicPath(pathname: string): boolean {
   // Root landing page
@@ -60,14 +63,22 @@ function getCountryCodeFromHeaders(request: NextRequest): string | null {
 }
 
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Internal compute callbacks authenticate at their route boundary with a
+  // dedicated service token. They do not carry a browser session or geo
+  // headers, so cookie and public-instance region policy must not intercept
+  // them before the route can validate that token.
+  if (SERVICE_AUTHENTICATED_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
   if (isRichardrDevProductionInstance()) {
     const countryCode = getCountryCodeFromHeaders(request);
     const isUnitedStatesRequest = countryCode === US_COUNTRY_CODE;
 
     // Strict region gate for the official production instance.
     if (!isUnitedStatesRequest) {
-      const { pathname } = request.nextUrl;
-
       if (pathname.startsWith('/api/')) {
         return NextResponse.json(
           { error: 'OpenReader is only available in the United States.' },
@@ -86,8 +97,6 @@ export function middleware(request: NextRequest) {
   }
 
   getRequiredAuthEnv();
-
-  const { pathname } = request.nextUrl;
 
   // Fast-path redirect for signed-in users hitting the public landing page.
   // This avoids extra server work in the landing page render path.

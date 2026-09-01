@@ -1,13 +1,48 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
+  drainLatestNavigation,
   isCfiWithinRenderedRange,
   isDirectionalEpubLocation,
   shouldPreserveEpubPlaybackCursor,
   shouldNavigateToDifferentCfi,
 } from '../../src/lib/client/epub/location-controller';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
+}
+
 describe('EPUB location controller helpers', () => {
+  test('serializes display work and lets the newest queued locator win', async () => {
+    const firstResolution = deferred<string | null>();
+    const firstDisplay = deferred<void>();
+    const navigated: string[] = [];
+    const state = { pending: 'first' as string | null, running: false };
+    const resolve = vi.fn(async (target: string) => (
+      target === 'first' ? firstResolution.promise : `cfi:${target}`
+    ));
+    const navigate = vi.fn(async (cfi: string, target: string) => {
+      navigated.push(`${target}:${cfi}`);
+      if (target === 'second') await firstDisplay.promise;
+    });
+
+    const run = drainLatestNavigation(state, resolve, navigate);
+    state.pending = 'second';
+    await drainLatestNavigation(state, resolve, navigate);
+    firstResolution.resolve('cfi:first');
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+    expect(navigated).toEqual(['second:cfi:second']);
+
+    state.pending = 'third';
+    await drainLatestNavigation(state, resolve, navigate);
+    firstDisplay.resolve();
+    await run;
+
+    expect(navigated).toEqual(['second:cfi:second', 'third:cfi:third']);
+    expect(state).toEqual({ pending: null, running: false });
+  });
   const compareCfi = (left: string, right: string) => Number(left) - Number(right);
 
   test('detects directional locations', () => {

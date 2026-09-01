@@ -89,6 +89,11 @@ COPY --from=app-builder /app/packages/compute-worker/src/inference/whisper/asset
 # Match the app's historical container port now that standalone server.js
 # is started directly instead of `next start -p 3003`.
 ENV PORT=3003
+# Docker supplies its container ID through HOSTNAME. Next standalone otherwise
+# binds only to that interface, so the embedded worker cannot reach the app's
+# loopback credential broker. Bind the app on every container interface while
+# BASE_URL continues to define its public authentication origin.
+ENV HOSTNAME=0.0.0.0
 
 # Expose the port the app runs on
 EXPOSE 3003

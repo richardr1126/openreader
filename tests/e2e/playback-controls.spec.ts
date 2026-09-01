@@ -80,6 +80,8 @@ async function readEpubWordHighlight(page: Page) {
 async function verifyEpubPlayback(page: Page) {
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
   const position = page.getByRole('slider', { name: 'Playback position', exact: true });
+  const initialViewportHeading = page.frameLocator('iframe').getByRole('heading').first();
+  await expect(initialViewportHeading).toBeInViewport();
   const documentDuration = Number(await position.getAttribute('max'));
   expect(documentDuration).toBeGreaterThan(0);
 
@@ -128,10 +130,25 @@ async function verifyEpubPlayback(page: Page) {
     .toBe(settledGeneratedCount);
 
   await page.getByRole('button', { name: 'Next section', exact: true }).click();
+  await expect(initialViewportHeading).not.toBeInViewport({ timeout: 15_000 });
   await expect.poll(async () => Number(await position.getAttribute('max')))
     .toBeGreaterThan(documentDuration * 0.9);
   expect(await readGeneratedSegmentCount(page, session.seekLayoutUrl))
     .toBeGreaterThanOrEqual(settledGeneratedCount);
+
+  // Resume from a different EPUB section in the same canonical session. This
+  // catches stale async rendition navigation that can leave audio advancing in
+  // one spine while the rendered text and word highlight remain in another.
+  await playButton.click();
+  await expect(pauseButton).toBeVisible({ timeout: 60_000 });
+  const resumedAt = await readPlaybackPosition(page);
+  await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 })
+    .toBeGreaterThan(resumedAt + 1);
+  await expect.poll(() => readEpubWordHighlight(page), { timeout: 15_000 })
+    .not.toBe('');
+  await pauseButton.click();
+  await expect(playButton).toBeVisible();
+
   await page.getByRole('button', { name: 'Previous section', exact: true }).click();
 }
 

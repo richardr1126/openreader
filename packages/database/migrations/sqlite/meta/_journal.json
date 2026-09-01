@@ -113,6 +113,13 @@
       "when": 1782787292001,
       "tag": "0015_cleanup_pre_v5",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1787932379968,
+      "tag": "0016_account_identity_issuer",
+      "breakpoints": true
     }
   ]
 }

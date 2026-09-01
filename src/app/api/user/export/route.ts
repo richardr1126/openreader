@@ -177,6 +177,7 @@ export async function POST(req: NextRequest) {
           id: authSchema.account.id,
           accountId: authSchema.account.accountId,
           providerId: authSchema.account.providerId,
+          issuer: authSchema.account.issuer,
           scope: authSchema.account.scope,
           createdAt: authSchema.account.createdAt,
           updatedAt: authSchema.account.updatedAt,

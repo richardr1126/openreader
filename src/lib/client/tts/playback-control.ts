@@ -27,6 +27,27 @@ export function isPlaybackAbortError(error: unknown): boolean {
   return false;
 }
 
+export type PlaybackMediaResumeResult =
+  | { status: 'resumed' }
+  | { status: 'cancelled' }
+  | { status: 'stale'; error: unknown };
+
+/**
+ * A failed media resume may reconnect only while it still owns playback
+ * intent. A pause or replacement run that wins meanwhile cancels recovery.
+ */
+export async function resumePlaybackMedia(
+  play: () => Promise<void> | void,
+  isCurrent: () => boolean,
+): Promise<PlaybackMediaResumeResult> {
+  try {
+    await play();
+    return isCurrent() ? { status: 'resumed' } : { status: 'cancelled' };
+  } catch (error) {
+    return isCurrent() ? { status: 'stale', error } : { status: 'cancelled' };
+  }
+}
+
 export type PlaybackStartBuffer = {
   durationMs: number;
   segmentCount: number;
@@ -96,6 +117,9 @@ export async function waitForPlaybackStartBuffer<T extends PlaybackStartLayout>(
   for (;;) {
     if (!input.isCurrent()) return null;
     const layout = await input.loadLayout();
+    if (layout?.status === 'failed') {
+      throw new Error('TTS playback generation failed before audio became ready');
+    }
     if (
       layout
       && (layout.status === 'running' || layout.status === 'succeeded')

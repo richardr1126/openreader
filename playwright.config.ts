@@ -2,7 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 import 'dotenv/config';
 
 const playbackTest = /playback-controls\.spec\.ts/;
-const coreProjects = ['chromium', 'firefox', 'webkit'];
+const coreProjects = [
+  'chromium',
+  // 'firefox', // Temporarily disabled: Playwright Firefox hangs on macOS 27.
+  'webkit',
+];
 const includePlaybackProjects = !process.env.CI;
 
 export default defineConfig({
@@ -33,11 +37,11 @@ export default defineConfig({
       testIgnore: playbackTest,
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      testIgnore: playbackTest,
-      use: { ...devices['Desktop Firefox'] },
-    },
+    // {
+    //   name: 'firefox',
+    //   testIgnore: playbackTest,
+    //   use: { ...devices['Desktop Firefox'] },
+    // },
     {
       name: 'webkit',
       testIgnore: playbackTest,
@@ -51,12 +55,12 @@ export default defineConfig({
             dependencies: coreProjects,
             use: { ...devices['Desktop Chrome'] },
           },
-          {
-            name: 'playback-firefox',
-            testMatch: playbackTest,
-            dependencies: coreProjects,
-            use: { ...devices['Desktop Firefox'] },
-          },
+          // {
+          //   name: 'playback-firefox',
+          //   testMatch: playbackTest,
+          //   dependencies: coreProjects,
+          //   use: { ...devices['Desktop Firefox'] },
+          // },
           {
             name: 'playback-webkit',
             testMatch: playbackTest,

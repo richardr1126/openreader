@@ -83,6 +83,10 @@ function requireAuthEnv(env) {
   }
 }
 
+function embeddedCredentialBrokerUrl() {
+  return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials';
+}
+
 function parseCommandFromArgs(argv) {
   const marker = argv.indexOf('--');
   if (marker >= 0) return argv.slice(marker + 1);
@@ -395,6 +399,10 @@ async function main() {
         runtimeEnv.COMPUTE_WORKER_TOKEN,
         randomBytes(24).toString('base64url'),
       );
+      runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN = withDefault(
+        runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN,
+        randomBytes(24).toString('base64url'),
+      );
       runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
       runtimeEnv.COMPUTE_NATS_REPLICAS = withDefault(runtimeEnv.COMPUTE_NATS_REPLICAS, '1');
 
@@ -439,6 +447,10 @@ async function main() {
       const workerEnv = {
         ...runtimeEnv,
         PORT: String(embeddedWorkerPort),
+        COMPUTE_CREDENTIAL_BROKER_URL: withDefault(
+          runtimeEnv.COMPUTE_CREDENTIAL_BROKER_URL,
+          embeddedCredentialBrokerUrl(),
+        ),
       };
       const workerLaunch = resolveEmbeddedWorkerLaunch();
       workerProc = spawn(
@@ -468,8 +480,15 @@ async function main() {
       });
       await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30, 'Embedded compute-worker');
       console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
-    } else if (!runtimeEnv.COMPUTE_WORKER_URL?.trim() || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()) {
-      throw new Error('COMPUTE_WORKER_URL and COMPUTE_WORKER_TOKEN are required when embedded compute worker startup is disabled.');
+    } else if (
+      !runtimeEnv.COMPUTE_WORKER_URL?.trim()
+      || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()
+      || !runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN?.trim()
+    ) {
+      throw new Error(
+        'COMPUTE_WORKER_URL, COMPUTE_WORKER_TOKEN, and COMPUTE_CREDENTIAL_BROKER_TOKEN '
+        + 'are required when embedded compute worker startup is disabled.',
+      );
     }
 
     const { child, exitPromise } = spawnMainCommand(command, runtimeEnv);

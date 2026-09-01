@@ -83,9 +83,17 @@ describe('ComputeWorkerClient contract', () => {
     }
   });
 
-  test('keeps worker database dependency compatible with ESM execution', () => {
-    const databaseEntry = readFileSync(path.join(root, 'packages/database/src/index.ts'), 'utf8');
-    expect(databaseEntry).toContain("import { createRequire } from 'node:module'");
-    expect(databaseEntry).toContain('createRequire(import.meta.url)');
+  test('keeps application database ownership out of the compute worker', () => {
+    for (const file of collectSourceFiles(workerSrcRoot)) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, path.relative(root, file)).not.toContain('@openreader/database');
+      expect(source, path.relative(root, file)).not.toContain('drizzle-orm');
+      expect(source, path.relative(root, file)).not.toContain('process.env.AUTH_SECRET');
+    }
+    const workerPackage = JSON.parse(
+      readFileSync(path.join(root, 'packages/compute-worker/package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> };
+    expect(workerPackage.dependencies).not.toHaveProperty('@openreader/database');
+    expect(workerPackage.dependencies).not.toHaveProperty('drizzle-orm');
   });
 });

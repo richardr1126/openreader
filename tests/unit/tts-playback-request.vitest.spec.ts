@@ -15,6 +15,22 @@ const basePayload = {
 };
 
 describe('TTS playback request parsing', () => {
+  test('keeps provider credentials out of the accepted playback payload', () => {
+    const credentialSentinel = 'must-never-enter-a-playback-job';
+    const parsed = parseTtsPlaybackRequestBody({
+      ...basePayload,
+      settings: {
+        ...basePayload.settings,
+        apiKey: credentialSentinel,
+      },
+      apiKey: credentialSentinel,
+    });
+
+    expect(parsed).not.toBeNull();
+    expect(JSON.stringify(parsed)).not.toContain(credentialSentinel);
+    expect(parsed?.settings).not.toHaveProperty('apiKey');
+  });
+
   test('accepts PDF skip block kinds in planning payload', () => {
     const parsed = parseTtsPlaybackRequestBody({
       ...basePayload,

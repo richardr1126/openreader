@@ -44,11 +44,11 @@ quotas, rate/concurrency ledgers, and account records. Worker-owned jobs should
 persist job identity, operation state, session state, and progress in
 NATS/JetStream, and persist large inputs/outputs/manifests in object storage.
 Job messages should carry canonical scope, object keys, settings hashes,
-operation ids, and small options; they should not carry large blobs or require
-the worker to query app tables. The current narrow exception is read-only worker
-access to `admin_providers` for server-managed TTS provider credentials. Do not
-expand that exception for previews, conversion, exports, document metadata, or
-user/account data.
+operation ids, and small options; they should not carry large blobs, provider
+credentials, or require the worker to query app tables. At execution time, the
+worker obtains one provider configuration from the app-owned authenticated
+credential broker, keeps it in memory for the generation job, and never reads
+`admin_providers` directly.
 
 ---
 
@@ -960,9 +960,10 @@ Implementation work:
    - Assert removed routes and old callers are absent.
    - Assert worker-owned operation clients expose `opId` and use authenticated
      same-origin SSE proxies instead of polling.
-   - Assert new worker-owned preview, conversion, export, and audiobook artifact
-     code does not import app SQL/database modules, except the existing
-     read-only `admin_providers` credential resolution for TTS provider keys.
+   - Assert new worker-owned preview, conversion, export, audiobook artifact,
+     and TTS generation code does not import app SQL/database modules. Broker
+     response credentials must remain absent from job, operation, event, plan,
+     and artifact serialization.
 10. Run final validation from a clean local state:
     `pnpm migrate`, `pnpm test:unit`, `pnpm exec tsc --noEmit`, and a
     `pnpm dev` startup smoke test. Optionally run the highest-value Playwright

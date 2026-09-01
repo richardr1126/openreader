@@ -32,7 +32,8 @@ Required worker variables:
 
 ```env
 COMPUTE_WORKER_TOKEN=...
-AUTH_SECRET=...
+COMPUTE_CREDENTIAL_BROKER_URL=https://reader.example.com/api/internal/compute/tts-credentials
+COMPUTE_CREDENTIAL_BROKER_TOKEN=...
 TTS_PLAYBACK_TOKEN_SECRET=...
 NATS_URL=nats://...
 S3_BUCKET=...
@@ -45,8 +46,9 @@ S3_SECRET_ACCESS_KEY=...
 `compute-worker/.env*` is only for standalone worker deployments.
 
 - Embedded/local mode: configure the root `.env` only.
-- External worker mode: set `COMPUTE_WORKER_URL`, optional `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET` on the app, and worker runtime values on the worker service.
-- Keep shared values aligned across app and worker: `AUTH_SECRET`, `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`, and `S3_*`. The worker uses `AUTH_SECRET` to decrypt app-managed shared-provider credentials.
+- External worker mode: set `COMPUTE_WORKER_URL`, optional `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET` on the app, and worker runtime values on the worker service.
+- Keep shared values aligned across app and worker: `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`, and `S3_*`.
+- Do not set `AUTH_SECRET`, `POSTGRES_URL`, or `SQLITE_DB_PATH` on the worker. Provider lookup and decryption remain app-owned.
 :::
 
 Common optional variables:
@@ -56,6 +58,7 @@ Common optional variables:
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `PORT=8081` for local/manual runs. Platforms like Railway usually inject `PORT`.
 - `LOG_FORMAT=json` and `COMPUTE_LOG_LEVEL=info`
+- `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS=5000`
 - `COMPUTE_PREWARM_MODELS=false` by default. Set it to `true` to pre-download ONNX models during worker startup.
 - `COMPUTE_JOB_CONCURRENCY=1`
 - `COMPUTE_WHISPER_TIMEOUT_MS=30000`
@@ -81,6 +84,7 @@ COMPUTE_WORKER_URL=https://worker.example.com
 # Only needed when browsers cannot reach COMPUTE_WORKER_URL directly.
 # COMPUTE_WORKER_PUBLIC_URL=https://worker-public.example.com
 COMPUTE_WORKER_TOKEN=<same-token-as-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-as-worker>
 TTS_PLAYBACK_TOKEN_SECRET=<same-playback-secret-as-worker>
 ```
 
@@ -90,12 +94,13 @@ Notes:
 - There is no app-local compute fallback once `COMPUTE_WORKER_URL` is set. If the worker is unavailable, worker-backed requests fail.
 - `COMPUTE_WORKER_URL` is for app-to-worker API calls. `COMPUTE_WORKER_PUBLIC_URL` is the browser-facing base URL used for TTS playback audio; it defaults to `COMPUTE_WORKER_URL`.
 - `COMPUTE_WORKER_TOKEN` is never sent to browsers. Browser audio uses short-lived signed URLs backed by `TTS_PLAYBACK_TOKEN_SECRET`.
+- `COMPUTE_CREDENTIAL_BROKER_TOKEN` is never sent to browsers or worker jobs. It authenticates only worker-to-app provider resolution.
 
 ## Deployment notes
 
 - App and worker must share the same object storage.
 - Embedded `weed mini` is not supported for external worker mode.
-- Protect `AUTH_SECRET`, `COMPUTE_WORKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`.
+- Protect `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`.
 - The public `/v1/tts-playback/sessions/:sessionId/audio` route is intentionally browser-reachable, but it requires a signed playback token. Other worker routes remain protected by `COMPUTE_WORKER_TOKEN`.
 - The worker connects to NATS lazily and disconnects after 120 seconds of full idle time. That allows platforms like Railway to sleep the service, but the first request after a cold start will be slower.
 
@@ -111,7 +116,8 @@ Deploy the worker image to Railway and set worker env vars similar to:
 ```env
 COMPUTE_WORKER_HOST=0.0.0.0
 COMPUTE_WORKER_TOKEN=<shared-token>
-AUTH_SECRET=<same-auth-secret-as-app>
+COMPUTE_CREDENTIAL_BROKER_URL=https://<vercel-app-domain>/api/internal/compute/tts-credentials
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<shared-broker-token>
 TTS_PLAYBACK_TOKEN_SECRET=<shared-playback-secret>
 NATS_URL=tls://connect.ngs.global:4222
 NATS_CREDS="-----BEGIN NATS USER JWT-----
@@ -136,6 +142,7 @@ COMPUTE_WORKER_URL=https://<railway-worker-domain>
 # Optional when browsers need a different public URL:
 # COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>
 COMPUTE_WORKER_TOKEN=<same-token-as-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-as-worker>
 TTS_PLAYBACK_TOKEN_SECRET=<same-playback-secret-as-worker>
 ```
 

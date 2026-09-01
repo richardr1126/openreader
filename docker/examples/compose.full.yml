@@ -13,6 +13,8 @@ services:
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3003}
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}
+      COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
       POSTGRES_URL: postgres://openreader:openreader@postgres:5432/openreader
       COMPUTE_WORKER_URL: http://compute-worker:8081
       COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}
@@ -111,7 +113,8 @@ services:
       COMPUTE_WORKER_HOST: 0.0.0.0
       PORT: 8081
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
-      AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      COMPUTE_CREDENTIAL_BROKER_URL: http://openreader:3003/api/internal/compute/tts-credentials
+      COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
       TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       S3_INTERNAL_ENDPOINT: http://seaweedfs:8333
       S3_BUCKET: ${S3_BUCKET:-openreader-documents}

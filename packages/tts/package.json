@@ -6,6 +6,7 @@
   "exports": {
     "./audio-format": "./src/audio-format.ts",
     "./audio-text": "./src/audio-text.ts",
+    "./credential-broker": "./src/credential-broker.ts",
     "./generate": "./src/generate.ts",
     "./kokoro": "./src/kokoro.ts",
     "./logger": "./src/logger.ts",

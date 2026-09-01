@@ -204,12 +204,14 @@ COMPUTE_WORKER_URL=http://localhost:8081
 # Only needed when browsers cannot reach COMPUTE_WORKER_URL directly.
 # COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
 TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 ```
 
 Use the same ownership split:
-- root `.env`: app routing/auth (`AUTH_SECRET`, `COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus embedded-worker tuning
-- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning) plus the matching `AUTH_SECRET`, `COMPUTE_WORKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`
+- root `.env`: app routing/auth (`AUTH_SECRET`, `COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus embedded-worker tuning
+- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning), `COMPUTE_CREDENTIAL_BROKER_URL`, and the matching compute/broker/playback tokens
+- `AUTH_SECRET`, `POSTGRES_URL`, and `SQLITE_DB_PATH` remain app-only; the worker resolves enabled providers through the credential broker
 
 Use one of these `.env` mode templates:
 
@@ -270,6 +272,7 @@ COMPUTE_WORKER_URL=http://localhost:8081
 # Optional when browsers need a different public URL:
 # COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
 TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 USE_EMBEDDED_WEED_MINI=false
 S3_BUCKET=your-bucket

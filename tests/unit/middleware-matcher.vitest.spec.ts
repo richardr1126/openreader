@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server.js';
+import { NextRequest } from 'next/server';
 
-import { config } from '../../src/middleware';
+import { config, middleware } from '../../src/middleware';
 
 describe('middleware matcher', () => {
   test('leaves the authenticated raw blob upload outside middleware body buffering', () => {
@@ -19,6 +20,21 @@ describe('middleware matcher', () => {
       'http://localhost/app',
     ]) {
       expect(unstable_doesMiddlewareMatch({ config, nextConfig: {}, url })).toBe(true);
+    }
+  });
+
+  test('passes service-authenticated compute callbacks to their bearer-token route', () => {
+    const previous = process.env.RICHARDRDEV_PRODUCTION;
+    process.env.RICHARDRDEV_PRODUCTION = 'true';
+    try {
+      const response = middleware(new NextRequest(
+        'http://localhost/api/internal/compute/tts-credentials',
+        { method: 'POST' },
+      ));
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+    } finally {
+      if (previous === undefined) delete process.env.RICHARDRDEV_PRODUCTION;
+      else process.env.RICHARDRDEV_PRODUCTION = previous;
     }
   });
 });
