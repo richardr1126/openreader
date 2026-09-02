@@ -43,8 +43,6 @@ OpenReader chooses one browser transport before every transfer with `S3_BROWSER_
 - `presigned`: browser transfers use signatures generated from `S3_PUBLIC_ENDPOINT`. The server and compute worker still use `S3_INTERNAL_ENDPOINT`.
 - `auto`: chooses `proxy` for embedded SeaweedFS, otherwise requires a public HTTPS `S3_PUBLIC_ENDPOINT` and chooses `presigned`.
 
-`S3_ENDPOINT` is a deprecated compatibility alias scheduled for removal in OpenReader 5.0. Configure `S3_INTERNAL_ENDPOINT` and, for direct browser storage, `S3_PUBLIC_ENDPOINT` instead.
-
 For a public SeaweedFS/S3 origin, use a dedicated HTTPS hostname such as `s3.reader.example`, not a `/s3` path mount. Preserve the signed path, query string, `Host`, and signed headers in the reverse proxy. Configure CORS for the OpenReader origin with `GET`, `HEAD`, `PUT`, and `OPTIONS`, allowing `Content-Type` and `x-amz-server-side-encryption`.
 
 ## Browser Cache Storage
@@ -105,7 +103,10 @@ Typical key layout:
 
 Notes:
 
-- The legacy `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` roots are purged by `pnpm migrate-decommission`.
+- Docker, Compose, `pnpm dev`, and `pnpm start` automatically purge the legacy
+  `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` roots during startup. Vercel/custom
+  app-only deployments run the same idempotent cleanup with `pnpm migrate-decommission` during the
+  v5 rollout.
 - The playback sidecar prefix uses a hashed user id; audio uses the storage user id for content-addressed deduplication.
 
 ## Account Deletion Cleanup

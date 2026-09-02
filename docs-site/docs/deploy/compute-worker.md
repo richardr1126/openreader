@@ -1,6 +1,6 @@
 ---
 title: Compute Worker
-description: Deploy the standalone worker used for Whisper alignment and PDF layout parsing.
+description: Deploy the standalone worker used for playback, document processing, and model inference.
 ---
 
 Use this guide when OpenReader runs compute as a separate service. For the default embedded/local flow (`pnpm dev` or `pnpm start` without `COMPUTE_WORKER_URL`), configure the root `.env` instead and see [Local Development](./local-development).
@@ -10,6 +10,7 @@ Use this guide when OpenReader runs compute as a separate service. For the defau
 - Runs Whisper word alignment jobs
 - Runs PDF layout parsing jobs
 - Runs worker-owned TTS playback planning/generation
+- Generates PDF/EPUB previews and converts DOCX documents with headless LibreOffice
 - Serves signed progressive MP3 playback audio directly to browsers
 - Stores durable job state in NATS JetStream and NATS KV
 
@@ -95,11 +96,15 @@ Notes:
 - `COMPUTE_WORKER_URL` is for app-to-worker API calls. `COMPUTE_WORKER_PUBLIC_URL` is the browser-facing base URL used for TTS playback audio; it defaults to `COMPUTE_WORKER_URL`.
 - `COMPUTE_WORKER_TOKEN` is never sent to browsers. Browser audio uses short-lived signed URLs backed by `TTS_PLAYBACK_TOKEN_SECRET`.
 - `COMPUTE_CREDENTIAL_BROKER_TOKEN` is never sent to browsers or worker jobs. It authenticates only worker-to-app provider resolution.
+- The worker makes upstream speech-synthesis requests after resolving short-lived provider execution
+  credentials from the app. A self-hosted provider URL must be reachable from the worker host.
 
 ## Deployment notes
 
 - App and worker must share the same object storage.
 - Embedded `weed mini` is not supported for external worker mode.
+- NATS must be reachable from the worker. The app submits operations through the worker HTTP API
+  and does not need NATS credentials.
 - Protect `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`.
 - The public `/v1/tts-playback/sessions/:sessionId/audio` route is intentionally browser-reachable, but it requires a signed playback token. Other worker routes remain protected by `COMPUTE_WORKER_TOKEN`.
 - The worker connects to NATS lazily and disconnects after 120 seconds of full idle time. That allows platforms like Railway to sleep the service, but the first request after a cold start will be slower.

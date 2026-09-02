@@ -41,7 +41,7 @@ On native Linux Docker, `host.docker.internal` needs `--add-host=host.docker.int
 3. Leave API key blank â€” `supertonic serve` does not require one.
 4. Set default model to `supertonic-3` (or `supertonic-2`).
 
-**Legacy bootstrap seed (optional, first boot only):**
+**Bootstrap seed (optional, first boot only):**
 
 ```env
 API_BASE=http://host.docker.internal:7788/v1
@@ -52,6 +52,10 @@ Users select the configured shared provider, model, and voice from **Settings â†
 ## Running OpenReader directly on the host
 
 If OpenReader runs on the same machine (e.g. `pnpm dev`) rather than in Docker, skip `host.docker.internal` and use `http://127.0.0.1:7788/v1` as the base URL everywhere above.
+
+If the compute worker runs on a remote host, the loopback-only Supertonic server is not reachable.
+Expose it through a secured public/private network or run the provider alongside the worker. See
+the [provider topology table](../tts-providers#custom-provider-requirements).
 
 ## References
 

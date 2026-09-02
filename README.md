@@ -18,12 +18,16 @@ OpenReader is an open-source, self-host-friendly text-to-speech document reader 
 
 ## ✨ Highlights
 
+- ▶️ **Progressive background generation and playback** — begin listening as soon as the first
+  segment is ready while the worker continues generating ahead into one durable document timeline;
+  cached audio is reused across seeks, reloads, and exports.
 - 🧱 **Layout-aware PDF parsing** with PP-DocLayoutV3 (ONNX) — structured block detection, cross-page stitching, and geometry-based highlighting for precise read-along sync.
 - ⏱️ **Word-by-word highlighting** via ONNX Whisper alignment through the compute worker control plane (NATS JetStream-backed).
-- ⚡ **Segment-based read-along** for EPUB, PDF, TXT, MD, and DOCX — sentence-aware TTS with cached audio segments, background preloading, and resumable playback.
+- 📚 **Five readable formats** — synchronized EPUB, PDF, TXT, MD, and worker-converted DOCX,
+  with generated PDF/EPUB library previews.
 - 🎯 **Multi-provider TTS** — self-hosted OpenAI-compatible servers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI) or cloud APIs (OpenAI, Replicate, DeepInfra).
 - 🌐 **Multilingual support** — choose a document language for language-aware narration and highlighting. Available languages depend on the configured TTS provider and voice.
-- 🎧 **Audiobook export** in `m4b`/`mp3` with resumable chapter processing.
+- 🎧 **Audiobook export** in M4B or MP3, assembled by the worker from the same playback cache.
 - 🗂️ **Flexible backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync.
 - 🐳 **Self-host friendly** — Docker (amd64/arm64), built-in auth/session support, and automatic startup migrations.
 
@@ -32,6 +36,7 @@ OpenReader is an open-source, self-host-friendly text-to-speech document reader 
 | Goal | Link |
 | --- | --- |
 | Run with Docker | [Docker Quick Start](https://docs.openreader.richardr.dev/docker-quick-start) |
+| Run a Compose example | [Docker Compose](https://docs.openreader.richardr.dev/deploy/docker-compose) |
 | Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
 | Deploy external compute worker | [Compute Worker (NATS JetStream)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
 | Develop locally | [Local Development](https://docs.openreader.richardr.dev/deploy/local-development) |
