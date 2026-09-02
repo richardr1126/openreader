@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PrivacyPage() {
-  const effectiveDate = 'February 17, 2026';
+  const effectiveDate = 'September 2, 2026';
   const isRichardrDevProductionInstance =
     process.env.RICHARDRDEV_PRODUCTION?.trim().toLowerCase() === 'true';
 
@@ -72,12 +72,13 @@ export default async function PrivacyPage() {
               <h2>1. Information we collect</h2>
               <p>
                 OpenReader collects data needed to operate the service and maintain your reading state.
-                Categories include account identifiers, uploaded content, and product usage telemetry.
+                Categories include account identifiers and uploaded content. Optional product usage analytics is
+                collected only after you consent.
               </p>
               <ul className="policy-fact-list">
                 <li><strong>Identifiers:</strong> Email, session-related identifiers, account name, and IP metadata for authentication and security.</li>
                 <li><strong>Reader content:</strong> Uploaded documents, reading progress, bookmarks, and playback settings required for core functionality.</li>
-                <li><strong>Usage events:</strong> Feature interactions and performance analytics used to debug and improve product reliability.</li>
+                <li><strong>Optional usage events:</strong> After you consent, page views and related referrer, browser, device, and approximate location information used to understand and improve the product.</li>
               </ul>
             </section>
 
@@ -98,13 +99,13 @@ export default async function PrivacyPage() {
                 infrastructure and user-initiated features.
               </p>
               <div className="policy-highlight">
-                Optional analytics is controlled by your consent choice, and Global Privacy Control (GPC) opt-out
-                signals are honored.
+                Optional analytics does not load or send events unless you explicitly accept it. Declining leaves it
+                disabled, and Global Privacy Control (GPC) signals are always treated as an opt-out.
               </div>
               <ul className="policy-fact-list">
                 {isRichardrDevProductionInstance ? (
                   <>
-                    <li><strong>Hosting:</strong> Vercel for application hosting, edge runtime, and performance analytics.</li>
+                    <li><strong>Hosting:</strong> Vercel for application hosting and edge runtime, plus optional analytics only after you consent.</li>
                     <li><strong>Database:</strong> Neon PostgreSQL for account and document metadata storage.</li>
                     <li><strong>File storage:</strong> Railway S3-compatible object storage for encrypted uploaded documents and audio artifacts.</li>
                     <li><strong>TTS processing:</strong> User-initiated TTS is handled by shared providers: Kitten TTS FastAPI (self-hosted on a local Pi cluster) and Replicate.</li>
