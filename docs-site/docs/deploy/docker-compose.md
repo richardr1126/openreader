@@ -170,6 +170,16 @@ For direct browser storage, configure `S3_BROWSER_TRANSPORT=presigned` and a pub
 The examples use local-only default credentials. Override existing `${VARIABLE}` values through
 your shell environment before using them beyond local development.
 
+For a persistent deployment, generate each secret once, store the values in the Compose project's
+`.env` file, and reuse that file whenever the services are recreated:
+
+```dotenv
+AUTH_SECRET=<openssl-rand-base64-32>
+COMPUTE_WORKER_TOKEN=<openssl-rand-base64-32>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=<openssl-rand-base64-32>
+```
+
 :::warning Protect public deployments
 Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, compute-worker token,
 credential-broker token and `TTS_PLAYBACK_TOKEN_SECRET` before
@@ -181,3 +191,50 @@ private app-owned credential broker.
 For the complete configuration reference, see
 [Environment Variables](../reference/environment-variables). See [Database](../configure/database)
 for PostgreSQL and SQLite behavior.
+
+## Upgrade from v4.4 to v5
+
+Back up the named volumes first, then pull and recreate the same Compose project. Do not use
+`docker compose down -v`: the `-v` option deletes the data being upgraded.
+
+<Tabs groupId="docker-compose-upgrade-stack">
+<TabItem value="slim" label="Slim" default>
+
+```bash
+docker compose -f docker/examples/compose.yml pull
+docker compose -f docker/examples/compose.yml up -d
+```
+
+</TabItem>
+<TabItem value="full" label="Full">
+
+```bash
+docker compose -f docker/examples/compose.full.yml pull
+docker compose -f docker/examples/compose.full.yml up -d
+```
+
+</TabItem>
+<TabItem value="local-slim" label="Local Slim">
+
+```bash
+docker compose -f docker/examples/compose.local-slim.yml up -d --build
+```
+
+</TabItem>
+<TabItem value="local-full" label="Local Full">
+
+```bash
+docker compose -f docker/examples/compose.local-full.yml up -d --build
+```
+
+</TabItem>
+</Tabs>
+
+Keep the same Compose project name, volumes, `AUTH_SECRET`, and storage settings. Add stable values
+for the v5 worker, credential-broker, and playback secrets before recreating the services.
+
+The OpenReader entrypoint waits for its database and storage dependencies, applies pending schema
+migrations, and then idempotently deletes the retired v4 object prefixes
+`tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`. A separate migration container is not
+required. Confirm the migration and decommission completion messages in the OpenReader logs before
+performing the post-upgrade smoke test.

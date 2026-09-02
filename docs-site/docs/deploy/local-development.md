@@ -219,7 +219,7 @@ Use one of these `.env` mode templates:
   <TabItem value="auth-enabled" label="Auth Enabled" default>
 
 ```env
-API_BASE=http://host.docker.internal:8880/v1
+API_BASE=http://127.0.0.1:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
@@ -233,7 +233,7 @@ TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 ```env
 # API_BASE and optional API_KEY are seeded into the admin "default-openai" shared provider
 # on first boot, then no longer read. Manage them in Settings → Admin afterwards.
-API_BASE=http://host.docker.internal:8880/v1
+API_BASE=http://127.0.0.1:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
@@ -245,7 +245,7 @@ ADMIN_EMAILS=you@example.com
   <TabItem value="external-s3" label="External S3">
 
 ```env
-API_BASE=http://host.docker.internal:8880/v1
+API_BASE=http://127.0.0.1:8880/v1
 USE_EMBEDDED_WEED_MINI=false
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
@@ -265,7 +265,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
   <TabItem value="worker-mode" label="External Worker Service">
 
 ```env
-API_BASE=http://host.docker.internal:8880/v1
+API_BASE=http://127.0.0.1:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 COMPUTE_WORKER_URL=http://localhost:8081
@@ -334,8 +334,11 @@ pnpm start
   </TabItem>
 </Tabs>
 
-:::warning API Base Reachability
-`API_BASE` must be reachable from the Next.js server process, not just your browser.
+:::warning Provider reachability
+Background speech generation runs in the compute worker, while optional custom voice discovery runs
+in the app server. A self-hosted provider base URL must therefore be reachable from both runtimes.
+For native `pnpm dev`/`pnpm start` with the embedded worker, `http://127.0.0.1:<port>/v1` is correct.
+If the worker is remote, configure a URL reachable from that host as well.
 :::
 
 Visit [http://localhost:3003](http://localhost:3003).
@@ -351,5 +354,5 @@ pnpm migrate
 ```
 
 :::info
-If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the v4 legacy storage decommission manually with `pnpm migrate-decommission`.
+If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the idempotent v4 legacy storage decommission manually with `pnpm migrate-decommission`. See [Migrations](../configure/migrations) before a production v4.4→v5 upgrade.
 :::

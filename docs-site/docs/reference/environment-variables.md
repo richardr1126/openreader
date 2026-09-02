@@ -45,7 +45,6 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `S3_INTERNAL_ENDPOINT` | Storage | `http://127.0.0.1:8333` embedded | Private S3 endpoint for app and worker traffic |
 | `S3_PUBLIC_ENDPOINT` | Storage | — | Public HTTPS S3 endpoint for browser presigned transfers |
 | `S3_BROWSER_TRANSPORT` | Storage | `auto` | Browser transfer mode: `auto`, `proxy`, or `presigned` |
-| `S3_ENDPOINT` | Storage | deprecated | Compatibility alias; replace with explicit internal/public endpoints |
 | `S3_FORCE_PATH_STYLE` | Storage | `true` in embedded mode | Set per provider requirement |
 | `S3_AUTO_CREATE_BUCKET` | Storage | `false` | Create a missing external bucket during startup; intended for self-contained deployments |
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
@@ -272,10 +271,6 @@ Browser-reachable HTTPS endpoint used only to generate direct presigned URLs.
 ### S3_BROWSER_TRANSPORT
 
 `auto` (default), `proxy`, or `presigned`. Proxy is not allowed on Vercel/cloud request-duration hosting.
-
-### S3_ENDPOINT
-
-Deprecated compatibility alias for `S3_INTERNAL_ENDPOINT`; when `presigned` is explicitly selected it also supplies `S3_PUBLIC_ENDPOINT`. It will be removed in OpenReader 5.0.
 
 ### S3_FORCE_PATH_STYLE
 
@@ -533,7 +528,7 @@ Controls startup v4 legacy object-prefix purge.
 - Default: `true`
 - Set `false` to skip deleting retired `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` object prefixes
 
-## Runtime JSON Seed (v4)
+## Runtime JSON Seed
 
 ### RUNTIME_SEED_JSON_PATH
 

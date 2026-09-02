@@ -38,14 +38,22 @@ In most setups, you do not need to run migration commands manually because start
 
 ### Schema history
 
-Migrations are applied in order. All of the following ship in v3.0.0; an instance upgrading from v2.2.0 applies `0001`–`0004` in a single startup pass.
+Migrations are applied in order for both SQLite and Postgres. A v4.4 database upgrading to v5
+keeps its users, documents, progress, folders, preferences, providers, settings, and scheduled-task
+state while applying the later v5 migrations.
 
 | Migration | Dialects | What it does |
 | --- | --- | --- |
-| `0001_tts_segments` | SQLite + Postgres | Creates the original single-table `tts_segments` used by server-side TTS segment caching. |
-| `0002_add_segment_key_to_tts_segments` | SQLite + Postgres | Adds the `segment_key` column to `tts_segments` for stable locator-independent segment identity. |
-| `0003_tts_segments_v2_split` | SQLite + Postgres | Replaces `tts_segments` with a normalized two-table model: `tts_segment_entries` (one row per document segment + locator identity) and `tts_segment_variants` (one row per settings combination, holding the cached audio key, status, and alignment). Drops the original `tts_segments` table — no released build (v2.2.0 or earlier) ever populated it, so there is no production data to migrate. |
-| `0004_admin_panel` | SQLite + Postgres | Creates `admin_providers` (encrypted shared TTS provider rows) and `admin_settings` (runtime site-feature config), and adds the `is_admin` column to the `user` table. Backs the [Admin Panel](./admin-panel). |
+| `0000` | SQLite + Postgres | Creates the baseline document, user-preference, progress, auth, preview, and legacy audiobook schema. |
+| `0001`–`0003` | SQLite + Postgres | Introduces and evolves the pre-v5 SQL TTS segment cache. |
+| `0004` | SQLite + Postgres | Creates encrypted shared providers and admin settings, and adds user admin status. |
+| `0005`–`0009` | SQLite + Postgres | Adds document settings and transitional PDF parsing/job-event state, then removes superseded PDF state. |
+| `0010` | SQLite + Postgres | Adds user-data cleanup cascades. |
+| `0011` | SQLite + Postgres | Adds scheduled maintenance tasks and document blob leases. |
+| `0012` | SQLite + Postgres | Adds folders, onboarding/privacy state, and recently-opened document state. |
+| `0013`–`0014` | SQLite + Postgres | Adds transitional SQL playback-session state used during v5 development. |
+| `0015` | SQLite + Postgres | Removes the retired SQL TTS cache, transitional playback sessions, legacy audiobook tables, and their obsolete cleanup task. v5 playback artifacts live in object storage. |
+| `0016` | SQLite + Postgres | Adds explicit account identity issuers, normalizes existing credential/GitHub identities, and adds identity indexes. |
 
 To skip automatic startup migrations:
 
@@ -59,6 +67,25 @@ If you disable startup migrations, ensure your deployment process runs migration
 ## Apply migrations
 
 In most cases, you do not need manual migration commands because startup runs migrations automatically.
+
+### Docker and Docker Compose
+
+The published app image runs the shared bootstrap entrypoint. Pull and recreate the container or
+Compose services with the same database/storage volumes and stable secrets; the entrypoint applies
+pending DB migrations and then runs the v4 storage decommission before starting the app. Do not use
+`docker compose down -v` during an upgrade.
+
+The decommission is idempotent and deletes only these retired object roots beneath `S3_PREFIX`:
+
+- `tts_segments_v1/`
+- `tts_segments_v2/`
+- `audiobooks_v1/`
+
+No manual `pnpm` command or migration-only container is needed for the supported Docker paths. See
+[Docker Quick Start](../docker-quick-start#3-upgrade-from-v44-to-v5) or
+[Docker Compose](../deploy/docker-compose#upgrade-from-v44-to-v5).
+
+### Native source and custom/serverless deployments
 
 `pnpm migrate` applies migrations for one database target:
 
@@ -74,6 +101,14 @@ pnpm migrate
 # Purge retired v4 object prefixes: tts_segments_v1, tts_segments_v2, audiobooks_v1
 pnpm migrate-decommission
 ```
+
+Use the manual commands when deploying the standalone Next.js app without the bootstrap entrypoint,
+including Vercel. `pnpm migrate-decommission` requires the same S3 endpoint, bucket, region,
+credentials, path-style setting, and prefix as the deployment. Pause traffic and back up the
+database and object store before a v4.4→v5 production upgrade.
+
+Startup logs include `Running database migrations...` and
+`Running v4 legacy storage decommission...`; confirm both phases complete before restoring traffic.
 
 `pnpm migrate` uses the programmatic Drizzle migrator from `@openreader/database`. Drizzle Kit is
 not a production or startup dependency; it is used only to generate new migration files.

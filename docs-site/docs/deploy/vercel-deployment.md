@@ -2,17 +2,21 @@
 title: Vercel Deployment
 ---
 
-This guide covers deploying OpenReader to Vercel with external Postgres and S3-compatible object storage.
+This guide covers deploying the OpenReader app to Vercel with external Postgres, S3-compatible
+object storage, NATS JetStream, and a standalone compute worker such as Railway.
 
 ## What works on Vercel
 
-- Documents (PDF/EPUB/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
-- Audiobook export downloads the worker-owned playback MP3 stream; there are no audiobook-specific serverless routes.
-- Heavy compute features (Whisper alignment + PDF layout parsing) run through an external compute worker service.
+- Documents (PDF/EPUB/DOCX/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
+- Background TTS generation, playback, previews, DOCX conversion, Whisper alignment, PDF layout
+  parsing, and audiobook export run through an external compute worker service.
+- Audiobook export downloads the worker-owned playback stream; there are no audiobook-specific
+  serverless routes.
 - For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
 
-:::warning DOCX Conversion Limitation
-`docx` conversion requires `soffice` (LibreOffice), which is not available in a standard Vercel runtime.
+:::info DOCX conversion
+The published compute-worker image includes headless LibreOffice. DOCX conversion therefore works
+with Vercel when the external worker is configured; Vercel itself does not run `soffice`.
 :::
 
 ## 1. Environment Variables
@@ -61,10 +65,15 @@ If you also run an external worker service (for example Railway), configure it w
 
 - `COMPUTE_CREDENTIAL_BROKER_URL=https://<your-app-domain>/api/internal/compute/tts-credentials`
 - the matching `COMPUTE_CREDENTIAL_BROKER_TOKEN`
+- the matching `COMPUTE_WORKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`
+- its NATS connection and the same S3 storage configuration used by the app
 - `LOG_FORMAT=json`
 - `COMPUTE_LOG_LEVEL=info`
 
 Do not set the app's `AUTH_SECRET` or `POSTGRES_URL` on the worker. Provider lookup and decryption remain app-owned.
+Self-hosted provider URLs configured in the admin panel must be reachable from the worker runtime,
+not from Vercel or the browser. A Railway worker cannot reach a provider through `localhost` or
+`host.docker.internal` on your personal computer.
 
 :::note Env vars vs. admin panel (important for Vercel)
 `API_KEY` / `API_BASE` are one-shot bootstrap seeds on first deploy. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
@@ -75,7 +84,7 @@ Do not set the app's `AUTH_SECRET` or `POSTGRES_URL` on the worker. Provider loo
 If your Vercel app uses an external compute worker on Railway with Synadia Cloud (NGS):
 
 1. Deploy a Railway service from:
-   - `ghcr.io/richardr1126/openreader-compute-worker:refactor-ppdoclayoutv3-onnx-layout-parsing`
+   - `ghcr.io/richardr1126/openreader-compute-worker:latest`
 2. Enable public networking on that Railway service and set:
    - `COMPUTE_WORKER_URL=https://<railway-worker-domain>` (in Vercel)
    - `COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>` (in Vercel) if browsers cannot reach `COMPUTE_WORKER_URL` directly
@@ -91,7 +100,7 @@ After the first successful deploy and admin login, open **Settings → Admin** a
 
 - **Shared providers**: create/edit your provider key(s) here (encrypted at rest).
 - **Site features**:
-  - `enableDocxConversion=false` on Vercel (`soffice` unavailable).
+  - `enableDocxConversion=true` when the published compute-worker image is connected.
   - `enableTtsProvidersTab=false` if you want shared-provider-only UX.
   - `enableUserSignups=true` unless you explicitly want an invite-only deployment.
   - `defaultTtsProvider=replicate` (or your preferred shared slug).
@@ -102,10 +111,11 @@ After the first successful deploy and admin login, open **Settings → Admin** a
 
 If you must pre-seed site features/providers at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Prefer the admin panel for ongoing management.
 
-See [Environment Variables](../reference/environment-variables#runtime-json-seed-v4) for schema and examples.
+See [Environment Variables](../reference/environment-variables#runtime-json-seed) for schema and examples.
 
 :::warning Auth recommendation
-Set both `BASE_URL` and `AUTH_SECRET` — they are required in v4+ and also required for the admin panel and for encrypting admin-stored TTS credentials.
+Set both `BASE_URL` and `AUTH_SECRET` — they are required for startup, the admin panel, and
+encrypting admin-stored TTS credentials. Keep `AUTH_SECRET` stable across deployments.
 :::
 
 :::warning Rotating AUTH_SECRET invalidates admin-stored keys
@@ -116,12 +126,24 @@ Admin-managed TTS provider keys are encrypted with a key derived from `AUTH_SECR
 For all variables and defaults, see [Environment Variables](../reference/environment-variables).
 :::
 
-## 4. Database and data migrations
+## 4. Upgrade from v4.4 to v5
 
 Vercel deployments do not run the `@openreader/bootstrap` process, so automatic startup migrations do not run there.
 
-- Run `pnpm migrate` in a controlled environment to apply Drizzle schema migrations to your Postgres DB.
-- Run `pnpm migrate-decommission` once during the v5 rollout to purge retired object prefixes (`tts_segments_v1/`, `tts_segments_v2/`, `audiobooks_v1/`).
+1. Take the v4 app offline or pause deployment traffic, then back up Postgres and the S3 bucket.
+2. From a v5 source checkout, configure the production `POSTGRES_URL` and run `pnpm migrate`.
+3. In the same controlled environment, configure the production `S3_INTERNAL_ENDPOINT`, bucket,
+   region, access key, secret key, path-style setting, and prefix, then run
+   `pnpm migrate-decommission` once.
+4. Deploy the v5 worker and app with matching worker, credential-broker, playback, and S3 settings;
+   configure the worker's NATS connection.
+5. Check the migration output, then perform the smoke test below before restoring normal traffic.
+
+The decommission command idempotently deletes only the retired v4 object roots
+`tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`. It does not remove documents,
+accounts, settings, or v5 playback artifacts. Re-running it is safe if a deployment is interrupted.
+
+For the full schema history and Docker's automatic path, see [Migrations](../configure/migrations).
 
 ## 5. Scheduled maintenance tasks
 
@@ -133,7 +155,8 @@ Each due task is claimed with a database-backed lease, due tasks start independe
 
 ## 6. Runtime expectations and caveats
 
-- Audiobook export requires the external compute worker and S3-compatible object storage because it downloads the worker-owned playback MP3 stream.
+- Playback and audiobook export require the external compute worker and S3-compatible object
+  storage because generation continues outside the serverless request lifecycle.
 - For production Vercel deploys, use `POSTGRES_URL` instead of SQLite.
 
 ## 7. Smoke test after deploy

@@ -12,7 +12,8 @@ title: Stack
 ## Containerization and runtime
 
 - [Docker](https://www.docker.com/) (linux/amd64 and linux/arm64)
-- Shared entrypoint that runs DB migrations by default and can bootstrap embedded SeaweedFS before app startup
+- Shared entrypoint that runs DB migrations and the idempotent v4 storage decommission by default,
+  then can bootstrap embedded SeaweedFS, NATS, and the compute worker before app startup
 
 ## Next.js client
 
@@ -43,22 +44,26 @@ title: Stack
 - Audio pipeline: [ffmpeg](https://ffmpeg.org/) (`ffmpeg-static`) for TTS audio normalization and probing
 - Utilities: `lru-cache` for in-process caching, `fast-xml-parser` for EPUB/XML parsing, `uuid` for identifier generation, `zod` for schema validation
 
-## External compute worker (optional)
+## Compute worker
 
 Standalone worker package:
 
 - **`@openreader/compute-worker`** — standalone Node.js compute service containing its private inference and queue runtime
+  - Background TTS planning/generation with signed progressive playback audio
+  - PDF/EPUB preview generation and worker-backed DOCX conversion through headless LibreOffice
   - ONNX runtime: `onnxruntime-node` with `@huggingface/tokenizers`
   - Whisper alignment: `onnx-community/whisper-base_timestamped` (q4) for word-level timestamps
   - PDF layout: `Bei0001/PP-DocLayoutV3-ONNX` for document block detection and layout parsing
   - PDF rendering: `pdfjs-dist`, `@napi-rs/canvas` for server-side page rasterization
-  - Utilities: `jszip`, `ffmpeg-static`
+  - Utilities: `jszip`, `ffmpeg-static`, headless LibreOffice in published worker images
 - HTTP server: [Fastify](https://fastify.dev/) v5 with a versioned OpenAPI contract
   - Job queue + state: [NATS](https://nats.io/) JetStream WorkQueue pull consumers + NATS KV (`jobs.whisper`, `jobs.layout`)
   - Storage: AWS SDK v3 S3 client for reading/writing blobs
   - Logging: [Pino](https://getpino.io/)
   - Validation: [Zod](https://zod.dev/)
-- The Next.js app communicates with the worker only through the versioned HTTP API generated from OpenAPI.
+- The worker is embedded by default for Docker and native startup, or deployed as a standalone
+  service for distributed/serverless setups. The Next.js app communicates with it only through the
+  versioned HTTP API generated from OpenAPI.
 
 ## Tooling and testing
 

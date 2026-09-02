@@ -2,7 +2,10 @@
 title: TTS Providers
 ---
 
-OpenReader routes all TTS requests through the Next.js server. Provider credentials are always admin-managed and never accepted from the browser.
+OpenReader keeps provider configuration in the app, while background speech synthesis runs in the
+compute worker. Provider credentials are always admin-managed and never accepted from the browser.
+The worker resolves the selected provider just in time through the authenticated app-owned
+credential broker; credentials are not embedded in NATS jobs or playback artifacts.
 
 **Admin-managed shared providers** (Settings > Admin > Shared providers): DB-backed instances configured by an admin and visible to all users. Keys are encrypted at rest and never exposed to the client. Available only when [auth is enabled](./auth) and your account is in `ADMIN_EMAILS`. See [Admin Panel](./admin-panel).
 
@@ -36,8 +39,20 @@ Self-hosted or custom providers only need an OpenAI-compatible speech endpoint:
 
 The speech endpoint may return any common audio format — `mp3`, `wav`, `ogg`, or `flac`. OpenReader detects the format and transcodes non-mp3 audio to mp3 automatically, so your server does not need to honor `response_format: mp3`. An API key is optional; keyless servers work.
 
-:::warning TTS requests are server-side
-TTS requests originate from the **Next.js server**, not the browser. The base URL must be reachable from the server runtime. In Docker, use `http://host.docker.internal:<port>/v1` so OpenReader reaches the service's published port on your host. A container name only resolves if OpenReader and the TTS service share a Docker network (Docker Compose, `--link`, or a shared `--network`). `localhost`/`127.0.0.1` will not work, since inside the container that points at the container itself.
+:::warning Provider URLs are server-side
+Speech synthesis originates from the **compute worker**, not the browser. Optional custom voice
+discovery is performed by the Next.js app server, so a self-hosted base URL should be reachable from
+both server runtimes.
+
+| Deployment | Provider base URL |
+| --- | --- |
+| Native app + embedded worker on the same host | `http://127.0.0.1:<port>/v1` |
+| Single Docker container, provider on the Docker host | `http://host.docker.internal:<port>/v1` (add Docker's host-gateway mapping on Linux) |
+| Docker Compose | The provider service name on the shared network, such as `http://kokoro-tts:8880/v1` |
+| Remote worker (Railway or another host) | A public, private-network, or VPN URL reachable from both app and worker |
+
+`localhost` always means the current process/container. It cannot refer to a provider on your laptop
+from a remote worker.
 :::
 
 ## Provider guides

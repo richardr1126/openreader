@@ -24,7 +24,7 @@ Known compatible implementations: [Kokoro-FastAPI](./kokoro-fastapi), [KittenTTS
 3. Set API key if your service requires authentication.
 4. Set a default model/voice supported by your backend.
 
-**Legacy bootstrap seed (optional, first boot only):**
+**Bootstrap seed (optional, first boot only):**
 
 ```env
 API_BASE=http://your-tts-server/v1
@@ -33,13 +33,16 @@ API_BASE=http://your-tts-server/v1
 
 Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
 
-:::warning TTS requests are server-side
-`API_BASE` must be reachable from the **Next.js server**, not just the browser. In Docker, use `http://host.docker.internal:<port>/v1` so OpenReader reaches the service's published port on your host. A container name only resolves if OpenReader and the TTS service share a Docker network (Docker Compose, `--link`, or a shared `--network`). `localhost`/`127.0.0.1` will not work, since inside the container that points at the container itself.
+:::warning Provider reachability
+Speech synthesis runs in the compute worker, while optional voice discovery runs in the Next.js app
+server. The provider URL should be reachable from both. See the
+[provider topology table](../tts-providers#custom-provider-requirements) for native, Docker,
+Compose, and remote-worker examples.
 :::
 
 ## Troubleshooting
 
-If voices don't load, confirm the server is reachable from the Next.js runtime and that at least one of `/v1/audio/voices`, `/v1/voices`, or `/v1/styles` returns a valid response. If none do, OpenReader falls back to default voices — synthesis still works as long as `POST /v1/audio/speech` succeeds.
+If voices don't load, confirm the server is reachable from the Next.js runtime and that at least one of `/v1/audio/voices`, `/v1/voices`, or `/v1/styles` returns a valid response. If none do, OpenReader falls back to default voices. If synthesis fails, confirm the same provider URL is reachable from the compute worker and that `POST /v1/audio/speech` succeeds.
 
 ## References
 

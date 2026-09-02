@@ -77,7 +77,6 @@ const documentedEnvironmentVariables = [
   'S3_ACCESS_KEY_ID',
   'S3_BROWSER_TRANSPORT',
   'S3_BUCKET',
-  'S3_ENDPOINT',
   'S3_FORCE_PATH_STYLE',
   'S3_INTERNAL_ENDPOINT',
   'S3_PREFIX',
@@ -139,12 +138,18 @@ describe('shared runtime configuration boundary', () => {
     }
 
     expect(rootExample).not.toContain('IMPORT_LIBRARY_DIR=');
+    expect(rootExample).not.toContain('S3_ENDPOINT=');
     expect(reference).not.toContain('### IMPORT_LIBRARY_DIR\n');
+    expect(reference).not.toContain('`S3_ENDPOINT`');
     expect(workerExample).not.toContain('AUTH_SECRET=');
     expect(workerExample).not.toContain('POSTGRES_URL=');
     expect(workerExample).not.toContain('SQLITE_DB_PATH=');
     expect(workerExample).toContain('COMPUTE_CREDENTIAL_BROKER_URL=');
     expect(workerExample).toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN=');
+    expect(workerExample).toContain('NATS_URL=nats://127.0.0.1:4222');
+    expect(workerExample).not.toContain('S3_PUBLIC_ENDPOINT=');
+    expect(rootExample).toContain('COMPUTE_WORKER_PUBLIC_URL=');
+    expect(rootExample).toContain('TTS_PLAYBACK_TOKEN_SECRET=');
     expect(fullCompose).toContain('AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}');
     expect(fullCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
     const fullWorker = fullCompose.slice(fullCompose.indexOf('\n  compute-worker:'));

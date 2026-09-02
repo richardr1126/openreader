@@ -6,7 +6,7 @@ This page covers application-level configuration for provider access and authent
 
 ## Auth behavior
 
-- `BASE_URL` and `AUTH_SECRET` are required at startup in v4+.
+- `BASE_URL` and `AUTH_SECRET` are required at startup.
 - Keep `AUTH_TRUSTED_ORIGINS` empty to trust only `BASE_URL`.
 - Anonymous auth sessions are disabled by default.
 - Set `USE_ANONYMOUS_AUTH_SESSIONS=true` to enable anonymous session flows.
