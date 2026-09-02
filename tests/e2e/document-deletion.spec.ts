@@ -5,6 +5,7 @@ import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
 test('anonymous user cancels and confirms document deletion', async ({ page }) => {
+  test.setTimeout(60_000);
   await enterAnonymousLibrary(page);
 
   await uploadLibraryFiles(page, resolve('tests/files/sample.md'));

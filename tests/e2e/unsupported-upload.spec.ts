@@ -7,7 +7,9 @@ import { uploadLibraryFiles } from './support/upload';
 test('anonymous user receives useful feedback for an unsupported file', async ({ page }) => {
   await enterAnonymousLibrary(page);
 
-  await uploadLibraryFiles(page, resolve('tests/files/unsupported.xyz'));
+  await uploadLibraryFiles(page, resolve('tests/files/unsupported.xyz'), {
+    waitForLibraryEntries: false,
+  });
 
   await expect(
     page.getByRole('alert').filter({ hasText: 'unsupported.xyz is not supported.' }),
