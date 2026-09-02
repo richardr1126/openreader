@@ -4,9 +4,7 @@ import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId, presignGet } from '@/lib/server/documents/blobstore';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
-import { isLoopbackS3Endpoint, isS3Configured } from '@/lib/server/storage/s3';
-import { errorToLog, serverLogger } from '@/lib/server/logger';
+import { getBrowserStorageTransport, isS3Configured } from '@/lib/server/storage/s3';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
@@ -21,12 +19,14 @@ function s3NotConfiguredResponse(): NextResponse {
 export async function GET(req: NextRequest) {
   try {
     if (!isS3Configured()) return s3NotConfiguredResponse();
+    if (getBrowserStorageTransport() !== 'presigned') {
+      return NextResponse.json({ error: 'Presigned document delivery is disabled when S3_BROWSER_TRANSPORT=proxy.' }, { status: 409 });
+    }
 
     const ctxOrRes = await requireAuthContext(req);
     if (ctxOrRes instanceof Response) return ctxOrRes;
     if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const testNamespace = getOpenReaderTestNamespace(req.headers);
     const storageUserId = ctxOrRes.userId;
     const allowedUserIds = [storageUserId];
 
@@ -49,34 +49,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(doc.id)}`;
-    // Loopback S3 endpoints yield presigned URLs unreachable from a remote
-    // browser; serve through the same-origin proxy fallback instead.
-    const directUrl = isLoopbackS3Endpoint()
-      ? null
-      : await presignGet(doc.id, testNamespace).catch(() => null);
-    if (!directUrl) {
-      serverLogger.warn({
-        event: 'documents.blob.get.presign.unavailable',
-        degraded: true,
-        fallbackPath: 'download_proxy',
-        documentId: doc.id,
-      }, 'Presigned document download unavailable, redirecting to proxy fallback');
-      return NextResponse.redirect(fallbackUrl, {
-        status: 307,
-        headers: { 'Cache-Control': 'no-store' },
-      });
-    }
+    const directUrl = await presignGet(doc.id, null);
 
     return NextResponse.redirect(directUrl, {
       status: 307,
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    serverLogger.error({
-      event: 'documents.blob.get.presign.failed',
-      error: errorToLog(error),
-    }, 'Failed to create document download signature');
     return errorResponse(error, {
       apiErrorMessage: 'Failed to prepare document download',
       normalize: { code: 'DOCUMENTS_BLOB_GET_PRESIGN_FAILED', errorClass: 'storage' },

@@ -52,10 +52,11 @@ export function SidebarDialog<T extends string = string>({
       panelTestId={panelTestId}
       className={modalClassName}
     >
-      {customContent ? (
-        customContent
-      ) : (
-        <div className={cn('flex flex-col h-[480px]', className)}>
+      {customContent}
+      <div
+        className={cn('flex flex-col h-[480px]', className)}
+        style={{ display: customContent ? 'none' : undefined }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-line-soft shrink-0">
           <div className="flex items-baseline gap-4">
@@ -121,8 +122,7 @@ export function SidebarDialog<T extends string = string>({
             {children}
           </div>
         </div>
-        </div>
-      )}
+      </div>
     </ModalFrame>
   );
 }

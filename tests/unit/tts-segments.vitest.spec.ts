@@ -1,25 +1,29 @@
 import { describe, expect, test } from 'vitest';
 import {
-  buildTtsSegmentDocumentPrefix,
+  buildTtsPlaybackSegmentAudioKey,
+  buildTtsPlaybackSettingsHash,
   buildProportionalAlignment,
-  buildTtsSegmentEntryId,
-  buildTtsSegmentId,
+  buildTtsPlaybackAudioContentHash,
+  buildTtsSegmentSettingsJson,
   buildTtsSegmentSettingsHash,
   buildTtsSegmentTextHash,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
   projectSegmentLocator,
-} from '../../src/lib/server/tts/segments';
+} from '@openreader/tts/segments';
 
 describe('tts segment helpers', () => {
-  test('builds a user/document-scoped audio prefix across every version and variant', () => {
-    expect(buildTtsSegmentDocumentPrefix({
+  test('builds playback-owned segment audio key', () => {
+    expect(buildTtsPlaybackSegmentAudioKey({
       storagePrefix: 'openreader',
-      namespace: 'test namespace',
+      namespace: 'test-ns',
       userId: 'user/name',
       documentId: 'doc-id',
-    })).toBe('openreader/tts_segments_v2/ns/test namespace/users/user%2Fname/docs/doc-id/');
+      documentVersion: 7,
+      settingsHash: 'settings',
+      audioContentHash: 'content-hash',
+    })).toBe('openreader/tts_playback_segments_audio_v1/ns/test-ns/users/user%2Fname/docs/doc-id/7/settings/content-hash.mp3');
   });
 
   test('builds stable settings hash', () => {
@@ -42,28 +46,93 @@ describe('tts segment helpers', () => {
     expect(a).toBe(b);
   });
 
-  test('builds deterministic segment id', () => {
-    const id1 = buildTtsSegmentId({
+  test('playback settings hash changes when segmentation settings change', () => {
+    const settings = {
+      providerRef: 'openai',
+      providerType: 'openai' as const,
+      ttsModel: 'gpt-4o-mini-tts',
+      voice: 'alloy',
+      nativeSpeed: 1,
+      ttsInstructions: 'calm',
+      language: 'en',
+    };
+    const baseSegmentation = {
+      maxBlockLength: 1200,
+      language: 'en',
+      enforceSourceBoundaries: true,
+      skipBlockKinds: ['header'],
+      isPlainText: false,
+      namespace: null,
+    };
+    const base = buildTtsPlaybackSettingsHash(settings, baseSegmentation);
+    expect(buildTtsPlaybackSettingsHash(settings, {
+      ...baseSegmentation,
+      skipBlockKinds: ['header', 'footer'],
+    })).not.toBe(base);
+    expect(buildTtsPlaybackSettingsHash(settings, {
+      ...baseSegmentation,
+      maxBlockLength: 800,
+    })).not.toBe(base);
+    expect(buildTtsPlaybackSettingsHash({ ...settings, voice: 'verse' }, baseSegmentation)).not.toBe(base);
+  });
+
+  test('builds SQLite settings JSON with worker-readable keys', () => {
+    const previousPostgresUrl = process.env.POSTGRES_URL;
+    delete process.env.POSTGRES_URL;
+    try {
+      const json = buildTtsSegmentSettingsJson({
+        providerRef: 'supertonic',
+        providerType: 'custom-openai',
+        ttsModel: 'sonic',
+        voice: 'narrator',
+        nativeSpeed: 1,
+        ttsInstructions: 'calm',
+        language: 'en',
+      });
+      expect(typeof json).toBe('string');
+      const parsed = JSON.parse(json as string);
+      expect(parsed).toMatchObject({
+        providerRef: 'supertonic',
+        providerType: 'custom-openai',
+        ttsModel: 'sonic',
+        voice: 'narrator',
+        nativeSpeed: 1,
+        ttsInstructions: 'calm',
+        language: 'en',
+      });
+      expect(parsed).not.toHaveProperty('model');
+      expect(parsed).not.toHaveProperty('speed');
+    } finally {
+      if (previousPostgresUrl === undefined) {
+        delete process.env.POSTGRES_URL;
+      } else {
+        process.env.POSTGRES_URL = previousPostgresUrl;
+      }
+    }
+  });
+
+  test('builds deterministic playback audio content hash', () => {
+    const id1 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       normalizedText: 'hello world',
       locatorFingerprint: 'loc',
     });
-    const id2 = buildTtsSegmentId({
+    const id2 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       normalizedText: 'hello world',
       locatorFingerprint: 'loc',
     });
-    const id3 = buildTtsSegmentId({
+    const id3 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 3,
+      ordinal: 3,
       normalizedText: 'hello world',
       locatorFingerprint: 'loc',
     });
@@ -71,59 +140,30 @@ describe('tts segment helpers', () => {
     expect(id1).not.toBe(id3);
   });
 
-  test('builds deterministic segment entry id independent of settings', () => {
-    const entry1 = buildTtsSegmentEntryId({
-      documentId: 'doc',
-      documentVersion: 1,
-      segmentIndex: 2,
-      segmentKey: 'doc:v1:segment-a',
-      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
-      textHash: 'abc123',
-    });
-    const entry2 = buildTtsSegmentEntryId({
-      documentId: 'doc',
-      documentVersion: 1,
-      segmentIndex: 2,
-      segmentKey: 'doc:v1:segment-a',
-      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
-      textHash: 'abc123',
-    });
-    const entry3 = buildTtsSegmentEntryId({
-      documentId: 'doc',
-      documentVersion: 1,
-      segmentIndex: 2,
-      segmentKey: 'doc:v1:segment-b',
-      locatorIdentityKey: 'epub:2:OEBPS/ch02.xhtml:128',
-      textHash: 'abc123',
-    });
-    expect(entry1).toBe(entry2);
-    expect(entry1).not.toBe(entry3);
-  });
-
-  test('canonical segment key makes id independent of locator and index', () => {
-    const id1 = buildTtsSegmentId({
+  test('canonical segment key makes playback audio content hash independent of locator and ordinal', () => {
+    const id1 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       segmentKey: 'doc:v1:segment-a',
       normalizedText: 'hello world',
       locatorFingerprint: 'loc-a',
     });
-    const id2 = buildTtsSegmentId({
+    const id2 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 99,
+      ordinal: 99,
       segmentKey: 'doc:v1:segment-a',
       normalizedText: 'hello world',
       locatorFingerprint: 'loc-b',
     });
-    const id3 = buildTtsSegmentId({
+    const id3 = buildTtsPlaybackAudioContentHash({
       documentId: 'doc',
       documentVersion: 1,
       settingsHash: 'abc',
-      segmentIndex: 2,
+      ordinal: 2,
       segmentKey: 'doc:v1:segment-b',
       normalizedText: 'hello world',
       locatorFingerprint: 'loc-a',
@@ -201,9 +241,22 @@ describe('tts segment helpers', () => {
     });
     expect(alignment.sentenceIndex).toBe(5);
     expect(alignment.words.length).toBe(3);
-    expect(alignment.words[0].startSec).toBe(0);
-    expect(alignment.words[2].endSec).toBeGreaterThan(1.4);
-    expect(alignment.words[1].charStart).toBeGreaterThan(alignment.words[0].charStart);
+    const first = alignment.words[0];
+    const second = alignment.words[1];
+    const third = alignment.words[2];
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(third).toBeDefined();
+    expect(first!.startSec).toBe(0);
+    expect(third!.endSec).toBeGreaterThan(1.4);
+    expect(first!.charStart).toBeDefined();
+    expect(second!.charStart).toBeDefined();
+    const firstCharStart = first!.charStart;
+    const secondCharStart = second!.charStart;
+    if (firstCharStart === undefined || secondCharStart === undefined) {
+      throw new Error('Expected proportional alignment words to include charStart offsets');
+    }
+    expect(secondCharStart).toBeGreaterThan(firstCharStart);
   });
 
   test('builds proportional alignment for no-space languages', () => {

@@ -17,6 +17,7 @@ export async function deleteOwnedDocument(input: {
   userId: string;
   documentId: string;
   namespace: string | null;
+  scheduleCleanup?: (task: () => Promise<void>) => void;
 }): Promise<boolean> {
   const [removed] = await db
     .delete(documents)
@@ -27,15 +28,23 @@ export async function deleteOwnedDocument(input: {
     .returning();
   if (!removed) return false;
 
-  await deleteDocumentTtsSegmentCache(input).catch((error) => {
-    logDegraded(serverLogger, {
-      event: 'documents.delete_owned.tts_cache_cleanup.failed',
-      msg: 'Failed to clean TTS segment cache after document deletion',
-      step: 'delete_document_tts_segment_cache',
-      context: { documentId: input.documentId, userIdHash: hashForLog(input.userId) },
-      error,
+  const cleanPlaybackCache = async () => {
+    await deleteDocumentTtsSegmentCache(input).catch((error) => {
+      logDegraded(serverLogger, {
+        event: 'documents.delete_owned.tts_cache_cleanup.failed',
+        msg: 'Failed to clean TTS segment cache after document deletion',
+        step: 'delete_document_tts_segment_cache',
+        context: { documentId: input.documentId, userIdHash: hashForLog(input.userId) },
+        error,
+      });
     });
-  });
+  };
+
+  if (input.scheduleCleanup) {
+    input.scheduleCleanup(cleanPlaybackCache);
+  } else {
+    await cleanPlaybackCache();
+  }
 
   return true;
 }

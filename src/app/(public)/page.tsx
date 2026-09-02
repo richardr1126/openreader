@@ -213,7 +213,7 @@ export default async function LandingPage() {
               <p>
                 Follow word-level highlighting right on the original page as it
                 plays, pick up where you left off on any device, and export a
-                chaptered m4b or mp3 audiobook for the road.
+                CBR MP3 audiobook for the road.
               </p>
             </li>
           </ol>
@@ -264,7 +264,7 @@ export default async function LandingPage() {
               <span className="public-feature-kicker">Export</span>
               <h3>Audiobook output</h3>
               <p>
-                Render chaptered m4b and mp3 files with resumable processing,
+                Render m4b and mp3 files with resumable processing,
                 ready for any offline player you already use.
               </p>
             </article>

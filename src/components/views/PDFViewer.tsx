@@ -1,6 +1,6 @@
 'use client';
 
-import { RefObject, useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { RefObject, useCallback, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Document, Page } from 'react-pdf';
 import type { Dest } from 'react-pdf/src/shared/types.js';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -13,7 +13,8 @@ import type { ParsedPdfBlock, ParsedPdfPage } from '@/types/parsed-pdf';
 
 interface PDFViewerProps {
   zoomLevel: number;
-  onDocumentReady?: () => void;
+  onReady?: () => void;
+  onError?: (error: Error) => void;
   pdfState: Pick<
     PdfDocumentState,
     | 'highlightPattern'
@@ -36,16 +37,18 @@ interface PDFOnLinkClickArgs {
   dest?: Dest;
 }
 
-export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerProps) {
+export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollPageRefs = useRef(new Map<number, HTMLDivElement>());
+  const scrollSyncedPageRef = useRef<number | null>(null);
+  const programmaticScrollPageRef = useRef<number | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
-  const [textLayerRenderRevision, setTextLayerRenderRevision] = useState(0);
-  const hasSignaledReadyRef = useRef(false);
+  const [textLayerReadyLayoutKey, setTextLayerReadyLayoutKey] = useState('');
   const scaleRef = useRef<number>(1);
   const { containerWidth, containerHeight } = usePDFResize(containerRef);
   const sentenceHighlightSeqRef = useRef(0);
   const wordHighlightSeqRef = useRef(0);
-  const sentenceHighlightTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wordHighlightTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const lastSentenceLayoutKeyRef = useRef<string>('');
   const lastWordLayoutKeyRef = useRef<string>('');
@@ -61,6 +64,8 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     currentSegment,
     skipToLocation,
     resolvedLanguage,
+    playbackPlanReady,
+    playbackPlanSegmentCount,
   } = useTTS();
 
   const {
@@ -92,7 +97,78 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     }
   }, [currDocId, currDocData]);
 
-  const layoutKey = `${zoomLevel}:${containerWidth}:${containerHeight}:${viewType}:${currDocPage}`;
+  const [pageWidth, setPageWidth] = useState<number>(595); // default A4 width
+  const [pageHeight, setPageHeight] = useState<number>(842); // default A4 height
+
+  const calculateScale = useCallback((width = pageWidth, height = pageHeight): number => {
+    const margin = viewType === 'dual' ? 48 : 24;
+    const effectiveContainerWidth = containerWidth
+      || containerRef.current?.clientWidth
+      || width + margin;
+    const effectiveContainerHeight = containerHeight
+      || containerRef.current?.clientHeight
+      || window.innerHeight;
+    const targetWidth = viewType === 'dual'
+      ? (effectiveContainerWidth - margin) / 2
+      : effectiveContainerWidth - margin;
+    const targetHeight = effectiveContainerHeight - margin;
+    const scaleByWidth = Math.max(0.1, targetWidth / width);
+
+    if (viewType === 'scroll') {
+      return scaleByWidth * 0.75 * (zoomLevel / 100);
+    }
+
+    const scaleByHeight = Math.max(0.1, targetHeight / height);
+    return Math.min(scaleByWidth, scaleByHeight) * (zoomLevel / 100);
+  }, [containerWidth, containerHeight, zoomLevel, pageWidth, pageHeight, viewType]);
+
+  const renderScale = useMemo(() => {
+    const nextScale = calculateScale();
+    if (Math.abs(nextScale - scaleRef.current) > 0.01) {
+      scaleRef.current = nextScale;
+    }
+    return scaleRef.current;
+  }, [calculateScale]);
+
+  // Renderer readiness follows the props that can actually make React-PDF
+  // repaint. Raw container dimensions are deliberately excluded: if they
+  // change without changing the stabilized scale, no render callback will fire.
+  const layoutKey = `${renderScale}:${viewType}:${currDocPage}`;
+  const selectedSegmentKey = playbackPlanSegmentCount === 0
+    ? 'empty'
+    : currentSegment
+      ? `${currentSegment.ordinal}:${currentSegment.key}`
+      : null;
+  const surfaceKey = currDocId && playbackPlanReady && selectedSegmentKey
+    ? `${currDocId}:${layoutKey}:${selectedSegmentKey}`
+    : null;
+  const activeSurfaceKeyRef = useRef<string | null>(surfaceKey);
+  const committedSurfacePartsRef = useRef(new Map<string, Set<'canvas' | 'text' | 'highlight'>>());
+  const readySurfaceKeyRef = useRef<string | null>(null);
+  const failedSurfaceKeyRef = useRef<string | null>(null);
+  const activeLayoutKeyRef = useRef(layoutKey);
+  activeSurfaceKeyRef.current = surfaceKey;
+  activeLayoutKeyRef.current = layoutKey;
+
+  const commitSurfacePart = useCallback((
+    key: string | null,
+    part: 'canvas' | 'text' | 'highlight',
+  ) => {
+    if (!key || activeSurfaceKeyRef.current !== key || readySurfaceKeyRef.current) return;
+    const parts = committedSurfacePartsRef.current.get(key) ?? new Set();
+    parts.add(part);
+    committedSurfacePartsRef.current.set(key, parts);
+    if (!parts.has('canvas') || !parts.has('text') || !parts.has('highlight')) return;
+    readySurfaceKeyRef.current = key;
+    onReady?.();
+  }, [onReady]);
+
+  const reportSurfaceCommitError = useCallback((error: Error) => {
+    const key = activeSurfaceKeyRef.current;
+    if (!key || readySurfaceKeyRef.current || failedSurfaceKeyRef.current === key) return;
+    failedSurfaceKeyRef.current = key;
+    onError?.(error);
+  }, [onError]);
 
   // Track page turns so we can keep the previous canvas visible until the new one paints.
   const lastRenderedLayoutKeyRef = useRef<string>('');
@@ -102,33 +178,32 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     }
   }, [layoutKey]);
 
-  const markViewerReady = useCallback(() => {
-    if (hasSignaledReadyRef.current) return;
-    hasSignaledReadyRef.current = true;
-    onDocumentReady?.();
-  }, [onDocumentReady]);
+  // Keep these callbacks stable. React-PDF includes them in the canvas/text
+  // render effects, so allocating a new callback during the state update below
+  // causes the layer to render again and can form an infinite callback loop.
+  const handlePageRenderSuccess = useCallback(() => {
+    lastRenderedLayoutKeyRef.current = activeLayoutKeyRef.current;
+    setIsPageRendering(false);
+    commitSurfacePart(activeSurfaceKeyRef.current, 'canvas');
+  }, [commitSurfacePart]);
 
   const handleTextLayerRenderSuccess = useCallback(() => {
-    setTextLayerRenderRevision((revision) => revision + 1);
-  }, []);
+    const readyLayoutKey = activeLayoutKeyRef.current;
+    setTextLayerReadyLayoutKey((currentKey) => (
+      currentKey === readyLayoutKey ? currentKey : readyLayoutKey
+    ));
+    commitSurfacePart(activeSurfaceKeyRef.current, 'text');
+  }, [commitSurfacePart]);
 
   useEffect(() => {
-    hasSignaledReadyRef.current = false;
+    committedSurfacePartsRef.current.clear();
+    readySurfaceKeyRef.current = null;
+    failedSurfaceKeyRef.current = null;
   }, [currDocId, currDocData]);
-
-  const clearSentenceHighlightTimeouts = useCallback(() => {
-    for (const t of sentenceHighlightTimeoutsRef.current) clearTimeout(t);
-    sentenceHighlightTimeoutsRef.current = [];
-  }, []);
 
   const clearWordHighlightTimeouts = useCallback(() => {
     for (const t of wordHighlightTimeoutsRef.current) clearTimeout(t);
     wordHighlightTimeoutsRef.current = [];
-  }, []);
-
-  const scheduleSentenceTimeout = useCallback((fn: () => void, ms: number) => {
-    const t = setTimeout(fn, ms);
-    sentenceHighlightTimeoutsRef.current.push(t);
   }, []);
 
   const scheduleWordTimeout = useCallback((fn: () => void, ms: number) => {
@@ -144,27 +219,13 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
   }, [clearHighlights, clearWordHighlights]);
 
   useEffect(() => {
-    /*
-     * Handles highlighting the current sentence being read by TTS.
-     * Includes a small delay for smooth highlighting and cleans up on unmount.
-     * 
-     * Dependencies:
-     * - pdfText: Re-run when the text content changes
-     * - currentSentence: Re-run when the TTS position changes
-     * - highlightPattern: Function from context that could change
-     * - clearHighlights: Function from context that could change
-     */
-
-    if (!currDocText || !pdfHighlightEnabled) {
+    if (!pdfHighlightEnabled || playbackPlanSegmentCount === 0) {
       clearHighlights();
+      commitSurfacePart(surfaceKey, 'highlight');
       return;
     }
 
-    clearSentenceHighlightTimeouts();
-
-    if (!currentSentence) {
-      // Cancel any in-flight retry loops and ensure stale highlights don't remain
-      // when the current sentence becomes null/undefined.
+    if (!currentSentence || !currentSegment || !currDocText) {
       sentenceHighlightSeqRef.current += 1;
       clearHighlights();
       return;
@@ -172,7 +233,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
 
     // Root-cause guard: do not repaint highlights while react-pdf is still
     // replacing page/text layers for a new page or viewport layout.
-    if (isPageRendering) {
+    if (isPageRendering || textLayerReadyLayoutKey !== layoutKey) {
       return;
     }
 
@@ -183,6 +244,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     const hasParsedBlockLocator =
       !!parsedDocument
       && activeLocator?.readerType === 'pdf'
+      && activeLocator.page === currDocPage
       && typeof activeLocator.blockId === 'string'
       && activeLocator.blockId.length > 0;
 
@@ -191,39 +253,43 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     }
 
     if (!hasParsedBlockLocator) {
+      reportSurfaceCommitError(
+        new Error('The selected worker-plan segment did not contain a PDF block locator.'),
+      );
       return;
     }
 
     const useBlockGeometryOnly = !pdfWordHighlightEnabled;
 
-    const tryApply = (attempt: number) => {
-      if (seq !== sentenceHighlightSeqRef.current) return;
-      const container = containerRef.current;
-      if (!container) return;
-
-      if (!useBlockGeometryOnly) {
-        const spans = container.querySelectorAll('.react-pdf__Page__textContent span');
-        if (!spans.length) {
-          if (attempt < 1) scheduleSentenceTimeout(() => tryApply(attempt + 1), 90);
-          return;
-        }
-      }
-
-      highlightPattern(currDocText, currentSentence, containerRef as RefObject<HTMLDivElement>, {
+    try {
+      const didCommitHighlight = highlightPattern(
+        currentSentence,
+        containerRef as RefObject<HTMLDivElement>,
+        {
         parsedDocument,
         locator: activeLocator,
         useBlockGeometryOnly,
         language: resolvedLanguage,
-      });
-    };
-
-    scheduleSentenceTimeout(() => tryApply(0), useBlockGeometryOnly ? 80 : 120);
-
-    return () => {
-      clearSentenceHighlightTimeouts();
-    };
+        },
+      );
+      if (seq !== sentenceHighlightSeqRef.current) return;
+      if (activeSurfaceKeyRef.current !== surfaceKey) return;
+      if (!didCommitHighlight) {
+        reportSurfaceCommitError(
+          new Error('The selected worker-plan segment did not map to the rendered PDF surface.'),
+        );
+        return;
+      }
+      commitSurfacePart(surfaceKey, 'highlight');
+    } catch (error) {
+      if (seq !== sentenceHighlightSeqRef.current) return;
+      reportSurfaceCommitError(
+        error instanceof Error ? error : new Error('Failed to highlight the initial PDF surface.'),
+      );
+    }
   }, [
     currDocText,
+    currDocPage,
     currentSentence,
     currentSegment,
     highlightPattern,
@@ -232,11 +298,13 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     pdfWordHighlightEnabled,
     parsedDocument,
     resolvedLanguage,
+    playbackPlanSegmentCount,
     layoutKey,
-    textLayerRenderRevision,
+    surfaceKey,
+    textLayerReadyLayoutKey,
     isPageRendering,
-    clearSentenceHighlightTimeouts,
-    scheduleSentenceTimeout
+    commitSurfacePart,
+    reportSurfaceCommitError,
   ]);
 
   // Word-level highlight layered on top of the block highlight
@@ -264,7 +332,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
       return;
     }
 
-    if (isPageRendering) {
+    if (isPageRendering || textLayerReadyLayoutKey !== layoutKey) {
       return;
     }
 
@@ -315,15 +383,11 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     clearWordHighlights,
     highlightWordIndex,
     layoutKey,
-    textLayerRenderRevision,
+    textLayerReadyLayoutKey,
     clearWordHighlightTimeouts,
     scheduleWordTimeout,
     isPageRendering
   ]);
-
-  // Add page dimensions state
-  const [pageWidth, setPageWidth] = useState<number>(595); // default A4 width
-  const [pageHeight, setPageHeight] = useState<number>(842); // default A4 height
 
   // Calculate which pages to show based on viewType
   const leftPage = viewType === 'dual'
@@ -333,37 +397,100 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
     ? (currDocPage % 2 === 0 ? currDocPage : currDocPage + 1)
     : null;
 
-  // Modify scale calculation to be more efficient
-  const calculateScale = useCallback((width = pageWidth, height = pageHeight): number => {
-    const margin = viewType === 'dual' ? 48 : 24; // adjust margin based on view type
-    const effectiveContainerHeight = containerHeight || (containerRef.current?.clientHeight ?? window.innerHeight);
-    const targetWidth = viewType === 'dual'
-      ? (containerWidth - margin) / 2 // divide by 2 for dual pages
-      : containerWidth - margin;
-    const targetHeight = effectiveContainerHeight - margin;
-
-    if (viewType === 'scroll') {
-      // For scroll mode, use a more comfortable width-based scale
-      // Use 75% of the width-based scale to make it less zoomed in
-      const scaleByWidth = (targetWidth / width) * 0.75;
-      return scaleByWidth * (zoomLevel / 100);
+  // React-PDF can resize the active page again when its text layer commits.
+  // Keep commanded navigation authoritative through that reflow, then let
+  // ordinary scroll events resume synchronizing the visible page to playback.
+  useLayoutEffect(() => {
+    if (viewType !== 'scroll') {
+      programmaticScrollPageRef.current = null;
+      return;
+    }
+    if (scrollSyncedPageRef.current === currDocPage) {
+      scrollSyncedPageRef.current = null;
+      return;
     }
 
-    const scaleByWidth = targetWidth / width;
-    const scaleByHeight = targetHeight / height;
+    const container = containerRef.current;
+    const page = scrollPageRefs.current.get(currDocPage);
+    if (!container || !page) return;
 
-    const baseScale = Math.min(scaleByWidth, scaleByHeight);
-    return baseScale * (zoomLevel / 100);
-  }, [containerWidth, containerHeight, zoomLevel, pageWidth, pageHeight, viewType]);
+    programmaticScrollPageRef.current = currDocPage;
+    let frame: number | null = null;
+    let remainingAttempts = 300;
+    const alignRequestedPage = () => {
+      if (programmaticScrollPageRef.current !== currDocPage) return;
 
-  // Add memoized scale to prevent unnecessary recalculations
-  const currentScale = useCallback(() => {
-    const newScale = calculateScale();
-    if (Math.abs(newScale - scaleRef.current) > 0.01) {
-      scaleRef.current = newScale;
+      const containerRect = container.getBoundingClientRect();
+      const pageRect = page.getBoundingClientRect();
+      container.scrollTo({
+        top: container.scrollTop + pageRect.top - containerRect.top,
+        behavior: 'auto',
+      });
+
+      const alignedPageRect = page.getBoundingClientRect();
+      const overlap = Math.max(
+        0,
+        Math.min(containerRect.bottom, alignedPageRect.bottom)
+          - Math.max(containerRect.top, alignedPageRect.top),
+      );
+      if (
+        alignedPageRect.height > 0
+        && overlap > 0
+        && textLayerReadyLayoutKey === layoutKey
+      ) {
+        programmaticScrollPageRef.current = null;
+        return;
+      }
+
+      remainingAttempts -= 1;
+      if (remainingAttempts > 0) {
+        frame = window.requestAnimationFrame(alignRequestedPage);
+      } else {
+        programmaticScrollPageRef.current = null;
+      }
+    };
+
+    alignRequestedPage();
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [currDocPage, layoutKey, textLayerReadyLayoutKey, viewType]);
+
+  useEffect(() => () => {
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
     }
-    return scaleRef.current;
-  }, [calculateScale]);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (viewType !== 'scroll' || scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (programmaticScrollPageRef.current !== null) return;
+      const container = containerRef.current;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      let visiblePage = currDocPage;
+      let visibleHeight = -1;
+      for (const [pageNumber, page] of scrollPageRefs.current) {
+        const pageRect = page.getBoundingClientRect();
+        const overlap = Math.max(
+          0,
+          Math.min(containerRect.bottom, pageRect.bottom)
+            - Math.max(containerRect.top, pageRect.top),
+        );
+        if (overlap > visibleHeight) {
+          visibleHeight = overlap;
+          visiblePage = pageNumber;
+        }
+      }
+
+      if (visiblePage === currDocPage) return;
+      scrollSyncedPageRef.current = visiblePage;
+      skipToLocation(visiblePage, true);
+    });
+  }, [currDocPage, skipToLocation, viewType]);
 
   const parsedPageByNumber = useMemo(() => {
     const map = new Map<number, ParsedPdfPage>();
@@ -512,6 +639,7 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
   return (
     <div
       ref={containerRef}
+      onScroll={handleScroll}
       className="flex flex-col items-center overflow-auto w-full px-6 h-full pdf-viewer"
     >
       <Document
@@ -519,6 +647,8 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
         loading={null}
         noData={null}
         file={documentFile}
+        onLoadError={reportSurfaceCommitError}
+        onSourceError={reportSurfaceCommitError}
         onLoadSuccess={(pdf) => {
           onDocumentLoadSuccess(pdf);
         }}
@@ -540,20 +670,27 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
             // Scroll mode: render all pages
             <div className="flex flex-col gap-4">
               {currDocPages && [...Array(currDocPages)].map((_, i) => (
-                <div key={`page_wrap_${i + 1}`} className="relative">
+                <div
+                  key={`page_wrap_${i + 1}`}
+                  ref={(node) => {
+                    if (node) scrollPageRefs.current.set(i + 1, node);
+                    else scrollPageRefs.current.delete(i + 1);
+                  }}
+                  role="region"
+                  aria-label={`PDF page ${i + 1}`}
+                  className="relative"
+                >
                   <Page
                     key={`page_${i + 1}`}
                     pageNumber={i + 1}
                     renderAnnotationLayer={true}
                     renderTextLayer={i + 1 === currDocPage}
                     className="shadow-elev-2"
-                    scale={currentScale()}
-                    onRenderSuccess={() => {
-                      lastRenderedLayoutKeyRef.current = layoutKey;
-                      setIsPageRendering(false);
-                      markViewerReady();
-                    }}
-                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
+                    scale={renderScale}
+                    onRenderSuccess={i + 1 === currDocPage ? handlePageRenderSuccess : undefined}
+                    onRenderError={reportSurfaceCommitError}
+                    onRenderTextLayerSuccess={i + 1 === currDocPage ? handleTextLayerRenderSuccess : undefined}
+                    onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
@@ -567,20 +704,18 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
             // Single/Dual page mode
             <div className="flex justify-center gap-4">
               {currDocPages && leftPage > 0 && (
-                <div className="relative">
+                <div role="region" aria-label={`PDF page ${leftPage}`} className="relative">
                   <Page
                     key={`page_${leftPage}`}
                     pageNumber={leftPage}
                     renderAnnotationLayer={true}
                     renderTextLayer={leftPage === currDocPage}
                     className="shadow-elev-2"
-                    scale={currentScale()}
-                    onRenderSuccess={() => {
-                      lastRenderedLayoutKeyRef.current = layoutKey;
-                      setIsPageRendering(false);
-                      markViewerReady();
-                    }}
-                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
+                    scale={renderScale}
+                    onRenderSuccess={leftPage === currDocPage ? handlePageRenderSuccess : undefined}
+                    onRenderError={reportSurfaceCommitError}
+                    onRenderTextLayerSuccess={leftPage === currDocPage ? handleTextLayerRenderSuccess : undefined}
+                    onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);
@@ -590,20 +725,18 @@ export function PDFViewer({ zoomLevel, onDocumentReady, pdfState }: PDFViewerPro
                 </div>
               )}
               {currDocPages && rightPage && rightPage <= currDocPages && viewType === 'dual' && (
-                <div className="relative">
+                <div role="region" aria-label={`PDF page ${rightPage}`} className="relative">
                   <Page
                     key={`page_${rightPage}`}
                     pageNumber={rightPage}
                     renderAnnotationLayer={true}
                     renderTextLayer={rightPage === currDocPage}
                     className="shadow-elev-2"
-                    scale={currentScale()}
-                    onRenderSuccess={() => {
-                      lastRenderedLayoutKeyRef.current = layoutKey;
-                      setIsPageRendering(false);
-                      markViewerReady();
-                    }}
-                    onRenderTextLayerSuccess={handleTextLayerRenderSuccess}
+                    scale={renderScale}
+                    onRenderSuccess={rightPage === currDocPage ? handlePageRenderSuccess : undefined}
+                    onRenderError={reportSurfaceCommitError}
+                    onRenderTextLayerSuccess={rightPage === currDocPage ? handleTextLayerRenderSuccess : undefined}
+                    onRenderTextLayerError={reportSurfaceCommitError}
                     onLoadSuccess={(page) => {
                       setPageWidth(page.originalWidth);
                       setPageHeight(page.originalHeight);

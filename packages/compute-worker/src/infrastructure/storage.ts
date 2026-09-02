@@ -2,15 +2,19 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
 export interface ArtifactStorage {
   readObject(key: string): Promise<ArrayBuffer>;
   objectExists(key: string): Promise<boolean>;
   deleteObject(key: string): Promise<void>;
+  listPrefix(prefix: string): Promise<string[]>;
+  putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown): Promise<string>;
 }
 
@@ -66,9 +70,10 @@ export function normalizeS3Prefix(prefix: string | undefined): string {
 }
 
 export function createS3ClientFromEnv(requireEnv: (name: string) => string): S3Client {
+  const transport = resolveStorageTransport(process.env);
   return new S3Client({
     region: requireEnv('S3_REGION'),
-    endpoint: process.env.S3_ENDPOINT?.trim() || undefined,
+    endpoint: transport.internalEndpoint,
     forcePathStyle: ['1', 'true', 'yes', 'on'].includes(process.env.S3_FORCE_PATH_STYLE?.trim().toLowerCase() ?? ''),
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
@@ -110,6 +115,32 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
       await config.client.send(new DeleteObjectCommand({
         Bucket: config.bucket,
         Key: safeKey(key),
+      }));
+    },
+    async listPrefix(prefix) {
+      const safePrefix = safeKey(prefix);
+      const keys: string[] = [];
+      let continuationToken: string | undefined;
+      do {
+        const response = await config.client.send(new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: safePrefix,
+          ContinuationToken: continuationToken,
+        }));
+        for (const item of response.Contents ?? []) {
+          if (typeof item.Key === 'string') keys.push(item.Key);
+        }
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
+      return keys;
+    },
+    async putObject(key, body, contentType) {
+      await config.client.send(new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: safeKey(key),
+        Body: Buffer.from(body),
+        ContentType: contentType,
+        ServerSideEncryption: 'AES256',
       }));
     },
     async putParsedPdf(documentId, namespace, parsed) {

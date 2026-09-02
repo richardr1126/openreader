@@ -1,25 +1,33 @@
 import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
+  AccountExportJobRequest,
+  AccountExportJobResult,
+  DocumentPreviewJobRequest,
+  DocumentPreviewJobResult,
+  DocumentConversionJobRequest,
+  DocumentConversionJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
-  PdfLayoutProgress,
-  WhisperAlignJobRequest,
-  WhisperAlignJobResult,
+  TtsPlaybackPlanJobRequest,
+  TtsPlaybackPlanJobResult,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResult,
+  TtsPlaybackJobRequest,
+  TtsPlaybackJobResult,
   WorkerJobTiming,
   WorkerOperationKind,
+  WorkerOperationProgress,
 } from '../operations/contracts';
+import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
+import { toErrorMessage } from '../infrastructure/errors';
+import { TtsCredentialBrokerClientError } from './tts-credential-broker-error';
 
 const LOOP_ERROR_BACKOFF_MS = 500;
 const RUNNING_HEARTBEAT_MS = 5000;
 const PULL_EXPIRES_MS = 5_000;
-const WHISPER_MAX_DELIVER = 1;
-const SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND: Record<WorkerOperationKind, number> = {
-  whisper_align: 15_000,
-  pdf_layout: 120_000,
-};
 
 export interface QueuedJob<TPayload> {
   jobId: string;
@@ -34,7 +42,7 @@ export interface WorkerLoopOrchestrator {
   markRunning(input: { opId: string; startedAt?: number; updatedAt?: number; timing?: WorkerJobTiming }): Promise<unknown>;
   markProgress(input: {
     opId: string;
-    progress: PdfLayoutProgress;
+    progress: WorkerOperationProgress;
     updatedAt?: number;
     timing?: WorkerJobTiming;
   }): Promise<unknown>;
@@ -82,8 +90,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : String(error);
+function toErrorLog(error: unknown): { message: string; name?: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      message: error.message || String(error),
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+  return { message: String(error) };
 }
 
 function safeDurationMs(start: number, end: number): number {
@@ -107,14 +122,21 @@ export function createWorkerLoopController(input: {
   logger: WorkerLogger;
   jobConcurrency: number;
   pdfAttempts: number;
-  whisperCodec: JsonCodec<QueuedJob<WhisperAlignJobRequest>>;
   pdfCodec: JsonCodec<QueuedJob<PdfLayoutJobRequest>>;
+  ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
+  ttsPlaybackPlanCodec?: JsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>;
+  ttsPlaybackExportCodec?: JsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>;
+  documentPreviewCodec?: JsonCodec<QueuedJob<DocumentPreviewJobRequest>>;
+  documentConversionCodec?: JsonCodec<QueuedJob<DocumentConversionJobRequest>>;
+  accountExportCodec?: JsonCodec<QueuedJob<AccountExportJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
   onInFlightJobsChanged: (delta: number) => void;
 }) {
-  const gate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
+  const playbackGate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
+  const planGate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
+  const layoutGate = new ConcurrencyGate(Math.max(1, Math.floor(input.jobConcurrency)));
   let loops: Promise<void>[] = [];
   let stopRequested = false;
 
@@ -123,18 +145,19 @@ export function createWorkerLoopController(input: {
     workerLabel: string;
     startedAt: number;
     queueWaitTiming?: { queueWaitMs: number };
-    latestProgress?: PdfLayoutProgress;
+    latestProgress?: WorkerOperationProgress;
   };
 
   type JobRunner<TPayload, TResult> = (
     payload: TPayload,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
+    hooks?: { onProgress?: (progress: WorkerOperationProgress) => Promise<void> },
   ) => Promise<TResult>;
 
   type WorkDefinition<TPayload, TResult> = {
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: JobRunner<TPayload, TResult>;
+    gate: ConcurrencyGate;
   };
 
   const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
@@ -216,7 +239,7 @@ export function createWorkerLoopController(input: {
       });
       work.msg.ack();
       const durationMs = safeDurationMs(startedAt, now);
-      if (durationMs >= SLOW_JOB_LOG_THRESHOLD_MS_BY_KIND[decoded.kind]) {
+      if (durationMs >= WORKER_OPERATION_KIND_POLICY[decoded.kind].slowJobLogThresholdMs) {
         input.logger.info({ worker: work.workerLabel, kind: decoded.kind, opId: decoded.opId, jobId: decoded.jobId, durationMs, timing: timing ?? null }, 'job.stage');
       }
       input.logger.info({
@@ -231,9 +254,15 @@ export function createWorkerLoopController(input: {
       }, 'job.terminal');
     } catch (error) {
       const errorMessage = toErrorMessage(error);
+      const errorLog = toErrorLog(error);
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
-      const action = decideRetryAction({ kind, deliveryCount, pdfAttempts: input.pdfAttempts, whisperMaxDeliver: WHISPER_MAX_DELIVER });
+      const action = decideRetryAction({
+        kind,
+        deliveryCount,
+        pdfAttempts: input.pdfAttempts,
+        retryable: error instanceof TtsCredentialBrokerClientError ? error.retryable : undefined,
+      });
       const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
       if (context) {
         const update = action === 'nak_retry'
@@ -260,6 +289,8 @@ export function createWorkerLoopController(input: {
         jobId: context?.decoded.jobId,
         status: action === 'nak_retry' ? 'running' : 'failed',
         error: errorMessage,
+        errorName: errorLog.name,
+        errorStack: errorLog.stack,
         deliveryCount,
         retryAction: action === 'nak_retry' ? 'nack_retry' : 'term',
       }, 'job.terminal');
@@ -288,12 +319,12 @@ export function createWorkerLoopController(input: {
         if (!msg) continue;
         input.markActivity(`job_received:${work.workerLabel}`);
         input.onInFlightJobsChanged(1);
-        await gate.acquire();
+        await work.gate.acquire();
         if (detached()) return;
         await processMessage({ ...work, msg });
       } finally {
         if (msg) {
-          gate.release();
+          work.gate.release();
           input.onInFlightJobsChanged(-1);
           input.markActivity(`job_completed:${work.workerLabel}`);
         }
@@ -302,20 +333,90 @@ export function createWorkerLoopController(input: {
   };
 
   return {
-    start(owner: object, consumers: { whisper: Consumer; pdfLayout: Consumer }): void {
+    start(owner: object, consumers: {
+      pdfLayout: Consumer;
+      ttsPlayback?: Consumer;
+      ttsPlaybackPlan?: Consumer;
+      ttsPlaybackExport?: Consumer;
+      documentPreview?: Consumer;
+      documentConversion?: Consumer;
+      accountExport?: Consumer;
+    }): void {
       stopRequested = false;
       loops = [];
-      const whisperWork: WorkDefinition<WhisperAlignJobRequest, WhisperAlignJobResult> = {
-        codec: input.whisperCodec,
-        run: input.handlers.runWhisper,
-      };
       const pdfWork: WorkDefinition<PdfLayoutJobRequest, PdfLayoutJobResult> = {
         codec: input.pdfCodec,
         run: input.handlers.runPdfLayout,
+        gate: layoutGate,
       };
+      const ttsPlaybackWork: WorkDefinition<TtsPlaybackJobRequest, TtsPlaybackJobResult> | null =
+        input.ttsPlaybackCodec && consumers.ttsPlayback
+          ? {
+            codec: input.ttsPlaybackCodec,
+            run: input.handlers.runTtsPlayback,
+            gate: playbackGate,
+          }
+          : null;
+      const ttsPlaybackPlanWork: WorkDefinition<TtsPlaybackPlanJobRequest, TtsPlaybackPlanJobResult> | null =
+        input.ttsPlaybackPlanCodec && consumers.ttsPlaybackPlan
+          ? {
+            codec: input.ttsPlaybackPlanCodec,
+            run: input.handlers.runTtsPlaybackPlan,
+            gate: planGate,
+          }
+          : null;
+      const ttsPlaybackExportWork: WorkDefinition<TtsPlaybackExportArtifactRequest, TtsPlaybackExportArtifactResult> | null =
+        input.ttsPlaybackExportCodec && consumers.ttsPlaybackExport
+          ? {
+            codec: input.ttsPlaybackExportCodec,
+            run: input.handlers.runTtsPlaybackExportArtifact,
+            gate: playbackGate,
+          }
+          : null;
+      const documentPreviewWork: WorkDefinition<DocumentPreviewJobRequest, DocumentPreviewJobResult> | null =
+        input.documentPreviewCodec && consumers.documentPreview
+          ? {
+            codec: input.documentPreviewCodec,
+            run: input.handlers.runDocumentPreview,
+            gate: layoutGate,
+          }
+          : null;
+      const documentConversionWork: WorkDefinition<DocumentConversionJobRequest, DocumentConversionJobResult> | null =
+        input.documentConversionCodec && consumers.documentConversion
+          ? {
+            codec: input.documentConversionCodec,
+            run: input.handlers.runDocumentConversion,
+            gate: layoutGate,
+          }
+          : null;
+      const accountExportWork: WorkDefinition<AccountExportJobRequest, AccountExportJobResult> | null =
+        input.accountExportCodec && consumers.accountExport
+          ? {
+            codec: input.accountExportCodec,
+            run: input.handlers.runAccountExport,
+            gate: layoutGate,
+          }
+          : null;
       for (let i = 0; i < input.jobConcurrency; i += 1) {
-        loops.push(runLoop({ owner, consumer: consumers.whisper, ...whisperWork, workerLabel: `whisper-${i + 1}` }));
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
+        if (ttsPlaybackWork && consumers.ttsPlayback) {
+          loops.push(runLoop({ owner, consumer: consumers.ttsPlayback, ...ttsPlaybackWork, workerLabel: `tts-playback-${i + 1}` }));
+        }
+        if (ttsPlaybackPlanWork && consumers.ttsPlaybackPlan) {
+          loops.push(runLoop({ owner, consumer: consumers.ttsPlaybackPlan, ...ttsPlaybackPlanWork, workerLabel: `tts-playback-plan-${i + 1}` }));
+        }
+        if (ttsPlaybackExportWork && consumers.ttsPlaybackExport) {
+          loops.push(runLoop({ owner, consumer: consumers.ttsPlaybackExport, ...ttsPlaybackExportWork, workerLabel: `tts-playback-export-${i + 1}` }));
+        }
+        if (documentPreviewWork && consumers.documentPreview) {
+          loops.push(runLoop({ owner, consumer: consumers.documentPreview, ...documentPreviewWork, workerLabel: `document-preview-${i + 1}` }));
+        }
+        if (documentConversionWork && consumers.documentConversion) {
+          loops.push(runLoop({ owner, consumer: consumers.documentConversion, ...documentConversionWork, workerLabel: `document-conversion-${i + 1}` }));
+        }
+        if (accountExportWork && consumers.accountExport) {
+          loops.push(runLoop({ owner, consumer: consumers.accountExport, ...accountExportWork, workerLabel: `account-export-${i + 1}` }));
+        }
       }
     },
     async stop(): Promise<void> {

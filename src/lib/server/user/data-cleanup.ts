@@ -1,34 +1,24 @@
 /**
  * Cleans up user-scoped storage that the orphaned-blob reaper cannot reach.
  *
- * Called from Better Auth's `beforeDelete` hook (canonical pass) and the
- * account-delete route (test-namespaced pass). Shared, content-addressed
- * document blobs + previews are NOT deleted here on the canonical pass — they
- * are reclaimed by the `reap-orphaned-blobs` task once their ownership rows are
- * gone. Per-user storage (audiobooks, TTS segments, temp uploads) is keyed by
- * userId and would be unreachable after the cascade, so it is deleted inline
- * and failures block the deletion.
+ * Called from Better Auth's `beforeDelete` hook. Shared, content-addressed
+ * document blobs and previews are reclaimed by the `reap-orphaned-blobs` task
+ * once their ownership rows are gone. Per-user storage (TTS segments, temp
+ * uploads) is keyed by
+ * userId and would be unreachable after the cascade, so the compute worker
+ * deletes it before deletion is allowed to proceed.
  */
 
 import { db } from '@openreader/database';
-import { documents, audiobooks, userJobEvents, userTtsChars } from '@openreader/database/schema';
+import { documents, userJobEvents, userTtsChars } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 import { eq } from 'drizzle-orm';
-import { getS3Config, isS3Configured } from '@/lib/server/storage/s3';
-import {
-  deleteDocumentBlob,
-  deleteDocumentPrefix,
-  tempDocumentUploadPrefix,
-} from '@/lib/server/documents/blobstore';
-import { deleteDocumentPreviewArtifacts } from '@/lib/server/documents/previews-blobstore';
+import { isS3Configured } from '@/lib/server/storage/s3';
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
-import { audiobookPrefix, deleteAudiobookPrefix } from '@/lib/server/audiobooks/blobstore';
-import { deleteTtsSegmentPrefix } from '@/lib/server/tts/segments-blobstore';
+import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
-
-type AudiobookRow = { id: string };
 
 export async function deleteUserStorageData(
   userId: string,
@@ -41,93 +31,60 @@ export async function deleteUserStorageData(
   const database = db as any;
   const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 
-  // --- Document blobs & previews ---
-  // Canonical pass: deferred to the reap-orphaned-blobs task (the rows cascade
-  // away with the user, then the reaper reclaims the now-orphaned blobs). The
-  // reaper only runs for the canonical namespace, so test-namespaced storage is
-  // deleted inline here.
+  // Canonical shared document blobs remain reaper-owned after the SQL cascade.
+  // Test-namespaced document artifacts and all per-user storage are deleted by
+  // the compute worker, never by a Next request.
   let docBlobsDeleted = 0;
-  if (s3Enabled && namespace !== null) {
-    const userDocs = (await database
-      .select({ id: documents.id })
-      .from(documents)
-      .where(eq(documents.userId, userId))) as Array<{ id: string }>;
-    for (const doc of userDocs) {
-      try {
-        await deleteDocumentBlob(doc.id, namespace);
-        await deleteDocumentPreviewArtifacts(doc.id, namespace);
-        await deleteDocumentPreviewRows(doc.id, namespace);
-        docBlobsDeleted++;
-      } catch (error) {
-        failures.push(error);
-        logDegraded(serverLogger, {
-          event: 'user.data_cleanup.document_storage_delete.failed',
-          msg: 'Failed to delete namespaced document storage',
-          step: 'delete_namespaced_document_storage',
-          context: { documentId: doc.id, userIdHash: hashForLog(userId) },
-          error,
-        });
-      }
-    }
-  }
-
-  // --- Audiobooks (per-user object storage; not reaped) ---
-  const userBooks: AudiobookRow[] = s3Enabled
-    ? await database
-        .select({ id: audiobooks.id })
-        .from(audiobooks)
-        .where(eq(audiobooks.userId, userId))
-    : [];
-
-  let booksDeleted = 0;
-  for (const book of userBooks) {
-    try {
-      await deleteAudiobookPrefix(audiobookPrefix(book.id, userId, namespace));
-      booksDeleted++;
-    } catch (error) {
-      failures.push(error);
-      logDegraded(serverLogger, {
-        event: 'user.data_cleanup.audiobook_blobs_delete.failed',
-        msg: 'Failed to delete audiobook blobs',
-        step: 'delete_audiobook_prefix',
-        context: { bookId: book.id, userIdHash: hashForLog(userId) },
-        error,
-      });
-    }
-  }
-
-  // --- Temp uploads + TTS segments (per-user object storage; not reaped) ---
-  let segmentsDeleted = 0;
+  let userStorageObjectsDeleted = 0;
   if (s3Enabled) {
-    try {
-      await deleteDocumentPrefix(tempDocumentUploadPrefix(userId, namespace));
-    } catch (error) {
-      failures.push(error);
-      logDegraded(serverLogger, {
-        event: 'user.data_cleanup.temp_document_uploads_delete.failed',
-        msg: 'Failed to delete temporary document uploads',
-        step: 'delete_temp_document_upload_prefix',
-        context: { userIdHash: hashForLog(userId) },
-        error,
-      });
-    }
+    if (!isComputeWorkerAvailable()) {
+      failures.push(new Error('Compute worker is required for user storage cleanup'));
+    } else {
+      const userDocs = namespace !== null
+        ? (await database
+          .select({ id: documents.id })
+          .from(documents)
+          .where(eq(documents.userId, userId))) as Array<{ id: string }>
+        : [];
 
-    try {
-      const cfg = getS3Config();
-      const nsSegment = namespace ? `ns/${namespace}/` : '';
-      const ttsPrefixV1 = `${cfg.prefix}/tts_segments_v1/${nsSegment}users/${encodeURIComponent(userId)}/`;
-      const ttsPrefixV2 = `${cfg.prefix}/tts_segments_v2/${nsSegment}users/${encodeURIComponent(userId)}/`;
-      segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV1);
-      segmentsDeleted += await deleteTtsSegmentPrefix(ttsPrefixV2);
-    } catch (error) {
-      failures.push(error);
-      logDegraded(serverLogger, {
-        event: 'user.data_cleanup.tts_segments_delete.failed',
-        msg: 'Failed to delete TTS segment blobs',
-        step: 'delete_tts_segment_prefixes',
-        context: { userIdHash: hashForLog(userId) },
-        error,
-      });
+      for (let index = 0; index < userDocs.length || index === 0; index += 100) {
+        const documentIds = userDocs.slice(index, index + 100).map((doc) => doc.id);
+        if (index > 0 && documentIds.length === 0) break;
+        try {
+          const result = await getComputeWorkerClient().cleanupUserStorage({
+            storageUserId: userId,
+            namespace,
+            documentIds,
+          });
+          userStorageObjectsDeleted += result.deletedObjects;
+          docBlobsDeleted += result.deletedDocumentArtifacts;
+        } catch (error) {
+          failures.push(error);
+          logDegraded(serverLogger, {
+            event: 'user.data_cleanup.worker_storage_delete.failed',
+            msg: 'Failed to delete user storage through compute worker',
+            step: 'delete_user_storage_worker',
+            context: { userIdHash: hashForLog(userId) },
+            error,
+          });
+        }
+        if (userDocs.length === 0) break;
+      }
+
+      if (namespace !== null) {
+        for (const doc of userDocs) {
+          await deleteDocumentPreviewRows(doc.id, namespace).catch((error) => {
+            failures.push(error);
+            logDegraded(serverLogger, {
+              event: 'user.data_cleanup.document_preview_rows_delete.failed',
+              msg: 'Failed to delete namespaced document preview rows',
+              step: 'delete_namespaced_document_preview_rows',
+              context: { documentId: doc.id, userIdHash: hashForLog(userId) },
+              error,
+            });
+          });
+        }
+      }
     }
   }
 
@@ -161,14 +118,12 @@ export async function deleteUserStorageData(
     }
   }
 
-  if (docBlobsDeleted > 0 || booksDeleted > 0 || segmentsDeleted > 0) {
+  if (docBlobsDeleted > 0 || userStorageObjectsDeleted > 0) {
     serverLogger.info({
       event: 'user.data_cleanup.completed',
       userIdHash: hashForLog(userId),
       docBlobsDeleted,
-      booksDeleted,
-      totalBooks: userBooks.length,
-      segmentsDeleted,
+      userStorageObjectsDeleted,
     }, 'Completed user storage cleanup');
   }
 

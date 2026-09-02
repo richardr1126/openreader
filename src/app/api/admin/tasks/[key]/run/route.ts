@@ -4,7 +4,7 @@ import { runTaskNow } from '@/lib/server/tasks/engine';
 import { TASK_REGISTRY } from '@/lib/server/tasks/registry';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function POST(
   req: NextRequest,

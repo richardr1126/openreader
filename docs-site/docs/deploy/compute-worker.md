@@ -9,6 +9,8 @@ Use this guide when OpenReader runs compute as a separate service. For the defau
 
 - Runs Whisper word alignment jobs
 - Runs PDF layout parsing jobs
+- Runs worker-owned TTS playback planning/generation
+- Serves signed progressive MP3 playback audio directly to browsers
 - Stores durable job state in NATS JetStream and NATS KV
 
 The app server submits resource-specific operations under `/v1` and listens for updates on
@@ -30,6 +32,9 @@ Required worker variables:
 
 ```env
 COMPUTE_WORKER_TOKEN=...
+COMPUTE_CREDENTIAL_BROKER_URL=https://reader.example.com/api/internal/compute/tts-credentials
+COMPUTE_CREDENTIAL_BROKER_TOKEN=...
+TTS_PLAYBACK_TOKEN_SECRET=...
 NATS_URL=nats://...
 S3_BUCKET=...
 S3_REGION=...
@@ -41,21 +46,24 @@ S3_SECRET_ACCESS_KEY=...
 `compute-worker/.env*` is only for standalone worker deployments.
 
 - Embedded/local mode: configure the root `.env` only.
-- External worker mode: set `COMPUTE_WORKER_URL` and `COMPUTE_WORKER_TOKEN` on the app, and worker runtime values on the worker service.
-- Keep shared values aligned across app and worker: `COMPUTE_WORKER_TOKEN`, `S3_*`, `COMPUTE_WHISPER_TIMEOUT_MS`, `COMPUTE_PDF_TIMEOUT_MS`, `COMPUTE_PDF_JOB_ATTEMPTS`, and `COMPUTE_OP_STALE_MS`.
+- External worker mode: set `COMPUTE_WORKER_URL`, optional `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET` on the app, and worker runtime values on the worker service.
+- Keep shared values aligned across app and worker: `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`, and `S3_*`.
+- Do not set `AUTH_SECRET`, `POSTGRES_URL`, or `SQLITE_DB_PATH` on the worker. Provider lookup and decryption remain app-owned.
 :::
 
 Common optional variables:
 
 - `NATS_CREDS` or `NATS_CREDS_FILE`
-- `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=true`, `S3_PREFIX=openreader`
+- `S3_INTERNAL_ENDPOINT`, `S3_FORCE_PATH_STYLE=true`, `S3_PREFIX=openreader`
 - `COMPUTE_WORKER_HOST=0.0.0.0`
 - `PORT=8081` for local/manual runs. Platforms like Railway usually inject `PORT`.
 - `LOG_FORMAT=json` and `COMPUTE_LOG_LEVEL=info`
+- `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS=5000`
 - `COMPUTE_PREWARM_MODELS=false` by default. Set it to `true` to pre-download ONNX models during worker startup.
 - `COMPUTE_JOB_CONCURRENCY=1`
 - `COMPUTE_WHISPER_TIMEOUT_MS=30000`
 - `COMPUTE_PDF_TIMEOUT_MS=300000`
+- `COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS=30000` (defaults to the Whisper timeout)
 - `COMPUTE_PDF_JOB_ATTEMPTS=1`
 - `COMPUTE_JOBS_STREAM_MAX_BYTES=268435456`
 - `COMPUTE_EVENTS_STREAM_MAX_BYTES=134217728`
@@ -73,24 +81,27 @@ Set these on the Next.js app server:
 
 ```env
 COMPUTE_WORKER_URL=https://worker.example.com
+# Only needed when browsers cannot reach COMPUTE_WORKER_URL directly.
+# COMPUTE_WORKER_PUBLIC_URL=https://worker-public.example.com
 COMPUTE_WORKER_TOKEN=<same-token-as-worker>
-# Optional shared overrides:
-# COMPUTE_WHISPER_TIMEOUT_MS=30000
-# COMPUTE_PDF_TIMEOUT_MS=300000
-# COMPUTE_PDF_JOB_ATTEMPTS=1
-# COMPUTE_OP_STALE_MS=1800000
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-as-worker>
+TTS_PLAYBACK_TOKEN_SECRET=<same-playback-secret-as-worker>
 ```
 
 Notes:
 
 - Model artifact overrides (`WHISPER_MODEL_BASE_URL`, `PDF_LAYOUT_MODEL_BASE_URL`) belong on the worker service, not the app server.
 - There is no app-local compute fallback once `COMPUTE_WORKER_URL` is set. If the worker is unavailable, worker-backed requests fail.
+- `COMPUTE_WORKER_URL` is for app-to-worker API calls. `COMPUTE_WORKER_PUBLIC_URL` is the browser-facing base URL used for TTS playback audio; it defaults to `COMPUTE_WORKER_URL`.
+- `COMPUTE_WORKER_TOKEN` is never sent to browsers. Browser audio uses short-lived signed URLs backed by `TTS_PLAYBACK_TOKEN_SECRET`.
+- `COMPUTE_CREDENTIAL_BROKER_TOKEN` is never sent to browsers or worker jobs. It authenticates only worker-to-app provider resolution.
 
 ## Deployment notes
 
 - App and worker must share the same object storage.
 - Embedded `weed mini` is not supported for external worker mode.
-- Protect `COMPUTE_WORKER_TOKEN` and do not expose worker routes without auth.
+- Protect `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, and `TTS_PLAYBACK_TOKEN_SECRET`.
+- The public `/v1/tts-playback/sessions/:sessionId/audio` route is intentionally browser-reachable, but it requires a signed playback token. Other worker routes remain protected by `COMPUTE_WORKER_TOKEN`.
 - The worker connects to NATS lazily and disconnects after 120 seconds of full idle time. That allows platforms like Railway to sleep the service, but the first request after a cold start will be slower.
 
 ## Health endpoints
@@ -105,6 +116,9 @@ Deploy the worker image to Railway and set worker env vars similar to:
 ```env
 COMPUTE_WORKER_HOST=0.0.0.0
 COMPUTE_WORKER_TOKEN=<shared-token>
+COMPUTE_CREDENTIAL_BROKER_URL=https://<vercel-app-domain>/api/internal/compute/tts-credentials
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<shared-broker-token>
+TTS_PLAYBACK_TOKEN_SECRET=<shared-playback-secret>
 NATS_URL=tls://connect.ngs.global:4222
 NATS_CREDS="-----BEGIN NATS USER JWT-----
 ...
@@ -114,7 +128,7 @@ S3_REGION=<region>
 S3_ACCESS_KEY_ID=<key>
 S3_SECRET_ACCESS_KEY=<secret>
 # Optional:
-# S3_ENDPOINT=https://...
+# S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
 # S3_FORCE_PATH_STYLE=true
 # S3_PREFIX=openreader
 ```
@@ -125,7 +139,11 @@ Set these on the OpenReader app server:
 
 ```env
 COMPUTE_WORKER_URL=https://<railway-worker-domain>
+# Optional when browsers need a different public URL:
+# COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>
 COMPUTE_WORKER_TOKEN=<same-token-as-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-as-worker>
+TTS_PLAYBACK_TOKEN_SECRET=<same-playback-secret-as-worker>
 ```
 
 Verify the worker after deploy:

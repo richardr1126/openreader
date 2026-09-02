@@ -10,7 +10,6 @@ export type TTSSentenceAlignment = components['schemas']['TTSSentenceAlignment']
 export type TTSSentenceWord = TTSSentenceAlignment['words'][number];
 
 export type PdfLayoutProgress = NonNullable<components['schemas']['ComputeOperation']['progress']>;
-export type ComputeOperationStatus = components['schemas']['ComputeOperation']['status'];
 export type ComputeOperationSubject = components['schemas']['ComputeOperation']['subject'];
 
 export type ComputeOperation<Result = unknown> =
@@ -22,36 +21,102 @@ export type ComputeOperationEvent<Result = unknown> = {
   snapshot: ComputeOperation<Result>;
 };
 
-export type WhisperAlignRequest =
-  paths['/v1/whisper-align/operations']['post']['requestBody']['content']['application/json'];
 export type PdfLayoutRequest =
-  paths['/v1/pdf-layout/operations']['post']['requestBody']['content']['application/json'];
-export type PdfLayoutResolveRequest =
-  paths['/v1/pdf-layout/resolve']['post']['requestBody']['content']['application/json'];
-
-export type WhisperAlignResult = {
-  alignments: TTSSentenceAlignment[];
-  timing?: components['schemas']['ComputeOperation']['timing'];
-};
+  paths['/v1/pdf-layout/jobs']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackRequest =
+  paths['/v1/tts-playback/sessions/jobs']['post']['requestBody']['content']['application/json']
+  & { generationExtent?: 'window' | 'document' };
+export type TtsPlaybackPlanRequest =
+  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent'>;
+export type TtsPlaybackSessionResolveRequest =
+  paths['/v1/tts-playback/sessions/resolve']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackSessionResolution =
+  paths['/v1/tts-playback/sessions/resolve']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackExportArtifactRequest =
+  paths['/v1/tts-playback/exports/jobs']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackExportArtifactResolution =
+  paths['/v1/tts-playback/exports/resolve']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackExportArtifactMetadata =
+  NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
+export type DocumentPreviewRequest =
+  paths['/v1/document-previews/jobs']['post']['requestBody']['content']['application/json'];
+export type DocumentPreviewResolution =
+  paths['/v1/document-previews/resolve']['post']['responses'][200]['content']['application/json'];
+export type DocumentPreviewArtifactMetadata =
+  NonNullable<DocumentPreviewResolution['artifact']>;
+export type DocumentConversionRequest =
+  paths['/v1/document-conversions/docx/jobs']['post']['requestBody']['content']['application/json'];
+export type DocumentConversionResolution =
+  paths['/v1/document-conversions/docx/resolve']['post']['responses'][200]['content']['application/json'];
+export type DocumentConversionArtifactMetadata =
+  NonNullable<DocumentConversionResolution['artifact']>;
+export type AccountExportRequest =
+  paths['/v1/account-exports/jobs']['post']['requestBody']['content']['application/json'];
+export type AccountExportResolveRequest =
+  paths['/v1/account-exports/resolve']['post']['requestBody']['content']['application/json'];
+export type AccountExportResolution =
+  paths['/v1/account-exports/resolve']['post']['responses'][200]['content']['application/json'];
+export type AccountExportArtifactMetadata =
+  NonNullable<AccountExportResolution['artifact']>;
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;
   timing?: components['schemas']['ComputeOperation']['timing'];
 };
 
+export type TtsPlaybackPlanResult = {
+  planObjectKey: string;
+  planSignature: string;
+  startOrdinal: number;
+  plannedCount: number;
+  timing?: components['schemas']['ComputeOperation']['timing'];
+};
+
+export type TtsPlaybackExportArtifactResult = {
+  artifact: TtsPlaybackExportArtifactMetadata;
+  timing?: components['schemas']['ComputeOperation']['timing'];
+};
+
+export type TtsPlaybackSessionState = {
+  schemaVersion: 1;
+  sessionId: string;
+  userId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  workerOpId?: string | null;
+  settingsHash: string;
+  settingsJson: unknown;
+  aheadWindow?: number | null;
+  backgroundExtent?: 'section' | 'document' | null;
+  generationExtent?: 'window' | 'document' | null;
+  playbackActive?: boolean;
+  generationRunId?: string | null;
+  generationSatisfiedFromOrdinal?: number | null;
+  generationSatisfiedThroughOrdinal?: number | null;
+  planning?: unknown;
+  generationStartOrdinal: number;
+  cursorOrdinal: number;
+  cursorUpdatedAt: number | null;
+  planObjectKey: string | null;
+  expiresAt: number;
+  lastError: string | null;
+  updatedAt: number;
+};
+
+export type TtsPlaybackCompletedSegment = {
+  ordinal: number;
+  segmentKey: string | null;
+  audioKey: string;
+  durationMs: number;
+  alignmentJson: string | null;
+  alignmentSource: 'proportional' | 'exact' | null;
+  updatedAt: number | null;
+};
+
 export type PdfLayoutResolution = {
   artifact: { objectKey: string } | null;
   operation: ComputeOperation<PdfLayoutResult> | null;
 };
-
-export function isComputeOperation(value: unknown): value is ComputeOperation {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
-  return typeof record.opId === 'string'
-    && !!record.subject
-    && typeof record.subject === 'object'
-    && typeof (record.subject as Record<string, unknown>).kind === 'string'
-    && typeof record.status === 'string'
-    && typeof record.queuedAt === 'number'
-    && typeof record.updatedAt === 'number';
-}

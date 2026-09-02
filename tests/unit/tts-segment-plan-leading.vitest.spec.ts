@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { planCanonicalTtsSegments } from '../../src/lib/shared/tts-segment-plan';
+import { planCanonicalTtsSegments } from '@openreader/tts/segment-plan';
 
 describe('planCanonicalTtsSegments – leading context handling', () => {
   test('clean boundary: splits block so current source keeps its first sentence', () => {

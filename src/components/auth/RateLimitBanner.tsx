@@ -45,38 +45,3 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
     </div>
   );
 }
-
-/**
- * Compact version for inline display
- */
-export function RateLimitIndicator({ className = '' }: RateLimitBannerProps) {
-  const { status, isAtLimit } = useAuthRateLimit();
-
-  if (!status) {
-    return null;
-  }
-
-  const percentage = status.limit > 0
-    ? Math.min(100, (status.currentCount / status.limit) * 100)
-    : 0;
-
-  const isWarning = percentage >= 80;
-
-  if (isAtLimit) {
-    return (
-      <span className={`text-xs font-medium text-accent  ${className}`}>
-        Limit reached
-      </span>
-    );
-  }
-
-  if (isWarning) {
-    return (
-      <span className={`text-xs text-soft ${className}`}>
-        {formatCharCount(status.remainingChars)} chars left
-      </span>
-    );
-  }
-
-  return null;
-}

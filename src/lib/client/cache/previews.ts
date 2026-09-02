@@ -1,4 +1,4 @@
-import { documentPreviewFallbackUrl, documentPreviewPresignUrl } from '@/lib/client/api/documents';
+import { documentPreviewPresignUrl } from '@/lib/client/api/documents';
 import { evictCachedBlobPrefix, getCachedBlob, previewBlobCacheKey } from '@/lib/client/cache/blob-cache';
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
@@ -24,10 +24,12 @@ export function clearInMemoryDocumentPreviewCache(): void {
 }
 
 async function fetchPreviewSource(docId: string, signal?: AbortSignal): Promise<Response> {
-  const options = { signal, cache: 'no-store' as const };
-  const direct = await fetch(documentPreviewPresignUrl(docId), options).catch(() => null);
-  if (direct?.ok) return direct;
-  return fetch(documentPreviewFallbackUrl(docId), options);
+  return fetch(documentPreviewPresignUrl(docId), { signal, cache: 'no-store' });
+}
+
+function isReadyPreviewImage(response: Response): boolean {
+  return response.status === 200
+    && response.headers.get('content-type')?.toLowerCase().startsWith('image/') === true;
 }
 
 export async function getPersistedDocumentPreviewUrl(
@@ -54,7 +56,10 @@ export async function primeDocumentPreviewCache(
       previewBlobCacheKey(docId, previewVersion),
       () => fetchPreviewSource(docId, options?.signal),
     ).catch(() => null);
-    if (!response?.ok) return null;
+    // A preview that is still generating responds with 202 JSON. Treating any
+    // 2xx response as an image creates a broken blob URL and prevents the
+    // caller from subscribing to the completion event stream.
+    if (!response || !isReadyPreviewImage(response)) return null;
     const blob = await response.blob();
     if (blob.size === 0) return null;
     const url = URL.createObjectURL(blob);

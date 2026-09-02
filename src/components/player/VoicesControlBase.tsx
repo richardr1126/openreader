@@ -5,14 +5,15 @@ import {
 } from '@headlessui/react';
 import { ChevronUpDownIcon, AudioWaveIcon, CheckIcon } from '@/components/icons/Icons';
 import { useMemo } from 'react';
-import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@/lib/shared/kokoro';
-import { keepKokoroVoicesInOneLanguage } from '@/lib/shared/language';
-import { type TtsProviderType } from '@/lib/shared/tts-provider-catalog';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@openreader/tts/kokoro';
+import { keepKokoroVoicesInOneLanguage } from '@openreader/tts/language';
+import { type TtsProviderType } from '@openreader/tts/provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { SharedListboxButton, SharedListboxOption, SharedListboxOptions, cn } from '@/components/ui';
 
 export function VoicesControlBase({
   availableVoices,
+  disabled = false,
   voice,
   onChangeVoice,
   providerType,
@@ -21,6 +22,7 @@ export function VoicesControlBase({
   variant = 'compact',
 }: {
   availableVoices: string[];
+  disabled?: boolean;
   voice: string;
   onChangeVoice: (voice: string) => void;
   providerType: TtsProviderType;
@@ -129,7 +131,16 @@ export function VoicesControlBase({
             }
           }}
         >
-          <SharedListboxButton tone={buttonTone} className={buttonClass}>
+          <SharedListboxButton
+            aria-label={`Voice: ${
+              selectedVoices.length > 1
+                ? selectedVoices.join(' + ')
+                : selectedVoices[0] || currentVoice
+            }`}
+            disabled={disabled}
+            tone={buttonTone}
+            className={buttonClass}
+          >
             {variant === 'field' ? (
               <>
                 <span className="flex items-center gap-2 truncate text-sm font-medium">
@@ -172,7 +183,12 @@ export function VoicesControlBase({
         </Listbox>
       ) : (
         <Listbox value={currentVoice} onChange={onChangeVoice}>
-          <SharedListboxButton tone={buttonTone} className={buttonClass}>
+          <SharedListboxButton
+            aria-label={`Voice: ${currentVoice}`}
+            disabled={disabled}
+            tone={buttonTone}
+            className={buttonClass}
+          >
             {variant === 'field' ? (
               <>
                 <span className="flex items-center gap-2 truncate text-sm font-medium">

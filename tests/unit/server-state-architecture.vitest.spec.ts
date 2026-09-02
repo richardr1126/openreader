@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 
@@ -23,6 +23,32 @@ function collectSourceFiles(dir: string): string[] {
     }
   }
   return files;
+}
+
+function collectNextRoutePaths(): string[] {
+  return collectSourceFiles(path.join(srcRoot, 'app/api'))
+    .filter((file) => path.basename(file) === 'route.ts')
+    .map((file) => `/api${path.dirname(path.relative(path.join(srcRoot, 'app/api'), file)) === '.'
+      ? ''
+      : `/${path.dirname(path.relative(path.join(srcRoot, 'app/api'), file)).split(path.sep).join('/')}`}`)
+    .sort();
+}
+
+function computeWorkerRouteSource(): string {
+  const routeRoot = path.join(root, 'packages/compute-worker/src/api/routes');
+  const playbackRoot = path.join(root, 'packages/compute-worker/src/api/playback');
+  return [
+    source('packages/compute-worker/src/api/routes.ts'),
+    ...collectSourceFiles(routeRoot).map((file) => readFileSync(file, 'utf8')),
+    ...collectSourceFiles(playbackRoot).map((file) => readFileSync(file, 'utf8')),
+  ]
+    .join('\n');
+}
+
+function computeWorkerJobSource(): string {
+  return collectSourceFiles(path.join(root, 'packages/compute-worker/src/jobs'))
+    .map((file) => readFileSync(file, 'utf8'))
+    .join('\n');
 }
 
 describe('server-state architecture', () => {
@@ -99,40 +125,615 @@ describe('server-state architecture', () => {
     expect(offenders).toEqual([]);
   });
 
-  test('keeps audiobook status and chapter mutations in the audiobook query hook', () => {
+  test('keeps audiobook export on worker playback state instead of legacy status rows', () => {
     const modal = source('src/components/AudiobookExportModal.tsx');
-    expect(modal).toContain('useAudiobookStatus(documentId');
-    expect(modal).not.toContain('getAudiobookStatus');
+    expect(modal).toContain('startDocumentAudioExport');
+    expect(modal).toContain('resolveDocumentAudioExport');
+    expect(modal).toContain('subscribeTtsExportGenerationEvents');
+    expect(modal).toContain('subscribeTtsExportArtifactEvents');
+    expect(modal).toContain('snapshot.completedCount');
+    expect(modal).toContain('const urlToDownload = downloadUrl;');
+    expect(modal).not.toContain('withDownloadOptions');
+    expect(modal).toContain("type ExportFormat = 'mp3' | 'm4b'");
+    expect(modal).toContain('Audiobook export format');
+    expect(modal).toContain('setAudioPlayerSpeedAndRestart');
+    expect(modal).toContain('progressCompleteRef.current');
+    expect(modal).not.toContain('useAudiobookStatus');
+    expect(modal).not.toContain('/api/audiobook');
+    expect(modal).not.toContain('getTtsPlaybackSeekLayout');
+    expect(modal).not.toContain('setInterval');
+    expect(modal).not.toContain('await fetch(urlToDownload');
+    expect(modal).not.toContain('Audio export progress disconnected');
     expect(modal).not.toContain('setChapters');
     expect(modal).not.toContain('setBookId');
   });
 
-  test('keeps parsed PDF server state and SSE cache updates in the parsed-document query hook', () => {
+  test('supplies the parsed PDF artifact through the aggregate bootstrap payload', () => {
     const pdf = source('src/app/(app)/pdf/[id]/usePdfDocument.ts');
-    const parsedDocumentHook = source('src/hooks/useParsedPdfDocument.ts');
-    expect(pdf).toContain('useParsedPdfDocument(documentId)');
+    const bootstrap = source('src/lib/server/reader/bootstrap.ts');
+    const documentsApi = source('src/lib/client/api/documents.ts');
+    expect(pdf).toContain('parsedDocument: ParsedPdfDocument');
+    expect(pdf).not.toContain('useParsedPdfDocument');
     expect(pdf).not.toContain('subscribeParsedPdfDocumentEvents');
-    expect(parsedDocumentHook).toContain('queryKeys.parsedDocument');
-    expect(parsedDocumentHook).toContain('queryClient.setQueryData<ParsedPdfQueryState>');
+    expect(bootstrap).toContain('parsedDocument: parsedPdfDocument');
+    expect(documentsApi).not.toContain('getParsedPdfDocument');
+    expect(documentsApi).not.toContain('subscribeParsedPdfDocumentEvents');
+    expect(existsSync(path.resolve(root, 'src/hooks/useParsedPdfDocument.ts'))).toBe(false);
   });
 
-  test('loads voices and claims through centralized query hooks', () => {
-    expect(source('src/hooks/audio/useVoiceManagement.ts')).toContain('queryKeys.ttsVoices');
+  test('keeps document preview completion on operation SSE instead of polling', () => {
+    const preview = source('src/components/doclist/DocumentPreview.tsx');
+    const documentsApi = source('src/lib/client/api/documents.ts');
+    const previewEventsRoute = source('src/app/api/documents/blob/preview/events/route.ts');
+    expect(preview).toContain('subscribeDocumentPreviewEvents');
+    expect(preview).not.toContain('setTimeout');
+    expect(preview).not.toContain('retryAfterMs');
+    expect(documentsApi).toContain('subscribeDocumentPreviewEvents');
+    expect(documentsApi).toContain('/api/documents/blob/preview/events');
+    expect(documentsApi).not.toContain('retryAfterMs');
+    expect(previewEventsRoute).toContain("operation.subject.kind !== 'document_preview'");
+    expect(previewEventsRoute).toContain('proxyOperationEvents');
+    const operationEventsProxy = source('src/lib/server/compute-worker/operation-events-proxy.ts');
+    expect(operationEventsProxy).toContain('openOperationEvents');
+  });
+
+  test('keeps DOCX conversion completion on authenticated operation SSE instead of polling', () => {
+    const documentsApi = source('src/lib/client/api/documents.ts');
+    const uploadEventsRoute = source('src/app/api/documents/blob/upload/events/route.ts');
+    expect(documentsApi).toContain('new EventSource(documentConversionEventsUrl(conversion))');
+    expect(documentsApi).toContain('/api/documents/blob/upload/events');
+    expect(documentsApi).not.toContain('Retry-After');
+    expect(documentsApi).not.toContain('conversionRetryDelayMs');
+    expect(uploadEventsRoute).toContain("operation.subject.kind !== 'document_conversion'");
+    expect(uploadEventsRoute).toContain('buildDocxConversionRequest');
+    expect(uploadEventsRoute).toContain('proxyOperationEvents');
+  });
+
+  test('loads TTS voice metadata and claims through centralized query hooks', () => {
+    const voiceHook = source('src/hooks/audio/useVoiceManagement.ts');
+    expect(voiceHook).toContain('queryKeys.ttsVoices');
+    expect(voiceHook).toContain('resolveTtsProviderModelPolicy');
     expect(source('src/components/auth/ClaimDataModal.tsx')).toContain('useClaimData(false)');
     expect(source('src/contexts/OnboardingFlowContext.tsx')).toContain('useClaimData(');
   });
 
-  test('uses centralized query keys for manifests, rate limits, and admin state', () => {
-    expect(source('src/components/reader/SegmentsSidebar.tsx')).toContain('queryKeys.ttsManifest');
+  test('keeps the compute worker API surface on the hard-cut route map', () => {
+    const workerRoutes = computeWorkerRouteSource();
+    const routes = Array.from(workerRoutes.matchAll(/app\.(get|post|put|delete)\('([^']+)'/g))
+      .map((match) => `${match[1].toUpperCase()} ${match[2]}`)
+      .sort();
+
+    expect(routes).toEqual([
+      'GET /health/live',
+      'GET /health/ready',
+      'GET /v1/operations/:opId',
+      'GET /v1/operations/:opId/events',
+      'GET /v1/tts-playback/exports/:artifactId',
+      'GET /v1/tts-playback/sessions/:sessionId',
+      'GET /v1/tts-playback/sessions/:sessionId/audio',
+      'GET /v1/tts-playback/sessions/:sessionId/segments',
+      'POST /v1/account-exports/expire',
+      'POST /v1/account-exports/jobs',
+      'POST /v1/account-exports/resolve',
+      'POST /v1/document-conversions/docx/jobs',
+      'POST /v1/document-conversions/docx/resolve',
+      'POST /v1/document-previews/clear',
+      'POST /v1/document-previews/jobs',
+      'POST /v1/document-previews/resolve',
+      'POST /v1/pdf-layout/clear',
+      'POST /v1/pdf-layout/jobs',
+      'POST /v1/pdf-layout/resolve',
+      'POST /v1/tts-playback/cache/clear',
+      'POST /v1/tts-playback/exports/expire',
+      'POST /v1/tts-playback/exports/jobs',
+      'POST /v1/tts-playback/exports/resolve',
+      'POST /v1/tts-playback/plans/clear',
+      'POST /v1/tts-playback/plans/jobs',
+      'POST /v1/tts-playback/sessions/jobs',
+      'POST /v1/tts-playback/sessions/resolve',
+      'POST /v1/user-storage/cleanup',
+      'PUT /v1/tts-playback/sessions/:sessionId/cursor',
+    ].sort());
+    expect(workerRoutes).not.toContain('/v1/tts-playback/cache/reset');
+    expect(workerRoutes).toContain('await playbackStorage.artifacts.incrementScopeEpoch(scope, now)');
+    expect(workerRoutes).toContain('await playbackStorage.sessions.cancelSessionsForScope(scope, now)');
+    expect(workerRoutes).toContain('readModel.invalidateSidecarsForScope(scope)');
+    expect(workerRoutes).toContain('await invalidatePlaybackOperationsForScope({');
+    expect(workerRoutes).toContain('await clearTtsPlaybackArtifacts({');
+    const compositionRoot = source('packages/compute-worker/src/api/routes.ts');
+    expect(compositionRoot).toContain('registerPlaybackAudioRoutes(context, playbackReadModel, playbackController)');
+    expect(compositionRoot).not.toContain('app.get(');
+    expect(source('packages/compute-worker/src/api/playback/operation-invalidation.ts')).toContain(
+      'ttsPlaybackSubjectFromOperationKey(state.opKey)',
+    );
+    expect(computeWorkerRouteSource()).not.toContain("state.opKey.split('|')");
+  });
+
+  test('keeps the Next API surface on the hard-cut route map', () => {
+    expect(collectNextRoutePaths()).toEqual([
+      '/api/account/delete',
+      '/api/admin/providers',
+      '/api/admin/providers/[id]',
+      '/api/admin/settings',
+      '/api/admin/tasks',
+      '/api/admin/tasks/[key]',
+      '/api/admin/tasks/[key]/run',
+      '/api/admin/tasks/tick',
+      '/api/auth/[...all]',
+      '/api/documents',
+      '/api/documents/[id]/opened',
+      '/api/documents/[id]/parsed',
+      '/api/documents/[id]/reader-bootstrap',
+      '/api/documents/[id]/reader-bootstrap/events',
+      '/api/documents/[id]/settings',
+      '/api/documents/blob/get',
+      '/api/documents/blob/get/presign',
+      '/api/documents/blob/preview',
+      '/api/documents/blob/preview/ensure',
+      '/api/documents/blob/preview/events',
+      '/api/documents/blob/preview/presign',
+      '/api/documents/blob/upload',
+      '/api/documents/blob/upload/events',
+      '/api/documents/blob/upload/finalize',
+      '/api/documents/blob/upload/presign',
+      '/api/documents/folders',
+      '/api/documents/import-url',
+      '/api/folders',
+      '/api/folders/[id]',
+      '/api/internal/compute/tts-credentials',
+      '/api/local-library',
+      '/api/local-library/content',
+      '/api/rate-limit/status',
+      '/api/tts/export/download',
+      '/api/tts/export/events',
+      '/api/tts/export/resolve',
+      '/api/tts/playback/plans/[planId]/seek-layout',
+      '/api/tts/segments/clear',
+      '/api/tts/shared-providers',
+      '/api/tts/stream/[sessionId]/cursor',
+      '/api/tts/stream/[sessionId]/events',
+      '/api/tts/stream/[sessionId]/timeline',
+      '/api/tts/stream/sessions',
+      '/api/tts/voices',
+      '/api/user/claim',
+      '/api/user/export',
+      '/api/user/export/download',
+      '/api/user/export/events',
+      '/api/user/state/changelog/version-check',
+      '/api/user/state/onboarding',
+      '/api/user/state/preferences',
+      '/api/user/state/progress',
+    ]);
+    expect(existsSync(path.join(root, 'src/app/api/documents/library/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/documents/library/content/route.ts'))).toBe(false);
+  });
+
+  test('keeps account export archive assembly worker-owned', () => {
+    const accountExportRoute = source('src/app/api/user/export/route.ts');
+    const accountExportDownloadRoute = source('src/app/api/user/export/download/route.ts');
+    const accountExportEventsRoute = source('src/app/api/user/export/events/route.ts');
+    const accountExport = source('src/components/settings/useAccountExport.ts');
+    const workerRoutes = computeWorkerRouteSource();
+    const workerHandlers = computeWorkerJobSource();
+    const computeClient = source('src/lib/server/compute-worker/client.ts');
+
+    expect(accountExportRoute).toContain('buildUserExportManifest');
+    expect(accountExportRoute).toContain('createAccountExportOperation');
+    expect(accountExportRoute).toContain('resolveAccountExport');
+    expect(accountExportRoute).toContain('/api/user/export/download');
+    expect(accountExportRoute).not.toContain('createAccountExportDownloadToken');
+    expect(accountExportDownloadRoute).toContain('sendStorageArtifact');
+    expect(accountExportDownloadRoute).toContain('resolveAccountExport');
+    const artifactDownloadHelper = source('src/lib/server/storage/artifact-download.ts');
+    expect(artifactDownloadHelper).toContain('getSignedUrl');
+    expect(artifactDownloadHelper).toContain('NextResponse.redirect');
+    expect(accountExportRoute).not.toContain("archiver('zip'");
+    expect(accountExportRoute).not.toContain('Readable.toWeb');
+    expect(accountExportEventsRoute).toContain("operation.subject.kind !== 'account_export'");
+    expect(accountExportEventsRoute).toContain('proxyOperationEvents');
+    expect(accountExport).toContain("new EventSource(`/api/user/export/events?opId=");
+    expect(accountExport).not.toContain("window.open('/api/user/export'");
+    expect(workerRoutes).toContain("/v1/account-exports/jobs");
+    expect(workerRoutes).toContain("/v1/account-exports/resolve");
+    expect(workerRoutes).not.toContain('verifyAccountExportDownloadToken');
+    expect(workerHandlers).toContain('buildAccountExportArchive');
+    expect(computeClient).toContain('createAccountExportOperation');
+  });
+
+  test('keeps legacy TTS manifest queries removed while centralizing other server state', () => {
+    // The segments sidebar (the last legacy-manifest consumer) was removed; its
+    // only surviving capability — clearing cached audio — moved to reader settings.
+    expect(existsSync(path.join(root, 'src/components/reader/SegmentsSidebar.tsx'))).toBe(false);
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('queryKeys.ttsManifest');
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('/api/tts/segments/manifest');
+    expect(source('src/components/documents/DocumentSettings.tsx')).toContain("'/api/tts/segments/clear'");
     expect(source('src/contexts/AuthRateLimitContext.tsx')).toContain('queryKeys.rateLimit');
     expect(source('src/components/admin/AdminProvidersPanel.tsx')).toContain('queryKeys.admin(sessionId');
   });
 
-  test('keys TTS audio blobs by server-owned audio identity and version', () => {
+  test('drives TTS playback through worker-owned progressive streams', () => {
     const context = source('src/contexts/TTSContext.tsx');
-    expect(context).toContain('audioKey: playbackSource.manifest.audioKey');
-    expect(context).toContain('version: playbackSource.manifest.updatedAt');
-    expect(context).not.toContain('version: playbackSource.manifest.durationMs');
+    const clientTts = source('src/lib/client/api/tts.ts');
+    const playbackHook = source('src/hooks/audio/useTtsPlayback.ts');
+    const planController = source('src/hooks/audio/useTtsPlanController.ts');
+    const playbackProjection = source('src/hooks/audio/usePlaybackProjection.ts');
+    const playbackForegroundSync = source('src/hooks/audio/usePlaybackForegroundSync.ts');
+    const playbackControl = source('src/lib/client/tts/playback-control.ts');
+    const playbackSelection = source('src/lib/client/tts/playback-selection.ts');
+    const documentNavigation = source('src/hooks/audio/useTtsDocumentNavigation.ts');
+    const epubHighlighting = source('src/hooks/epub/useEPUBHighlighting.ts');
+    const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
+    const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
+    const streamTimelineRoute = source('src/app/api/tts/stream/[sessionId]/timeline/route.ts');
+    const exportResolveRoute = source('src/app/api/tts/export/resolve/route.ts');
+    const exportDownloadRoute = source('src/app/api/tts/export/download/route.ts');
+    const exportEventsRoute = source('src/app/api/tts/export/events/route.ts');
+    const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
+    const workerRoutes = computeWorkerRouteSource();
+    const workerHandlers = computeWorkerJobSource();
+    const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
+    const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
+    const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
+    const computeGenerated = source('src/lib/server/compute-worker/generated.ts');
+    const adminFeatures = source('src/components/admin/AdminFeaturesPanel.tsx');
+    const playbackPlan = source('src/lib/shared/playback-plan.ts');
+    const playbackGrid = source('src/lib/client/tts/playback-grid.ts');
+    const playbackModel = source('src/hooks/audio/useTtsPlaybackModel.ts');
+    const ttsApi = source('src/lib/client/api/tts.ts');
+    const pdfPage = source('src/app/(app)/pdf/[id]/page.tsx');
+    expect(playbackHook).toContain('createTtsPlaybackSession');
+    expect(planController).not.toContain('createTtsPlaybackPlan');
+    expect(planController).toContain('getPlaybackPlan');
+    expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
+    expect(planController).toContain('requestedSeekLayoutPlanIdRef.current !== plan.planId');
+    expect(planController).toContain('resetBootstrapPlanAdoption');
+    expect(context).toContain('resetBootstrapPlanAdoption();');
+    expect(planController).not.toContain('attempt < 20');
+    expect(planController.match(/getTtsPlaybackSeekLayout\(/g) ?? []).toHaveLength(1);
+    expect(playbackHook).toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');
+    expect(planController).toContain('applyPlaybackPlan(plan)');
+    expect(clientTts).not.toContain("fetch('/api/tts/playback/plans'");
+    expect(clientTts).not.toContain('planOnly');
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('planOnly');
+    expect(context).toContain('useTtsPlayback');
+    expect(context).toContain('useTtsPlaybackModel');
+    expect(context).toContain('useTtsPlanController');
+    expect(context).toContain('useTtsDocumentExport');
+    expect(context).toContain('useTtsDocumentNavigation');
+    expect(context).toContain('useTtsPlaybackSettings');
+    expect(context.split('\n').length).toBeLessThan(800);
+    expect(playbackHook.split('\n').length).toBeLessThan(800);
+    expect(context).not.toContain('createTtsPlaybackPlan(');
+    expect(context).not.toContain('resolveTtsExport(');
+    expect(context).not.toContain('subscribeTtsPlaybackEvents(');
+    expect(planController).toContain('resolvePlanBackedSelectionIndex');
+    expect(playbackModel).toContain('playbackPlanToCanonicalSegments');
+    expect(playbackModel).toContain('selectedOrdinal');
+    expect(playbackHook).toContain('TtsPlaybackPhase');
+    expect(playbackHook).toContain("'planning'");
+    expect(playbackHook).toContain("'buffering'");
+    expect(playbackProjection).toContain('normalizePlaybackGrid');
+    expect(playbackProjection).toContain('projectPlaybackGridAtTime');
+    expect(playbackHook).toContain('audio.src = session.audioUrl');
+    expect(context).toContain('canStartPlayback: isPlaying &&');
+    expect(context).not.toContain("activeReaderType === 'epub' && sentence.trim()");
+    expect(context).not.toContain("activeReaderType !== 'epub' && playbackSegment?.key");
+    expect(context).toContain("activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds }");
+    expect(clientTts).toContain('skipBlockKinds?: ParsedPdfBlockKind[]');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('readOptionalSkipBlockKinds(planningRec)');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds');
+    expect(playbackSelection).toContain('isStableEpubLocator(anchor?.locator)');
+    expect(context).not.toContain('playbackSegment?.ownerLocator');
+    expect(playbackSelection).toContain('charOffset,');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('buildEpubCanonicalWindow');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('canonicalWindow');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('startLocator: canonicalWindow.segments[0]?.ownerLocator');
+    expect(source('src/app/(app)/epub/[id]/useEpubDocument.ts')).not.toContain('setText: setTTSText');
+    expect(documentNavigation).toContain('resolveEpubPlanBackedSelection');
+    expect(documentNavigation).not.toContain('clearPlaybackSegments');
+    expect(context).not.toContain('setText:');
+    expect(playbackModel).not.toContain('clearPlaybackSegments');
+    expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('skipBlank');
+    expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).toContain('setDocumentPlaybackAnchor(currDocPageNumber, Boolean(text.trim()))');
+    expect(pdfPage).toContain('void updateDocumentSettings(nextSettings)');
+    expect(pdfPage).not.toContain('invalidatePlaybackPlan');
+    expect(source('src/app/(app)/pdf/[id]/usePdfDocument.ts')).not.toContain('setTTSText(text');
+    expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).toContain('setDocumentPlaybackAnchor(1, true');
+    expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setText: setTTSText');
+    expect(source('src/app/(app)/html/[id]/useHtmlDocument.ts')).not.toContain('setTTSText(currDocText)');
+    expect(context).not.toContain('if (!sentences[currentIndex]) return');
+    expect(context).toContain('currentSentence,');
+    expect(context).not.toContain('playbackAnchor:');
+    expect(planController).toContain('acceptBootstrapPlaybackPlan');
+    expect(planController).not.toContain('resolveTtsPlaybackPlan');
+    expect(context).toContain('reacquirePlaybackPlan');
+    expect(context).not.toContain('setPlaybackPlanSource');
+    expect(context).not.toContain('setPlaybackSegments');
+    expect(context).not.toContain('setSentences');
+    expect(streamSessionRoute).toContain('audioUrl: buildWorkerAudioUrl');
+    expect(streamSessionRoute).not.toContain('downloadUrl');
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/audio/route.ts'))).toBe(false);
+    for (const composePath of [
+      'docker/examples/compose.yml',
+      'docker/examples/compose.local-slim.yml',
+    ]) {
+      const slimCompose = source(composePath);
+      expect(slimCompose, composePath).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
+      expect(slimCompose, composePath).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
+      expect(slimCompose, composePath).toContain('- "8081:8081"');
+    }
+    expect(clientTts).toContain("fetch('/api/tts/export/resolve'");
+    expect(exportResolveRoute).toContain('buildTtsPlaybackExportArtifactId');
+    expect(exportResolveRoute).toContain('createTtsPlaybackExportArtifactOperation');
+    expect(exportResolveRoute).toContain('/api/tts/export/download?artifactId=');
+    expect(exportDownloadRoute).toContain('getTtsPlaybackExportArtifact');
+    expect(exportDownloadRoute).toContain('sendStorageArtifact');
+    expect(exportEventsRoute).toContain('proxyOperationEvents');
+    expect(workerHandlers).toContain('runTtsPlaybackExportArtifact');
+    expect(workerHandlers).toContain('buildAtempoFilter');
+    expect(workerHandlers).toContain("'aac'");
+    expect(workerHandlers).toContain("'M4B '");
+    expect(workerHandlers).toContain("'+faststart'");
+    expect(workerHandlers).toContain("'-map_chapters'");
+    expect(streamSessionRoute).not.toContain('planOnly');
+    expect(streamSessionRoute).toContain('planObjectKey');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
+    expect(workerRoutes).toContain("/v1/tts-playback/sessions/:sessionId/audio");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/jobs");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/resolve");
+    expect(workerRoutes).toContain("/v1/tts-playback/exports/:artifactId");
+    expect(workerRoutes).not.toContain("/v1/tts-playback/exports/:artifactId/download");
+    expect(source('src/app/api/tts/segments/clear/route.ts')).toContain('clearTtsPlaybackScope');
+    expect(source('src/app/api/tts/segments/clear/route.ts')).not.toContain('deleteTtsSegmentPrefix');
+    expect(source('src/lib/server/user/data-cleanup.ts')).toContain('cleanupUserStorage');
+    expect(source('src/lib/server/user/data-cleanup.ts')).not.toContain('deleteTtsSegmentPrefix');
+    expect(workerRoutes).toContain("/v1/tts-playback/plans/jobs");
+    expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");
+    expect(workerRoutes).not.toContain("/v1/tts-playback/:sessionId/audio");
+    expect(workerRoutes).not.toContain("/v1/tts-playback-plans/operations");
+    expect(workerRoutes).toContain('Readable.from(streamRange())');
+    // The audio stream is seekable (range-capable + finite Content-Length) so the
+    // browser honors post-generation playbackRate, including on Safari.
+    expect(workerRoutes).toContain("reply.header('Accept-Ranges', 'bytes')");
+    expect(workerRoutes).toContain('parseRangeHeader');
+    expect(workerRoutes).toContain('verifyTtsPlaybackToken');
+    expect(workerRoutes).toContain('controller.updateCursor');
+    // The scaffolding-silence floor follows the cursor via the shared helper (so
+    // it cannot drift from the worker's generation floor → no bytes=0- hang), and
+    // a seek request pins the floor to its own race-proof start ordinal. The
+    // completed-audio check must still precede the silence branch so existing
+    // audio below the floor is served, never silenced.
+    expect(workerRoutes).toContain('generationFloorForCursor');
+    expect(workerRoutes).toContain('const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].ordinal : 0');
+    expect(workerRoutes).toContain('rangeStartOrdinal > 0 ? rangeStartOrdinal : session.cursorOrdinal');
+    expect(workerRoutes).toContain('if (ordinal < silenceFloor)');
+    expect(workerRoutes).not.toContain('if (ordinal < session.generationStartOrdinal)');
+    expect(workerRoutes.indexOf("if (segmentState.status === 'completed')")).toBeLessThan(
+      workerRoutes.indexOf('if (ordinal < silenceFloor)'),
+    );
+    expect(streamSessionRoute).not.toContain('parsed.startOrdinal');
+    expect(streamSessionRoute).not.toContain('generationCursorOrdinal');
+    expect(streamSessionRoute).not.toContain('startOrdinal: 0,');
+    expect(streamSessionRoute).not.toContain('generationStartOrdinal: 0');
+    expect(streamSessionRoute).not.toContain('cursorOrdinal: 0');
+    expect(streamSessionRoute).toContain('expiresAt,');
+    expect(workerSchemas).not.toContain('startOrdinal: z.number().int().nonnegative().default(0)');
+    expect(workerContracts).not.toContain('startOrdinal: number;\n  planObjectKey?: string;');
+    expect(workerContracts).not.toContain('startOrdinal: number;\n  planning: TtsPlaybackJobRequest');
+    expect(workerKeys).not.toContain('String(input.startOrdinal)');
+    expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planObjectKey?: string;');
+    expect(computeGenerated).not.toContain('startOrdinal: number;\n                        planning:');
+    expect(workerRoutes).toContain('const startOrdinal = Math.max(0, Math.floor(Number(requestBody.planning.selectedOrdinal)))');
+    expect(workerRoutes).toContain('generationStartOrdinal: startOrdinal');
+    expect(workerRoutes).toContain('cursorOrdinal: startOrdinal');
+    expect(workerHandlers).toContain('const isContinuationRun = Boolean(parsed.generationRunId)');
+    expect(workerHandlers).toContain('cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal');
+    // Generation centers on the cursor via the same shared floor helper as the
+    // stream's silence boundary: a fresh run uses the resolved start, a
+    // continuation follows the (possibly seeked-backward) cursor — no clamp to
+    // the original start.
+    expect(workerHandlers).toMatch(/generationFloorForCursor\(\s*isContinuationRun \? sessionCursorOrdinal : startOrdinal\s*\)/);
+    expect(workerHandlers).toContain('segment.ordinal >= generationFloor');
+    expect(workerHandlers).not.toContain('segment.ordinal >= startOrdinal');
+    // A run abandons ordinals that fell below the live floor (forward seek) so a
+    // continuation re-anchors at the cursor instead of grinding through the gap.
+    expect(workerHandlers).toContain('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))');
+    expect(workerHandlers).toContain('cursor.playbackActive === false');
+    expect(workerHandlers).toContain('cursor.generationRunId !== generationRunId');
+    expect(workerRoutes).toContain('session.playbackActive === false');
+    expect(workerRoutes).toContain('session.generationSatisfiedThroughOrdinal');
+    // Only the requested range start may re-anchor generation. Ordinary audio
+    // download/prefetch must not impersonate audible playhead progress.
+    expect(workerRoutes).toContain('controller.updateCursor(sessionId, rangeStartOrdinal, { ensureGeneration: true })');
+    expect(workerRoutes).not.toContain('controller.updateCursor(sessionId, ordinal');
+    expect(workerHandlers).toMatch(/status: 'running',\s*planObjectKey,\s*generationStartOrdinal/);
+    expect(workerHandlers).not.toContain('status: \'running\',\n        lastError: null');
+    expect(workerHandlers).not.toMatch(/planObjectKey,\s*startOrdinal,\s*generationStartOrdinal/);
+    expect(workerRoutes).toContain('resolvePlaybackStreamStartOrdinal');
+    expect(workerRoutes).toContain('session.generationStartOrdinal');
+    expect(workerRoutes).toContain('query.fromOrdinal');
+    expect(streamTimelineRoute).toContain('startOrdinal: 0');
+    expect(seekLayoutRoute).toContain('const startOrdinal = 0;');
+    expect(workerHandlers).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("typeof rec.nativeSpeed !== 'number'");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("readOptionalInt(startRec, 'page', 1)");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain("const planExtent = 'document'");
+    expect(source('src/lib/server/tts/playback-request.ts')).toContain('selectedOrdinal: parsed.startIntent.selectedOrdinal');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startPage:');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("return 'EPUB playback start requires stable spine coordinates'");
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("scope.readerType === 'epub' ? { startSpineIndex: parsed.startLocation.spineIndex }");
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("startSpineIndex: parsed.startLocation.spineIndex ?? 0");
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startSegmentKey');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startText');
+    expect(workerHandlers).not.toContain("throw new Error('EPUB playback start requires stable spine coordinates')");
+    expect(workerHandlers).not.toContain('if (planning.startText)');
+    expect(epubHighlighting).toContain('resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)');
+    expect(epubHighlighting).not.toContain('segment.startAnchor.sourceKey !== resolved.map.sourceKey');
+    // Single forward-generation job throttled to a client cursor; segment
+    // discovery is SSE-driven (no polling), and the disconnect-continuation
+    // extent comes from the admin ttsPlaybackBackgroundExtent setting.
+    expect(streamSessionRoute).toContain('TTS_PLAYBACK_AHEAD_WINDOW');
+    expect(streamSessionRoute).toContain('backgroundExtent');
+    expect(playbackForegroundSync).toContain('subscribeTtsPlaybackEvents');
+    expect(playbackHook).toContain('postTtsPlaybackCursor');
+    // The heartbeat cursor is the playhead's projected ordinal (the same value
+    // that drives the highlight), held in playbackCursorOrdinalRef. It must NOT
+    // be re-derived from derived UI indexes. `null` => no faithful playhead yet → skip.
+    expect(playbackForegroundSync).toContain('const cursorOrdinal = playbackCursorOrdinalRef.current');
+    expect(playbackForegroundSync).toContain('if (cursorOrdinal == null) return');
+    expect(playbackForegroundSync).toContain('const cursor = Math.max(0, cursorOrdinal)');
+    expect(context).not.toContain('const currentSegment = playbackSegmentsRef.current[currentIndexRef.current]');
+    expect(playbackProjection).toContain('playbackCursorOrdinalRef.current = targetOrdinal');
+    expect(playbackSelection).toContain('function pdfLocatorPage(locator: TTSSegmentLocator | null | undefined)');
+    expect(playbackSelection).toContain('return isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;');
+    expect(playbackSelection).toContain('function pdfAnchorPage(location: TTSLocation | undefined)');
+    expect(playbackSelection).toContain("return typeof location === 'number' && Number.isFinite(location)");
+    expect(playbackSelection).toContain('pdfLocatorPage(segment.ownerLocator) === targetPage');
+    expect(playbackSelection).toContain('const page = pdfAnchorPage(location);');
+    expect(playbackSelection).toContain('const page = pdfAnchorPage(anchor?.location) ?? pdfAnchorPage(currentPdfPage);');
+    expect(playbackSelection).not.toContain('Math.max(1, Math.floor(Number(location) || 1))');
+    expect(playbackSelection).not.toContain('Number(anchor?.location');
+    expect(context).toContain('const page = pdfLocatorPage(locator);');
+    expect(documentNavigation).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html') {\n        playbackSyncNavigationRef.current = false;");
+    // Cursor-follow swallow is independent of play state (paused skip follows the
+    // page exactly like playback), so the consume sites no longer gate on
+    // playbackActiveRef.
+    expect(documentNavigation).toContain('if (playbackSyncNavigationRef.current) {\n      playbackSyncNavigationRef.current = false;\n      setIsProcessing(false);\n      return;\n    }');
+    expect(documentNavigation).not.toContain('playbackSyncNavigationRef.current && playbackActiveRef.current');
+    expect(playbackProjection).toContain('const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;');
+    expect(playbackProjection).not.toContain('const normalizePdfPage = (page: unknown): number | null =>');
+    expect(playbackProjection).not.toContain("normalizePdfPage((locator as { page?: unknown }).page)");
+    expect(playbackPlan).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
+    expect(playbackGrid).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
+    expect(ttsApi).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
+    expect(ttsApi).toContain('locator: TTSSegmentLocator | null');
+    expect(ttsApi).not.toContain('locator: unknown');
+    const abortAudioBody = playbackHook.slice(
+      playbackHook.indexOf('const abortAudio = useCallback'),
+      playbackHook.indexOf('const pauseActivePlayback = useCallback'),
+    );
+    expect(abortAudioBody).not.toContain('playbackPlanRef.current = null');
+    expect(abortAudioBody).not.toContain('setPlaybackSeekLayout(null)');
+    expect(documentNavigation).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html')");
+    expect(documentNavigation).toContain('resolveFirstPlanIndexForDocumentAnchor(');
+    expect(playbackHook).toContain('seekPlaybackTo');
+    expect(playbackHook).toContain('setAudioDocumentTime(audio, targetSec');
+    expect(playbackProjection).toContain('const targetOrdinal = projection.segment.ordinal;');
+    expect(playbackProjection).toContain('setSelectedOrdinal(targetOrdinal)');
+    expect(playbackProjection).toContain('shouldSyncPlaybackLocator(previous?.locatorKey, locatorKey)');
+    expect(playbackProjection).toContain('if (locator && shouldSyncLocator) syncPlaybackLocator?.(locator)');
+    expect(playbackProjection).not.toContain('ordinalIndexCacheRef');
+    expect(playbackProjection).not.toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
+    expect(playbackProjection).not.toContain('segment.key === segmentKey');
+    expect(adminFeatures).toContain('ttsPlaybackBackgroundExtent');
+    expect(adminFeatures).toContain('PLAYBACK_BACKGROUND_EXTENT_OPTIONS');
+    expect(context).not.toContain('restartPlaybackSessionFromCurrentPosition');
+    expect(playbackModel).toContain('const setSelectedOrdinal = useCallback((ordinal: number | null) =>');
+    expect(playbackModel).not.toContain('setPlaybackIndex');
+    expect(playbackModel).not.toContain('currentIndexRef');
+    expect(context).not.toContain('setPlaybackIndex');
+    expect(context).not.toContain('stopAndPlayFromOrdinal');
+    expect(context).not.toContain('playFromOrdinal');
+    expect(context).not.toContain('stopAndPlayFromIndex');
+    expect(context).not.toContain('playFromSegment');
+    expect(context).toContain('currentSentenceOrdinal');
+    expect(playbackHook).toContain('waitForPlaybackStartBuffer({');
+    expect(playbackControl).toContain("layout.status === 'running' || layout.status === 'succeeded'");
+    expect(playbackHook).toContain('initialSeekLayout.generationStartOrdinal');
+    expect(playbackHook).toContain('playbackStreamBaseSecRef.current = initialStartSec');
+    expect(playbackProjection).toContain('mediaTimeToDocumentTime');
+    expect(playbackHook).not.toContain('waitForAudioSeekReady');
+    expect(context).not.toContain('return last');
+    expect(context).not.toContain('?? initialSeekLayout.segments[0]');
+    expect(source('src/components/player/TTSPlayer.tsx')).toContain('scrubberTrackBackground');
+    expect(source('src/components/player/TTSPlayer.tsx')).toContain('segment.generated ? ready : estimated');
+    expect(context).toContain('playbackSyncNavigationRef');
+    expect(context).toContain('syncPlaybackLocator');
+    expect(context).toContain("handler(locator, 'playback-follow')");
+    expect(documentNavigation).toContain('if (!preservePlaybackCursor) {');
+    expect(documentNavigation).toContain('setSelectedOrdinal(resolution.ordinal)');
+    expect(documentNavigation).toContain('syncActivePlaybackToOrdinal(resolution.ordinal)');
+    const epubViewer = source('src/components/views/EPUBViewer.tsx');
+    expect(epubViewer).toContain('refreshRenderedPlacement({ preservePlaybackCursor: true })');
+    expect(epubViewer).not.toContain('pause();\n      void refreshRenderedPlacement');
+    expect(planController).toContain('setSelectedOrdinal(null)');
+    expect(context).not.toContain('startOrdinal: startSegment.ordinal');
+    expect(source('src/lib/client/api/tts.ts')).not.toContain('startOrdinal?: number');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startOrdinal?: number');
+    expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("readOptionalInt(rec, 'startOrdinal'");
+    expect(ttsApi).toContain("throw new Error('TTS playback seek layout response was missing required numeric fields')");
+    expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
+    expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
+    expect(seekLayoutRoute).toContain('buildPlaybackGrid');
+    expect(seekLayoutRoute).toContain('planObjectKey = session.planObjectKey');
+    expect(seekLayoutRoute.indexOf('resolveTtsPlaybackSession(request, sessionId)'))
+      .toBeLessThan(seekLayoutRoute.indexOf('resolveTtsPlaybackPlanOperation(planId)'));
+    expect(seekLayoutRoute).toContain('listCompletedTtsPlaybackSegments(session)');
+    expect(seekLayoutRoute).not.toContain('minOrdinal');
+    expect(streamTimelineRoute).toContain('buildPlaybackGrid');
+    expect(streamTimelineRoute).toContain('listCompletedTtsPlaybackSegments(session)');
+    expect(streamTimelineRoute).toContain("throw new Error('TTS playback timeline requires a canonical plan artifact')");
+    expect(streamTimelineRoute).toContain('segments: layout.segments');
+    expect(streamTimelineRoute).toContain('completedSegments');
+    expect(seekLayoutRoute).toContain('segments: layout.segments');
+    expect(streamTimelineRoute).not.toContain('let cursorMs');
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/media.m3u8/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/lib/client/tts/hls-audio-controller.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/extend/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/tts/playback/plans/[planId]/events/route.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/plan/route.ts'))).toBe(false);
+    expect(streamSessions).toContain('options?.minOrdinal === undefined');
+    expect(streamSessions).toContain('Math.floor(options.minOrdinal)');
+    expect(streamSessions).toContain('options?.limit === undefined');
+    expect(streamSessions).toContain('Math.floor(options.limit), 10000');
+    expect(streamSessions).not.toContain('Math.max(session.startOrdinal');
+    expect(streamSessions).not.toContain('readStreamPlanSegments(session)');
+    expect(streamSessions).not.toContain('locatorIdentityKey(plan.locator)');
+    expect(streamSessions).toContain('getComputeWorkerClient().listTtsPlaybackSegments');
+    expect(streamSessions).toContain('return result.segments.map((segment) => ({');
+    expect(context).not.toContain('plannedSegmentsByLocationRef');
+    expect(context).not.toContain('pendingNextLocationRef');
+    expect(existsSync(path.join(root, 'src/lib/client/cache/audio.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/lib/client/tts/audio-warm-cache.ts'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/lib/client/pdf-tts-planning.ts'))).toBe(false);
+  });
+
+  test('keeps playback generation as idempotent jobs over a shared segment cache', () => {
+    const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
+    const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
+    const workerSchemas = source('packages/compute-worker/src/api/schemas.ts');
+    const workerHandlers = computeWorkerJobSource();
+    const workerStateMachine = source('packages/compute-worker/src/operations/state-machine.ts');
+    const playbackScope = source('packages/tts/src/playback-scope.ts');
+    const playbackStorage = source('packages/compute-worker/src/playback/storage.ts');
+    const context = source('src/contexts/TTSContext.tsx');
+    const documentExport = source('src/hooks/audio/useTtsDocumentExport.ts');
+
+    expect(streamSessionRoute).toContain('buildTtsPlaybackCanonicalSessionId');
+    expect(streamSessionRoute).toContain("purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live'");
+    expect(streamSessionRoute).toContain("return NextResponse.json({ error: 'TTS playback session requires a canonical planObjectKey' }");
+    expect(streamSessionRoute).not.toContain('randomUUID()');
+    expect(documentExport).toContain('startIntent: { selectedOrdinal: 0 }');
+    expect(context).not.toContain('setSelectedOrdinal(selectedExists ? selected : 0)');
+
+    expect(playbackScope).toContain("export type TtsPlaybackSessionPurpose = 'live' | 'export-document'");
+    expect(playbackScope).toContain('return `tts-${input.purpose}-${scopeHash}`');
+    expect(workerKeys).toContain("'tts_playback',\n    'v1',");
+    expect(workerKeys).toContain('scopeHash');
+    expect(workerKeys).toContain("const intent = input.generationExtent === 'document'");
+    expect(workerKeys).not.toContain("'v2'");
+    expect(workerSchemas).toContain('planObjectKey: z.string().trim().min(1).max(2048),');
+
+    expect(playbackStorage).toContain('leaseOwnerId?: string | null;');
+    expect(playbackStorage).toContain('leaseUpdatedAt?: number | null;');
+    expect(workerHandlers).toContain("persistSegmentMetadata(segment, 'generating'");
+    expect(workerHandlers).toContain('isFreshForeignLease');
+    expect(workerHandlers).toContain('leaseStaleMs');
+    expect(workerHandlers).toMatch(/forceDocumentExtent\s*\? plannedSegments/);
+    expect(workerHandlers.indexOf('if (forceDocumentExtent)')).toBeLessThan(
+      workerHandlers.indexOf('if (planOrdinal < generationFloorForCursor(cursor.cursorOrdinal))'),
+    );
+    expect(workerStateMachine).toContain('WORKER_OPERATION_KIND_POLICY[input.requestKind].reusesSucceeded');
   });
 
   test('keeps Cache Storage best-effort and admits only successful full responses', () => {

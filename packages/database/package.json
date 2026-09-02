@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./migrate": "./src/migrate.mjs",
+    "./sqlite-path": "./src/sqlite-path.js",
     "./schema": "./src/schema.ts",
     "./schema-postgres": "./src/schema_postgres.ts",
     "./schema-sqlite": "./src/schema_sqlite.ts",
@@ -25,9 +26,9 @@
     "migrate": "node bin/migrate.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.21.0"
+    "pg": "^8.23.0"
   }
 }

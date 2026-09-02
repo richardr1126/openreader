@@ -11,6 +11,10 @@ export const CONSENT_CHANGED_EVENT = 'openreader:consentChanged';
 
 export type ConsentState = 'undecided' | 'accepted' | 'declined';
 
+export function isAnalyticsAllowed(consent: ConsentState): boolean {
+  return consent === 'accepted';
+}
+
 export function getConsentState(): ConsentState {
   if (typeof window === 'undefined') return 'undecided';
 
@@ -31,13 +35,6 @@ export function setConsentState(state: 'accepted' | 'declined') {
   const effectiveState = window.navigator?.globalPrivacyControl ? 'declined' : state;
   localStorage.setItem(CONSENT_KEY, effectiveState);
   window.dispatchEvent(new Event(CONSENT_CHANGED_EVENT));
-
-  // Apply the choice immediately
-  if (effectiveState === 'declined') {
-    disableAnalytics();
-  } else {
-    enableAnalytics();
-  }
 }
 
 declare global {

@@ -35,9 +35,13 @@ export default defineConfig({
         },
       },
       {
+        resolve: {
+          alias,
+        },
         test: {
           name: 'compute-worker',
           environment: 'node',
+          alias,
           include: ['packages/compute-worker/tests/{unit,api,compute}/**/*.test.ts'],
           setupFiles: ['packages/compute-worker/tests/setup-env.ts'],
         },

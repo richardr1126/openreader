@@ -6,8 +6,8 @@ import {
   extractReplicateAudioUrl,
   generateTTSBuffer,
   resolveReplicateLanguageValue,
-} from '../../src/lib/server/tts/generate';
-import { REPLICATE_KOKORO_82M_VERSIONED_MODEL } from '../../src/lib/shared/tts-provider-catalog';
+} from '@openreader/tts/generate';
+import { REPLICATE_KOKORO_82M_VERSIONED_MODEL } from '@openreader/tts/provider-catalog';
 
 describe('replicate output URL extraction', () => {
   test('returns direct URL string output', () => {
@@ -98,7 +98,6 @@ describe('Replicate language schema values', () => {
       language: 'en',
       provider: 'replicate',
       apiKey: 'r8_token',
-      testNamespace: null,
     })).resolves.toEqual({
       text: 'Hello world',
       voice: 'af_sarah',
@@ -114,7 +113,6 @@ describe('Replicate language schema values', () => {
       language: 'en',
       provider: 'replicate',
       apiKey: 'r8_token',
-      testNamespace: null,
     })).resolves.toEqual({
       text: 'Hello world',
       voice: 'bf_emma',
@@ -129,7 +127,6 @@ describe('Replicate language schema values', () => {
       model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
       provider: 'replicate',
       apiKey: 'r8_token',
-      testNamespace: null,
     })).resolves.toEqual({
       text: 'Hello world',
       voice: 'af_sarah',

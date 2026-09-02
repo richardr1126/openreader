@@ -3,16 +3,15 @@ import type { NextRequest } from 'next/server';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
 import type { ReaderType } from '@/types/user-state';
 
 export type ResolvedSegmentDocumentScope = {
-  testNamespace: string | null;
   storageUserId: string;
   userId: string;
   isAnonymousUser: boolean;
   documentVersion: number;
   readerType: ReaderType;
+  documentName: string;
 };
 
 function toReaderType(documentType: string): ReaderType {
@@ -29,7 +28,6 @@ export async function resolveSegmentDocumentScope(
   if (ctxOrRes instanceof Response) return ctxOrRes;
   if (!ctxOrRes.userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const testNamespace = getOpenReaderTestNamespace(request.headers);
   const storageUserId = ctxOrRes.userId;
   const allowedUserIds = [storageUserId];
 
@@ -38,12 +36,14 @@ export async function resolveSegmentDocumentScope(
       userId: documents.userId,
       lastModified: documents.lastModified,
       type: documents.type,
+      name: documents.name,
     })
     .from(documents)
     .where(and(eq(documents.id, documentId), inArray(documents.userId, allowedUserIds)))) as Array<{
       userId: string;
       lastModified: number;
       type: string;
+      name: string;
     }>;
 
   const doc = rows.find((row) => row.userId === storageUserId) ?? rows[0];
@@ -52,11 +52,11 @@ export async function resolveSegmentDocumentScope(
   }
 
   return {
-    testNamespace,
     storageUserId: doc.userId,
     userId: ctxOrRes.userId,
     isAnonymousUser: Boolean(ctxOrRes.user?.isAnonymous),
     documentVersion: Number(doc.lastModified),
     readerType: toReaderType(doc.type),
+    documentName: doc.name,
   };
 }

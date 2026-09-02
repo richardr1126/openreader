@@ -1,17 +1,16 @@
 export const queryKeys = {
   documents: (sessionId: string) => ['documents', sessionId] as const,
-  document: (sessionId: string, documentId: string) => ['documents', sessionId, 'detail', documentId] as const,
+  readerBootstraps: () => ['reader-bootstrap'] as const,
+  readerBootstrap: (sessionId: string, documentId: string) => ['reader-bootstrap', sessionId, documentId] as const,
+  readerDocumentSource: (sessionId: string, documentId: string, contentVersion: string) => (
+    ['reader-document-source', sessionId, documentId, contentVersion] as const
+  ),
   libraryDocuments: (sessionId: string) => ['documents', sessionId, 'library'] as const,
   preferences: (sessionId: string) => ['preferences', sessionId] as const,
-  progress: (sessionId: string, documentId: string) => ['progress', sessionId, documentId] as const,
-  documentSettings: (sessionId: string, documentId: string) => ['document-settings', sessionId, documentId] as const,
   onboarding: (sessionId: string) => ['onboarding', sessionId] as const,
   folders: (sessionId: string) => ['folders', sessionId] as const,
-  audiobook: (sessionId: string, bookId: string) => ['audiobook', sessionId, bookId] as const,
   sharedProviders: (sessionId: string) => ['tts-shared-providers', sessionId] as const,
   ttsVoices: (sessionId: string, providerRef: string, model: string) => ['tts-voices', sessionId, providerRef, model] as const,
-  ttsManifest: (sessionId: string, documentId: string) => ['tts-manifest', sessionId, documentId] as const,
-  parsedDocument: (sessionId: string, documentId: string) => ['parsed-document', sessionId, documentId] as const,
   claimCounts: (sessionId: string) => ['claim-counts', sessionId] as const,
   rateLimit: (sessionId: string) => ['rate-limit', sessionId] as const,
   admin: (sessionId: string, scope: string) => ['admin', sessionId, scope] as const,

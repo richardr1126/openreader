@@ -9,7 +9,9 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
   skipToLocation: (location: string | number, shouldPause?: boolean) => void;
 }) => {
   const [inputValue, setInputValue] = useState('');
+  const [popoverKey, setPopoverKey] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setInputValue(currentPage.toString());
@@ -21,23 +23,30 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
     setInputValue(value);
   };
 
-  const handleInputConfirm = () => {
+  const handleInputConfirm = (close?: () => void) => {
     if (inputValue === '') return; // Don't do anything if input is empty
     let page = parseInt(inputValue, 10);
     if (isNaN(page)) return;
     const maxPage = numPages || 1;
     if (page < 1) page = 1;
     if (page > maxPage) page = maxPage;
+    close?.();
     if (page !== currentPage) {
       skipToLocation(page, true);
     }
     setInputValue(''); // Clear input after confirming
+    if (close) {
+      setPopoverKey((key) => key + 1);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
   };
 
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    close: () => void,
+  ) => {
     if (e.key === 'Enter') {
-      handleInputConfirm();
-      inputRef.current?.blur();
+      handleInputConfirm(close);
     }
   };
 
@@ -65,32 +74,36 @@ export const Navigator = ({ currentPage, numPages, skipToLocation }: {
       </IconButton>
 
       {/* Page number popup */}
-      <PopoverRoot className="relative mb-1">
-        <PopoverTrigger className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs" onClick={handlePopoverOpen}>
-          <p className="text-xs whitespace-nowrap">
-            {currentPage} / {numPages || 1}
-          </p>
-        </PopoverTrigger>
-        <PopoverSurface anchor="top">
-          <div className="flex flex-col space-y-2">
-            <div className="text-xs font-medium text-foreground">Go to page</div>
-            <Input
-              ref={inputRef}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              controlSize="sm"
-              className="w-20 appearance-none border-none text-center text-accent"
-              value={inputValue}
-              onChange={handleInputChange}
-              onBlur={handleInputConfirm}
-              onKeyDown={handleInputKeyDown}
-              placeholder={currentPage.toString()}
-              aria-label="Page number"
-            />
-            <div className="text-xs text-soft text-center">of {numPages || 1}</div>
-          </div>
-        </PopoverSurface>
+      <PopoverRoot key={popoverKey} className="relative mb-1">
+        {({ close }) => (
+          <>
+            <PopoverTrigger ref={triggerRef} className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs" onClick={handlePopoverOpen}>
+              <p className="text-xs whitespace-nowrap">
+                {currentPage} / {numPages || 1}
+              </p>
+            </PopoverTrigger>
+            <PopoverSurface anchor="top">
+              <div className="flex flex-col space-y-2">
+                <div className="text-xs font-medium text-foreground">Go to page</div>
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  controlSize="sm"
+                  className="w-20 appearance-none border-none text-center text-accent"
+                  value={inputValue}
+                  onChange={handleInputChange}
+                  onBlur={() => handleInputConfirm()}
+                  onKeyDown={(event) => handleInputKeyDown(event, close)}
+                  placeholder={currentPage.toString()}
+                  aria-label="Page number"
+                />
+                <div className="text-xs text-soft text-center">of {numPages || 1}</div>
+              </div>
+            </PopoverSurface>
+          </>
+        )}
       </PopoverRoot>
 
       {/* Page forward */}

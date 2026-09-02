@@ -4,7 +4,7 @@ import {
   locatorGroupKey,
   locatorIdentityKey,
   normalizeEpubLocationToken,
-} from '../../src/lib/shared/tts-locator';
+} from '@openreader/tts/locator';
 import {
   isHtmlLocator,
   isPdfLocator,

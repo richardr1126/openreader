@@ -1,126 +1,51 @@
-import { z } from 'zod';
-import {
-  runPdfLayoutFromPdfBuffer,
-  runWhisperAlignmentFromAudioBuffer,
-} from '../inference/runtime';
-import { withIdleTimeoutAndHardCap, withTimeout } from '../infrastructure/config';
 import type {
+  AccountExportJobRequest,
+  AccountExportJobResult,
+  AccountExportProgress,
+  DocumentConversionJobRequest,
+  DocumentConversionJobResult,
+  DocumentConversionProgress,
+  DocumentPreviewJobRequest,
+  DocumentPreviewJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
   PdfLayoutProgress,
-  WhisperAlignJobRequest,
-  WhisperAlignJobResult,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResult,
+  TtsPlaybackExportProgress,
+  TtsPlaybackJobRequest,
+  TtsPlaybackJobResult,
+  TtsPlaybackPlanJobRequest,
+  TtsPlaybackPlanJobResult,
+  TtsPlaybackProgress,
 } from '../operations/contracts';
-import type { ArtifactStorage } from '../infrastructure/storage';
-import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
-import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
-
-const whisperRequestSchema = z.object({
-  text: z.string().trim().min(1),
-  lang: z.string().trim().min(1).max(16).optional(),
-  cacheKey: z.string().trim().min(1).max(256).optional(),
-  audioObjectKey: z.string().trim().min(1).max(2048),
-});
-
-const pdfRequestSchema = z.object({
-  documentId: z.string().trim().min(1),
-  namespace: z.string().trim().min(1).max(128).nullable(),
-  documentObjectKey: z.string().trim().min(1).max(2048),
-});
+import { createAccountExportHandler } from './account-export';
+import type { JobHandlerContext } from './context';
+import { createDocumentConversionHandler } from './document-conversion';
+import { createDocumentPreviewHandler } from './document-preview';
+import { createPdfLayoutHandler } from './pdf-layout';
+import { createTtsPlaybackExportHandler } from './playback/export-job';
+import { createTtsPlaybackHandler } from './playback/playback-job';
+import { createTtsPlaybackPlanHandler } from './playback/plan-job';
 
 export interface JobHandlers {
-  runWhisper(payload: WhisperAlignJobRequest, queueWaitMs: number): Promise<WhisperAlignJobResult>;
-  runPdfLayout(
-    payload: PdfLayoutJobRequest,
-    queueWaitMs: number,
-    hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> },
-  ): Promise<PdfLayoutJobResult>;
+  runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> }): Promise<PdfLayoutJobResult>;
+  runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> }): Promise<TtsPlaybackJobResult>;
+  runTtsPlaybackPlan(payload: TtsPlaybackPlanJobRequest, queueWaitMs: number): Promise<TtsPlaybackPlanJobResult>;
+  runTtsPlaybackExportArtifact(payload: TtsPlaybackExportArtifactRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackExportProgress) => Promise<void> }): Promise<TtsPlaybackExportArtifactResult>;
+  runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number): Promise<DocumentPreviewJobResult>;
+  runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: DocumentConversionProgress) => Promise<void> }): Promise<DocumentConversionJobResult>;
+  runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: AccountExportProgress) => Promise<void> }): Promise<AccountExportJobResult>;
 }
 
-export function createJobHandlers(input: {
-  storage: ArtifactStorage;
-  whisperTimeoutMs: number;
-  pdfTimeoutMs: number;
-  pdfHardCapMs: number;
-}): JobHandlers {
+export function createJobHandlers(input: JobHandlerContext): JobHandlers {
   return {
-    async runWhisper(payload, queueWaitMs) {
-      const parsed = whisperRequestSchema.parse(payload);
-      const s3FetchStartedAt = Date.now();
-      const audioBuffer = await withTimeout(
-        input.storage.readObject(parsed.audioObjectKey),
-        input.whisperTimeoutMs,
-        'whisper s3 fetch',
-      );
-      const s3FetchMs = Date.now() - s3FetchStartedAt;
-      const computeStartedAt = Date.now();
-      const result = await withTimeout(
-        runWhisperAlignmentFromAudioBuffer({
-          audioBuffer,
-          text: parsed.text,
-          cacheKey: parsed.cacheKey,
-          lang: parsed.lang,
-        }),
-        input.whisperTimeoutMs,
-        'whisper alignment job',
-      );
-      return {
-        ...result,
-        timing: { queueWaitMs, s3FetchMs, computeMs: Date.now() - computeStartedAt },
-      };
-    },
-
-    async runPdfLayout(payload, queueWaitMs, hooks) {
-      const parsed = pdfRequestSchema.parse(payload);
-      const s3FetchStartedAt = Date.now();
-      const pdfBytes = await withTimeout(
-        input.storage.readObject(parsed.documentObjectKey),
-        Math.max(input.pdfTimeoutMs, 1_000),
-        'pdf s3 fetch',
-      );
-      const s3FetchMs = Date.now() - s3FetchStartedAt;
-      let lastTotalPages = 0;
-      let lastPagesParsed = 0;
-      const computeStartedAt = Date.now();
-      const result = await withIdleTimeoutAndHardCap({
-        idleTimeoutMs: Math.max(input.pdfTimeoutMs, 1_000),
-        hardCapMs: input.pdfHardCapMs,
-        label: 'pdf layout job',
-        run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
-          documentId: parsed.documentId,
-          pdfBytes,
-          onPageStarted: async ({ pageNumber, totalPages }) => {
-            touchProgress();
-            lastTotalPages = totalPages;
-            await hooks?.onProgress?.(buildInferProgressForPageStart({ pageNumber, totalPages }));
-          },
-          onPageParsed: async ({ pageNumber, totalPages }) => {
-            touchProgress();
-            lastTotalPages = totalPages;
-            lastPagesParsed = pageNumber;
-            await hooks?.onProgress?.(buildInferProgressForPageParsed({ pageNumber, totalPages }));
-          },
-        }),
-      });
-      const computeMs = Date.now() - computeStartedAt;
-      if (hooks?.onProgress && lastTotalPages > 0) {
-        await hooks.onProgress({
-          totalPages: lastTotalPages,
-          pagesParsed: lastPagesParsed,
-          currentPage: lastPagesParsed || undefined,
-          phase: 'merge',
-        });
-      }
-      const parsedObjectKey = await persistParsedPdfWhileSourceExists({
-        sourceObjectKey: parsed.documentObjectKey,
-        sourceExists: input.storage.objectExists,
-        putParsedObject: () => input.storage.putParsedPdf(parsed.documentId, parsed.namespace, result.parsed),
-        deleteParsedObject: input.storage.deleteObject,
-      });
-      return {
-        parsedObjectKey,
-        timing: { queueWaitMs, s3FetchMs, computeMs },
-      };
-    },
+    runPdfLayout: createPdfLayoutHandler(input),
+    runTtsPlayback: createTtsPlaybackHandler(input),
+    runTtsPlaybackPlan: createTtsPlaybackPlanHandler(input),
+    runTtsPlaybackExportArtifact: createTtsPlaybackExportHandler(input),
+    runDocumentPreview: createDocumentPreviewHandler(input),
+    runDocumentConversion: createDocumentConversionHandler(input),
+    runAccountExport: createAccountExportHandler(input),
   };
 }

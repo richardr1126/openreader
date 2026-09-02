@@ -11,7 +11,7 @@ This page covers migration behavior for both database schema and storage data in
 
 - `@openreader/database` owns database clients, schemas, SQL migration files, and programmatic
   migration execution for SQLite and PostgreSQL.
-- `@openreader/bootstrap` owns startup orchestration, storage migration, and optional embedded
+- `@openreader/bootstrap` owns startup orchestration, v4 legacy storage decommission, and optional embedded
   SeaweedFS, NATS, and compute-worker processes.
 - The Next.js app imports `@openreader/database` directly, but does not orchestrate migrations or
   child processes.
@@ -30,7 +30,7 @@ By default, the shared entrypoint runs migrations automatically before app start
 Startup migration phases:
 
 - DB schema migrations (`pnpm migrate`)
-- Storage/data migration (`pnpm migrate-fs`) for legacy filesystem content into S3 + DB rows
+- v4 legacy storage decommission (`pnpm migrate-decommission`) for deleting retired object prefixes
 
 :::info
 In most setups, you do not need to run migration commands manually because startup handles this automatically.
@@ -50,7 +50,7 @@ Migrations are applied in order. All of the following ship in v3.0.0; an instanc
 To skip automatic startup migrations:
 
 - Set `RUN_DRIZZLE_MIGRATIONS=false`
-- Set `RUN_FS_MIGRATIONS=false`
+- Set `RUN_V4_DECOMMISSION=false`
 
 :::warning
 If you disable startup migrations, ensure your deployment process runs migrations before serving traffic.
@@ -71,11 +71,8 @@ In most cases, you do not need manual migration commands because startup runs mi
 # - SQLite if POSTGRES_URL is unset
 pnpm migrate
 
-# Run storage migration (filesystem -> S3 + DB)
-pnpm migrate-fs
-
-# Dry-run storage migration without uploading/deleting
-pnpm migrate-fs:dry-run
+# Purge retired v4 object prefixes: tts_segments_v1, tts_segments_v2, audiobooks_v1
+pnpm migrate-decommission
 ```
 
 `pnpm migrate` uses the programmatic Drizzle migrator from `@openreader/database`. Drizzle Kit is

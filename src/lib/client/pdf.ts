@@ -4,101 +4,25 @@ import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 import type { TTSSegmentLocator } from '@/types/client';
-import { segmentWords } from '@/lib/shared/language';
+import { segmentWords } from '@openreader/tts/language';
 import {
   buildAlignmentTokenRanges,
+  findBestHighlightTokenMatch,
   type HighlightTokenRange,
 } from '@/lib/client/highlight-token-alignment';
 
-// Worker coordination for offloading highlight token matching
-interface HighlightTokenMatchRequest {
-  id: string;
-  type: 'tokenMatch';
-  patternTokens: string[];
-  tokenTexts: string[];
+export function shouldUseLegacyPdfBuild(userAgent: string): boolean {
+  const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent);
+  if (!isSafari) return false;
+
+  const match = userAgent.match(/Version\/(\d+)/i);
+  if (!match?.[1]) return true;
+  return Number.parseInt(match[1], 10) <= 18;
 }
 
-interface HighlightTokenMatchResponse {
-  id: string;
-  type: 'tokenMatchResult';
-  bestStart: number;
-  bestEnd: number;
-  rating: number;
-  lengthDiff: number;
-}
-
-let highlightWorker: Worker | null = null;
-
-function getHighlightWorker(): Worker | null {
-  if (typeof window === 'undefined') return null;
-  if (highlightWorker) return highlightWorker;
-
-  try {
-    highlightWorker = new Worker(
-      new URL('pdf-highlight-worker.ts', import.meta.url),
-      { type: 'module' }
-    );
-    return highlightWorker;
-  } catch (e) {
-    console.error('Failed to initialize PDF highlight worker:', e);
-    highlightWorker = null;
-    return null;
-  }
-}
-
-function runHighlightTokenMatch(
-  patternTokens: string[],
-  tokenTexts: string[]
-): Promise<HighlightTokenMatchResponse | null> {
-  const worker = getHighlightWorker();
-  if (!worker) {
-    return Promise.resolve(null);
-  }
-
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-  return new Promise((resolve) => {
-    const handleMessage = (event: MessageEvent) => {
-      const data = event.data as HighlightTokenMatchResponse;
-      if (!data || data.id !== id || data.type !== 'tokenMatchResult') {
-        return;
-      }
-      worker.removeEventListener('message', handleMessage as EventListener);
-      resolve(data);
-    };
-
-    worker.addEventListener('message', handleMessage as EventListener);
-
-    const message: HighlightTokenMatchRequest = {
-      id,
-      type: 'tokenMatch',
-      patternTokens,
-      tokenTexts,
-    };
-    worker.postMessage(message);
-  });
-}
-
-// Function to detect if we need to use legacy build
-function shouldUseLegacyBuild() {
-  try {
-    if (typeof window === 'undefined') return false;
-
-    const ua = window.navigator.userAgent;
-    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-
-    if (!isSafari) return false;
-
-    // Extract Safari version - matches "Version/18" format
-    const match = ua.match(/Version\/(\d+)/i);
-    if (!match || !match[1]) return true; // If we can't determine version, use legacy to be safe
-
-    const version = parseInt(match[1]);
-    return version < 18; // Use legacy build for Safari versions equal or below 18
-  } catch (e) {
-    console.error('Error detecting Safari version:', e);
-    return false;
-  }
+function shouldUseLegacyBuild(): boolean {
+  if (typeof window === 'undefined') return false;
+  return shouldUseLegacyPdfBuild(window.navigator.userAgent);
 }
 
 // Function to initialize PDF worker
@@ -268,6 +192,7 @@ function highlightParsedBlockGeometry(
 
     const highlight = document.createElement('div');
     highlight.className = 'pdf-text-highlight-overlay';
+    highlight.dataset.testid = 'pdf-sentence-highlight';
     highlight.style.position = 'absolute';
     highlight.style.backgroundColor = 'grey';
     highlight.style.opacity = '0.4';
@@ -404,20 +329,19 @@ export function clearWordHighlights() {
 }
 
 export function highlightPattern(
-  text: string,
   pattern: string,
   containerRef: React.RefObject<HTMLDivElement>,
   options?: HighlightPatternOptions,
-) {
+): boolean {
   const seq = ++highlightPatternSeq;
   clearHighlights();
 
-  if (!pattern?.trim()) return;
+  if (!pattern?.trim()) return false;
   const container = containerRef.current;
-  if (!container) return;
+  if (!container) return false;
 
   const cleanPattern = pattern.trim().replace(/\s+/g, ' ');
-  if (!cleanPattern) return;
+  if (!cleanPattern) return false;
   lastSentencePattern = cleanPattern;
   lastSentenceWordToTokenRangeMap = null;
   lastSentenceTokenWindow = null;
@@ -427,16 +351,16 @@ export function highlightPattern(
   // Canonical path: parsed block locator is required for PDF sentence
   // highlighting. Avoid broad full-page text matching fallbacks.
   if (!parsedDocument || !locator || locator.readerType !== 'pdf' || !locator.blockId) {
-    return;
+    return false;
   }
 
   const spanNodes = collectSpanNodesForParsedBlock(container, parsedDocument, locator) ?? [];
 
   if (!spanNodes.length) {
     if (options?.useBlockGeometryOnly) {
-      highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
     }
-    return;
+    return false;
   }
   lastSpanNodes = spanNodes;
 
@@ -459,7 +383,7 @@ export function highlightPattern(
     }
   });
 
-  if (!tokens.length) return;
+  if (!tokens.length) return false;
   lastTokens = tokens;
 
   if (options?.useBlockGeometryOnly) {
@@ -467,8 +391,7 @@ export function highlightPattern(
       start: 0,
       end: tokens.length - 1,
     };
-    highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
-    return;
+    return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
   }
 
   const patternLen = cleanPattern.length;
@@ -483,7 +406,7 @@ export function highlightPattern(
           lengthDiff: number;
         }
       | null
-  ) => {
+  ): boolean => {
     const highlightRanges: Array<{
       textNode: Text;
       startOffset: number;
@@ -552,7 +475,7 @@ export function highlightPattern(
       });
     }
 
-    if (!highlightRanges.length) return;
+    if (!highlightRanges.length) return false;
 
     // Create overlay rectangles for each range, relative to its page text layer
     const scrollIntoViewRects: DOMRect[] = [];
@@ -572,6 +495,7 @@ export function highlightPattern(
         rects.forEach((rect) => {
           const highlight = document.createElement('div');
           highlight.className = 'pdf-text-highlight-overlay';
+          highlight.dataset.testid = 'pdf-sentence-highlight';
           highlight.style.position = 'absolute';
           highlight.style.backgroundColor = 'grey';
           highlight.style.opacity = '0.4';
@@ -590,7 +514,7 @@ export function highlightPattern(
       }
     });
 
-    if (!scrollIntoViewRects.length) return;
+    if (!scrollIntoViewRects.length) return false;
 
     // Scroll the first highlighted rect into view if needed
     const containerRect = container.getBoundingClientRect();
@@ -607,35 +531,22 @@ export function highlightPattern(
         behavior: 'smooth',
       });
     }
+    return true;
   };
 
   const tokenTexts = tokens.map((t) => t.text);
   const patternTokens = segmentWords(cleanPattern, options?.language).map((token) => token.text);
 
-  // Fire-and-forget async worker call; UI thread returns immediately
-  runHighlightTokenMatch(patternTokens, tokenTexts)
-    .then((result) => {
-      if (seq !== highlightPatternSeq) return;
-      if (!result || result.bestStart === -1) {
-        // No worker result or no good match; nothing to highlight
-        applyHighlightFromTokens(null);
-      } else {
-        applyHighlightFromTokens({
-          bestStart: result.bestStart,
-          bestEnd: result.bestEnd,
-          rating: result.rating,
-          lengthDiff: result.lengthDiff,
-        });
-      }
-    })
-    .catch((error) => {
-      if (seq !== highlightPatternSeq) return;
-      console.error(
-        'Error in PDF highlight worker; no highlights applied:',
-        error
-      );
-      applyHighlightFromTokens(null);
-    });
+  const result = findBestHighlightTokenMatch(patternTokens, tokenTexts);
+  if (seq !== highlightPatternSeq || result.start === -1) {
+    return applyHighlightFromTokens(null);
+  }
+  return applyHighlightFromTokens({
+    bestStart: result.start,
+    bestEnd: result.end,
+    rating: result.rating,
+    lengthDiff: result.lengthDiff,
+  });
 }
 
 export function highlightWordIndex(

@@ -81,25 +81,107 @@ describe('worker loop controller', () => {
         documentObjectKey: 'openreader/doc.pdf',
       },
     });
-    const whisperCodec = createJsonCodec<QueuedJob<{
-      text: string;
-      audioObjectKey: string;
-    }>>();
     const controller = createWorkerLoopController({
       orchestrator,
       handlers: {
-        runWhisper: async () => ({ alignments: [] }),
         runPdfLayout: async (_payload, _queueWaitMs, hooks) => {
           await hooks?.onProgress?.(progress);
           active = false;
           complete();
           return { parsedObjectKey: 'openreader/parsed.json' };
         },
+        runTtsPlayback: async () => ({ sessionId: 'session' }),
+        runTtsPlaybackPlan: async () => ({
+          planObjectKey: 'plan.json',
+          planSignature: 'signature',
+          startOrdinal: 0,
+          plannedCount: 0,
+        }),
+        runTtsPlaybackExportArtifact: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            artifactId: 'artifact',
+            sessionId: 'session',
+            storageUserId: 'storage-user',
+            documentId: 'a'.repeat(64),
+            documentVersion: 1,
+            readerType: 'pdf',
+            settingsHash: 'settings',
+            planObjectKey: 'plan.json',
+            format: 'mp3',
+            speed: 1,
+            objectKey: 'artifact.mp3',
+            contentType: 'audio/mpeg',
+            byteLength: 1,
+            dispositionFilename: 'artifact.mp3',
+            sourceSessionId: 'session',
+            sourcePlanObjectKey: 'plan.json',
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
+        runDocumentPreview: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            documentId: 'a'.repeat(64),
+            namespace: null,
+            documentType: 'pdf',
+            sourceObjectKey: 'openreader/doc.pdf',
+            sourceLastModifiedMs: 1,
+            previewKind: 'card',
+            rendererVersion: 'test',
+            objectKey: 'openreader/preview.jpg',
+            metadataObjectKey: 'openreader/preview.json',
+            contentType: 'image/jpeg',
+            width: 400,
+            height: 500,
+            byteLength: 1,
+            eTag: null,
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
+        runDocumentConversion: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            conversionId: 'a'.repeat(64),
+            namespace: null,
+            sourceObjectKey: 'openreader/upload.docx',
+            sourceLastModifiedMs: 1,
+            sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            sourceEtag: null,
+            converterVersion: 'test',
+            objectKey: 'openreader/converted.pdf',
+            metadataObjectKey: 'openreader/converted.json',
+            contentType: 'application/pdf',
+            byteLength: 1,
+            documentId: 'a'.repeat(64),
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
+        runAccountExport: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            artifactId: 'artifact',
+            userId: 'user',
+            storageUserId: 'storage-user',
+            namespace: null,
+            exportSchemaVersion: 4,
+            manifestHash: 'a'.repeat(64),
+            manifestObjectKey: 'openreader/account-export/manifest.json',
+            objectKey: 'openreader/account-export/artifact.zip',
+            contentType: 'application/zip',
+            byteLength: 1,
+            dispositionFilename: 'openreader-data.zip',
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
       },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       jobConcurrency: 1,
       pdfAttempts: 2,
-      whisperCodec,
       pdfCodec: pdf.codec,
       isOwnerActive: () => active,
       isStopping: () => false,
@@ -107,7 +189,7 @@ describe('worker loop controller', () => {
       onInFlightJobsChanged: (delta) => { inFlight += delta; },
     });
 
-    controller.start(owner, { whisper: createConsumer(), pdfLayout: createConsumer(pdf.msg) });
+    controller.start(owner, { pdfLayout: createConsumer(pdf.msg) });
     await completed;
     await controller.stop();
 
@@ -140,17 +222,103 @@ describe('worker loop controller', () => {
     const controller = createWorkerLoopController({
       orchestrator,
       handlers: {
-        runWhisper: async () => ({ alignments: [] }),
         runPdfLayout: async () => {
           active = false;
           attempted();
           throw new Error('retry me');
         },
+        runTtsPlayback: async () => ({ sessionId: 'session' }),
+        runTtsPlaybackPlan: async () => ({
+          planObjectKey: 'plan.json',
+          planSignature: 'signature',
+          startOrdinal: 0,
+          plannedCount: 0,
+        }),
+        runTtsPlaybackExportArtifact: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            artifactId: 'artifact',
+            sessionId: 'session',
+            storageUserId: 'storage-user',
+            documentId: 'a'.repeat(64),
+            documentVersion: 1,
+            readerType: 'pdf',
+            settingsHash: 'settings',
+            planObjectKey: 'plan.json',
+            format: 'mp3',
+            speed: 1,
+            objectKey: 'artifact.mp3',
+            contentType: 'audio/mpeg',
+            byteLength: 1,
+            dispositionFilename: 'artifact.mp3',
+            sourceSessionId: 'session',
+            sourcePlanObjectKey: 'plan.json',
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
+        runDocumentPreview: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            documentId: 'a'.repeat(64),
+            namespace: null,
+            documentType: 'pdf',
+            sourceObjectKey: 'openreader/doc.pdf',
+            sourceLastModifiedMs: 1,
+            previewKind: 'card',
+            rendererVersion: 'test',
+            objectKey: 'openreader/preview.jpg',
+            metadataObjectKey: 'openreader/preview.json',
+            contentType: 'image/jpeg',
+            width: 400,
+            height: 500,
+            byteLength: 1,
+            eTag: null,
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
+        runDocumentConversion: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            conversionId: 'a'.repeat(64),
+            namespace: null,
+            sourceObjectKey: 'openreader/upload.docx',
+            sourceLastModifiedMs: 1,
+            sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            sourceEtag: null,
+            converterVersion: 'test',
+            objectKey: 'openreader/converted.pdf',
+            metadataObjectKey: 'openreader/converted.json',
+            contentType: 'application/pdf',
+            byteLength: 1,
+            documentId: 'a'.repeat(64),
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
+        runAccountExport: async () => ({
+          artifact: {
+            schemaVersion: 1,
+            artifactId: 'artifact',
+            userId: 'user',
+            storageUserId: 'storage-user',
+            namespace: null,
+            exportSchemaVersion: 4,
+            manifestHash: 'a'.repeat(64),
+            manifestObjectKey: 'openreader/account-export/manifest.json',
+            objectKey: 'openreader/account-export/artifact.zip',
+            contentType: 'application/zip',
+            byteLength: 1,
+            dispositionFilename: 'openreader-data.zip',
+            status: 'ready',
+            createdAt: Date.now(),
+          },
+        }),
       },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       jobConcurrency: 1,
       pdfAttempts: 2,
-      whisperCodec: createJsonCodec(),
       pdfCodec: pdf.codec,
       isOwnerActive: () => active,
       isStopping: () => false,
@@ -158,7 +326,7 @@ describe('worker loop controller', () => {
       onInFlightJobsChanged: vi.fn(),
     });
 
-    controller.start(owner, { whisper: createConsumer(), pdfLayout: createConsumer(pdf.msg) });
+    controller.start(owner, { pdfLayout: createConsumer(pdf.msg) });
     await attemptCompleted;
     await new Promise((resolve) => setTimeout(resolve, 0));
     await controller.stop();

@@ -7,7 +7,7 @@ This guide covers deploying OpenReader to Vercel with external Postgres and S3-c
 ## What works on Vercel
 
 - Documents (PDF/EPUB/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
-- Audiobook routes work on Node.js serverless functions using `ffmpeg-static`.
+- Audiobook export downloads the worker-owned playback MP3 stream; there are no audiobook-specific serverless routes.
 - Heavy compute features (Whisper alignment + PDF layout parsing) run through an external compute worker service.
 - For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
 
@@ -29,7 +29,9 @@ S3_BUCKET=...
 S3_REGION=us-east-1
 S3_PREFIX=openreader
 # Optional (non-AWS S3-compatible providers):
-# S3_ENDPOINT=https://...
+# S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
+# S3_PUBLIC_ENDPOINT=https://s3.example
+# S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 
 # Auth (required for the admin panel)
@@ -40,7 +42,11 @@ CRON_SECRET=...               # generate with: openssl rand -base64 32
 
 # Heavy compute (required on Vercel in current releases)
 COMPUTE_WORKER_URL=https://<railway-worker-domain>
+# Optional when browsers need a different public worker URL for playback audio
+# COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>
 COMPUTE_WORKER_TOKEN=...
+COMPUTE_CREDENTIAL_BROKER_TOKEN=... # generate separately; set the same value on the worker
+TTS_PLAYBACK_TOKEN_SECRET=... # generate with: openssl rand -base64 32; set the same value on the worker
 
 # Logging (recommended for Vercel log ingestion)
 LOG_FORMAT=json
@@ -51,10 +57,14 @@ LOG_LEVEL=info
 # API_BASE only needed for OpenAI-compatible self-hosted providers
 ```
 
-If you also run an external worker service (for example Railway), set these there too:
+If you also run an external worker service (for example Railway), configure it with:
 
+- `COMPUTE_CREDENTIAL_BROKER_URL=https://<your-app-domain>/api/internal/compute/tts-credentials`
+- the matching `COMPUTE_CREDENTIAL_BROKER_TOKEN`
 - `LOG_FORMAT=json`
 - `COMPUTE_LOG_LEVEL=info`
+
+Do not set the app's `AUTH_SECRET` or `POSTGRES_URL` on the worker. Provider lookup and decryption remain app-owned.
 
 :::note Env vars vs. admin panel (important for Vercel)
 `API_KEY` / `API_BASE` are one-shot bootstrap seeds on first deploy. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
@@ -68,7 +78,10 @@ If your Vercel app uses an external compute worker on Railway with Synadia Cloud
    - `ghcr.io/richardr1126/openreader-compute-worker:refactor-ppdoclayoutv3-onnx-layout-parsing`
 2. Enable public networking on that Railway service and set:
    - `COMPUTE_WORKER_URL=https://<railway-worker-domain>` (in Vercel)
+   - `COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>` (in Vercel) if browsers cannot reach `COMPUTE_WORKER_URL` directly
 3. Use the same `COMPUTE_WORKER_TOKEN` value in both Vercel and Railway worker env vars.
+4. Use the same `COMPUTE_CREDENTIAL_BROKER_TOKEN` value in both Vercel and Railway worker env vars, and point the worker broker URL at the Vercel app.
+5. Use the same `TTS_PLAYBACK_TOKEN_SECRET` value in both Vercel and Railway worker env vars. The worker derives a domain-separated private-text fingerprint key from it; no additional text-hash secret is configured.
 
 For complete Railway worker env vars (`NATS_*`, `S3_*`, health checks, and Synadia `.creds` guidance), see [Compute Worker (NATS JetStream)](./compute-worker).
 
@@ -108,7 +121,7 @@ For all variables and defaults, see [Environment Variables](../reference/environ
 Vercel deployments do not run the `@openreader/bootstrap` process, so automatic startup migrations do not run there.
 
 - Run `pnpm migrate` in a controlled environment to apply Drizzle schema migrations to your Postgres DB.
-- Run `pnpm migrate-fs` only when migrating legacy local filesystem data (`docstore/documents_v1`, `docstore/audiobooks_v1`) into object storage + DB rows. Fresh Vercel deployments usually do not need this.
+- Run `pnpm migrate-decommission` once during the v5 rollout to purge retired object prefixes (`tts_segments_v1/`, `tts_segments_v2/`, `audiobooks_v1/`).
 
 ## 5. Scheduled maintenance tasks
 
@@ -118,45 +131,15 @@ The checked-in Hobby-compatible schedule invokes the route once daily. The admin
 
 Each due task is claimed with a database-backed lease, due tasks start independently, and individual runs are aborted and marked failed after four minutes. Review failures and run tasks manually from **Settings → Admin → Scheduled tasks**.
 
-## 6. FFmpeg packaging in Vercel functions
+## 6. Runtime expectations and caveats
 
-`ffmpeg-static` binaries must be included in function traces. This repo already does that in `next.config.ts` via `outputFileTracingIncludes` for:
-
-- `/api/audiobook`
-- `/api/audiobook/chapter`
-- `/api/tts/segments/ensure`
-
-:::info
-`serverExternalPackages` should include `ffmpeg-static` so package paths resolve at runtime instead of being bundled into route output.
-:::
-
-If you change route paths or split handlers, update `outputFileTracingIncludes` accordingly.
-
-## 7. Function memory sizing
-
-FFmpeg workloads benefit from more memory/CPU. This repo includes:
-
-```json
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app/api/audiobook/route.ts": { "memory": 3009 },
-    "app/api/tts/segments/ensure/route.ts": { "memory": 3009 }
-  }
-}
-```
-
-Adjust memory per route if your files are larger or your plan differs.
-
-## 8. Runtime expectations and caveats
-
-- Audiobook APIs require S3 configuration; otherwise they return `503`.
+- Audiobook export requires the external compute worker and S3-compatible object storage because it downloads the worker-owned playback MP3 stream.
 - For production Vercel deploys, use `POSTGRES_URL` instead of SQLite.
 
-## 9. Smoke test after deploy
+## 7. Smoke test after deploy
 
 1. Upload and read a PDF/EPUB document.
 2. Confirm sync/blob fetch works across refreshes/devices.
-3. Generate at least one audiobook chapter and play/download it.
+3. Start TTS playback and download an audiobook MP3 export.
 4. Verify worker-backed word highlighting and PDF parsing.
 5. Open **Settings → Admin → Scheduled tasks**, run one task manually, and confirm the next daily cron invocation succeeds.

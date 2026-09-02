@@ -194,18 +194,24 @@ Default embedded worker flow (no external worker URL):
 ```env
 # Leave COMPUTE_WORKER_URL unset.
 # Entry point auto-starts embedded worker+NATS when available.
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 ```
 
 External worker flow:
 
 ```env
 COMPUTE_WORKER_URL=http://localhost:8081
+# Only needed when browsers cannot reach COMPUTE_WORKER_URL directly.
+# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
+TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 ```
 
 Use the same ownership split:
-- root `.env`: app routing/auth (`COMPUTE_WORKER_URL`, `COMPUTE_WORKER_TOKEN`) plus optional shared timeout/stale overrides
-- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning)
+- root `.env`: app routing/auth (`AUTH_SECRET`, `COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus embedded-worker tuning
+- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning), `COMPUTE_CREDENTIAL_BROKER_URL`, and the matching compute/broker/playback tokens
+- `AUTH_SECRET`, `POSTGRES_URL`, and `SQLITE_DB_PATH` remain app-only; the worker resolves enabled providers through the credential broker
 
 Use one of these `.env` mode templates:
 
@@ -216,6 +222,7 @@ Use one of these `.env` mode templates:
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 # Optional when you need multiple local origins:
 # AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
 ```
@@ -229,6 +236,7 @@ AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 # Comma-separated emails to auto-promote to admin on signin.
 ADMIN_EMAILS=you@example.com
 ```
@@ -241,12 +249,15 @@ API_BASE=http://host.docker.internal:8880/v1
 USE_EMBEDDED_WEED_MINI=false
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 # Optional for non-AWS providers:
-# S3_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
+# S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 ```
 
@@ -258,14 +269,20 @@ API_BASE=http://host.docker.internal:8880/v1
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 COMPUTE_WORKER_URL=http://localhost:8081
+# Optional when browsers need a different public URL:
+# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
+TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
 USE_EMBEDDED_WEED_MINI=false
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 # Optional for non-AWS providers:
-# S3_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
+# S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
+# S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 ```
 
@@ -334,5 +351,5 @@ pnpm migrate
 ```
 
 :::info
-If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_FS_MIGRATIONS=false`. You can run storage migration manually with `pnpm migrate-fs`.
+If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the v4 legacy storage decommission manually with `pnpm migrate-decommission`.
 :::

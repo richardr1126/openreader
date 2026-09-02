@@ -1,9 +1,22 @@
 import type { WorkerOperationState } from '../operations/contracts';
-import { pdfSubjectFromOperationKey } from '../operations/keys';
+import {
+  accountExportSubjectFromOperationKey,
+  documentConversionSubjectFromOperationKey,
+  documentPreviewSubjectFromOperationKey,
+  pdfSubjectFromOperationKey,
+  ttsPlaybackExportSubjectFromOperationKey,
+  ttsPlaybackPlanSubjectFromOperationKey,
+  ttsPlaybackSubjectFromOperationKey,
+} from '../operations/keys';
 
 export type ComputeOperationSubject =
-  | { kind: 'whisper_align' }
-  | { kind: 'pdf_layout'; documentId: string; namespace: string | null };
+  | { kind: 'pdf_layout'; documentId: string; namespace: string | null }
+  | { kind: 'tts_playback'; documentId: string; sessionId: string }
+  | { kind: 'tts_playback_plan'; documentId: string; settingsHash: string; planSignature: string }
+  | { kind: 'tts_playback_export'; documentId: string; artifactId: string; format: 'mp3' | 'm4b' }
+  | { kind: 'document_preview'; documentId: string; namespace: string | null; previewKind: 'card' }
+  | { kind: 'document_conversion'; conversionId: string; namespace: string | null }
+  | { kind: 'account_export'; storageUserId: string; namespace: string | null; artifactId: string };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -28,7 +41,41 @@ export function toComputeOperation<Result>(
 ): ComputeOperation<Result> {
   const subject = state.kind === 'pdf_layout'
     ? (pdfSubjectFromOperationKey(state.opKey) ?? { kind: 'pdf_layout', documentId: '', namespace: null })
-    : { kind: 'whisper_align' as const };
+    : state.kind === 'tts_playback_plan'
+      ? (ttsPlaybackPlanSubjectFromOperationKey(state.opKey) ?? {
+        kind: 'tts_playback_plan',
+        documentId: '',
+        settingsHash: '',
+        planSignature: '',
+      })
+      : state.kind === 'tts_playback_export'
+        ? (ttsPlaybackExportSubjectFromOperationKey(state.opKey) ?? {
+          kind: 'tts_playback_export',
+          documentId: '',
+          artifactId: '',
+          format: 'mp3',
+        })
+        : state.kind === 'document_preview'
+          ? (documentPreviewSubjectFromOperationKey(state.opKey) ?? {
+            kind: 'document_preview',
+            documentId: '',
+            namespace: null,
+            previewKind: 'card',
+          })
+          : state.kind === 'document_conversion'
+            ? (documentConversionSubjectFromOperationKey(state.opKey) ?? {
+              kind: 'document_conversion',
+              conversionId: '',
+              namespace: null,
+            })
+            : state.kind === 'account_export'
+              ? (accountExportSubjectFromOperationKey(state.opKey) ?? {
+                kind: 'account_export',
+                storageUserId: '',
+                namespace: null,
+                artifactId: '',
+              })
+              : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,
     subject,

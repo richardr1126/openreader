@@ -1,4 +1,4 @@
-import { and, eq, inArray, not } from 'drizzle-orm';
+import { eq, inArray, not } from 'drizzle-orm';
 import { describe, expect, test } from 'vitest';
 
 import { db } from '@openreader/database';
@@ -269,6 +269,7 @@ describe('runtime config JSON seeding', () => {
       computeParseSustainedMax: 12,
       computeParseSustainedWindowSec: 300,
       maxUploadMb: 150,
+      ttsPlaybackBackgroundExtent: 'document',
     };
     try {
       await db.delete(adminSettings).where(inArray(adminSettings.key, keys));

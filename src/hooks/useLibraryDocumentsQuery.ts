@@ -7,7 +7,7 @@ import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 
 async function fetchLibraryDocuments(signal?: AbortSignal): Promise<BaseDocument[]> {
-  const res = await fetch('/api/documents/library?limit=10000', { signal });
+  const res = await fetch('/api/local-library?limit=10000', { signal });
   if (!res.ok) throw new Error('Failed to list library documents');
   const data = (await res.json()) as { documents?: BaseDocument[] };
   return data.documents || [];

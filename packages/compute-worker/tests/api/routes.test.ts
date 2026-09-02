@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createComputeWorkerApp } from '../../src/api/app';
+import { buildTtsPlaybackOperationKey } from '../../src/operations/keys';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
 
 const AUTH = { authorization: 'Bearer test-token' };
@@ -29,10 +30,24 @@ describe('compute worker API routes', () => {
     expect(protectedRoute.statusCode).toBe(401);
   });
 
+  test('allows public playback audio route through bearer auth but requires a signed playback token', async () => {
+    const missing = await runtime.app.inject({
+      method: 'GET',
+      url: '/v1/tts-playback/sessions/session-1/audio',
+    });
+    expect(missing.statusCode).toBe(400);
+
+    const invalid = await runtime.app.inject({
+      method: 'GET',
+      url: '/v1/tts-playback/sessions/session-1/audio?token=not-a-token',
+    });
+    expect(invalid.statusCode).toBe(403);
+  });
+
   test('validates operation creation body and returns 400 for invalid payload', async () => {
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: {
         documentId: '',
@@ -49,7 +64,7 @@ describe('compute worker API routes', () => {
     const documentId = 'c'.repeat(64);
     const create = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: {
         documentId,
@@ -77,6 +92,70 @@ describe('compute worker API routes', () => {
     expect(fetch.json()).toMatchObject({ opId: created.opId, status: 'queued' });
   });
 
+  test('creates document preview operations without exposing internal keys', async () => {
+    const documentId = '9'.repeat(64);
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/document-previews/jobs',
+      headers: AUTH,
+      payload: {
+        documentId,
+        namespace: null,
+        documentType: 'pdf',
+        sourceObjectKey: `openreader/documents_v1/${documentId}`,
+        sourceLastModifiedMs: 12345,
+        previewKind: 'card',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      subject: { kind: 'document_preview', documentId, namespace: null, previewKind: 'card' },
+      status: 'queued',
+    });
+    expect(response.json()).not.toHaveProperty('opKey');
+    expect(response.json()).not.toHaveProperty('jobId');
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'document_preview',
+      payload: {
+        documentId,
+        sourceObjectKey: `openreader/documents_v1/${documentId}`,
+        previewKind: 'card',
+      },
+    });
+  });
+
+  test('creates document conversion operations without exposing internal keys', async () => {
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/document-conversions/docx/jobs',
+      headers: AUTH,
+      payload: {
+        conversionId: 'a'.repeat(64),
+        namespace: null,
+        sourceObjectKey: 'openreader/document_uploads_temp_v1/users/user-1/upload.bin',
+        sourceLastModifiedMs: 12345,
+        sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        sourceEtag: 'source-etag',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      subject: { kind: 'document_conversion', conversionId: 'a'.repeat(64), namespace: null },
+      status: 'queued',
+    });
+    expect(response.json()).not.toHaveProperty('opKey');
+    expect(response.json()).not.toHaveProperty('jobId');
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'document_conversion',
+      payload: {
+        conversionId: 'a'.repeat(64),
+        sourceObjectKey: 'openreader/document_uploads_temp_v1/users/user-1/upload.bin',
+      },
+    });
+  });
+
   test('reuses idempotent PDF requests and replaces them only with an explicit token', async () => {
     const documentId = 'e'.repeat(64);
     const payload = {
@@ -86,7 +165,7 @@ describe('compute worker API routes', () => {
     };
     const create = (body: typeof payload & { replaceToken?: string }) => runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: body,
     });
@@ -100,31 +179,138 @@ describe('compute worker API routes', () => {
     expect(replacement.subject).toEqual(initial.subject);
   });
 
-  test('creates whisper alignment operations without exposing internal keys', async () => {
+  test('creates TTS playback operations without exposing internal keys', async () => {
+    const documentId = 'b'.repeat(64);
     const response = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/whisper-align/operations',
+      url: '/v1/tts-playback/sessions/jobs',
       headers: AUTH,
       payload: {
-        text: 'Canonical worker text',
-        audioObjectKey: 'openreader/audio.mp3',
-        lang: 'en',
+        sessionId: 'playback-session-1',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId,
+        documentVersion: 123,
+        readerType: 'pdf',
+        settingsHash: 'settings-hash',
+        settingsJson: { voice: 'alloy' },
+        planObjectKey: 'plans/playback-session-1.json',
+        planning: {
+          selectedOrdinal: 4,
+          maxBlockLength: 500,
+          enforceSourceBoundaries: true,
+          language: 'en',
+          documentSource: {
+            namespace: null,
+            extent: 'section',
+          },
+        },
       },
     });
 
     expect(response.statusCode).toBe(202);
     expect(response.json()).toMatchObject({
-      subject: { kind: 'whisper_align' },
+      subject: { kind: 'tts_playback', documentId, sessionId: 'playback-session-1' },
       status: 'queued',
     });
     expect(response.json()).not.toHaveProperty('opKey');
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'tts_playback',
+      payload: {
+        planning: {
+          selectedOrdinal: 4,
+          documentSource: {
+            namespace: null,
+            extent: 'section',
+          },
+        },
+      },
+    });
+  });
+
+  test('rejects TTS playback operations without a worker-plan ordinal', async () => {
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/sessions/jobs',
+      headers: AUTH,
+      payload: {
+        sessionId: 'playback-session-missing-ordinal',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId: 'c'.repeat(64),
+        documentVersion: 123,
+        readerType: 'pdf',
+        settingsHash: 'settings-hash',
+        settingsJson: { voice: 'alloy' },
+        planObjectKey: 'plans/playback-session-missing-ordinal.json',
+        planning: {
+          maxBlockLength: 500,
+          enforceSourceBoundaries: true,
+          language: 'en',
+          documentSource: {
+            namespace: null,
+            extent: 'section',
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: 'TTS playback operation requires a worker-plan ordinal',
+    });
+  });
+
+  test('creates isolated TTS playback plan operations', async () => {
+    const documentId = 'f'.repeat(64);
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/plans/jobs',
+      headers: AUTH,
+      payload: {
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId,
+        documentVersion: 123,
+        readerType: 'pdf',
+        settingsHash: 'settings-hash',
+        settingsJson: { providerRef: 'p', providerType: 'openai', ttsModel: 'm', voice: 'v', nativeSpeed: 1 },
+        planning: {
+          maxBlockLength: 500,
+          enforceSourceBoundaries: true,
+          language: 'en',
+          documentSource: {
+            namespace: null,
+            extent: 'document',
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      subject: { kind: 'tts_playback_plan', documentId, settingsHash: 'settings-hash' },
+      status: 'queued',
+    });
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({
+      kind: 'tts_playback_plan',
+      payload: {
+        documentId,
+        planning: {
+          documentSource: {
+            namespace: null,
+            extent: 'document',
+          },
+        },
+      },
+    });
   });
 
   test('resolves the current PDF artifact and operation without exposing parser identity', async () => {
     const documentId = 'a'.repeat(64);
     const create = await runtime.app.inject({
       method: 'POST',
-      url: '/v1/pdf-layout/operations',
+      url: '/v1/pdf-layout/jobs',
       headers: AUTH,
       payload: {
         documentId,
@@ -221,22 +407,59 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('"status":"succeeded"');
   });
 
-  test('marks stale running whisper and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {
+  test('streams TTS playback completed-count progress in SSE snapshots', async () => {
     const now = Date.now();
     fake.seedState({
-      opId: 'op-stale-whisper-running',
-      opKey: 'k-stale-whisper-running',
-      kind: 'whisper_align',
-      jobId: 'job-op-stale-whisper-running',
+      opId: 'op-tts-progress',
+      opKey: buildTtsPlaybackOperationKey({
+        sessionId: 'playback-session-progress',
+        storageUserId: 'storage-progress',
+        documentId: 'doc-progress',
+        documentVersion: 1,
+        readerType: 'epub',
+        settingsHash: 'settings-progress',
+        planObjectKey: 'plans/doc-progress/settings-progress.json',
+      }),
+      kind: 'tts_playback',
+      jobId: 'job-op-tts-progress',
+      status: 'succeeded',
+      queuedAt: now,
+      updatedAt: now,
+      progress: {
+        completedThroughOrdinal: 8,
+        completedCount: 7,
+        plannedCount: 14,
+      },
+    });
+
+    const stream = await runtime.app.inject({
+      method: 'GET',
+      url: '/v1/operations/op-tts-progress/events',
+      headers: AUTH,
+    });
+
+    expect(stream.statusCode).toBe(200);
+    expect(stream.body).toContain('"completedThroughOrdinal":8');
+    expect(stream.body).toContain('"completedCount":7');
+    expect(stream.body).toContain('"plannedCount":14');
+  });
+
+  test('marks stale running playback and pdf ops failed during request-time orphan recovery but leaves queued ops on the conservative path', async () => {
+    const now = Date.now();
+    fake.seedState({
+      opId: 'op-stale-playback-running',
+      opKey: 'k-stale-playback-running',
+      kind: 'tts_playback',
+      jobId: 'job-op-stale-playback-running',
       status: 'running',
       queuedAt: 1,
       updatedAt: now - 40_000,
     });
     fake.seedState({
-      opId: 'op-stale-whisper-queued',
-      opKey: 'k-stale-whisper-queued',
-      kind: 'whisper_align',
-      jobId: 'job-op-stale-whisper-queued',
+      opId: 'op-stale-playback-queued',
+      opKey: 'k-stale-playback-queued',
+      kind: 'tts_playback',
+      jobId: 'job-op-stale-playback-queued',
       status: 'queued',
       queuedAt: 1,
       updatedAt: now - 40_000,
@@ -264,25 +487,25 @@ describe('compute worker API routes', () => {
     // orphanRecoveryPromise path through ensureOrphanedOpRecovery().
     const fetch = await runtime.app.inject({
       method: 'GET',
-      url: '/v1/operations/op-stale-whisper-running',
+      url: '/v1/operations/op-stale-playback-running',
       headers: AUTH,
     });
 
     expect(fetch.statusCode).toBe(200);
     expect(fetch.json()).toMatchObject({
-      opId: 'op-stale-whisper-running',
+      opId: 'op-stale-playback-running',
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',
       },
     });
-    expect(fake.getState('op-stale-whisper-running')).toMatchObject({
+    expect(fake.getState('op-stale-playback-running')).toMatchObject({
       status: 'failed',
       error: {
         code: 'WORKER_ORPHANED_OP',
       },
     });
-    expect(fake.getState('op-stale-whisper-queued')).toMatchObject({
+    expect(fake.getState('op-stale-playback-queued')).toMatchObject({
       status: 'queued',
     });
     expect(fake.getState('op-stale-pdf-running')).toMatchObject({

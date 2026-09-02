@@ -1,42 +1,45 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { useTimeEstimation } from '@/hooks/useTimeEstimation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
-import { DownloadIcon, CheckCircleIcon, XCircleIcon, ClockIcon, RefreshIcon, DotsVerticalIcon } from '@/components/icons/Icons';
+import { DownloadIcon } from '@/components/icons/Icons';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
-import { getTtsLanguageCompatibilityWarnings, resolveTtsLanguage } from '@/lib/shared/language';
-import type { TTSAudiobookChapter, TTSAudiobookFormat } from '@/types/tts';
-import { Button, Card, IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, RangeInput, Select } from '@/components/ui';
-import { 
-  downloadAudiobookChapter, 
-  downloadAudiobook 
-} from '@/lib/client/api/audiobooks';
-import { useAudiobookStatus } from '@/hooks/useAudiobookStatus';
-import type { AudiobookGenerationSettings } from '@/types/client';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
+import { Badge, Button, RangeField, Section, SegmentedControl } from '@/components/ui';
+import { subscribeTtsExportArtifactEvents, subscribeTtsExportGenerationEvents } from '@/lib/client/api/tts';
+
 interface AudiobookExportModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   documentType: 'epub' | 'pdf' | 'html';
   documentId: string;
-  onGenerateAudiobook: (
-    onProgress: (progress: number) => void,
-    signal: AbortSignal,
-    onChapterComplete: (chapter: TTSAudiobookChapter) => void,
-    settings: AudiobookGenerationSettings
-  ) => Promise<string>; // Returns bookId
-  onRegenerateChapter?: (
-    chapterIndex: number,
-    bookId: string,
-    settings: AudiobookGenerationSettings,
-    signal: AbortSignal
-  ) => Promise<TTSAudiobookChapter>;
+}
+
+type ExportStatus = 'idle' | 'generating' | 'ready' | 'downloading' | 'complete';
+type ExportFormat = 'mp3' | 'm4b';
+
+const EXPORT_FORMAT_OPTIONS: Array<{ value: ExportFormat; label: string }> = [
+  { value: 'mp3', label: 'MP3' },
+  { value: 'm4b', label: 'M4B' },
+];
+
+function formatSpeed(speed: number): string {
+  return Number.isInteger(speed) ? speed.toString() : speed.toFixed(1);
+}
+
+function clampProgress(completed: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+}
+
+function formatLabel(format: ExportFormat): string {
+  return format.toUpperCase();
 }
 
 export function AudiobookExportModal({
@@ -44,354 +47,411 @@ export function AudiobookExportModal({
   setIsOpen,
   documentType,
   documentId,
-  onGenerateAudiobook,
-  onRegenerateChapter
 }: AudiobookExportModalProps) {
-  const { isLoading, providerRef, providerType, ttsModel, ttsInstructions, voice: configVoice, voiceSpeed, audioPlayerSpeed } = useConfig();
-  const { availableVoices, documentLanguage } = useTTS();
-  const { progress, setProgress, estimatedTimeRemaining } = useTimeEstimation();
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isCombining, setIsCombining] = useState(false);
-  const [currentChapter, setCurrentChapter] = useState<string>('');
-  const [format, setFormat] = useState<TTSAudiobookFormat>('m4b');
-  const [audiobookVoice, setAudiobookVoice] = useState<string>(configVoice || '');
-  const [nativeSpeed, setNativeSpeed] = useState<number>(voiceSpeed);
-  const [postSpeed, setPostSpeed] = useState<number>(audioPlayerSpeed);
-  const [regeneratingChapter, setRegeneratingChapter] = useState<number | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const [pendingDeleteChapter, setPendingDeleteChapter] = useState<TTSAudiobookChapter | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showRegenerateHint, setShowRegenerateHint] = useState(false);
   const {
-    query: audiobookQuery,
-    setChapter,
-    deleteChapterMutation,
-    resetMutation,
-    invalidate: invalidateAudiobook,
-  } = useAudiobookStatus(documentId, isOpen || isGenerating);
-  const audiobookStatus = audiobookQuery.data;
-  const chapters = audiobookStatus?.chapters ?? [];
-  const bookId = audiobookStatus?.bookId ?? null;
-  const savedSettings = audiobookStatus?.settings ?? null;
-  const isLoadingExisting = audiobookQuery.isPending;
-  const isRefreshingChapters = audiobookQuery.isFetching && !audiobookQuery.isPending;
-  useEffect(() => {
-    if (isOpen && audiobookQuery.error) {
-      setErrorMessage(audiobookQuery.error instanceof Error
-        ? audiobookQuery.error.message
-        : 'Failed to load audiobook status.');
-    }
-  }, [audiobookQuery.error, isOpen]);
+    isLoading,
+    providerRef,
+    providerType,
+    ttsModel,
+    voiceSpeed,
+    audioPlayerSpeed,
+  } = useConfig();
+  const {
+    voice,
+    availableVoices,
+    documentLanguage,
+    setVoiceAndRestart,
+    setSpeedAndRestart,
+    setAudioPlayerSpeedAndRestart,
+    startDocumentAudioExport,
+    resolveDocumentAudioExport,
+  } = useTTS();
+  const [status, setStatus] = useState<ExportStatus>('idle');
+  const [progress, setProgress] = useState(0);
+  const [completedSegments, setCompletedSegments] = useState(0);
+  const [plannedSegments, setPlannedSegments] = useState(0);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
+  const [localAudioPlayerSpeed, setLocalAudioPlayerSpeed] = useState(audioPlayerSpeed);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const progressCompleteRef = useRef(false);
+  const statusRef = useRef<ExportStatus>('idle');
+  const hydrateRunIdRef = useRef(0);
 
-  const formatSpeed = useCallback((speed: number) => {
-    return Number.isInteger(speed) ? speed.toString() : speed.toFixed(1);
-  }, []);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    setLocalAudioPlayerSpeed(audioPlayerSpeed);
+  }, [audioPlayerSpeed]);
+
   const providerModelPolicy = useMemo(
     () => resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel }),
     [providerRef, providerType, ttsModel],
   );
   const nativeSpeedSupported = providerModelPolicy.supportsNativeModelSpeed;
-  const effectiveNativeSpeed = nativeSpeedSupported ? nativeSpeed : 1;
-
-  const hasExistingAudiobook = Boolean(bookId) || chapters.length > 0;
-  const isLegacyAudiobookMissingSettings = hasExistingAudiobook && savedSettings === null;
-
-  useEffect(() => {
-    if (!audiobookStatus) return;
-    if (audiobookStatus.chapters[0]?.format) {
-      setFormat(audiobookStatus.chapters[0].format as TTSAudiobookFormat);
-    }
-    if (audiobookStatus.settings) {
-      setAudiobookVoice(audiobookStatus.settings.voice);
-      setNativeSpeed(audiobookStatus.settings.nativeSpeed);
-      setPostSpeed(audiobookStatus.settings.postSpeed);
-      setFormat(audiobookStatus.settings.format);
-    }
-    if (audiobookStatus.hasComplete) {
-      setProgress(100);
-    }
-  }, [audiobookStatus, setProgress]);
-
-  useEffect(() => {
-    // For new audiobooks (no saved settings/chapters), keep generation defaults aligned
-    // with the current playback controls so users don't need a route remount.
-    if (!isOpen) return;
-    if (savedSettings) return;
-    if (hasExistingAudiobook) return;
-
-    setNativeSpeed(voiceSpeed);
-    setPostSpeed(audioPlayerSpeed);
-    setAudiobookVoice(configVoice || availableVoices[0] || '');
-  }, [
-    isOpen,
-    savedSettings,
-    hasExistingAudiobook,
-    voiceSpeed,
-    audioPlayerSpeed,
-    configVoice,
-    availableVoices,
-  ]);
-
-  useEffect(() => {
-    if (savedSettings) return;
-    if (audiobookVoice) return;
-    if (availableVoices.length > 0) {
-      setAudiobookVoice(availableVoices[0] || '');
-    }
-  }, [savedSettings, audiobookVoice, availableVoices]);
-
-  const effectiveSettings: AudiobookGenerationSettings | null = useMemo(() => {
-    if (savedSettings) return savedSettings;
-    const nextVoice = audiobookVoice || configVoice || availableVoices[0] || '';
-    if (!nextVoice) return null;
-    return {
-      providerRef,
-      providerType,
-      ttsModel,
-      voice: nextVoice,
-      nativeSpeed: effectiveNativeSpeed,
-      postSpeed,
-      format,
-      ttsInstructions: providerModelPolicy.supportsInstructions ? ttsInstructions : undefined,
-      language: resolveTtsLanguage({
-        configuredLanguage: documentLanguage,
-        voice: nextVoice,
-      }),
-    };
-  }, [savedSettings, audiobookVoice, configVoice, availableVoices, providerRef, providerType, ttsModel, ttsInstructions, effectiveNativeSpeed, postSpeed, format, providerModelPolicy.supportsInstructions, documentLanguage]);
   const languageWarnings = useMemo(() => getTtsLanguageCompatibilityWarnings({
-    model: effectiveSettings?.ttsModel,
-    voice: effectiveSettings?.voice,
-    documentLanguage: effectiveSettings?.language,
-  }), [effectiveSettings]);
+    model: ttsModel,
+    voice,
+    documentLanguage,
+  }), [documentLanguage, ttsModel, voice]);
 
-  const handleChapterComplete = useCallback((chapter: TTSAudiobookChapter) => {
-    setChapter(chapter);
-    setCurrentChapter(chapter.title);
-  }, [setChapter]);
+  const isGenerating = status === 'generating';
+  const canDownload = (status === 'ready' || status === 'complete') && Boolean(downloadUrl);
+  const exportFormatLabel = formatLabel(exportFormat);
+  const progressStatusMessage = plannedSegments > 0
+    ? `${completedSegments}/${plannedSegments} segments ready`
+    : 'Preparing segments';
 
-  const handleStartGeneration = useCallback(async () => {
-    if (!effectiveSettings) {
-      setErrorMessage('No voice selected; please choose a voice before generating.');
-      return;
-    }
-    setIsGenerating(true);
-    setProgress(0);
-    setCurrentChapter('');
-    abortControllerRef.current = new AbortController();
-
-    try {
-      await onGenerateAudiobook(
-        (progress) => setProgress(progress),
-        abortControllerRef.current.signal,
-        handleChapterComplete,
-        effectiveSettings
-      );
-    } catch (error) {
-      console.error('Error generating audiobook:', error);
-      if (error instanceof Error && error.message.includes('cancelled')) {
-        // Graceful cancellation - chapters are saved
-        console.log('Audiobook generation cancelled gracefully');
-      } else {
-        // Show error to user for actual errors
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to generate audiobook. Please try again.');
-      }
-    } finally {
-      setIsGenerating(false);
-      setProgress(0);
-      abortControllerRef.current = null;
-      await invalidateAudiobook();
-    }
-  }, [onGenerateAudiobook, handleChapterComplete, setProgress, effectiveSettings, invalidateAudiobook]);
-
-  const handleCancel = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+  const cleanupSubscription = useCallback(() => {
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
   }, []);
 
-  // Cancel in-flight conversion if the page is being hidden or the component unmounts
-  // (e.g., user navigates away from the document to the home screen).
+  const applyProgressSnapshot = useCallback((completed: number, total: number) => {
+    const safeTotal = Math.max(0, Math.floor(total));
+    const safeCompleted = safeTotal > 0
+      ? Math.max(0, Math.min(safeTotal, Math.floor(completed)))
+      : 0;
+    setPlannedSegments(safeTotal);
+    setCompletedSegments(safeCompleted);
+    setProgress(clampProgress(safeCompleted, safeTotal));
+    if (safeTotal > 0 && safeCompleted >= safeTotal) {
+      progressCompleteRef.current = true;
+      cleanupSubscription();
+      abortControllerRef.current = null;
+      setStatus('ready');
+      setProgress(100);
+    }
+  }, [cleanupSubscription]);
+
+  const markReady = useCallback((total?: number | null) => {
+    const safeTotal = Math.max(0, Math.floor(total ?? 0));
+    if (safeTotal > 0) {
+      setPlannedSegments(safeTotal);
+      setCompletedSegments(safeTotal);
+    }
+    cleanupSubscription();
+    abortControllerRef.current = null;
+    progressCompleteRef.current = true;
+    setStatus('ready');
+    setProgress(100);
+  }, [cleanupSubscription]);
+
+  const stopTracking = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    cleanupSubscription();
+    progressCompleteRef.current = true;
+    if (statusRef.current === 'generating') {
+      setStatus('idle');
+    }
+  }, [cleanupSubscription]);
+
+  const commitAudioPlayerSpeed = useCallback(() => {
+    if (localAudioPlayerSpeed !== audioPlayerSpeed) {
+      setAudioPlayerSpeedAndRestart(localAudioPlayerSpeed);
+    }
+  }, [audioPlayerSpeed, localAudioPlayerSpeed, setAudioPlayerSpeedAndRestart]);
+
   useEffect(() => {
-    const onPageHide = () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
+    const onPageHide = () => stopTracking();
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('beforeunload', onPageHide);
     return () => {
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onPageHide);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      stopTracking();
     };
-  }, []);
+  }, [stopTracking]);
 
-  const handleRegenerateChapter = useCallback(async (chapter: TTSAudiobookChapter) => {
-    if (!onRegenerateChapter || !bookId) return;
-    if (!effectiveSettings) {
-      setErrorMessage('No voice selected; please choose a voice before generating.');
+  const attachArtifact = useCallback((artifactOpId: string, controller: AbortController, fallbackTotal?: number | null) => {
+    cleanupSubscription();
+    setStatus('generating');
+    unsubscribeRef.current = subscribeTtsExportArtifactEvents({
+      opId: artifactOpId,
+      documentId,
+    }, {
+      onSnapshot: async (snapshot) => {
+        if (snapshot.status === 'failed') {
+          progressCompleteRef.current = true;
+          cleanupSubscription();
+          abortControllerRef.current = null;
+          setStatus('idle');
+          setErrorMessage('Audiobook artifact preparation failed.');
+          return;
+        }
+
+        const total = snapshot.plannedSegments !== null
+          ? Math.max(0, Math.floor(snapshot.plannedSegments))
+          : Math.max(0, Math.floor(fallbackTotal ?? 0));
+        if (total > 0) {
+          const completed = Math.max(0, Math.min(total, Math.floor(snapshot.completedSegments ?? 0)));
+          setPlannedSegments(total);
+          setCompletedSegments(completed);
+          setProgress(clampProgress(completed, total));
+        }
+
+        if (snapshot.status === 'succeeded') {
+          cleanupSubscription();
+          const refreshed = await startDocumentAudioExport({
+            format: exportFormat,
+            speed: localAudioPlayerSpeed,
+          }, controller.signal);
+          if (controller.signal.aborted) return;
+          setDownloadUrl(refreshed.downloadUrl);
+          markReady(refreshed.plannedCount || total);
+        }
+      },
+      onError: () => {},
+    });
+  }, [
+    cleanupSubscription,
+    documentId,
+    exportFormat,
+    localAudioPlayerSpeed,
+    markReady,
+    startDocumentAudioExport,
+  ]);
+
+  const beginArtifactPreparation = useCallback(async (controller: AbortController, fallbackTotal?: number | null) => {
+    const refreshed = await startDocumentAudioExport({
+      format: exportFormat,
+      speed: localAudioPlayerSpeed,
+    }, controller.signal);
+    if (controller.signal.aborted) return;
+    setDownloadUrl(refreshed.downloadUrl);
+    const total = refreshed.plannedCount || fallbackTotal || 0;
+    if (refreshed.downloadUrl || refreshed.artifactStatus === 'succeeded') {
+      markReady(total);
       return;
     }
-
-    if (!showRegenerateHint) {
-      setShowRegenerateHint(true);
+    if (refreshed.artifactOperationId) {
+      attachArtifact(refreshed.artifactOperationId, controller, total);
     }
+  }, [
+    attachArtifact,
+    exportFormat,
+    localAudioPlayerSpeed,
+    markReady,
+    startDocumentAudioExport,
+  ]);
 
-    setRegeneratingChapter(chapter.index);
-    setCurrentChapter(`Regenerating: ${chapter.title}`);
-    abortControllerRef.current = new AbortController();
+  const attachGeneration = useCallback((input: {
+    generationOperationId: string;
+    controller: AbortController;
+    plannedCount: number;
+  }) => {
+    cleanupSubscription();
+    setStatus('generating');
+    unsubscribeRef.current = subscribeTtsExportGenerationEvents({
+      opId: input.generationOperationId,
+      documentId,
+    }, {
+      onSnapshot: (snapshot) => {
+        const total = snapshot.plannedCount ?? input.plannedCount;
+        if (snapshot.status === 'failed') {
+          progressCompleteRef.current = true;
+          cleanupSubscription();
+          abortControllerRef.current = null;
+          setStatus('idle');
+          setErrorMessage('Audio export failed.');
+          return;
+        }
+
+        const completed = snapshot.status === 'succeeded'
+          ? total
+          : snapshot.completedCount !== null
+            ? snapshot.completedCount
+            : snapshot.completedThroughOrdinal === null
+              ? 0
+              : Math.min(total, snapshot.completedThroughOrdinal + 1);
+        applyProgressSnapshot(completed, total);
+        if (snapshot.status === 'succeeded' || (total > 0 && completed >= total)) {
+          progressCompleteRef.current = true;
+          cleanupSubscription();
+          setProgress(100);
+          void beginArtifactPreparation(input.controller, total);
+        }
+      },
+      onError: () => {
+        // EventSource reconnects automatically. Progress comes from operation
+        // snapshots, so a transient disconnect is not a user-facing failure.
+      },
+    });
+  }, [
+    applyProgressSnapshot,
+    beginArtifactPreparation,
+    cleanupSubscription,
+    documentId,
+  ]);
+
+  const handleStartGeneration = useCallback(async () => {
+    cleanupSubscription();
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    progressCompleteRef.current = false;
+    setStatus('generating');
+    setProgress(0);
+    setCompletedSegments(0);
+    setPlannedSegments(0);
+    setDownloadUrl(null);
+    setErrorMessage(null);
 
     try {
-      setChapter({ ...chapter, status: 'generating' });
-
-      const regeneratedChapter = await onRegenerateChapter(
-        chapter.index,
-        bookId,
-        effectiveSettings,
-        abortControllerRef.current.signal
-      );
-
-      setChapter(regeneratedChapter);
-
-    } catch (error) {
-      console.error('Error regenerating chapter:', error);
-      if (error instanceof Error && error.message.includes('cancelled')) {
-        console.log('Chapter regeneration cancelled');
-      } else {
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to regenerate chapter. Please try again.');
-        setChapter({ ...chapter, status: 'error' });
+      const session = await startDocumentAudioExport({
+        format: exportFormat,
+        speed: localAudioPlayerSpeed,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+      setDownloadUrl(session.downloadUrl);
+      setPlannedSegments(session.plannedCount);
+      if (session.completedCount !== null) {
+        setCompletedSegments(Math.max(0, Math.min(session.plannedCount, session.completedCount)));
+        setProgress(clampProgress(session.completedCount, session.plannedCount));
       }
-    } finally {
-      setRegeneratingChapter(null);
-      setCurrentChapter('');
-      setProgress(0);
-      abortControllerRef.current = null;
-      await invalidateAudiobook();
-    }
-  }, [onRegenerateChapter, bookId, setProgress, showRegenerateHint, effectiveSettings, invalidateAudiobook, setChapter]);
-
-  const performDeleteChapter = useCallback(async () => {
-    if (!bookId || !pendingDeleteChapter) return;
-    try {
-      await deleteChapterMutation.mutateAsync({
-        bookId,
-        chapterIndex: pendingDeleteChapter.index,
-      });
-    } catch (error) {
-      console.error('Error deleting chapter:', error);
-      setErrorMessage('Failed to delete chapter. Please try again.');
-    } finally {
-      setPendingDeleteChapter(null);
-    }
-  }, [bookId, deleteChapterMutation, pendingDeleteChapter]);
-
-  const performResetAll = useCallback(async () => {
-    const targetBookId = bookId || documentId;
-    if (!targetBookId) return;
-    try {
-      await resetMutation.mutateAsync(targetBookId);
-      setProgress(0);
-    } catch (error) {
-      console.error('Error resetting audiobook chapters:', error);
-      setErrorMessage('Failed to reset chapters. Please try again.');
-    } finally {
-      setShowResetConfirm(false);
-    }
-  }, [bookId, documentId, resetMutation, setProgress]);
-
-  const handleDownloadChapter = useCallback(async (chapter: TTSAudiobookChapter) => {
-    if (!chapter.bookId) return;
-
-    try {
-      const blob = await downloadAudiobookChapter(chapter.bookId, chapter.index);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // Use the chapter's stored format directly - it knows what it actually is
-      const ext = chapter.format || 'm4b';
-      a.download = `${chapter.title}.${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading chapter:', error);
-      setErrorMessage('Failed to download chapter. Please try again.');
-    }
-  }, []);
-
-  const handleDownloadComplete = useCallback(async () => {
-    if (!bookId) return;
-
-    setIsCombining(true);
-    try {
-      const response = await downloadAudiobook(bookId, format);
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response body');
-
-      const chunks: Uint8Array[] = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
+      if (session.downloadUrl || session.artifactStatus === 'succeeded') {
+        markReady(session.plannedCount);
+        return;
       }
-
-      const mimeType = format === 'mp3' ? 'audio/mpeg' : 'audio/mp4';
-      const blob = new Blob(chunks as BlobPart[], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `audiobook.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      if (session.generationStatus === 'succeeded' && session.artifactOperationId) {
+        attachArtifact(session.artifactOperationId, controller, session.plannedCount);
+        return;
+      }
+      if (session.artifactOperationId) {
+        attachArtifact(session.artifactOperationId, controller, session.plannedCount);
+        return;
+      }
+      if (session.generationOperationId) {
+        attachGeneration({
+          generationOperationId: session.generationOperationId,
+          controller,
+          plannedCount: session.plannedCount,
+        });
+      }
     } catch (error) {
-      console.error('Error downloading complete audiobook:', error);
-      setErrorMessage('Failed to download audiobook. Please try again.');
-    } finally {
-      setIsCombining(false);
+      if (controller.signal.aborted) return;
+      setStatus('idle');
+      setErrorMessage(error instanceof Error ? error.message : 'Audio export failed.');
     }
-  }, [bookId, format]);
+  }, [
+    attachArtifact,
+    attachGeneration,
+    cleanupSubscription,
+    exportFormat,
+    localAudioPlayerSpeed,
+    markReady,
+    startDocumentAudioExport,
+  ]);
 
+  useEffect(() => {
+    if (!isOpen || isLoading || !voice) return;
+    if (statusRef.current === 'generating' || statusRef.current === 'downloading') return;
 
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+    const controller = new AbortController();
+    const runId = ++hydrateRunIdRef.current;
+    let attachedSubscription = false;
 
-  // Compute display list including gaps before the highest existing index
-  const maxIndex = chapters.length > 0 ? Math.max(...chapters.map(c => c.index)) : -1;
-  const displayChapters: TTSAudiobookChapter[] =
-    maxIndex >= 0
-      ? Array.from({ length: maxIndex + 1 }, (_, i) => {
-        const existing = chapters.find(c => c.index === i);
-        if (existing) return existing;
-        return {
-          index: i,
-          title: documentType === 'pdf' ? `Page ${i + 1}` : `Chapter ${i + 1}`,
-          status: 'pending',
-          bookId: bookId || undefined,
-          format
-        };
-      })
-      : [];
+    void (async () => {
+      try {
+        const snapshot = await resolveDocumentAudioExport({
+          format: exportFormat,
+          speed: localAudioPlayerSpeed,
+        }, controller.signal);
+        if (controller.signal.aborted || runId !== hydrateRunIdRef.current) return;
 
-  // Determine if we should show the Resume and Reset buttons
-  const hasAnyChapters = chapters.length > 0;
-  const showResumeButton = !isGenerating && !regeneratingChapter && hasAnyChapters;
-  const showResetButton = !isGenerating && !regeneratingChapter && hasAnyChapters;
-  const settingsLocked = savedSettings !== null;
-  const canGenerate = effectiveSettings !== null;
+        const total = Math.max(0, Math.floor(snapshot.plannedCount));
+        const completed = snapshot.completedCount !== null
+          ? Math.max(0, Math.min(total, Math.floor(snapshot.completedCount)))
+          : 0;
+        setDownloadUrl(snapshot.downloadUrl);
+        setPlannedSegments(total);
+        setCompletedSegments(completed);
+        setProgress(clampProgress(completed, total));
+        setErrorMessage(null);
 
-  // Do not render until storage/config is initialized
+        if (snapshot.downloadUrl || snapshot.artifactStatus === 'succeeded') {
+          markReady(total);
+          return;
+        }
+
+        if (
+          snapshot.artifactOperationId
+          && (snapshot.artifactStatus === 'queued' || snapshot.artifactStatus === 'running')
+        ) {
+          attachedSubscription = true;
+          attachArtifact(snapshot.artifactOperationId, controller, total);
+          return;
+        }
+
+        if (snapshot.generationStatus === 'succeeded') {
+          attachedSubscription = true;
+          await beginArtifactPreparation(controller, total);
+          return;
+        }
+
+        if (
+          snapshot.generationOperationId
+          && (snapshot.generationStatus === 'queued' || snapshot.generationStatus === 'running')
+        ) {
+          attachedSubscription = true;
+          attachGeneration({
+            generationOperationId: snapshot.generationOperationId,
+            controller,
+            plannedCount: total,
+          });
+          return;
+        }
+
+        setStatus('idle');
+      } catch (error) {
+        if (controller.signal.aborted || runId !== hydrateRunIdRef.current) return;
+        setStatus('idle');
+        setErrorMessage(error instanceof Error ? error.message : 'Audio export lookup failed.');
+      }
+    })();
+
+    return () => {
+      if (!attachedSubscription) {
+        controller.abort();
+        hydrateRunIdRef.current += 1;
+      }
+    };
+  }, [
+    attachArtifact,
+    attachGeneration,
+    beginArtifactPreparation,
+    exportFormat,
+    isLoading,
+    isOpen,
+    localAudioPlayerSpeed,
+    markReady,
+    resolveDocumentAudioExport,
+    voice,
+  ]);
+
+  const handleDownload = useCallback(() => {
+    const urlToDownload = downloadUrl;
+    if (!urlToDownload) return;
+    setStatus('downloading');
+    try {
+      const link = document.createElement('a');
+      link.href = urlToDownload;
+      link.download = `openreader-${documentType}-${documentId.slice(0, 12)}.${exportFormat}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setStatus('complete');
+    } catch (error) {
+      setStatus('ready');
+      setErrorMessage(error instanceof Error ? error.message : 'Download failed.');
+    }
+  }, [documentId, documentType, downloadUrl, exportFormat]);
+
   if (isLoading) {
     return null;
   }
@@ -401,14 +461,12 @@ export function AudiobookExportModal({
       <ProgressPopup
         isOpen={isGenerating && !isOpen}
         progress={progress}
-        estimatedTimeRemaining={estimatedTimeRemaining || undefined}
-        onCancel={handleCancel}
-        cancelText="Cancel"
+        onCancel={stopTracking}
+        cancelText="Dismiss"
         operationType="audiobook"
         onClick={() => setIsOpen(true)}
-        currentChapter={currentChapter}
-        totalChapters={documentType === 'epub' ? undefined : undefined}
-        completedChapters={chapters.filter(c => c.status === 'completed').length}
+        currentChapter={`Preparing ${exportFormatLabel}`}
+        statusMessage={progressStatusMessage}
       />
 
       <ReaderSidebarShell
@@ -416,401 +474,125 @@ export function AudiobookExportModal({
         onClose={() => setIsOpen(false)}
         ariaLabel="Export audiobook"
         title="Export Audiobook"
-        subtitle="Only leaving the document cancels generation."
+        subtitle="Render this document to a downloadable audio file."
+        bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
       >
-                {isLoadingExisting ? (
-                  <AudiobookSettingsSkeleton />
-                ) : (
-                  <>
-			                      <div className="space-y-4">
-			                        {!isGenerating && (
-			                          <div className="w-full rounded-lg border border-line bg-background">
-			                            {/* Header */}
-			                            <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft bg-surface rounded-t-xl">
-			                              <h4 className="text-sm font-medium text-foreground tracking-tight">Generation settings</h4>
-			                              {settingsLocked && (
-			                                <span className="inline-flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-[11px] font-medium text-soft uppercase tracking-wider">
-			                                  <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z" clipRule="evenodd" /></svg>
-			                                  Locked
-			                                </span>
-			                              )}
-			                            </div>
+        <div className="space-y-4">
+          <Section title="Voice" subtitle="Narration used for this export." variant="flat">
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-faint">Voice</span>
+              <VoicesControlBase
+                availableVoices={availableVoices}
+                voice={voice}
+                onChangeVoice={setVoiceAndRestart}
+                providerType={providerType}
+                ttsModel={ttsModel}
+                dropdownDirection="down"
+                variant="field"
+              />
+            </div>
+            {languageWarnings.map((warning) => (
+              <p key={warning} className="text-xs text-warning">
+                {warning}
+              </p>
+            ))}
+          </Section>
 
-			                            <div className="p-4">
-			                              {isLegacyAudiobookMissingSettings && (
-			                                <div className="mb-4 rounded-lg border border-accent-line bg-accent-wash p-3 text-xs text-foreground">
-			                                  <div className="font-medium">Saved generation settings not found</div>
-			                                  <div className="mt-1 text-soft">
-			                                    This audiobook was likely created before v1 metadata was introduced, so OpenReader can&apos;t know
-			                                    which voice/speeds/format were used. Consider resetting this audiobook to regenerate it with
-			                                    v1 metadata (so settings are saved for resumes across devices).
-			                                  </div>
-			                                </div>
-			                              )}
+          <Section title="Format & Speed" subtitle="File type and playback pace." variant="flat">
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-faint">File format</span>
+              <SegmentedControl<ExportFormat>
+                value={exportFormat}
+                options={EXPORT_FORMAT_OPTIONS}
+                onChange={setExportFormat}
+                ariaLabel="Audiobook export format"
+                className="grid-cols-2"
+              />
+            </div>
 
-			                              {settingsLocked && savedSettings ? (
-			                                <div className="space-y-3">
-			                                  <div className="grid grid-cols-2 gap-3">
-			                                    <Card className="p-3">
-			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Voice</div>
-			                                      <div className="text-sm font-medium text-foreground truncate">{savedSettings.voice}</div>
-			                                    </Card>
-			                                    <Card className="p-3">
-			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Format</div>
-			                                      <div className="text-sm font-medium text-foreground">{savedSettings.format.toUpperCase()}</div>
-			                                    </Card>
-			                                  </div>
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <Card className="p-3">
-                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Native speed</div>
-                                      <div className="text-sm font-medium text-foreground">
-                                        {resolveTtsProviderModelPolicy({
-                                          providerRef: savedSettings.providerRef,
-                                          providerType: savedSettings.providerType,
-                                          model: savedSettings.ttsModel,
-                                        }).supportsNativeModelSpeed
-                                          ? `${formatSpeed(savedSettings.nativeSpeed)}x`
-                                          : 'Not supported'}
-                                      </div>
-                                    </Card>
-			                                    <Card className="p-3">
-			                                      <div className="text-[11px] uppercase tracking-wider text-soft mb-1">Post speed</div>
-			                                      <div className="text-sm font-medium text-foreground">{formatSpeed(savedSettings.postSpeed)}x</div>
-			                                    </Card>
-			                                  </div>
-			                                  <p className="text-xs text-soft">
-			                                    Reset the audiobook to change generation settings.
-			                                  </p>
-			                                </div>
-			                              ) : (
-			                                <div className="space-y-4">
-			                                  {/* Voice & Format row */}
-			                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-			                                    <div className="space-y-1.5">
-			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Voice</label>
-			                                      <VoicesControlBase
-			                                        availableVoices={availableVoices}
-			                                        voice={audiobookVoice}
-			                                        onChangeVoice={setAudiobookVoice}
-			                                        providerType={providerType}
-			                                        ttsModel={ttsModel}
-			                                        dropdownDirection="down"
-			                                        variant="field"
-			                                      />
-			                                    </div>
+            {nativeSpeedSupported ? (
+              <RangeField
+                label="Native model speed"
+                value={voiceSpeed}
+                min={0.5}
+                max={3}
+                step={0.1}
+                formatter={(value) => `${formatSpeed(value)}x`}
+                onChange={(value) => setSpeedAndRestart(value)}
+                disabled={isGenerating}
+              />
+            ) : (
+              <p className="text-xs text-faint">Native model speed is not available for this model.</p>
+            )}
 
-			                                    <div className="space-y-1.5">
-			                                      <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Format</label>
-			                                      {chapters.length === 0 ? (
-			                                        <Select
-			                                          value={format}
-			                                          onChange={(newFormat) => setFormat(newFormat)}
-			                                          options={['m4b', 'mp3'] as const}
-			                                          disabled={chapters.length > 0 || settingsLocked}
-			                                          renderValue={(option) => (
-			                                            <span className="text-sm font-medium">{option.toUpperCase()}</span>
-			                                          )}
-			                                          renderOption={(option, { selected }) => (
-			                                            <span className={`block truncate text-sm ${selected ? 'font-medium' : 'font-normal'}`}>
-			                                              {option.toUpperCase()}
-			                                            </span>
-			                                          )}
-			                                          buttonClassName="bg-surface"
-			                                          chevronClassName="h-4 w-4 text-soft"
-			                                          optionInset="none"
-			                                          optionItemClassName="py-2"
-			                                          showCheckmark={false}
-			                                        />
-			                                      ) : (
-			                                        <div className="text-sm font-medium text-foreground py-1.5 pl-3">{format.toUpperCase()}</div>
-			                                      )}
-			                                    </div>
-			                                  </div>
-                                  {languageWarnings.map((warning) => (
-                                    <p key={warning} className="text-xs text-warning">
-                                      {warning}
-                                    </p>
-                                  ))}
+            <RangeField
+              label="Audiobook speed"
+              value={localAudioPlayerSpeed}
+              min={0.5}
+              max={3}
+              step={0.1}
+              formatter={(value) => `${formatSpeed(value)}x`}
+              onChange={setLocalAudioPlayerSpeed}
+              onMouseUp={commitAudioPlayerSpeed}
+              onKeyUp={commitAudioPlayerSpeed}
+              onTouchEnd={commitAudioPlayerSpeed}
+              disabled={isGenerating}
+            />
+          </Section>
 
-                                  {/* Speed controls */}
-                                  <Card className="p-3 space-y-3">
-                                    {!nativeSpeedSupported && (
-                                      <div className="rounded-md border border-line bg-background px-2 py-1.5 text-[11px] text-soft">
-                                        Native model speed is not available for this model.
-                                      </div>
-                                    )}
+          <Section
+            title="Export"
+            subtitle="Generate audio, then download."
+            variant="flat"
+            action={
+              <Badge tone={canDownload ? 'accent' : isGenerating ? 'foreground' : 'muted'}>
+                {canDownload ? 'Ready' : isGenerating ? 'Generating' : 'Idle'}
+              </Badge>
+            }
+          >
+            <div className="flex items-center justify-between text-xs text-faint">
+              <span>Segments</span>
+              <span className="font-semibold text-foreground tabular-nums">
+                {plannedSegments > 0 ? `${completedSegments}/${plannedSegments}` : '—'}
+              </span>
+            </div>
 
-                                    {nativeSpeedSupported && (
-                                      <>
-                                        <div className="space-y-2">
-                                          <div className="flex items-center justify-between">
-                                            <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Native model speed</label>
-                                            <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(nativeSpeed)}x</span>
-                                          </div>
-                                          <RangeInput
-                                            min="0.5"
-                                            max="3"
-                                            step="0.1"
-                                            value={nativeSpeed}
-                                            onChange={(e) => setNativeSpeed(parseFloat(e.target.value))}
-                                          />
-                                          <div className="flex justify-between text-[10px] text-soft">
-                                            <span>0.5x</span>
-                                            <span>3x</span>
-                                          </div>
-                                        </div>
+            {isGenerating && (
+              <ProgressCard
+                progress={progress}
+                onCancel={stopTracking}
+                operationType="audiobook"
+                currentChapter={`Preparing ${exportFormatLabel}`}
+                statusMessage={progressStatusMessage}
+                cancelText="Dismiss"
+              />
+            )}
 
-                                        <div className="border-t border-line-soft" />
-                                      </>
-                                    )}
-
-			                                    <div className="space-y-2">
-			                                      <div className="flex items-center justify-between">
-			                                        <label className="text-[11px] uppercase tracking-wider font-medium text-soft">Post-generation speed</label>
-			                                        <span className="text-xs font-medium text-accent tabular-nums">{formatSpeed(postSpeed)}x</span>
-			                                      </div>
-			                                      <RangeInput
-			                                        min="0.5"
-			                                        max="3"
-			                                        step="0.1"
-			                                        value={postSpeed}
-			                                        onChange={(e) => setPostSpeed(parseFloat(e.target.value))}
-			                                      />
-			                                      <div className="flex justify-between text-[10px] text-soft">
-			                                        <span>0.5x</span>
-			                                        <span>3x</span>
-			                                      </div>
-			                                    </div>
-			                                  </Card>
-			                                </div>
-			                              )}
-
-			                              {/* Action buttons */}
-			                              <div className="mt-4 flex items-center gap-2">
-			                                {chapters.length === 0 && (
-			                                  <Button
-			                                    onClick={handleStartGeneration}
-			                                    disabled={!canGenerate}
-			                                    variant="primary"
-			                                    size="md"
-			                                    className="flex-1"
-			                                  >
-			                                    Start Generation
-			                                  </Button>
-			                                )}
-			                                {showResumeButton && (
-			                                  <Button
-			                                    onClick={handleStartGeneration}
-			                                    disabled={!canGenerate}
-			                                    variant="primary"
-			                                    size="md"
-			                                    className="flex-1"
-			                                  >
-			                                    Resume
-			                                  </Button>
-			                                )}
-			                                {showResetButton && (
-			                                  <Button
-			                                    onClick={() => setShowResetConfirm(true)}
-			                                    disabled={isGenerating}
-			                                    variant="danger"
-			                                    size="md"
-			                                    title="Delete all generated chapters/pages for this document"
-			                                  >
-			                                    Reset
-			                                  </Button>
-			                                )}
-			                              </div>
-			                            </div>
-			                          </div>
-			                        )}
-                        {showRegenerateHint && (
-                          <div className="flex items-start justify-between bg-surface-sunken border border-line rounded-md px-3 py-2 text-xs sm:text-sm">
-                            <p className="text-xs sm:text-sm text-foreground">
-                              TTS audio for this chapter may be cached
-                              <br />
-                              Change the TTS playback options or restart the server to force uncached regeneration
-                            </p>
-                            <IconButton
-                              onClick={() => setShowRegenerateHint(false)}
-                              className="ml-3"
-                              aria-label="Dismiss regenerate hint"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </IconButton>
-                          </div>
-                        )}
-                        {/* Progress Info */}
-                        {isGenerating && (
-                          <ProgressCard
-                            progress={progress}
-                            estimatedTimeRemaining={estimatedTimeRemaining || undefined}
-                            onCancel={handleCancel}
-                            operationType="audiobook"
-                            currentChapter={currentChapter}
-                            completedChapters={chapters.filter(c => c.status === 'completed').length}
-                            cancelText="Cancel"
-                          />
-                        )}
-
-                        {chapters.length > 0 && (
-                          <>
-                            <div
-                              className={`w-full space-y-2 max-h-96 overflow-y-auto ${isRefreshingChapters ? 'opacity-70 transition-opacity' : ''}`}
-                              aria-busy={isRefreshingChapters}
-                            >
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-medium text-foreground">Chapters</h4>
-                                {isRefreshingChapters && <ClockIcon className="h-4 w-4 text-soft animate-spin" />}
-                              </div>
-                              {displayChapters.map((chapter) => (
-                                <div
-                                  key={chapter.index}
-                                  className={`flex items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-surface-sunken ${(regeneratingChapter === chapter.index || chapter.status === 'generating') ? 'prism-outline' : ''}`}
-                                >
-                                  <div className="flex items-center space-x-3 flex-1">
-                                    {chapter.status === 'completed' ? (
-                                      <CheckCircleIcon className="h-5 w-5 text-accent" />
-                                    ) : onRegenerateChapter ? (
-                                      <IconButton
-                                        onClick={() => handleRegenerateChapter(chapter)}
-                                        disabled={regeneratingChapter !== null || chapter.status === 'generating' || isGenerating}
-                                        tone="ghost"
-                                        size="sm"
-                                        className="rounded-full bg-surface-sunken text-accent"
-                                        title={chapter.status === 'generating' ? 'Generating...' : 'Regenerate this chapter'}
-                                      >
-                                        <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index || chapter.status === 'generating' ? 'animate-spin' : ''}`} />
-                                      </IconButton>
-                                    ) : (
-                                      <ClockIcon className="h-5 w-5 text-soft" />
-                                    )}
-                                    <div className="flex flex-row flex-wrap items-center gap-1">
-                                      <p className="text-sm font-medium text-foreground">
-                                        {chapter.title}
-                                      </p>
-                                      <p>•</p>
-                                      <p className="text-xs text-soft mt-0.5">
-                                        {chapter.status !== 'completed' && <span className="text-warning">Missing • </span>}{formatDuration(chapter.duration)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center">
-                                    {((onRegenerateChapter && !isGenerating) || chapter.status === 'completed') && (
-                                      <MenuRoot as="div" className="relative inline-block text-left">
-                                        <MenuTrigger
-                                          as={IconButton}
-                                          size="sm"
-                                          title="Chapter actions"
-                                        >
-                                          <DotsVerticalIcon className="h-5 w-5" />
-                                        </MenuTrigger>
-                                        <MenuTransition>
-                                          <MenuItemsSurface
-                                            anchor={{ to: 'bottom end', gap: '8px', padding: '12px' }}
-                                            portal
-                                            className="z-[70] w-44 origin-top-right bg-background focus:outline-none"
-                                          >
-                                            {chapter.status === 'completed' && (
-                                              <>
-                                                <MenuActionItem
-                                                  tone="danger"
-                                                  onClick={() => setPendingDeleteChapter(chapter)}
-                                                  title="Delete this chapter"
-                                                >
-                                                  <XCircleIcon className="h-4 w-4" />
-                                                  <span>Delete</span>
-                                                </MenuActionItem>
-                                                <MenuActionItem onClick={() => handleDownloadChapter(chapter)}>
-                                                  <DownloadIcon className="h-4 w-4" />
-                                                  <span>Download</span>
-                                                </MenuActionItem>
-                                              </>
-                                            )}
-                                            {regeneratingChapter === chapter.index && (
-                                              <MenuActionItem
-                                                tone="danger"
-                                                onClick={handleCancel}
-                                                title="Cancel this chapter regeneration"
-                                              >
-                                                <XCircleIcon className="h-4 w-4" />
-                                                <span>Cancel</span>
-                                              </MenuActionItem>
-                                            )}
-                                            {onRegenerateChapter && !isGenerating && (
-                                              <MenuActionItem
-                                                disabled={regeneratingChapter !== null}
-                                                onClick={() => handleRegenerateChapter(chapter)}
-                                                title="Regenerate this chapter"
-                                              >
-                                                <RefreshIcon className={`h-4 w-4 ${regeneratingChapter === chapter.index ? 'animate-spin' : ''}`} />
-                                                <span>{regeneratingChapter === chapter.index ? 'Regenerating...' : 'Regenerate'}</span>
-                                              </MenuActionItem>
-                                            )}
-                                          </MenuItemsSurface>
-                                          {/* end of menu items */}
-                                        </MenuTransition>
-                                      </MenuRoot>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-
-                            {bookId && !isGenerating && (
-                              <div className="pt-4 border-t border-line-soft">
-                                <Button
-                                  onClick={handleDownloadComplete}
-                                  disabled={isCombining}
-                                  variant="primary"
-                                  size="md"
-                                  className="w-full space-x-2"
-                                >
-                                  <DownloadIcon className="h-5 w-5" />
-                                  <span>{isCombining ? 'Combining chapters...' : `Full Download (${format.toUpperCase()})`}</span>
-                                </Button>
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {chapters.length === 0 && !isGenerating && !isLoadingExisting && (
-                          <div className="text-center">
-                            <p className="text-sm text-soft">
-                              Audiobook settings are fixed after generation. Chapters will appear here as they are ready.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                    </>
-                  )}
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                onClick={handleStartGeneration}
+                disabled={isGenerating || status === 'downloading' || !voice}
+                variant="primary"
+                size="md"
+                className="flex-1"
+              >
+                {canDownload ? 'Regenerate' : 'Generate'}
+              </Button>
+              <Button
+                onClick={handleDownload}
+                disabled={!canDownload}
+                variant="secondary"
+                size="md"
+                className="flex-1 gap-2"
+              >
+                <DownloadIcon className="h-4 w-4" />
+                <span>{status === 'downloading' ? 'Downloading...' : 'Download'}</span>
+              </Button>
+            </div>
+          </Section>
+        </div>
       </ReaderSidebarShell>
-      {/* Confirm delete chapter */}
-      <ConfirmDialog
-        isOpen={pendingDeleteChapter !== null}
-        onClose={() => setPendingDeleteChapter(null)}
-        onConfirm={performDeleteChapter}
-        title="Delete Chapter"
-        message={pendingDeleteChapter ? `Delete "${pendingDeleteChapter.title}"? This will remove the audio and metadata for this chapter.` : ''}
-        confirmText="Delete"
-        cancelText="Cancel"
-        isDangerous
-      />
-      {/* Confirm reset all */}
-      <ConfirmDialog
-        isOpen={showResetConfirm}
-        onClose={() => setShowResetConfirm(false)}
-        onConfirm={performResetAll}
-        title="Reset Audiobook"
-        message="Reset audiobook? This deletes all generated chapters/pages and any combined files. This cannot be undone."
-        confirmText="Reset"
-        cancelText="Cancel"
-        isDangerous
-      />
-      {/* Error dialog replacing alerts */}
+
       <ConfirmDialog
         isOpen={errorMessage !== null}
         onClose={() => setErrorMessage(null)}
@@ -822,52 +604,5 @@ export function AudiobookExportModal({
         isDangerous={false}
       />
     </>
-  );
-}
-
-function AudiobookSettingsSkeleton() {
-  return (
-    <div className="space-y-4 animate-pulse" aria-label="Loading audiobook settings" aria-busy="true">
-      <div className="w-full rounded-lg border border-line bg-background overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-line-soft bg-surface">
-          <div className="h-4 w-40 rounded bg-surface-sunken" />
-          <div className="h-5 w-14 rounded bg-surface-sunken" />
-        </div>
-        <div className="p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <div className="h-3 w-16 rounded bg-surface-sunken" />
-              <div className="h-9 w-full rounded-md bg-surface-sunken" />
-            </div>
-            <div className="space-y-1.5">
-              <div className="h-3 w-16 rounded bg-surface-sunken" />
-              <div className="h-9 w-full rounded-md bg-surface-sunken" />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <div className="h-3 w-24 rounded bg-surface-sunken" />
-              <div className="h-2 w-full rounded bg-surface-sunken" />
-            </div>
-            <div className="space-y-1.5">
-              <div className="h-3 w-20 rounded bg-surface-sunken" />
-              <div className="h-2 w-full rounded bg-surface-sunken" />
-            </div>
-          </div>
-          <div className="h-9 w-full rounded-md bg-surface-sunken" />
-        </div>
-      </div>
-
-      <div className="w-full rounded-lg border border-line bg-background overflow-hidden">
-        <div className="px-4 py-3 border-b border-line-soft bg-surface">
-          <div className="h-4 w-28 rounded bg-surface-sunken" />
-        </div>
-        <div className="p-4 space-y-2">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-16 rounded-lg border border-line bg-surface" />
-          ))}
-        </div>
-      </div>
-    </div>
   );
 }

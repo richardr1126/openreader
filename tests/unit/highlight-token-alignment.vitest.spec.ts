@@ -4,7 +4,7 @@ import {
   buildAlignmentTokenRanges,
   findBestHighlightTokenMatch,
 } from '../../src/lib/client/highlight-token-alignment';
-import { segmentWords } from '../../src/lib/shared/language';
+import { segmentWords } from '@openreader/tts/language';
 import type { TTSSentenceAlignment } from '../../src/types/tts';
 
 const alignmentWords = (

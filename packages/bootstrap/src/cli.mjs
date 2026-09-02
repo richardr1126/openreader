@@ -1,25 +1,31 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
 import { runMigrations } from '@openreader/database/migrate';
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
+import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
-  detectHostForDefaultEndpoint,
+  ensureS3Bucket,
   hasWeedBinary,
-  isRunningInDocker,
-  loopbackS3Endpoint,
-  parseS3Endpoint,
-  parseUrlHost,
+  resolveWeedMiniAdvertiseHost,
   waitForEndpoint,
 } from './embedded-seaweedfs.mjs';
 import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
+
+function applyStorageTransportEnv(env, options = {}) {
+  const resolved = resolveStorageTransport(env, options);
+  env.S3_INTERNAL_ENDPOINT = resolved.internalEndpoint;
+  if (resolved.publicEndpoint) env.S3_PUBLIC_ENDPOINT = resolved.publicEndpoint;
+  env.S3_BROWSER_TRANSPORT = resolved.mode;
+  return resolved;
+}
 
 function findWorkspaceRoot(startDir = process.cwd()) {
   let dir = startDir;
@@ -77,6 +83,10 @@ function requireAuthEnv(env) {
   }
 }
 
+function embeddedCredentialBrokerUrl() {
+  return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials';
+}
+
 function parseCommandFromArgs(argv) {
   const marker = argv.indexOf('--');
   if (marker >= 0) return argv.slice(marker + 1);
@@ -129,23 +139,6 @@ function spawnMainCommand(command, env) {
 async function runDbMigrations(env) {
   console.log('Running database migrations...');
   await runMigrations({ cwd: workspaceRoot, env });
-}
-
-function runStorageMigrations(env) {
-  const migrateScript = fileURLToPath(new URL('./storage-migration.mjs', import.meta.url));
-
-  console.log('Running storage migrations (v2)...');
-  const migration = spawnSync(process.execPath, [migrateScript, '--dry-run', 'false', '--delete-local', 'false'], {
-    env,
-    stdio: 'inherit',
-  });
-
-  if (migration.error) {
-    throw migration.error;
-  }
-  if (typeof migration.status === 'number' && migration.status !== 0) {
-    throw new Error(`Storage migrations failed with exit code ${migration.status}.`);
-  }
 }
 
 function hasS3Config(env) {
@@ -220,6 +213,10 @@ async function main() {
 
   const runtimeEnv = { ...process.env };
   runtimeEnv.LOG_FORMAT = withDefault(runtimeEnv.LOG_FORMAT, 'pretty');
+  runtimeEnv.SQLITE_DB_PATH = withDefault(
+    runtimeEnv.SQLITE_DB_PATH,
+    path.join(workspaceRoot, 'docstore', 'sqlite3.db'),
+  );
   requireAuthEnv(runtimeEnv);
   let weedProc = null;
   let weedExitPromise = Promise.resolve();
@@ -297,13 +294,18 @@ async function main() {
     if (useEmbeddedWeed) {
       runtimeEnv.WEED_MINI_DIR = withDefault(runtimeEnv.WEED_MINI_DIR, path.join(workspaceRoot, 'docstore/seaweedfs'));
       runtimeEnv.WEED_MINI_WAIT_SEC = withDefault(runtimeEnv.WEED_MINI_WAIT_SEC, '20');
+      runtimeEnv.WEED_MINI_BIND_HOST = withDefault(runtimeEnv.WEED_MINI_BIND_HOST, '127.0.0.1');
+      runtimeEnv.WEED_MINI_ADVERTISE_HOST = resolveWeedMiniAdvertiseHost(
+        runtimeEnv.WEED_MINI_BIND_HOST,
+        runtimeEnv.WEED_MINI_ADVERTISE_HOST,
+      );
+      runtimeEnv.WEED_MINI_PORT = withDefault(runtimeEnv.WEED_MINI_PORT, '8333');
       runtimeEnv.S3_BUCKET = withDefault(runtimeEnv.S3_BUCKET, 'openreader-documents');
       runtimeEnv.S3_REGION = withDefault(runtimeEnv.S3_REGION, 'us-east-1');
-      const configuredBaseUrl = runtimeEnv.BASE_URL?.trim() || '';
-      const baseUrlHost = configuredBaseUrl ? parseUrlHost(configuredBaseUrl, 'BASE_URL') : '';
-      const configuredS3Endpoint = runtimeEnv.S3_ENDPOINT?.trim() || '';
-      const defaultS3Host = baseUrlHost || detectHostForDefaultEndpoint();
-      runtimeEnv.S3_ENDPOINT = configuredS3Endpoint || `http://${defaultS3Host}:8333`;
+      runtimeEnv.S3_INTERNAL_ENDPOINT = withDefault(
+        runtimeEnv.S3_INTERNAL_ENDPOINT || runtimeEnv.S3_ENDPOINT,
+        `http://127.0.0.1:${runtimeEnv.WEED_MINI_PORT}`,
+      );
       runtimeEnv.S3_FORCE_PATH_STYLE = withDefault(runtimeEnv.S3_FORCE_PATH_STYLE, 'true');
       runtimeEnv.S3_PREFIX = withDefault(runtimeEnv.S3_PREFIX, 'openreader');
       runtimeEnv.S3_ACCESS_KEY_ID = withDefault(runtimeEnv.S3_ACCESS_KEY_ID, randomBytes(16).toString('hex'));
@@ -311,21 +313,18 @@ async function main() {
       runtimeEnv.AWS_ACCESS_KEY_ID = runtimeEnv.S3_ACCESS_KEY_ID;
       runtimeEnv.AWS_SECRET_ACCESS_KEY = runtimeEnv.S3_SECRET_ACCESS_KEY;
       fs.mkdirSync(runtimeEnv.WEED_MINI_DIR, { recursive: true });
-      const runningInDocker = isRunningInDocker();
       const waitSec = Number.parseInt(runtimeEnv.WEED_MINI_WAIT_SEC || '20', 10);
       const waitTimeout = Number.isFinite(waitSec) ? waitSec : 20;
-      const launchWeed = (endpointUrl) => {
-        const parsedEndpoint = parseS3Endpoint(endpointUrl);
+      const launchWeed = () => {
         const weedArgs = [
           '-alsologtostderr=false',
           '-stderrthreshold=WARNING',
           'mini',
           `-dir=${runtimeEnv.WEED_MINI_DIR}`,
         ];
-        weedArgs.push(`-s3.port=${parsedEndpoint.port}`);
-        if (runningInDocker) {
-          weedArgs.push('-ip.bind=0.0.0.0');
-        }
+        weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
+        weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
+        weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
 
         weedProc = spawn('weed', weedArgs, {
           env: runtimeEnv,
@@ -347,22 +346,37 @@ async function main() {
       };
 
       console.log('Starting embedded SeaweedFS weed mini...');
-      launchWeed(runtimeEnv.S3_ENDPOINT);
-      const startupEndpoint = parseS3Endpoint(runtimeEnv.S3_ENDPOINT);
-      await waitForEndpoint(`http://127.0.0.1:${startupEndpoint.port}`, waitTimeout, 'Embedded SeaweedFS');
-      console.log(`Embedded SeaweedFS is ready at ${runtimeEnv.S3_ENDPOINT}`);
+      launchWeed();
+      await waitForEndpoint(`http://127.0.0.1:${runtimeEnv.WEED_MINI_PORT}`, waitTimeout, 'Embedded SeaweedFS');
+      const embeddedBucket = await ensureS3Bucket(runtimeEnv);
+      if (embeddedBucket.created) {
+        console.log(`Created embedded S3 bucket ${embeddedBucket.bucket}.`);
+      }
+      console.log(`Embedded SeaweedFS is ready at ${runtimeEnv.S3_INTERNAL_ENDPOINT}`);
     }
 
-    const shouldRunStorageMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_FS_MIGRATIONS', true);
-    if (shouldRunStorageMigrations) {
+    const storageTransport = applyStorageTransportEnv(runtimeEnv, { embedded: useEmbeddedWeed });
+    if (storageTransport.usesDeprecatedEndpoint) {
+      console.warn('S3_ENDPOINT is deprecated; configure S3_INTERNAL_ENDPOINT and S3_PUBLIC_ENDPOINT. S3_ENDPOINT will be removed in OpenReader 5.0.');
+    }
+
+    if (!useEmbeddedWeed && resolveBooleanEnv(runtimeEnv, 'S3_AUTO_CREATE_BUCKET', false)) {
+      if (!hasS3Config(runtimeEnv)) {
+        throw new Error('S3_AUTO_CREATE_BUCKET=true requires complete S3 configuration.');
+      }
+      const externalBucket = await ensureS3Bucket(runtimeEnv);
+      if (externalBucket.created) {
+        console.log(`Created S3 bucket ${externalBucket.bucket}.`);
+      }
+    }
+
+    const shouldRunV4Decommission = resolveBooleanEnv(runtimeEnv, 'RUN_V4_DECOMMISSION', true);
+    if (shouldRunV4Decommission) {
       if (hasS3Config(runtimeEnv)) {
-        const migrationEnv = { ...runtimeEnv };
-        if (useEmbeddedWeed && migrationEnv.S3_ENDPOINT?.trim()) {
-          migrationEnv.S3_ENDPOINT = loopbackS3Endpoint(migrationEnv.S3_ENDPOINT);
-        }
-        runStorageMigrations(migrationEnv);
+        const decommissionEnv = { ...runtimeEnv };
+        await runV4Decommission(decommissionEnv);
       } else {
-        console.warn('Skipping storage migrations: S3 configuration is incomplete.');
+        console.warn('Skipping v4 legacy storage decommission: S3 configuration is incomplete.');
       }
     }
 
@@ -383,6 +397,10 @@ async function main() {
       runtimeEnv.COMPUTE_WORKER_URL = withDefault(runtimeEnv.COMPUTE_WORKER_URL, `http://127.0.0.1:${embeddedWorkerPort}`);
       runtimeEnv.COMPUTE_WORKER_TOKEN = withDefault(
         runtimeEnv.COMPUTE_WORKER_TOKEN,
+        randomBytes(24).toString('base64url'),
+      );
+      runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN = withDefault(
+        runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN,
         randomBytes(24).toString('base64url'),
       );
       runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
@@ -429,6 +447,10 @@ async function main() {
       const workerEnv = {
         ...runtimeEnv,
         PORT: String(embeddedWorkerPort),
+        COMPUTE_CREDENTIAL_BROKER_URL: withDefault(
+          runtimeEnv.COMPUTE_CREDENTIAL_BROKER_URL,
+          embeddedCredentialBrokerUrl(),
+        ),
       };
       const workerLaunch = resolveEmbeddedWorkerLaunch();
       workerProc = spawn(
@@ -458,8 +480,15 @@ async function main() {
       });
       await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30, 'Embedded compute-worker');
       console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
-    } else if (!runtimeEnv.COMPUTE_WORKER_URL?.trim() || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()) {
-      throw new Error('COMPUTE_WORKER_URL and COMPUTE_WORKER_TOKEN are required when embedded compute worker startup is disabled.');
+    } else if (
+      !runtimeEnv.COMPUTE_WORKER_URL?.trim()
+      || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()
+      || !runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN?.trim()
+    ) {
+      throw new Error(
+        'COMPUTE_WORKER_URL, COMPUTE_WORKER_TOKEN, and COMPUTE_CREDENTIAL_BROKER_TOKEN '
+        + 'are required when embedded compute worker startup is disabled.',
+      );
     }
 
     const { child, exitPromise } = spawnMainCommand(command, runtimeEnv);

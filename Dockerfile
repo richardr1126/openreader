@@ -23,6 +23,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/bootstrap/package.json ./packages/bootstrap/package.json
 COPY packages/compute-worker/package.json ./packages/compute-worker/package.json
 COPY packages/database/package.json ./packages/database/package.json
+COPY packages/runtime-config/package.json ./packages/runtime-config/package.json
+COPY packages/tts/package.json ./packages/tts/package.json
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -50,10 +52,10 @@ RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
 FROM node:lts-slim AS runner
 
 # Add runtime OS dependencies:
-# - libreoffice-writer: required for DOCX → PDF conversion
+# - libreoffice-writer-nogui: required for headless DOCX → PDF conversion
 # ffmpeg is provided by ffmpeg-static from node_modules.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates libreoffice-writer && \
+    apt-get install -y --no-install-recommends ca-certificates libreoffice-writer-nogui && \
     rm -rf /var/lib/apt/lists/*
 
 # App runtime directory
@@ -87,6 +89,11 @@ COPY --from=app-builder /app/packages/compute-worker/src/inference/whisper/asset
 # Match the app's historical container port now that standalone server.js
 # is started directly instead of `next start -p 3003`.
 ENV PORT=3003
+# Docker supplies its container ID through HOSTNAME. Next standalone otherwise
+# binds only to that interface, so the embedded worker cannot reach the app's
+# loopback credential broker. Bind the app on every container interface while
+# BASE_URL continues to define its public authentication origin.
+ENV HOSTNAME=0.0.0.0
 
 # Expose the port the app runs on
 EXPOSE 3003

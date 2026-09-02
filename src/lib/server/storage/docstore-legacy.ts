@@ -3,7 +3,6 @@ import path from 'path';
 
 export const DOCSTORE_DIR = path.join(process.cwd(), 'docstore');
 export const DOCUMENTS_V1_DIR = path.join(DOCSTORE_DIR, 'documents_v1');
-export const AUDIOBOOKS_V1_DIR = path.join(DOCSTORE_DIR, 'audiobooks_v1');
 
 export const UNCLAIMED_USER_ID = 'unclaimed';
 

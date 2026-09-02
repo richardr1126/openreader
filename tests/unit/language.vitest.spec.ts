@@ -13,7 +13,7 @@ import {
   segmentSentences,
   segmentWords,
   toBaseLanguageCode,
-} from '../../src/lib/shared/language';
+} from '@openreader/tts/language';
 
 describe('multilingual language utilities', () => {
   test('keeps the multilingual document fixture readable as UTF-8', () => {

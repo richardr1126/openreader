@@ -1,6 +1,6 @@
 import type { BaseDocument, DocumentType } from '@/types/documents';
-import type { ParsedPdfDocument, PdfParseProgress, PdfParseStatus } from '@/types/parsed-pdf';
 import type { DocumentSettings } from '@/types/document-settings';
+import type { ReaderBootstrapRestart } from '@/types/reader-bootstrap';
 import { parseApiError } from '@/lib/client/api/http';
 
 export type UploadSource = {
@@ -16,28 +16,175 @@ type UploadOptions = {
   signal?: AbortSignal;
 };
 
+type FinalizeUploadPayload = {
+  token: string | undefined;
+  name: string;
+  type: DocumentType;
+  lastModified: number;
+};
+
+type FinalizeResponse = {
+  stored?: BaseDocument[];
+  conversions?: Array<{
+    token: string;
+    name: string;
+    conversionId: string;
+    opId: string | null;
+    status: 'queued' | 'running' | 'failed';
+    error?: string;
+  }>;
+  error?: string;
+};
+
+const DOCUMENT_CONVERSION_TIMEOUT_MS = 5 * 60 * 1000;
+
+export class DocumentConversionPendingError extends Error {
+  readonly conversions: NonNullable<FinalizeResponse['conversions']>;
+  readonly stored: BaseDocument[];
+
+  constructor(input: {
+    conversions: NonNullable<FinalizeResponse['conversions']>;
+    stored: BaseDocument[];
+  }) {
+    super('DOCX conversion is still running');
+    this.name = 'DocumentConversionPendingError';
+    this.conversions = input.conversions;
+    this.stored = input.stored;
+  }
+}
+
 function toUploadBody(body: UploadSource['body']): BodyInit {
   if (body instanceof Blob) return body;
   if (body instanceof ArrayBuffer) return body;
   return body as unknown as BodyInit;
 }
 
-async function uploadDocumentSourceViaProxy(
-  source: UploadSource,
-  token: string,
-  options?: UploadOptions,
+type PendingDocumentConversion = NonNullable<FinalizeResponse['conversions']>[number];
+
+function documentConversionEventsUrl(conversion: PendingDocumentConversion): string {
+  const params = new URLSearchParams();
+  params.set('opId', conversion.opId ?? '');
+  params.set('token', conversion.token);
+  return `/api/documents/blob/upload/events?${params.toString()}`;
+}
+
+function waitForDocumentConversion(
+  conversion: PendingDocumentConversion,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`/api/documents/blob/upload/fallback?token=${encodeURIComponent(token)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': source.contentType || 'application/octet-stream' },
-    body: toUploadBody(source.body),
+  if (!conversion.opId) {
+    return Promise.reject(new Error(`DOCX conversion did not provide an operation for ${conversion.name}`));
+  }
+  if (signal?.aborted) {
+    return Promise.reject(
+      signal.reason instanceof Error ? signal.reason : new Error('Document upload aborted'),
+    );
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const source = new EventSource(documentConversionEventsUrl(conversion));
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new DocumentConversionPendingError({ conversions: [conversion], stored: [] }));
+    }, DOCUMENT_CONVERSION_TIMEOUT_MS);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', handleAbort);
+      source.close();
+    };
+    const handleAbort = () => {
+      cleanup();
+      reject(signal?.reason instanceof Error ? signal.reason : new Error('Document upload aborted'));
+    };
+    const handleSnapshot = (event: Event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as {
+          snapshot?: {
+            status?: 'queued' | 'running' | 'succeeded' | 'failed';
+            error?: { message?: string } | null;
+          };
+        };
+        const snapshot = payload.snapshot;
+        if (snapshot?.status === 'succeeded') {
+          cleanup();
+          resolve();
+        } else if (snapshot?.status === 'failed') {
+          cleanup();
+          reject(new Error(snapshot.error?.message || `DOCX conversion failed for ${conversion.name}`));
+        }
+      } catch {
+        // Ignore malformed frames so EventSource can reconnect and continue.
+      }
+    };
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    source.addEventListener('snapshot', handleSnapshot);
+  });
+}
+
+async function waitForDocumentConversions(
+  conversions: PendingDocumentConversion[],
+  signal?: AbortSignal,
+): Promise<void> {
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', forwardAbort, { once: true });
+  if (signal?.aborted) forwardAbort();
+
+  try {
+    await Promise.all(conversions.map((conversion) => (
+      waitForDocumentConversion(conversion, controller.signal)
+    )));
+  } catch (error) {
+    controller.abort(error);
+    throw error;
+  } finally {
+    signal?.removeEventListener('abort', forwardAbort);
+  }
+}
+
+async function requestUploadFinalization(
+  uploads: FinalizeUploadPayload[],
+  options?: UploadOptions,
+): Promise<{ response: Response; data: FinalizeResponse | null }> {
+  const response = await fetch('/api/documents/blob/upload/finalize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploads }),
     signal: options?.signal,
   });
+  const data = (await response.json().catch(() => null)) as FinalizeResponse | null;
+  return { response, data };
+}
 
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || `Proxy upload failed (status ${res.status})`);
+async function finalizeUploadedSources(
+  uploads: FinalizeUploadPayload[],
+  options?: UploadOptions,
+): Promise<BaseDocument[]> {
+  let { response, data } = await requestUploadFinalization(uploads, options);
+
+  if (response.status === 202) {
+    const conversions = data?.conversions ?? [];
+    if (conversions.length === 0) {
+      throw new Error('Pending DOCX conversion response did not include any operations');
+    }
+    await waitForDocumentConversions(conversions, options?.signal);
+    ({ response, data } = await requestUploadFinalization(uploads, options));
   }
+
+  if (response.status === 202) {
+    throw new DocumentConversionPendingError({
+      conversions: data?.conversions ?? [],
+      stored: data?.stored ?? [],
+    });
+  }
+  if (response.ok) {
+    return data?.stored || [];
+  }
+
+  const failed = data?.conversions?.find((conversion) => conversion.status === 'failed');
+  throw new Error(failed?.error || data?.error || 'Failed to finalize uploaded documents');
 }
 
 function documentTypeForName(name: string): DocumentType {
@@ -102,187 +249,54 @@ export async function markDocumentOpened(
   return (await res.json()) as { documentId: string; recentlyOpenedAt: number };
 }
 
-export class ParsedPdfNotReadyError extends Error {
-  readonly parseStatus: PdfParseStatus;
-  readonly parseProgress: PdfParseProgress | null;
-  readonly opId: string | null;
-  readonly details: string | null;
-
-  constructor(input: {
-    parseStatus: PdfParseStatus;
-    parseProgress: PdfParseProgress | null;
-    opId?: string | null;
-    details?: string | null;
-  }) {
-    super(`Parsed PDF is not ready (${input.parseStatus})`);
-    this.name = 'ParsedPdfNotReadyError';
-    this.parseStatus = input.parseStatus;
-    this.parseProgress = input.parseProgress;
-    this.opId = input.opId?.trim() || null;
-    this.details = input.details?.trim() || null;
-  }
-}
-
-export async function getParsedPdfDocument(
+export async function forceReparsePdfDocument(
   id: string,
   options?: { signal?: AbortSignal },
-): Promise<ParsedPdfDocument> {
-  const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
-    signal: options?.signal,
-    cache: 'no-store',
-  });
-
-  if (res.status === 409) {
-    const data = (await res.json().catch(() => null)) as {
-      parseStatus?: string;
-      parseProgress?: PdfParseProgress | null;
-      opId?: string | null;
-      error?: string;
-    } | null;
-    throw new ParsedPdfNotReadyError({
-      parseStatus: data?.parseStatus === 'running'
-        ? 'running'
-        : data?.parseStatus === 'ready'
-          ? 'ready'
-          : data?.parseStatus === 'failed'
-            ? 'failed'
-            : 'pending',
-      parseProgress: data?.parseProgress ?? null,
-      opId: data?.opId ?? null,
-      details: data?.error ?? null,
-    });
-  }
-
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to load parsed PDF');
-  }
-
-  return (await res.json()) as ParsedPdfDocument;
-}
-
-export function subscribeParsedPdfDocumentEvents(
-  id: string,
-  options: {
-    opId: string;
-  },
-  handlers: {
-    onSnapshot: (snapshot: {
-      parseStatus: PdfParseStatus;
-      parseProgress: PdfParseProgress | null;
-      opId?: string | null;
-      error?: string | null;
-    }) => void;
-    onError?: (error: Event) => void;
-  },
-): () => void {
-  const params = new URLSearchParams();
-  params.set('opId', options.opId);
-  const query = params.size > 0 ? `?${params.toString()}` : '';
-  const source = new EventSource(`/api/documents/${encodeURIComponent(id)}/parsed/events${query}`);
-  source.addEventListener('snapshot', (event) => {
-    if (!(event instanceof MessageEvent)) return;
-    try {
-      const payload = JSON.parse(event.data) as {
-        snapshot?: {
-          opId: string;
-          status: 'queued' | 'running' | 'succeeded' | 'failed';
-          progress?: PdfParseProgress | null;
-          error?: { message?: string } | null;
-        };
-      };
-      const snapshot = payload?.snapshot;
-      if (!snapshot?.opId || !snapshot.status) return;
-      handlers.onSnapshot({
-        parseStatus: snapshot.status === 'running'
-          ? 'running'
-          : snapshot.status === 'succeeded'
-            ? 'ready'
-            : snapshot.status === 'failed'
-              ? 'failed'
-              : 'pending',
-        parseProgress: snapshot.status === 'running' ? (snapshot.progress ?? null) : null,
-        opId: snapshot.opId,
-        ...(snapshot.status === 'failed' && snapshot.error?.message
-          ? { error: snapshot.error.message }
-          : {}),
-      });
-    } catch {
-      // Ignore malformed payloads to avoid breaking active streams.
-    }
-  });
-  source.addEventListener('error', (event) => {
-    handlers.onError?.(event);
-  });
-  return () => {
-    source.close();
-  };
-}
-
-function normalizeParsedPdfOperationResponse(
-  data: { parseStatus?: string; parseProgress?: PdfParseProgress | null; opId?: string | null; error?: string } | null,
-): {
-  parseStatus: PdfParseStatus;
-  parseProgress: PdfParseProgress | null;
-  opId: string | null;
-  error?: string | null;
-} {
-  return {
-    parseStatus: data?.parseStatus === 'running'
-      ? 'running'
-      : data?.parseStatus === 'ready'
-        ? 'ready'
-        : data?.parseStatus === 'failed'
-          ? 'failed'
-          : 'pending',
-    parseProgress: data?.parseProgress ?? null,
-    opId: data?.opId?.trim() || null,
-    ...(data?.error ? { error: data.error } : {}),
-  };
-}
-
-export async function ensureParsedPdfDocumentOperation(
-  id: string,
-  options?: { signal?: AbortSignal; replace?: boolean },
-): Promise<{
-  parseStatus: PdfParseStatus;
-  parseProgress: PdfParseProgress | null;
-  opId: string | null;
-  error?: string | null;
-}> {
+): Promise<ReaderBootstrapRestart> {
   const res = await fetch(`/api/documents/${encodeURIComponent(id)}/parsed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ replace: options?.replace === true }),
+    body: JSON.stringify({ replace: true }),
     signal: options?.signal,
     cache: 'no-store',
   });
 
   const data = (await res.json().catch(() => null)) as {
     parseStatus?: string;
-    parseProgress?: PdfParseProgress | null;
+    parseProgress?: {
+      phase?: string;
+      pagesParsed?: number;
+      totalPages?: number;
+      downloadedBytes?: number;
+      totalBytes?: number;
+    } | null;
     opId?: string | null;
     error?: string;
+    detail?: string;
   } | null;
 
-  if (!res.ok && res.status !== 409) {
-    throw new Error(data?.error || 'Failed to ensure parsed PDF operation');
+  if (!res.ok) {
+    throw new Error(data?.error || data?.detail || 'Failed to start PDF reparse');
   }
-
-  return normalizeParsedPdfOperationResponse(data);
-}
-
-export async function forceReparsePdfDocument(
-  id: string,
-  options?: { signal?: AbortSignal },
-): Promise<{ status: 'pending' | 'running'; opId?: string | null }> {
-  const data = await ensureParsedPdfDocumentOperation(id, {
-    signal: options?.signal,
-    replace: true,
-  });
+  const operationId = data?.opId?.trim();
+  if (!operationId) throw new Error('PDF reparse started without an operation ID.');
+  const progress = data?.parseProgress;
   return {
-    status: data.parseStatus === 'running' ? 'running' : 'pending',
-    opId: data.opId,
+    operationId,
+    progress: {
+      kind: 'pdf-parse',
+      phase: data?.parseStatus === 'running'
+        ? progress?.phase === 'download_model'
+          ? 'downloading-model'
+          : progress?.phase === 'merge' ? 'merging' : 'parsing'
+        : 'queued',
+      pagesParsed: Math.max(0, Number(progress?.pagesParsed ?? 0)),
+      totalPages: Math.max(0, Number(progress?.totalPages ?? 0)),
+      ...(progress?.phase === 'download_model' ? {
+        downloadedBytes: Math.max(0, Number(progress.downloadedBytes ?? 0)),
+        totalBytes: Math.max(0, Number(progress.totalBytes ?? 0)),
+      } : {}),
+    },
   };
 }
 
@@ -329,7 +343,7 @@ export async function putDocumentSettings(
 export async function uploadDocumentSources(sources: UploadSource[], options?: UploadOptions): Promise<BaseDocument[]> {
   if (sources.length === 0) return [];
 
-  const presignRes = await fetch('/api/documents/blob/upload/presign', {
+  const presignRes = await fetch('/api/documents/blob/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -358,10 +372,9 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     const source = sources[index];
     const upload = uploads[index];
     if (!upload?.url || !upload.token) {
-      throw new Error(`Missing presigned upload for document ${source.name}`);
+      throw new Error(`Missing prepared upload for document ${source.name}`);
     }
 
-    let putError: unknown = null;
     try {
       const putRes = await fetch(upload.url, {
         method: 'PUT',
@@ -374,42 +387,23 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
       if (putRes.ok || putRes.status === 412) {
         continue;
       }
-      putError = new Error(`Direct upload failed with status ${putRes.status}`);
+      throw new Error(`Document upload failed with status ${putRes.status}`);
     } catch (error) {
       if (options?.signal?.aborted) throw error;
-      putError = error;
-    }
-
-    try {
-      await uploadDocumentSourceViaProxy(source, upload.token, options);
-    } catch (proxyError) {
-      const directMessage = putError instanceof Error ? putError.message : 'unknown direct upload error';
-      const proxyMessage = proxyError instanceof Error ? proxyError.message : 'unknown proxy upload error';
-      throw new Error(`Failed to upload document ${source.name}: ${directMessage}; fallback failed: ${proxyMessage}`);
+      const message = error instanceof Error ? error.message : 'unknown upload error';
+      throw new Error(`Failed to upload document ${source.name}: ${message}`);
     }
   }
 
-  const finalizeRes = await fetch('/api/documents/blob/upload/finalize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      uploads: sources.map((source, index) => ({
-        token: uploads[index]?.token,
-        name: source.name,
-        type: source.type,
-        lastModified: source.lastModified,
-      })),
-    }),
-    signal: options?.signal,
-  });
-
-  if (!finalizeRes.ok) {
-    const data = (await finalizeRes.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || 'Failed to finalize uploaded documents');
-  }
-
-  const data = (await finalizeRes.json()) as { stored: BaseDocument[] };
-  return data.stored || [];
+  return finalizeUploadedSources(
+    sources.map((source, index) => ({
+      token: uploads[index]?.token,
+      name: source.name,
+      type: source.type,
+      lastModified: source.lastModified,
+    })),
+    options,
+  );
 }
 
 export async function uploadDocuments(files: File[], options?: UploadOptions): Promise<BaseDocument[]> {
@@ -454,73 +448,41 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
 }
 
 export async function fetchDocumentContentResponse(id: string, options?: { signal?: AbortSignal }): Promise<Response> {
-  const fallbackUrl = `/api/documents/blob/get/fallback?id=${encodeURIComponent(id)}`;
-
-  const fetchFallback = async (): Promise<Response> => {
-    const res = await fetch(fallbackUrl, { signal: options?.signal });
-    if (!res.ok) {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error || `Failed to download document (status ${res.status})`);
-      }
-      throw new Error(`Failed to download document (status ${res.status})`);
+  const res = await fetch(`/api/documents/blob/get?id=${encodeURIComponent(id)}`, {
+    signal: options?.signal,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(data?.error || `Failed to download document (status ${res.status})`);
     }
-    return res;
-  };
-
-  try {
-    const directRes = await fetch(`/api/documents/blob/get/presign?id=${encodeURIComponent(id)}`, {
-      signal: options?.signal,
-      cache: 'no-store',
-    });
-    if (!directRes.ok) {
-      const contentType = directRes.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = (await directRes.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error || `Failed to download document (status ${directRes.status})`);
-      }
-      throw new Error(`Failed to download document (status ${directRes.status})`);
-    }
-    return directRes;
-  } catch (error) {
-    if (options?.signal?.aborted) throw error;
-    return fetchFallback();
+    throw new Error(`Failed to download document (status ${res.status})`);
   }
+  return res;
 }
 
 export async function getDocumentContentSnippet(
   id: string,
   options?: { maxChars?: number; maxBytes?: number; signal?: AbortSignal },
 ): Promise<string> {
-  const params = new URLSearchParams();
-  params.set('id', id);
-  params.set('snippet', '1');
-  if (typeof options?.maxChars === 'number') params.set('maxChars', String(options.maxChars));
-  if (typeof options?.maxBytes === 'number') params.set('maxBytes', String(options.maxBytes));
-
-  const res = await fetch(`/api/documents/blob/preview/fallback?${params.toString()}`, { signal: options?.signal });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || `Failed to load content snippet (status ${res.status})`);
-  }
-
-  const data = (await res.json()) as { snippet?: string };
-  return data?.snippet || '';
+  const maxBytes = Math.max(1, Math.floor(options?.maxBytes ?? 128 * 1024));
+  const maxChars = Math.max(1, Math.floor(options?.maxChars ?? 1600));
+  const bytes = new Uint8Array(await downloadDocumentContent(id, { signal: options?.signal }));
+  return new TextDecoder().decode(bytes.slice(0, maxBytes)).slice(0, maxChars);
 }
 
 export type DocumentPreviewPending = {
   kind: 'pending';
   status: 'queued' | 'processing' | 'failed';
-  retryAfterMs: number;
-  fallbackUrl: string;
+  opId: string | null;
   presignUrl: string;
   directUrl?: string;
 };
 
 export type DocumentPreviewReady = {
   kind: 'ready';
-  fallbackUrl: string;
   presignUrl: string;
   directUrl?: string;
   previewVersion: string;
@@ -533,11 +495,14 @@ function documentPreviewEnsureUrl(id: string): string {
 }
 
 export function documentPreviewPresignUrl(id: string): string {
-  return `/api/documents/blob/preview/presign?id=${encodeURIComponent(id)}`;
+  return `/api/documents/blob/preview?id=${encodeURIComponent(id)}`;
 }
 
-export function documentPreviewFallbackUrl(id: string): string {
-  return `/api/documents/blob/preview/fallback?id=${encodeURIComponent(id)}`;
+function documentPreviewEventsUrl(id: string, opId: string): string {
+  const params = new URLSearchParams();
+  params.set('id', id);
+  params.set('opId', opId);
+  return `/api/documents/blob/preview/events?${params.toString()}`;
 }
 
 export async function getDocumentPreviewStatus(
@@ -552,16 +517,14 @@ export async function getDocumentPreviewStatus(
   if (res.status === 202) {
     const data = (await res.json().catch(() => null)) as {
       status?: 'queued' | 'processing' | 'failed';
-      retryAfterMs?: number;
-      fallbackUrl?: string;
+      opId?: string | null;
       presignUrl?: string;
       directUrl?: string;
     } | null;
     return {
       kind: 'pending',
       status: data?.status ?? 'queued',
-      retryAfterMs: Number.isFinite(data?.retryAfterMs) ? Number(data?.retryAfterMs) : 1500,
-      fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
+      opId: data?.opId || null,
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
     };
@@ -569,14 +532,12 @@ export async function getDocumentPreviewStatus(
 
   if (res.ok) {
     const data = (await res.json().catch(() => null)) as {
-      fallbackUrl?: string;
       presignUrl?: string;
       directUrl?: string;
       previewVersion?: string;
     } | null;
     return {
       kind: 'ready',
-      fallbackUrl: data?.fallbackUrl || documentPreviewFallbackUrl(id),
       presignUrl: data?.presignUrl || documentPreviewPresignUrl(id),
       directUrl: data?.directUrl,
       previewVersion: data?.previewVersion || '',
@@ -595,8 +556,7 @@ export async function getDocumentPreviewStatus(
       return {
         kind: 'pending',
         status: 'failed',
-        retryAfterMs: 0,
-        fallbackUrl: documentPreviewFallbackUrl(id),
+        opId: null,
         presignUrl: documentPreviewPresignUrl(id),
       };
     }
@@ -604,6 +564,56 @@ export async function getDocumentPreviewStatus(
   }
 
   throw new Error(`Failed to load preview status (status ${res.status})`);
+}
+
+export function subscribeDocumentPreviewEvents(
+  id: string,
+  options: {
+    opId: string;
+  },
+  handlers: {
+    onSnapshot: (snapshot: {
+      status: 'queued' | 'processing' | 'ready' | 'failed';
+      opId: string;
+      error?: string | null;
+    }) => void;
+    onError?: (error: Event) => void;
+  },
+): () => void {
+  const source = new EventSource(documentPreviewEventsUrl(id, options.opId));
+  source.addEventListener('snapshot', (event) => {
+    if (!(event instanceof MessageEvent)) return;
+    try {
+      const payload = JSON.parse(event.data) as {
+        snapshot?: {
+          opId: string;
+          status: 'queued' | 'running' | 'succeeded' | 'failed';
+          error?: { message?: string } | null;
+        };
+      };
+      const snapshot = payload?.snapshot;
+      if (!snapshot?.opId || !snapshot.status) return;
+      handlers.onSnapshot({
+        status: snapshot.status === 'running'
+          ? 'processing'
+          : snapshot.status === 'succeeded'
+            ? 'ready'
+            : snapshot.status,
+        opId: snapshot.opId,
+        ...(snapshot.status === 'failed' && snapshot.error?.message
+          ? { error: snapshot.error.message }
+          : {}),
+      });
+    } catch {
+      // Ignore malformed payloads so EventSource can continue.
+    }
+  });
+  source.addEventListener('error', (event) => {
+    handlers.onError?.(event);
+  });
+  return () => {
+    source.close();
+  };
 }
 
 export async function importUrl(

@@ -10,16 +10,24 @@ import { nanos } from '@nats-io/transport-node';
 import { OP_EVENTS_SUBJECT_WILDCARD } from './nats-adapters';
 
 export const JOBS_STREAM_NAME = 'compute_jobs';
-export const WHISPER_JOBS_SUBJECT = 'jobs.whisper';
 export const LAYOUT_JOBS_SUBJECT = 'jobs.layout';
-export const WHISPER_CONSUMER_NAME = 'compute_whisper';
+export const TTS_PLAYBACK_JOBS_SUBJECT = 'jobs.tts_playback';
+export const TTS_PLAYBACK_PLAN_JOBS_SUBJECT = 'jobs.tts_playback_plan';
+export const TTS_PLAYBACK_EXPORT_JOBS_SUBJECT = 'jobs.tts_playback_export';
+export const DOCUMENT_PREVIEW_JOBS_SUBJECT = 'jobs.document_preview';
+export const DOCUMENT_CONVERSION_JOBS_SUBJECT = 'jobs.document_conversion';
+export const ACCOUNT_EXPORT_JOBS_SUBJECT = 'jobs.account_export';
 export const LAYOUT_CONSUMER_NAME = 'compute_layout';
+export const TTS_PLAYBACK_CONSUMER_NAME = 'compute_tts_playback';
+export const TTS_PLAYBACK_PLAN_CONSUMER_NAME = 'compute_tts_playback_plan';
+export const TTS_PLAYBACK_EXPORT_CONSUMER_NAME = 'compute_tts_playback_export';
+export const DOCUMENT_PREVIEW_CONSUMER_NAME = 'compute_document_preview';
+export const DOCUMENT_CONVERSION_CONSUMER_NAME = 'compute_document_conversion';
+export const ACCOUNT_EXPORT_CONSUMER_NAME = 'compute_account_export';
 export const EVENTS_STREAM_NAME = 'compute_events';
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 export const NATS_API_TIMEOUT_MS = 60_000;
-
-const WHISPER_MAX_DELIVER = 1;
 
 function isAlreadyExistsError(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -37,7 +45,15 @@ export async function ensureJetStreamResources(input: {
 }): Promise<void> {
   const streamConfig = {
     name: JOBS_STREAM_NAME,
-    subjects: [WHISPER_JOBS_SUBJECT, LAYOUT_JOBS_SUBJECT],
+    subjects: [
+      LAYOUT_JOBS_SUBJECT,
+      TTS_PLAYBACK_JOBS_SUBJECT,
+      TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
+      TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
+      DOCUMENT_PREVIEW_JOBS_SUBJECT,
+      DOCUMENT_CONVERSION_JOBS_SUBJECT,
+      ACCOUNT_EXPORT_JOBS_SUBJECT,
+    ],
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
     max_bytes: input.jobsMaxBytes,
@@ -98,7 +114,12 @@ export async function ensureJetStreamResources(input: {
   };
 
   await Promise.all([
-    ensureConsumer(WHISPER_CONSUMER_NAME, WHISPER_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, WHISPER_MAX_DELIVER),
     ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
+    ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
+    ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
+    ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
+    ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
+    ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
+    ensureConsumer(ACCOUNT_EXPORT_CONSUMER_NAME, ACCOUNT_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
   ]);
 }

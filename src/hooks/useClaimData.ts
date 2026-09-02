@@ -7,7 +7,6 @@ import type { ClaimableCounts } from '@/types/client';
 
 export const EMPTY_CLAIM_COUNTS: ClaimableCounts = {
   documents: 0,
-  audiobooks: 0,
   preferences: 0,
   progress: 0,
   documentSettings: 0,
@@ -24,7 +23,6 @@ export function toClaimableCounts(value: unknown): ClaimableCounts {
   const rec = (value && typeof value === 'object') ? (value as Record<string, unknown>) : {};
   return {
     documents: toCount(rec.documents),
-    audiobooks: toCount(rec.audiobooks),
     preferences: toCount(rec.preferences),
     progress: toCount(rec.progress),
     documentSettings: toCount(rec.documentSettings),

@@ -1,24 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { useConfig, ViewType } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import {
-  SEGMENT_PRELOAD_DEPTH_MIN,
-  SEGMENT_PRELOAD_DEPTH_MAX,
-  SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN,
-  SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX,
   TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN,
   TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX,
   TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP,
-  clampSegmentPreloadDepth,
-  clampSegmentPreloadSentenceLookahead,
   clampTtsSegmentMaxBlockLength,
 } from '@/types/config';
 import {
   IconButton,
-  RangeInput,
+  RangeField,
   Section,
   ToggleRow,
   CheckItem,
@@ -26,9 +22,21 @@ import {
   Select,
 } from '@/components/ui';
 import { RefreshIcon, SparkleIcon } from '@/components/icons/Icons';
+import { Button } from '@/components/ui';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
-import { getLanguageDisplayName, getTtsLanguageCompatibilityWarnings } from '@/lib/shared/language';
+import { getLanguageDisplayName, getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
+
+type ClearSegmentsPayload = {
+  error?: string;
+  deletedSegments?: number;
+  requestedAudioObjects?: number;
+  deletedAudioObjects?: number;
+  deletedPlanObjects?: number;
+  deletedPlaybackObjects?: number;
+  invalidatedPlaybackSessions?: number;
+  warning?: string;
+};
 
 const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
   { kind: 'header', label: 'Header' },
@@ -74,51 +82,10 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'th', label: 'Thai' },
 ];
 
-type RangeSettingProps = {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  description: string;
-  valueWidth?: string;
-  formatter?: (value: number) => string;
-  onChange: (value: number) => void;
-};
-
-function RangeSetting({
-  label,
-  value,
-  min,
-  max,
-  step,
-  description,
-  valueWidth = 'w-10',
-  formatter = (next) => String(next),
-  onChange,
-}: RangeSettingProps) {
-  return (
-    <div className="space-y-1.5">
-      <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label>
-      <div className="flex items-center gap-3">
-        <RangeInput
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="flex-1"
-        />
-        <span className={`${valueWidth} text-xs font-semibold text-right text-foreground`}>{formatter(value)}</span>
-      </div>
-      <p className="text-xs text-muted">{description}</p>
-    </div>
-  );
-}
-
-export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
+export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
   isOpen: boolean,
   setIsOpen: (isOpen: boolean) => void,
+  documentId?: string,
   epub?: boolean,
   html?: boolean,
   language?: string,
@@ -136,10 +103,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
   const canWordHighlight = true;
   const {
     viewType,
-    skipBlank,
     epubTheme,
-    segmentPreloadDepthPages,
-    segmentPreloadSentenceLookahead,
     ttsSegmentMaxBlockLength,
     updateConfigKey,
     pdfHighlightEnabled,
@@ -150,7 +114,7 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
     htmlWordHighlightEnabled,
     ttsModel,
   } = useConfig();
-  const { voice, resolvedLanguage } = useTTS();
+  const { voice, resolvedLanguage, reacquirePlaybackPlan, clearSegmentCaches } = useTTS();
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     voice,
@@ -160,21 +124,53 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
     ?? DOCUMENT_LANGUAGE_OPTIONS[0];
   const selectedView = viewTypeTextMapping.find(v => v.id === viewType) || viewTypeTextMapping[0];
   const isPdfMode = !epub && !html && !!pdf;
-  const [localPreloadDepth, setLocalPreloadDepth] = useState(segmentPreloadDepthPages);
-  const [localSentenceLookahead, setLocalSentenceLookahead] = useState(segmentPreloadSentenceLookahead);
   const [localMaxBlockLength, setLocalMaxBlockLength] = useState(ttsSegmentMaxBlockLength);
-
-  useEffect(() => {
-    setLocalPreloadDepth(segmentPreloadDepthPages);
-  }, [segmentPreloadDepthPages]);
-
-  useEffect(() => {
-    setLocalSentenceLookahead(segmentPreloadSentenceLookahead);
-  }, [segmentPreloadSentenceLookahead]);
 
   useEffect(() => {
     setLocalMaxBlockLength(ttsSegmentMaxBlockLength);
   }, [ttsSegmentMaxBlockLength]);
+
+  const clearSegmentsMutation = useMutation({
+    mutationFn: async (): Promise<ClearSegmentsPayload | null> => {
+      if (!documentId) throw new Error('Missing document id');
+      const res = await fetch('/api/tts/segments/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId }),
+      });
+      const payload = (await res.json().catch(() => null)) as ClearSegmentsPayload | null;
+      if (!res.ok) {
+        throw new Error(payload?.error || `Request failed (${res.status})`);
+      }
+      return payload;
+    },
+    onSuccess: (payload) => {
+      // Drop the stale cached plan/segments so the next play rebuilds against the
+      // freshly cleared storage instead of regenerating from a deleted plan.
+      clearSegmentCaches();
+      if (payload?.warning) {
+        toast.error(`Audio cleared, but cleanup was partial: ${payload.warning}`);
+      } else if (payload) {
+        const deletedPlaybackObjects = Number(payload.deletedPlaybackObjects ?? payload.deletedAudioObjects ?? 0);
+        const invalidatedPlaybackSessions = Number(payload.invalidatedPlaybackSessions ?? 0);
+        const sessionSuffix = invalidatedPlaybackSessions > 0
+          ? ` Reset ${invalidatedPlaybackSessions} playback session${invalidatedPlaybackSessions === 1 ? '' : 's'}.`
+          : '';
+        toast.success(`Cleared ${deletedPlaybackObjects} cached playback object${deletedPlaybackObjects === 1 ? '' : 's'}.${sessionSuffix}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to clear cached audio');
+    },
+  });
+  const { mutate: clearSegments, isPending: isClearingSegments } = clearSegmentsMutation;
+
+  const handleClearCache = () => {
+    if (!documentId || isClearingSegments) return;
+    const confirmed = window.confirm('Clear all cached audio for this document? Playback will regenerate from scratch the next time you press play.');
+    if (!confirmed) return;
+    clearSegments();
+  };
 
   return (
     <ReaderSidebarShell
@@ -309,49 +305,8 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
           subtitle="Segment and queue behavior."
           variant="flat"
         >
-          {!html && (
-            <ToggleRow
-              label="Skip blank pages"
-              description="Skip pages with no readable text."
-              checked={skipBlank}
-              onChange={(checked) => updateConfigKey('skipBlank', checked)}
-              variant="flat"
-            />
-          )}
-
-
-          <div className="space-y-3 pt-1">
-            <RangeSetting
-              label="Segment preload depth"
-              value={localPreloadDepth}
-              min={SEGMENT_PRELOAD_DEPTH_MIN}
-              max={SEGMENT_PRELOAD_DEPTH_MAX}
-              step={1}
-              description="Upcoming pages/locations to queue."
-              formatter={(value) => String(value)}
-              onChange={(value) => {
-                const next = clampSegmentPreloadDepth(value);
-                setLocalPreloadDepth(next);
-                void updateConfigKey('segmentPreloadDepthPages', next);
-              }}
-            />
-
-            <RangeSetting
-              label="Segment lookahead per page/location"
-              value={localSentenceLookahead}
-              min={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN}
-              max={SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX}
-              step={1}
-              description="Segments to prepare per queued page/section."
-              formatter={(value) => String(value)}
-              onChange={(value) => {
-                const next = clampSegmentPreloadSentenceLookahead(value);
-                setLocalSentenceLookahead(next);
-                void updateConfigKey('segmentPreloadSentenceLookahead', next);
-              }}
-            />
-
-            <RangeSetting
+          <div className="pt-1">
+            <RangeField
               label="TTS segment max block length"
               value={localMaxBlockLength}
               min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN}
@@ -359,14 +314,32 @@ export function DocumentSettings({ isOpen, setIsOpen, epub, html, language, dete
               step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
               description="Max characters per TTS segment block."
               valueWidth="w-14"
-              formatter={(value) => String(value)}
               onChange={(value) => {
                 const next = clampTtsSegmentMaxBlockLength(value);
                 setLocalMaxBlockLength(next);
-                void updateConfigKey('ttsSegmentMaxBlockLength', next);
+                void updateConfigKey('ttsSegmentMaxBlockLength', next)
+                  .then(reacquirePlaybackPlan);
               }}
             />
           </div>
+
+          {documentId ? (
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-muted">Cached audio</label>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleClearCache}
+                disabled={isClearingSegments}
+                className="w-full"
+              >
+                {isClearingSegments ? 'Clearing…' : 'Clear cached audio'}
+              </Button>
+              <p className="text-xs text-muted">
+                Deletes all generated audio for this document. Playback regenerates from scratch on the next play.
+              </p>
+            </div>
+          ) : null}
         </Section>
 
         {epub && (

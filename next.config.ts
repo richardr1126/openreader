@@ -24,7 +24,6 @@ const pdfjsTraceFiles = [
 const serverExternalPackages = [
   '@napi-rs/canvas',
   'better-sqlite3',
-  'ffmpeg-static',
   // Keep pdfjs-dist as a real package in node_modules. Server-side preview
   // rendering resolves pdf.js runtime assets from the filesystem at runtime.
   'pdfjs-dist',
@@ -49,24 +48,12 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@openreader/database'],
   serverExternalPackages,
   outputFileTracingIncludes: {
-    '/api/audiobook': [
-      './node_modules/ffmpeg-static/ffmpeg',
-    ],
-    '/api/audiobook/chapter': [
-      './node_modules/ffmpeg-static/ffmpeg',
-    ],
-    '/api/tts/segments/ensure': [
-      './node_modules/ffmpeg-static/ffmpeg',
-    ],
     '/api/documents/blob/preview/ensure': [
       // pdf.js runtime assets are resolved through filesystem paths at runtime,
       // so trace them explicitly for Vercel/standalone serverless bundles.
       ...pdfjsTraceFiles,
     ],
     '/api/documents/blob/preview/presign': [
-      ...pdfjsTraceFiles,
-    ],
-    '/api/documents/blob/preview/fallback': [
       ...pdfjsTraceFiles,
     ],
   },

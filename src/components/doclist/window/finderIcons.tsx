@@ -38,13 +38,6 @@ export const FolderPlusIcon = (props: IconProps) => (
   </svg>
 );
 
-export const SidebarIcon = (props: IconProps) => (
-  <svg {...baseSvg(props)}>
-    <rect x="3" y="5" width="18" height="14" rx="2" />
-    <path d="M9 5v14" />
-  </svg>
-);
-
 export const IconsViewIcon = (props: IconProps) => (
   <svg {...baseSvg(props)}>
     <rect x="4" y="4" width="6" height="6" rx="1" />
@@ -64,18 +57,6 @@ export const GalleryViewIcon = (props: IconProps) => (
   <svg {...baseSvg(props)}>
     <rect x="4" y="4" width="16" height="13" rx="1.5" />
     <path d="M5 20h14" />
-  </svg>
-);
-
-export const ChevronRightSmall = (props: IconProps) => (
-  <svg {...baseSvg(props)}>
-    <path d="m9 6 6 6-6 6" />
-  </svg>
-);
-
-export const ChevronLeftSmall = (props: IconProps) => (
-  <svg {...baseSvg(props)}>
-    <path d="m15 6-6 6 6 6" />
   </svg>
 );
 

@@ -3,6 +3,53 @@ import fs from 'node:fs';
 import os from 'node:os';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
+import {
+  CreateBucketCommand,
+  HeadBucketCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+
+function isMissingBucketError(error) {
+  if (!error || typeof error !== 'object') return false;
+  if (error.$metadata?.httpStatusCode === 404) return true;
+  return error.name === 'NotFound' || error.name === 'NoSuchBucket';
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value == null || String(value).trim() === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function createS3Client(env) {
+  return new S3Client({
+    region: env.S3_REGION,
+    endpoint: env.S3_INTERNAL_ENDPOINT,
+    forcePathStyle: parseBoolean(env.S3_FORCE_PATH_STYLE),
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    },
+  });
+}
+
+export async function ensureS3Bucket(env, client = createS3Client(env)) {
+  const bucket = env.S3_BUCKET?.trim();
+  if (!bucket) throw new Error('S3 bucket name is required.');
+
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }));
+    return { bucket, created: false };
+  } catch (error) {
+    if (!isMissingBucketError(error)) throw error;
+  }
+
+  const createInput = { Bucket: bucket };
+  if (env.S3_REGION && env.S3_REGION !== 'us-east-1') {
+    createInput.CreateBucketConfiguration = { LocationConstraint: env.S3_REGION };
+  }
+  await client.send(new CreateBucketCommand(createInput));
+  return { bucket, created: true };
+}
 
 function isPrivateIPv4(address) {
   if (!address) return false;
@@ -25,6 +72,21 @@ export function detectHostForDefaultEndpoint() {
     .map((entry) => entry.address);
 
   return ipv4.find(isPrivateIPv4) || ipv4[0] || '127.0.0.1';
+}
+
+export function resolveWeedMiniAdvertiseHost(
+  bindHost,
+  configuredAdvertiseHost,
+  detectedHost = detectHostForDefaultEndpoint(),
+) {
+  const explicit = configuredAdvertiseHost?.trim();
+  if (explicit) return explicit;
+
+  const bind = bindHost?.trim() || '127.0.0.1';
+  if (bind === '0.0.0.0' || bind === '::' || bind === '[::]') {
+    return detectedHost;
+  }
+  return bind;
 }
 
 export function parseS3Endpoint(endpoint) {

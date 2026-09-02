@@ -6,14 +6,14 @@ import {
   type TtsProviderDefinition,
   type TtsProviderId,
   type TtsProviderType,
-} from '@/lib/shared/tts-provider-catalog';
+} from '@openreader/tts/provider-catalog';
 import {
   normalizeLegacyProviderRef,
   resolveEffectiveProviderType,
   resolveProviderDefaults,
   resolveTtsModelForProvider,
   resolveTtsProviderModelPolicy,
-} from '@/lib/shared/tts-provider-policy';
+} from '@openreader/tts/provider-policy';
 import type { SharedProviderEntry } from '@/hooks/useSharedProviders';
 
 export interface ResolveTtsSettingsViewModelOptions {

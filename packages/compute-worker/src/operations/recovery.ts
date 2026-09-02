@@ -1,12 +1,19 @@
 import type {
   PdfLayoutJobResult,
-  WhisperAlignJobResult,
+  AccountExportJobResult,
+  DocumentPreviewJobResult,
+  DocumentConversionJobResult,
+  TtsPlaybackExportArtifactResult,
+  TtsPlaybackPlanJobResult,
+  TtsPlaybackJobResult,
   WorkerJobTiming,
   WorkerJobState,
   WorkerOperationState,
 } from '../operations/contracts';
 
-export type StreamedOperationState = WorkerOperationState<WhisperAlignJobResult | PdfLayoutJobResult>;
+export type StreamedOperationState = WorkerOperationState<
+  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult
+>;
 
 export interface OrphanRecoveryStateStore {
   getOpStateRecord(opId: string): Promise<{ state: StreamedOperationState; revision: number } | null>;
@@ -44,10 +51,21 @@ export function getOrphanRecoveryThresholdMs(input: {
 }): number | null {
   if (!isInflightStatus(input.state.status)) return null;
   if (input.state.status === 'running') {
-    return input.state.kind === 'whisper_align' ? input.whisperTimeoutMs : input.pdfTimeoutMs;
+    return input.state.kind === 'pdf_layout'
+      || input.state.kind === 'tts_playback_export'
+      || input.state.kind === 'document_preview'
+      || input.state.kind === 'document_conversion'
+      || input.state.kind === 'account_export'
+      ? input.pdfTimeoutMs
+      : input.whisperTimeoutMs;
   }
-  if (input.state.kind !== 'pdf_layout') return null;
-  return input.opStaleMs;
+  return input.state.kind === 'pdf_layout'
+    || input.state.kind === 'tts_playback_plan'
+    || input.state.kind === 'document_preview'
+    || input.state.kind === 'document_conversion'
+    || input.state.kind === 'account_export'
+    ? input.opStaleMs
+    : null;
 }
 
 export async function recoverOrphanedOperations(

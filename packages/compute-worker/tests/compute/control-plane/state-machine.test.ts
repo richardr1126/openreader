@@ -57,7 +57,7 @@ describe('state-machine decisions', () => {
   });
 
   test('never reuses kind-mismatched operation', () => {
-    const current = runningState({ kind: 'whisper_align' });
+    const current = runningState({ kind: 'tts_playback' });
 
     expect(shouldReuseExistingOperation({
       current,
@@ -72,5 +72,19 @@ describe('state-machine decisions', () => {
       now: 2_100,
       opStaleMs: 10_000,
     })).toBe('kind_mismatch');
+  });
+
+  test('reuses terminal playback plan operations', () => {
+    const current = runningState({
+      kind: 'tts_playback_plan',
+      status: 'succeeded',
+    });
+
+    expect(shouldReuseExistingOperation({
+      current,
+      requestKind: 'tts_playback_plan',
+      now: 2_100,
+      opStaleMs: 10_000,
+    })).toBe(true);
   });
 });

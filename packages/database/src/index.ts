@@ -1,15 +1,18 @@
 import { sql } from 'drizzle-orm';
+import { createRequire } from 'node:module';
 import path from 'path';
 import fs from 'fs';
 import * as schema from './schema';
 import * as authSchemaSqlite from './schema_auth_sqlite';
 import * as authSchemaPostgres from './schema_auth_postgres';
+import { resolveSqliteDatabasePath } from './sqlite-path.js';
 
 // Database driver modules are loaded lazily via require() inside getDrizzleDB()
 // to avoid loading the unused driver (~15-20 MB each) in every serverless function.
 // require() is used instead of dynamic import() because getDrizzleDB() must remain
 // synchronous for the SQLite code path.
 
+const require = createRequire(import.meta.url);
 
 const UNCLAIMED_USER_ID = 'unclaimed';
 
@@ -95,7 +98,7 @@ function getDrizzleDB() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require('better-sqlite3');
     const workspaceRoot = findWorkspaceRoot(process.cwd());
-    const dbPath = path.join(workspaceRoot, 'docstore', 'sqlite3.db');
+    const dbPath = resolveSqliteDatabasePath(workspaceRoot);
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -103,8 +106,8 @@ function getDrizzleDB() {
     const sqlite = new Database(dbPath);
     // WAL mode allows concurrent readers + writer without blocking each other.
     // busy_timeout retries on SQLITE_BUSY instead of failing immediately,
-    // which prevents 500 errors under concurrent API requests (e.g. multiple
-    // Playwright browser projects hitting the server simultaneously).
+    // which prevents 500 errors under concurrent API requests (for example,
+    // multiple browser sessions hitting the server simultaneously).
     sqlite.pragma('journal_mode = WAL');
     sqlite.pragma('busy_timeout = 5000');
     dbInstance = drizzleSqlite(sqlite, { schema: { ...schema, ...authSchemaSqlite } });

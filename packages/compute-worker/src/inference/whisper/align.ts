@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import * as ort from 'onnxruntime-node';
 import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
-import type { TTSAudioBuffer, TTSAudioBytes, TTSSentenceAlignment } from '../../api/types';
+import type { TTSAudioBuffer, TTSSentenceAlignment } from '../../api/types';
 import { getFFmpegPath } from '../../infrastructure/platform';
 import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import { getComputeTimeoutConfig } from '../../infrastructure/config';
@@ -34,6 +34,7 @@ import {
   applyWhisperTimestampLogitsRules,
   argmax,
 } from './decoder';
+import type { ModelDownloadProgressHandler } from '../model-download';
 
 export function buildGoertzelCoefficients(freqBins: number, fftSize: number): Float64Array {
   const coeffs = new Float64Array(freqBins);
@@ -58,12 +59,7 @@ export function goertzelPower(samples: Float32Array, coeff: number): number {
 interface WhisperAlignmentOptions {
   lang?: string;
   textHint?: string;
-}
-
-export interface WhisperRequestBody {
-  text: string;
-  audio: TTSAudioBytes;
-  lang?: string;
+  onModelDownloadProgress?: ModelDownloadProgressHandler;
 }
 
 interface WhisperRuntime {
@@ -453,11 +449,11 @@ function buildEmptyPastFeeds() {
   return state.emptyPastFeedsTemplate;
 }
 
-async function getRuntime(): Promise<WhisperRuntime> {
+async function getRuntime(onModelDownloadProgress?: ModelDownloadProgressHandler): Promise<WhisperRuntime> {
   if (state.runtimePromise) return state.runtimePromise;
 
   state.runtimePromise = (async () => {
-    await ensureWhisperModel();
+    await ensureWhisperModel({ onProgress: onModelDownloadProgress });
     await loadOfficialMelFilters();
 
     const [configRaw, generationRaw, tokenizerJsonRaw, tokenizerConfigRaw] = await Promise.all([
@@ -588,7 +584,7 @@ async function runWhisperOnnx(
   timeoutMs: number,
 ): Promise<WhisperWord[]> {
   assertWithinDeadline(deadlineMs, timeoutMs);
-  const runtime = await getRuntime();
+  const runtime = await getRuntime(opts.onModelDownloadProgress);
   const decodeStepLimit = computeAdaptiveDecodeStepLimit(runtime.maxDecodeSteps, opts.textHint);
   const mel = computeLogMelSpectrogram(audioSamples);
   const encoderPast: Record<string, ort.Tensor> = {};
@@ -905,22 +901,16 @@ export async function alignAudioWithText(
   })();
 
   alignmentInFlight.set(inFlightKey, run);
-  run.finally(() => {
+  const clearInFlight = () => {
     if (alignmentInFlight.get(inFlightKey) === run) {
       alignmentInFlight.delete(inFlightKey);
     }
-  });
+  };
+  // `finally()` creates a second promise that rejects when `run` rejects. If
+  // nobody observes that derived promise, a best-effort alignment timeout can
+  // become a process-fatal unhandled rejection even when the caller catches
+  // `run`. Handle both outcomes explicitly so cleanup never changes failure
+  // ownership.
+  void run.then(clearInFlight, clearInFlight);
   return run;
-}
-
-export function makeWhisperCacheKey(input: WhisperRequestBody): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        text: input.text,
-        lang: input.lang || '',
-        audioLen: input.audio?.length || 0,
-      }),
-    )
-    .digest('hex');
 }

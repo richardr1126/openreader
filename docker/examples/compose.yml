@@ -9,6 +9,11 @@ services:
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3003}
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}
+      COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
+      COMPUTE_WORKER_HOST: 0.0.0.0
+      COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}
+      TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       RUNTIME_SEED_JSON: |-
         {
           "version": 1,
@@ -29,6 +34,7 @@ services:
     ports:
       - "3003:3003"
       - "8333:8333"
+      - "8081:8081"
     volumes:
       - openreader-docstore:/app/docstore
 

@@ -2,12 +2,23 @@ import type {
   PdfLayoutRequest,
   PdfLayoutResolution,
   PdfLayoutResult,
-  WhisperAlignRequest,
-  WhisperAlignResult,
+  DocumentPreviewRequest,
+  DocumentPreviewResolution,
+  DocumentConversionRequest,
+  DocumentConversionResolution,
+  AccountExportRequest,
+  AccountExportResolveRequest,
+  AccountExportResolution,
+  TtsPlaybackRequest,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResolution,
+  TtsPlaybackPlanRequest,
+  TtsPlaybackSessionState,
+  TtsPlaybackCompletedSegment,
+  TtsPlaybackSessionResolution,
+  TtsPlaybackSessionResolveRequest,
   ComputeOperation,
-  ComputeOperationEvent,
 } from './protocol';
-import { isComputeOperation } from './protocol';
 
 class WorkerHttpError extends Error {
   constructor(
@@ -46,6 +57,11 @@ export function getComputeWorkerConfigFromEnv(): { baseUrl: string; token: strin
   };
 }
 
+export function getComputeWorkerPublicBaseUrl(): string {
+  const publicUrl = process.env.COMPUTE_WORKER_PUBLIC_URL?.trim();
+  return normalizeWorkerBaseUrl(publicUrl || readRequiredEnv('COMPUTE_WORKER_URL'));
+}
+
 export function isComputeWorkerAvailable(): boolean {
   try {
     getComputeWorkerConfigFromEnv();
@@ -55,41 +71,12 @@ export function isComputeWorkerAvailable(): boolean {
   }
 }
 
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name]?.trim();
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-}
-
-function alignmentWaitTimeoutMs(): number {
-  return Math.max(60_000, readPositiveIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', 30_000) + 15_000);
-}
-
 function parseRetryAfterMs(value: string | null): number | null {
   if (!value) return null;
   const seconds = Number(value);
   if (Number.isFinite(seconds)) return Math.max(0, Math.floor(seconds * 1000));
   const date = Date.parse(value);
   return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
-}
-
-function parseSseFrame(frame: string): { id: number | null; data: string | null } {
-  let id: number | null = null;
-  const data: string[] = [];
-  for (const line of frame.split(/\r?\n/)) {
-    if (line.startsWith('id:')) {
-      const parsed = Number(line.slice(3).trim());
-      if (Number.isFinite(parsed) && parsed >= 0) id = Math.floor(parsed);
-    } else if (line.startsWith('data:')) {
-      data.push(line.slice(5).trimStart());
-    }
-  }
-  return { id, data: data.length > 0 ? data.join('\n') : null };
-}
-
-function isTerminal(operation: ComputeOperation): boolean {
-  return operation.status === 'succeeded' || operation.status === 'failed';
 }
 
 export class ComputeWorkerClient {
@@ -101,36 +88,20 @@ export class ComputeWorkerClient {
     this.token = config.token;
   }
 
-  async alignWords(input: WhisperAlignRequest): Promise<WhisperAlignResult> {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      try {
-        const operation = await this.requestJson<ComputeOperation<WhisperAlignResult>>(
-          'POST',
-          '/v1/whisper-align/operations',
-          input,
-        );
-        const final = isTerminal(operation)
-          ? operation
-          : await this.waitForOperation<WhisperAlignResult>(operation.opId, alignmentWaitTimeoutMs());
-        if (final.status !== 'succeeded' || !final.result) {
-          throw new Error(final.error?.message || 'Whisper worker operation did not complete');
-        }
-        return final.result;
-      } catch (error) {
-        lastError = error;
-        if (attempt >= 2 || !this.shouldRetry(error)) break;
-        const delay = error instanceof WorkerHttpError && error.retryAfterMs !== null
-          ? error.retryAfterMs
-          : attempt * 250;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error('Unknown compute worker failure');
+  createPdfLayoutOperation(input: PdfLayoutRequest): Promise<ComputeOperation<PdfLayoutResult>> {
+    return this.requestJson('POST', '/v1/pdf-layout/jobs', input);
   }
 
-  createPdfLayoutOperation(input: PdfLayoutRequest): Promise<ComputeOperation<PdfLayoutResult>> {
-    return this.requestJson('POST', '/v1/pdf-layout/operations', input);
+  createDocumentPreviewOperation(input: DocumentPreviewRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/document-previews/jobs', input);
+  }
+
+  createDocumentConversionOperation(input: DocumentConversionRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/document-conversions/docx/jobs', input);
+  }
+
+  createAccountExportOperation(input: AccountExportRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/account-exports/jobs', input);
   }
 
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
@@ -139,6 +110,157 @@ export class ComputeWorkerClient {
       namespace: input.namespace,
       documentObjectKey: input.documentObjectKey,
     });
+  }
+
+  resolveDocumentPreview(input: Omit<DocumentPreviewRequest, 'targetWidth'>): Promise<DocumentPreviewResolution> {
+    return this.requestJson('POST', '/v1/document-previews/resolve', input);
+  }
+
+  resolveDocumentConversion(input: DocumentConversionRequest): Promise<DocumentConversionResolution> {
+    return this.requestJson('POST', '/v1/document-conversions/docx/resolve', input);
+  }
+
+  resolveAccountExport(input: AccountExportResolveRequest): Promise<AccountExportResolution> {
+    return this.requestJson('POST', '/v1/account-exports/resolve', input);
+  }
+
+  createTtsPlaybackOperation(
+    input: TtsPlaybackRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/tts-playback/sessions/jobs', input, init);
+  }
+
+  createTtsPlaybackPlanOperation(input: TtsPlaybackPlanRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/tts-playback/plans/jobs', input);
+  }
+
+  createTtsPlaybackExportArtifactOperation(input: TtsPlaybackExportArtifactRequest): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/jobs', input);
+  }
+
+  resolveTtsPlaybackSession(input: TtsPlaybackSessionResolveRequest): Promise<TtsPlaybackSessionResolution> {
+    return this.requestJson('POST', '/v1/tts-playback/sessions/resolve', input);
+  }
+
+  resolveTtsPlaybackExportArtifact(input: {
+    artifactId: string;
+    storageUserId: string;
+    documentId: string;
+    documentVersion: number;
+    settingsHash: string;
+    format: 'mp3' | 'm4b';
+    speed: number;
+  }): Promise<TtsPlaybackExportArtifactResolution> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/resolve', input);
+  }
+
+  async getTtsPlaybackExportArtifact(input: {
+    artifactId: string;
+    storageUserId: string;
+    documentId: string;
+  }): Promise<NonNullable<TtsPlaybackExportArtifactResolution['artifact']> | null> {
+    try {
+      const query = new URLSearchParams({
+        storageUserId: input.storageUserId,
+        documentId: input.documentId,
+      });
+      return await this.requestJson('GET', `/v1/tts-playback/exports/${encodeURIComponent(input.artifactId)}?${query.toString()}`);
+    } catch (error) {
+      if (error instanceof WorkerHttpError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {
+    try {
+      return await this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}`);
+    } catch (error) {
+      if (error instanceof WorkerHttpError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  listTtsPlaybackSegments(input: {
+    sessionId: string;
+    minOrdinal?: number;
+    limit?: number;
+  }): Promise<{ sessionId: string; segments: TtsPlaybackCompletedSegment[] }> {
+    const search = new URLSearchParams();
+    if (input.minOrdinal !== undefined) search.set('minOrdinal', String(input.minOrdinal));
+    if (input.limit !== undefined) search.set('limit', String(input.limit));
+    const suffix = search.size > 0 ? `?${search.toString()}` : '';
+    return this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/segments${suffix}`);
+  }
+
+  updateTtsPlaybackCursor(input: {
+    sessionId: string;
+    ordinal: number;
+    playbackActive?: boolean;
+    expiresAt?: number;
+  }): Promise<{ sessionId: string; cursorOrdinal: number; playbackActive: boolean; expiresAt: number }> {
+    return this.requestJson('PUT', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/cursor`, {
+      ordinal: input.ordinal,
+      ...(input.playbackActive === undefined ? {} : { playbackActive: input.playbackActive }),
+      ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
+    });
+  }
+
+  clearTtsPlaybackScope(input: {
+    storageUserId: string;
+    documentId: string;
+    documentVersion?: number;
+    readerType?: 'pdf' | 'epub' | 'html';
+    namespace: string | null;
+  }): Promise<{
+    deletedAudioObjects: number;
+    deletedSidecarObjects: number;
+    deletedPlanObjects: number;
+    deletedExportObjects: number;
+    invalidatedPlaybackSessions: number;
+    invalidatedJobOperations: number;
+  }> {
+    return this.requestJson('POST', '/v1/tts-playback/cache/clear', input);
+  }
+
+  cleanupUserStorage(input: {
+    storageUserId: string;
+    namespace: string | null;
+    documentIds: string[];
+  }): Promise<{ deletedObjects: number; deletedDocumentArtifacts: number }> {
+    return this.requestJson('POST', '/v1/user-storage/cleanup', input);
+  }
+
+  expireAccountExportArtifacts(input: {
+    maxAgeMs: number;
+  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/account-exports/expire', input, init);
+  }
+
+  expireTtsPlaybackExportArtifacts(input: {
+    maxAgeMs: number;
+  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/tts-playback/exports/expire', input, init);
+  }
+
+  clearPdfLayoutArtifacts(input: {
+    documentId: string;
+    namespace: string | null;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedParsedObjects: number }> {
+    return this.requestJson('POST', '/v1/pdf-layout/clear', input, init);
+  }
+
+  clearDocumentPreviewArtifacts(input: {
+    documentId: string;
+    namespace: string | null;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedPreviewObjects: number }> {
+    return this.requestJson('POST', '/v1/document-previews/clear', input, init);
+  }
+
+  clearTtsPlaybackPlans(input: {
+    documentId: string;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedPlanObjects: number }> {
+    return this.requestJson('POST', '/v1/tts-playback/plans/clear', input, init);
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {
@@ -169,15 +291,21 @@ export class ComputeWorkerClient {
     });
   }
 
-  private async requestJson<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(
+    method: 'GET' | 'POST' | 'PUT',
+    path: string,
+    body?: unknown,
+    init?: { signal?: AbortSignal },
+  ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: 'application/json',
-        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+        ...(method === 'POST' || method === 'PUT' ? { 'Content-Type': 'application/json' } : {}),
       },
-      ...(method === 'POST' ? { body: JSON.stringify(body ?? {}) } : {}),
+      ...(method === 'POST' || method === 'PUT' ? { body: JSON.stringify(body ?? {}) } : {}),
+      ...(init?.signal ? { signal: init.signal } : {}),
       cache: 'no-store',
     });
     if (!response.ok) {
@@ -190,54 +318,6 @@ export class ComputeWorkerClient {
     }
     const parsed = await response.json() as T;
     return parsed;
-  }
-
-  private shouldRetry(error: unknown): boolean {
-    if (error instanceof WorkerHttpError) {
-      return error.status === 429 || error.status === 502 || error.status === 503 || error.status === 504;
-    }
-    return error instanceof Error && /network|timeout|fetch failed/i.test(error.message);
-  }
-
-  private async waitForOperation<Result>(opId: string, timeoutMs: number): Promise<ComputeOperation<Result>> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    let lastEventId: number | null = null;
-    try {
-      while (!controller.signal.aborted) {
-        const response = await this.openOperationEvents(opId, {
-          sinceEventId: lastEventId === null ? null : String(lastEventId),
-          lastEventId: lastEventId === null ? null : String(lastEventId),
-          signal: controller.signal,
-        });
-        if (!response.ok || !response.body) {
-          throw new WorkerHttpError(`Worker event stream failed: ${response.status}`, response.status);
-        }
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          while (true) {
-            const end = buffer.indexOf('\n\n');
-            if (end < 0) break;
-            const frame = parseSseFrame(buffer.slice(0, end));
-            buffer = buffer.slice(end + 2);
-            if (frame.id !== null) lastEventId = frame.id;
-            if (!frame.data) continue;
-            const event = JSON.parse(frame.data) as ComputeOperationEvent<Result>;
-            if (!event?.snapshot || !isComputeOperation(event.snapshot) || event.snapshot.opId !== opId) continue;
-            if (isTerminal(event.snapshot)) return event.snapshot;
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      throw new Error(`Operation stream timed out for ${opId}`);
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 }
 

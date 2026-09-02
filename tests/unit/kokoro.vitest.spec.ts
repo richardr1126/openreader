@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { getMaxVoicesForProvider } from '../../src/lib/shared/kokoro';
+import { getMaxVoicesForProvider } from '@openreader/tts/kokoro';
 
 describe('kokoro voice limits', () => {
   test('keeps Replicate single-voice even for Kokoro models', () => {

@@ -3,8 +3,8 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { adminProviders } from '@openreader/database/schema';
 import { apiKeyLast4, decryptSecret, encryptSecret } from '@/lib/server/crypto/secrets';
-import { type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
-import { resolveTtsProviderModelPolicy } from '@/lib/shared/tts-provider-policy';
+import { type TtsProviderId } from '@openreader/tts/provider-catalog';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { resolvePreferredSharedProviderSlug } from '@/lib/shared/shared-provider-selection';
 import { getRuntimeConfig, setRuntimeConfigKey } from '@/lib/server/admin/settings';
 
@@ -362,11 +362,6 @@ export async function getEnabledAdminProviderBySlug(
     .limit(1);
   const arr = rows as Array<Record<string, unknown>>;
   return arr[0] ? rowToRecord(arr[0]) : null;
-}
-
-export async function getFirstEnabledAdminProvider(): Promise<AdminProviderRecord | null> {
-  const rows = await listEnabledAdminProviders();
-  return rows[0] ?? null;
 }
 
 export async function resolvePreferredEnabledAdminProvider(input: {

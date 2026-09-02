@@ -8,15 +8,14 @@ import {
   speechSdkProviderPrefix,
   supportsNativeModelSpeed,
   supportsTtsInstructions,
-} from '../../src/lib/shared/tts-provider-catalog';
-import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '../../src/lib/shared/tts-provider-policy';
+} from '@openreader/tts/provider-catalog';
+import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import {
   resolveReplicateLanguageInputKey,
   resolveReplicateVoiceInputKey,
   resolveVoices,
-} from '../../src/lib/server/tts/voice-resolution';
+} from '@openreader/tts/voice-resolution';
 import { applyConfigUpdate, getVoicePreferenceKey } from '../../src/lib/client/config/updates';
-import { buildSyncedPreferencePatch } from '../../src/lib/client/config/preferences';
 
 describe('tts provider catalog', () => {
   test('resolves provider models with fixed Deepinfra catalog', () => {
@@ -530,22 +529,4 @@ describe('config helpers', () => {
     });
   });
 
-  test('builds synced preference patches and honors non-default filtering', () => {
-    expect(buildSyncedPreferencePatch({
-      voiceSpeed: 1.2,
-      ttsModel: 'kokoro',
-    })).toEqual({
-      voiceSpeed: 1.2,
-      ttsModel: 'kokoro',
-    });
-
-    // The user's provider/model now default to empty ("inherit the admin
-    // default"), so empty values are treated as defaults and filtered out.
-    expect(buildSyncedPreferencePatch({
-      voiceSpeed: 1,
-      providerRef: '',
-      providerType: 'unknown',
-      ttsModel: '',
-    }, { nonDefaultOnly: true })).toEqual({});
-  });
 });

@@ -5,23 +5,14 @@ import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
-import {
-  createOrReuseCurrentPdfParseOperation,
-  lookupCurrentPdfParseOperation,
-} from '@/lib/server/pdf-parse/operation';
-import { readCurrentParsedPdfArtifact, readParsedPdfArtifactByKey } from '@/lib/server/pdf-parse/artifact';
-import {
-  parsedObjectKeyFromWorkerState,
-  pdfParseSnapshotFromWorkerState,
-} from '@/lib/server/pdf-parse/snapshot';
-import { getOpenReaderTestNamespace } from '@/lib/server/testing/test-namespace';
+import { createOrReuseCurrentPdfParseOperation } from '@/lib/server/pdf-parse/operation';
+import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { checkJobRate, getPdfLayoutRateConfig } from '@/lib/server/rate-limit/job-rate-limiter';
+import { checkJobRate, getPdfLayoutRateConfig, recordJobEvent } from '@/lib/server/rate-limit/job-rate-limiter';
 import { buildComputeRateLimitedResponse } from '@/lib/server/rate-limit/problem-response';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
-import type { PdfParseSnapshot } from '@/lib/server/pdf-parse/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,92 +43,6 @@ async function loadOwnedDocumentRow(input: {
   return rows[0] ?? null;
 }
 
-function jsonSnapshot(snapshot: PdfParseSnapshot, status = 409): NextResponse {
-  return NextResponse.json(snapshot, { status });
-}
-
-function artifactResponse(bytes: Buffer): NextResponse {
-  return new NextResponse(new Uint8Array(bytes), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    },
-  });
-}
-
-export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { logger } = createRequestLogger({
-    route: '/api/documents/[id]/parsed',
-    request: req,
-  });
-
-  try {
-    if (!isS3Configured()) return s3NotConfiguredResponse();
-
-    const authCtxOrRes = await requireAuthContext(req);
-    if (authCtxOrRes instanceof Response) return authCtxOrRes;
-    if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const params = await ctx.params;
-    const id = (params.id || '').trim().toLowerCase();
-    if (!isValidDocumentId(id)) {
-      return NextResponse.json({ error: 'Invalid document id' }, { status: 400 });
-    }
-
-    const row = await loadOwnedDocumentRow({
-      documentId: id,
-      allowedUserIds: [authCtxOrRes.userId],
-    });
-    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    if (row.type !== 'pdf') {
-      return NextResponse.json({ error: 'Document is not a PDF' }, { status: 400 });
-    }
-
-    const namespace = getOpenReaderTestNamespace(req.headers);
-    const artifact = await readCurrentParsedPdfArtifact({ documentId: id, namespace });
-    if (artifact) {
-      return artifactResponse(artifact.bytes);
-    }
-
-    const currentOp = await lookupCurrentPdfParseOperation({ documentId: id, namespace });
-    if (!currentOp) {
-      return jsonSnapshot({
-        parseStatus: 'pending',
-        parseProgress: null,
-        opId: null,
-      });
-    }
-
-    if (currentOp.status === 'succeeded') {
-      const artifactKey = parsedObjectKeyFromWorkerState(currentOp);
-      if (artifactKey) {
-        const artifactFromOp = await readParsedPdfArtifactByKey(artifactKey);
-        if (artifactFromOp) {
-          return artifactResponse(artifactFromOp.bytes);
-        }
-      }
-      return NextResponse.json(
-        {
-          error: 'Current parse operation succeeded without a readable parsed artifact.',
-          opId: currentOp.opId,
-        },
-        { status: 502 },
-      );
-    }
-
-    return jsonSnapshot(pdfParseSnapshotFromWorkerState(currentOp));
-  } catch (error) {
-    return errorResponse(error, {
-      logger,
-      event: 'documents.parsed.get_failed',
-      msg: 'Failed to read parsed PDF',
-      apiErrorMessage: 'Failed to read parsed PDF',
-      normalize: { code: 'DOCUMENTS_PARSED_GET_FAILED', errorClass: 'storage' },
-    });
-  }
-}
-
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { logger } = createRequestLogger({
     route: '/api/documents/[id]/parsed',
@@ -157,12 +62,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: 'Invalid document id' }, { status: 400 });
     }
 
-    let replace = false;
-    try {
-      const body = (await req.json()) as { replace?: unknown };
-      replace = body?.replace === true;
-    } catch {
-      replace = false;
+    const body = await req.json().catch(() => null) as { replace?: unknown } | null;
+    if (body?.replace !== true) {
+      return NextResponse.json({ error: 'PDF reparse requires replace=true' }, { status: 400 });
     }
 
     const row = await loadOwnedDocumentRow({
@@ -174,39 +76,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: 'Document is not a PDF' }, { status: 400 });
     }
 
-    const namespace = getOpenReaderTestNamespace(req.headers);
-
-    if (!replace) {
-      const artifact = await readCurrentParsedPdfArtifact({ documentId: id, namespace });
-      if (artifact) {
-        return jsonSnapshot({
-          parseStatus: 'ready',
-          parseProgress: null,
-          opId: null,
-        }, 200);
-      }
-
-      const currentOp = await lookupCurrentPdfParseOperation({ documentId: id, namespace });
-      if (currentOp) {
-        const snapshot = pdfParseSnapshotFromWorkerState(currentOp);
-        if (snapshot.parseStatus === 'failed') {
-          return jsonSnapshot(snapshot);
-        }
-        if (snapshot.parseStatus === 'ready') {
-          const artifactKey = parsedObjectKeyFromWorkerState(currentOp);
-          if (artifactKey && await readParsedPdfArtifactByKey(artifactKey)) {
-            return jsonSnapshot(snapshot, 200);
-          }
-          return jsonSnapshot({
-            parseStatus: 'running',
-            parseProgress: null,
-            opId: snapshot.opId,
-          }, 202);
-        }
-        return jsonSnapshot(snapshot, 202);
-      }
-    }
-
     const rateConfig = getPdfLayoutRateConfig(await getResolvedRuntimeConfig());
     const rateDecision = await checkJobRate(authCtxOrRes.userId, 'pdf_layout', rateConfig);
     if (!rateDecision.allowed) {
@@ -215,11 +84,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const workerState = await createOrReuseCurrentPdfParseOperation({
       documentId: id,
-      namespace,
-      ...(replace ? { forceToken: randomUUID() } : {}),
+      namespace: null,
+      forceToken: randomUUID(),
     });
+    await recordJobEvent(authCtxOrRes.userId, 'pdf_layout', workerState.opId, rateConfig);
 
-    return jsonSnapshot(pdfParseSnapshotFromWorkerState(workerState), 202);
+    return NextResponse.json(pdfParseSnapshotFromWorkerState(workerState), { status: 202 });
   } catch (error) {
     return errorResponse(error, {
       logger,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { buildSegmentKey, buildSegmentKeyPrefix, planCanonicalTtsSegments } from '../../src/lib/shared/tts-segment-plan';
+import { buildSegmentKey, buildSegmentKeyPrefix, planCanonicalTtsSegments } from '@openreader/tts/segment-plan';
 
 describe('planCanonicalTtsSegments', () => {
   test('emits a cross-boundary segment once and assigns it to the source where it starts', () => {

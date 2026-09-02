@@ -2,16 +2,14 @@ const DEFAULT_COMPUTE_WHISPER_TIMEOUT_MS = 30_000;
 const DEFAULT_COMPUTE_PDF_TIMEOUT_MS = 300_000;
 const DEFAULT_COMPUTE_PDF_HARD_CAP_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_COMPUTE_OP_STALE_MIN_MS = 30 * 60_000;
-const DEFAULT_WORKER_WAIT_BUFFER_MS = 15_000;
-const DEFAULT_WORKER_WAIT_MIN_MS = 60_000;
 
 export type ComputeTimeoutConfig = {
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfHardCapMs: number;
+  ttsPlaybackSegmentTimeoutMs: number;
 };
 
-export type ComputeOperationKind = 'whisper_align' | 'pdf_layout';
 export type IdleTimeoutAndHardCapInput<T> = {
   run: (touchProgress: () => void) => Promise<T>;
   idleTimeoutMs: number;
@@ -66,10 +64,12 @@ let opStaleMsCache: number | null = null;
 
 export function getComputeTimeoutConfig(): ComputeTimeoutConfig {
   if (timeoutConfigCache) return timeoutConfigCache;
+  const whisperTimeoutMs = readPositiveIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', DEFAULT_COMPUTE_WHISPER_TIMEOUT_MS);
   timeoutConfigCache = {
-    whisperTimeoutMs: readPositiveIntEnv('COMPUTE_WHISPER_TIMEOUT_MS', DEFAULT_COMPUTE_WHISPER_TIMEOUT_MS),
+    whisperTimeoutMs,
     pdfTimeoutMs: readPositiveIntEnv('COMPUTE_PDF_TIMEOUT_MS', DEFAULT_COMPUTE_PDF_TIMEOUT_MS),
     pdfHardCapMs: DEFAULT_COMPUTE_PDF_HARD_CAP_MS,
+    ttsPlaybackSegmentTimeoutMs: readPositiveIntEnv('COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS', whisperTimeoutMs),
   };
   return timeoutConfigCache;
 }
@@ -82,12 +82,6 @@ export function getComputeOpStaleMs(): number {
     Math.max(DEFAULT_COMPUTE_OP_STALE_MIN_MS, Math.max(config.whisperTimeoutMs, config.pdfTimeoutMs) * 4),
   );
   return opStaleMsCache;
-}
-
-export function getWorkerClientWaitTimeoutMs(kind: ComputeOperationKind): number {
-  const config = getComputeTimeoutConfig();
-  const timeoutMs = kind === 'pdf_layout' ? config.pdfTimeoutMs : config.whisperTimeoutMs;
-  return Math.max(DEFAULT_WORKER_WAIT_MIN_MS, timeoutMs + DEFAULT_WORKER_WAIT_BUFFER_MS);
 }
 
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {

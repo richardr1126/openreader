@@ -1,6 +1,6 @@
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/user-state';
-import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@/lib/shared/tts-provider-catalog';
-import { resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
+import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@openreader/tts/provider-catalog';
+import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 
 export interface PreferenceNormalizationContext {
   showAllProviderModels: boolean;
@@ -102,8 +102,6 @@ export function sanitizePreferencesPatch(
         break;
       case 'voiceSpeed':
       case 'audioPlayerSpeed':
-      case 'segmentPreloadDepthPages':
-      case 'segmentPreloadSentenceLookahead':
       case 'ttsSegmentMaxBlockLength':
       case 'headerMargin':
       case 'footerMargin':
@@ -111,7 +109,6 @@ export function sanitizePreferencesPatch(
       case 'rightMargin':
         if (Number.isFinite(value)) out[key] = Number(value);
         break;
-      case 'skipBlank':
       case 'epubTheme':
       case 'pdfHighlightEnabled':
       case 'pdfWordHighlightEnabled':
@@ -126,7 +123,9 @@ export function sanitizePreferencesPatch(
         break;
       case 'documentListState':
         if (isRecord(value)) {
-          out[key] = { ...value, folders: [] } as unknown as SyncedPreferencesPatch[typeof key];
+          out[key] = Object.fromEntries(
+            Object.entries(value).filter(([field]) => field !== 'folders' && field !== 'collapsedFolders'),
+          ) as unknown as SyncedPreferencesPatch[typeof key];
         }
         break;
       default:

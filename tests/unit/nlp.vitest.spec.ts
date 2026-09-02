@@ -5,7 +5,7 @@ import {
   splitTextToTtsBlocksEPUB,
   normalizeTextForTts,
   MAX_BLOCK_LENGTH
-} from '../../src/lib/shared/nlp';
+} from '@openreader/tts/nlp';
 
 const PDF_MAX_BLOCK_LENGTH = MAX_BLOCK_LENGTH * 2; // splitTextToTtsBlocks can overflow to reach punctuation
 
@@ -32,6 +32,10 @@ describe('preprocessSentenceForAudio', () => {
       {
         input: 'This is *bold* text',
         expected: 'This is bold text',
+      },
+      {
+        input: 'This uses ∗ math star ∗ markers',
+        expected: 'This uses math star markers',
       },
       {
         input: '▪ First item\n▪ Second item',

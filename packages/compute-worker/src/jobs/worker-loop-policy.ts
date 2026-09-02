@@ -11,12 +11,8 @@ export function decideRetryAction(input: {
   kind: WorkerOperationKind;
   deliveryCount: number;
   pdfAttempts: number;
-  whisperMaxDeliver?: number;
+  retryable?: boolean;
 }): RetryAction {
-  const whisperMaxDeliver = input.whisperMaxDeliver ?? 1;
-  if (input.kind === 'whisper_align') {
-    return input.deliveryCount < whisperMaxDeliver ? 'nak_retry' : 'term_fail';
-  }
-
+  if (input.retryable === false) return 'term_fail';
   return input.deliveryCount < input.pdfAttempts ? 'nak_retry' : 'term_fail';
 }

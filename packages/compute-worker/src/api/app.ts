@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import {
   credsAuthenticator,
@@ -18,12 +18,26 @@ import {
   readPositiveIntEnv,
   requireEnv,
 } from '../infrastructure/config';
-import { OperationOrchestrator } from '../operations';
+import {
+  getTtsCredentialBrokerConfig,
+  requireTtsSegmentTextHashSecret,
+} from '../infrastructure/credential-broker-config';
+import { OperationOrchestrator } from '../operations/service';
 import type {
+  AccountExportJobRequest,
+  AccountExportJobResult,
+  DocumentPreviewJobRequest,
+  DocumentPreviewJobResult,
+  DocumentConversionJobRequest,
+  DocumentConversionJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
-  WhisperAlignJobRequest,
-  WhisperAlignJobResult,
+  TtsPlaybackPlanJobRequest,
+  TtsPlaybackPlanJobResult,
+  TtsPlaybackExportArtifactRequest,
+  TtsPlaybackExportArtifactResult,
+  TtsPlaybackJobRequest,
+  TtsPlaybackJobResult,
 } from '../operations/contracts';
 import {
   JetStreamOperationEventStream,
@@ -38,14 +52,20 @@ import {
   normalizeS3Prefix,
   type ArtifactStorage,
 } from '../infrastructure/storage';
+import { createTtsPlaybackStorage } from '../playback/storage';
 import { createJobHandlers } from '../jobs/handlers';
 import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
+  ACCOUNT_EXPORT_JOBS_SUBJECT,
   EVENTS_STREAM_NAME,
+  DOCUMENT_PREVIEW_JOBS_SUBJECT,
+  DOCUMENT_CONVERSION_JOBS_SUBJECT,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
-  WHISPER_JOBS_SUBJECT,
+  TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
+  TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
+  TTS_PLAYBACK_JOBS_SUBJECT,
 } from '../infrastructure/nats';
 import { registerHttpHooks } from './http-hooks';
 import {
@@ -62,19 +82,20 @@ import {
   pdfLayoutResolutionSchema,
   computeOperationEventSchema,
   computeOperationSchema,
+  accountExportArtifactMetadataSchema,
+  accountExportProgressSchema,
+  accountExportResolutionSchema,
+  documentPreviewArtifactMetadataSchema,
+  documentConversionArtifactMetadataSchema,
+  documentConversionProgressSchema,
+  documentConversionResolutionSchema,
+  documentPreviewResolutionSchema,
+  ttsPlaybackExportArtifactMetadataSchema,
+  ttsPlaybackExportProgressSchema,
+  ttsPlaybackExportArtifactResolutionSchema,
   ttsSentenceAlignmentSchema,
 } from './schemas';
-
-// Disconnect from NATS after this much continuous idle so the worker stops
-// generating outbound traffic (pull polling + keepalive PINGs) and Railway can
-// put it to sleep. Reconnect happens lazily on the next inbound request.
-const IDLE_DISCONNECT_MS = 120_000;
-const IDLE_CHECK_INTERVAL_MS = 5_000;
-const IDLE_STATUS_LOG_INTERVAL_MS = 60_000;
-const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
-// Bounded pull window so consumer loops yield periodically and can be stopped
-// cleanly when going idle, instead of blocking on a long-lived pull.
-const WHISPER_MAX_DELIVER = 1;
+import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
 export type { ComputeWorkerRouteDeps } from './routes';
 
@@ -99,6 +120,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const host = options.host ?? (process.env.COMPUTE_WORKER_HOST?.trim() || '0.0.0.0');
   const workerToken = options.workerToken ?? requireEnv('COMPUTE_WORKER_TOKEN');
   const disableWorkers = options.disableWorkers ?? false;
+  // Test/control-plane instances intentionally disable all object access. A
+  // real worker validates the shared browser/server storage contract at startup.
+  if (!disableWorkers) {
+    resolveStorageTransport(process.env);
+    getTtsCredentialBrokerConfig();
+    requireTtsSegmentTextHashSecret();
+  }
   const natsUrl = requireEnv('NATS_URL');
   const timeoutConfig = getComputeTimeoutConfig();
 
@@ -106,6 +134,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const whisperTimeoutMs = timeoutConfig.whisperTimeoutMs;
   const pdfTimeoutMs = timeoutConfig.pdfTimeoutMs;
   const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
+  const ttsPlaybackSegmentTimeoutMs = timeoutConfig.ttsPlaybackSegmentTimeoutMs;
   const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
   const prewarmModels = readBoolEnv('COMPUTE_PREWARM_MODELS', false);
   const jobsStreamMaxBytes = readPositiveIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
@@ -150,6 +179,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       readObject: storageDisabled,
       objectExists: storageDisabled,
       deleteObject: storageDisabled,
+      listPrefix: storageDisabled,
+      putObject: storageDisabled,
       putParsedPdf: storageDisabled,
     }
     : createArtifactStorage({
@@ -164,7 +195,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const app = Fastify({
     logger: buildLoggerConfig(),
-    disableRequestLogging: true,
+    logController: new LogController({ disableRequestLogging: true }),
   });
   await app.register(swagger, {
     openapi: {
@@ -187,9 +218,20 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
           ErrorResponse: jsonSchema(apiErrorResponseSchema),
           OperationError: jsonSchema(operationErrorSchema),
           PdfLayoutProgress: jsonSchema(pdfLayoutProgressSchema),
+          TtsPlaybackExportProgress: jsonSchema(ttsPlaybackExportProgressSchema),
+          DocumentConversionProgress: jsonSchema(documentConversionProgressSchema),
+          AccountExportProgress: jsonSchema(accountExportProgressSchema),
+          TtsPlaybackExportArtifact: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
+          AccountExportArtifact: jsonSchema(accountExportArtifactMetadataSchema),
+          DocumentPreviewArtifact: jsonSchema(documentPreviewArtifactMetadataSchema),
+          DocumentConversionArtifact: jsonSchema(documentConversionArtifactMetadataSchema),
           ComputeOperation: jsonSchema(computeOperationSchema),
           ComputeOperationEvent: jsonSchema(computeOperationEventSchema),
           PdfLayoutResolution: jsonSchema(pdfLayoutResolutionSchema),
+          TtsPlaybackExportArtifactResolution: jsonSchema(ttsPlaybackExportArtifactResolutionSchema),
+          DocumentPreviewResolution: jsonSchema(documentPreviewResolutionSchema),
+          DocumentConversionResolution: jsonSchema(documentConversionResolutionSchema),
+          AccountExportResolution: jsonSchema(accountExportResolutionSchema),
         },
       },
       security: [{ bearerAuth: [] }],
@@ -209,23 +251,38 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     pdfLayoutHardCapMs: pdfHardCapMs,
   }, 'compute runtime config');
 
-  const whisperJobCodec = createJsonCodec<QueuedJob<WhisperAlignJobRequest>>();
   const layoutJobCodec = createJsonCodec<QueuedJob<PdfLayoutJobRequest>>();
+  const ttsPlaybackJobCodec = createJsonCodec<QueuedJob<TtsPlaybackJobRequest>>();
+  const ttsPlaybackPlanJobCodec = createJsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>();
+  const ttsPlaybackExportJobCodec = createJsonCodec<QueuedJob<TtsPlaybackExportArtifactRequest>>();
+  const documentPreviewJobCodec = createJsonCodec<QueuedJob<DocumentPreviewJobRequest>>();
+  const documentConversionJobCodec = createJsonCodec<QueuedJob<DocumentConversionJobRequest>>();
+  const accountExportJobCodec = createJsonCodec<QueuedJob<AccountExportJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<WhisperAlignJobResult | PdfLayoutJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<WhisperAlignJobResult | PdfLayoutJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
   });
+  const playbackStorage = createTtsPlaybackStorage({
+    getKv: async () => (await ensureConnected()).kv,
+    storage,
+    s3Prefix,
+  });
 
   const operationQueue = new JetStreamOperationQueue({
     getJs: async () => (await ensureConnected()).js,
-    whisperSubject: WHISPER_JOBS_SUBJECT,
     layoutSubject: LAYOUT_JOBS_SUBJECT,
+    ttsPlaybackSubject: TTS_PLAYBACK_JOBS_SUBJECT,
+    ttsPlaybackPlanSubject: TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
+    ttsPlaybackExportSubject: TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
+    documentPreviewSubject: DOCUMENT_PREVIEW_JOBS_SUBJECT,
+    documentConversionSubject: DOCUMENT_CONVERSION_JOBS_SUBJECT,
+    accountExportSubject: ACCOUNT_EXPORT_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -270,6 +327,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       operationEventStream,
       artifactExists: options.routeDeps?.artifactExists ?? storage.objectExists,
     },
+    storage,
+    playbackStorage: options.routeDeps ? undefined : playbackStorage,
     s3Prefix,
     ensureOrphanedOpRecovery,
     getOpState,
@@ -283,9 +342,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const jobHandlers = createJobHandlers({
     storage,
-    whisperTimeoutMs,
+    playbackStorage,
     pdfTimeoutMs,
     pdfHardCapMs,
+    ttsPlaybackSegmentTimeoutMs,
+    s3Prefix,
   });
 
   const workerLoops = createWorkerLoopController({
@@ -294,8 +355,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     logger: app.log,
     jobConcurrency,
     pdfAttempts,
-    whisperCodec: whisperJobCodec,
     pdfCodec: layoutJobCodec,
+    ttsPlaybackCodec: ttsPlaybackJobCodec,
+    ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
+    ttsPlaybackExportCodec: ttsPlaybackExportJobCodec,
+    documentPreviewCodec: documentPreviewJobCodec,
+    documentConversionCodec: documentConversionJobCodec,
+    accountExportCodec: accountExportJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -326,8 +392,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     startWorkers: (session) => {
       if (disableWorkers) return;
       workerLoops.start(session, {
-        whisper: session.whisperConsumer,
         pdfLayout: session.layoutConsumer,
+        ttsPlayback: session.ttsPlaybackConsumer,
+        ttsPlaybackPlan: session.ttsPlaybackPlanConsumer,
+        ttsPlaybackExport: session.ttsPlaybackExportConsumer,
+        documentPreview: session.documentPreviewConsumer,
+        documentConversion: session.documentConversionConsumer,
+        accountExport: session.accountExportConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

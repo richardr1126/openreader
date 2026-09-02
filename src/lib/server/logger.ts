@@ -4,7 +4,6 @@ import pino, { type Logger } from 'pino';
 import pinoPretty from 'pino-pretty';
 
 export type ServerLogger = Logger;
-export type ServerLogLevel = 'error' | 'warn' | 'info';
 
 export type LoggedError = {
   name: string;

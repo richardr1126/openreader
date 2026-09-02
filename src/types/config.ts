@@ -1,27 +1,13 @@
 import type { DocumentListState } from '@/types/documents';
-import type { TtsProviderType } from '@/lib/shared/tts-provider-catalog';
+import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 
 export type ViewType = 'single' | 'dual' | 'scroll';
 
 export type SavedVoices = Record<string, string>;
 
-export const SEGMENT_PRELOAD_DEPTH_MIN = 1;
-export const SEGMENT_PRELOAD_DEPTH_MAX = 5;
-export const SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN = 1;
-export const SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX = 10;
 export const TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN = 150;
 export const TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX = 1200;
 export const TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP = 25;
-
-export function clampSegmentPreloadDepth(value: number | undefined | null): number {
-  const candidate = Math.floor(Number(value) || SEGMENT_PRELOAD_DEPTH_MIN);
-  return Math.max(SEGMENT_PRELOAD_DEPTH_MIN, Math.min(SEGMENT_PRELOAD_DEPTH_MAX, candidate));
-}
-
-export function clampSegmentPreloadSentenceLookahead(value: number | undefined | null): number {
-  const candidate = Math.floor(Number(value) || SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN);
-  return Math.max(SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MIN, Math.min(SEGMENT_PRELOAD_SENTENCE_LOOKAHEAD_MAX, candidate));
-}
 
 export function clampTtsSegmentMaxBlockLength(value: number | undefined | null): number {
   const candidate = Math.floor(Number(value) || TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN);
@@ -33,7 +19,6 @@ export interface AppConfigValues {
   voiceSpeed: number;
   audioPlayerSpeed: number;
   voice: string;
-  skipBlank: boolean;
   epubTheme: boolean;
   headerMargin: number;
   footerMargin: number;
@@ -44,8 +29,6 @@ export interface AppConfigValues {
   ttsModel: string;
   ttsInstructions: string;
   savedVoices: SavedVoices;
-  segmentPreloadDepthPages: number;
-  segmentPreloadSentenceLookahead: number;
   ttsSegmentMaxBlockLength: number;
   pdfHighlightEnabled: boolean;
   pdfWordHighlightEnabled: boolean;
@@ -74,7 +57,6 @@ export function getAppConfigDefaults(): AppConfigValues {
     voiceSpeed: 1,
     audioPlayerSpeed: 1,
     voice: '',
-    skipBlank: true,
     epubTheme: false,
     headerMargin: 0,
     footerMargin: 0,
@@ -85,8 +67,6 @@ export function getAppConfigDefaults(): AppConfigValues {
     ttsModel: '',
     ttsInstructions: '',
     savedVoices: {},
-    segmentPreloadDepthPages: 1,
-    segmentPreloadSentenceLookahead: 3,
     ttsSegmentMaxBlockLength: 450,
     pdfHighlightEnabled: true,
     pdfWordHighlightEnabled: true,
@@ -97,8 +77,6 @@ export function getAppConfigDefaults(): AppConfigValues {
     documentListState: {
       sortBy: 'name',
       sortDirection: 'asc',
-      folders: [],
-      collapsedFolders: [],
       showHint: true,
       viewMode: 'grid',
     },

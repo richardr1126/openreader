@@ -105,4 +105,22 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     });
     expect(sanitizeSavedVoices(['af_sarah'])).toEqual({});
   });
+
+  test('accepts old document-list preferences without rewriting obsolete folder fields', () => {
+    const { patch } = sanitizePreferencesPatch({
+      documentListState: {
+        sortBy: 'name',
+        sortDirection: 'asc',
+        showHint: true,
+        folders: [{ id: 'legacy-folder' }],
+        collapsedFolders: ['legacy-folder'],
+      },
+    }, makeContext(), { fillMissingProvider: false });
+
+    expect(patch.documentListState).toEqual({
+      sortBy: 'name',
+      sortDirection: 'asc',
+      showHint: true,
+    });
+  });
 });

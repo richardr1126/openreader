@@ -1,6 +1,6 @@
 'use client';
 
-import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon, ListIcon } from '@/components/icons/Icons';
+import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon } from '@/components/icons/Icons';
 import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
@@ -11,10 +11,8 @@ interface DocumentHeaderMenuProps {
   onZoomDecrease: () => void;
   onOpenSettings: () => void;
   onOpenAudiobook?: () => void;
-  onOpenSegments?: () => void;
   isSettingsOpen?: boolean;
   isAudiobookOpen?: boolean;
-  isSegmentsOpen?: boolean;
   showAudiobookExport?: boolean;
   minZoom?: number;
   maxZoom?: number;
@@ -26,10 +24,8 @@ export function DocumentHeaderMenu({
   onZoomDecrease,
   onOpenSettings,
   onOpenAudiobook,
-  onOpenSegments,
   isSettingsOpen = false,
   isAudiobookOpen = false,
-  isSegmentsOpen = false,
   showAudiobookExport,
   minZoom = 0,
   maxZoom = 100
@@ -45,16 +41,6 @@ export function DocumentHeaderMenu({
         min={minZoom}
         max={maxZoom}
       />
-      {onOpenSegments && (
-        <ToolbarButton
-          onClick={onOpenSegments}
-          active={isSegmentsOpen}
-          aria-label={isSegmentsOpen ? 'Hide segments sidebar' : 'Open segments sidebar'}
-          title={isSegmentsOpen ? 'Hide Segments' : 'Segments'}
-        >
-          <ListIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
-        </ToolbarButton>
-      )}
       {showAudiobookExport && onOpenAudiobook && (
         <ToolbarButton
           onClick={onOpenAudiobook}
@@ -71,7 +57,10 @@ export function DocumentHeaderMenu({
         aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
         title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
       >
-        <FileSettingsIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
+        <FileSettingsIcon
+          aria-hidden="true"
+          className="w-4 h-4 transform transition-transform duration-base ease-standard"
+        />
       </ToolbarButton>
       <UserMenu />
     </div>
@@ -107,12 +96,6 @@ export function DocumentHeaderMenu({
 
             {/* Actions Section */}
             <div className="p-1">
-              {onOpenSegments && (
-                <MenuActionItem onClick={onOpenSegments} activeOverride={isSegmentsOpen}>
-                  <ListIcon className="h-4 w-4" />
-                  {isSegmentsOpen ? 'Hide Segments' : 'Segments'}
-                </MenuActionItem>
-              )}
               {showAudiobookExport && onOpenAudiobook && (
                 <MenuActionItem onClick={onOpenAudiobook} activeOverride={isAudiobookOpen}>
                   <DownloadIcon className="h-4 w-4" />
@@ -120,7 +103,7 @@ export function DocumentHeaderMenu({
                 </MenuActionItem>
               )}
               <MenuActionItem onClick={onOpenSettings} activeOverride={isSettingsOpen}>
-                <FileSettingsIcon className="h-4 w-4" />
+                <FileSettingsIcon aria-hidden="true" className="h-4 w-4" />
                 {isSettingsOpen ? 'Hide Settings' : 'Settings'}
               </MenuActionItem>
             </div>

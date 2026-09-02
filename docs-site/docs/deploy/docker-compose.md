@@ -95,26 +95,30 @@ Compose file: [`docker/examples/compose.local-full.yml`](https://github.com/rich
 On first boot, `RUNTIME_SEED_JSON` creates an enabled Kokoro shared provider and selects it as the
 default TTS provider.
 
+The full examples also opt into `S3_AUTO_CREATE_BUCKET`, allowing the app to create the configured
+SeaweedFS bucket before startup storage cleanup when the stack uses a new data volume.
+
 ## Endpoints
 
 - OpenReader: `http://localhost:3003`
 - SeaweedFS S3: `http://localhost:8333`
 - Kokoro-FastAPI: `http://localhost:8880`
+- Compute worker playback audio: `http://localhost:8081`
 
-In the full examples, PostgreSQL, the compute worker, and NATS remain internal to the Compose
-network.
+All examples publish port `8081` so browsers can load signed worker-owned TTS playback audio. In
+the full examples, the app still reaches the worker over the internal `http://compute-worker:8081`
+URL; PostgreSQL and NATS remain internal to the Compose network.
 
 ## LAN access
 
-Set `BASE_URL` and `S3_ENDPOINT` to the Docker host's LAN IP so browser-facing app and presigned
-S3 URLs are reachable from other devices:
+Set `BASE_URL` to the Docker host's LAN IP for the default same-origin proxy topology:
 
 <Tabs groupId="docker-compose-lan-stack">
 <TabItem value="slim" label="Slim" default>
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.yml up
 # Repository convenience command: pnpm compose
 ```
@@ -124,7 +128,7 @@ docker compose -f docker/examples/compose.yml up
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.full.yml up
 # Repository convenience command: pnpm compose:full
 ```
@@ -134,7 +138,7 @@ docker compose -f docker/examples/compose.full.yml up
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
 ```
@@ -144,7 +148,7 @@ docker compose -f docker/examples/compose.local-slim.yml up --build
 
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
-S3_ENDPOINT=http://192.168.0.XXX:8333 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
 docker compose -f docker/examples/compose.local-full.yml up --build
 # Repository convenience command: pnpm compose:local:full
 ```
@@ -152,12 +156,13 @@ docker compose -f docker/examples/compose.local-full.yml up --build
 </TabItem>
 </Tabs>
 
-Replace `192.168.0.XXX` with your Docker host's LAN IP and allow inbound TCP ports `3003` and
-`8333` through its firewall.
+Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP ports `3003` and `8081`.
+The embedded/proxy storage endpoint does not need browser access.
 
 :::info Internal full-stack endpoint
-The full and local-full compute workers continue using `http://seaweedfs:8333` internally.
-`S3_ENDPOINT` configures the app endpoint and browser-facing presigned URLs.
+The full and local-full app and compute workers use `http://seaweedfs:8333` internally.
+For direct browser storage, configure `S3_BROWSER_TRANSPORT=presigned` and a public HTTPS `S3_PUBLIC_ENDPOINT`; do not use a path-mounted S3 reverse proxy.
+`COMPUTE_WORKER_PUBLIC_URL` configures the browser-facing worker playback audio URL.
 :::
 
 ## Configuration
@@ -166,8 +171,11 @@ The examples use local-only default credentials. Override existing `${VARIABLE}`
 your shell environment before using them beyond local development.
 
 :::warning Protect public deployments
-Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, and compute-worker
-token before exposing a stack outside your trusted local network.
+Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, compute-worker token,
+credential-broker token and `TTS_PLAYBACK_TOKEN_SECRET` before
+exposing a stack outside your trusted local network. The full worker receives neither
+`AUTH_SECRET` nor application database credentials; it resolves enabled TTS providers through the
+private app-owned credential broker.
 :::
 
 For the complete configuration reference, see

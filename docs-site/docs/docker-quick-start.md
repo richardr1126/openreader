@@ -51,7 +51,7 @@ docker run --name openreader \
 What this command enables:
 
 - `-p 3003:3003`: exposes the OpenReader web app/API.
-- `-p 8333:8333`: exposes embedded SeaweedFS S3 endpoint for direct browser presigned upload/download.
+- `-p 8333:8333`: optionally exposes the embedded SeaweedFS S3 endpoint for administration and debugging; browser transfers use the app proxy by default.
 - `-v openreader_docstore:/app/docstore`: persists SQLite metadata, SeaweedFS blob data, and migration/runtime state.
 - `-e API_BASE=...` / optional `-e API_KEY=...`: **first-boot seed only.** On the first container start, these are auto-migrated into a `default-openai` admin shared provider stored in the DB (key encrypted at rest when provided). After that, the running app no longer reads them — manage the provider from **Settings → Admin → Shared providers**. See [Admin Panel](./configure/admin-panel).
 - `-e BASE_URL=...` and `-e AUTH_SECRET=...`: required for v4+ auth/session startup.
@@ -121,14 +121,12 @@ What this command enables:
 - Set `ADMIN_EMAILS` to your email if you want the **Admin** tab in Settings.
 - TTS credentials are configured only through **Settings → Admin → Shared providers**.
 - Use a `/app/docstore` mount if you want data to survive container/image replacement.
-- Startup automatically runs DB/storage migrations via the shared entrypoint.
+- Startup automatically runs DB migrations and the v4 legacy storage decommission via the shared entrypoint.
 - Scheduled maintenance tasks run in-process and can be managed from **Settings → Admin → Scheduled tasks**; Docker/self-hosted deployments do not need `CRON_SECRET`.
 :::
 
 :::warning Port `8333` Exposure
-Expose `8333` for direct browser presigned upload/download with embedded SeaweedFS.
-
-If `8333` is not reachable from the browser, direct presigned access is unavailable. Uploads fall back to `/api/documents/blob/upload/fallback`, and document reads fall back to `/api/documents/blob/get/fallback`.
+The embedded topology uses `S3_BROWSER_TRANSPORT=proxy`, so port `8333` does not need browser access. To use direct browser S3 transfers, configure a separate HTTPS `S3_PUBLIC_ENDPOINT` and set `S3_BROWSER_TRANSPORT=presigned`; do not rely on fallback proxy retries.
 :::
 
 ## 2. Configure settings in the app UI

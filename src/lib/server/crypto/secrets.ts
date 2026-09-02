@@ -68,14 +68,6 @@ export function decryptSecret(ciphertext: string, iv: string): string {
   return plaintext.toString('utf8');
 }
 
-/** Mask helper for API keys — returns "••••" + last 4 chars (or fewer). */
-export function maskApiKey(key: string): string {
-  if (!key) return '';
-  const trimmed = key.trim();
-  if (trimmed.length <= 4) return '•'.repeat(trimmed.length);
-  return '••••' + trimmed.slice(-4);
-}
-
 export function apiKeyLast4(key: string): string {
   const trimmed = (key || '').trim();
   return trimmed.length <= 4 ? trimmed : trimmed.slice(-4);

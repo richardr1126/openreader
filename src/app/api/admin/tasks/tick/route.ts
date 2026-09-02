@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runDueTasks } from '@/lib/server/tasks/engine';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 /**
  * Cron-driven tick for serverless (Vercel) deployments. Vercel automatically

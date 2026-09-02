@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { APP_CONFIG_DEFAULTS, type ViewType, type SavedVoices, type AppConfigValues } from '@/types/config';
-import { resolveProviderDefaults } from '@/lib/shared/tts-provider-policy';
+import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { applyConfigUpdate } from '@/lib/client/config/updates';
@@ -17,10 +17,7 @@ interface ConfigContextType {
   voiceSpeed: number;
   audioPlayerSpeed: number;
   voice: string;
-  skipBlank: boolean;
   epubTheme: boolean;
-  segmentPreloadDepthPages: number;
-  segmentPreloadSentenceLookahead: number;
   ttsSegmentMaxBlockLength: number;
   headerMargin: number;
   footerMargin: number;
@@ -90,10 +87,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       voiceSpeed: config.voiceSpeed,
       audioPlayerSpeed: config.audioPlayerSpeed,
       voice: config.voice,
-      skipBlank: config.skipBlank,
       epubTheme: config.epubTheme,
-      segmentPreloadDepthPages: config.segmentPreloadDepthPages,
-      segmentPreloadSentenceLookahead: config.segmentPreloadSentenceLookahead,
       ttsSegmentMaxBlockLength: config.ttsSegmentMaxBlockLength,
       headerMargin: config.headerMargin,
       footerMargin: config.footerMargin,

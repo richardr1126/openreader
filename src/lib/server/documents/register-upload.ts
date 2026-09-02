@@ -16,6 +16,7 @@ type RegisterUploadedDocumentInput = {
   type: DocumentType;
   size: number;
   lastModified: number;
+  schedulePreview?: (task: () => Promise<void>) => void;
 };
 
 export async function registerUploadedDocument(input: RegisterUploadedDocumentInput): Promise<BaseDocument> {
@@ -58,22 +59,29 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
       },
     });
 
-  await enqueueDocumentPreview(
-    {
-      id: input.documentId,
-      type: input.type,
-      lastModified: input.lastModified,
-    },
-    input.namespace,
-  ).catch((error) => {
-    serverLogger.warn({
-      event: 'documents.preview.enqueue.failed',
-      degraded: true,
-      fallbackPath: 'skip_preview_enqueue',
-      documentId: input.documentId,
-      error: errorToLog(error),
-    }, 'Failed to enqueue document preview');
-  });
+  const enqueuePreview = async () => {
+    await enqueueDocumentPreview(
+      {
+        id: input.documentId,
+        type: input.type,
+        lastModified: input.lastModified,
+      },
+      input.namespace,
+    ).catch((error) => {
+      serverLogger.warn({
+        event: 'documents.preview.enqueue.failed',
+        degraded: true,
+        fallbackPath: 'skip_preview_enqueue',
+        documentId: input.documentId,
+        error: errorToLog(error),
+      }, 'Failed to enqueue document preview');
+    });
+  };
+  if (input.schedulePreview) {
+    input.schedulePreview(enqueuePreview);
+  } else {
+    await enqueuePreview();
+  }
 
   return {
     id: input.documentId,

@@ -29,18 +29,23 @@ Storage variables are documented in [Environment Variables](../reference/environ
 ## Ports
 
 - `3003`: OpenReader app and API routes
-- `8333`: Embedded SeaweedFS S3 endpoint for direct browser blob access
+- `8333`: embedded SeaweedFS S3 endpoint for app/worker storage traffic
 
 :::info
-`8333` is only needed for direct browser presigned access to embedded SeaweedFS.
+The embedded default uses same-origin OpenReader proxy routes, so `8333` does not need to be exposed to browsers.
 :::
 
 ## Upload behavior
 
-- Primary path: browser uploads to presigned URL from `/api/documents/blob/upload/presign`.
-- Fallback path: `/api/documents/blob/upload/fallback` when direct upload fails/unreachable.
-- Document read path: direct presigned access from `/api/documents/blob/get/presign`, with `/api/documents/blob/get/fallback` as the app-server fallback.
-- Preview path: `/api/documents/blob/preview/ensure` reports generation status and version; presigned and fallback routes serve the generated artifact.
+OpenReader chooses one browser transport before every transfer with `S3_BROWSER_TRANSPORT`; it never retries a failed direct request through the app proxy.
+
+- `proxy` (the embedded default): uploads use `/api/documents/blob/upload`, reads use `/api/documents/blob/get`, and previews use `/api/documents/blob/preview`.
+- `presigned`: browser transfers use signatures generated from `S3_PUBLIC_ENDPOINT`. The server and compute worker still use `S3_INTERNAL_ENDPOINT`.
+- `auto`: chooses `proxy` for embedded SeaweedFS, otherwise requires a public HTTPS `S3_PUBLIC_ENDPOINT` and chooses `presigned`.
+
+`S3_ENDPOINT` is a deprecated compatibility alias scheduled for removal in OpenReader 5.0. Configure `S3_INTERNAL_ENDPOINT` and, for direct browser storage, `S3_PUBLIC_ENDPOINT` instead.
+
+For a public SeaweedFS/S3 origin, use a dedicated HTTPS hostname such as `s3.reader.example`, not a `/s3` path mount. Preserve the signed path, query string, `Host`, and signed headers in the reverse proxy. Configure CORS for the OpenReader origin with `GET`, `HEAD`, `PUT`, and `OPTIONS`, allowing `Content-Type` and `x-amz-server-side-encryption`.
 
 ## Browser Cache Storage
 
@@ -57,9 +62,8 @@ Synthetic key layouts:
 - `/openreader-cache/documents/{documentId}/{contentVersion}`
 - `/openreader-cache/previews/{documentId}/{previewVersion}`
 - `/openreader-cache/audio/{audioKey}/{version}`
-- `/openreader-cache/audiobooks/{bookId}/chapters/{chapterIndex}/{version}` when reusable chapter playback is enabled
 
-Explicit audiobook downloads and exports are not persistently cached.
+Explicit audiobook MP3 exports are not persistently cached.
 
 ## Document previews
 
@@ -84,102 +88,59 @@ Explicit audiobook downloads and exports are not persistently cached.
 - Mount string: `-v /path/to/your/library:/app/docstore/library:ro`
 - Details: [Server Library Import](./server-library-import)
 
-## Private blob endpoint mode
+## Transport topology
 
-If `8333` is not published externally:
+The default embedded topology is `Browser → OpenReader → http://127.0.0.1:8333 SeaweedFS`. For public object storage, use `Browser → https://s3.example → S3/SeaweedFS` and configure the app and worker with a private `S3_INTERNAL_ENDPOINT`.
 
-- Document uploads still work through upload fallback proxy
-- Reads/snippets continue through app API routes
-- Direct presigned browser upload/download to embedded endpoint is unavailable
+## TTS Playback Storage
 
-:::warning
-Without `8333`, expect higher app-server traffic because uploads/downloads go through API routes instead of direct object endpoint access.
-:::
-
-## Audiobook Storage Debug Commands
-
-Audiobook assets are stored in object storage under the `audiobooks_v1` keyspace. Use these commands to inspect and download objects for debugging.
-
-<Tabs groupId="audiobook-storage-access-cli">
-  <TabItem value="aws-s3" label="AWS S3" default>
-
-```bash
-# List all audiobook objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/audiobooks_v1/" --recursive
-
-# Filter to one book id (replace <book-id>)
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/audiobooks_v1/" --recursive | grep "<book-id>-audiobook/"
-
-# Download one object by full key
-aws s3 cp "s3://$S3_BUCKET/$S3_PREFIX/audiobooks_v1/<path>/<file>.m4b" "./audiobook.m4b"
-```
-
-  </TabItem>
-  <TabItem value="s3-compatible" label="Embedded / MinIO / R2 / etc">
-
-```bash
-# List all audiobook objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/audiobooks_v1/" --recursive --endpoint-url "$S3_ENDPOINT"
-
-# Filter to one book id (replace <book-id>)
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/audiobooks_v1/" --recursive --endpoint-url "$S3_ENDPOINT" | grep "<book-id>-audiobook/"
-
-# Download one object by full key
-aws s3 cp "s3://$S3_BUCKET/$S3_PREFIX/audiobooks_v1/<path>/<file>.m4b" "./audiobook.m4b" --endpoint-url "$S3_ENDPOINT"
-```
-
-Embedded default example: `S3_ENDPOINT=http://127.0.0.1:8333` (or your mapped host/port).
-
-  </TabItem>
-</Tabs>
-
-## TTS Segment Storage
-
-Server-side TTS segment audio is stored in object storage under the `tts_segments_v1` keyspace.
+Worker-owned TTS playback artifacts are stored under dedicated playback keyspaces.
 
 Typical key layout:
 
-- `${S3_PREFIX}/tts_segments_v1/users/<url-encoded-user-id>/docs/<document-id>/<document-version>/<settings-hash>/<segment-id>.mp3`
-- `${S3_PREFIX}/tts_segments_v1/ns/<test-namespace>/users/<url-encoded-user-id>/docs/...` (test namespace mode)
+- `${S3_PREFIX}/tts_playback_segments_audio_v1/users/<url-encoded-user-id>/docs/<document-id>/<document-version>/<settings-hash>/<audio-content-hash>.mp3`
+- `${S3_PREFIX}/tts_playback_segments_v1/users/<user-hash>/docs/<document-id>/<document-version>/<settings-hash>/segments/<ordinal>.json`
+- `${S3_PREFIX}/tts_playback_plan_v1/...`
+- `${S3_PREFIX}/tts_playback_v1/...`
 
 Notes:
 
-- For the corresponding normalized SQL metadata model (`tts_segment_entries` and `tts_segment_variants`), see [Database](./database).
+- The legacy `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` roots are purged by `pnpm migrate-decommission`.
+- The playback sidecar prefix uses a hashed user id; audio uses the storage user id for content-addressed deduplication.
 
 ## Account Deletion Cleanup
 
 Account deletion performs best-effort object cleanup:
 
 - Document blobs + preview artifacts
-- Audiobook blobs
-- TTS segment blobs under `tts_segments_v1`
+- TTS playback audio and sidecar blobs
 
 If object deletion fails, account deletion still proceeds and orphaned objects may require manual cleanup.
 
-## TTS Segment Storage Debug Commands
+## TTS Playback Storage Debug Commands
 
-Use these commands to inspect segment objects.
+Use these commands to inspect playback audio objects.
 
 <Tabs groupId="tts-segment-storage-access-cli">
   <TabItem value="aws-s3" label="AWS S3" default>
 
 ```bash
-# List all TTS segment objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_segments_v1/" --recursive
+# List all playback audio objects
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive
 
 # Filter to one document id (replace <document-id>)
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_segments_v1/" --recursive | grep "/docs/<document-id>/"
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive | grep "/docs/<document-id>/"
 ```
 
   </TabItem>
   <TabItem value="s3-compatible" label="Embedded / MinIO / R2 / etc">
 
 ```bash
-# List all TTS segment objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_segments_v1/" --recursive --endpoint-url "$S3_ENDPOINT"
+# List all playback audio objects
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_INTERNAL_ENDPOINT"
 
 # Filter to one document id (replace <document-id>)
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_segments_v1/" --recursive --endpoint-url "$S3_ENDPOINT" | grep "/docs/<document-id>/"
+aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_INTERNAL_ENDPOINT" | grep "/docs/<document-id>/"
 ```
 
   </TabItem>

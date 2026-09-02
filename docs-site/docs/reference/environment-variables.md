@@ -13,53 +13,77 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 
 ## Quick Reference Table
 
-| Variable | Area | Default | When to set |
+All OpenReader configuration variables are server-only; none are exposed through a `NEXT_PUBLIC_` browser variable. "App" includes the bootstrap process and embedded worker it starts. Standalone-worker rows must be set on the worker service itself.
+
+| Variable | Owner / runtime | Default and validation | When to set |
 | --- | --- | --- | --- |
 | `LOG_FORMAT` | Runtime logging | `pretty` | Set `json` for structured logs |
 | `LOG_LEVEL` | Runtime logging | `info` | Set app server log level |
 | `API_BASE` | TTS provider bootstrap seed | unset | Optional first-boot base URL for `default-openai` |
 | `API_KEY` | TTS provider bootstrap seed | unset | Optional first-boot API key for `default-openai` |
 | `BASE_URL` | Auth | unset | Required at startup |
-| `AUTH_SECRET` | Auth | unset | Required at startup |
+| `AUTH_SECRET` | App auth + provider encryption | unset | Required on the app; never configure it on a standalone worker |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
 | `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `ADMIN_EMAILS` | Admin | empty | Comma-separated emails auto-promoted to admin |
 | `CRON_SECRET` | Scheduled tasks | unset | Required for Vercel cron invocations |
+| `RICHARDRDEV_PRODUCTION` | Official hosted instance | `false`; enabled only by exact `true` | Enables the official-instance label, privacy notice, and US region gate |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
+| `SQLITE_DB_PATH` | Database | `docstore/sqlite3.db` | Override the SQLite file path; relative values resolve from the app workspace |
 | `USE_EMBEDDED_WEED_MINI` | Storage | `true` when unset | Set `false` to use external S3-compatible storage only |
 | `WEED_MINI_DIR` | Storage | `docstore/seaweedfs` | Override embedded SeaweedFS data directory |
 | `WEED_MINI_WAIT_SEC` | Storage | `20` | Tune SeaweedFS startup wait timeout |
+| `WEED_MINI_BIND_HOST` | Storage | `127.0.0.1` | Override embedded SeaweedFS bind interface |
+| `WEED_MINI_ADVERTISE_HOST` | Storage | bind host or detected private host | Override the host embedded SeaweedFS advertises |
+| `WEED_MINI_PORT` | Storage | `8333` | Override embedded SeaweedFS S3 port |
 | `S3_ACCESS_KEY_ID` | Storage | auto-generated in embedded mode | Set explicitly for stable/external credentials |
 | `S3_SECRET_ACCESS_KEY` | Storage | auto-generated in embedded mode | Set explicitly for stable/external credentials |
 | `S3_BUCKET` | Storage | `openreader-documents` in embedded mode | Required for external S3-compatible storage |
 | `S3_REGION` | Storage | `us-east-1` in embedded mode | Required for external S3-compatible storage |
-| `S3_ENDPOINT` | Storage | derived in embedded mode | Set for S3-compatible providers (MinIO/SeaweedFS/R2/etc.) |
+| `S3_INTERNAL_ENDPOINT` | Storage | `http://127.0.0.1:8333` embedded | Private S3 endpoint for app and worker traffic |
+| `S3_PUBLIC_ENDPOINT` | Storage | — | Public HTTPS S3 endpoint for browser presigned transfers |
+| `S3_BROWSER_TRANSPORT` | Storage | `auto` | Browser transfer mode: `auto`, `proxy`, or `presigned` |
+| `S3_ENDPOINT` | Storage | deprecated | Compatibility alias; replace with explicit internal/public endpoints |
 | `S3_FORCE_PATH_STYLE` | Storage | `true` in embedded mode | Set per provider requirement |
+| `S3_AUTO_CREATE_BUCKET` | Storage | `false` | Create a missing external bucket during startup; intended for self-contained deployments |
 | `S3_PREFIX` | Storage | `openreader` | Customize object key prefix |
-| `IMPORT_LIBRARY_DIR` | Library import | `docstore/library` fallback | Set a single server library root |
-| `IMPORT_LIBRARY_DIRS` | Library import | unset | Set multiple roots (comma/colon/semicolon separated) |
+| `IMPORT_LIBRARY_DIRS` | App library import | `docstore/library` fallback | Set one or more roots (comma/colon/semicolon separated) |
 | `EMBEDDED_COMPUTE_WORKER_PORT` | Compute | `8081` | Override embedded worker bind port |
 | `EMBEDDED_NATS_PORT` | Compute | `4222` | Override embedded NATS client port |
 | `EMBEDDED_NATS_MONITOR_PORT` | Compute | `8222` | Override embedded NATS monitor port |
 | `EMBEDDED_NATS_STORE_DIR` | Compute | `docstore/nats/jetstream` | Override embedded JetStream storage directory |
 | `NATS_URL` | Compute | `nats://127.0.0.1:4222` in embedded startup | Override embedded startup or set standalone worker URL |
+| `NATS_CREDS` | Standalone worker | unset | Raw NATS credentials; mutually exclusive in practice with `NATS_CREDS_FILE` |
+| `NATS_CREDS_FILE` | Standalone worker | unset | Path to a NATS credentials file |
 | `COMPUTE_LOG_LEVEL` | Compute | `info` | Compute worker log level |
+| `COMPUTE_WORKER_HOST` | Compute worker HTTP | `127.0.0.1` embedded; `0.0.0.0` standalone | Override worker bind host |
+| `PORT` | Standalone worker / container | `8081` in worker; `3003` in app image | Usually injected by the hosting platform |
 | `COMPUTE_JOB_CONCURRENCY` | Compute | `1` | Shared compute concurrency cap |
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Compute | `30000` | Whisper alignment timeout budget |
 | `COMPUTE_PDF_TIMEOUT_MS` | Compute | `300000` | PDF parse timeout budget |
+| `COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS` | Compute | Whisper timeout | Per-segment TTS generation timeout budget |
 | `COMPUTE_PDF_JOB_ATTEMPTS` | Compute | `1` | Max JetStream deliveries for PDF layout jobs |
+| `COMPUTE_PREWARM_MODELS` | Compute | `false` | Set `true` to pre-download worker models at startup |
+| `COMPUTE_JOBS_STREAM_MAX_BYTES` | Compute / JetStream | `268435456` | Override jobs stream retention bytes with a positive integer |
+| `COMPUTE_EVENTS_STREAM_MAX_BYTES` | Compute / JetStream | `134217728` | Override events stream retention bytes with a positive integer |
+| `COMPUTE_JOB_STATES_MAX_BYTES` | Compute / JetStream | `67108864` | Override job-state KV storage bytes with a positive integer |
+| `COMPUTE_NATS_REPLICAS` | Compute / JetStream | `1`; only `1`, `3`, or `5` survive normalization | Use `3` or `5` for a clustered NATS deployment |
 | `COMPUTE_OP_STALE_MS` | Compute | `max(30m, 4x max compute timeout)` | Shared stale window for compute op replacement |
 | `WHISPER_MODEL_BASE_URL` | Compute model source | onnx-community default | Override Whisper ONNX model base URL |
 | `PDF_LAYOUT_MODEL_BASE_URL` | Compute model source | PP-DocLayoutV3 default | Override PDF layout ONNX model base URL |
 | `COMPUTE_WORKER_URL` | External compute mode | unset | Set only for standalone external worker mode |
+| `COMPUTE_WORKER_PUBLIC_URL` | TTS playback | `COMPUTE_WORKER_URL` | Set when browsers need a different worker URL for audio |
 | `COMPUTE_WORKER_TOKEN` | External compute mode | unset | Required for standalone external worker auth |
+| `COMPUTE_CREDENTIAL_BROKER_URL` | Standalone worker | unset | HTTPS app endpoint used to resolve TTS provider execution credentials |
+| `COMPUTE_CREDENTIAL_BROKER_TOKEN` | App + worker | generated for embedded startup | Authenticates worker-to-app credential resolution |
+| `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS` | Standalone worker | `5000` | Credential-broker request timeout |
+| `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | unset | Required for signed worker-owned playback audio URLs |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
-| `ENABLE_TEST_NAMESPACE` | Testing/CI | unset | Honor `x-openreader-test-namespace` header in production builds |
 | `RUN_DRIZZLE_MIGRATIONS` | DB migrations | `true` | Set `false` to skip startup Drizzle migrations |
-| `RUN_FS_MIGRATIONS` | Storage migrations | `true` | Set `false` to skip startup filesystem -> S3/DB migration pass |
+| `RUN_V4_DECOMMISSION` | Storage decommission | `true` | Set `false` to skip startup v4 legacy object-prefix purge |
 | `RUNTIME_SEED_JSON_PATH` | Runtime JSON seed | unset | Absolute path to first-boot JSON seed document |
 | `RUNTIME_SEED_JSON` | Runtime JSON seed | unset | Inline first-boot JSON seed document |
 
@@ -111,6 +135,7 @@ Required external base URL for this OpenReader instance.
 Required secret key used by auth/session handling.
 
 - Required at startup
+- App-only: standalone workers resolve provider credentials through the authenticated credential broker and must not receive this secret
 - Generate with `openssl rand -base64 32`
 
 ### AUTH_TRUSTED_ORIGINS
@@ -154,6 +179,14 @@ Bearer-token secret for `GET /api/admin/tasks/tick`.
 - Generate a strong random value, for example with `openssl rand -base64 32`.
 - Self-hosted Node.js deployments run the scheduler in-process and do not require this variable.
 
+### RICHARDRDEV_PRODUCTION
+
+Official-host deployment flag for `openreader.richardr.dev`.
+
+- Default: `false`
+- Exact `true` enables the official-instance badge, official privacy notice, and US-only request gate
+- Self-hosted deployments should leave it unset
+
 ## Database and Object Blob Storage
 
 ### POSTGRES_URL
@@ -181,6 +214,24 @@ Data directory for embedded SeaweedFS (`weed mini`).
 Max wait time for embedded SeaweedFS startup.
 
 - Default: `20`
+
+### WEED_MINI_BIND_HOST
+
+Bind interface for embedded SeaweedFS.
+
+- Default: `127.0.0.1`
+
+### WEED_MINI_ADVERTISE_HOST
+
+Host embedded SeaweedFS advertises in generated S3 URLs.
+
+- Default: the bind host, or a detected reachable private address when binding all interfaces
+
+### WEED_MINI_PORT
+
+S3-compatible port for embedded SeaweedFS.
+
+- Default: `8333`
 
 ### S3_ACCESS_KEY_ID
 
@@ -210,18 +261,33 @@ S3 region.
 - Embedded default: `us-east-1`
 - Required for external S3 mode
 
+### S3_INTERNAL_ENDPOINT
+
+Private endpoint used by the app and compute worker for S3-compatible storage.
+
+### S3_PUBLIC_ENDPOINT
+
+Browser-reachable HTTPS endpoint used only to generate direct presigned URLs.
+
+### S3_BROWSER_TRANSPORT
+
+`auto` (default), `proxy`, or `presigned`. Proxy is not allowed on Vercel/cloud request-duration hosting.
+
 ### S3_ENDPOINT
 
-Custom endpoint for S3-compatible providers.
-
-- Optional for AWS
-- Typical for MinIO/SeaweedFS/R2
+Deprecated compatibility alias for `S3_INTERNAL_ENDPOINT`; when `presigned` is explicitly selected it also supplies `S3_PUBLIC_ENDPOINT`. It will be removed in OpenReader 5.0.
 
 ### S3_FORCE_PATH_STYLE
 
 Force path-style S3 URLs.
 
 - Embedded default: `true`
+
+### S3_AUTO_CREATE_BUCKET
+
+Create `S3_BUCKET` during startup when it does not exist. This is disabled by default for externally
+managed storage; enable it only when the configured credentials may create buckets. The full Docker
+Compose examples enable it so a new SeaweedFS volume can boot without a separate initialization step.
 
 ### S3_PREFIX
 
@@ -231,15 +297,12 @@ Object key prefix.
 
 ## Library Import
 
-### IMPORT_LIBRARY_DIR
-
-Single library source directory.
-
 ### IMPORT_LIBRARY_DIRS
 
-Multiple library roots.
+One or more library roots.
 
 - Supports comma, colon, or semicolon-separated values
+- Defaults to `docstore/library` when unset
 
 ## Compute Worker and Model Configuration
 
@@ -273,11 +336,34 @@ NATS URL used by compute services.
 
 - Embedded startup default: `nats://127.0.0.1:4222`
 
+### NATS_CREDS
+
+Raw NATS credentials content for a standalone worker. Prefer this form on platforms that inject multiline secrets.
+
+### NATS_CREDS_FILE
+
+Path to a NATS credentials file for a standalone worker. `NATS_CREDS` takes precedence when both are set.
+
 ### COMPUTE_LOG_LEVEL
 
 Compute worker log level.
 
 - Default: `info`
+
+### COMPUTE_WORKER_HOST
+
+Compute worker HTTP bind host.
+
+- Embedded default: `127.0.0.1`
+- Standalone default: `0.0.0.0`
+
+### PORT
+
+Compute worker HTTP port.
+
+- Worker default: `8081`
+- Hosting platforms commonly inject this value
+- The published app container separately sets `PORT=3003` for the Next standalone server
 
 ### COMPUTE_JOB_CONCURRENCY
 
@@ -297,12 +383,49 @@ PDF parse timeout budget.
 
 - Default: `300000`
 
+### COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS
+
+Per-segment TTS generation timeout budget.
+
+- Default: the resolved `COMPUTE_WHISPER_TIMEOUT_MS` value
+
 ### COMPUTE_PDF_JOB_ATTEMPTS
 
 Max JetStream deliveries for PDF layout jobs.
 
 - Default: `1`
 - In embedded worker mode, set this in the root `.env`
+
+### COMPUTE_PREWARM_MODELS
+
+Controls whether the worker downloads model artifacts during startup.
+
+- Default: `false`
+
+### COMPUTE_JOBS_STREAM_MAX_BYTES
+
+Maximum retained bytes in the JetStream jobs stream.
+
+- Default: `268435456`
+
+### COMPUTE_EVENTS_STREAM_MAX_BYTES
+
+Maximum retained bytes in the JetStream operation-events stream.
+
+- Default: `134217728`
+
+### COMPUTE_JOB_STATES_MAX_BYTES
+
+Maximum bytes used by the job-state key-value bucket.
+
+- Default: `67108864`
+
+### COMPUTE_NATS_REPLICAS
+
+JetStream replica count requested by the worker.
+
+- Default: `1`
+- Accepted effective values: `1`, `3`, or `5`; other values normalize to `1`
 
 ### COMPUTE_OP_STALE_MS
 
@@ -323,10 +446,60 @@ Base URL for PDF layout model downloads.
 External compute worker URL.
 
 - Leave unset for embedded worker mode
+- Used by the app server for internal worker API calls.
+- In embedded mode, bootstrap sets this to the local embedded worker URL for the app process.
+
+### COMPUTE_WORKER_PUBLIC_URL
+
+Browser-reachable compute worker URL for worker-owned TTS playback audio.
+
+- Default: `COMPUTE_WORKER_URL`
+- Set this when `COMPUTE_WORKER_URL` points at an internal hostname that browsers cannot reach.
+- The browser loads signed progressive MP3 playback directly from `${COMPUTE_WORKER_PUBLIC_URL}/v1/tts-playback/sessions/:sessionId/audio`.
+- Do not include `COMPUTE_WORKER_TOKEN` in this URL. Browser playback uses `TTS_PLAYBACK_TOKEN_SECRET`-signed short-lived URLs instead.
 
 ### COMPUTE_WORKER_TOKEN
 
 Shared token for app-to-external-worker requests.
+
+- Required when `COMPUTE_WORKER_URL` points at a standalone worker.
+- Never expose this token to browsers.
+
+### COMPUTE_CREDENTIAL_BROKER_URL
+
+App-owned credential endpoint used by a standalone worker when TTS generation begins.
+
+- Required on standalone workers
+- Use `https://<app-origin>/api/internal/compute/tts-credentials` for remote deployments
+- Full Compose uses the private `http://openreader:3003/api/internal/compute/tts-credentials` service URL
+- Never point this at `COMPUTE_WORKER_PUBLIC_URL`
+
+### COMPUTE_CREDENTIAL_BROKER_TOKEN
+
+Dedicated bearer token for worker-to-app TTS credential resolution.
+
+- Required on the app and every standalone worker, with the same value
+- Generated automatically for an embedded worker when unset
+- Separate from `COMPUTE_WORKER_TOKEN` because the request direction and permitted route differ
+- Never sent to browsers, NATS, operation state, or storage
+- Generate with `openssl rand -base64 32`
+
+### COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS
+
+Timeout for a worker credential-broker request.
+
+- Default: `5000`
+- Positive integer milliseconds
+- Transient broker failures use a bounded worker-side retry
+
+### TTS_PLAYBACK_TOKEN_SECRET
+
+Secret used to sign short-lived browser-facing TTS playback URLs.
+
+- Required for worker-owned TTS playback.
+- Must be set to the same value on the app server and standalone compute worker.
+- Generate with `openssl rand -base64 32`.
+- This is separate from `COMPUTE_WORKER_TOKEN`; it signs public audio URLs and must not be used as the internal worker bearer token.
 
 ## Audio Runtime
 
@@ -334,7 +507,7 @@ Shared token for app-to-external-worker requests.
 
 Override ffmpeg binary path used for audio processing.
 
-- Used by audiobook processing routes and compute worker Whisper audio decode.
+- Used by TTS audio normalization/probing and compute worker Whisper audio decode.
 
 ## Testing and CI
 
@@ -343,10 +516,6 @@ Override ffmpeg binary path used for audio processing.
 Disables Better Auth request rate limiting.
 
 - Default: `false`
-
-### ENABLE_TEST_NAMESPACE
-
-Enables the `x-openreader-test-namespace` header path in production builds.
 
 ## Migration Controls
 
@@ -357,12 +526,12 @@ Controls startup Drizzle schema migrations.
 - Default: `true`
 - Set `false` to skip startup migration run
 
-### RUN_FS_MIGRATIONS
+### RUN_V4_DECOMMISSION
 
-Controls startup filesystem-to-S3/DB migration pass.
+Controls startup v4 legacy object-prefix purge.
 
 - Default: `true`
-- Set `false` to skip startup storage migration run
+- Set `false` to skip deleting retired `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` object prefixes
 
 ## Runtime JSON Seed (v4)
 
@@ -407,6 +576,7 @@ Example:
     "ttsCacheTtlMs": 1800000,
     "ttsUpstreamMaxRetries": 2,
     "ttsUpstreamTimeoutMs": 285000,
+    "ttsPlaybackBackgroundExtent": "section",
     "disableComputeRateLimit": true,
     "computeParseBurstMax": 8,
     "computeParseBurstWindowSec": 60,
@@ -438,6 +608,33 @@ Precedence summary:
 - Runtime reads: admin DB runtime rows override built-in defaults.
 - Seed input (`RUNTIME_SEED_JSON*`) only populates missing runtime rows on first boot; it does not overwrite existing/admin-edited rows.
 - Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY` fallback > no provider bootstrap.
+
+## Platform-Supplied Signals
+
+These values are read by OpenReader but owned by Node.js, Next.js, the hosting platform, or the test runner. They are not deployment configuration knobs and should normally be left to the owning platform.
+
+| Variable | Owner | OpenReader use |
+| --- | --- | --- |
+| `NODE_ENV` | Node.js / Next.js | Production cookie security and runtime behavior |
+| `NEXT_RUNTIME` | Next.js | Loads Node-only instrumentation in the Node runtime |
+| `VERCEL` | Vercel | Selects scheduled-task behavior, request IP handling, and rejects proxy browser storage on request-duration hosting |
+| `CI` | CI runner | Test retries, server reuse, and reporter selection |
+| `PWD` | Process launcher | Worker fallback for locating the bundled `docstore` directory |
+
+## Documentation Build Variables
+
+These variables belong only to `scripts/build-changelog-feed.mjs` and the documentation deployment workflow; they are not read by the OpenReader app or worker.
+
+| Variable | Default / owner | Purpose |
+| --- | --- | --- |
+| `CHANGELOG_REPO` | `GITHUB_REPOSITORY`, then `richardr1126/openreader` | Release repository queried for changelog data |
+| `CHANGELOG_PUBLIC_BASE_URL` | `https://docs.openreader.richardr.dev` | Public base used in generated changelog URLs |
+| `CHANGELOG_MUTABLE_COUNT` | `3`; positive numeric input expected | Number of recent releases refreshed during incremental builds |
+| `CHANGELOG_FORCE_FULL` | unset; exact `1` enables | Forces a full changelog reconciliation |
+| `GITHUB_TOKEN` | GitHub Actions secret | Authenticates release API requests |
+| `GITHUB_REPOSITORY` | GitHub Actions | Default changelog repository |
+| `GITHUB_EVENT_PATH` | GitHub Actions | Event payload used to identify a release change |
+| `GITHUB_EVENT_NAME` | GitHub Actions | Selects incremental event handling |
 
 ## Related
 

@@ -3,8 +3,6 @@ name: openreader-full
 services:
   openreader:
     image: ghcr.io/richardr1126/openreader:latest
-    # Keep localhost:8333 valid for both app requests and browser-facing presigned URLs.
-    network_mode: service:seaweedfs
     depends_on:
       kokoro-tts:
         condition: service_started
@@ -15,16 +13,22 @@ services:
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3003}
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}
+      COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
       POSTGRES_URL: postgres://openreader:openreader@postgres:5432/openreader
       COMPUTE_WORKER_URL: http://compute-worker:8081
+      COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
+      TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
       USE_EMBEDDED_WEED_MINI: "false"
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:8333} # Used for internal endpoint and public facing presigned URLs.
+      S3_INTERNAL_ENDPOINT: http://seaweedfs:8333
+      S3_BROWSER_TRANSPORT: proxy
       S3_BUCKET: ${S3_BUCKET:-openreader-documents}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-devkey}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-devsecret}
       S3_FORCE_PATH_STYLE: "true"
+      S3_AUTO_CREATE_BUCKET: "true"
       S3_PREFIX: ${S3_PREFIX:-openreader}
       RUNTIME_SEED_JSON: |-
         {
@@ -45,6 +49,8 @@ services:
         }
     volumes:
       - openreader-docstore:/app/docstore
+    ports:
+      - "3003:3003"
 
   kokoro-tts:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.4
@@ -71,7 +77,6 @@ services:
       timeout: 2s
       retries: 30
     ports:
-      - "3003:3003"
       - "8333:8333"
     volumes:
       - seaweedfs-data:/data
@@ -108,7 +113,10 @@ services:
       COMPUTE_WORKER_HOST: 0.0.0.0
       PORT: 8081
       COMPUTE_WORKER_TOKEN: ${COMPUTE_WORKER_TOKEN:-local-compute-token}
-      S3_ENDPOINT: http://seaweedfs:8333
+      COMPUTE_CREDENTIAL_BROKER_URL: http://openreader:3003/api/internal/compute/tts-credentials
+      COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
+      TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
+      S3_INTERNAL_ENDPOINT: http://seaweedfs:8333
       S3_BUCKET: ${S3_BUCKET:-openreader-documents}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-devkey}
@@ -116,6 +124,8 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       S3_PREFIX: ${S3_PREFIX:-openreader}
       COMPUTE_PREWARM_MODELS: ${COMPUTE_PREWARM_MODELS:-false}
+    ports:
+      - "8081:8081"
 
 volumes:
   openreader-docstore:

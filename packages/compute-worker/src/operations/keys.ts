@@ -1,28 +1,10 @@
 import { createHash } from 'node:crypto';
-import { PDF_PARSER_VERSION } from './contracts';
-
-function sha256Hex(input: string): string {
-  return createHash('sha256').update(input).digest('hex');
-}
-
-export function buildWhisperOperationKey(input: {
-  audioObjectKey: string;
-  text: string;
-  lang?: string;
-  cacheKey?: string;
-}): string {
-  const cacheKey = input.cacheKey?.trim();
-  if (cacheKey) {
-    return `whisper_align|v1|cache|${cacheKey}|${input.audioObjectKey}`;
-  }
-  return [
-    'whisper_align',
-    'v1',
-    input.audioObjectKey,
-    input.lang ?? '',
-    sha256Hex(input.text),
-  ].join('|');
-}
+import {
+  buildAccountExportArtifactId,
+  buildTtsPlaybackCanonicalScopeKey,
+  buildTtsPlaybackExportArtifactId,
+} from '@openreader/tts/playback-scope';
+import { DOCX_CONVERTER_VERSION, DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION } from './contracts';
 
 export function buildPdfOperationKey(input: {
   documentId: string;
@@ -41,6 +23,120 @@ export function buildPdfOperationKey(input: {
   ].join('|');
 }
 
+export function buildDocumentPreviewOperationKey(input: {
+  documentId: string;
+  namespace: string | null;
+  documentType: 'pdf' | 'epub';
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  previewKind: 'card';
+  rendererVersion?: string;
+}): string {
+  return [
+    'document_preview',
+    'v1',
+    input.rendererVersion?.trim() || DOCUMENT_PREVIEW_RENDERER_VERSION,
+    input.documentId,
+    input.namespace ?? '',
+    input.documentType,
+    input.previewKind,
+    input.sourceObjectKey,
+    String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
+  ].join('|');
+}
+
+export function buildDocumentConversionOperationKey(input: {
+  conversionId: string;
+  namespace: string | null;
+  sourceObjectKey: string;
+  sourceLastModifiedMs: number;
+  sourceContentType: string;
+  sourceEtag?: string | null;
+  converterVersion?: string;
+}): string {
+  return [
+    'document_conversion',
+    'v1',
+    input.converterVersion?.trim() || DOCX_CONVERTER_VERSION,
+    input.conversionId,
+    input.namespace ?? '',
+    input.sourceObjectKey,
+    String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
+    input.sourceContentType.trim().toLowerCase() || 'application/octet-stream',
+    input.sourceEtag?.trim() || '',
+  ].join('|');
+}
+
+export function documentConversionSubjectFromOperationKey(opKey: string): {
+  kind: 'document_conversion';
+  conversionId: string;
+  namespace: string | null;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, , conversionId, namespace] = parts;
+  if (kind !== 'document_conversion' || version !== 'v1' || !conversionId) return null;
+  return {
+    kind: 'document_conversion',
+    conversionId,
+    namespace: namespace || null,
+  };
+}
+
+export { buildAccountExportArtifactId };
+
+export function buildAccountExportOperationKey(input: {
+  artifactId: string;
+  storageUserId: string;
+  namespace: string | null;
+  schemaVersion: number;
+  manifestHash: string;
+}): string {
+  return [
+    'account_export',
+    'v1',
+    input.storageUserId,
+    input.namespace ?? '',
+    String(Math.max(1, Math.floor(input.schemaVersion))),
+    input.manifestHash,
+    input.artifactId,
+  ].join('|');
+}
+
+export function accountExportSubjectFromOperationKey(opKey: string): {
+  kind: 'account_export';
+  storageUserId: string;
+  namespace: string | null;
+  artifactId: string;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, storageUserId, namespace] = parts;
+  const artifactId = parts[6];
+  if (kind !== 'account_export' || version !== 'v1' || !storageUserId || !artifactId) return null;
+  return {
+    kind: 'account_export',
+    storageUserId,
+    namespace: namespace || null,
+    artifactId,
+  };
+}
+
+export function documentPreviewSubjectFromOperationKey(opKey: string): {
+  kind: 'document_preview';
+  documentId: string;
+  namespace: string | null;
+  previewKind: 'card';
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, , documentId, namespace, , previewKind] = parts;
+  if (kind !== 'document_preview' || version !== 'v1' || !documentId || previewKind !== 'card') return null;
+  return {
+    kind: 'document_preview',
+    documentId,
+    namespace: namespace || null,
+    previewKind,
+  };
+}
+
 export function pdfSubjectFromOperationKey(opKey: string): {
   kind: 'pdf_layout';
   documentId: string;
@@ -53,4 +149,163 @@ export function pdfSubjectFromOperationKey(opKey: string): {
     documentId,
     namespace: namespace || null,
   };
+}
+
+export function buildTtsPlaybackOperationKey(input: {
+  sessionId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  planObjectKey: string;
+  generationRunId?: string;
+  generationExtent?: 'window' | 'document';
+}): string {
+  const scopeHash = createHash('sha256').update(buildTtsPlaybackCanonicalScopeKey({
+    storageUserId: input.storageUserId,
+    documentId: input.documentId,
+    documentVersion: input.documentVersion,
+    readerType: input.readerType,
+    settingsHash: input.settingsHash,
+    planObjectKey: input.planObjectKey,
+  })).digest('hex');
+  const intent = input.generationExtent === 'document'
+    ? 'document'
+    : `live:${input.generationRunId?.trim() || 'initial'}`;
+  return [
+    'tts_playback',
+    'v1',
+    input.documentId,
+    String(input.documentVersion),
+    input.settingsHash,
+    scopeHash,
+    input.sessionId,
+    intent,
+  ].join('|');
+}
+
+export function buildTtsPlaybackPlanOperationKey(input: {
+  documentId: string;
+  documentVersion: number;
+  readerType: 'pdf' | 'epub' | 'html';
+  settingsHash: string;
+  planSignature: string;
+}): string {
+  return [
+    'tts_playback_plan',
+    'v1',
+    input.documentId,
+    String(input.documentVersion),
+    input.readerType,
+    input.settingsHash,
+    input.planSignature,
+  ].join('|');
+}
+
+export { buildTtsPlaybackExportArtifactId };
+
+export function buildTtsPlaybackExportOperationKey(input: {
+  artifactId: string;
+  storageUserId: string;
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  format: 'mp3' | 'm4b';
+  speed: number;
+}): string {
+  const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
+  // storageUserId is part of the key so cache-reset invalidation can match
+  // export operations to their owner without reading artifact metadata.
+  return [
+    'tts_playback_export',
+    'v1',
+    input.documentId,
+    String(input.documentVersion),
+    input.storageUserId,
+    input.settingsHash,
+    input.artifactId,
+    input.format,
+    speed.toFixed(2),
+  ].join('|');
+}
+
+/**
+ * Extract the cache-reset scope fields shared by the playback operation keys.
+ * Kept beside the key builders so a key-format change cannot silently desync
+ * scope matching in the cache-reset path. `storageUserId` is null for kinds
+ * whose keys carry no owner (shared plan operations).
+ */
+export function ttsPlaybackResetScopeFromOperationKey(opKey: string): {
+  documentId: string;
+  documentVersion: number;
+  settingsHash: string;
+  storageUserId: string | null;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  if (version !== 'v1' || !documentId) return null;
+  if (kind !== 'tts_playback' && kind !== 'tts_playback_plan' && kind !== 'tts_playback_export') return null;
+  // tts_playback        | v1 | documentId | version | settingsHash  | scopeHash    | sessionId  | intent
+  // tts_playback_export | v1 | documentId | version | storageUserId | settingsHash | artifactId | format | speed
+  // tts_playback_plan   | v1 | documentId | version | readerType    | settingsHash | planSignature
+  const settingsHash = kind === 'tts_playback' ? parts[4] : parts[5];
+  const storageUserId = kind === 'tts_playback_export' ? parts[4] ?? null : null;
+  const documentVersion = Number(parts[3]);
+  if (!settingsHash || !Number.isFinite(documentVersion)) return null;
+  if (kind === 'tts_playback_export' && !storageUserId) return null;
+  return { documentId, documentVersion, settingsHash, storageUserId };
+}
+
+export function ttsPlaybackSubjectFromOperationKey(opKey: string): {
+  kind: 'tts_playback';
+  documentId: string;
+  sessionId: string;
+} | null {
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  // tts_playback | v1 | documentId | version | settingsHash | scopeHash | sessionId | intent
+  const sessionId = parts[6];
+  if (kind !== 'tts_playback' || version !== 'v1' || !documentId || !sessionId) return null;
+  return { kind: 'tts_playback', documentId, sessionId };
+}
+
+export function ttsPlaybackExportSubjectFromOperationKey(opKey: string): {
+  kind: 'tts_playback_export';
+  documentId: string;
+  artifactId: string;
+  format: 'mp3' | 'm4b';
+} | null {
+  // tts_playback_export | v1 | documentId | version | storageUserId | settingsHash | artifactId | format | speed
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  const artifactId = parts[6];
+  const format = parts[7];
+  if (
+    kind !== 'tts_playback_export'
+    || version !== 'v1'
+    || !documentId
+    || !artifactId
+    || (format !== 'mp3' && format !== 'm4b')
+  ) {
+    return null;
+  }
+  return { kind: 'tts_playback_export', documentId, artifactId, format };
+}
+
+export function ttsPlaybackPlanSubjectFromOperationKey(opKey: string): {
+  kind: 'tts_playback_plan';
+  documentId: string;
+  settingsHash: string;
+  planSignature: string;
+} | null {
+  // tts_playback_plan | v1 | documentId | version | readerType | settingsHash | planSignature | ...
+  const parts = opKey.split('|');
+  const [kind, version, documentId] = parts;
+  const settingsHash = parts[5];
+  const planSignature = parts[6];
+  if (kind !== 'tts_playback_plan' || version !== 'v1' || !documentId || !settingsHash || !planSignature) {
+    return null;
+  }
+  return { kind: 'tts_playback_plan', documentId, settingsHash, planSignature };
 }
