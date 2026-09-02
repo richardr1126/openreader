@@ -11,7 +11,9 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   const conversionEventsRequest = page.waitForRequest((request) => (
     new URL(request.url()).pathname === '/api/documents/blob/upload/events'
   ));
-  await uploadLibraryFiles(page, resolve('tests/files/sample.docx'));
+  await uploadLibraryFiles(page, resolve('tests/files/sample.docx'), {
+    waitForLibraryEntries: false,
+  });
 
   await expect(page.getByText('Uploading', { exact: true })).toBeVisible();
   await expect(page.getByText('sample.docx', { exact: true })).toBeVisible();
