@@ -533,7 +533,7 @@ Gate:
 
 ### Phase 6: Documentation and final audit
 
-Status: in progress.
+Status: complete (2026-09-02).
 
 Update active documentation to explain:
 
@@ -795,12 +795,42 @@ Postgres upgrade and standalone-worker checkpoint on 2026-08-30:
   port 3003. Playback is paused and the upgraded EPUB reader remains open for
   inspection; the slim project is stopped with its volume preserved.
 
-## Remaining Work
+True v4.4.0-to-v5 full-Compose upgrade checkpoint on 2026-09-02:
 
-- Repeat the provider edit/disable controls through an authenticated admin UI
-  session if the UI interaction itself remains a release acceptance requirement;
-  the broker's live no-restart behavior and failure semantics are verified.
-- Run the applicable Playwright matrix and repeat the final repository audit
-  after the remaining live journeys.
+- Started the published `v4.4.0` web and compute-worker images with the released
+  full-Compose topology and fresh named Postgres, SeaweedFS, NATS, and docstore
+  volumes. Through the visible application, created a disposable credential
+  account, accepted onboarding, created a folder and encrypted Markdown
+  document, opened the document to persist `html:1:1`, and initiated TTS through
+  the v4 encrypted shared Kokoro provider.
+- Recorded the pre-upgrade database shape: the credential account had no
+  `issuer` column, the provider retained its v4 AES-256-GCM ciphertext and IV,
+  and five legacy TTS segment rows/artifacts existed. Stopped the project without
+  `-v`, built the current web and standalone-worker images, and started them with
+  the same Compose project name and the same four volumes.
+- Startup migrated the credential account to `issuer=local:credential`,
+  normalized `accountId` to the user ID, preserved the account, authenticated
+  session, document, folder, onboarding row, reading locator, and provider
+  ciphertext, and removed the legacy TTS tables plus five `tts_segments_v2/`
+  objects.
+- Reloaded the already-authenticated reader after the image replacement. The
+  preserved document rendered from object storage, the library still showed its
+  folder, and playback using the v4-encrypted provider moved from
+  `Preparing audio…` to a progressing timeline while model-download SSE advanced
+  from 8% to 91%. The standalone worker normalized and served the new MP3 and
+  completed the playback job successfully.
+- The upgraded worker has no app database or `AUTH_SECRET` environment variable,
+  emitted no `admin_providers`/broker/playback error, and created no ONNX `.ses`
+  telemetry identifier. Exactly one project, `openreader-v5-upgrade-check`, is
+  running on port 3003 for inspection.
+
+## Release-wide Follow-up
+
+- Run the final Playwright matrix after stopping this single Compose project so
+  the test-owned server can use port 3003 without creating a competing stack.
+- Repeat the release-wide verification commands and CI dispatch after the final
+  version/changelog changes. The authentication boundary audit itself is clean:
+  the worker has no database dependency or app secret, active docs teach only
+  the broker path, and the live v4.4.0 upgrade journey passed.
 - Stop or leave the single Compose stack running according to the active test
   session request; never start a Playwright-owned stack on the same ports.

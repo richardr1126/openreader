@@ -430,7 +430,33 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 21 Worker-owned document derived-artifact deletion | Done | Parsed PDF, preview, and playback-plan cleanup is worker-owned and control-plane-triggered. |
 | 22 EPUB plan-backed render handoff | Done | EPUB rendering now reconciles committed stable spine anchors against the applied worker plan; the client-text/setText branch and plan-clearing navigation paths are removed. |
 | 23 Plan-canonical EPUB resume progress | Done | Server-backed EPUB progress is a versioned stable spine locator; startup resolves it through the applied plan and issues one adapter-owned EPUB.js display command. |
-| 24 Plan-selected surface commit | Reopened | EPUB and HTML improvements remain, but the PDF implementation is rejected and reset to the pre-`c00a7ab` baseline. Exact cross-reader orchestration and PDF text-item projection are specified in `READER_READINESS_STATE_MACHINE.md`. |
+| 24 Plan-selected surface commit | Done (superseded) | The rejected intermediate implementation remains historical context. The smaller unified bootstrap/readiness design in `READER_READINESS_STATE_MACHINE.md` superseded it and is complete across PDF, EPUB, and HTML. |
+
+### v4.4 release-line reconciliation (2026-09-02)
+
+The three product fixes released on `main` after this v5 branch diverged were
+reviewed against the rewritten architecture rather than copied mechanically:
+
+- PR #127's loopback-S3 fallback is superseded by the explicit
+  `S3_INTERNAL_ENDPOINT` / `S3_PUBLIC_ENDPOINT` / `S3_BROWSER_TRANSPORT`
+  contract. Embedded Compose selects `proxy`; public storage selects
+  `presigned`, so v5 never hands a browser an internal endpoint and does not
+  retain the old fallback or loopback-guessing code.
+- PR #128's HTML/Markdown block-boundary behavior is preserved in the
+  worker-owned planner. Shared parsing now yields one canonical source unit and
+  stable `b-NNNN` locator per visible block, and HTML enables enforced source
+  boundaries. The legacy document-root location remains a compatibility anchor
+  for existing progress while saved ordinals continue to identify the exact
+  segment.
+- PR #129's malformed-Xing repair is superseded by the stricter v5 stream
+  invariant: every provider response, including MP3, is transcoded to the same
+  headerless CBR/sample-rate/channel profile before it enters the progressive
+  stream or cache. This repairs that provider output without retaining the old
+  special-case detector.
+
+The immutable v4.4 documentation snapshot and version history are retained from
+`main`. The v4.4 package version is also the correct pre-v5 baseline until the
+final `5.0.0` release bump.
 
 ---
 
@@ -1474,13 +1500,13 @@ for Step 22.
 
 ### 24. Commit Startup Selection and Highlight as One Surface Boundary
 
-Status: reopened. The blocking reader gate added in `c00a7ab` made the worker
-plan mandatory, but it left plan preparation, selection, renderer readiness,
-and highlighting in independent effects. The strict policy therefore exposed
-races that the former best-effort prefetch had hidden. The attempted PDF repair
-did not establish exact projection identity, regressed performance, and is
-rejected. `READER_READINESS_STATE_MACHINE.md` is now the normative replacement
-plan for readiness orchestration and PDF mapping.
+Status: superseded and complete. The blocking reader gate added in `c00a7ab`
+made the worker plan mandatory, but the attempted follow-up left preparation,
+selection, renderer readiness, and highlighting in independent effects. That
+intermediate PDF repair was rejected. `READER_READINESS_STATE_MACHINE.md` is the
+normative replacement, and its smaller unified bootstrap/readiness hard cut is
+complete across PDF, EPUB, and HTML. The numbered record below is retained as
+historical design context, not remaining implementation work.
 
 1. A loaded plan is not an implicit selection. When no worker ordinal is
    selected, `currentSegment` is null; segment zero cannot render or highlight

@@ -1,5 +1,5 @@
 import { normalizeLanguageTag } from '@openreader/tts/language';
-import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
+import { buildHtmlSourceUnits, parseHtmlBlocks } from '@openreader/tts/html-blocks';
 import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
 import {
   buildSegmentKeyPrefix,
@@ -90,13 +90,9 @@ async function deriveHtmlSourceUnits(
   });
   const bytes = await storage.readObject(sourceKey);
   const source = Buffer.from(bytes).toString('utf8');
-  const text = buildHtmlDocumentText(parseHtmlBlocks(source, Boolean(documentSource.isPlainText)));
-  if (!text.trim()) return [];
-  return [{
-    sourceKey: '1',
-    text,
-    locator: { readerType: 'html', location: '1' } as CanonicalTtsSourceUnit['locator'],
-  }];
+  return buildHtmlSourceUnits(
+    parseHtmlBlocks(source, Boolean(documentSource.isPlainText)),
+  );
 }
 
 async function deriveEpubSourceUnits(

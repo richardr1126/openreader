@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { parseTtsSettings, resolvePlaybackSourceUnits } from '../../src/jobs/playback/plan';
+import {
+  parseTtsSettings,
+  planTtsPlaybackSegments,
+  resolvePlaybackSourceUnits,
+} from '../../src/jobs/playback/plan';
 import { documentSourceKey } from '../../src/storage/artifact-addressing';
 import { buildHtmlDocumentText, parseHtmlBlocks } from '@openreader/tts/html-blocks';
 
@@ -64,42 +68,61 @@ describe('worker-owned HTML/TXT/MD playback derivation', () => {
     });
   });
 
-  test('derives a single full-document source unit with html location', async () => {
+  test('derives one source unit per rendered HTML block', async () => {
     const storage = fakeStorage(MARKDOWN);
     const units = await resolvePlaybackSourceUnits(
       htmlRequest({ namespace: null, extent: 'document', isPlainText: false }),
       storage,
       PREFIX,
     );
-    expect(units).toHaveLength(1);
-    expect(units[0].sourceKey).toBe('1');
-    expect(units[0].locator).toEqual({ readerType: 'html', location: '1' });
+    expect(units).toHaveLength(3);
+    expect(units.map((unit) => unit.sourceKey)).toEqual(['b-0000', 'b-0001', 'b-0002']);
+    expect(units.map((unit) => unit.locator)).toEqual([
+      { readerType: 'html', location: 'b-0000' },
+      { readerType: 'html', location: 'b-0001' },
+      { readerType: 'html', location: 'b-0002' },
+    ]);
   });
 
-  test('worker text matches the shared parser output byte-for-byte (markdown stripped)', async () => {
+  test('worker text matches the shared parser output block-for-block (markdown stripped)', async () => {
     const storage = fakeStorage(MARKDOWN);
-    const [unit] = await resolvePlaybackSourceUnits(
+    const units = await resolvePlaybackSourceUnits(
       htmlRequest({ namespace: null, extent: 'document', isPlainText: false }),
       storage,
       PREFIX,
     );
     const expected = buildHtmlDocumentText(parseHtmlBlocks(MARKDOWN, false));
-    expect(unit.text).toBe(expected);
+    expect(units.map((unit) => unit.text).join('\n\n')).toBe(expected);
     // markdown markers are stripped; visible link label is kept.
-    expect(unit.text).toContain('bold');
-    expect(unit.text).toContain('link');
-    expect(unit.text).not.toContain('**');
-    expect(unit.text).not.toContain('](https');
+    expect(units[1].text).toContain('bold');
+    expect(units[1].text).toContain('link');
+    expect(units[1].text).not.toContain('**');
+    expect(units[1].text).not.toContain('](https');
+  });
+
+  test('preserves block ownership in the canonical segment plan', async () => {
+    const storage = fakeStorage(MARKDOWN);
+    const request = htmlRequest({ namespace: null, extent: 'document', isPlainText: false });
+    request.planning.enforceSourceBoundaries = true;
+    const units = await resolvePlaybackSourceUnits(request, storage, PREFIX);
+    const segments = planTtsPlaybackSegments(request, units);
+
+    expect(segments.map((segment) => segment.locator)).toEqual([
+      { readerType: 'html', location: 'b-0000' },
+      { readerType: 'html', location: 'b-0001' },
+      { readerType: 'html', location: 'b-0002' },
+    ]);
   });
 
   test('plain-text mode splits on blank lines without markdown processing', async () => {
     const storage = fakeStorage('Line with **stars** kept.\n\nSecond paragraph.');
-    const [unit] = await resolvePlaybackSourceUnits(
+    const units = await resolvePlaybackSourceUnits(
       htmlRequest({ namespace: null, extent: 'section', isPlainText: true }),
       storage,
       PREFIX,
     );
     // In txt mode the asterisks are literal text, not markdown emphasis.
-    expect(unit.text).toContain('**stars**');
+    expect(units[0].text).toContain('**stars**');
+    expect(units).toHaveLength(2);
   });
 });

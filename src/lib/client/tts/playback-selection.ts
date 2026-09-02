@@ -57,7 +57,8 @@ export function resolveFirstPlanIndexForDocumentAnchor(
     const locationKey = String(location || '1');
     return plan.findIndex((segment) => {
       const locator = segment.ownerLocator;
-      return locator?.readerType === 'html' && String(locator.location || '1') === locationKey;
+      return locator?.readerType === 'html'
+        && (locationKey === '1' || String(locator.location || '1') === locationKey);
     });
   }
   return -1;
@@ -81,7 +82,10 @@ export function resolveDocumentAnchorSelectionOrdinal(input: {
     const belongsToAnchor = input.readerType === 'pdf'
       ? pdfLocatorPage(locator) === pdfAnchorPage(input.location)
       : locator?.readerType === 'html'
-        && String(locator.location || '1') === String(input.location || '1');
+        && (
+          String(input.location || '1') === '1'
+          || String(locator.location || '1') === String(input.location || '1')
+        );
     if (belongsToAnchor) return selected.ordinal;
   }
 

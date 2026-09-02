@@ -190,7 +190,9 @@ export async function buildTtsPlaybackPlanningInput(
   const isPlainText = scope.readerType === 'html'
     ? scope.documentName.toLowerCase().endsWith('.txt')
     : false;
-  const enforceSourceBoundaries = scope.readerType === 'pdf' || scope.readerType === 'epub';
+  const enforceSourceBoundaries = scope.readerType === 'pdf'
+    || scope.readerType === 'epub'
+    || scope.readerType === 'html';
 
   // The audio settings hash must vary with segmentation, not just voice: changing
   // skipBlockKinds (etc.) changes which text lands at each ordinal, so reusing a

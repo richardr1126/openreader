@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  buildHtmlSourceUnits,
   mdToPlainText,
   parseHtmlBlocks,
   splitMarkdownBlocks,
@@ -144,5 +145,24 @@ describe('buildFullDocumentText-style integration (badge-only blocks)', () => {
     expect(heading.plainText).toBe('Project');
     expect(badgesBlock.plainText.trim()).toBe('');
     expect(description.plainText).toBe('Real description here.');
+  });
+});
+
+describe('buildHtmlSourceUnits', () => {
+  test('keeps visible block boundaries and skips non-rendered TTS text', () => {
+    const blocks = parseHtmlBlocks('# Title\n\n![cover](cover.jpg)\n\nFirst paragraph.', false);
+
+    expect(buildHtmlSourceUnits(blocks)).toEqual([
+      {
+        sourceKey: 'b-0000',
+        text: 'Title',
+        locator: { readerType: 'html', location: 'b-0000' },
+      },
+      {
+        sourceKey: 'b-0002',
+        text: 'First paragraph.',
+        locator: { readerType: 'html', location: 'b-0002' },
+      },
+    ]);
   });
 });

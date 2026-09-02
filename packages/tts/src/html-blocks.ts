@@ -10,6 +10,8 @@
  * (bold/italic/links/code) round-trips visually.
  */
 
+import type { CanonicalTtsSourceUnit } from './segment-plan';
+
 export type HtmlBlockKind =
   | 'heading'
   | 'paragraph'
@@ -284,14 +286,30 @@ function stripInlineMarkdown(text: string): string {
 }
 
 /**
- * Concatenate every block's plain text into one TTS source string. The whole
- * HTML/TXT/MD document is treated as a single flat sequence of segments, so this
- * is the canonical full-document text shared by the client reader and the
- * worker-owned planner (single source of truth for identity parity).
+ * Concatenate every block's plain text into one display/search string. The
+ * reader uses this to determine whether the document has playable content.
+ * Worker planning uses {@link buildHtmlSourceUnits} so block boundaries and
+ * locators survive normalization.
  */
 export function buildHtmlDocumentText(blocks: HtmlBlock[]): string {
   return blocks
     .map((b) => b.plainText)
     .filter((t) => t && t.trim())
     .join('\n\n');
+}
+
+/**
+ * Build the canonical worker-plan inputs for HTML, Markdown, and plain text.
+ * Keeping one source unit per rendered block prevents headings and unrelated
+ * paragraphs from being packed into the same segment and gives every segment a
+ * stable DOM locator for highlighting.
+ */
+export function buildHtmlSourceUnits(blocks: HtmlBlock[]): CanonicalTtsSourceUnit[] {
+  return blocks
+    .filter((block) => Boolean(block.plainText?.trim()))
+    .map((block) => ({
+      sourceKey: block.anchorId,
+      text: block.plainText,
+      locator: { readerType: 'html', location: block.anchorId },
+    }));
 }

@@ -82,6 +82,21 @@ describe('playback plan selection', () => {
     })).toBe(9);
   });
 
+  test('treats the legacy HTML document root as an anchor for block-located plans', () => {
+    const plan = [
+      segment(8, { readerType: 'html', location: 'b-0000' }),
+      segment(9, { readerType: 'html', location: 'b-0001' }),
+    ];
+
+    expect(resolveFirstPlanIndexForDocumentAnchor(plan, 'html', 1)).toBe(0);
+    expect(resolveDocumentAnchorSelectionOrdinal({
+      plan,
+      readerType: 'html',
+      location: 1,
+      selectedOrdinal: 9,
+    })).toBe(9);
+  });
+
   test('resolves EPUB starts from stable spine coordinates', () => {
     const anchor = {
       text: 'Visible text',
