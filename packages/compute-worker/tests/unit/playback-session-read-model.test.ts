@@ -140,6 +140,7 @@ describe('playback session read model', () => {
     fixture.sidecars.set(0, audioFirst);
 
     const audioFirstRows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 0, limit: 1 });
+    expect(audioFirstRows[0]?.alignmentSource).toBe('proportional');
     const proportional = JSON.parse(audioFirstRows[0]?.alignmentJson ?? 'null') as {
       words?: Array<{ text?: string; endSec?: number }>;
     } | null;
@@ -149,6 +150,7 @@ describe('playback session read model', () => {
 
     fixture.sidecars.set(0, completedSidecar(0));
     const exactRows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 0, limit: 1 });
+    expect(exactRows[0]?.alignmentSource).toBe('exact');
     const exact = JSON.parse(exactRows[0]?.alignmentJson ?? 'null') as {
       words?: Array<{ text?: string; endSec?: number }>;
     } | null;

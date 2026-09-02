@@ -194,8 +194,6 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     audioKey: string;
     durationMs: number;
   };
-  const pendingAlignments: PendingAlignment[] = [];
-
   const persistSegmentMetadata = async (
     segment: (typeof normalized)[number],
     status: 'generating' | 'completed' | 'error',
@@ -267,6 +265,37 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
   };
 
+  // Keep synthesis audio-first, but do not postpone the first exact word
+  // timing until the entire ahead window has been generated. A single ordered
+  // alignment lane runs beside synthesis: the current segment becomes
+  // playable immediately, its Whisper timing starts while the next segment is
+  // synthesized, and only one alignment model invocation runs at a time.
+  let alignmentQueue = Promise.resolve();
+  let alignmentQueueStopped = false;
+  const enqueueAlignment = (pending: PendingAlignment): void => {
+    alignmentQueue = alignmentQueue.then(async () => {
+      if (alignmentQueueStopped) return;
+      const planOrdinal = pending.segment.original.ordinal;
+      if (!await shouldContinueWrites(planOrdinal)) {
+        alignmentQueueStopped = true;
+        return;
+      }
+      const existing = await freshSidecar(pending.segment);
+      if (existing?.status !== 'completed' || existing.alignment) return;
+      const alignment = await computeAlignment(pending.audio, pending.segment, pending.audioKey);
+      if (!alignment || !await shouldContinueWrites(planOrdinal)) return;
+      await persistSegmentMetadata(pending.segment, 'completed', {
+        audioKey: pending.audioKey,
+        durationMs: pending.durationMs,
+        alignment,
+        updatedAt: Date.now(),
+      }).catch(() => undefined);
+      // Emit another snapshot so a live client replaces provisional timing
+      // without waiting for a new playback session.
+      await input.onSegmentCompleted?.(planOrdinal);
+    });
+  };
+
   segmentLoop:
   for (const segment of normalized) {
     const planOrdinal = segment.original.ordinal;
@@ -307,7 +336,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }
       await input.onSegmentCompleted?.(planOrdinal);
       if (!alignment && storedAudio) {
-        pendingAlignments.push({
+        enqueueAlignment({
           segment,
           audio: storedAudio,
           audioKey,
@@ -357,6 +386,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     let lastError: unknown = null;
     let lastErrorInfo: SegmentErrorInfo | null = null;
     let completed = false;
+    let completedAlignment: PendingAlignment | null = null;
     for (let attempt = 1; attempt <= SEGMENT_MAX_ATTEMPTS; attempt += 1) {
       try {
         const audioBuffer = await withAbortableTimeout(
@@ -389,12 +419,12 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           alignment: null,
           updatedAt: Date.now(),
         }).catch(() => undefined);
-        pendingAlignments.push({
+        completedAlignment = {
           segment,
           audio: audioBuffer,
           audioKey,
           durationMs: Math.max(1, durationMs),
-        });
+        };
         completed = true;
         break;
       } catch (error) {
@@ -407,6 +437,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
 
     if (completed) {
       await input.onSegmentCompleted?.(planOrdinal);
+      if (completedAlignment) enqueueAlignment(completedAlignment);
       continue;
     }
     if (!await shouldContinueWrites(planOrdinal)) break;
@@ -418,25 +449,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     await input.onSegmentErrored?.(planOrdinal);
   }
 
-  // Alignment improves word highlighting, but it must never gate playable
-  // audio. Generate the requested buffer first, then backfill timings while
-  // the same run is still current. A paused, superseded, or cleared run stops
-  // this best-effort work through the same ownership checks as synthesis.
-  for (const pending of pendingAlignments) {
-    const planOrdinal = pending.segment.original.ordinal;
-    if (!await shouldContinueWrites(planOrdinal)) break;
-    const existing = await freshSidecar(pending.segment);
-    if (existing?.status !== 'completed' || existing.alignment) continue;
-    const alignment = await computeAlignment(pending.audio, pending.segment, pending.audioKey);
-    if (!alignment || !await shouldContinueWrites(planOrdinal)) continue;
-    await persistSegmentMetadata(pending.segment, 'completed', {
-      audioKey: pending.audioKey,
-      durationMs: pending.durationMs,
-      alignment,
-      updatedAt: Date.now(),
-    }).catch(() => undefined);
-    // Emit another snapshot so a live client refreshes the sidecar and begins
-    // using exact word timing without waiting for a new playback session.
-    await input.onSegmentCompleted?.(planOrdinal);
-  }
+  // Keep the job alive until queued best-effort timing has either completed or
+  // observed that this playback run was paused/superseded.
+  await alignmentQueue;
 }

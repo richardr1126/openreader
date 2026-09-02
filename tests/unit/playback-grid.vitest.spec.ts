@@ -4,6 +4,7 @@ import {
   mediaTimeToDocumentTime,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
+  shouldRefreshPlaybackSegmentTiming,
   type TtsPlaybackGrid,
 } from '@/lib/client/tts/playback-grid';
 
@@ -27,6 +28,7 @@ const grid: TtsPlaybackGrid = {
       estimated: false,
       locator: null,
       alignment: null,
+      alignmentSource: null,
     },
     {
       ordinal: 1,
@@ -47,6 +49,7 @@ const grid: TtsPlaybackGrid = {
           { text: 'world', startSec: 0.5, endSec: 1.2 },
         ],
       },
+      alignmentSource: 'exact',
     },
   ],
 };
@@ -67,13 +70,17 @@ describe('playback grid mapping', () => {
       generationStartOrdinal: 0,
       durationMs: 2000,
       segments: [
-        { ordinal: 1, segmentKey: 'b', startMs: 1000, endMs: 2000, durationMs: 1000, generated: true },
+        { ordinal: 1, segmentKey: 'b', startMs: 1000, endMs: 2000, durationMs: 1000, generated: true, alignmentSource: 'proportional' },
         { ordinal: 0, segmentKey: 'a', startMs: 0, endMs: 1000, durationMs: 1000, estimated: true },
       ],
     });
     expect(normalized.segments.map((segment) => segment.ordinal)).toEqual([0, 1]);
     expect(normalized.segments.map((segment) => segment.audioState)).toEqual(['pending', 'ready']);
     expect(normalized.segments.map((segment) => segment.durationSource)).toEqual(['estimated', 'exact']);
+    expect(normalized.segments.map((segment) => segment.alignmentSource)).toEqual([null, 'proportional']);
+    expect(shouldRefreshPlaybackSegmentTiming(normalized.segments[0])).toBe(true);
+    expect(shouldRefreshPlaybackSegmentTiming(normalized.segments[1])).toBe(true);
+    expect(shouldRefreshPlaybackSegmentTiming(grid.segments[1])).toBe(false);
   });
 
   test('projects media time to segment and word position', () => {

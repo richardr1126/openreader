@@ -759,6 +759,13 @@ Fresh slim and dependency-upgrade checkpoint on 2026-08-29:
   alignment is still pending and exact timing is persisted afterward. The
   playback read model deliberately avoids caching that transitional sidecar so
   a live timeline can observe the alignment backfill.
+- Follow-up EPUB timing audit found that the first implementation waited for
+  the entire nine-segment ahead window before starting the first alignment.
+  Generation now keeps audio-first readiness while running one ordered
+  alignment lane beside later synthesis. Timeline rows label proportional and
+  exact timing so the client refreshes the active word schedule until the exact
+  backfill arrives. Regression coverage holds the second synthesis open and
+  proves the first segment is already exactly aligned.
 - Reused and recreated only the single
   `openreader-local-slim-fresh-20260828` Compose project throughout this check;
   no competing stack or Playwright web server was started. Its volumes remain

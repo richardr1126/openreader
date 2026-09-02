@@ -46,6 +46,7 @@ export async function GET(
     const segments = await listCompletedTtsPlaybackSegments(session);
     const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
       alignment: parseAlignment(segment.alignmentJson),
+      alignmentSource: segment.alignmentSource,
       updatedAt: segment.updatedAt,
     }]));
     const layout = buildPlaybackGrid({

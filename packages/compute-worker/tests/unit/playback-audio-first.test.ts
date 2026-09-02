@@ -134,4 +134,100 @@ describe('playback audio-first segment generation', () => {
     expect(writes.at(-1)?.alignment?.words[0]?.text).toBe('Audio');
     expect(writes.at(-1)?.durationMs).toBe(12_000);
   });
+
+  test('starts exact timing while the remaining audio buffer is still synthesizing', async () => {
+    type GeneratedAudio = Awaited<ReturnType<typeof mocks.generateTTSBuffer>>;
+    let resolveSecondAudio!: (value: GeneratedAudio) => void;
+    const secondAudio = new Promise<GeneratedAudio>((resolve) => {
+      resolveSecondAudio = resolve;
+    });
+    mocks.generateTTSBuffer
+      .mockResolvedValueOnce(Buffer.from('first-mp3'))
+      .mockImplementationOnce(() => secondAudio);
+    mocks.runAlignment.mockResolvedValue({
+      alignments: [{
+        sentence: 'First segment.',
+        sentenceIndex: 0,
+        words: [{
+          text: 'First',
+          startSec: 0,
+          endSec: 0.5,
+          charStart: 0,
+          charEnd: 5,
+        }],
+      }],
+    });
+
+    const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
+    const onSegmentCompleted = vi.fn(async () => undefined);
+    const playbackStorage = {
+      artifacts: {
+        readSegmentMetadata: vi.fn(async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null),
+        putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
+          sidecars.set(metadata.ordinal, metadata);
+          return `sidecar-${metadata.ordinal}`;
+        }),
+        getScopeEpoch: vi.fn(async () => 0),
+      },
+    } as unknown as TtsPlaybackStorage;
+
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    const run = generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-2',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId: 'document-1',
+        documentVersion: 1,
+        readerType: 'epub',
+        settingsHash: 'settings-1',
+        settingsJson: {
+          providerRef: 'local-kokoro',
+          providerType: 'custom-openai',
+          ttsModel: 'kokoro',
+          voice: 'af_heart',
+          nativeSpeed: 1,
+          ttsInstructions: '',
+          language: 'en',
+        },
+        planning: {},
+        planObjectKey: 'plan-key',
+      },
+      s3Prefix: 'openreader',
+      segments: [
+        {
+          ordinal: 0,
+          segmentKey: 'segment-0',
+          text: 'First segment.',
+          locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 0 },
+        },
+        {
+          ordinal: 1,
+          segmentKey: 'segment-1',
+          text: 'Second segment.',
+          locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 14 },
+        },
+      ],
+      putAudioObject: vi.fn(async () => undefined),
+      audioObjectExists: vi.fn(async () => false),
+      playbackStorage,
+      synthesisTimeoutMs: 30_000,
+      onSegmentCompleted,
+    });
+
+    await vi.waitFor(() => {
+      expect(mocks.generateTTSBuffer).toHaveBeenCalledTimes(2);
+      expect(mocks.runAlignment).toHaveBeenCalledTimes(1);
+      expect(sidecars.get(0)?.alignment?.words[0]?.text).toBe('First');
+    });
+    expect(sidecars.get(1)?.status).toBe('generating');
+    expect(sidecars.get(1)?.durationMs).toBeNull();
+    expect(sidecars.get(1)?.alignment).toBeNull();
+
+    resolveSecondAudio(Buffer.from('second-mp3'));
+    await run;
+
+    expect(sidecars.get(1)?.status).toBe('completed');
+    expect(onSegmentCompleted).toHaveBeenCalledTimes(4);
+  });
 });

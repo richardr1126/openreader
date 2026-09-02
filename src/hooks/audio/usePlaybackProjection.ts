@@ -7,6 +7,7 @@ import {
   mediaTimeToDocumentTime,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
+  shouldRefreshPlaybackSegmentTiming,
   type TtsPlaybackGrid,
 } from '@/lib/client/tts/playback-grid';
 import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
@@ -130,7 +131,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     });
     if (!projection.segment) return;
 
-    if (projection.segment.generated === false) {
+    if (shouldRefreshPlaybackSegmentTiming(projection.segment)) {
       const session = playbackSessionRef.current;
       const now = Date.now();
       if (session?.timelineUrl && now - lastTimelineHealAtRef.current > 1_000) {

@@ -268,8 +268,15 @@ For each planned segment:
    missing, using the stored audio when available.
 5. If a terminal error sidecar exists and no audio exists, leave the gap instead
    of repeatedly hammering the provider.
-6. Otherwise synthesize, write audio, compute duration/alignment, and write the
-   sidecar.
+6. Otherwise synthesize, write audio and its exact duration, and publish the
+   completed sidecar immediately so playback is never gated by alignment.
+7. Enqueue that segment into one ordered alignment lane. The lane starts exact
+   Whisper timing for the first playable segment while synthesis continues for
+   the remaining ahead window; it never runs more than one alignment at once.
+8. Replace the provisional sidecar timing with exact alignment and emit another
+   progress snapshot. A paused, superseded, or cache-cleared generation run
+   stops both further synthesis and timing backfills at the same ownership
+   boundary.
 
 There are no segment claims and no completed-claim stale takeover path. Object
 storage is the correctness boundary.
@@ -303,6 +310,12 @@ Readiness is derived from sidecars:
   document/settings scopes.
 - The non-hot `/segments` listing reads all plan ordinals so it can return the full
   completed set.
+
+When audio is ready before exact alignment, the timeline explicitly labels its
+word schedule as `proportional`. The client may use that schedule immediately,
+but continues refreshing the active segment until the worker returns `exact`
+timing. This preserves fast startup without allowing an entire EPUB ahead window
+to remain stuck on estimated word pacing.
 
 ### Cursor Updates
 

@@ -112,6 +112,7 @@ export type TtsPlaybackCompletedSegment = {
   audioKey: string;
   durationMs: number;
   alignmentJson: string | null;
+  alignmentSource: 'proportional' | 'exact' | null;
   updatedAt: number | null;
 };
 

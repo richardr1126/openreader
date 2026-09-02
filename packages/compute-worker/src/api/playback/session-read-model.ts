@@ -19,6 +19,7 @@ export type PlaybackSegmentManifestRow = {
   audioKey: string;
   durationMs: number;
   alignmentJson: string | null;
+  alignmentSource: 'proportional' | 'exact' | null;
   updatedAt: number | null;
 };
 
@@ -64,17 +65,26 @@ function serializeTimelineAlignment(input: {
   sidecar: TtsPlaybackSegmentMetadata;
   text: string | undefined;
   language: string | undefined;
-}): string | null {
-  if (input.sidecar.alignment) return JSON.stringify(input.sidecar.alignment);
+}): Pick<PlaybackSegmentManifestRow, 'alignmentJson' | 'alignmentSource'> {
+  if (input.sidecar.alignment) {
+    return {
+      alignmentJson: JSON.stringify(input.sidecar.alignment),
+      alignmentSource: 'exact',
+    };
+  }
   const durationMs = Number(input.sidecar.durationMs);
-  if (!input.text || !Number.isFinite(durationMs) || durationMs <= 0) return null;
+  if (!input.text || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return { alignmentJson: null, alignmentSource: null };
+  }
   const alignment = buildProportionalAlignment({
     sentence: input.text,
     sentenceIndex: input.sidecar.ordinal,
     durationMs,
     language: input.language,
   });
-  return alignment.words.length > 0 ? JSON.stringify(alignment) : null;
+  return alignment.words.length > 0
+    ? { alignmentJson: JSON.stringify(alignment), alignmentSource: 'proportional' }
+    : { alignmentJson: null, alignmentSource: null };
 }
 
 function scopeCacheKey(session: PlaybackSessionRow, cacheEpoch: number): string {
@@ -238,7 +248,7 @@ export function createPlaybackSessionReadModel(input: {
             segmentKey: sidecar.segmentKey,
             audioKey: sidecar.audioKey,
             durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
-            alignmentJson: serializeTimelineAlignment({
+            ...serializeTimelineAlignment({
               sidecar,
               text: planTextByOrdinal.get(sidecar.ordinal),
               language,
@@ -283,7 +293,7 @@ export function createPlaybackSessionReadModel(input: {
           segmentKey: sidecar.segmentKey,
           audioKey: sidecar.audioKey,
           durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
-          alignmentJson: serializeTimelineAlignment({
+          ...serializeTimelineAlignment({
             sidecar,
             text: planTextByOrdinal.get(sidecar.ordinal),
             language,
