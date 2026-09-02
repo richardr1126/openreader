@@ -128,6 +128,7 @@ describe('shared runtime configuration boundary', () => {
     const rootExample = source('.env.example');
     const workerExample = source('packages/compute-worker/.env.example');
     const fullCompose = source('docker/examples/compose.full.yml');
+    const playwrightWorkflow = source('.github/workflows/playwright.yml');
     const slimComposeFiles = [
       source('docker/examples/compose.yml'),
       source('docker/examples/compose.local-slim.yml'),
@@ -152,6 +153,7 @@ describe('shared runtime configuration boundary', () => {
     expect(fullWorker).not.toContain('SQLITE_DB_PATH:');
     expect(fullWorker).toContain('COMPUTE_CREDENTIAL_BROKER_URL: http://openreader:3003/api/internal/compute/tts-credentials');
     expect(fullWorker).toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN:');
+    expect(playwrightWorkflow).toContain('TTS_PLAYBACK_TOKEN_SECRET:');
     for (const slimCompose of slimComposeFiles) {
       expect(slimCompose).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
       expect(slimCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');

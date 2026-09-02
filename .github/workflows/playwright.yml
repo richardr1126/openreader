@@ -13,7 +13,8 @@ jobs:
     env:
       USE_EMBEDDED_WEED_MINI: true
       BASE_URL: http://127.0.0.1:3003
-      AUTH_SECRET: ci-auth-secret-change-me
+      AUTH_SECRET: ci-auth-secret-change-me-not-for-production
+      TTS_PLAYBACK_TOKEN_SECRET: ci-tts-playback-token-secret-not-for-production
       USE_ANONYMOUS_AUTH_SESSIONS: true
       S3_INTERNAL_ENDPOINT: http://127.0.0.1:8333
     steps:
