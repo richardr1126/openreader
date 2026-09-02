@@ -267,7 +267,6 @@ describe('server-state architecture', () => {
       '/api/documents/[id]/reader-bootstrap/events',
       '/api/documents/[id]/settings',
       '/api/documents/blob/get',
-      '/api/documents/blob/get/presign',
       '/api/documents/blob/preview',
       '/api/documents/blob/preview/ensure',
       '/api/documents/blob/preview/events',
