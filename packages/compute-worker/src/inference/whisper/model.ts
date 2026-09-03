@@ -209,17 +209,6 @@ export async function ensureWhisperArtifacts(options: {
   }
 }
 
-export function createSingleflightRunner<T>(work: () => Promise<T>): () => Promise<T> {
-  let inflight: Promise<T> | null = null;
-  return async () => {
-    if (inflight) return inflight;
-    inflight = work().finally(() => {
-      inflight = null;
-    });
-    return inflight;
-  };
-}
-
 async function ensureModelInternal(onProgress?: ModelDownloadProgressHandler): Promise<string> {
   if (process.env[WHISPER_MODEL_BASE_URL_ENV]?.trim()) {
     for (const relativePath of MODEL_RELATIVE_PATHS) {

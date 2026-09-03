@@ -60,6 +60,7 @@ interface WhisperAlignmentOptions {
   lang?: string;
   textHint?: string;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
+  shouldStart?: () => boolean | Promise<boolean>;
 }
 
 interface WhisperRuntime {
@@ -86,6 +87,7 @@ type WhisperAlignmentState = {
   alignmentCache: Map<string, TTSSentenceAlignment[]>;
   alignmentInFlight: Map<string, Promise<TTSSentenceAlignment[]>>;
   runtimePromise: Promise<WhisperRuntime> | null;
+  alignmentLaneTail: Promise<void>;
   pendingAlignments: number;
   officialMelFilters: Float32Array[] | null;
   emptyPastFeedsTemplate: Record<string, ort.Tensor> | null;
@@ -95,11 +97,15 @@ const WHISPER_ALIGNMENT_STATE_KEY = '__openreaderWhisperAlignmentStateV1';
 const g = globalThis as typeof globalThis & Record<string, unknown>;
 const state = (() => {
   const existing = g[WHISPER_ALIGNMENT_STATE_KEY] as WhisperAlignmentState | undefined;
-  if (existing) return existing;
+  if (existing) {
+    existing.alignmentLaneTail ??= Promise.resolve();
+    return existing;
+  }
   const created: WhisperAlignmentState = {
     alignmentCache: new Map<string, TTSSentenceAlignment[]>(),
     alignmentInFlight: new Map<string, Promise<TTSSentenceAlignment[]>>(),
     runtimePromise: null,
+    alignmentLaneTail: Promise.resolve(),
     pendingAlignments: 0,
     officialMelFilters: null,
     emptyPastFeedsTemplate: null,
@@ -848,7 +854,8 @@ export async function alignAudioWithText(
   if (shared) return shared;
 
   state.pendingAlignments += 1;
-  const run = (async (): Promise<TTSSentenceAlignment[]> => {
+  const execute = async (): Promise<TTSSentenceAlignment[]> => {
+    if (opts.shouldStart && !await opts.shouldStart()) return [];
     const alignmentTimeoutMs = getAlignmentTimeoutMs();
     const deadlineMs = Date.now() + alignmentTimeoutMs;
     let tmpBase = '';
@@ -898,7 +905,12 @@ export async function alignAudioWithText(
       }
       state.pendingAlignments = Math.max(0, state.pendingAlignments - 1);
     }
-  })();
+  };
+  // ONNX alignment is CPU- and memory-intensive. Keep one process-wide lane,
+  // including across superseded playback runs, so a refill can prioritize new
+  // audio without multiplying Whisper pressure on a constrained worker.
+  const run = state.alignmentLaneTail.then(execute, execute);
+  state.alignmentLaneTail = run.then(() => undefined, () => undefined);
 
   alignmentInFlight.set(inFlightKey, run);
   const clearInFlight = () => {

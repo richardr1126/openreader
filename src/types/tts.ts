@@ -13,7 +13,7 @@ export type {
  * client heartbeats its cursor, so generation tracks the listener instead of
  * racing to the end of the document.
  */
-export const TTS_PLAYBACK_AHEAD_WINDOW = 8;
+export const TTS_PLAYBACK_AHEAD_WINDOW = 12;
 
 /**
  * How often the client POSTs its playback cursor while playing. Must be well

@@ -38,7 +38,10 @@ function playbackSession(overrides: Partial<PlaybackSessionRow> = {}): PlaybackS
   };
 }
 
-function createFixture(initial: PlaybackSessionRow) {
+function createFixture(
+  initial: PlaybackSessionRow,
+  workerOpStatus: 'queued' | 'running' | 'succeeded' | 'failed' = 'succeeded',
+) {
   let session = initial;
   const enqueueOrReuse = vi.fn(async (request: { opKey: string }) => ({
     opId: 'continuation-op',
@@ -78,7 +81,7 @@ function createFixture(initial: PlaybackSessionRow) {
     deps: { orchestrator: { enqueueOrReuse } },
     playbackStorage,
     ensureOrphanedOpRecovery: vi.fn(async () => undefined),
-    getOpState: vi.fn(async () => ({ status: 'succeeded' as const })),
+    getOpState: vi.fn(async () => ({ status: workerOpStatus })),
   } as unknown as ComputeWorkerRouteContext;
   return {
     controller: createPlaybackSessionController(context, readModel),
@@ -148,8 +151,41 @@ describe('playback session continuation controller', () => {
 
     await fixture.controller.enqueueContinuationIfNeeded({
       ...satisfied,
-      cursorOrdinal: 17,
+      cursorOrdinal: 15,
     }, Date.now(), 'cursor');
     expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not supersede active synthesis before it publishes a satisfied window', async () => {
+    const fixture = createFixture(playbackSession(), 'running');
+
+    await fixture.controller.enqueueContinuationIfNeeded(
+      fixture.currentSession(),
+      Date.now(),
+      'cursor',
+    );
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test('refills audio while the active predecessor drains exact alignment', async () => {
+    const fixture = createFixture(playbackSession({
+      cursorOrdinal: 15,
+      generationSatisfiedFromOrdinal: 12,
+      generationSatisfiedThroughOrdinal: 20,
+    }), 'running');
+
+    await fixture.controller.enqueueContinuationIfNeeded(
+      fixture.currentSession(),
+      Date.now(),
+      'cursor',
+    );
+
+    expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    expect(fixture.currentSession()).toMatchObject({
+      generationRunId: 'active:15',
+      generationSatisfiedFromOrdinal: null,
+      generationSatisfiedThroughOrdinal: null,
+    });
   });
 });

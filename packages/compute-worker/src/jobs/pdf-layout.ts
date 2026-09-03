@@ -3,6 +3,7 @@ import { runPdfLayoutFromPdfBuffer } from '../inference/runtime';
 import { withIdleTimeoutAndHardCap, withTimeout } from '../infrastructure/config';
 import type { PdfLayoutJobRequest, PdfLayoutJobResult, PdfLayoutProgress } from '../operations/contracts';
 import type { JobHandlerContext } from './context';
+import { createModelDownloadProgressReporter } from './model-download-progress';
 import { persistParsedPdfWhileSourceExists } from './pdf-artifact-persistence';
 import { buildInferProgressForPageParsed, buildInferProgressForPageStart } from './pdf-progress';
 
@@ -24,8 +25,6 @@ export function createPdfLayoutHandler(input: JobHandlerContext) {
     const s3FetchMs = Date.now() - s3FetchStartedAt;
     let lastTotalPages = 0;
     let lastPagesParsed = 0;
-    let lastModelProgressAt = 0;
-    let lastModelProgressBytes = -1;
     const computeStartedAt = Date.now();
     const result = await withIdleTimeoutAndHardCap({
       idleTimeoutMs: Math.max(input.pdfTimeoutMs, 1_000),
@@ -34,24 +33,18 @@ export function createPdfLayoutHandler(input: JobHandlerContext) {
       run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
         documentId: parsed.documentId,
         pdfBytes,
-        onModelDownloadProgress: async ({ downloadedBytes, totalBytes }) => {
-          touchProgress();
-          const now = Date.now();
-          const shouldPublish = lastModelProgressBytes < 0
-            || downloadedBytes >= totalBytes
-            || downloadedBytes - lastModelProgressBytes >= 1024 * 1024
-            || now - lastModelProgressAt >= 500;
-          if (!shouldPublish) return;
-          lastModelProgressAt = now;
-          lastModelProgressBytes = downloadedBytes;
-          await hooks?.onProgress?.({
-            phase: 'download_model',
-            totalPages: 0,
-            pagesParsed: 0,
-            downloadedBytes,
-            totalBytes,
-          });
-        },
+        onModelDownloadProgress: createModelDownloadProgressReporter({
+          onObserved: touchProgress,
+          publish: async ({ downloadedBytes, totalBytes }) => {
+            await hooks?.onProgress?.({
+              phase: 'download_model',
+              totalPages: 0,
+              pagesParsed: 0,
+              downloadedBytes,
+              totalBytes,
+            });
+          },
+        }),
         onPageStarted: async ({ pageNumber, totalPages }) => {
           touchProgress();
           lastTotalPages = totalPages;

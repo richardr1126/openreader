@@ -76,18 +76,26 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     playbackEventsUnsubRef.current = subscribeTtsPlaybackEvents(activeSession.sessionId, {
       onSnapshot: (snapshot) => {
         if (runId !== playbackRunIdRef.current) return;
+        if (snapshot.status === 'failed') {
+          toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
+          return;
+        }
         if (snapshot.phase === 'downloading_model') {
           const percent = snapshot.totalBytes && snapshot.downloadedBytes !== null
             ? Math.round((snapshot.downloadedBytes / snapshot.totalBytes) * 100)
             : null;
           toast.loading(
-            percent === null ? 'Downloading playback model…' : `Downloading playback model… ${percent}%`,
+            percent === null
+              ? 'Downloading word-timing model…'
+              : `Downloading word-timing model… ${percent}%`,
             { id: MODEL_DOWNLOAD_TOAST_ID },
           );
-        } else {
-          toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
+          // Audio is already available with proportional timing. Download-only
+          // progress does not change either playback read model, so avoid two
+          // redundant HTTP reads for every model checkpoint.
+          return;
         }
-        if (snapshot.status === 'failed') return;
+        toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
         const currentSession = playbackSessionRef.current;
         if (!currentSession) return;
         void refreshPlaybackTimeline(currentSession.timelineUrl).catch(() => undefined);

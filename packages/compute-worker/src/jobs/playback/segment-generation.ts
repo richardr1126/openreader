@@ -99,6 +99,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   getCurrentCacheEpoch?: () => Promise<number>;
   synthesisTimeoutMs: number;
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
+  onSynthesisSettled?: () => Promise<void>;
   onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
   onSegmentErrored?: (planOrdinal: number) => Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
@@ -183,6 +184,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     lang: effectiveSettings.language,
     cacheKey: audioKey,
     onModelDownloadProgress: input.onModelDownloadProgress,
+    shouldStart: () => shouldContinueWrites(segment.original.ordinal),
   }).then((result) => {
     const first = result.alignments[0];
     return first ? { ...first, sentenceIndex: segment.original.ordinal } : null;
@@ -315,7 +317,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     if (audioExists) {
       if (!await shouldContinueWrites(planOrdinal)) break;
       let durationMs = existing?.status === 'completed' ? existing.durationMs : null;
-      let alignment = existing?.alignment ?? null;
+      const alignment = existing?.alignment ?? null;
       const needsRebuild = existing?.status !== 'completed' || durationMs == null || !alignment;
       let storedAudio: Buffer | null = null;
       if (needsRebuild && input.readAudioObject) {
@@ -448,6 +450,12 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }).catch(() => undefined);
     await input.onSegmentErrored?.(planOrdinal);
   }
+
+  // Audio production and best-effort exact alignment have different urgency.
+  // Tell the session controller that synthesis has reached its current boundary
+  // before waiting for the ordered alignment lane to drain, so an active reader
+  // can refill without being blocked by cold or CPU-constrained Whisper work.
+  await input.onSynthesisSettled?.();
 
   // Keep the job alive until queued best-effort timing has either completed or
   // observed that this playback run was paused/superseded.

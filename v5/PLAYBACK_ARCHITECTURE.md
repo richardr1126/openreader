@@ -1592,3 +1592,41 @@ long EPUB at Chapter Twenty-Three, retained the document-wide cached timeline,
 started playback at its canonical document time, and paused cleanly. Final
 worker logs showed one initial playback job, no prefetch-driven
 `tts.playback.resume_enqueued` cascade, and a clean audio client close on pause.
+
+---
+
+### 26. Harden Live Playback for Production Latency and Cold Model Load
+
+Status: in progress. The first deployed v5 stack exposed latency assumptions
+that the local same-host acceptance runs did not exercise:
+
+- The live generation window was only eight segments and waited until half of
+  that window remained before asking for a continuation. The active window is
+  now twelve segments and refills while roughly three quarters remain, giving
+  the provider, NATS, object storage, and browser heartbeat more recovery time
+  without returning to per-segment enqueueing.
+- A bounded playback job kept its operation nonterminal while its ordered
+  best-effort Whisper lane drained. The job now publishes its satisfied audio
+  boundary as soon as synthesis settles. Once playback crosses the low-water
+  mark, the controller may supersede that alignment-draining run with the next
+  deterministic audio continuation. The process still admits only one Whisper
+  inference at a time, preventing superseded runs from multiplying CPU and
+  memory pressure.
+- Cold Whisper download progress previously produced a durable operation update
+  about once per MiB. For the 268 MB model this could create hundreds of NATS
+  writes and, through foreground SSE handling, two browser read-model requests
+  per update. Model downloads now publish at bounded eight-MiB/one-second
+  checkpoints, and download-only snapshots update only the word-timing toast.
+  Timeline and seek-layout reads remain driven by segment/audio or exact-timing
+  changes.
+- The playback toast now calls this the `word-timing model`. Audio continues to
+  use proportional timing while the cold model downloads; visible highlighting
+  during that download is therefore not evidence that exact Whisper alignment
+  has already completed. Whisper artifact acquisition remains single-flight per
+  worker process.
+
+Local verification passed the worker unit suite, root Vitest suite, application
+and worker type checks, changed-source lint, production build, compute boundary,
+route-error, and server-bundle guards. A subsequent deployed cold-model
+walkthrough should confirm bounded model progress, uninterrupted audio refill,
+and exact timing replacement after the model becomes ready.

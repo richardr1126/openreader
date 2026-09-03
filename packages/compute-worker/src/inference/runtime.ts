@@ -14,12 +14,17 @@ export async function runWhisperAlignmentFromAudioBuffer(input: {
   cacheKey?: string;
   lang?: string;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
+  shouldStart?: () => boolean | Promise<boolean>;
 }) {
   const alignments = await alignAudioWithText(
     input.audioBuffer,
     input.text,
     input.cacheKey,
-    { lang: input.lang, onModelDownloadProgress: input.onModelDownloadProgress },
+    {
+      lang: input.lang,
+      onModelDownloadProgress: input.onModelDownloadProgress,
+      shouldStart: input.shouldStart,
+    },
   );
   return { alignments };
 }

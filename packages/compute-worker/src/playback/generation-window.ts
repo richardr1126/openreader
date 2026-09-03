@@ -21,6 +21,7 @@
  * grind." The knob is kept so the trade-off can be revisited in one place.
  */
 export const TTS_PLAYBACK_BACKWARD_PAD = 0;
+export const DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW = 12;
 
 export function generationFloorForCursor(cursorOrdinal: number): number {
   const cursor = Math.max(0, Math.floor(Number(cursorOrdinal) || 0));
