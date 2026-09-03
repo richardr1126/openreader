@@ -287,6 +287,62 @@ describe('TTS playback storage', () => {
     });
   });
 
+  test('ignores late cursor and activity sidecars from a superseded session write', async () => {
+    class InterleavingKv extends MemoryKv {
+      afterNextUpdate: (() => Promise<void>) | null = null;
+
+      async update(key: string, data: Uint8Array, version: number): Promise<unknown> {
+        const result = await super.update(key, data, version);
+        const afterUpdate = this.afterNextUpdate;
+        this.afterNextUpdate = null;
+        if (afterUpdate) await afterUpdate();
+        return result;
+      }
+    }
+
+    const kv = new InterleavingKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    const session = (
+      generationRunId: string,
+      expiresAt: number,
+      cursorOrdinal: number,
+      playbackActive: boolean,
+    ): Parameters<typeof store.putSessionIfNewer>[0] => ({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'queued',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive,
+      generationRunId,
+      generationStartOrdinal: cursorOrdinal,
+      cursorOrdinal,
+      cursorUpdatedAt: expiresAt,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt,
+      lastError: null,
+      updatedAt: expiresAt,
+    });
+
+    await store.putSessionIfNewer(session('run-original', 100, 10, true));
+    kv.afterNextUpdate = async () => {
+      expect(await store.putSessionIfNewer(session('run-newest', 300, 30, true))).toBe(true);
+    };
+
+    expect(await store.putSessionIfNewer(session('run-middle', 200, 20, false))).toBe(true);
+    expect(await store.getSession('session-1')).toMatchObject({
+      generationRunId: 'run-newest',
+      expiresAt: 300,
+      cursorOrdinal: 30,
+      playbackActive: true,
+    });
+  });
+
   test('cancels active sessions matching a playback artifact scope', async () => {
     const kv = new MemoryKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });

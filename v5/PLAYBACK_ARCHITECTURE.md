@@ -20,7 +20,7 @@ must remain contention-free.
 | Segment audio | S3, content-addressed CBR MP3 under `tts_playback_segments_audio_v1/` | idempotent put |
 | Segment duration/alignment/status | S3, one sidecar per plan ordinal | put to unique key |
 | Session record | JetStream KV, `tts_playback.session.*` | retrying CAS for patches and generation ownership |
-| Cursor/playhead | JetStream KV, `tts_playback.cursor.*` | plain `put`, last-write-wins |
+| Cursor/playhead | JetStream KV, `tts_playback.cursor.*` | expiry-tagged plain `put`, last-write-wins within one session generation |
 | Job queue | JetStream stream, `compute_jobs` subjects | small durable work messages |
 | Operation index/state | JetStream KV, `op_index.*` / `op_state.*` | CAS only for op claiming/state machine |
 | SSE events | JetStream stream, `compute_events` subjects | replayable operation snapshots |
@@ -33,6 +33,8 @@ revision. Session patches use bounded retrying CAS so a superseded generation
 run cannot overwrite its successor after an ownership check. Initial requests
 for a reused canonical session are also installed conditionally, ordered by the
 control plane's session expiry, so delayed requests cannot restore an older run.
+Cursor and activity sidecars carry that same expiry; reads ignore a late sidecar
+write when its session generation no longer matches the canonical record.
 
 Classify API ownership by `request duration x compute/memory/streaming cost`.
 Next.js routes run under Vercel's request-duration model and should own
