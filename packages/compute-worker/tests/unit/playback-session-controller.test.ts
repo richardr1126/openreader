@@ -56,11 +56,21 @@ function createFixture(
   const patchSession = vi.fn(async (_sessionId: string, patch: Partial<PlaybackSessionRow>) => {
     session = { ...session, ...patch };
   });
+  const patchSessionIfGenerationRun = vi.fn(async (
+    _sessionId: string,
+    expectedGenerationRunId: string | null,
+    patch: Partial<PlaybackSessionRow>,
+  ) => {
+    if ((session.generationRunId ?? null) !== expectedGenerationRunId) return false;
+    session = { ...session, ...patch };
+    return true;
+  });
   const playbackStorage = {
     sessions: {
       async getSession() { return session; },
       async putSession(next: PlaybackSessionRow) { session = next; },
       patchSession,
+      patchSessionIfGenerationRun,
       updateCursor,
       async listSessions() { return [session]; },
       async cancelSessionsForScope() { return 0; },
@@ -137,6 +147,22 @@ describe('playback session continuation controller', () => {
       playbackActive: true,
       generationRunId: 'active:12',
     });
+  });
+
+  test('does not let a stale continuation supersede a newer generation claim', async () => {
+    const fixture = createFixture(playbackSession({
+      cursorOrdinal: 20,
+      generationRunId: 'active:20',
+    }));
+
+    await fixture.controller.enqueueContinuationIfNeeded(
+      playbackSession({ cursorOrdinal: 12, generationRunId: 'initial:12' }),
+      Date.now(),
+      'cursor',
+    );
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+    expect(fixture.currentSession().generationRunId).toBe('active:20');
   });
 
   test('refills only after playback crosses the satisfied-window low-water mark', async () => {

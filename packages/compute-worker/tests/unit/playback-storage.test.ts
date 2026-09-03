@@ -138,9 +138,9 @@ describe('TTS playback storage', () => {
     });
   });
 
-  test('cursor updates never use CAS (no wrong-last-sequence under contention)', async () => {
-    // A KV that rejects every CAS write — proving the cursor/session paths use
-    // plain puts only. If any of them reach for kv.update, this throws.
+  test('hot cursor and activity updates never use CAS', async () => {
+    // A KV that rejects every CAS write proves the hot client-owned paths stay
+    // plain puts. Worker-owned session record patches intentionally use CAS.
     class NoCasKv extends MemoryKv {
       async update(): Promise<unknown> {
         throw new Error('wrong last sequence');
@@ -169,16 +169,72 @@ describe('TTS playback storage', () => {
       updatedAt: 100,
     });
 
-    // Many racing cursor writers + a concurrent status patch — all plain puts.
+    // Many racing cursor writers plus an activity update are all plain puts.
     await Promise.all([
       ...Array.from({ length: 25 }, (_, i) => store.updateCursor('session-1', i, 1000 + i)),
-      store.patchSession('session-1', { status: 'running', updatedAt: 1100 }),
+      store.patchSession('session-1', { playbackActive: false, updatedAt: 1100 }),
       store.patchSession('session-1', { cursorOrdinal: 5, cursorUpdatedAt: 1200, updatedAt: 1200 }),
     ]);
 
     const session = await store.getSession('session-1');
-    expect(session?.status).toBe('running');
+    expect(session?.status).toBe('queued');
+    expect(session?.playbackActive).toBe(false);
     expect(session?.cursorOrdinal).toBeGreaterThanOrEqual(0);
+  });
+
+  test('rejects a predecessor patch when a successor claims the generation run mid-write', async () => {
+    class InterleavingKv extends MemoryKv {
+      beforeNextUpdate: (() => Promise<void>) | null = null;
+
+      async update(key: string, data: Uint8Array, version: number): Promise<unknown> {
+        const beforeUpdate = this.beforeNextUpdate;
+        this.beforeNextUpdate = null;
+        if (beforeUpdate) await beforeUpdate();
+        return super.update(key, data, version);
+      }
+    }
+
+    const kv = new InterleavingKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    await store.putSession({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'running',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'run-old',
+      generationStartOrdinal: 10,
+      cursorOrdinal: 10,
+      cursorUpdatedAt: 100,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt: 1234,
+      lastError: null,
+      updatedAt: 100,
+    });
+
+    kv.beforeNextUpdate = async () => {
+      expect(await store.patchSessionIfGenerationRun('session-1', 'run-old', {
+        generationRunId: 'run-new',
+        generationSatisfiedFromOrdinal: null,
+        generationSatisfiedThroughOrdinal: null,
+      })).toBe(true);
+    };
+
+    expect(await store.patchSessionIfGenerationRun('session-1', 'run-old', {
+      generationSatisfiedFromOrdinal: 10,
+      generationSatisfiedThroughOrdinal: 22,
+    })).toBe(false);
+    expect(await store.getSession('session-1')).toMatchObject({
+      generationRunId: 'run-new',
+      generationSatisfiedFromOrdinal: null,
+      generationSatisfiedThroughOrdinal: null,
+    });
   });
 
   test('cancels active sessions matching a playback artifact scope', async () => {

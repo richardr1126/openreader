@@ -82,16 +82,27 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const isContinuationRun = Boolean(parsed.generationRunId);
       const sessionCursorOrdinal = Math.max(0, Math.floor(Number(currentSession.cursorOrdinal ?? startOrdinal)));
       const sessionCursorUpdatedAt = currentSession.cursorUpdatedAt == null ? null : Number(currentSession.cursorUpdatedAt);
-      await playbackStorage.sessions.patchSession(parsed.sessionId, {
-        status: 'running',
-        planObjectKey,
-        generationStartOrdinal: isContinuationRun
-          ? Math.max(0, Math.floor(Number(currentSession.generationStartOrdinal ?? startOrdinal)))
-          : startOrdinal,
-        cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal,
-        cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
-        lastError: null,
-      });
+      const markedRunning = await playbackStorage.sessions.patchSessionIfGenerationRun(
+        parsed.sessionId,
+        generationRunId,
+        {
+          status: 'running',
+          planObjectKey,
+          generationStartOrdinal: isContinuationRun
+            ? Math.max(0, Math.floor(Number(currentSession.generationStartOrdinal ?? startOrdinal)))
+            : startOrdinal,
+          cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal,
+          cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
+          lastError: null,
+        },
+      );
+      if (!markedRunning) {
+        return {
+          sessionId: parsed.sessionId,
+          planObjectKey,
+          timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+        };
+      }
 
       const lastOrdinal = plannedSegments.reduce((max, segment) => Math.max(max, segment.ordinal), -1);
       const aheadWindow = parsed.aheadWindow ?? DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW;
@@ -145,13 +156,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const persistSatisfiedWindowIfCurrent = async (): Promise<void> => {
         const satisfiedWindow = satisfaction.value;
         if (!satisfiedWindow) return;
-        const session = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
-        if (
-          !session
-          || session.playbackActive === false
-          || (session.generationRunId ?? null) !== generationRunId
-        ) return;
-        await playbackStorage.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
           generationSatisfiedFromOrdinal: satisfiedWindow.fromOrdinal,
           generationSatisfiedThroughOrdinal: satisfiedWindow.throughOrdinal,
         });
@@ -274,13 +279,17 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         && finalSession?.playbackActive !== false
         && (finalSession?.generationRunId ?? null) === generationRunId
       ) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
           generationSatisfiedFromOrdinal: satisfiedWindow.fromOrdinal,
           generationSatisfiedThroughOrdinal: satisfiedWindow.throughOrdinal,
         });
       }
       if (!stoppedEarly) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, { status: 'succeeded', planObjectKey, lastError: null });
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
+          status: 'succeeded',
+          planObjectKey,
+          lastError: null,
+        });
       }
       return { sessionId: parsed.sessionId, planObjectKey, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     } catch (error) {
@@ -289,7 +298,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         (latest?.status === 'queued' || latest?.status === 'running')
         && (latest.generationRunId ?? null) === generationRunId
       ) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
           status: 'failed',
           lastError: error instanceof Error ? error.message : String(error),
         }).catch(() => undefined);

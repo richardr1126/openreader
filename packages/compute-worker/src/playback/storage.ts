@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { TTSSentenceAlignment } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { createJsonCodec } from '../infrastructure/json-codec';
-import type { KvStoreLike } from '../infrastructure/nats-adapters';
+import { isKvCasConflictError, type KvStoreLike } from '../infrastructure/nats-adapters';
 import { ttsPlaybackSegmentSidecarArtifactKey } from '../storage/artifact-addressing';
 
 export type TtsPlaybackSessionStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
@@ -82,6 +82,11 @@ export interface TtsPlaybackSessionStore {
   getSession(sessionId: string): Promise<TtsPlaybackSessionState | null>;
   putSession(state: TtsPlaybackSessionState): Promise<void>;
   patchSession(sessionId: string, patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>): Promise<void>;
+  patchSessionIfGenerationRun(
+    sessionId: string,
+    expectedGenerationRunId: string | null,
+    patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>,
+  ): Promise<boolean>;
   updateCursor(sessionId: string, ordinal: number, updatedAt?: number): Promise<void>;
   listSessions(scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]>;
   cancelSessionsForScope(scope: TtsPlaybackResetScope, updatedAt?: number): Promise<number>;
@@ -181,6 +186,37 @@ export function createTtsPlaybackKvStore(input: {
   const sessionCodec = createJsonCodec<TtsPlaybackSessionState>();
   const cursorCodec = createJsonCodec<TtsPlaybackCursorRecord>();
   const activityCodec = createJsonCodec<TtsPlaybackActivityRecord>();
+  const patchSessionRecord = async (
+    sessionId: string,
+    recordPatch: Partial<TtsPlaybackSessionState>,
+    expectedGenerationRunId?: string | null,
+  ): Promise<boolean> => {
+    const kv = await input.getKv();
+    const key = sessionKvKey(sessionId);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const entry = await kv.get(key);
+      if (!isKvPut(entry)) return false;
+      const current = sessionCodec.decode(entry.value);
+      if (
+        expectedGenerationRunId !== undefined
+        && (current.generationRunId ?? null) !== expectedGenerationRunId
+      ) return false;
+      const next: TtsPlaybackSessionState = {
+        ...current,
+        ...recordPatch,
+        sessionId: current.sessionId,
+        schemaVersion: 1,
+        updatedAt: recordPatch.updatedAt ?? Date.now(),
+      };
+      try {
+        await kv.update(key, sessionCodec.encode(next), entry.revision);
+        return true;
+      } catch (error) {
+        if (!isKvCasConflictError(error)) throw error;
+      }
+    }
+    throw new Error(`Unable to update playback session ${sessionId} after repeated conflicts`);
+  };
   const listSessions = async (scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]> => {
     const kv = await input.getKv();
     const keys: string[] = [];
@@ -270,18 +306,15 @@ export function createTtsPlaybackKvStore(input: {
       // rewriting the record — the cursor key already carries a fresh timestamp.
       const meaningful = Object.keys(recordPatch).filter((field) => field !== 'updatedAt');
       if (meaningful.length === 0) return;
-      const key = sessionKvKey(sessionId);
-      const entry = await kv.get(key);
-      if (!isKvPut(entry)) return;
-      const current = sessionCodec.decode(entry.value);
-      const next: TtsPlaybackSessionState = {
-        ...current,
-        ...recordPatch,
-        sessionId: current.sessionId,
-        schemaVersion: 1,
-        updatedAt: recordPatch.updatedAt ?? Date.now(),
-      };
-      await kv.put(key, sessionCodec.encode(next));
+      await patchSessionRecord(sessionId, recordPatch);
+    },
+
+    async patchSessionIfGenerationRun(sessionId, expectedGenerationRunId, patch) {
+      const recordPatch: Partial<TtsPlaybackSessionState> = { ...patch };
+      delete recordPatch.cursorOrdinal;
+      delete recordPatch.cursorUpdatedAt;
+      delete recordPatch.playbackActive;
+      return patchSessionRecord(sessionId, recordPatch, expectedGenerationRunId);
     },
 
     async updateCursor(sessionId, ordinal, updatedAt = Date.now()) {

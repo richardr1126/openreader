@@ -114,17 +114,25 @@ export function createPlaybackSessionController(
     // Claim the canonical session for this deterministic continuation before
     // enqueueing it. A superseded worker observes the changed run id at its next
     // segment boundary and exits without mutating the new run's terminal state.
-    await playbackStorage.sessions.patchSession(session.sessionId, {
-      generationRunId,
-      generationSatisfiedFromOrdinal: null,
-      generationSatisfiedThroughOrdinal: null,
-      updatedAt: now,
-    });
+    const claimed = await playbackStorage.sessions.patchSessionIfGenerationRun(
+      session.sessionId,
+      session.generationRunId ?? null,
+      {
+        generationRunId,
+        generationSatisfiedFromOrdinal: null,
+        generationSatisfiedThroughOrdinal: null,
+        updatedAt: now,
+      },
+    );
     const claimedSession = await readModel.readSession(session.sessionId);
-    if (!claimedSession || claimedSession.playbackActive === false) return;
+    if (
+      !claimedSession
+      || claimedSession.playbackActive === false
+      || claimedSession.generationRunId !== generationRunId
+    ) return;
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
-    await playbackStorage.sessions.patchSession(session.sessionId, {
+    await playbackStorage.sessions.patchSessionIfGenerationRun(session.sessionId, generationRunId, {
       status: op.status === 'failed' ? 'failed' : op.status === 'succeeded' ? 'succeeded' : 'running',
       workerOpId: op.opId,
       lastError: op.status === 'failed' ? (op.error?.message ?? 'Failed to enqueue playback continuation') : null,
@@ -144,6 +152,7 @@ export function createPlaybackSessionController(
       aheadWindow,
       satisfiedFromOrdinal: satisfiedFrom,
       satisfiedThroughOrdinal: satisfiedThrough,
+      claimReused: !claimed,
       opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
     }, 'tts.playback.resume_enqueued');
   };

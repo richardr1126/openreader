@@ -88,7 +88,6 @@ type WhisperAlignmentState = {
   alignmentInFlight: Map<string, Promise<TTSSentenceAlignment[]>>;
   runtimePromise: Promise<WhisperRuntime> | null;
   alignmentLaneTail: Promise<void>;
-  pendingAlignments: number;
   officialMelFilters: Float32Array[] | null;
   emptyPastFeedsTemplate: Record<string, ort.Tensor> | null;
 };
@@ -106,7 +105,6 @@ const state = (() => {
     alignmentInFlight: new Map<string, Promise<TTSSentenceAlignment[]>>(),
     runtimePromise: null,
     alignmentLaneTail: Promise.resolve(),
-    pendingAlignments: 0,
     officialMelFilters: null,
     emptyPastFeedsTemplate: null,
   };
@@ -853,9 +851,7 @@ export async function alignAudioWithText(
   const shared = alignmentInFlight.get(inFlightKey);
   if (shared) return shared;
 
-  state.pendingAlignments += 1;
   const execute = async (): Promise<TTSSentenceAlignment[]> => {
-    if (opts.shouldStart && !await opts.shouldStart()) return [];
     const alignmentTimeoutMs = getAlignmentTimeoutMs();
     const deadlineMs = Date.now() + alignmentTimeoutMs;
     let tmpBase = '';
@@ -863,6 +859,7 @@ export async function alignAudioWithText(
     let pcmPath = '';
 
     try {
+      if (opts.shouldStart && !await opts.shouldStart()) return [];
       tmpBase = await mkdtemp(join(tmpdir(), 'openreader-whisper-'));
       inputPath = join(tmpBase, `${randomUUID()}-input.bin`);
       pcmPath = join(tmpBase, `${randomUUID()}-input.pcm16`);
@@ -903,7 +900,6 @@ export async function alignAudioWithText(
       if (tmpBase) {
         await rm(tmpBase, { recursive: true, force: true }).catch(() => {});
       }
-      state.pendingAlignments = Math.max(0, state.pendingAlignments - 1);
     }
   };
   // ONNX alignment is CPU- and memory-intensive. Keep one process-wide lane,
