@@ -3,6 +3,7 @@ import {
   DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW,
   generationFloorForCursor,
 } from '../../playback/generation-window';
+import { resolveTtsPlaybackSessionInstanceId } from '../../playback/storage';
 import type { JobHandlerContext } from '../context';
 import { createModelDownloadProgressReporter } from '../model-download-progress';
 import { resolveAndPersistTtsPlaybackPlan } from './plan';
@@ -235,6 +236,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       try {
         await generateExplicitTtsPlaybackSegments({
           request: parsed,
+          sessionInstanceId: resolveTtsPlaybackSessionInstanceId(currentSession),
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),

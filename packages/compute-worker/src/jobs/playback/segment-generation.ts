@@ -96,8 +96,25 @@ export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; 
   return { info: { message, code: 'UPSTREAM_ERROR', upstreamStatus }, retryable: false };
 }
 
+export function leaseBelongsToPlaybackSession(
+  ownerId: string,
+  sessionId: string,
+  sessionInstanceId: string,
+): boolean {
+  try {
+    const parsed = JSON.parse(ownerId) as { sessionId?: unknown; sessionInstanceId?: unknown };
+    return parsed.sessionId === sessionId && parsed.sessionInstanceId === sessionInstanceId;
+  } catch {
+    // Legacy owner ids cannot prove which incarnation wrote them. Treat them
+    // as foreign until their bounded lease expires rather than overlapping
+    // synthesis with a replaced session.
+    return false;
+  }
+}
+
 export async function generateExplicitTtsPlaybackSegments(input: {
   request: TtsPlaybackRequest;
+  sessionInstanceId: string;
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
@@ -268,18 +285,10 @@ export async function generateExplicitTtsPlaybackSegments(input: {
 
   const leaseOwnerId = JSON.stringify({
     sessionId: input.request.sessionId,
+    sessionInstanceId: input.sessionInstanceId,
     generationExtent: input.request.generationExtent ?? 'window',
     generationRunId: input.request.generationRunId ?? 'initial',
   });
-  const leaseBelongsToCurrentSession = (ownerId: string): boolean => {
-    try {
-      const parsed = JSON.parse(ownerId) as { sessionId?: unknown };
-      return parsed.sessionId === input.request.sessionId;
-    } catch {
-      // Backward compatibility for leases written before owner ids became JSON.
-      return ownerId.startsWith(`${input.request.sessionId}:`);
-    }
-  };
   const leaseStaleMs = Math.max(GENERATION_LEASE_MIN_MS, input.synthesisTimeoutMs + GENERATION_LEASE_GRACE_MS);
   const minCacheEpoch = Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)));
   const freshSidecar = async (segment: (typeof normalized)[number]) => {
@@ -293,10 +302,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   ): boolean => {
     if (!sidecar || sidecar.status !== 'generating' || sidecar.audioKey !== audioKey) return false;
     if (!sidecar.leaseOwnerId || sidecar.leaseOwnerId === leaseOwnerId) return false;
-    // One canonical live session has exactly one current generation run. Its
-    // successor may immediately steal its predecessor's lease after a seek or
-    // resume; the predecessor checks generation ownership before every write.
-    if (leaseBelongsToCurrentSession(sidecar.leaseOwnerId)) return false;
+    // One canonical session incarnation has exactly one current generation
+    // run. Its successor may immediately steal its predecessor's lease after a
+    // seek or resume; a replacement incarnation must respect the old lease.
+    if (leaseBelongsToPlaybackSession(
+      sidecar.leaseOwnerId,
+      input.request.sessionId,
+      input.sessionInstanceId,
+    )) return false;
     const leaseUpdatedAt = Number(sidecar.leaseUpdatedAt ?? sidecar.updatedAt ?? 0);
     return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
   };

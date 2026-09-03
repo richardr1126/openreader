@@ -89,7 +89,12 @@ export interface TtsPlaybackSessionStore {
     expectedGenerationRunId: string | null,
     patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>,
   ): Promise<boolean>;
-  updateCursor(sessionId: string, ordinal: number, updatedAt?: number): Promise<void>;
+  updateCursor(
+    sessionId: string,
+    ordinal: number,
+    expectedSessionInstanceId: string,
+    updatedAt?: number,
+  ): Promise<boolean>;
   watchGenerationInvalidation(
     sessionId: string,
     expectedGenerationRunId: string | null,
@@ -191,7 +196,7 @@ interface TtsPlaybackActivityRecord {
   updatedAt: number;
 }
 
-function resolveSessionInstanceId(session: TtsPlaybackSessionState): string {
+export function resolveTtsPlaybackSessionInstanceId(session: TtsPlaybackSessionState): string {
   return session.sessionInstanceId
     ?? `legacy:${session.expiresAt}:${session.generationRunId ?? 'initial'}`;
 }
@@ -201,7 +206,7 @@ function sidecarMatchesSession(
   session: TtsPlaybackSessionState,
 ): boolean {
   if (sidecar.sessionInstanceId) {
-    return sidecar.sessionInstanceId === resolveSessionInstanceId(session);
+    return sidecar.sessionInstanceId === resolveTtsPlaybackSessionInstanceId(session);
   }
   return sidecar.sessionExpiresAt === undefined || sidecar.sessionExpiresAt === session.expiresAt;
 }
@@ -253,6 +258,7 @@ export function createTtsPlaybackKvStore(input: {
       for (const entry of entries) {
         if (!isKvPut(entry)) continue;
         const session = sessionCodec.decode(entry.value);
+        session.sessionInstanceId = resolveTtsPlaybackSessionInstanceId(session);
         if (scope && !sessionMatchesScope(session, scope)) continue;
         sessions.push(session);
       }
@@ -285,6 +291,7 @@ export function createTtsPlaybackKvStore(input: {
       const entry = await kv.get(sessionKvKey(sessionId));
       if (!isKvPut(entry)) return null;
       const session = sessionCodec.decode(entry.value);
+      session.sessionInstanceId = resolveTtsPlaybackSessionInstanceId(session);
       // The cursor is authoritative on its own key; overlay it on top of the
       // record's last-known snapshot so callers see the live playhead.
       const cursorEntry = await kv.get(cursorKvKey(sessionId));
@@ -310,7 +317,7 @@ export function createTtsPlaybackKvStore(input: {
       const key = sessionKvKey(state.sessionId);
       const nextState: TtsPlaybackSessionState = {
         ...state,
-        sessionInstanceId: resolveSessionInstanceId(state),
+        sessionInstanceId: resolveTtsPlaybackSessionInstanceId(state),
       };
       let accepted = false;
       // The canonical session id is reused across starts. The Next control
@@ -361,7 +368,7 @@ export function createTtsPlaybackKvStore(input: {
       const sessionEntry = await kv.get(sessionKvKey(sessionId));
       if (!isKvPut(sessionEntry)) return;
       const currentSession = sessionCodec.decode(sessionEntry.value);
-      const sessionInstanceId = resolveSessionInstanceId(currentSession);
+      const sessionInstanceId = resolveTtsPlaybackSessionInstanceId(currentSession);
       if (patch.playbackActive !== undefined) {
         await kv.put(activityKvKey(sessionId), activityCodec.encode({
           sessionInstanceId,
@@ -400,20 +407,23 @@ export function createTtsPlaybackKvStore(input: {
       return patchSessionRecord(sessionId, recordPatch, expectedGenerationRunId);
     },
 
-    async updateCursor(sessionId, ordinal, updatedAt = Date.now()) {
+    async updateCursor(sessionId, ordinal, expectedSessionInstanceId, updatedAt = Date.now()) {
       const kv = await input.getKv();
       const sessionEntry = await kv.get(sessionKvKey(sessionId));
-      if (!isKvPut(sessionEntry)) return;
+      if (!isKvPut(sessionEntry)) return false;
       const session = sessionCodec.decode(sessionEntry.value);
+      if (resolveTtsPlaybackSessionInstanceId(session) !== expectedSessionInstanceId) return false;
       // Pure last-write-wins put on the cursor's own key. There is no CAS or
-      // shared session rewrite; the session expiry tag makes stale puts
-      // invisible if a newer canonical session wins while this write races.
+      // shared session rewrite. Stamp the captured instance id, rather than
+      // re-reading it after the request begins, so a replacement racing this
+      // put can only leave a sidecar that the successor ignores.
       await kv.put(cursorKvKey(sessionId), cursorCodec.encode({
-        sessionInstanceId: resolveSessionInstanceId(session),
+        sessionInstanceId: expectedSessionInstanceId,
         sessionExpiresAt: session.expiresAt,
         cursorOrdinal: Math.max(0, Math.floor(ordinal)),
         cursorUpdatedAt: updatedAt,
       }));
+      return true;
     },
 
     async watchGenerationInvalidation(sessionId, expectedGenerationRunId, onInvalidated) {
@@ -424,15 +434,29 @@ export function createTtsPlaybackKvStore(input: {
         include: 'updates',
       });
       let stopped = false;
+      let expiryTimer: ReturnType<typeof setTimeout> | null = null;
       const stop = () => {
         if (stopped) return;
         stopped = true;
+        if (expiryTimer !== null) {
+          clearTimeout(expiryTimer);
+          expiryTimer = null;
+        }
         watcher.stop();
       };
       const invalidate = () => {
         if (stopped) return;
         onInvalidated();
         stop();
+      };
+      const scheduleExpiryInvalidation = (expiresAt: number) => {
+        if (expiryTimer !== null) clearTimeout(expiryTimer);
+        const delayMs = Math.max(0, expiresAt - Date.now());
+        expiryTimer = setTimeout(() => {
+          expiryTimer = null;
+          if (Date.now() >= expiresAt) invalidate();
+          else scheduleExpiryInvalidation(expiresAt);
+        }, Math.min(delayMs, 2_147_483_647));
       };
       const current = await this.getSession(sessionId);
       if (
@@ -445,7 +469,8 @@ export function createTtsPlaybackKvStore(input: {
         invalidate();
         return stop;
       }
-      const expectedSessionInstanceId = resolveSessionInstanceId(current);
+      const expectedSessionInstanceId = resolveTtsPlaybackSessionInstanceId(current);
+      scheduleExpiryInvalidation(current.expiresAt);
       void (async () => {
         try {
           for await (const entry of watcher) {
@@ -453,12 +478,14 @@ export function createTtsPlaybackKvStore(input: {
             if (entry.key === sessionKvKey(sessionId)) {
               const session = sessionCodec.decode(entry.value);
               if (
-                resolveSessionInstanceId(session) !== expectedSessionInstanceId
+                resolveTtsPlaybackSessionInstanceId(session) !== expectedSessionInstanceId
                 || (session.status !== 'queued' && session.status !== 'running')
                 || (session.generationRunId ?? null) !== expectedGenerationRunId
                 || Date.now() > session.expiresAt
               ) {
                 invalidate();
+              } else {
+                scheduleExpiryInvalidation(session.expiresAt);
               }
               continue;
             }

@@ -38,6 +38,19 @@ describe('playback audio-first segment generation', () => {
     vi.clearAllMocks();
   });
 
+  test('only reclaims leases from the same session incarnation', async () => {
+    const { leaseBelongsToPlaybackSession } = await import('../../src/jobs/playback/segment-generation');
+    const owner = JSON.stringify({
+      sessionId: 'session-1',
+      sessionInstanceId: 'instance-1',
+      generationRunId: 'run-1',
+    });
+
+    expect(leaseBelongsToPlaybackSession(owner, 'session-1', 'instance-1')).toBe(true);
+    expect(leaseBelongsToPlaybackSession(owner, 'session-1', 'instance-2')).toBe(false);
+    expect(leaseBelongsToPlaybackSession('session-1:window:run-1', 'session-1', 'instance-1')).toBe(false);
+  });
+
   test('publishes playable audio before alignment and backfills word timing afterward', async () => {
     let resolveAlignment!: (value: {
       alignments: Array<{
@@ -96,6 +109,7 @@ describe('playback audio-first segment generation', () => {
         planning: {},
         planObjectKey: 'plan-key',
       },
+      sessionInstanceId: 'instance-1',
       s3Prefix: 'openreader',
       segments: [{
         ordinal: 0,
@@ -199,6 +213,7 @@ describe('playback audio-first segment generation', () => {
         planning: {},
         planObjectKey: 'plan-key',
       },
+      sessionInstanceId: 'instance-2',
       s3Prefix: 'openreader',
       segments: [
         {
@@ -283,6 +298,7 @@ describe('playback audio-first segment generation', () => {
         planning: {},
         planObjectKey: 'plan-key',
       },
+      sessionInstanceId: 'instance-cancel',
       s3Prefix: 'openreader',
       segments: [{
         ordinal: 0,
