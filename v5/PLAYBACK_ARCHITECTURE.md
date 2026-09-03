@@ -1597,7 +1597,8 @@ worker logs showed one initial playback job, no prefetch-driven
 
 ### 26. Harden Live Playback for Production Latency and Cold Model Load
 
-Status: in progress. The first deployed v5 stack exposed latency assumptions
+Status: implementation complete; deployed cold-model validation pending. The
+first deployed v5 stack exposed latency assumptions
 that the local same-host acceptance runs did not exercise:
 
 - The live generation window was only eight segments and waited until half of
@@ -1627,6 +1628,7 @@ that the local same-host acceptance runs did not exercise:
 
 Local verification passed the worker unit suite, root Vitest suite, application
 and worker type checks, changed-source lint, production build, compute boundary,
-route-error, and server-bundle guards. A subsequent deployed cold-model
+route-error, and server-bundle guards, plus the complete 24-case Chromium/WebKit
+Playwright matrix with both real playback journeys. A subsequent deployed cold-model
 walkthrough should confirm bounded model progress, uninterrupted audio refill,
 and exact timing replacement after the model becomes ready.
