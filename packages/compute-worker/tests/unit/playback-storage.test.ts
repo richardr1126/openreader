@@ -81,7 +81,7 @@ describe('TTS playback storage', () => {
     const kv = new MemoryKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });
 
-    await store.putSession({
+    await store.putSessionIfNewer({
       schemaVersion: 1,
       sessionId: 'session-1',
       userId: 'user-1',
@@ -149,7 +149,7 @@ describe('TTS playback storage', () => {
     const kv = new NoCasKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });
 
-    await store.putSession({
+    await store.putSessionIfNewer({
       schemaVersion: 1,
       sessionId: 'session-1',
       userId: 'user-1',
@@ -196,7 +196,7 @@ describe('TTS playback storage', () => {
 
     const kv = new InterleavingKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });
-    await store.putSession({
+    await store.putSessionIfNewer({
       schemaVersion: 1,
       sessionId: 'session-1',
       userId: 'user-1',
@@ -237,6 +237,56 @@ describe('TTS playback storage', () => {
     });
   });
 
+  test('does not let an older session request overwrite a newer overlapping request', async () => {
+    class InterleavingKv extends MemoryKv {
+      beforeNextUpdate: (() => Promise<void>) | null = null;
+
+      async update(key: string, data: Uint8Array, version: number): Promise<unknown> {
+        const beforeUpdate = this.beforeNextUpdate;
+        this.beforeNextUpdate = null;
+        if (beforeUpdate) await beforeUpdate();
+        return super.update(key, data, version);
+      }
+    }
+
+    const kv = new InterleavingKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    const session = (generationRunId: string, expiresAt: number): Parameters<
+      typeof store.putSessionIfNewer
+    >[0] => ({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'queued',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId,
+      generationStartOrdinal: 10,
+      cursorOrdinal: 10,
+      cursorUpdatedAt: 100,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt,
+      lastError: null,
+      updatedAt: 100,
+    });
+
+    await store.putSessionIfNewer(session('run-original', 100));
+    kv.beforeNextUpdate = async () => {
+      expect(await store.putSessionIfNewer(session('run-newest', 300))).toBe(true);
+    };
+
+    expect(await store.putSessionIfNewer(session('run-middle', 200))).toBe(false);
+    expect(await store.getSession('session-1')).toMatchObject({
+      generationRunId: 'run-newest',
+      expiresAt: 300,
+    });
+  });
+
   test('cancels active sessions matching a playback artifact scope', async () => {
     const kv = new MemoryKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });
@@ -258,11 +308,11 @@ describe('TTS playback storage', () => {
       updatedAt: 100,
     };
 
-    await store.putSession({ ...base, sessionId: 'queued', status: 'queued' });
-    await store.putSession({ ...base, sessionId: 'running', status: 'running' });
-    await store.putSession({ ...base, sessionId: 'succeeded', status: 'succeeded' });
-    await store.putSession({ ...base, sessionId: 'failed', status: 'failed' });
-    await store.putSession({
+    await store.putSessionIfNewer({ ...base, sessionId: 'queued', status: 'queued' });
+    await store.putSessionIfNewer({ ...base, sessionId: 'running', status: 'running' });
+    await store.putSessionIfNewer({ ...base, sessionId: 'succeeded', status: 'succeeded' });
+    await store.putSessionIfNewer({ ...base, sessionId: 'failed', status: 'failed' });
+    await store.putSessionIfNewer({
       ...base,
       sessionId: 'other-settings',
       status: 'running',

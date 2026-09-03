@@ -174,7 +174,7 @@ export function createPlaybackSessionController(
     async putSessionState(requestBody, status, workerOpId) {
       const now = Date.now();
       const startOrdinal = Math.max(0, Math.floor(Number(requestBody.planning.selectedOrdinal)));
-      await playbackStorage?.sessions.putSession({
+      await playbackStorage?.sessions.putSessionIfNewer({
         schemaVersion: 1,
         sessionId: requestBody.sessionId,
         userId: requestBody.userId,

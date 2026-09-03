@@ -30,7 +30,9 @@ The important invariant is that hot cursor updates never rewrite the worker-owne
 session record. Cursor writes happen on their own KV key, so a per-second browser
 heartbeat, audio-range re-anchor, and worker status update cannot collide on one
 revision. Session patches use bounded retrying CAS so a superseded generation
-run cannot overwrite its successor after an ownership check.
+run cannot overwrite its successor after an ownership check. Initial requests
+for a reused canonical session are also installed conditionally, ordered by the
+control plane's session expiry, so delayed requests cannot restore an older run.
 
 Classify API ownership by `request duration x compute/memory/streaming cost`.
 Next.js routes run under Vercel's request-duration model and should own

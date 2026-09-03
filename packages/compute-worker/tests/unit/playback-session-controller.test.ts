@@ -68,7 +68,13 @@ function createFixture(
   const playbackStorage = {
     sessions: {
       async getSession() { return session; },
-      async putSession(next: PlaybackSessionRow) { session = next; },
+      async putSessionIfNewer(next: PlaybackSessionRow) {
+        if (next.expiresAt <= session.expiresAt) {
+          return (next.generationRunId ?? null) === (session.generationRunId ?? null);
+        }
+        session = next;
+        return true;
+      },
       patchSession,
       patchSessionIfGenerationRun,
       updateCursor,

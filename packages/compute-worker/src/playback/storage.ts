@@ -80,7 +80,7 @@ export interface TtsPlaybackResetScope {
 
 export interface TtsPlaybackSessionStore {
   getSession(sessionId: string): Promise<TtsPlaybackSessionState | null>;
-  putSession(state: TtsPlaybackSessionState): Promise<void>;
+  putSessionIfNewer(state: TtsPlaybackSessionState): Promise<boolean>;
   patchSession(sessionId: string, patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>): Promise<void>;
   patchSessionIfGenerationRun(
     sessionId: string,
@@ -269,9 +269,38 @@ export function createTtsPlaybackKvStore(input: {
       return session;
     },
 
-    async putSession(state) {
+    async putSessionIfNewer(state) {
       const kv = await input.getKv();
-      await kv.put(sessionKvKey(state.sessionId), sessionCodec.encode(state));
+      const key = sessionKvKey(state.sessionId);
+      let accepted = false;
+      // The canonical session id is reused across starts. The Next control
+      // plane assigns later starts a later expiry, giving overlapping requests
+      // a stable ordering that does not depend on worker arrival order.
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const entry = await kv.get(key);
+        if (isKvPut(entry)) {
+          const current = sessionCodec.decode(entry.value);
+          if (state.expiresAt <= current.expiresAt) {
+            return (state.generationRunId ?? null) === (current.generationRunId ?? null);
+          }
+          try {
+            await kv.update(key, sessionCodec.encode(state), entry.revision);
+            accepted = true;
+            break;
+          } catch (error) {
+            if (!isKvCasConflictError(error)) throw error;
+            continue;
+          }
+        }
+        try {
+          await kv.create(key, sessionCodec.encode(state));
+          accepted = true;
+          break;
+        } catch (error) {
+          if (!isKvCasConflictError(error)) throw error;
+        }
+      }
+      if (!accepted) throw new Error(`Unable to create playback session ${state.sessionId} after repeated conflicts`);
       await kv.put(cursorKvKey(state.sessionId), cursorCodec.encode({
         cursorOrdinal: Math.max(0, Math.floor(state.cursorOrdinal)),
         cursorUpdatedAt: state.cursorUpdatedAt,
@@ -280,6 +309,7 @@ export function createTtsPlaybackKvStore(input: {
         playbackActive: state.playbackActive !== false,
         updatedAt: state.updatedAt,
       }));
+      return true;
     },
 
     async patchSession(sessionId, patch) {
