@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
 import type { KvEntryLike, KvStoreLike } from '../../src/infrastructure/nats-adapters';
 import {
@@ -76,6 +76,59 @@ class MemoryStorage implements ArtifactStorage {
   }
 }
 
+class WatchQueue<T> implements AsyncIterable<T> {
+  private readonly values: T[] = [];
+  private readonly waiters: Array<(value: IteratorResult<T>) => void> = [];
+  private stopped = false;
+
+  push(value: T): void {
+    const waiter = this.waiters.shift();
+    if (waiter) waiter({ done: false, value });
+    else this.values.push(value);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    for (const waiter of this.waiters.splice(0)) waiter({ done: true, value: undefined });
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return {
+      next: async () => {
+        const value = this.values.shift();
+        if (value !== undefined) return { done: false, value };
+        if (this.stopped) return { done: true, value: undefined };
+        return new Promise<IteratorResult<T>>((resolve) => this.waiters.push(resolve));
+      },
+    };
+  }
+}
+
+class WatchableMemoryKv extends MemoryKv {
+  private readonly watches: Array<{ keys: Set<string>; queue: WatchQueue<unknown> }> = [];
+
+  override async put(key: string, data: Uint8Array): Promise<unknown> {
+    const result = await super.put(key, data);
+    for (const watch of this.watches) {
+      if (watch.keys.has(key)) {
+        watch.queue.push({ key, value: data, operation: 'PUT', revision: 1 });
+      }
+    }
+    return result;
+  }
+
+  async watch(options?: { key?: string | string[] }): Promise<never> {
+    const keys = Array.isArray(options?.key)
+      ? options.key
+      : options?.key
+        ? [options.key]
+        : [];
+    const queue = new WatchQueue<unknown>();
+    this.watches.push({ keys: new Set(keys), queue });
+    return queue as never;
+  }
+}
+
 describe('TTS playback storage', () => {
   test('stores sessions and updates cursors in KV', async () => {
     const kv = new MemoryKv();
@@ -94,6 +147,7 @@ describe('TTS playback storage', () => {
       settingsJson: { voice: 'v' },
       playbackActive: true,
       generationRunId: 'initial:0',
+      sessionInstanceId: 'instance-1',
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
       cursorUpdatedAt: null,
@@ -103,7 +157,7 @@ describe('TTS playback storage', () => {
       updatedAt: 100,
     });
 
-    await store.updateCursor('session-1', 42, 200);
+    await store.updateCursor('session-1', 42, 'instance-1', 200);
 
     // The cursor lives on its own key (plain put, last-write-wins) and is
     // overlaid onto the record on read. A cursor update does NOT rewrite the
@@ -129,12 +183,165 @@ describe('TTS playback storage', () => {
     });
 
     await store.patchSession('session-1', { status: 'running', updatedAt: 400 });
-    await store.updateCursor('session-1', 43, 500);
+    await store.updateCursor('session-1', 43, 'instance-1', 500);
     expect(await store.getSession('session-1')).toMatchObject({
       status: 'running',
       cursorOrdinal: 43,
       playbackActive: false,
       updatedAt: 400,
+    });
+  });
+
+  test('keeps cursor and pause intent authoritative when the session TTL rolls', async () => {
+    const kv = new MemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+
+    await store.putSessionIfNewer({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'running',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'initial:10',
+      generationStartOrdinal: 10,
+      cursorOrdinal: 10,
+      cursorUpdatedAt: 100,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt: 1_000,
+      lastError: null,
+      updatedAt: 100,
+    });
+
+    await store.patchSession('session-1', {
+      cursorOrdinal: 24,
+      cursorUpdatedAt: 200,
+      playbackActive: false,
+      expiresAt: 2_000,
+      updatedAt: 200,
+    });
+
+    expect(await store.getSession('session-1')).toMatchObject({
+      cursorOrdinal: 24,
+      cursorUpdatedAt: 200,
+      playbackActive: false,
+      expiresAt: 2_000,
+    });
+  });
+
+  test('pushes generation invalidation when playback is paused', async () => {
+    const kv = new WatchableMemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    await store.putSessionIfNewer({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'running',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'run-1',
+      generationStartOrdinal: 10,
+      cursorOrdinal: 10,
+      cursorUpdatedAt: 100,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt: Date.now() + 60_000,
+      lastError: null,
+      updatedAt: 100,
+    });
+    const invalidated = vi.fn();
+    const stop = await store.watchGenerationInvalidation('session-1', 'run-1', invalidated);
+
+    await store.patchSession('session-1', { playbackActive: false, updatedAt: 200 });
+    await vi.waitFor(() => expect(invalidated).toHaveBeenCalledTimes(1));
+    stop();
+  });
+
+  test('invalidates generation when an otherwise idle session expires', async () => {
+    vi.useFakeTimers({ now: 1_000 });
+    try {
+      const kv = new WatchableMemoryKv();
+      const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+      await store.putSessionIfNewer({
+        schemaVersion: 1,
+        sessionId: 'session-expiring',
+        sessionInstanceId: 'instance-expiring',
+        userId: 'user-1',
+        storageUserId: 'storage-1',
+        documentId: 'a'.repeat(64),
+        documentVersion: 1,
+        readerType: 'epub',
+        status: 'running',
+        settingsHash: 'settings-hash',
+        settingsJson: { voice: 'v' },
+        playbackActive: true,
+        generationRunId: 'run-1',
+        generationStartOrdinal: 10,
+        cursorOrdinal: 10,
+        cursorUpdatedAt: 1_000,
+        planObjectKey: 'plans/session-expiring.json',
+        expiresAt: 1_500,
+        lastError: null,
+        updatedAt: 1_000,
+      });
+      const invalidated = vi.fn();
+      const stop = await store.watchGenerationInvalidation('session-expiring', 'run-1', invalidated);
+
+      await vi.advanceTimersByTimeAsync(501);
+      expect(invalidated).toHaveBeenCalledTimes(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('rejects a delayed cursor write captured from a replaced session', async () => {
+    const kv = new MemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    const session = (
+      sessionInstanceId: string,
+      cursorOrdinal: number,
+      expiresAt: number,
+    ): Parameters<typeof store.putSessionIfNewer>[0] => ({
+      schemaVersion: 1,
+      sessionId: 'session-reused',
+      sessionInstanceId,
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'running',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'run-1',
+      generationStartOrdinal: cursorOrdinal,
+      cursorOrdinal,
+      cursorUpdatedAt: expiresAt,
+      planObjectKey: 'plans/session-reused.json',
+      expiresAt,
+      lastError: null,
+      updatedAt: expiresAt,
+    });
+
+    await store.putSessionIfNewer(session('instance-old', 10, 1_000));
+    await store.putSessionIfNewer(session('instance-new', 30, 2_000));
+
+    expect(await store.updateCursor('session-reused', 11, 'instance-old', 1_500)).toBe(false);
+    expect(await store.getSession('session-reused')).toMatchObject({
+      sessionInstanceId: 'instance-new',
+      cursorOrdinal: 30,
+      cursorUpdatedAt: 2_000,
     });
   });
 
@@ -160,6 +367,7 @@ describe('TTS playback storage', () => {
       status: 'queued',
       settingsHash: 'settings-hash',
       settingsJson: { voice: 'v' },
+      sessionInstanceId: 'instance-hot',
       generationStartOrdinal: 0,
       cursorOrdinal: 0,
       cursorUpdatedAt: null,
@@ -171,7 +379,9 @@ describe('TTS playback storage', () => {
 
     // Many racing cursor writers plus an activity update are all plain puts.
     await Promise.all([
-      ...Array.from({ length: 25 }, (_, i) => store.updateCursor('session-1', i, 1000 + i)),
+      ...Array.from({ length: 25 }, (_, i) => (
+        store.updateCursor('session-1', i, 'instance-hot', 1000 + i)
+      )),
       store.patchSession('session-1', { playbackActive: false, updatedAt: 1100 }),
       store.patchSession('session-1', { cursorOrdinal: 5, cursorUpdatedAt: 1200, updatedAt: 1200 }),
     ]);

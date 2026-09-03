@@ -103,6 +103,17 @@ describe('playback start buffer', () => {
     })).toBe(true);
   });
 
+  test('starts from one long segment once it supplies the full time buffer', () => {
+    expect(isPlaybackStartBufferReady({
+      segments: [
+        segment(20, 14_000),
+        segment(21, 8_000, false),
+      ],
+      startOrdinal: 20,
+      playbackRate: 1,
+    })).toBe(true);
+  });
+
   test('scales the media buffer for playback speed and permits a short document tail', () => {
     const buffered = [segment(30, 6_000), segment(31, 6_000), segment(32, 9_000, false)];
     expect(isPlaybackStartBufferReady({

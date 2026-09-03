@@ -50,8 +50,17 @@ async function withAbortableTimeout<T>(
   run: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   label: string,
+  externalSignal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
+  const abortFromExternalSignal = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) abortFromExternalSignal();
+  else externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true });
+  if (controller.signal.aborted) {
+    throw controller.signal.reason instanceof Error
+      ? controller.signal.reason
+      : new DOMException('Aborted', 'AbortError');
+  }
   const operation = run(controller.signal);
   try {
     return await withTimeout(operation, timeoutMs, label);
@@ -62,6 +71,7 @@ async function withAbortableTimeout<T>(
     }
     throw error;
   } finally {
+    externalSignal?.removeEventListener('abort', abortFromExternalSignal);
     controller.abort();
   }
 }
@@ -86,8 +96,25 @@ export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; 
   return { info: { message, code: 'UPSTREAM_ERROR', upstreamStatus }, retryable: false };
 }
 
+export function leaseBelongsToPlaybackSession(
+  ownerId: string,
+  sessionId: string,
+  sessionInstanceId: string,
+): boolean {
+  try {
+    const parsed = JSON.parse(ownerId) as { sessionId?: unknown; sessionInstanceId?: unknown };
+    return parsed.sessionId === sessionId && parsed.sessionInstanceId === sessionInstanceId;
+  } catch {
+    // Legacy owner ids cannot prove which incarnation wrote them. Treat them
+    // as foreign until their bounded lease expires rather than overlapping
+    // synthesis with a replaced session.
+    return false;
+  }
+}
+
 export async function generateExplicitTtsPlaybackSegments(input: {
   request: TtsPlaybackRequest;
+  sessionInstanceId: string;
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
@@ -98,16 +125,26 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   cacheEpoch?: number;
   getCurrentCacheEpoch?: () => Promise<number>;
   synthesisTimeoutMs: number;
+  signal?: AbortSignal;
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
   onSynthesisSettled?: () => Promise<void>;
   onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
   onSegmentErrored?: (planOrdinal: number) => Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
 }): Promise<void> {
-  if (input.segments.length === 0) return;
+  if (input.segments.length === 0 || input.signal?.aborted) return;
 
   const settings = parseTtsSettings(input.request.settingsJson);
-  const requestCreds = await resolveTtsCredentialsFromBroker(settings.providerRef);
+  let requestCreds: Awaited<ReturnType<typeof resolveTtsCredentialsFromBroker>>;
+  try {
+    requestCreds = await resolveTtsCredentialsFromBroker(
+      settings.providerRef,
+      input.signal ? { signal: input.signal } : undefined,
+    );
+  } catch (error) {
+    if (input.signal?.aborted) return;
+    throw error;
+  }
   const effectiveProviderRef = requestCreds.providerRef;
   const resolvedProviderType = requestCreds.providerType;
   const effectiveModel = resolveTtsModelForProvider({
@@ -238,6 +275,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   };
 
   const shouldContinueWrites = async (planOrdinal: number): Promise<boolean> => {
+    if (input.signal?.aborted) return false;
     if (input.onBeforeSegment && await input.onBeforeSegment(planOrdinal) === 'stop') return false;
     if (input.cacheEpoch !== undefined && input.getCurrentCacheEpoch) {
       if (await input.getCurrentCacheEpoch() !== input.cacheEpoch) return false;
@@ -245,11 +283,12 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     return true;
   };
 
-  const leaseOwnerId = [
-    input.request.sessionId,
-    input.request.generationExtent ?? 'window',
-    input.request.generationRunId ?? 'initial',
-  ].join(':');
+  const leaseOwnerId = JSON.stringify({
+    sessionId: input.request.sessionId,
+    sessionInstanceId: input.sessionInstanceId,
+    generationExtent: input.request.generationExtent ?? 'window',
+    generationRunId: input.request.generationRunId ?? 'initial',
+  });
   const leaseStaleMs = Math.max(GENERATION_LEASE_MIN_MS, input.synthesisTimeoutMs + GENERATION_LEASE_GRACE_MS);
   const minCacheEpoch = Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)));
   const freshSidecar = async (segment: (typeof normalized)[number]) => {
@@ -263,6 +302,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   ): boolean => {
     if (!sidecar || sidecar.status !== 'generating' || sidecar.audioKey !== audioKey) return false;
     if (!sidecar.leaseOwnerId || sidecar.leaseOwnerId === leaseOwnerId) return false;
+    // One canonical session incarnation has exactly one current generation
+    // run. Its successor may immediately steal its predecessor's lease after a
+    // seek or resume; a replacement incarnation must respect the old lease.
+    if (leaseBelongsToPlaybackSession(
+      sidecar.leaseOwnerId,
+      input.request.sessionId,
+      input.sessionInstanceId,
+    )) return false;
     const leaseUpdatedAt = Number(sidecar.leaseUpdatedAt ?? sidecar.updatedAt ?? 0);
     return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
   };
@@ -300,6 +347,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
 
   segmentLoop:
   for (const segment of normalized) {
+    if (input.signal?.aborted) break;
     const planOrdinal = segment.original.ordinal;
     if (input.onBeforeSegment && await input.onBeforeSegment(planOrdinal) === 'stop') break;
     const audioKey = buildTtsPlaybackSegmentAudioKey({
@@ -406,6 +454,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
           input.synthesisTimeoutMs,
           'tts playback segment synthesis',
+          input.signal,
         );
         if (!await shouldContinueWrites(planOrdinal)) return;
         await input.putAudioObject(audioKey, audioBuffer);
@@ -430,6 +479,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         completed = true;
         break;
       } catch (error) {
+        if (input.signal?.aborted) return;
         lastError = error;
         const classified = classifySegmentError(error);
         lastErrorInfo = classified.info;

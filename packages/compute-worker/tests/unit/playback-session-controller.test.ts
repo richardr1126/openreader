@@ -26,6 +26,7 @@ function playbackSession(overrides: Partial<PlaybackSessionRow> = {}): PlaybackS
     generationExtent: 'window',
     playbackActive: true,
     generationRunId: 'initial:12',
+    sessionInstanceId: 'instance-1',
     planning: { selectedOrdinal: 12 },
     generationStartOrdinal: 12,
     cursorOrdinal: 12,
@@ -50,8 +51,14 @@ function createFixture(
     error: null,
     request,
   }));
-  const updateCursor = vi.fn(async (_sessionId: string, ordinal: number, updatedAt?: number) => {
+  const updateCursor = vi.fn(async (
+    _sessionId: string,
+    ordinal: number,
+    _expectedSessionInstanceId: string,
+    updatedAt?: number,
+  ) => {
     session = { ...session, cursorOrdinal: ordinal, cursorUpdatedAt: updatedAt ?? Date.now() };
+    return true;
   });
   const patchSession = vi.fn(async (_sessionId: string, patch: Partial<PlaybackSessionRow>) => {
     session = { ...session, ...patch };
@@ -78,6 +85,7 @@ function createFixture(
       patchSession,
       patchSessionIfGenerationRun,
       updateCursor,
+      async watchGenerationInvalidation() { return () => undefined; },
       async listSessions() { return [session]; },
       async cancelSessionsForScope() { return 0; },
     },
@@ -118,7 +126,12 @@ describe('playback session continuation controller', () => {
     );
     await fixture.controller.updateCursor('session-1', 13, { ensureGeneration: true });
 
-    expect(fixture.updateCursor).toHaveBeenCalledWith('session-1', 13, expect.any(Number));
+    expect(fixture.updateCursor).toHaveBeenCalledWith(
+      'session-1',
+      13,
+      'instance-1',
+      expect.any(Number),
+    );
     expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
   });
 
@@ -198,6 +211,18 @@ describe('playback session continuation controller', () => {
     );
 
     expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test('supersedes active synthesis immediately when an audio range repositions the cursor', async () => {
+    const fixture = createFixture(playbackSession(), 'running');
+
+    await fixture.controller.updateCursor('session-1', 24, { ensureGeneration: true });
+
+    expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    expect(fixture.currentSession()).toMatchObject({
+      cursorOrdinal: 24,
+      generationRunId: 'active:24',
+    });
   });
 
   test('refills audio while the active predecessor drains exact alignment', async () => {

@@ -1,7 +1,6 @@
 import type { TtsPlaybackPhase } from '@/types/tts';
 
 export const PLAYBACK_START_BUFFER_WALL_MS = 10_000;
-export const PLAYBACK_START_MIN_SEGMENTS = 2;
 
 type PlaybackBufferSegment = {
   ordinal: number;
@@ -102,8 +101,11 @@ export function isPlaybackStartBufferReady(input: {
     0,
     buffer.durationMs - Math.max(0, Math.floor(input.offsetWithinStartSegmentMs ?? 0)),
   );
-  return buffer.segmentCount >= PLAYBACK_START_MIN_SEGMENTS
-    && playableDurationMs >= minimumWallMs * playbackRate;
+  // Duration, not segment count, is the meaningful underrun protection. One
+  // long generated paragraph can provide more runway than several headings;
+  // requiring a second segment in that case only adds a full provider round
+  // trip before playback can begin.
+  return playableDurationMs >= minimumWallMs * playbackRate;
 }
 
 export async function waitForPlaybackStartBuffer<T extends PlaybackStartLayout>(input: {

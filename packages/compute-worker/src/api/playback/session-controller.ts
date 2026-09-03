@@ -5,6 +5,7 @@ import {
   DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW,
   generationFloorForCursor,
 } from '../../playback/generation-window';
+import { resolveTtsPlaybackSessionInstanceId } from '../../playback/storage';
 import { ttsPlaybackOperationCreateSchema } from '../schemas';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import { isTerminalStatus, toErrorMessage } from '../route-context';
@@ -68,6 +69,11 @@ export function createPlaybackSessionController(
     ) return;
 
     const hasSatisfiedWindow = satisfiedFrom !== null && satisfiedThrough !== null;
+    const generationStartOrdinal = Math.max(
+      0,
+      Math.floor(Number(session.generationStartOrdinal ?? cursorOrdinal)),
+    );
+    const isExplicitReposition = reason === 'stream' && cursorOrdinal !== generationStartOrdinal;
     if (session.workerOpId) {
       const current = await getOpState(session.workerOpId).catch((error) => {
         app.log.warn(
@@ -80,7 +86,12 @@ export function createPlaybackSessionController(
       // a satisfied window, however, it may only be draining best-effort exact
       // alignment. Let low-water refill supersede that run so alignment cannot
       // starve audible audio generation.
-      if (current && !isTerminalStatus(current.status) && !hasSatisfiedWindow) return;
+      if (
+        current
+        && !isTerminalStatus(current.status)
+        && !hasSatisfiedWindow
+        && !isExplicitReposition
+      ) return;
     }
 
     // Cursor heartbeats and audio consumption are two signals for the same
@@ -161,10 +172,18 @@ export function createPlaybackSessionController(
     enqueueContinuationIfNeeded,
     async updateCursor(sessionId, ordinal, options) {
       const now = Date.now();
-      await playbackStorage?.sessions.updateCursor(sessionId, ordinal, now).catch((error) => {
+      const initialSession = await readModel.readSession(sessionId);
+      if (!initialSession) return;
+      const cursorUpdated = await playbackStorage?.sessions.updateCursor(
+        sessionId,
+        ordinal,
+        resolveTtsPlaybackSessionInstanceId(initialSession),
+        now,
+      ).catch((error) => {
         app.log.warn({ sessionId, error: toErrorMessage(error) }, 'tts.playback.cursor_kv_update_failed');
+        return false;
       });
-      if (!options?.ensureGeneration) return;
+      if (!cursorUpdated || !options?.ensureGeneration) return;
       const session = await readModel.readSession(sessionId);
       // Only a stream that is seeking or blocked on missing audio may force a
       // continuation. Ordinary segment delivery updates the cursor without
