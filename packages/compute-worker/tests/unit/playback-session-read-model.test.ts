@@ -91,6 +91,7 @@ function createFixture() {
       async patchSession() {},
       async patchSessionIfGenerationRun() { return true; },
       async updateCursor() {},
+      async watchGenerationInvalidation() { return () => undefined; },
       async listSessions() { return []; },
       async cancelSessionsForScope() { return 0; },
     },

@@ -78,6 +78,7 @@ function createFixture(
       patchSession,
       patchSessionIfGenerationRun,
       updateCursor,
+      async watchGenerationInvalidation() { return () => undefined; },
       async listSessions() { return [session]; },
       async cancelSessionsForScope() { return 0; },
     },
@@ -198,6 +199,18 @@ describe('playback session continuation controller', () => {
     );
 
     expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test('supersedes active synthesis immediately when an audio range repositions the cursor', async () => {
+    const fixture = createFixture(playbackSession(), 'running');
+
+    await fixture.controller.updateCursor('session-1', 24, { ensureGeneration: true });
+
+    expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    expect(fixture.currentSession()).toMatchObject({
+      cursorOrdinal: 24,
+      generationRunId: 'active:24',
+    });
   });
 
   test('refills audio while the active predecessor drains exact alignment', async () => {

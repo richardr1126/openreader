@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AckPolicy, DeliverPolicy, ReplayPolicy, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
+import type { KV } from '@nats-io/kv';
 import { nanos } from '@nats-io/transport-node';
 import type {
   OperationEvent,
@@ -34,6 +35,7 @@ export interface KvStoreLike {
   create(key: string, data: Uint8Array): Promise<unknown>;
   update(key: string, data: Uint8Array, version: number): Promise<unknown>;
   keys(filter?: string | string[]): Promise<AsyncIterable<string>>;
+  watch?: KV['watch'];
 }
 
 export function isKvCasConflictError(error: unknown): boolean {

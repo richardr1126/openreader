@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { TtsPlaybackSegmentMetadata, TtsPlaybackStorage } from '../../src/playback/storage';
 
 const mocks = vi.hoisted(() => ({
-  generateTTSBuffer: vi.fn(async () => Buffer.from('test-mp3')),
+  generateTTSBuffer: vi.fn<(
+    request?: unknown,
+    signal?: AbortSignal,
+  ) => Promise<Buffer>>(async () => Buffer.from('test-mp3')),
   runAlignment: vi.fn(),
 }));
 
@@ -232,5 +235,74 @@ describe('playback audio-first segment generation', () => {
 
     expect(sidecars.get(1)?.status).toBe('completed');
     expect(onSegmentCompleted).toHaveBeenCalledTimes(4);
+  });
+
+  test('aborts an in-flight provider request without persisting an error segment', async () => {
+    type GeneratedAudio = Awaited<ReturnType<typeof mocks.generateTTSBuffer>>;
+    mocks.generateTTSBuffer.mockImplementationOnce((_request: unknown, signal?: AbortSignal) => (
+      new Promise<GeneratedAudio>((_resolve, reject) => {
+        void _request;
+        const abort = () => reject(new DOMException('Aborted', 'AbortError'));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener('abort', abort, { once: true });
+      })
+    ));
+    const sidecars: TtsPlaybackSegmentMetadata[] = [];
+    const playbackStorage = {
+      artifacts: {
+        readSegmentMetadata: vi.fn(async () => sidecars.at(-1) ?? null),
+        putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
+          sidecars.push(metadata);
+          return 'sidecar-0';
+        }),
+        getScopeEpoch: vi.fn(async () => 0),
+      },
+    } as unknown as TtsPlaybackStorage;
+    const controller = new AbortController();
+    const putAudioObject = vi.fn(async () => undefined);
+
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    const run = generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-cancel',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId: 'document-1',
+        documentVersion: 1,
+        readerType: 'epub',
+        settingsHash: 'settings-1',
+        settingsJson: {
+          providerRef: 'local-kokoro',
+          providerType: 'custom-openai',
+          ttsModel: 'kokoro',
+          voice: 'af_heart',
+          nativeSpeed: 1,
+          ttsInstructions: '',
+          language: 'en',
+        },
+        planning: {},
+        planObjectKey: 'plan-key',
+      },
+      s3Prefix: 'openreader',
+      segments: [{
+        ordinal: 0,
+        segmentKey: 'segment-0',
+        text: 'This request should be aborted.',
+        locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 0 },
+      }],
+      putAudioObject,
+      audioObjectExists: vi.fn(async () => false),
+      playbackStorage,
+      synthesisTimeoutMs: 30_000,
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => expect(mocks.generateTTSBuffer).toHaveBeenCalledTimes(1));
+    controller.abort();
+    await expect(run).resolves.toBeUndefined();
+
+    expect(putAudioObject).not.toHaveBeenCalled();
+    expect(sidecars).toHaveLength(1);
+    expect(sidecars[0]).toMatchObject({ status: 'generating', error: null });
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
 import type { KvEntryLike, KvStoreLike } from '../../src/infrastructure/nats-adapters';
 import {
@@ -76,6 +76,59 @@ class MemoryStorage implements ArtifactStorage {
   }
 }
 
+class WatchQueue<T> implements AsyncIterable<T> {
+  private readonly values: T[] = [];
+  private readonly waiters: Array<(value: IteratorResult<T>) => void> = [];
+  private stopped = false;
+
+  push(value: T): void {
+    const waiter = this.waiters.shift();
+    if (waiter) waiter({ done: false, value });
+    else this.values.push(value);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    for (const waiter of this.waiters.splice(0)) waiter({ done: true, value: undefined });
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<T> {
+    return {
+      next: async () => {
+        const value = this.values.shift();
+        if (value !== undefined) return { done: false, value };
+        if (this.stopped) return { done: true, value: undefined };
+        return new Promise<IteratorResult<T>>((resolve) => this.waiters.push(resolve));
+      },
+    };
+  }
+}
+
+class WatchableMemoryKv extends MemoryKv {
+  private readonly watches: Array<{ keys: Set<string>; queue: WatchQueue<unknown> }> = [];
+
+  override async put(key: string, data: Uint8Array): Promise<unknown> {
+    const result = await super.put(key, data);
+    for (const watch of this.watches) {
+      if (watch.keys.has(key)) {
+        watch.queue.push({ key, value: data, operation: 'PUT', revision: 1 });
+      }
+    }
+    return result;
+  }
+
+  async watch(options?: { key?: string | string[] }): Promise<never> {
+    const keys = Array.isArray(options?.key)
+      ? options.key
+      : options?.key
+        ? [options.key]
+        : [];
+    const queue = new WatchQueue<unknown>();
+    this.watches.push({ keys: new Set(keys), queue });
+    return queue as never;
+  }
+}
+
 describe('TTS playback storage', () => {
   test('stores sessions and updates cursors in KV', async () => {
     const kv = new MemoryKv();
@@ -136,6 +189,80 @@ describe('TTS playback storage', () => {
       playbackActive: false,
       updatedAt: 400,
     });
+  });
+
+  test('keeps cursor and pause intent authoritative when the session TTL rolls', async () => {
+    const kv = new MemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+
+    await store.putSessionIfNewer({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'running',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'initial:10',
+      generationStartOrdinal: 10,
+      cursorOrdinal: 10,
+      cursorUpdatedAt: 100,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt: 1_000,
+      lastError: null,
+      updatedAt: 100,
+    });
+
+    await store.patchSession('session-1', {
+      cursorOrdinal: 24,
+      cursorUpdatedAt: 200,
+      playbackActive: false,
+      expiresAt: 2_000,
+      updatedAt: 200,
+    });
+
+    expect(await store.getSession('session-1')).toMatchObject({
+      cursorOrdinal: 24,
+      cursorUpdatedAt: 200,
+      playbackActive: false,
+      expiresAt: 2_000,
+    });
+  });
+
+  test('pushes generation invalidation when playback is paused', async () => {
+    const kv = new WatchableMemoryKv();
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    await store.putSessionIfNewer({
+      schemaVersion: 1,
+      sessionId: 'session-1',
+      userId: 'user-1',
+      storageUserId: 'storage-1',
+      documentId: 'a'.repeat(64),
+      documentVersion: 1,
+      readerType: 'epub',
+      status: 'running',
+      settingsHash: 'settings-hash',
+      settingsJson: { voice: 'v' },
+      playbackActive: true,
+      generationRunId: 'run-1',
+      generationStartOrdinal: 10,
+      cursorOrdinal: 10,
+      cursorUpdatedAt: 100,
+      planObjectKey: 'plans/session-1.json',
+      expiresAt: Date.now() + 60_000,
+      lastError: null,
+      updatedAt: 100,
+    });
+    const invalidated = vi.fn();
+    const stop = await store.watchGenerationInvalidation('session-1', 'run-1', invalidated);
+
+    await store.patchSession('session-1', { playbackActive: false, updatedAt: 200 });
+    await vi.waitFor(() => expect(invalidated).toHaveBeenCalledTimes(1));
+    stop();
   });
 
   test('hot cursor and activity updates never use CAS', async () => {

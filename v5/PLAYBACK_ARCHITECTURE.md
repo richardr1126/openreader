@@ -1631,10 +1631,28 @@ that the local same-host acceptance runs did not exercise:
   during that download is therefore not evidence that exact Whisper alignment
   has already completed. Whisper artifact acquisition remains single-flight per
   worker process.
+- Cursor and play/pause sidecars now belong to a stable session incarnation,
+  rather than the session's rolling expiry. The previous expiry equality check
+  invalidated each cursor as soon as its heartbeat extended the TTL, so refill
+  and cancellation could keep observing the original cursor and active state.
+- Live jobs watch the canonical generation and activity KV keys. Pause and an
+  explicit range seek now abort the in-flight provider request through the
+  existing `AbortSignal`; they no longer wait for a long segment to finish.
+  A successor from the same canonical session may immediately reclaim the old
+  generation lease, while unrelated sessions continue to deduplicate work.
+- Startup readiness is based on contiguous playable wall time, not an arbitrary
+  minimum segment count. One long paragraph that already supplies the ten-second
+  runway can start immediately instead of waiting for another full provider
+  request; a short heading still waits for more real audio.
+- The existing normalized-audio log now separates provider time from MP3
+  normalization time and records text length. Deployed validation can therefore
+  distinguish slow synthesis from local transcoding before changing provider
+  concurrency or canonical segment sizing.
 
 Local verification passed the worker unit suite, root Vitest suite, application
 and worker type checks, changed-source lint, production build, compute boundary,
 route-error, and server-bundle guards, plus the complete 24-case Chromium/WebKit
 Playwright matrix with both real playback journeys. A subsequent deployed cold-model
 walkthrough should confirm bounded model progress, uninterrupted audio refill,
-and exact timing replacement after the model becomes ready.
+prompt pause/seek cancellation, and exact timing replacement after the model
+becomes ready.

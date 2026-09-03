@@ -334,16 +334,35 @@ export function getCbrSilenceSecond(signal?: AbortSignal): Promise<Buffer> {
  * post-generation `playbackRate` depend on. Segment audio is cached, so this one-time
  * transcode cost is amortized across every playback and MP3 export.
  */
-export async function normalizeToMp3(buffer: Buffer, signal?: AbortSignal): Promise<Buffer> {
+export async function normalizeToMp3(
+  buffer: Buffer,
+  signal?: AbortSignal,
+  context?: {
+    provider: string;
+    model: string;
+    textLength: number;
+    providerMs: number;
+  },
+): Promise<Buffer> {
   if (buffer.length === 0) return buffer;
 
+  const normalizationStartedAt = Date.now();
   const format = sniffAudioFormat(buffer);
   const transcoded = await transcodeToMp3(buffer, signal);
+  const normalizationMs = Date.now() - normalizationStartedAt;
   ttsLogger.info({
     event: 'tts.audio_format.normalized_to_mp3',
     sourceFormat: format,
     sourceBytes: buffer.length,
     outputBytes: transcoded.length,
+    normalizationMs,
+    ...(context ? {
+      provider: context.provider,
+      model: context.model,
+      textLength: context.textLength,
+      providerMs: context.providerMs,
+      totalMs: context.providerMs + normalizationMs,
+    } : {}),
   }, 'Normalized TTS audio to stream profile mp3');
   return transcoded;
 }

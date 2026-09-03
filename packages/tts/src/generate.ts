@@ -709,15 +709,22 @@ async function runProviderRequest(
   signal: AbortSignal,
   upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
 ): Promise<Buffer> {
+  const providerStartedAt = Date.now();
   const raw = request.provider === 'replicate'
     ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
     : request.provider === 'speech-sdk'
       ? await runSpeechSdkRequest(request, signal, upstreamSettings)
       : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
+  const providerMs = Date.now() - providerStartedAt;
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;
   // Normalize to MP3 so playback storage and document export stay MP3-only.
-  return normalizeToMp3(raw, signal);
+  return normalizeToMp3(raw, signal, {
+    provider: request.provider,
+    model: request.model,
+    textLength: request.text.length,
+    providerMs,
+  });
 }
 
 async function runOpenAiCompatibleRequest(

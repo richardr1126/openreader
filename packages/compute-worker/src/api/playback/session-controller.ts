@@ -68,6 +68,11 @@ export function createPlaybackSessionController(
     ) return;
 
     const hasSatisfiedWindow = satisfiedFrom !== null && satisfiedThrough !== null;
+    const generationStartOrdinal = Math.max(
+      0,
+      Math.floor(Number(session.generationStartOrdinal ?? cursorOrdinal)),
+    );
+    const isExplicitReposition = reason === 'stream' && cursorOrdinal !== generationStartOrdinal;
     if (session.workerOpId) {
       const current = await getOpState(session.workerOpId).catch((error) => {
         app.log.warn(
@@ -80,7 +85,12 @@ export function createPlaybackSessionController(
       // a satisfied window, however, it may only be draining best-effort exact
       // alignment. Let low-water refill supersede that run so alignment cannot
       // starve audible audio generation.
-      if (current && !isTerminalStatus(current.status) && !hasSatisfiedWindow) return;
+      if (
+        current
+        && !isTerminalStatus(current.status)
+        && !hasSatisfiedWindow
+        && !isExplicitReposition
+      ) return;
     }
 
     // Cursor heartbeats and audio consumption are two signals for the same

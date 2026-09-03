@@ -224,36 +224,50 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const generationSegments = forceDocumentExtent
         ? plannedSegments
         : plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
-      await generateExplicitTtsPlaybackSegments({
-        request: parsed,
-        s3Prefix: input.s3Prefix,
-        segments: generationSegments,
-        putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
-        deleteAudioObject: input.storage.deleteObject,
-        audioObjectExists: input.storage.objectExists,
-        playbackStorage,
-        readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
-        cacheEpoch,
-        getCurrentCacheEpoch: readCurrentCacheEpoch,
-        synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
-        onBeforeSegment,
-        onSynthesisSettled: persistSatisfiedWindowIfCurrent,
-        onSegmentCompleted,
-        onSegmentErrored: async (planOrdinal) => {
-          erroredOrdinals.add(planOrdinal);
-          await emitProgress();
-        },
-        onModelDownloadProgress: createModelDownloadProgressReporter({
-          publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
-            completedThroughOrdinal: lastCompletedThrough,
-            completedCount: completedOrdinals.size,
-            plannedCount: plannedSegments.length,
-            phase: 'downloading_model',
-            downloadedBytes,
-            totalBytes,
+      const generationController = new AbortController();
+      const stopWatchingGeneration = forceDocumentExtent
+        ? () => undefined
+        : await playbackStorage.sessions.watchGenerationInvalidation(
+          parsed.sessionId,
+          generationRunId,
+          () => generationController.abort(new Error('Playback generation was superseded or paused')),
+        ).catch(() => () => undefined);
+      try {
+        await generateExplicitTtsPlaybackSegments({
+          request: parsed,
+          s3Prefix: input.s3Prefix,
+          segments: generationSegments,
+          putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
+          deleteAudioObject: input.storage.deleteObject,
+          audioObjectExists: input.storage.objectExists,
+          playbackStorage,
+          readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
+          cacheEpoch,
+          getCurrentCacheEpoch: readCurrentCacheEpoch,
+          synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
+          signal: generationController.signal,
+          onBeforeSegment,
+          onSynthesisSettled: persistSatisfiedWindowIfCurrent,
+          onSegmentCompleted,
+          onSegmentErrored: async (planOrdinal) => {
+            erroredOrdinals.add(planOrdinal);
+            await emitProgress();
+          },
+          onModelDownloadProgress: createModelDownloadProgressReporter({
+            publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
+              completedThroughOrdinal: lastCompletedThrough,
+              completedCount: completedOrdinals.size,
+              plannedCount: plannedSegments.length,
+              phase: 'downloading_model',
+              downloadedBytes,
+              totalBytes,
+            }),
           }),
-        }),
-      });
+        });
+      } finally {
+        stopWatchingGeneration();
+      }
+      if (generationController.signal.aborted) stoppedEarly = true;
       const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
       const cacheEpochStillCurrent = await readCurrentCacheEpoch() === cacheEpoch;
       const generationRunIsCurrent = Boolean(
