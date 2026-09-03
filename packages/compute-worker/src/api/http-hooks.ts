@@ -60,6 +60,9 @@ export function registerHttpHooks(input: {
     (request as FastifyRequest & { [REQUEST_COUNTED_KEY]?: boolean })[REQUEST_COUNTED_KEY] = true;
     input.onInFlightHttpChanged(1);
     input.markActivity(`http_started:${path}`);
+    reply.raw.once('close', () => {
+      releaseHttp(request);
+    });
     if (!isHealthPath(path) && !isPublicPlaybackPath(path) && !isAuthed(request, input.workerToken)) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
