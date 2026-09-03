@@ -1,11 +1,14 @@
 import type { TtsPlaybackJobRequest, TtsPlaybackJobResult, TtsPlaybackProgress } from '../../operations/contracts';
-import { generationFloorForCursor } from '../../playback/generation-window';
+import {
+  DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW,
+  generationFloorForCursor,
+} from '../../playback/generation-window';
 import type { JobHandlerContext } from '../context';
+import { createModelDownloadProgressReporter } from '../model-download-progress';
 import { resolveAndPersistTtsPlaybackPlan } from './plan';
 import { generateExplicitTtsPlaybackSegments } from './segment-generation';
 import { ttsPlaybackRequestSchema } from './schemas';
 
-const DEFAULT_AHEAD_WINDOW = 8;
 const CURSOR_STALE_MS = 15_000;
 
 function playbackSectionKey(locator: unknown, readerType: 'pdf' | 'epub' | 'html'): string | null {
@@ -79,19 +82,30 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const isContinuationRun = Boolean(parsed.generationRunId);
       const sessionCursorOrdinal = Math.max(0, Math.floor(Number(currentSession.cursorOrdinal ?? startOrdinal)));
       const sessionCursorUpdatedAt = currentSession.cursorUpdatedAt == null ? null : Number(currentSession.cursorUpdatedAt);
-      await playbackStorage.sessions.patchSession(parsed.sessionId, {
-        status: 'running',
-        planObjectKey,
-        generationStartOrdinal: isContinuationRun
-          ? Math.max(0, Math.floor(Number(currentSession.generationStartOrdinal ?? startOrdinal)))
-          : startOrdinal,
-        cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal,
-        cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
-        lastError: null,
-      });
+      const markedRunning = await playbackStorage.sessions.patchSessionIfGenerationRun(
+        parsed.sessionId,
+        generationRunId,
+        {
+          status: 'running',
+          planObjectKey,
+          generationStartOrdinal: isContinuationRun
+            ? Math.max(0, Math.floor(Number(currentSession.generationStartOrdinal ?? startOrdinal)))
+            : startOrdinal,
+          cursorOrdinal: isContinuationRun ? sessionCursorOrdinal : startOrdinal,
+          cursorUpdatedAt: isContinuationRun ? sessionCursorUpdatedAt : Date.now(),
+          lastError: null,
+        },
+      );
+      if (!markedRunning) {
+        return {
+          sessionId: parsed.sessionId,
+          planObjectKey,
+          timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+        };
+      }
 
       const lastOrdinal = plannedSegments.reduce((max, segment) => Math.max(max, segment.ordinal), -1);
-      const aheadWindow = parsed.aheadWindow ?? DEFAULT_AHEAD_WINDOW;
+      const aheadWindow = parsed.aheadWindow ?? DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW;
       const backgroundExtent = parsed.backgroundExtent ?? 'section';
       const forceDocumentExtent = parsed.generationExtent === 'document';
       const readCurrentCacheEpoch = async () => playbackStorage.artifacts.getScopeEpoch({
@@ -139,6 +153,14 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const satisfaction: {
         value: { fromOrdinal: number; throughOrdinal: number } | null;
       } = { value: null };
+      const persistSatisfiedWindowIfCurrent = async (): Promise<void> => {
+        const satisfiedWindow = satisfaction.value;
+        if (!satisfiedWindow) return;
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
+          generationSatisfiedFromOrdinal: satisfiedWindow.fromOrdinal,
+          generationSatisfiedThroughOrdinal: satisfiedWindow.throughOrdinal,
+        });
+      };
       let lastCompletedThrough = completedOrdinals.size > 0 ? Math.max(...completedOrdinals) : -1;
       const emitProgress = async (): Promise<void> => {
         await hooks?.onProgress?.({
@@ -202,8 +224,6 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const generationSegments = forceDocumentExtent
         ? plannedSegments
         : plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
-      let lastModelProgressAt = 0;
-      let lastModelProgressBytes = -1;
       await generateExplicitTtsPlaybackSegments({
         request: parsed,
         s3Prefix: input.s3Prefix,
@@ -217,29 +237,22 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         getCurrentCacheEpoch: readCurrentCacheEpoch,
         synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
         onBeforeSegment,
+        onSynthesisSettled: persistSatisfiedWindowIfCurrent,
         onSegmentCompleted,
         onSegmentErrored: async (planOrdinal) => {
           erroredOrdinals.add(planOrdinal);
           await emitProgress();
         },
-        onModelDownloadProgress: async ({ downloadedBytes, totalBytes }) => {
-          const now = Date.now();
-          const shouldPublish = lastModelProgressBytes < 0
-            || downloadedBytes >= totalBytes
-            || downloadedBytes - lastModelProgressBytes >= 1024 * 1024
-            || now - lastModelProgressAt >= 500;
-          if (!shouldPublish) return;
-          lastModelProgressAt = now;
-          lastModelProgressBytes = downloadedBytes;
-          await hooks?.onProgress?.({
+        onModelDownloadProgress: createModelDownloadProgressReporter({
+          publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
             completedThroughOrdinal: lastCompletedThrough,
             completedCount: completedOrdinals.size,
             plannedCount: plannedSegments.length,
             phase: 'downloading_model',
             downloadedBytes,
             totalBytes,
-          });
-        },
+          }),
+        }),
       });
       const finalSession = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
       const cacheEpochStillCurrent = await readCurrentCacheEpoch() === cacheEpoch;
@@ -266,13 +279,17 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         && finalSession?.playbackActive !== false
         && (finalSession?.generationRunId ?? null) === generationRunId
       ) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
           generationSatisfiedFromOrdinal: satisfiedWindow.fromOrdinal,
           generationSatisfiedThroughOrdinal: satisfiedWindow.throughOrdinal,
         });
       }
       if (!stoppedEarly) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, { status: 'succeeded', planObjectKey, lastError: null });
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
+          status: 'succeeded',
+          planObjectKey,
+          lastError: null,
+        });
       }
       return { sessionId: parsed.sessionId, planObjectKey, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     } catch (error) {
@@ -281,7 +298,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         (latest?.status === 'queued' || latest?.status === 'running')
         && (latest.generationRunId ?? null) === generationRunId
       ) {
-        await playbackStorage.sessions.patchSession(parsed.sessionId, {
+        await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
           status: 'failed',
           lastError: error instanceof Error ? error.message : String(error),
         }).catch(() => undefined);

@@ -57,6 +57,7 @@ describe('playback audio-first segment generation', () => {
     let sidecar: TtsPlaybackSegmentMetadata | null = null;
     const writes: TtsPlaybackSegmentMetadata[] = [];
     const onSegmentCompleted = vi.fn(async () => undefined);
+    const onSynthesisSettled = vi.fn(async () => undefined);
     const playbackStorage = {
       artifacts: {
         readSegmentMetadata: vi.fn(async () => sidecar),
@@ -103,6 +104,7 @@ describe('playback audio-first segment generation', () => {
       audioObjectExists: vi.fn(async () => false),
       playbackStorage,
       synthesisTimeoutMs: 30_000,
+      onSynthesisSettled,
       onSegmentCompleted,
     }).finally(() => {
       finished = true;
@@ -114,6 +116,7 @@ describe('playback audio-first segment generation', () => {
       expect(sidecar?.alignment).toBeNull();
     });
     expect(finished).toBe(false);
+    expect(onSynthesisSettled).toHaveBeenCalledTimes(1);
 
     resolveAlignment({
       alignments: [{

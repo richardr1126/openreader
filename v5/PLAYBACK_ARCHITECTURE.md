@@ -10,16 +10,17 @@ hard cut, and the final Next/worker ownership model.
 
 ## Core Rules
 
-Classify playback state by `durability x write-frequency`, and do not use CAS in
-the playback path.
+Classify playback state by `durability x write-frequency`. Reserve CAS for the
+low-frequency worker-owned session record and operation state; hot client state
+must remain contention-free.
 
 | State | Home | Write model |
 |---|---|---|
 | Playback plan | S3, immutable plan object | write once |
 | Segment audio | S3, content-addressed CBR MP3 under `tts_playback_segments_audio_v1/` | idempotent put |
 | Segment duration/alignment/status | S3, one sidecar per plan ordinal | put to unique key |
-| Session record | JetStream KV, `tts_playback.session.*` | plain `put` |
-| Cursor/playhead | JetStream KV, `tts_playback.cursor.*` | plain `put`, last-write-wins |
+| Session record | JetStream KV, `tts_playback.session.*` | retrying CAS for patches and generation ownership |
+| Cursor/playhead | JetStream KV, `tts_playback.cursor.*` | expiry-tagged plain `put`, last-write-wins within one session generation |
 | Job queue | JetStream stream, `compute_jobs` subjects | small durable work messages |
 | Operation index/state | JetStream KV, `op_index.*` / `op_state.*` | CAS only for op claiming/state machine |
 | SSE events | JetStream stream, `compute_events` subjects | replayable operation snapshots |
@@ -28,7 +29,12 @@ the playback path.
 The important invariant is that hot cursor updates never rewrite the worker-owned
 session record. Cursor writes happen on their own KV key, so a per-second browser
 heartbeat, audio-range re-anchor, and worker status update cannot collide on one
-revision. `kv.update(...revision)` should not appear in playback storage.
+revision. Session patches use bounded retrying CAS so a superseded generation
+run cannot overwrite its successor after an ownership check. Initial requests
+for a reused canonical session are also installed conditionally, ordered by the
+control plane's session expiry, so delayed requests cannot restore an older run.
+Cursor and activity sidecars carry that same expiry; reads ignore a late sidecar
+write when its session generation no longer matches the canonical record.
 
 Classify API ownership by `request duration x compute/memory/streaming cost`.
 Next.js routes run under Vercel's request-duration model and should own
@@ -376,7 +382,7 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 
 ## Invariants
 
-- No CAS (`kv.update`) in playback storage.
+- CAS is limited to low-frequency session-record patches and generation ownership.
 - Cursor state lives on its own KV key and is overlaid onto sessions on read.
 - Cursor writes are plain `put`, last-write-wins.
 - Session record patches must not rewrite cursor-only updates into the session
@@ -1592,3 +1598,43 @@ long EPUB at Chapter Twenty-Three, retained the document-wide cached timeline,
 started playback at its canonical document time, and paused cleanly. Final
 worker logs showed one initial playback job, no prefetch-driven
 `tts.playback.resume_enqueued` cascade, and a clean audio client close on pause.
+
+---
+
+### 26. Harden Live Playback for Production Latency and Cold Model Load
+
+Status: implementation complete; deployed cold-model validation pending. The
+first deployed v5 stack exposed latency assumptions
+that the local same-host acceptance runs did not exercise:
+
+- The live generation window was only eight segments and waited until half of
+  that window remained before asking for a continuation. The active window is
+  now twelve segments and refills while roughly three quarters remain, giving
+  the provider, NATS, object storage, and browser heartbeat more recovery time
+  without returning to per-segment enqueueing.
+- A bounded playback job kept its operation nonterminal while its ordered
+  best-effort Whisper lane drained. The job now publishes its satisfied audio
+  boundary as soon as synthesis settles. Once playback crosses the low-water
+  mark, the controller may supersede that alignment-draining run with the next
+  deterministic audio continuation. The process still admits only one Whisper
+  inference at a time, preventing superseded runs from multiplying CPU and
+  memory pressure.
+- Cold Whisper download progress previously produced a durable operation update
+  about once per MiB. For the 268 MB model this could create hundreds of NATS
+  writes and, through foreground SSE handling, two browser read-model requests
+  per update. Model downloads now publish at bounded eight-MiB/one-second
+  checkpoints, and download-only snapshots update only the word-timing toast.
+  Timeline and seek-layout reads remain driven by segment/audio or exact-timing
+  changes.
+- The playback toast now calls this the `word-timing model`. Audio continues to
+  use proportional timing while the cold model downloads; visible highlighting
+  during that download is therefore not evidence that exact Whisper alignment
+  has already completed. Whisper artifact acquisition remains single-flight per
+  worker process.
+
+Local verification passed the worker unit suite, root Vitest suite, application
+and worker type checks, changed-source lint, production build, compute boundary,
+route-error, and server-bundle guards, plus the complete 24-case Chromium/WebKit
+Playwright matrix with both real playback journeys. A subsequent deployed cold-model
+walkthrough should confirm bounded model progress, uninterrupted audio refill,
+and exact timing replacement after the model becomes ready.

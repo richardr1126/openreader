@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { TTSSentenceAlignment } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { createJsonCodec } from '../infrastructure/json-codec';
-import type { KvStoreLike } from '../infrastructure/nats-adapters';
+import { isKvCasConflictError, type KvStoreLike } from '../infrastructure/nats-adapters';
 import { ttsPlaybackSegmentSidecarArtifactKey } from '../storage/artifact-addressing';
 
 export type TtsPlaybackSessionStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
@@ -80,8 +80,13 @@ export interface TtsPlaybackResetScope {
 
 export interface TtsPlaybackSessionStore {
   getSession(sessionId: string): Promise<TtsPlaybackSessionState | null>;
-  putSession(state: TtsPlaybackSessionState): Promise<void>;
+  putSessionIfNewer(state: TtsPlaybackSessionState): Promise<boolean>;
   patchSession(sessionId: string, patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>): Promise<void>;
+  patchSessionIfGenerationRun(
+    sessionId: string,
+    expectedGenerationRunId: string | null,
+    patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>,
+  ): Promise<boolean>;
   updateCursor(sessionId: string, ordinal: number, updatedAt?: number): Promise<void>;
   listSessions(scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]>;
   cancelSessionsForScope(scope: TtsPlaybackResetScope, updatedAt?: number): Promise<number>;
@@ -161,6 +166,7 @@ function isResettableSessionStatus(status: TtsPlaybackSessionStatus): boolean {
 }
 
 interface TtsPlaybackCursorRecord {
+  sessionExpiresAt?: number;
   cursorOrdinal: number;
   cursorUpdatedAt: number | null;
 }
@@ -171,8 +177,13 @@ interface TtsPlaybackCacheEpochRecord {
 }
 
 interface TtsPlaybackActivityRecord {
+  sessionExpiresAt?: number;
   playbackActive: boolean;
   updatedAt: number;
+}
+
+function sidecarMatchesSession(sidecarExpiresAt: number | undefined, sessionExpiresAt: number): boolean {
+  return sidecarExpiresAt === undefined || sidecarExpiresAt === sessionExpiresAt;
 }
 
 export function createTtsPlaybackKvStore(input: {
@@ -181,6 +192,37 @@ export function createTtsPlaybackKvStore(input: {
   const sessionCodec = createJsonCodec<TtsPlaybackSessionState>();
   const cursorCodec = createJsonCodec<TtsPlaybackCursorRecord>();
   const activityCodec = createJsonCodec<TtsPlaybackActivityRecord>();
+  const patchSessionRecord = async (
+    sessionId: string,
+    recordPatch: Partial<TtsPlaybackSessionState>,
+    expectedGenerationRunId?: string | null,
+  ): Promise<boolean> => {
+    const kv = await input.getKv();
+    const key = sessionKvKey(sessionId);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const entry = await kv.get(key);
+      if (!isKvPut(entry)) return false;
+      const current = sessionCodec.decode(entry.value);
+      if (
+        expectedGenerationRunId !== undefined
+        && (current.generationRunId ?? null) !== expectedGenerationRunId
+      ) return false;
+      const next: TtsPlaybackSessionState = {
+        ...current,
+        ...recordPatch,
+        sessionId: current.sessionId,
+        schemaVersion: 1,
+        updatedAt: recordPatch.updatedAt ?? Date.now(),
+      };
+      try {
+        await kv.update(key, sessionCodec.encode(next), entry.revision);
+        return true;
+      } catch (error) {
+        if (!isKvCasConflictError(error)) throw error;
+      }
+    }
+    throw new Error(`Unable to update playback session ${sessionId} after repeated conflicts`);
+  };
   const listSessions = async (scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]> => {
     const kv = await input.getKv();
     const keys: string[] = [];
@@ -200,12 +242,17 @@ export function createTtsPlaybackKvStore(input: {
         const cursorEntry = await kv.get(cursorKvKey(session.sessionId));
         if (isKvPut(cursorEntry)) {
           const cursor = cursorCodec.decode(cursorEntry.value);
-          session.cursorOrdinal = cursor.cursorOrdinal;
-          session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+          if (sidecarMatchesSession(cursor.sessionExpiresAt, session.expiresAt)) {
+            session.cursorOrdinal = cursor.cursorOrdinal;
+            session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+          }
         }
         const activityEntry = await kv.get(activityKvKey(session.sessionId));
         if (isKvPut(activityEntry)) {
-          session.playbackActive = activityCodec.decode(activityEntry.value).playbackActive;
+          const activity = activityCodec.decode(activityEntry.value);
+          if (sidecarMatchesSession(activity.sessionExpiresAt, session.expiresAt)) {
+            session.playbackActive = activity.playbackActive;
+          }
         }
       }));
     }
@@ -223,33 +270,75 @@ export function createTtsPlaybackKvStore(input: {
       const cursorEntry = await kv.get(cursorKvKey(sessionId));
       if (isKvPut(cursorEntry)) {
         const cursor = cursorCodec.decode(cursorEntry.value);
-        session.cursorOrdinal = cursor.cursorOrdinal;
-        session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+        if (sidecarMatchesSession(cursor.sessionExpiresAt, session.expiresAt)) {
+          session.cursorOrdinal = cursor.cursorOrdinal;
+          session.cursorUpdatedAt = cursor.cursorUpdatedAt;
+        }
       }
       const activityEntry = await kv.get(activityKvKey(sessionId));
       if (isKvPut(activityEntry)) {
-        session.playbackActive = activityCodec.decode(activityEntry.value).playbackActive;
+        const activity = activityCodec.decode(activityEntry.value);
+        if (sidecarMatchesSession(activity.sessionExpiresAt, session.expiresAt)) {
+          session.playbackActive = activity.playbackActive;
+        }
       }
       return session;
     },
 
-    async putSession(state) {
+    async putSessionIfNewer(state) {
       const kv = await input.getKv();
-      await kv.put(sessionKvKey(state.sessionId), sessionCodec.encode(state));
+      const key = sessionKvKey(state.sessionId);
+      let accepted = false;
+      // The canonical session id is reused across starts. The Next control
+      // plane assigns later starts a later expiry, giving overlapping requests
+      // a stable ordering that does not depend on worker arrival order.
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const entry = await kv.get(key);
+        if (isKvPut(entry)) {
+          const current = sessionCodec.decode(entry.value);
+          if (state.expiresAt <= current.expiresAt) {
+            return (state.generationRunId ?? null) === (current.generationRunId ?? null);
+          }
+          try {
+            await kv.update(key, sessionCodec.encode(state), entry.revision);
+            accepted = true;
+            break;
+          } catch (error) {
+            if (!isKvCasConflictError(error)) throw error;
+            continue;
+          }
+        }
+        try {
+          await kv.create(key, sessionCodec.encode(state));
+          accepted = true;
+          break;
+        } catch (error) {
+          if (!isKvCasConflictError(error)) throw error;
+        }
+      }
+      if (!accepted) throw new Error(`Unable to create playback session ${state.sessionId} after repeated conflicts`);
       await kv.put(cursorKvKey(state.sessionId), cursorCodec.encode({
+        sessionExpiresAt: state.expiresAt,
         cursorOrdinal: Math.max(0, Math.floor(state.cursorOrdinal)),
         cursorUpdatedAt: state.cursorUpdatedAt,
       }));
       await kv.put(activityKvKey(state.sessionId), activityCodec.encode({
+        sessionExpiresAt: state.expiresAt,
         playbackActive: state.playbackActive !== false,
         updatedAt: state.updatedAt,
       }));
+      return true;
     },
 
     async patchSession(sessionId, patch) {
       const kv = await input.getKv();
+      const sessionEntry = await kv.get(sessionKvKey(sessionId));
+      const sessionExpiresAt = isKvPut(sessionEntry)
+        ? sessionCodec.decode(sessionEntry.value).expiresAt
+        : undefined;
       if (patch.playbackActive !== undefined) {
         await kv.put(activityKvKey(sessionId), activityCodec.encode({
+          ...(sessionExpiresAt === undefined ? {} : { sessionExpiresAt }),
           playbackActive: patch.playbackActive,
           updatedAt: patch.updatedAt ?? Date.now(),
         }));
@@ -258,6 +347,7 @@ export function createTtsPlaybackKvStore(input: {
       // never collides with the playhead heartbeat. Plain put, last-write-wins.
       if (patch.cursorOrdinal !== undefined && patch.cursorUpdatedAt !== undefined) {
         await kv.put(cursorKvKey(sessionId), cursorCodec.encode({
+          ...(sessionExpiresAt === undefined ? {} : { sessionExpiresAt }),
           cursorOrdinal: Math.max(0, Math.floor(patch.cursorOrdinal)),
           cursorUpdatedAt: patch.cursorUpdatedAt,
         }));
@@ -270,26 +360,28 @@ export function createTtsPlaybackKvStore(input: {
       // rewriting the record — the cursor key already carries a fresh timestamp.
       const meaningful = Object.keys(recordPatch).filter((field) => field !== 'updatedAt');
       if (meaningful.length === 0) return;
-      const key = sessionKvKey(sessionId);
-      const entry = await kv.get(key);
-      if (!isKvPut(entry)) return;
-      const current = sessionCodec.decode(entry.value);
-      const next: TtsPlaybackSessionState = {
-        ...current,
-        ...recordPatch,
-        sessionId: current.sessionId,
-        schemaVersion: 1,
-        updatedAt: recordPatch.updatedAt ?? Date.now(),
-      };
-      await kv.put(key, sessionCodec.encode(next));
+      await patchSessionRecord(sessionId, recordPatch);
+    },
+
+    async patchSessionIfGenerationRun(sessionId, expectedGenerationRunId, patch) {
+      const recordPatch: Partial<TtsPlaybackSessionState> = { ...patch };
+      delete recordPatch.cursorOrdinal;
+      delete recordPatch.cursorUpdatedAt;
+      delete recordPatch.playbackActive;
+      return patchSessionRecord(sessionId, recordPatch, expectedGenerationRunId);
     },
 
     async updateCursor(sessionId, ordinal, updatedAt = Date.now()) {
       const kv = await input.getKv();
-      // Pure last-write-wins put on the cursor's own key. No read, no CAS: a
-      // racing writer simply means newest-wins, the correct "where am I now"
-      // semantics for a playhead hint.
+      const sessionEntry = await kv.get(sessionKvKey(sessionId));
+      const sessionExpiresAt = isKvPut(sessionEntry)
+        ? sessionCodec.decode(sessionEntry.value).expiresAt
+        : undefined;
+      // Pure last-write-wins put on the cursor's own key. There is no CAS or
+      // shared session rewrite; the session expiry tag makes stale puts
+      // invisible if a newer canonical session wins while this write races.
       await kv.put(cursorKvKey(sessionId), cursorCodec.encode({
+        ...(sessionExpiresAt === undefined ? {} : { sessionExpiresAt }),
         cursorOrdinal: Math.max(0, Math.floor(ordinal)),
         cursorUpdatedAt: updatedAt,
       }));

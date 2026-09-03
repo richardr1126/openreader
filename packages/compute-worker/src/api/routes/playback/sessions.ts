@@ -215,12 +215,16 @@ export function registerPlaybackJobRoutes(
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
-    await playbackStorage?.sessions.patchSession(parsed.data.sessionId, {
-      workerOpId: op.opId,
-      status: op.status === 'failed' ? 'failed' : op.status === 'succeeded' ? 'succeeded' : 'running',
-      lastError: op.status === 'failed' ? op.error?.message ?? 'Failed to enqueue playback operation' : null,
-      updatedAt: Date.now(),
-    }).catch((error) => {
+    await playbackStorage?.sessions.patchSessionIfGenerationRun(
+      parsed.data.sessionId,
+      parsed.data.generationRunId ?? null,
+      {
+        workerOpId: op.opId,
+        status: op.status === 'failed' ? 'failed' : op.status === 'succeeded' ? 'succeeded' : 'running',
+        lastError: op.status === 'failed' ? op.error?.message ?? 'Failed to enqueue playback operation' : null,
+        updatedAt: Date.now(),
+      },
+    ).catch((error) => {
       app.log.warn(
         { sessionId: parsed.data.sessionId, opId: op.opId, error: toErrorMessage(error) },
         'tts.playback.session_worker_op_patch_failed',

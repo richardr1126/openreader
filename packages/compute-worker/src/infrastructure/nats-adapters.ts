@@ -36,7 +36,7 @@ export interface KvStoreLike {
   keys(filter?: string | string[]): Promise<AsyncIterable<string>>;
 }
 
-function isCasConflictError(error: unknown): boolean {
+export function isKvCasConflictError(error: unknown): boolean {
   const message = toErrorMessage(error).toLowerCase();
   return message.includes('wrong last sequence') || message.includes('key exists') || message.includes('wrong last');
 }
@@ -115,7 +115,7 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
       );
       return true;
     } catch (error) {
-      if (isCasConflictError(error)) return false;
+      if (isKvCasConflictError(error)) return false;
       throw error;
     }
   }
@@ -153,7 +153,7 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
         await kv.create(key, value);
         return true;
       } catch (error) {
-        if (isCasConflictError(error)) return false;
+        if (isKvCasConflictError(error)) return false;
         throw error;
       }
     }
@@ -167,7 +167,7 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
       await kv.update(key, value, current.revision);
       return true;
     } catch (error) {
-      if (isCasConflictError(error)) return false;
+      if (isKvCasConflictError(error)) return false;
       throw error;
     }
   }

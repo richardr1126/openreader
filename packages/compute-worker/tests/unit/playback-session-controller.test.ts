@@ -38,7 +38,10 @@ function playbackSession(overrides: Partial<PlaybackSessionRow> = {}): PlaybackS
   };
 }
 
-function createFixture(initial: PlaybackSessionRow) {
+function createFixture(
+  initial: PlaybackSessionRow,
+  workerOpStatus: 'queued' | 'running' | 'succeeded' | 'failed' = 'succeeded',
+) {
   let session = initial;
   const enqueueOrReuse = vi.fn(async (request: { opKey: string }) => ({
     opId: 'continuation-op',
@@ -53,11 +56,27 @@ function createFixture(initial: PlaybackSessionRow) {
   const patchSession = vi.fn(async (_sessionId: string, patch: Partial<PlaybackSessionRow>) => {
     session = { ...session, ...patch };
   });
+  const patchSessionIfGenerationRun = vi.fn(async (
+    _sessionId: string,
+    expectedGenerationRunId: string | null,
+    patch: Partial<PlaybackSessionRow>,
+  ) => {
+    if ((session.generationRunId ?? null) !== expectedGenerationRunId) return false;
+    session = { ...session, ...patch };
+    return true;
+  });
   const playbackStorage = {
     sessions: {
       async getSession() { return session; },
-      async putSession(next: PlaybackSessionRow) { session = next; },
+      async putSessionIfNewer(next: PlaybackSessionRow) {
+        if (next.expiresAt <= session.expiresAt) {
+          return (next.generationRunId ?? null) === (session.generationRunId ?? null);
+        }
+        session = next;
+        return true;
+      },
       patchSession,
+      patchSessionIfGenerationRun,
       updateCursor,
       async listSessions() { return [session]; },
       async cancelSessionsForScope() { return 0; },
@@ -78,7 +97,7 @@ function createFixture(initial: PlaybackSessionRow) {
     deps: { orchestrator: { enqueueOrReuse } },
     playbackStorage,
     ensureOrphanedOpRecovery: vi.fn(async () => undefined),
-    getOpState: vi.fn(async () => ({ status: 'succeeded' as const })),
+    getOpState: vi.fn(async () => ({ status: workerOpStatus })),
   } as unknown as ComputeWorkerRouteContext;
   return {
     controller: createPlaybackSessionController(context, readModel),
@@ -136,6 +155,22 @@ describe('playback session continuation controller', () => {
     });
   });
 
+  test('does not let a stale continuation supersede a newer generation claim', async () => {
+    const fixture = createFixture(playbackSession({
+      cursorOrdinal: 20,
+      generationRunId: 'active:20',
+    }));
+
+    await fixture.controller.enqueueContinuationIfNeeded(
+      playbackSession({ cursorOrdinal: 12, generationRunId: 'initial:12' }),
+      Date.now(),
+      'cursor',
+    );
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+    expect(fixture.currentSession().generationRunId).toBe('active:20');
+  });
+
   test('refills only after playback crosses the satisfied-window low-water mark', async () => {
     const satisfied = playbackSession({
       generationSatisfiedFromOrdinal: 12,
@@ -148,8 +183,41 @@ describe('playback session continuation controller', () => {
 
     await fixture.controller.enqueueContinuationIfNeeded({
       ...satisfied,
-      cursorOrdinal: 17,
+      cursorOrdinal: 15,
     }, Date.now(), 'cursor');
     expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not supersede active synthesis before it publishes a satisfied window', async () => {
+    const fixture = createFixture(playbackSession(), 'running');
+
+    await fixture.controller.enqueueContinuationIfNeeded(
+      fixture.currentSession(),
+      Date.now(),
+      'cursor',
+    );
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test('refills audio while the active predecessor drains exact alignment', async () => {
+    const fixture = createFixture(playbackSession({
+      cursorOrdinal: 15,
+      generationSatisfiedFromOrdinal: 12,
+      generationSatisfiedThroughOrdinal: 20,
+    }), 'running');
+
+    await fixture.controller.enqueueContinuationIfNeeded(
+      fixture.currentSession(),
+      Date.now(),
+      'cursor',
+    );
+
+    expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    expect(fixture.currentSession()).toMatchObject({
+      generationRunId: 'active:15',
+      generationSatisfiedFromOrdinal: null,
+      generationSatisfiedThroughOrdinal: null,
+    });
   });
 });

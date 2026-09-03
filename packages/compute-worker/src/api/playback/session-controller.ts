@@ -1,7 +1,10 @@
 import { hashOpKey } from '../../infrastructure/nats-adapters';
 import type { WorkerOperationRequest } from '../../operations/contracts';
 import { buildTtsPlaybackOperationKey } from '../../operations/keys';
-import { generationFloorForCursor } from '../../playback/generation-window';
+import {
+  DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW,
+  generationFloorForCursor,
+} from '../../playback/generation-window';
 import { ttsPlaybackOperationCreateSchema } from '../schemas';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import { isTerminalStatus, toErrorMessage } from '../route-context';
@@ -43,8 +46,13 @@ export function createPlaybackSessionController(
     if (session.playbackActive === false) return;
     if (now > session.expiresAt || !session.planObjectKey) return;
     const cursorOrdinal = Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)));
-    const aheadWindow = Math.max(1, Math.floor(Number(session.aheadWindow ?? 8)));
-    const refillThreshold = Math.max(1, Math.floor(aheadWindow / 2));
+    const aheadWindow = Math.max(1, Math.floor(Number(
+      session.aheadWindow ?? DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW,
+    )));
+    // Refill while roughly three quarters of the window remains. Production
+    // queue, object-storage, and provider latency need more runway than the old
+    // half-window low-water mark provided.
+    const refillThreshold = Math.max(1, Math.ceil(aheadWindow * 0.75));
     const satisfiedFrom = session.generationSatisfiedFromOrdinal == null
       ? null
       : Math.max(0, Math.floor(Number(session.generationSatisfiedFromOrdinal)));
@@ -59,6 +67,7 @@ export function createPlaybackSessionController(
       && reason !== 'stream'
     ) return;
 
+    const hasSatisfiedWindow = satisfiedFrom !== null && satisfiedThrough !== null;
     if (session.workerOpId) {
       const current = await getOpState(session.workerOpId).catch((error) => {
         app.log.warn(
@@ -67,7 +76,11 @@ export function createPlaybackSessionController(
         );
         return null;
       });
-      if (current && !isTerminalStatus(current.status)) return;
+      // A nonterminal operation normally owns synthesis. Once it has published
+      // a satisfied window, however, it may only be draining best-effort exact
+      // alignment. Let low-water refill supersede that run so alignment cannot
+      // starve audible audio generation.
+      if (current && !isTerminalStatus(current.status) && !hasSatisfiedWindow) return;
     }
 
     // Cursor heartbeats and audio consumption are two signals for the same
@@ -101,15 +114,25 @@ export function createPlaybackSessionController(
     // Claim the canonical session for this deterministic continuation before
     // enqueueing it. A superseded worker observes the changed run id at its next
     // segment boundary and exits without mutating the new run's terminal state.
-    await playbackStorage.sessions.patchSession(session.sessionId, {
-      generationRunId,
-      updatedAt: now,
-    });
+    const claimed = await playbackStorage.sessions.patchSessionIfGenerationRun(
+      session.sessionId,
+      session.generationRunId ?? null,
+      {
+        generationRunId,
+        generationSatisfiedFromOrdinal: null,
+        generationSatisfiedThroughOrdinal: null,
+        updatedAt: now,
+      },
+    );
     const claimedSession = await readModel.readSession(session.sessionId);
-    if (!claimedSession || claimedSession.playbackActive === false) return;
+    if (
+      !claimedSession
+      || claimedSession.playbackActive === false
+      || claimedSession.generationRunId !== generationRunId
+    ) return;
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp);
-    await playbackStorage.sessions.patchSession(session.sessionId, {
+    await playbackStorage.sessions.patchSessionIfGenerationRun(session.sessionId, generationRunId, {
       status: op.status === 'failed' ? 'failed' : op.status === 'succeeded' ? 'succeeded' : 'running',
       workerOpId: op.opId,
       lastError: op.status === 'failed' ? (op.error?.message ?? 'Failed to enqueue playback continuation') : null,
@@ -125,6 +148,11 @@ export function createPlaybackSessionController(
       opId: op.opId,
       status: op.status,
       reason,
+      cursorOrdinal,
+      aheadWindow,
+      satisfiedFromOrdinal: satisfiedFrom,
+      satisfiedThroughOrdinal: satisfiedThrough,
+      claimReused: !claimed,
       opKeyHash: hashOpKey(requestOp.opKey.trim()).slice(0, 16),
     }, 'tts.playback.resume_enqueued');
   };
@@ -146,7 +174,7 @@ export function createPlaybackSessionController(
     async putSessionState(requestBody, status, workerOpId) {
       const now = Date.now();
       const startOrdinal = Math.max(0, Math.floor(Number(requestBody.planning.selectedOrdinal)));
-      await playbackStorage?.sessions.putSession({
+      await playbackStorage?.sessions.putSessionIfNewer({
         schemaVersion: 1,
         sessionId: requestBody.sessionId,
         userId: requestBody.userId,
