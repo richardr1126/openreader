@@ -133,6 +133,7 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
 
     try {
       let signature = JSON.stringify(initial);
+      let latestUpdatedAt = initial.updatedAt;
       writeSnapshot(initial, sinceEventId > 0 ? sinceEventId : 0);
       if (isTerminalStatus(initial.status)) return reply;
       keepalive = setInterval(() => {
@@ -142,7 +143,9 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
         opId: params.data.opId,
         sinceEventId,
         onEvent: (event) => {
-          if (closed || event.snapshot.opId !== params.data.opId) return;
+          if (closed || event.snapshot.opId !== params.data.opId
+            || event.snapshot.updatedAt < latestUpdatedAt) return;
+          latestUpdatedAt = event.snapshot.updatedAt;
           const nextSignature = JSON.stringify(event.snapshot);
           if (nextSignature !== signature) {
             signature = nextSignature;
@@ -156,7 +159,15 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
           closeStream();
         },
       });
-      await new Promise<void>((resolve) => request.raw.once('close', resolve));
+      // A replayed terminal event may close the response before subscribe()
+      // returns its teardown function. Do not leak that consumer or wait for
+      // a close event that has already happened.
+      if (closed) {
+        unsubscribe();
+        unsubscribe = null;
+      } else {
+        await new Promise<void>((resolve) => request.raw.once('close', resolve));
+      }
     } catch (error) {
       app.log.warn({ opId: params.data.opId, error: toErrorMessage(error) }, 'op events stream loop error');
     } finally {

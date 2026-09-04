@@ -39,10 +39,8 @@ export async function GET(
       throw new Error('TTS playback timeline requires a canonical plan artifact');
     }
 
-    // No explicit window: the worker read model owns the documented bounded
-    // whole-document scan (0..max(highest cached, cursor)+64). Keeping that
-    // policy at the sidecar cache boundary prevents chapter changes from
-    // making already-generated audio disappear from the timeline.
+    // The worker lists existing sidecars across the document, keeping earlier
+    // cached chapters visible without probing every ungenerated ordinal.
     const segments = await listCompletedTtsPlaybackSegments(session);
     const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
       alignment: parseAlignment(segment.alignmentJson),

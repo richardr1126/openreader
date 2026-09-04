@@ -212,7 +212,7 @@ export class ComputeWorkerClient {
     documentVersion?: number;
     readerType?: 'pdf' | 'epub' | 'html';
     namespace: string | null;
-  }): Promise<{
+  }, init?: { signal?: AbortSignal }): Promise<{
     deletedAudioObjects: number;
     deletedSidecarObjects: number;
     deletedPlanObjects: number;
@@ -220,7 +220,7 @@ export class ComputeWorkerClient {
     invalidatedPlaybackSessions: number;
     invalidatedJobOperations: number;
   }> {
-    return this.requestJson('POST', '/v1/tts-playback/cache/clear', input);
+    return this.requestJson('POST', '/v1/tts-playback/cache/clear', input, init);
   }
 
   cleanupUserStorage(input: {

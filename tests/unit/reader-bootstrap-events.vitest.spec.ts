@@ -30,6 +30,41 @@ describe('reader bootstrap aggregate event stream', () => {
     hoisted.resolveReaderBootstrapState.mockReset();
   });
 
+  test('forwards download progress and keepalives without a readiness round trip', async () => {
+    const initial: ReaderBootstrapResolution = {
+      result: { status: 'pending', progress: {
+        kind: 'pdf-parse', phase: 'queued', pagesParsed: 0, totalPages: 0,
+      } },
+      operationId: 'parse-op',
+    };
+    const snapshot = (opId: string, downloadedBytes: number) => (
+      `event: snapshot\ndata: ${JSON.stringify({ snapshot: {
+        opId, status: 'running', progress: {
+          phase: 'download_model', pagesParsed: 0, totalPages: 0,
+          downloadedBytes, totalBytes: 100,
+        },
+      } })}\n\n`
+    );
+    hoisted.openOperationEvents.mockResolvedValue(new Response(
+      snapshot('parse-op', 10) + ': keepalive\n\n'
+      + snapshot('wrong-op', 75) + 'event: snapshot\ndata: invalid\n\n'
+      + snapshot('parse-op', 90),
+    ));
+    // An accidentally reintroduced resolver call must not delay progress.
+    hoisted.resolveReaderBootstrapState.mockImplementation(() => new Promise(() => undefined));
+    const { createReaderBootstrapEventStream } = await import('@/lib/server/reader/bootstrap-events');
+    const body = await new Response(createReaderBootstrapEventStream(
+      new NextRequest('http://localhost/events'), 'doc-1', initial,
+    )).text();
+
+    expect(body).toContain(': keepalive\n\n');
+    const snapshots = body.split('\n').filter((line) => line.startsWith('data: '))
+      .map((line) => JSON.parse(line.slice(6)));
+    expect(snapshots.map((value) => value.progress.downloadedBytes)).toEqual([undefined, 10, 90]);
+    expect(snapshots[2].progress.phase).toBe('downloading-model');
+    expect(hoisted.resolveReaderBootstrapState).not.toHaveBeenCalled();
+  });
+
   test('moves from PDF parse observation to plan observation and emits full snapshots', async () => {
     const initial: ReaderBootstrapResolution = {
       result: {

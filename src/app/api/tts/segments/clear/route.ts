@@ -6,6 +6,7 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 function parseBody(value: unknown): { documentId: string } | null {
   if (!value || typeof value !== 'object') return null;
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       documentVersion: scope.documentVersion,
       readerType: scope.readerType,
       namespace: null,
-    });
+    }, { signal: AbortSignal.timeout(45_000) });
 
     return NextResponse.json({
       documentId: parsed.documentId,
@@ -47,6 +48,12 @@ export async function POST(request: NextRequest) {
       ...cleared,
     });
   } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      logger.warn({ event: 'tts.segments.clear_confirmation_timeout' }, 'Cache cleanup confirmation timed out');
+      return NextResponse.json({
+        error: 'Cleanup confirmation timed out. The cache may already be reset; cleanup may still be running. Reload the reader before trying playback again.',
+      }, { status: 504 });
+    }
     return errorResponse(error, {
       logger,
       event: 'tts.segments.clear_failed',

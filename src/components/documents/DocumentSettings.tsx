@@ -137,6 +137,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId }),
+        signal: AbortSignal.timeout(60_000),
       });
       const payload = (await res.json().catch(() => null)) as ClearSegmentsPayload | null;
       if (!res.ok) {
@@ -160,7 +161,9 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
       }
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to clear cached audio');
+      toast.error(error instanceof Error && error.name === 'TimeoutError'
+        ? 'Cleanup confirmation timed out. The cache may already be reset. Reload the reader before trying playback again.'
+        : error instanceof Error ? error.message : 'Failed to clear cached audio');
     },
   });
   const { mutate: clearSegments, isPending: isClearingSegments } = clearSegmentsMutation;

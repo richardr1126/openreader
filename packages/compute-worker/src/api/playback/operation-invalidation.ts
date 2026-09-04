@@ -35,30 +35,41 @@ export async function invalidatePlaybackOperationsForScope(input: {
     return 0;
   }
 
+  const sessions = new Map<string, Promise<PlaybackSessionRow | null>>();
   const belongsToScope = async (state: StreamedOperationState): Promise<boolean> => {
-    if (state.kind !== 'tts_playback') return operationMatchesPlaybackResetScope(state, scope);
+    if (!operationMatchesPlaybackResetScope(state, scope)) return false;
+    if (state.kind !== 'tts_playback') return true;
     const subject = ttsPlaybackSubjectFromOperationKey(state.opKey);
     if (!subject) return false;
-    const session = await readSession(subject.sessionId).catch(() => null);
+    let pending = sessions.get(subject.sessionId);
+    if (!pending) {
+      pending = readSession(subject.sessionId).catch(() => null);
+      sessions.set(subject.sessionId, pending);
+    }
+    const session = await pending;
     return session?.storageUserId === scope.storageUserId;
   };
 
   const states = await operationStateStore.listOpStates();
   let invalidated = 0;
-  for (const state of states) {
-    if (!await belongsToScope(state)) continue;
-    const record = await operationStateStore.getOpStateRecord(state.opId);
-    if (!record || !await belongsToScope(record.state)) continue;
-    const updated = await orchestrator.markFailedIfUnchanged({
-      current: record.state,
-      expectedRevision: record.revision,
-      error: {
-        message: 'TTS playback cache was cleared',
-        code: 'TTS_PLAYBACK_CACHE_CLEARED',
-      },
-      updatedAt: now,
-    });
-    if (updated) invalidated += 1;
+  const candidates = states.filter((state) => state.status !== 'failed'
+    && operationMatchesPlaybackResetScope(state, scope));
+  for (let index = 0; index < candidates.length; index += 16) {
+    await Promise.all(candidates.slice(index, index + 16).map(async (state) => {
+      if (!await belongsToScope(state)) return;
+      const record = await operationStateStore.getOpStateRecord!(state.opId);
+      if (!record || record.state.status === 'failed' || !await belongsToScope(record.state)) return;
+      const updated = await orchestrator.markFailedIfUnchanged!({
+        current: record.state,
+        expectedRevision: record.revision,
+        error: {
+          message: 'TTS playback cache was cleared',
+          code: 'TTS_PLAYBACK_CACHE_CLEARED',
+        },
+        updatedAt: now,
+      });
+      if (updated) invalidated += 1;
+    }));
   }
   return invalidated;
 }

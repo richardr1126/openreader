@@ -236,10 +236,11 @@ describe('server-state architecture', () => {
     ].sort());
     expect(workerRoutes).not.toContain('/v1/tts-playback/cache/reset');
     expect(workerRoutes).toContain('await playbackStorage.artifacts.incrementScopeEpoch(scope, now)');
-    expect(workerRoutes).toContain('await playbackStorage.sessions.cancelSessionsForScope(scope, now)');
+    expect(workerRoutes).toContain("await timed('cancel_sessions'");
+    expect(workerRoutes).toContain('playbackStorage.sessions.cancelSessionsForScope(scope, now)');
     expect(workerRoutes).toContain('readModel.invalidateSidecarsForScope(scope)');
-    expect(workerRoutes).toContain('await invalidatePlaybackOperationsForScope({');
-    expect(workerRoutes).toContain('await clearTtsPlaybackArtifacts({');
+    expect(workerRoutes).toContain("await timed('invalidate_operations', () => invalidatePlaybackOperationsForScope({");
+    expect(workerRoutes).toContain("await timed('delete_objects', () => clearTtsPlaybackArtifacts({");
     const compositionRoot = source('packages/compute-worker/src/api/routes.ts');
     expect(compositionRoot).toContain('registerPlaybackAudioRoutes(context, playbackReadModel, playbackController)');
     expect(compositionRoot).not.toContain('app.get(');

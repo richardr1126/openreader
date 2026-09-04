@@ -91,6 +91,7 @@ function createFixture(
     },
     artifacts: {
       sidecarKey() { return ''; },
+      async listSegmentOrdinals() { return []; },
       async putSegmentMetadata() { return ''; },
       async readSegmentMetadata() { return null; },
       async getScopeEpoch() { return 0; },

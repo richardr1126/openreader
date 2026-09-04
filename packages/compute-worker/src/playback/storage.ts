@@ -107,6 +107,8 @@ export interface TtsPlaybackSessionStore {
 export interface TtsPlaybackSegmentArtifactStore {
   /** S3 key of one segment's sidecar, addressable directly from the plan ordinal. */
   sidecarKey(input: TtsPlaybackSegmentScope & { ordinal: number }): string;
+  /** Discover stored ordinals without issuing an object-store miss for every ungenerated segment. */
+  listSegmentOrdinals(scope: TtsPlaybackSegmentScope): Promise<number[]>;
   /** Write one segment's sidecar (plain put to its own key — race-free). */
   putSegmentMetadata(metadata: TtsPlaybackSegmentMetadata): Promise<string>;
   /** Read one segment's sidecar by ordinal. Returns null when not yet generated. */
@@ -555,6 +557,17 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
 
   return {
     sidecarKey,
+
+    async listSegmentOrdinals(scope) {
+      const prefix = sidecarKey({ ...scope, ordinal: 0 }).slice(0, -'0.json'.length);
+      const keys = await input.storage.listPrefix(prefix);
+      return [...new Set(keys.flatMap((key) => {
+        if (!key.startsWith(prefix)) return [];
+        const match = /^(\d+)\.json$/.exec(key.slice(prefix.length));
+        const ordinal = match ? Number(match[1]) : NaN;
+        return Number.isSafeInteger(ordinal) ? [ordinal] : [];
+      }))].sort((a, b) => a - b);
+    },
 
     async putSegmentMetadata(metadata) {
       // One segment → one immutable object at its own key. Plain put, no shared

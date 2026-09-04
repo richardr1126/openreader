@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createComputeWorkerApp } from '../../src/api/app';
 import { buildTtsPlaybackOperationKey } from '../../src/operations/keys';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
@@ -405,6 +405,26 @@ describe('compute worker API routes', () => {
     expect(stream.body).toContain('event: snapshot');
     expect(stream.body).toContain('id: 7');
     expect(stream.body).toContain('"status":"succeeded"');
+  });
+
+  test('cleans up a subscription that replays completion before returning its teardown', async () => {
+    const now = Date.now();
+    const initial = {
+      opId: 'op-gap', opKey: 'k-gap', kind: 'pdf_layout' as const,
+      jobId: 'job-gap', status: 'running' as const, queuedAt: now, updatedAt: now,
+    };
+    fake.seedState(initial);
+    const stop = vi.fn();
+    vi.spyOn(fake.deps.operationEventStream, 'subscribe').mockImplementationOnce(async ({ onEvent }) => {
+      await onEvent({ eventId: 1, snapshot: { ...initial, status: 'queued', updatedAt: now - 1 } });
+      await onEvent({ eventId: 2, snapshot: { ...initial, status: 'succeeded', updatedAt: now + 1 } });
+      return stop;
+    });
+    const stream = await runtime.app.inject({ method: 'GET', url: '/v1/operations/op-gap/events', headers: AUTH });
+    expect(stream.body).toContain('"status":"running"');
+    expect(stream.body).toContain('"status":"succeeded"');
+    expect(stream.body).not.toContain('"status":"queued"');
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
   });
 
   test('streams TTS playback completed-count progress in SSE snapshots', async () => {

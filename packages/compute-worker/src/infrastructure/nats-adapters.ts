@@ -124,12 +124,16 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
 
   async listOpStates(): Promise<OperationState<Result>[]> {
     const kv = await this.getKv();
-    const keys = await kv.keys('op_state.*');
+    const keys: string[] = [];
+    for await (const key of await kv.keys('op_state.*')) keys.push(key);
     const states: OperationState<Result>[] = [];
-    for await (const key of keys) {
-      const entry = await kv.get(key);
-      if (!isPut(entry)) continue;
-      states.push(this.opStateCodec.decode(entry.value));
+    // Remote NATS round trips dominate this scan in production. Bound the
+    // fan-out instead of serializing every historical operation read.
+    for (let index = 0; index < keys.length; index += 32) {
+      const entries = await Promise.all(keys.slice(index, index + 32).map((key) => kv.get(key)));
+      for (const entry of entries) {
+        if (isPut(entry)) states.push(this.opStateCodec.decode(entry.value));
+      }
     }
     return states;
   }
@@ -219,7 +223,10 @@ export class JetStreamOperationEventStream<Result = unknown> implements Operatio
     const config = {
       name,
       ack_policy: AckPolicy.None,
-      deliver_policy: since > 0 ? DeliverPolicy.StartSequence : (input.replayOnly ? DeliverPolicy.All : DeliverPolicy.New),
+      // The HTTP route reads its initial snapshot before creating this
+      // consumer. Replay the latest event for this subject to cover a job
+      // finishing in that gap; New would lose the terminal update forever.
+      deliver_policy: since > 0 ? DeliverPolicy.StartSequence : (input.replayOnly ? DeliverPolicy.All : DeliverPolicy.Last),
       replay_policy: ReplayPolicy.Instant,
       filter_subject: subject,
       max_deliver: 1,

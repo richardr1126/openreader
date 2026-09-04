@@ -130,6 +130,17 @@ class WatchableMemoryKv extends MemoryKv {
 }
 
 describe('TTS playback storage', () => {
+  test('lists existing segment ordinals only within the exact artifact scope', async () => {
+    const storage = new MemoryStorage();
+    const artifacts = createTtsPlaybackSegmentArtifactStore({ storage, s3Prefix: 'openreader' });
+    const scope = { storageUserId: 'user-1', documentId: 'a'.repeat(64), documentVersion: 1, settingsHash: 'settings-1' };
+    await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 9000 }), Buffer.from('{}'));
+    await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 2 }), Buffer.from('{}'));
+    await storage.putObject(artifacts.sidecarKey({ ...scope, settingsHash: 'other-settings', ordinal: 3 }), Buffer.from('{}'));
+    await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 4 }) + '.tmp', Buffer.from('{}'));
+    expect(await artifacts.listSegmentOrdinals(scope)).toEqual([2, 9000]);
+  });
+
   test('stores sessions and updates cursors in KV', async () => {
     const kv = new MemoryKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });

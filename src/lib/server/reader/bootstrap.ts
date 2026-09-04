@@ -19,7 +19,6 @@ import type { BaseDocument } from '@/types/documents';
 import type { DocumentProgressRecord } from '@/types/user-state';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type {
-  ReaderBootstrapProgress,
   ReaderBootstrapResult,
   ReaderPayload,
 } from '@/types/reader-bootstrap';
@@ -36,8 +35,6 @@ import {
   isComputeWorkerAvailable,
 } from '@/lib/server/compute-worker/client';
 import type {
-  ComputeOperation,
-  PdfLayoutResult,
   TtsPlaybackPlanResult,
 } from '@/lib/server/compute-worker/protocol';
 import {
@@ -48,7 +45,6 @@ import {
 } from '@/lib/server/pdf-parse/operation';
 import {
   isCurrentPdfParseOperationAuthoritative,
-  pdfParseSnapshotFromWorkerState,
 } from '@/lib/server/pdf-parse/snapshot';
 import {
   checkJobRate,
@@ -72,6 +68,7 @@ import {
   type PreferenceNormalizationContext,
 } from '@/lib/server/user/preferences-normalize';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
+import { resolvePdfOperationReadiness } from './bootstrap-progress';
 
 type DocumentRow = {
   id: string;
@@ -134,57 +131,6 @@ function toProgress(row: {
   return null;
 }
 
-function pendingPdfProgress(
-  status: 'pending' | 'running',
-  progress: {
-    phase: 'download_model' | 'infer' | 'merge';
-    pagesParsed: number;
-    totalPages: number;
-    downloadedBytes?: number;
-    totalBytes?: number;
-  } | null,
-): ReaderBootstrapProgress {
-  return {
-    kind: 'pdf-parse',
-    phase: status === 'pending'
-      ? 'queued'
-      : progress?.phase === 'download_model'
-        ? 'downloading-model'
-        : progress?.phase === 'merge' ? 'merging' : 'parsing',
-    pagesParsed: Math.max(0, Number(progress?.pagesParsed ?? 0)),
-    totalPages: Math.max(0, Number(progress?.totalPages ?? 0)),
-    ...(progress?.phase === 'download_model' ? {
-      downloadedBytes: Math.max(0, Number(progress.downloadedBytes ?? 0)),
-      totalBytes: Math.max(0, Number(progress.totalBytes ?? 0)),
-    } : {}),
-  };
-}
-
-function resolvePdfOperationReadiness(
-  operation: ComputeOperation<PdfLayoutResult>,
-): ReaderBootstrapResolution | null {
-  const snapshot = pdfParseSnapshotFromWorkerState(operation);
-  if (snapshot.parseStatus === 'ready') return null;
-  if (snapshot.parseStatus === 'failed') {
-    return {
-      result: {
-        status: 'error',
-        message: snapshot.error || 'PDF structure could not be prepared.',
-        retryable: true,
-      },
-    };
-  }
-  return {
-    result: {
-      status: 'pending',
-      progress: pendingPdfProgress(
-        snapshot.parseStatus === 'running' ? 'running' : 'pending',
-        snapshot.parseProgress,
-      ),
-    },
-    operationId: operation.opId,
-  };
-}
 
 async function ensurePdfReady(
   documentId: string,
