@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { createCoalescedPlaybackRefresh, createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
+import { createCoalescedPlaybackRefresh, createPlaybackTimelineLoader, createPlaybackOperationSubscription } from '@/lib/client/tts/playback-refresh';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -8,6 +8,29 @@ function deferred<T>() {
 }
 
 describe('playback read-model delivery under network delay', () => {
+  test('follows refill operations once and ignores late events after replacement or pause', () => {
+    const callbacks = new Map<string, (snapshot: string) => void>();
+    const close = vi.fn();
+    const subscribe = vi.fn((id: string, onSnapshot: (snapshot: string) => void) => {
+      callbacks.set(id, onSnapshot);
+      return close;
+    });
+    const onSnapshot = vi.fn();
+    const events = createPlaybackOperationSubscription({ subscribe, onSnapshot });
+    events.update('first');
+    events.update('first');
+    callbacks.get('first')!('initial timing');
+    events.update('refill');
+    callbacks.get('first')!('stale model download');
+    callbacks.get('refill')!('new exact timing');
+    events.stop();
+    callbacks.get('refill')!('late after pause');
+    events.update('after-stop');
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(onSnapshot.mock.calls.flat()).toEqual(['initial timing', 'new exact timing']);
+  });
+
   test('shares slow timeline reads and fetches exact timing on the next refresh', async () => {
     const slow = deferred<string>();
     const session = { timelineUrl: '/timeline' };

@@ -1,4 +1,5 @@
 import { buildTtsPlaybackCanonicalSessionId } from '@openreader/tts/playback-scope';
+import { resolveTtsPlaybackSessionInstanceId } from '../../../playback/storage';
 import { hashOpKey } from '../../../infrastructure/nats-adapters';
 import type { WorkerOperationRequest } from '../../../operations/contracts';
 import {
@@ -30,6 +31,35 @@ export function registerPlaybackSessionRoutes(
   controller: PlaybackSessionController,
 ): void {
   const { app, playbackStorage, getOpState } = context;
+
+  // A dropped/cancelled creation response must not leave synthesis running.
+  // The browser activates this instance only after accepting the response.
+  app.post('/v1/tts-playback/sessions/prepare', {
+    schema: {
+      body: jsonSchema(ttsPlaybackOperationCreateSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: { sessionId: { type: 'string' }, sessionInstanceId: { type: 'string' } },
+          required: ['sessionId', 'sessionInstanceId'], additionalProperties: false,
+        },
+        400: errorResponseSchema, 409: errorResponseSchema, 503: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackOperationCreateSchema.safeParse(request.body);
+    if (!parsed.success || parsed.data.planning.selectedOrdinal === undefined
+      || !parsed.data.generationRunId || parsed.data.generationExtent === 'document') {
+      return reply.code(400).send({ error: 'Live preparation requires a start ordinal and generation identity' });
+    }
+    if (!playbackStorage) return reply.code(503).send({ error: 'TTS playback storage is unavailable' });
+    await controller.putSessionState(parsed.data, 'queued', null, false);
+    const session = await readModel.readSession(parsed.data.sessionId);
+    if (!session || session.generationRunId !== parsed.data.generationRunId) {
+      return reply.code(409).send({ error: 'Playback preparation was superseded' });
+    }
+    return { sessionId: session.sessionId, sessionInstanceId: resolveTtsPlaybackSessionInstanceId(session) };
+  });
 
   app.post('/v1/tts-playback/sessions/resolve', {
     schema: {
@@ -139,7 +169,7 @@ export function registerPlaybackSessionRoutes(
         required: ['sessionId'],
       },
       body: jsonSchema(ttsPlaybackCursorUpdateSchema),
-      response: { 400: errorResponseSchema, 404: errorResponseSchema },
+      response: { 400: errorResponseSchema, 404: errorResponseSchema, 409: errorResponseSchema },
     },
   }, async (request, reply) => {
     const sessionId = (request.params as { sessionId?: string }).sessionId?.trim() ?? '';
@@ -158,6 +188,10 @@ export function registerPlaybackSessionRoutes(
       return { error: 'Playback session not found' };
     }
     const now = Date.now();
+    const sessionInstanceId = resolveTtsPlaybackSessionInstanceId(session);
+    if (parsed.data.sessionInstanceId !== undefined && parsed.data.sessionInstanceId !== sessionInstanceId) {
+      return reply.code(409).send({ error: 'Playback session was replaced' });
+    }
     await playbackStorage?.sessions.patchSession(sessionId, {
       cursorOrdinal: parsed.data.ordinal,
       cursorUpdatedAt: now,
@@ -166,20 +200,21 @@ export function registerPlaybackSessionRoutes(
         : { playbackActive: parsed.data.playbackActive }),
       ...(parsed.data.expiresAt === undefined ? {} : { expiresAt: parsed.data.expiresAt }),
       updatedAt: now,
-    });
-    const nextSession = {
-      ...session,
-      cursorOrdinal: parsed.data.ordinal,
-      cursorUpdatedAt: now,
-      playbackActive: parsed.data.playbackActive ?? session.playbackActive,
-      expiresAt: parsed.data.expiresAt ?? session.expiresAt,
-      updatedAt: now,
-    };
+    }, sessionInstanceId);
+    const nextSession = await readModel.readSession(sessionId);
+    if (!nextSession || resolveTtsPlaybackSessionInstanceId(nextSession) !== sessionInstanceId) {
+      return reply.code(409).send({ error: 'Playback session was replaced' });
+    }
     if (nextSession.playbackActive !== false) {
       await controller.enqueueContinuationIfNeeded(nextSession, now, 'cursor');
     }
+    const currentSession = await readModel.readSession(sessionId);
+    if (!currentSession || resolveTtsPlaybackSessionInstanceId(currentSession) !== sessionInstanceId) {
+      return reply.code(409).send({ error: 'Playback session was replaced' });
+    }
     return {
       sessionId,
+      workerOpId: currentSession?.workerOpId ?? null,
       cursorOrdinal: parsed.data.ordinal,
       playbackActive: nextSession.playbackActive !== false,
       expiresAt: parsed.data.expiresAt ?? session.expiresAt,

@@ -135,6 +135,12 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/plans/jobs', input);
   }
 
+  prepareTtsPlaybackSession(input: TtsPlaybackRequest, init?: { signal?: AbortSignal }): Promise<{
+    sessionId: string; sessionInstanceId: string;
+  }> {
+    return this.requestJson('POST', '/v1/tts-playback/sessions/prepare', input, init);
+  }
+
   createTtsPlaybackExportArtifactOperation(input: TtsPlaybackExportArtifactRequest): Promise<ComputeOperation> {
     return this.requestJson('POST', '/v1/tts-playback/exports/jobs', input);
   }
@@ -195,11 +201,13 @@ export class ComputeWorkerClient {
 
   updateTtsPlaybackCursor(input: {
     sessionId: string;
+    sessionInstanceId?: string;
     ordinal: number;
     playbackActive?: boolean;
     expiresAt?: number;
-  }): Promise<{ sessionId: string; cursorOrdinal: number; playbackActive: boolean; expiresAt: number }> {
+  }): Promise<{ sessionId: string; cursorOrdinal: number; playbackActive: boolean; expiresAt: number; workerOpId: string | null }> {
     return this.requestJson('PUT', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/cursor`, {
+      ...(input.sessionInstanceId === undefined ? {} : { sessionInstanceId: input.sessionInstanceId }),
       ordinal: input.ordinal,
       ...(input.playbackActive === undefined ? {} : { playbackActive: input.playbackActive }),
       ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),

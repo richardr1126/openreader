@@ -134,6 +134,7 @@ export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSc
 }).strict();
 
 export const ttsPlaybackCursorUpdateSchema = z.object({
+  sessionInstanceId: z.string().trim().min(1).max(256).optional(),
   ordinal: z.number().int().nonnegative(),
   playbackActive: z.boolean().optional(),
   expiresAt: z.number().int().positive().optional(),

@@ -4415,6 +4415,254 @@
         }
       }
     },
+    "/v1/tts-playback/sessions/prepare": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "readerType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub",
+                      "html"
+                    ]
+                  },
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "settingsJson": {},
+                  "planning": {
+                    "type": "object",
+                    "properties": {
+                      "selectedOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxBlockLength": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 20000
+                      },
+                      "enforceSourceBoundaries": {
+                        "type": "boolean"
+                      },
+                      "language": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32
+                      },
+                      "documentSource": {
+                        "type": "object",
+                        "properties": {
+                          "namespace": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "skipBlockKinds": {
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "extent": {
+                            "type": "string",
+                            "enum": [
+                              "section",
+                              "document"
+                            ]
+                          },
+                          "isPlainText": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "namespace",
+                          "extent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "planObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "generationRunId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "aheadWindow": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 4096
+                  },
+                  "backgroundExtent": {
+                    "type": "string",
+                    "enum": [
+                      "section",
+                      "document"
+                    ]
+                  },
+                  "generationExtent": {
+                    "type": "string",
+                    "enum": [
+                      "window",
+                      "document"
+                    ]
+                  }
+                },
+                "required": [
+                  "userId",
+                  "storageUserId",
+                  "documentId",
+                  "documentVersion",
+                  "readerType",
+                  "settingsHash",
+                  "settingsJson",
+                  "planning",
+                  "sessionId",
+                  "planObjectKey"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "sessionInstanceId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "sessionInstanceId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tts-playback/sessions/resolve": {
       "post": {
         "requestBody": {
@@ -5148,6 +5396,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "sessionInstanceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "ordinal": {
                     "type": "integer",
                     "minimum": 0,
@@ -5201,6 +5454,25 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {

@@ -16,6 +16,7 @@ import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh'
 
 export type PlaybackSessionState = {
   sessionId: string;
+  sessionInstanceId?: string;
   audioUrl: string;
   timelineUrl: string;
   seekLayoutUrl?: string;

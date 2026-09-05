@@ -25,6 +25,7 @@ export const createTtsPlaybackSession = async (
   signal?: AbortSignal,
 ): Promise<{
   sessionId: string;
+  sessionInstanceId?: string;
   operation: unknown;
   audioUrl: string;
   timelineUrl: string;
@@ -277,8 +278,10 @@ export const subscribeTtsPlaybackEvents = (
     onSnapshot: (snapshot: TtsPlaybackEventSnapshot) => void;
     onError?: (error: Event) => void;
   },
+  operationId?: string,
 ): (() => void) => {
-  const source = new EventSource(`/api/tts/stream/${encodeURIComponent(sessionId)}/events`);
+  const suffix = operationId ? `?operationId=${encodeURIComponent(operationId)}` : '';
+  const source = new EventSource(`/api/tts/stream/${encodeURIComponent(sessionId)}/events${suffix}`);
   source.addEventListener('snapshot', (event) => {
     if (!(event instanceof MessageEvent)) return;
     try {
@@ -455,18 +458,24 @@ export const postTtsPlaybackCursor = async (
   sessionId: string,
   ordinal: number,
   headers: TTSRequestHeaders,
-  options?: { keepalive?: boolean; signal?: AbortSignal; playbackActive?: boolean },
-): Promise<void> => {
-  await fetch(`/api/tts/stream/${encodeURIComponent(sessionId)}/cursor`, {
+  options?: { keepalive?: boolean; signal?: AbortSignal; playbackActive?: boolean; sessionInstanceId?: string; requireAcknowledgement?: boolean },
+): Promise<{ workerOpId: string | null } | null> => {
+  const response = await fetch(`/api/tts/stream/${encodeURIComponent(sessionId)}/cursor`, {
     method: 'POST',
     headers: headers as HeadersInit,
     body: JSON.stringify({
       ordinal,
+      ...(options?.sessionInstanceId === undefined ? {} : { sessionInstanceId: options.sessionInstanceId }),
       ...(options?.playbackActive === undefined
         ? {}
         : { playbackActive: options.playbackActive }),
     }),
     keepalive: options?.keepalive ?? false,
-    signal: options?.signal,
-  }).catch(() => undefined);
+    signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(options?.signal ? [options.signal] : [])]),
+  }).catch(() => null);
+  if (!response?.ok) {
+    if (options?.requireAcknowledgement) throw new Error('Playback activation could not be confirmed');
+    return null;
+  }
+  return response.json().catch(() => null);
 };

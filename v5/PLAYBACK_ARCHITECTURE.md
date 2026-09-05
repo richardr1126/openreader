@@ -1713,3 +1713,33 @@ Follow-up investigation: rapid cancellation before the session-creation response
 arrives produced aborted HTTP requests alongside queued synthesis in local logs.
 Verify cancellation ownership across that boundary separately; this patch does
 not change session-creation cancellation semantics.
+
+### Step 28 — Playback cancellation and stalled-stream recovery
+
+The production playback follow-up exposed three independent failure modes:
+
+- Live sessions are now prepared inactive and enqueue no synthesis. The browser
+  activates the exact session incarnation only after receiving and accepting the
+  preparation response. Abandoned requests therefore remain inert, and a delayed
+  pause/start from a replaced incarnation is rejected.
+- Refill identity includes the predecessor generation run. Concurrent cursor and
+  audio signals still collapse onto one idempotent job, while a later visit to the
+  same cursor cannot reuse a partial job that stopped successfully on pause.
+- The cursor heartbeat returns the current worker operation and retargets the
+  operation-scoped SSE subscription when refill begins. This preserves exact-word
+  timing and readiness delivery without adding another polling loop.
+- A five-second local media-clock watchdog reconnects only when the existing SSE
+  read model already proves enough contiguous cached audio is ready. It reopens
+  the same canonical session at the current ordinal, preserving the cache and
+  projected document time. Two unsuccessful reconnects pause with an actionable
+  error instead of spinning or creating replacement sessions.
+- The worker audio response uses byte-mode backpressure with a 64 KiB high-water
+  mark; it no longer permits Node to queue sixteen whole segment buffers merely
+  because an async generator yields Buffer objects.
+
+Focused coverage locks cancellation before activation, incarnation ordering,
+same-cursor refill identity, SSE operation replacement, and bounded same-session
+media recovery. Local verification passed 133 Vitest files / 669 tests, application
+and worker type checks, the production build and bundle/boundary guards, and the
+complete 24-case Chromium/WebKit matrix with both true-audio journeys. Production
+network validation remains the final deployment check for this step.

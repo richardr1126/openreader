@@ -39,6 +39,12 @@ export async function GET(
     if (!session.workerOpId) {
       return NextResponse.json({ error: 'Playback session has no worker operation yet' }, { status: 409 });
     }
+    const operationId = request.nextUrl.searchParams.get('operationId');
+    if (operationId && operationId !== session.workerOpId) {
+      // Event IDs belong to an operation. Never replay an old operation's
+      // Last-Event-ID against its successor; the cursor response retargets SSE.
+      return NextResponse.json({ error: 'Playback operation was replaced' }, { status: 409 });
+    }
 
     return await proxyOperationEvents({
       request,

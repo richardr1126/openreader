@@ -194,6 +194,12 @@ describe('TTS playback storage', () => {
     });
 
     await store.patchSession('session-1', { status: 'running', updatedAt: 400 });
+    await store.patchSession('session-1', {
+      playbackActive: true, cursorOrdinal: 99, cursorUpdatedAt: 450, expiresAt: 9999,
+    }, 'replaced-instance');
+    expect(await store.getSession('session-1')).toMatchObject({
+      playbackActive: false, cursorOrdinal: 42, expiresAt: 1234,
+    });
     await store.updateCursor('session-1', 43, 'instance-1', 500);
     expect(await store.getSession('session-1')).toMatchObject({
       status: 'running',

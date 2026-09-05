@@ -230,6 +230,7 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/plans/clear',
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
+      'POST /v1/tts-playback/sessions/prepare',
       'POST /v1/tts-playback/sessions/resolve',
       'POST /v1/user-storage/cleanup',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
@@ -491,7 +492,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");
     expect(workerRoutes).not.toContain("/v1/tts-playback/:sessionId/audio");
     expect(workerRoutes).not.toContain("/v1/tts-playback-plans/operations");
-    expect(workerRoutes).toContain('Readable.from(streamRange())');
+    expect(workerRoutes).toContain("Readable.from(streamRange(), { objectMode: false, highWaterMark: 64 * 1024 })");
     // The audio stream is seekable (range-capable + finite Content-Length) so the
     // browser honors post-generation playbackRate, including on Safari.
     expect(workerRoutes).toContain("reply.header('Accept-Ranges', 'bytes')");

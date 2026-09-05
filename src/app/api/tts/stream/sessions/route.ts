@@ -111,7 +111,8 @@ export async function POST(request: NextRequest) {
       planObjectKey,
       purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live',
     });
-    const operation = await new ComputeWorkerClient().createTtsPlaybackOperation({
+    const client = new ComputeWorkerClient();
+    const workerRequest = {
       sessionId,
       userId: scope.userId,
       storageUserId: scope.storageUserId,
@@ -128,14 +129,19 @@ export async function POST(request: NextRequest) {
       backgroundExtent,
       ...(parsed.generationExtent === 'document'
         ? {}
-        : { generationRunId: `initial:${selectedOrdinal}` }),
+        : { generationRunId: `prepared:${expiresAt}:${selectedOrdinal}` }),
       ...(parsed.generationExtent === 'document' ? { generationExtent: 'document' as const } : {}),
       planning,
-    }, { signal: request.signal });
+    };
+    const prepared = parsed.generationExtent === 'document' ? null
+      : await client.prepareTtsPlaybackSession(workerRequest, { signal: request.signal });
+    const operation = parsed.generationExtent === 'document'
+      ? await client.createTtsPlaybackOperation(workerRequest, { signal: request.signal }) : null;
 
     const responseBase = {
       sessionId,
       operation,
+      ...(prepared ? { sessionInstanceId: prepared.sessionInstanceId } : {}),
       timelineUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/timeline`,
       eventsUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/events`,
       seekLayoutUrl: parsed.planId
