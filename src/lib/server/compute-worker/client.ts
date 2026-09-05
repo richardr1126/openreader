@@ -10,6 +10,9 @@ import type {
   AccountExportResolveRequest,
   AccountExportResolution,
   TtsPlaybackRequest,
+  TtsPlaybackSessionPrepareRequest,
+  TtsPlaybackSessionPrepareResponse,
+  TtsPlaybackCursorResponse,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
   TtsPlaybackPlanRequest,
@@ -135,9 +138,10 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/plans/jobs', input);
   }
 
-  prepareTtsPlaybackSession(input: TtsPlaybackRequest, init?: { signal?: AbortSignal }): Promise<{
-    sessionId: string; sessionInstanceId: string;
-  }> {
+  prepareTtsPlaybackSession(
+    input: TtsPlaybackSessionPrepareRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<TtsPlaybackSessionPrepareResponse> {
     return this.requestJson('POST', '/v1/tts-playback/sessions/prepare', input, init);
   }
 
@@ -205,7 +209,7 @@ export class ComputeWorkerClient {
     ordinal: number;
     playbackActive?: boolean;
     expiresAt?: number;
-  }): Promise<{ sessionId: string; cursorOrdinal: number; playbackActive: boolean; expiresAt: number; workerOpId: string | null }> {
+  }): Promise<TtsPlaybackCursorResponse> {
     return this.requestJson('PUT', `/v1/tts-playback/sessions/${encodeURIComponent(input.sessionId)}/cursor`, {
       ...(input.sessionInstanceId === undefined ? {} : { sessionInstanceId: input.sessionInstanceId }),
       ordinal: input.ordinal,

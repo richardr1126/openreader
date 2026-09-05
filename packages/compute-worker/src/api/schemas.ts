@@ -133,12 +133,24 @@ export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSc
   generationExtent: z.enum(['window', 'document']).optional(),
 }).strict();
 
+export const ttsPlaybackSessionPrepareSchema = ttsPlaybackOperationCreateSchema.extend({
+  generationRunId: z.string().trim().min(1).max(128),
+}).strict();
+
 export const ttsPlaybackCursorUpdateSchema = z.object({
   sessionInstanceId: z.string().trim().min(1).max(256).optional(),
   ordinal: z.number().int().nonnegative(),
   playbackActive: z.boolean().optional(),
   expiresAt: z.number().int().positive().optional(),
 });
+
+export const ttsPlaybackCursorResponseSchema = z.object({
+  sessionId: z.string().trim().min(1).max(128),
+  workerOpId: z.string().trim().min(1).nullable(),
+  cursorOrdinal: z.number().int().nonnegative(),
+  playbackActive: z.boolean(),
+  expiresAt: z.number().int().positive(),
+}).strict();
 
 export const ttsPlaybackCacheClearSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),

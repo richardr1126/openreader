@@ -35,9 +35,20 @@ export function createPlaybackTimelineLoader<T>(input: {
     session: ReturnType<typeof input.getSession>;
     controller: AbortController;
     signal: AbortSignal;
+    scopeSignal?: AbortSignal;
     promise?: Promise<T>;
   };
   let active: Read | null = null;
+  const waitForRead = (promise: Promise<T>, signal: AbortSignal): Promise<void> => {
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      void promise.then(() => resolve(), () => resolve()).finally(() => {
+        signal.removeEventListener('abort', onAbort);
+      });
+    });
+  };
   const reset = () => {
     active?.controller.abort();
     active = null;
@@ -46,13 +57,23 @@ export function createPlaybackTimelineLoader<T>(input: {
     const runId = input.getRunId();
     const session = input.getSession();
     if (active?.url === url && active.runId === runId && active.session === session
-      && !active.signal.aborted && active.promise) return active.promise;
+      && !active.signal.aborted && active.promise) {
+      if (active.scopeSignal === signal || (active.scopeSignal !== undefined && signal === undefined)) {
+        return active.promise;
+      }
+      if (active.scopeSignal === undefined && signal !== undefined) {
+        // Do not abort a startup/timing-heal read that another caller awaits.
+        // The foreground subscriber still gets one exact trailing read, and
+        // its own stop signal can cancel the wait before that read starts.
+        return waitForRead(active.promise, signal).then(() => refresh(url, signal));
+      }
+    }
     reset();
     const controller = new AbortController();
     const combinedSignal = AbortSignal.any([
       controller.signal, AbortSignal.timeout(30_000), ...(signal ? [signal] : []),
     ]);
-    const read: Read = { url, runId, session, controller, signal: combinedSignal };
+    const read: Read = { url, runId, session, controller, signal: combinedSignal, scopeSignal: signal };
     active = read;
     read.promise = (async () => {
       try {

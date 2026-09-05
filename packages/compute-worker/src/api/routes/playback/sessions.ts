@@ -16,10 +16,12 @@ import {
   apiErrorResponseSchema,
   computeOperationSchema,
   jsonSchema,
+  ttsPlaybackCursorResponseSchema,
   ttsPlaybackCursorUpdateSchema,
   ttsPlaybackOperationCreateSchema,
   ttsPlaybackPlanOperationCreateSchema,
   ttsPlaybackSessionResolutionSchema,
+  ttsPlaybackSessionPrepareSchema,
   ttsPlaybackSessionResolveSchema,
 } from '../../schemas';
 
@@ -36,7 +38,7 @@ export function registerPlaybackSessionRoutes(
   // The browser activates this instance only after accepting the response.
   app.post('/v1/tts-playback/sessions/prepare', {
     schema: {
-      body: jsonSchema(ttsPlaybackOperationCreateSchema),
+      body: jsonSchema(ttsPlaybackSessionPrepareSchema),
       response: {
         200: {
           type: 'object',
@@ -47,9 +49,9 @@ export function registerPlaybackSessionRoutes(
       },
     },
   }, async (request, reply) => {
-    const parsed = ttsPlaybackOperationCreateSchema.safeParse(request.body);
+    const parsed = ttsPlaybackSessionPrepareSchema.safeParse(request.body);
     if (!parsed.success || parsed.data.planning.selectedOrdinal === undefined
-      || !parsed.data.generationRunId || parsed.data.generationExtent === 'document') {
+      || parsed.data.generationExtent === 'document') {
       return reply.code(400).send({ error: 'Live preparation requires a start ordinal and generation identity' });
     }
     if (!playbackStorage) return reply.code(503).send({ error: 'TTS playback storage is unavailable' });
@@ -169,7 +171,12 @@ export function registerPlaybackSessionRoutes(
         required: ['sessionId'],
       },
       body: jsonSchema(ttsPlaybackCursorUpdateSchema),
-      response: { 400: errorResponseSchema, 404: errorResponseSchema, 409: errorResponseSchema },
+      response: {
+        200: jsonSchema(ttsPlaybackCursorResponseSchema),
+        400: errorResponseSchema,
+        404: errorResponseSchema,
+        409: errorResponseSchema,
+      },
     },
   }, async (request, reply) => {
     const sessionId = (request.params as { sessionId?: string }).sessionId?.trim() ?? '';

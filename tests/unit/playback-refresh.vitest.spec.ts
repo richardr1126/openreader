@@ -91,6 +91,46 @@ describe('playback read-model delivery under network delay', () => {
     expect(apply.mock.calls.map(([value]) => value)).toEqual(['resumed']);
   });
 
+  test('follows an unscoped timing-heal read with the foreground abortable refresh', async () => {
+    const slow = deferred<string>();
+    const foreground = deferred<string>();
+    const session = { timelineUrl: '/timeline' };
+    const load = vi.fn().mockReturnValueOnce(slow.promise).mockReturnValueOnce(foreground.promise);
+    const apply = vi.fn();
+    const loader = createPlaybackTimelineLoader({ load, apply, getRunId: () => 1, getSession: () => session });
+    const timingHeal = loader.refresh('/timeline');
+    const controller = new AbortController();
+    const exact = loader.refresh('/timeline', controller.signal);
+    expect(exact).not.toBe(timingHeal);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0][1].aborted).toBe(false);
+    slow.resolve('proportional');
+    await timingHeal;
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    controller.abort();
+    expect(load.mock.calls[1][1].aborted).toBe(true);
+    foreground.resolve('exact');
+    await exact;
+    expect(apply.mock.calls.map(([value]) => value)).toEqual(['proportional']);
+  });
+
+  test('foreground stop cancels a trailing refresh before an unscoped read settles', async () => {
+    const slow = deferred<string>();
+    const session = { timelineUrl: '/timeline' };
+    const load = vi.fn().mockReturnValue(slow.promise);
+    const loader = createPlaybackTimelineLoader({
+      load, apply: vi.fn(), getRunId: () => 1, getSession: () => session,
+    });
+    const timingHeal = loader.refresh('/timeline');
+    const controller = new AbortController();
+    const exact = loader.refresh('/timeline', controller.signal);
+    controller.abort(new DOMException('Stopped', 'AbortError'));
+    await expect(exact).rejects.toMatchObject({ name: 'AbortError' });
+    slow.resolve('proportional');
+    await timingHeal;
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   test('coalesces SSE bursts but preserves a trailing exact-timing refresh', async () => {
     const first = deferred<void>();
     const second = deferred<void>();

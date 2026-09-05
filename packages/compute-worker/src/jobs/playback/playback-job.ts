@@ -6,6 +6,7 @@ import {
 import { resolveTtsPlaybackSessionInstanceId } from '../../playback/storage';
 import type { JobHandlerContext } from '../context';
 import { createModelDownloadProgressReporter } from '../model-download-progress';
+import { toErrorMessage } from '../../infrastructure/errors';
 import { resolveAndPersistTtsPlaybackPlan } from './plan';
 import { generateExplicitTtsPlaybackSegments } from './segment-generation';
 import { ttsPlaybackRequestSchema } from './schemas';
@@ -121,7 +122,13 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const plannedOrdinals = new Set(plannedSegments.map((segment) => segment.ordinal));
       // Discover existing cache entries instead of issuing an S3 GET for every
       // segment in the book before the requested segment can start synthesis.
-      const cachedOrdinals = (await playbackStorage.artifacts.listSegmentOrdinals(parsed))
+      const cachedOrdinals = (await playbackStorage.artifacts.listSegmentOrdinals(parsed).catch((error) => {
+        input.logger?.warn({
+          sessionId: parsed.sessionId,
+          error: toErrorMessage(error),
+        }, 'tts.playback.cache_catalogue_read_failed');
+        return [];
+      }))
         .filter((ordinal) => plannedOrdinals.has(ordinal));
       for (let index = 0; index < cachedOrdinals.length; index += 32) {
         const sidecars = await Promise.all(cachedOrdinals.slice(index, index + 32).map((ordinal) =>

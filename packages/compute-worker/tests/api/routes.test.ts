@@ -427,6 +427,30 @@ describe('compute worker API routes', () => {
     await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
   });
 
+  test('does not replace the initial operation snapshot with an older equal-time replay', async () => {
+    const now = Date.now();
+    const initial = {
+      opId: 'op-equal-time', opKey: 'k-equal-time', kind: 'pdf_layout' as const,
+      jobId: 'job-equal-time', status: 'running' as const, queuedAt: now, updatedAt: now,
+    };
+    fake.seedState(initial);
+    const stop = vi.fn();
+    vi.spyOn(fake.deps.operationEventStream, 'subscribe').mockImplementationOnce(async ({ onEvent }) => {
+      await onEvent({ eventId: 1, snapshot: { ...initial, status: 'queued' } });
+      const succeeded = { ...initial, status: 'succeeded' as const };
+      fake.seedState(succeeded);
+      await onEvent({ eventId: 2, snapshot: succeeded });
+      return stop;
+    });
+    const stream = await runtime.app.inject({
+      method: 'GET', url: '/v1/operations/op-equal-time/events', headers: AUTH,
+    });
+    expect(stream.body).toContain('"status":"running"');
+    expect(stream.body).toContain('"status":"succeeded"');
+    expect(stream.body).not.toContain('"status":"queued"');
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+  });
+
   test('streams TTS playback completed-count progress in SSE snapshots', async () => {
     const now = Date.now();
     fake.seedState({

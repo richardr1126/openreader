@@ -106,7 +106,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   const playbackRequestAbortRef = useRef<AbortController | null>(null);
   const playbackRecoveryRef = useRef<ReturnType<typeof createPlaybackRecovery> | null>(null);
   const latestSeekLayoutRef = useRef(playbackSeekLayout);
-  latestSeekLayoutRef.current = playbackSeekLayout;
+  useEffect(() => { latestSeekLayoutRef.current = playbackSeekLayout; }, [playbackSeekLayout]);
   const checkRecovery = useCallback(() => { playbackRecoveryRef.current?.check(); }, []);
   const playbackPhaseRef = useRef<TtsPlaybackPhase>('idle');
   const [playbackPhase, setPlaybackPhaseState] = useState<TtsPlaybackPhase>('idle');
@@ -466,6 +466,14 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
 
   const playWorkerPlaybackStream = useCallback(async () => {
     const runId = playbackRunIdRef.current;
+    // React may flush the effect that requested this start immediately after
+    // the user canceled it. The intent ref changes synchronously, so check it
+    // before stale work can put the controls back into a processing state.
+    if (!isPlayingRef.current) {
+      playbackInFlightRef.current = false;
+      setIsProcessing(false);
+      return;
+    }
     const request = controller.buildPlaybackPlanRequest();
     if (!request) {
       playbackInFlightRef.current = false;

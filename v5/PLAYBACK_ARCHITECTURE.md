@@ -249,11 +249,13 @@ or another worker is discovered.
 1. The client ensures the canonical worker plan is loaded.
 2. The client maps the selected/highlighted UI state to exactly one worker-plan
    ordinal from that plan.
-3. The client asks the Next proxy for a playback session with that ordinal.
-4. The compute worker validates the ordinal against the immutable plan and uses it
-   as `generationStartOrdinal`.
-5. The worker writes the session record and cursor key with plain `put`.
-6. A JetStream operation is queued for generation.
+3. The client asks the Next proxy to prepare a playback session with that ordinal.
+4. The compute worker validates the ordinal against the immutable plan, writes an
+   inactive session record, and returns its instance identity without queuing generation.
+5. After the browser accepts the response, it activates that exact session instance
+   by writing the cursor and active playback intent.
+6. Activation queues a JetStream operation and uses the ordinal as
+   `generationStartOrdinal`.
 7. The generation job patches non-cursor session fields such as status and
    generation start with plain `put`.
 

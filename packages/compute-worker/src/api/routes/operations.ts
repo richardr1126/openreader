@@ -142,11 +142,19 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
       unsubscribe = await deps.operationEventStream.subscribe({
         opId: params.data.opId,
         sinceEventId,
-        onEvent: (event) => {
+        onEvent: async (event) => {
           if (closed || event.snapshot.opId !== params.data.opId
             || event.snapshot.updatedAt < latestUpdatedAt) return;
-          latestUpdatedAt = event.snapshot.updatedAt;
           const nextSignature = JSON.stringify(event.snapshot);
+          // State is persisted before its event. If a replay has the same
+          // millisecond timestamp but differs from the initial state, confirm
+          // it is still the current state before allowing it to move the SSE
+          // stream backwards.
+          if (event.snapshot.updatedAt === latestUpdatedAt && nextSignature !== signature) {
+            const current = await getOpState(params.data.opId);
+            if (!current || JSON.stringify(current) !== nextSignature) return;
+          }
+          latestUpdatedAt = event.snapshot.updatedAt;
           if (nextSignature !== signature) {
             signature = nextSignature;
             markActivity('sse_event');

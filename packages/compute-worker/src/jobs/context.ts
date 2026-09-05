@@ -8,4 +8,5 @@ export interface JobHandlerContext {
   pdfHardCapMs: number;
   ttsPlaybackSegmentTimeoutMs: number;
   s3Prefix: string;
+  logger?: { warn(data: unknown, message?: string): void };
 }

@@ -218,6 +218,16 @@ describe('playback session read model', () => {
     expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(3);
   });
 
+  test('serves the in-process sidecar cache when catalogue discovery fails', async () => {
+    const fixture = createFixture();
+    fixture.sidecars.set(2, completedSidecar(2));
+    await expect(fixture.model.readSegmentState(session, 2))
+      .resolves.toMatchObject({ status: 'completed', ordinal: 2 });
+    fixture.listSegmentOrdinals.mockRejectedValueOnce(new Error('catalogue unavailable'));
+    await expect(fixture.model.readSegmentIndexRows(session))
+      .resolves.toMatchObject([{ ordinal: 2 }]);
+  });
+
   test('invalidates cached sidecars by exact scope and parsed plans by prefix', async () => {
     const fixture = createFixture();
     fixture.sidecars.set(0, completedSidecar(0));

@@ -126,4 +126,27 @@ describe('playback operation invalidation', () => {
     expect(maximum).toBe(16);
     expect(readSession).toHaveBeenCalledTimes(1);
   });
+
+  test('reports a session ownership read failure instead of claiming cleanup succeeded', async () => {
+    const scope = { storageUserId: 'user-1', documentId: 'doc-1' };
+    const live = state({
+      opId: 'live', kind: 'tts_playback',
+      opKey: buildTtsPlaybackOperationKey({
+        ...scope, sessionId: 'session-1', documentVersion: 1, readerType: 'epub',
+        settingsHash: 'settings', planObjectKey: 'plan', generationRunId: 'run-1',
+      }),
+    });
+    const markFailedIfUnchanged = vi.fn();
+    await expect(invalidatePlaybackOperationsForScope({
+      scope,
+      now: 100,
+      operationStateStore: {
+        listOpStates: async () => [live],
+        getOpStateRecord: async () => ({ state: live, revision: 1 }),
+      } as unknown as OperationStateStoreLike,
+      orchestrator: { markFailedIfUnchanged } as unknown as OrchestratorLike,
+      readSession: async () => { throw new Error('session store unavailable'); },
+    })).rejects.toThrow('session store unavailable');
+    expect(markFailedIfUnchanged).not.toHaveBeenCalled();
+  });
 });

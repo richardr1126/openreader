@@ -26,6 +26,12 @@ export type PdfLayoutRequest =
 export type TtsPlaybackRequest =
   paths['/v1/tts-playback/sessions/jobs']['post']['requestBody']['content']['application/json']
   & { generationExtent?: 'window' | 'document' };
+export type TtsPlaybackSessionPrepareRequest =
+  paths['/v1/tts-playback/sessions/prepare']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackSessionPrepareResponse =
+  paths['/v1/tts-playback/sessions/prepare']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackCursorResponse =
+  paths['/v1/tts-playback/sessions/{sessionId}/cursor']['put']['responses'][200]['content']['application/json'];
 export type TtsPlaybackPlanRequest =
   Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent'>;
 export type TtsPlaybackSessionResolveRequest =

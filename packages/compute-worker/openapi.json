@@ -4572,7 +4572,8 @@
                   "settingsJson",
                   "planning",
                   "sessionId",
-                  "planObjectKey"
+                  "planObjectKey",
+                  "generationRunId"
                 ],
                 "additionalProperties": false
               }
@@ -5434,6 +5435,55 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "workerOpId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "cursorOrdinal": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "playbackActive": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "workerOpId",
+                    "cursorOrdinal",
+                    "playbackActive",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "400": {
             "description": "Default Response",
             "content": {

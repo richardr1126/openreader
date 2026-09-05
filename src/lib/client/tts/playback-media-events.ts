@@ -16,7 +16,7 @@ export function installPlaybackMediaEvents(input: {
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
   };
   audio.onended = () => {
-    if (!input.isCurrent() || !input.isPlaying()) return;
+    if (!input.isCurrent()) return;
     if (input.shouldRecoverEnd()) input.onRecover(); else input.onEnded();
   };
   audio.onerror = () => { if (input.isCurrent() && input.isPlaying()) input.onRecover(); };

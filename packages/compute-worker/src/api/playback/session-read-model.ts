@@ -1,5 +1,6 @@
 import { buildProportionalAlignment } from '@openreader/tts/segments';
 import type { ArtifactStorage } from '../../infrastructure/storage';
+import { toErrorMessage } from '../../infrastructure/errors';
 import type {
   TtsPlaybackSegmentMetadata,
   TtsPlaybackSessionState,
@@ -103,8 +104,9 @@ function scopeCacheKeyPrefix(scope: PlaybackScope): string {
 export function createPlaybackSessionReadModel(input: {
   storage: ArtifactStorage;
   playbackStorage?: TtsPlaybackStorage;
+  logger?: { warn(data: unknown, message?: string): void };
 }): PlaybackSessionReadModel {
-  const { storage, playbackStorage } = input;
+  const { storage, playbackStorage, logger } = input;
   const sidecarScopes = new Map<string, Map<number, TtsPlaybackSegmentMetadata>>();
   const scopeCollections = new Map<string, Promise<Map<number, TtsPlaybackSegmentMetadata>>>();
   const plans = new Map<string, Array<{ ordinal: number; text: string }>>();
@@ -184,7 +186,13 @@ export function createPlaybackSessionReadModel(input: {
       // must not turn thousands of ungenerated ordinals into serial S3 batches.
       // Existing exact timing remains cached across chapter changes; unfinished
       // sidecars are re-read so proportional timing upgrades to exact timing.
-      const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(session) ?? [])
+      const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(session).catch((error) => {
+        logger?.warn({
+          sessionId: session.sessionId,
+          error: toErrorMessage(error),
+        }, 'tts.playback.timeline_catalogue_read_failed');
+        return [];
+      }) ?? [])
         .filter((ordinal) => ordinal < planLength && !isStableCompletedSidecar(cache.get(ordinal)));
       for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
         const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);

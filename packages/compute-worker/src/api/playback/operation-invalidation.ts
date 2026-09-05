@@ -43,7 +43,7 @@ export async function invalidatePlaybackOperationsForScope(input: {
     if (!subject) return false;
     let pending = sessions.get(subject.sessionId);
     if (!pending) {
-      pending = readSession(subject.sessionId).catch(() => null);
+      pending = readSession(subject.sessionId);
       sessions.set(subject.sessionId, pending);
     }
     const session = await pending;

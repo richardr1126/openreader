@@ -211,7 +211,7 @@ export interface paths {
                         };
                         sessionId: string;
                         planObjectKey: string;
-                        generationRunId?: string;
+                        generationRunId: string;
                         expiresAt?: number;
                         aheadWindow?: number;
                         /** @enum {string} */
@@ -597,6 +597,21 @@ export interface paths {
                 };
             };
             responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessionId: string;
+                            workerOpId: string | null;
+                            cursorOrdinal: number;
+                            playbackActive: boolean;
+                            expiresAt: number;
+                        };
+                    };
+                };
                 /** @description Default Response */
                 400: {
                     headers: {
