@@ -60,8 +60,8 @@ function completedSidecar(ordinal: number, cacheEpoch = 0): TtsPlaybackSegmentMe
   };
 }
 
-function createFixture() {
-  const planSegments = Array.from({ length: 100 }, (_, ordinal) => ({
+function createFixture(planLength = 100) {
+  const planSegments = Array.from({ length: planLength }, (_, ordinal) => ({
     ordinal,
     text: `Segment ${ordinal}.`,
   }));
@@ -72,6 +72,7 @@ function createFixture() {
   let epoch = 0;
   const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
   const readSegmentMetadata = vi.fn(async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null);
+  const listSegmentOrdinals = vi.fn(async () => [...sidecars.keys()].sort((a, b) => a - b));
   const storage = {
     async readObject(key: string) {
       const bytes = objects.get(key);
@@ -97,6 +98,7 @@ function createFixture() {
     },
     artifacts: {
       sidecarKey() { return ''; },
+      listSegmentOrdinals,
       async putSegmentMetadata() { return ''; },
       readSegmentMetadata,
       async getScopeEpoch() { return epoch; },
@@ -108,6 +110,7 @@ function createFixture() {
     objects,
     sidecars,
     readSegmentMetadata,
+    listSegmentOrdinals,
     setEpoch(value: number) { epoch = value; },
   };
 }
@@ -173,26 +176,56 @@ describe('playback session read model', () => {
     expect(fixture.readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal)).toEqual([40, 41, 42]);
   });
 
-  test('keeps a bounded whole-document cache view across cursor and chapter changes', async () => {
+  test('keeps all cached chapters visible without probing absent ordinals', async () => {
     const fixture = createFixture();
     fixture.sidecars.set(2, completedSidecar(2));
     fixture.sidecars.set(80, completedSidecar(80));
 
     const nearStartSession = { ...session, cursorOrdinal: 0 };
     await expect(fixture.model.readSegmentIndexRows(nearStartSession))
-      .resolves.toMatchObject([{ ordinal: 2 }]);
+      .resolves.toMatchObject([{ ordinal: 2 }, { ordinal: 80 }]);
     expect(fixture.readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal))
-      .toEqual(Array.from({ length: 65 }, (_, ordinal) => ordinal));
+      .toEqual([2, 80]);
 
-    // Discover a later cached chapter, then move the cursor back. The next
-    // whole-document read must retain both cached regions and extend its bounded
-    // scan from the highest discovered sidecar instead of hiding that cache.
+    // Moving back retains both cached regions without refetching exact timing.
     await expect(fixture.model.readSegmentState(session, 80))
       .resolves.toMatchObject({ status: 'completed', ordinal: 80 });
     fixture.readSegmentMetadata.mockClear();
     await expect(fixture.model.readSegmentIndexRows(nearStartSession))
       .resolves.toMatchObject([{ ordinal: 2 }, { ordinal: 80 }]);
-    expect(fixture.readSegmentMetadata.mock.calls.some(([scope]) => scope.ordinal === 99)).toBe(true);
+    expect(fixture.readSegmentMetadata).not.toHaveBeenCalled();
+  });
+
+  test('shares slow catalogue reads and discovers exact timing in a sparsely generated long book', async () => {
+    const fixture = createFixture(10_000);
+    const deepSession = { ...session, cursorOrdinal: 9_000 };
+    fixture.sidecars.set(2, completedSidecar(2));
+    fixture.sidecars.set(9_000, { ...completedSidecar(9_000), alignment: null });
+    let release!: (ordinals: number[]) => void;
+    const listed = new Promise<number[]>((resolve) => { release = resolve; });
+    fixture.listSegmentOrdinals.mockReturnValueOnce(listed);
+    const timeline = fixture.model.readSegmentIndexRows(deepSession);
+    const durations = fixture.model.listCompletedDurations(deepSession, 10_000);
+    await vi.waitFor(() => expect(fixture.listSegmentOrdinals).toHaveBeenCalledTimes(1));
+    release([2, 9_000]);
+    expect((await timeline).map((row) => row.alignmentSource)).toEqual(['exact', 'proportional']);
+    expect([...(await durations).keys()]).toEqual([2, 9_000]);
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
+
+    fixture.sidecars.set(9_000, completedSidecar(9_000));
+    const exact = await fixture.model.readSegmentIndexRows(deepSession);
+    expect(exact.at(-1)?.alignmentSource).toBe('exact');
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(3);
+  });
+
+  test('serves the in-process sidecar cache when catalogue discovery fails', async () => {
+    const fixture = createFixture();
+    fixture.sidecars.set(2, completedSidecar(2));
+    await expect(fixture.model.readSegmentState(session, 2))
+      .resolves.toMatchObject({ status: 'completed', ordinal: 2 });
+    fixture.listSegmentOrdinals.mockRejectedValueOnce(new Error('catalogue unavailable'));
+    await expect(fixture.model.readSegmentIndexRows(session))
+      .resolves.toMatchObject([{ ordinal: 2 }]);
   });
 
   test('invalidates cached sidecars by exact scope and parsed plans by prefix', async () => {

@@ -8,10 +8,12 @@ import {
   postTtsPlaybackCursor,
   subscribeTtsPlaybackEvents,
   type TtsPlaybackSeekLayout,
+  type TtsPlaybackEventSnapshot,
 } from '@/lib/client/api/tts';
 import type { TTSRequestHeaders } from '@/types/client';
 import { TTS_PLAYBACK_CURSOR_HEARTBEAT_MS } from '@/types/tts';
 import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
+import { createCoalescedPlaybackRefresh, createPlaybackOperationSubscription } from '@/lib/client/tts/playback-refresh';
 
 type UsePlaybackForegroundSyncInput = {
   playbackCursorOrdinalRef: MutableRefObject<number | null>;
@@ -36,23 +38,30 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   const playbackEventsUnsubRef = useRef<(() => void) | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackActivityWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const playbackRefreshRef = useRef<ReturnType<typeof createCoalescedPlaybackRefresh> | null>(null);
 
-  const setWorkerPlaybackActive = useCallback((playbackActive: boolean) => {
+  const setWorkerPlaybackActive = useCallback((playbackActive: boolean, requireAcknowledgement = false) => {
     const session = playbackSessionRef.current;
     const headers = playbackRequestHeadersRef.current;
     const ordinal = playbackCursorOrdinalRef.current;
-    if (!session || !headers || ordinal == null) return;
+    if (!session || !headers || ordinal == null) return Promise.resolve();
     // Serialize fast pause/resume writes so stale intent cannot arrive last.
-    playbackActivityWriteRef.current = playbackActivityWriteRef.current.then(() => (
-      postTtsPlaybackCursor(session.sessionId, Math.max(0, ordinal), headers, {
+    const write = playbackActivityWriteRef.current.then(async () => {
+      await postTtsPlaybackCursor(session.sessionId, Math.max(0, ordinal), headers, {
         playbackActive,
+        sessionInstanceId: session.sessionInstanceId,
+        requireAcknowledgement,
         keepalive: !playbackActive,
-      })
-    ));
+      });
+    });
+    playbackActivityWriteRef.current = write.catch(() => undefined);
+    return write;
   }, [playbackCursorOrdinalRef, playbackRequestHeadersRef, playbackSessionRef]);
 
   const stopPlaybackForegroundSync = useCallback(() => {
     toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
+    playbackRefreshRef.current?.stop();
+    playbackRefreshRef.current = null;
     if (playbackCursorIntervalRef.current) {
       clearInterval(playbackCursorIntervalRef.current);
       playbackCursorIntervalRef.current = null;
@@ -72,8 +81,23 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     if (!activeSession) return;
 
     stopPlaybackForegroundSync();
-    void refreshPlaybackTimeline(activeSession.timelineUrl).catch(() => undefined);
-    playbackEventsUnsubRef.current = subscribeTtsPlaybackEvents(activeSession.sessionId, {
+    const refresh = createCoalescedPlaybackRefresh(async (signal) => {
+      if (runId !== playbackRunIdRef.current || playbackSessionRef.current !== activeSession) return;
+      const readSignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
+      await Promise.allSettled([
+        refreshPlaybackTimeline(activeSession.timelineUrl, readSignal),
+        activeSession.seekLayoutUrl
+          ? getTtsPlaybackSeekLayout(activeSession.seekLayoutUrl, readSignal).then((layout) => {
+            if (!readSignal.aborted && runId === playbackRunIdRef.current
+              && playbackSessionRef.current === activeSession) setPlaybackSeekLayout(layout);
+          })
+          : Promise.resolve(),
+      ]);
+    });
+    playbackRefreshRef.current = refresh;
+    refresh.request();
+    const events = createPlaybackOperationSubscription<TtsPlaybackEventSnapshot>({
+      subscribe: (operationId, onSnapshot) => subscribeTtsPlaybackEvents(activeSession.sessionId, { onSnapshot }, operationId),
       onSnapshot: (snapshot) => {
         if (runId !== playbackRunIdRef.current) return;
         if (snapshot.status === 'failed') {
@@ -96,26 +120,30 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           return;
         }
         toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
-        const currentSession = playbackSessionRef.current;
-        if (!currentSession) return;
-        void refreshPlaybackTimeline(currentSession.timelineUrl).catch(() => undefined);
-        if (currentSession.seekLayoutUrl) {
-          void getTtsPlaybackSeekLayout(currentSession.seekLayoutUrl)
-            .then((layout) => {
-              if (runId === playbackRunIdRef.current) setPlaybackSeekLayout(layout);
-            })
-            .catch(() => undefined);
-        }
+        refresh.request();
       },
     });
+    playbackEventsUnsubRef.current = events.stop;
 
-    const writeCursor = () => {
+    let writingCursor = false;
+    const writeCursor = async () => {
+      if (writingCursor) return;
       const currentSession = playbackSessionRef.current;
       if (!currentSession) return;
       const cursorOrdinal = playbackCursorOrdinalRef.current;
       if (cursorOrdinal == null) return;
       const cursor = Math.max(0, cursorOrdinal);
-      void postTtsPlaybackCursor(currentSession.sessionId, cursor, headers);
+      writingCursor = true;
+      try {
+        const updated = await postTtsPlaybackCursor(currentSession.sessionId, cursor, headers, {
+          sessionInstanceId: currentSession.sessionInstanceId,
+        });
+        if (updated && runId === playbackRunIdRef.current && playbackSessionRef.current === activeSession) {
+          events.update(updated.workerOpId);
+        }
+      } finally {
+        writingCursor = false;
+      }
     };
     writeCursor();
     playbackCursorIntervalRef.current = setInterval(() => {

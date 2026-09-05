@@ -60,7 +60,15 @@ describe('playback operation invalidation', () => {
         planSignature: 'signature-2',
       }),
     });
-    const rows = [live, plan, unrelated];
+    const unrelatedLive = state({
+      opId: 'unrelated-live', kind: 'tts_playback',
+      opKey: buildTtsPlaybackOperationKey({
+        sessionId: 'other-session', storageUserId: scope.storageUserId,
+        documentId: 'other-document', documentVersion: scope.documentVersion,
+        readerType: 'pdf', settingsHash: scope.settingsHash, planObjectKey: 'other-plan.json',
+      }),
+    });
+    const rows = [live, plan, unrelated, unrelatedLive];
     type InvalidationInput = Parameters<NonNullable<OrchestratorLike['markFailedIfUnchanged']>>[0];
     const markFailedIfUnchanged = vi.fn(async (_input: InvalidationInput) => ({ status: 'failed' }));
     const operationStateStore = {
@@ -71,9 +79,7 @@ describe('playback operation invalidation', () => {
       },
     } as OperationStateStoreLike;
     const orchestrator = { markFailedIfUnchanged } as unknown as OrchestratorLike;
-    const readSession = vi.fn(async (sessionId: string) => sessionId === 'session-1'
-      ? { storageUserId: scope.storageUserId }
-      : null);
+    const readSession = vi.fn(async () => ({ storageUserId: scope.storageUserId }));
 
     await expect(invalidatePlaybackOperationsForScope({
       scope,
@@ -82,8 +88,65 @@ describe('playback operation invalidation', () => {
       orchestrator,
       readSession: readSession as never,
     })).resolves.toBe(2);
-    expect(readSession).toHaveBeenCalledWith('session-1');
+    expect(readSession).toHaveBeenCalledExactlyOnceWith('session-1');
     expect(markFailedIfUnchanged).toHaveBeenCalledTimes(2);
-    expect(markFailedIfUnchanged.mock.calls.map(([call]) => call.current.opId)).toEqual(['live', 'plan']);
+    expect(markFailedIfUnchanged.mock.calls.map(([call]) => call.current.opId).sort()).toEqual(['live', 'plan']);
+  });
+
+  test('bounds concurrent invalidation reads and shares session ownership lookups', async () => {
+    const scope = { storageUserId: 'user-1', documentId: 'doc-1' };
+    const rows = Array.from({ length: 40 }, (_, i) => state({
+      opId: `op-${i}`, kind: 'tts_playback',
+      opKey: buildTtsPlaybackOperationKey({
+        ...scope, sessionId: 'session-1', documentVersion: 1, readerType: 'html',
+        settingsHash: 'settings', planObjectKey: 'plan', generationRunId: `run-${i}`,
+      }),
+    }));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let active = 0;
+    let maximum = 0;
+    const getOpStateRecord = vi.fn(async (opId: string) => {
+      active++;
+      maximum = Math.max(active, maximum);
+      await gate;
+      active--;
+      return { state: rows.find((row) => row.opId === opId)!, revision: 1 };
+    });
+    const readSession = vi.fn(async () => ({ storageUserId: 'user-1' }));
+    const run = invalidatePlaybackOperationsForScope({
+      scope, now: 100,
+      operationStateStore: { listOpStates: async () => rows, getOpStateRecord } as unknown as OperationStateStoreLike,
+      orchestrator: { markFailedIfUnchanged: async () => ({ status: 'failed' }) } as unknown as OrchestratorLike,
+      readSession: readSession as never,
+    });
+    await vi.waitFor(() => expect(getOpStateRecord).toHaveBeenCalledTimes(16));
+    release();
+    expect(await run).toBe(40);
+    expect(maximum).toBe(16);
+    expect(readSession).toHaveBeenCalledTimes(1);
+  });
+
+  test('reports a session ownership read failure instead of claiming cleanup succeeded', async () => {
+    const scope = { storageUserId: 'user-1', documentId: 'doc-1' };
+    const live = state({
+      opId: 'live', kind: 'tts_playback',
+      opKey: buildTtsPlaybackOperationKey({
+        ...scope, sessionId: 'session-1', documentVersion: 1, readerType: 'epub',
+        settingsHash: 'settings', planObjectKey: 'plan', generationRunId: 'run-1',
+      }),
+    });
+    const markFailedIfUnchanged = vi.fn();
+    await expect(invalidatePlaybackOperationsForScope({
+      scope,
+      now: 100,
+      operationStateStore: {
+        listOpStates: async () => [live],
+        getOpStateRecord: async () => ({ state: live, revision: 1 }),
+      } as unknown as OperationStateStoreLike,
+      orchestrator: { markFailedIfUnchanged } as unknown as OrchestratorLike,
+      readSession: async () => { throw new Error('session store unavailable'); },
+    })).rejects.toThrow('session store unavailable');
+    expect(markFailedIfUnchanged).not.toHaveBeenCalled();
   });
 });

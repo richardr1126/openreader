@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import Fastify from 'fastify';
 
 import { createPlaybackSessionController } from '../../src/api/playback/session-controller';
 import type {
@@ -7,6 +8,8 @@ import type {
 } from '../../src/api/playback/session-read-model';
 import type { ComputeWorkerRouteContext } from '../../src/api/route-context';
 import type { TtsPlaybackStorage } from '../../src/playback/storage';
+import { resolveTtsPlaybackSessionInstanceId } from '../../src/playback/storage';
+import { registerPlaybackSessionRoutes } from '../../src/api/routes/playback/sessions';
 
 function playbackSession(overrides: Partial<PlaybackSessionRow> = {}): PlaybackSessionRow {
   return {
@@ -79,7 +82,7 @@ function createFixture(
         if (next.expiresAt <= session.expiresAt) {
           return (next.generationRunId ?? null) === (session.generationRunId ?? null);
         }
-        session = next;
+        session = { ...next, sessionInstanceId: resolveTtsPlaybackSessionInstanceId(next) };
         return true;
       },
       patchSession,
@@ -91,6 +94,7 @@ function createFixture(
     },
     artifacts: {
       sidecarKey() { return ''; },
+      async listSegmentOrdinals() { return []; },
       async putSegmentMetadata() { return ''; },
       async readSegmentMetadata() { return null; },
       async getScopeEpoch() { return 0; },
@@ -112,10 +116,56 @@ function createFixture(
     enqueueOrReuse,
     updateCursor,
     currentSession: () => session,
+    context,
+    readModel,
   };
 }
 
 describe('playback session continuation controller', () => {
+  test('does not reuse a completed partial run when resuming at the same cursor', async () => {
+    const fixture = createFixture(playbackSession({ generationRunId: 'active:12' }));
+    await fixture.controller.enqueueContinuationIfNeeded(fixture.currentSession(), Date.now(), 'cursor');
+    const first = fixture.enqueueOrReuse.mock.calls[0][0].opKey;
+    const instance = fixture.currentSession().sessionInstanceId;
+    await fixture.controller.enqueueContinuationIfNeeded(fixture.currentSession(), Date.now(), 'cursor');
+    expect(fixture.enqueueOrReuse.mock.calls[1][0].opKey).not.toBe(first);
+    expect(fixture.currentSession().sessionInstanceId).toBe(instance);
+    expect(fixture.currentSession().sessionId).toBe('session-1');
+  });
+
+  test('preparation queues nothing until activation and rejects a delayed old pause', async () => {
+    const fixture = createFixture(playbackSession({ expiresAt: 1 }));
+    const app = Fastify();
+    registerPlaybackSessionRoutes({ ...fixture.context, app } as ComputeWorkerRouteContext,
+      fixture.readModel, fixture.controller);
+    try {
+      const payload = {
+        sessionId: 'session-1', userId: 'user-1', storageUserId: 'storage-1',
+        documentId: 'a'.repeat(64), documentVersion: 1, readerType: 'epub',
+        settingsHash: 'settings-1', settingsJson: {}, planObjectKey: 'plans/session-1.json',
+        planning: { selectedOrdinal: 12 }, generationRunId: 'prepared:first', expiresAt: Date.now() + 60_000,
+      };
+      const prepared = await app.inject({ method: 'POST', url: '/v1/tts-playback/sessions/prepare', payload });
+      expect(prepared.statusCode).toBe(200);
+      expect(fixture.currentSession()).toMatchObject({ playbackActive: false, workerOpId: null });
+      await fixture.controller.updateCursor('session-1', 12, { ensureGeneration: true });
+      expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+      const firstInstance = prepared.json().sessionInstanceId;
+      const activated = await app.inject({ method: 'PUT', url: '/v1/tts-playback/sessions/session-1/cursor',
+        payload: { ordinal: 12, playbackActive: true, sessionInstanceId: firstInstance } });
+      expect(activated.statusCode).toBe(200);
+      expect(activated.json().workerOpId).toBe('continuation-op');
+      expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+      await app.inject({ method: 'POST', url: '/v1/tts-playback/sessions/prepare',
+        payload: { ...payload, generationRunId: 'prepared:second', expiresAt: payload.expiresAt + 1 } });
+      const late = await app.inject({ method: 'PUT', url: '/v1/tts-playback/sessions/session-1/cursor',
+        payload: { ordinal: 99, playbackActive: true, sessionInstanceId: firstInstance } });
+      expect(late.statusCode).toBe(409);
+      expect(fixture.currentSession()).toMatchObject({ playbackActive: false, cursorOrdinal: 12 });
+      expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    } finally { await app.close(); }
+  });
+
   test('does not enqueue cursor or stream continuations while explicitly paused', async () => {
     const fixture = createFixture(playbackSession({ playbackActive: false }));
 
@@ -164,7 +214,7 @@ describe('playback session continuation controller', () => {
     expect(firstRequest?.opKey).toBe(secondRequest?.opKey);
     expect(fixture.currentSession()).toMatchObject({
       playbackActive: true,
-      generationRunId: 'active:12',
+      generationRunId: expect.stringMatching(/^active:12:/),
     });
   });
 
@@ -221,7 +271,7 @@ describe('playback session continuation controller', () => {
     expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
     expect(fixture.currentSession()).toMatchObject({
       cursorOrdinal: 24,
-      generationRunId: 'active:24',
+      generationRunId: expect.stringMatching(/^active:24:/),
     });
   });
 
@@ -240,7 +290,7 @@ describe('playback session continuation controller', () => {
 
     expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
     expect(fixture.currentSession()).toMatchObject({
-      generationRunId: 'active:15',
+      generationRunId: expect.stringMatching(/^active:15:/),
       generationSatisfiedFromOrdinal: null,
       generationSatisfiedThroughOrdinal: null,
     });

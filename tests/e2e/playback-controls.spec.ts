@@ -82,8 +82,11 @@ async function verifyEpubPlayback(page: Page) {
   const position = page.getByRole('slider', { name: 'Playback position', exact: true });
   const initialViewportHeading = page.frameLocator('iframe').getByRole('heading').first();
   await expect(initialViewportHeading).toBeInViewport();
+  // The EPUB rendition and its asynchronous duration projection become ready
+  // independently. Wait for the same required value instead of sampling once.
+  await expect.poll(async () => Number(await position.getAttribute('max')))
+    .toBeGreaterThan(0);
   const documentDuration = Number(await position.getAttribute('max'));
-  expect(documentDuration).toBeGreaterThan(0);
 
   const sessionResponsePromise = page.waitForResponse((response) => (
     response.request().method() === 'POST'

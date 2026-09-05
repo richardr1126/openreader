@@ -133,6 +133,7 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
 
     try {
       let signature = JSON.stringify(initial);
+      let latestUpdatedAt = initial.updatedAt;
       writeSnapshot(initial, sinceEventId > 0 ? sinceEventId : 0);
       if (isTerminalStatus(initial.status)) return reply;
       keepalive = setInterval(() => {
@@ -141,9 +142,19 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
       unsubscribe = await deps.operationEventStream.subscribe({
         opId: params.data.opId,
         sinceEventId,
-        onEvent: (event) => {
-          if (closed || event.snapshot.opId !== params.data.opId) return;
+        onEvent: async (event) => {
+          if (closed || event.snapshot.opId !== params.data.opId
+            || event.snapshot.updatedAt < latestUpdatedAt) return;
           const nextSignature = JSON.stringify(event.snapshot);
+          // State is persisted before its event. If a replay has the same
+          // millisecond timestamp but differs from the initial state, confirm
+          // it is still the current state before allowing it to move the SSE
+          // stream backwards.
+          if (event.snapshot.updatedAt === latestUpdatedAt && nextSignature !== signature) {
+            const current = await getOpState(params.data.opId);
+            if (!current || JSON.stringify(current) !== nextSignature) return;
+          }
+          latestUpdatedAt = event.snapshot.updatedAt;
           if (nextSignature !== signature) {
             signature = nextSignature;
             markActivity('sse_event');
@@ -156,7 +167,15 @@ export function registerOperationRoutes(context: ComputeWorkerRouteContext): voi
           closeStream();
         },
       });
-      await new Promise<void>((resolve) => request.raw.once('close', resolve));
+      // A replayed terminal event may close the response before subscribe()
+      // returns its teardown function. Do not leak that consumer or wait for
+      // a close event that has already happened.
+      if (closed) {
+        unsubscribe();
+        unsubscribe = null;
+      } else {
+        await new Promise<void>((resolve) => request.raw.once('close', resolve));
+      }
     } catch (error) {
       app.log.warn({ opId: params.data.opId, error: toErrorMessage(error) }, 'op events stream loop error');
     } finally {

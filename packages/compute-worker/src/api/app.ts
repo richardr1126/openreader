@@ -347,6 +347,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     pdfHardCapMs,
     ttsPlaybackSegmentTimeoutMs,
     s3Prefix,
+    logger: app.log,
   });
 
   const workerLoops = createWorkerLoopController({

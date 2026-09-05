@@ -1,5 +1,6 @@
 import { buildProportionalAlignment } from '@openreader/tts/segments';
 import type { ArtifactStorage } from '../../infrastructure/storage';
+import { toErrorMessage } from '../../infrastructure/errors';
 import type {
   TtsPlaybackSegmentMetadata,
   TtsPlaybackSessionState,
@@ -45,7 +46,6 @@ export interface PlaybackScope {
 }
 
 const SIDECAR_SCOPE_CACHE_MAX = 8;
-const SIDECAR_SCAN_AHEAD = 64;
 const SIDECAR_FETCH_BATCH = 32;
 const PLAN_CACHE_MAX = 4;
 
@@ -104,9 +104,11 @@ function scopeCacheKeyPrefix(scope: PlaybackScope): string {
 export function createPlaybackSessionReadModel(input: {
   storage: ArtifactStorage;
   playbackStorage?: TtsPlaybackStorage;
+  logger?: { warn(data: unknown, message?: string): void };
 }): PlaybackSessionReadModel {
-  const { storage, playbackStorage } = input;
+  const { storage, playbackStorage, logger } = input;
   const sidecarScopes = new Map<string, Map<number, TtsPlaybackSegmentMetadata>>();
+  const scopeCollections = new Map<string, Promise<Map<number, TtsPlaybackSegmentMetadata>>>();
   const plans = new Map<string, Array<{ ordinal: number; text: string }>>();
 
   const getScopeEpoch = async (session: PlaybackSessionRow): Promise<number> => {
@@ -174,26 +176,42 @@ export function createPlaybackSessionReadModel(input: {
   ): Promise<Map<number, TtsPlaybackSegmentMetadata>> => {
     const cacheEpoch = await getScopeEpoch(session);
     const cache = getSidecarScope(session, cacheEpoch);
-    const result = new Map<number, TtsPlaybackSegmentMetadata>(cache);
-    if (planLength <= 0) return result;
-    const cursor = Math.max(0, Math.floor(Number(session.cursorOrdinal ?? 0)));
-    const highestCached = cache.size > 0 ? Math.max(...cache.keys()) : -1;
-    const bandEnd = Math.min(planLength - 1, Math.max(highestCached, cursor) + SIDECAR_SCAN_AHEAD);
-    const ordinals: number[] = [];
-    for (let ordinal = 0; ordinal <= bandEnd; ordinal += 1) {
-      if (!isStableCompletedSidecar(cache.get(ordinal))) ordinals.push(ordinal);
+    if (planLength <= 0) return new Map(cache);
+    const key = scopeCacheKey(session, cacheEpoch);
+    const pending = scopeCollections.get(key);
+    if (pending) return pending;
+    const collect = (async () => {
+      const result = new Map<number, TtsPlaybackSegmentMetadata>(cache);
+      // List only this user/document/version/settings prefix. A deep cursor
+      // must not turn thousands of ungenerated ordinals into serial S3 batches.
+      // Existing exact timing remains cached across chapter changes; unfinished
+      // sidecars are re-read so proportional timing upgrades to exact timing.
+      const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(session).catch((error) => {
+        logger?.warn({
+          sessionId: session.sessionId,
+          error: toErrorMessage(error),
+        }, 'tts.playback.timeline_catalogue_read_failed');
+        return [];
+      }) ?? [])
+        .filter((ordinal) => ordinal < planLength && !isStableCompletedSidecar(cache.get(ordinal)));
+      for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
+        const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
+        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
+        batch.forEach((ordinal, batchIndex) => {
+          const sidecar = fetched[batchIndex];
+          if (!sidecar) return;
+          result.set(ordinal, sidecar);
+          if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
+        });
+      }
+      return result;
+    })();
+    scopeCollections.set(key, collect);
+    try {
+      return await collect;
+    } finally {
+      if (scopeCollections.get(key) === collect) scopeCollections.delete(key);
     }
-    for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
-      const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
-      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
-      batch.forEach((ordinal, batchIndex) => {
-        const sidecar = fetched[batchIndex];
-        if (!sidecar) return;
-        result.set(ordinal, sidecar);
-        if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
-      });
-    }
-    return result;
   };
 
   const readPlanSegments = async (

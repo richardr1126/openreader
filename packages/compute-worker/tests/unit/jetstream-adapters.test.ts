@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import { DeliverPolicy } from '@nats-io/jetstream';
 import { OperationOrchestrator } from '../../src/operations/service';
 import type { WorkerOperationRequest } from '../../src/operations/contracts';
 import {
@@ -88,6 +89,65 @@ function buildPdfRequest(opKey: string): WorkerOperationRequest {
 }
 
 describe('jetstream adapters', () => {
+  test('replays a completion published between the initial state read and subscription', async () => {
+    let policy: unknown;
+    const terminal = { opId: 'op-gap', status: 'succeeded', updatedAt: 2 };
+    const onEvent = vi.fn();
+    const add = vi.fn(async (_stream: string, config: { deliver_policy: unknown }) => {
+      policy = config.deliver_policy;
+    });
+    const events = new JetStreamOperationEventStream({
+      getJsm: async () => ({ consumers: { add, delete: async () => true } }) as never,
+      getJs: async () => ({ consumers: { get: async () => ({ consume: async () => ({
+        close: async () => undefined,
+        async *[Symbol.asyncIterator]() {
+          // This event already exists when the consumer is created, so a
+          // new-only subscription cannot see it and would remain pending.
+          if (policy === DeliverPolicy.Last) {
+            yield { seq: 9, data: new TextEncoder().encode(JSON.stringify(terminal)) };
+          }
+        },
+      }) }) } }) as never,
+      eventsStreamName: 'events',
+    });
+    const stop = await events.subscribe({ opId: 'op-gap', onEvent });
+    await vi.waitFor(() => expect(onEvent).toHaveBeenCalledWith({ eventId: 9, snapshot: terminal }));
+    expect(add).toHaveBeenCalledWith('events', expect.objectContaining({
+      deliver_policy: DeliverPolicy.Last, filter_subject: opEventsSubject('op-gap'),
+    }));
+    stop();
+    await events.subscribe({ opId: 'op-gap', sinceEventId: 9, onEvent });
+    expect(add).toHaveBeenLastCalledWith('events', expect.objectContaining({
+      deliver_policy: DeliverPolicy.StartSequence, opt_start_seq: 10,
+    }));
+  });
+
+  test('reads historical operation states with bounded parallelism', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let active = 0;
+    let maximum = 0;
+    class SlowKvStore extends FakeKvStore {
+      override async get(key: string) {
+        active++;
+        maximum = Math.max(maximum, active);
+        await gate;
+        active--;
+        return super.get(key);
+      }
+    }
+    const kv = new SlowKvStore();
+    for (let i = 0; i < 40; i++) {
+      await kv.put(opStateKvKey(`op-${i}`), new TextEncoder().encode(JSON.stringify({ opId: `op-${i}` })));
+    }
+    const store = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const read = store.listOpStates();
+    await vi.waitFor(() => expect(active).toBe(32));
+    release();
+    expect(await read).toHaveLength(40);
+    expect(maximum).toBe(32);
+  });
+
   test('state store compareAndSet enforces create/update semantics', async () => {
     const kv = new FakeKvStore();
     const store = new JetStreamOperationStateStore({ getKv: async () => kv });

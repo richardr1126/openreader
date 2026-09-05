@@ -1,117 +1,47 @@
 'use client';
 
 import { useCallback, type MutableRefObject } from 'react';
-
 import { resumePlaybackMedia } from '@/lib/client/tts/playback-control';
 import type { TTSRequestHeaders } from '@/types/client';
 import type { TtsPlaybackPhase } from '@/types/tts';
-import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
 
-type UsePlaybackMediaResumeInput = {
+export function usePlaybackMediaResume(input: {
   audioSpeed: number;
   isPlayingRef: MutableRefObject<boolean>;
-  playbackActiveRef: MutableRefObject<boolean>;
   playbackInFlightRef: MutableRefObject<boolean>;
   playbackRequestHeadersRef: MutableRefObject<TTSRequestHeaders | null>;
-  playbackResumeRunIdRef: MutableRefObject<number | null>;
   playbackRunIdRef: MutableRefObject<number>;
-  playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
-  cancelSeekResync: () => void;
-  invalidatePlaybackRun: () => void;
-  reconnectPlaybackStream: () => void;
   setIsPlaying: (value: boolean) => void;
   setIsProcessing: (value: boolean) => void;
   setPlaybackPhase: (phase: TtsPlaybackPhase) => void;
   setWorkerPlaybackActive: (active: boolean) => void;
   startPlaybackForegroundSync: (runId: number, headers: TTSRequestHeaders) => void;
-  stopPlaybackForegroundSync: () => void;
-  stopPlaybackProjectionLoop: () => void;
-};
-
-export function usePlaybackMediaResume(input: UsePlaybackMediaResumeInput) {
+  checkRecovery: () => void;
+}) {
   const {
-    audioSpeed,
-    isPlayingRef,
-    playbackActiveRef,
-    playbackInFlightRef,
-    playbackRequestHeadersRef,
-    playbackResumeRunIdRef,
-    playbackRunIdRef,
-    playbackSessionRef,
-    cancelSeekResync,
-    invalidatePlaybackRun,
-    reconnectPlaybackStream,
-    setIsPlaying,
-    setIsProcessing,
-    setPlaybackPhase,
-    setWorkerPlaybackActive,
-    startPlaybackForegroundSync,
-    stopPlaybackForegroundSync,
-    stopPlaybackProjectionLoop,
+    audioSpeed, isPlayingRef, playbackInFlightRef, playbackRequestHeadersRef,
+    playbackRunIdRef, setIsPlaying, setIsProcessing, setPlaybackPhase,
+    setWorkerPlaybackActive, startPlaybackForegroundSync, checkRecovery,
   } = input;
-
   return useCallback((audio: HTMLAudioElement) => {
-    const resumeRunId = playbackRunIdRef.current;
-    const headers = playbackRequestHeadersRef.current;
+    const runId = playbackRunIdRef.current;
     setWorkerPlaybackActive(true);
-    if (headers) startPlaybackForegroundSync(resumeRunId, headers);
+    const headers = playbackRequestHeadersRef.current;
+    if (headers) startPlaybackForegroundSync(runId, headers);
     audio.playbackRate = audioSpeed;
     playbackInFlightRef.current = true;
     setPlaybackPhase('buffering');
     setIsProcessing(true);
     isPlayingRef.current = true;
     setIsPlaying(true);
-    playbackResumeRunIdRef.current = resumeRunId;
-
-    void resumePlaybackMedia(
-      () => audio.play(),
-      () => resumeRunId === playbackRunIdRef.current && isPlayingRef.current,
-    ).then((result) => {
-      if (playbackResumeRunIdRef.current === resumeRunId) {
-        playbackResumeRunIdRef.current = null;
-      }
-      if (result.status !== 'stale') return;
-
-      console.warn('TTS media stream became stale; reconnecting from the current cursor:', result.error);
-      setWorkerPlaybackActive(false);
-      invalidatePlaybackRun();
-      cancelSeekResync();
-      stopPlaybackProjectionLoop();
-      stopPlaybackForegroundSync();
-      playbackActiveRef.current = false;
-      playbackSessionRef.current = null;
-      playbackRequestHeadersRef.current = null;
-      try {
-        audio.onerror = null;
-        audio.pause();
-        audio.removeAttribute('src');
-        audio.load();
-      } catch {
-        // A replacement stream does not depend on stale media teardown.
-      }
-      playbackInFlightRef.current = true;
-      setPlaybackPhase('planning');
-      setIsProcessing(true);
-      reconnectPlaybackStream();
-    });
+    // Recovery also watches play() promises that never settle. Neither path
+    // replaces the playback session or discards the generated-cache timeline.
+    void resumePlaybackMedia(() => audio.play(), () => (
+      runId === playbackRunIdRef.current && isPlayingRef.current
+    )).then((result) => { if (result.status === 'stale') checkRecovery(); });
   }, [
-    audioSpeed,
-    cancelSeekResync,
-    invalidatePlaybackRun,
-    isPlayingRef,
-    playbackActiveRef,
-    playbackInFlightRef,
-    playbackRequestHeadersRef,
-    playbackResumeRunIdRef,
-    playbackRunIdRef,
-    playbackSessionRef,
-    reconnectPlaybackStream,
-    setIsPlaying,
-    setIsProcessing,
-    setPlaybackPhase,
-    setWorkerPlaybackActive,
-    startPlaybackForegroundSync,
-    stopPlaybackForegroundSync,
-    stopPlaybackProjectionLoop,
+    audioSpeed, isPlayingRef, playbackInFlightRef, playbackRequestHeadersRef,
+    playbackRunIdRef, setIsPlaying, setIsProcessing, setPlaybackPhase,
+    setWorkerPlaybackActive, startPlaybackForegroundSync, checkRecovery,
   ]);
 }

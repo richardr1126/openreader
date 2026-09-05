@@ -66,21 +66,38 @@ export function registerCleanupRoutes(
     }
     const { namespace, readerType, ...scope } = parsed.data;
     const now = Date.now();
+    const timed = async <T>(phase: string, run: () => Promise<T>): Promise<T> => {
+      const startedAt = Date.now();
+      try {
+        const result = await run();
+        app.log.info({ requestId: request.id, phase, durationMs: Date.now() - startedAt },
+          'tts.playback.cache_clear_phase');
+        return result;
+      } catch (error) {
+        app.log.warn({ requestId: request.id, phase, durationMs: Date.now() - startedAt },
+          'tts.playback.cache_clear_phase_failed');
+        throw error;
+      }
+    };
     await playbackStorage.artifacts.incrementScopeEpoch(scope, now);
-    const invalidatedPlaybackSessions = await playbackStorage.sessions.cancelSessionsForScope(scope, now);
+    const invalidatedPlaybackSessions = await timed('cancel_sessions', () => (
+      playbackStorage.sessions.cancelSessionsForScope(scope, now)
+    ));
     readModel.invalidateSidecarsForScope(scope);
-    const invalidatedJobOperations = await invalidatePlaybackOperationsForScope({
+    const invalidatedJobOperations = await timed('invalidate_operations', () => invalidatePlaybackOperationsForScope({
       scope,
       now,
       operationStateStore: deps.operationStateStore,
       orchestrator: deps.orchestrator,
       readSession: readModel.readSession,
-    });
-    const deleted = await clearTtsPlaybackArtifacts({
+    }));
+    const deleted = await timed('delete_objects', () => clearTtsPlaybackArtifacts({
       storage,
       s3Prefix,
       scope: { ...scope, namespace, ...(readerType ? { readerType } : {}) },
-    });
+    }));
+    app.log.info({ requestId: request.id, durationMs: Date.now() - now, ...deleted,
+      invalidatedPlaybackSessions, invalidatedJobOperations }, 'tts.playback.cache_clear_completed');
     return { ...deleted, invalidatedPlaybackSessions, invalidatedJobOperations };
   });
 

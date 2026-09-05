@@ -169,6 +169,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tts-playback/sessions/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        userId: string;
+                        storageUserId: string;
+                        documentId: string;
+                        documentVersion: number;
+                        /** @enum {string} */
+                        readerType: "pdf" | "epub" | "html";
+                        settingsHash: string;
+                        settingsJson: unknown;
+                        planning: {
+                            selectedOrdinal?: number;
+                            maxBlockLength?: number;
+                            enforceSourceBoundaries?: boolean;
+                            language?: string;
+                            documentSource?: {
+                                namespace: string | null;
+                                skipBlockKinds?: string[];
+                                /** @enum {string} */
+                                extent: "section" | "document";
+                                isPlainText?: boolean;
+                            };
+                        };
+                        sessionId: string;
+                        planObjectKey: string;
+                        generationRunId: string;
+                        expiresAt?: number;
+                        aheadWindow?: number;
+                        /** @enum {string} */
+                        backgroundExtent?: "section" | "document";
+                        /** @enum {string} */
+                        generationExtent?: "window" | "document";
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessionId: string;
+                            sessionInstanceId: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tts-playback/sessions/resolve": {
         parameters: {
             query?: never;
@@ -477,6 +589,7 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        sessionInstanceId?: string;
                         ordinal: number;
                         playbackActive?: boolean;
                         expiresAt?: number;
@@ -484,6 +597,21 @@ export interface paths {
                 };
             };
             responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessionId: string;
+                            workerOpId: string | null;
+                            cursorOrdinal: number;
+                            playbackActive: boolean;
+                            expiresAt: number;
+                        };
+                    };
+                };
                 /** @description Default Response */
                 400: {
                     headers: {
@@ -499,6 +627,19 @@ export interface paths {
                 };
                 /** @description Default Response */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };

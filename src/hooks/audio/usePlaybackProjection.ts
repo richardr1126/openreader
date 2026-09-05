@@ -12,9 +12,11 @@ import {
 } from '@/lib/client/tts/playback-grid';
 import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
+import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
 
 export type PlaybackSessionState = {
   sessionId: string;
+  sessionInstanceId?: string;
   audioUrl: string;
   timelineUrl: string;
   seekLayoutUrl?: string;
@@ -77,6 +79,19 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     locatorKey: string;
   } | null>(null);
   const lastTimelineHealAtRef = useRef(0);
+  const timelineLoaderRef = useRef<ReturnType<typeof createPlaybackTimelineLoader<TtsPlaybackGrid>> | null>(null);
+  if (!timelineLoaderRef.current) {
+    timelineLoaderRef.current = createPlaybackTimelineLoader({
+      getRunId: () => playbackRunIdRef.current,
+      getSession: () => playbackSessionRef.current,
+      apply: (timeline) => { playbackTimelineRef.current = timeline; },
+      load: async (url, signal) => {
+        const response = await fetch(url, { cache: 'no-store', signal });
+        if (!response.ok) throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
+        return normalizePlaybackGrid(await response.json());
+      },
+    });
+  }
 
   const publishPlaybackTimeSec = useCallback((value: number, options?: { force?: boolean }) => {
     const next = Math.max(0, Number.isFinite(value) ? value : 0);
@@ -114,13 +129,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
   }, [playbackSessionRef]);
 
   const refreshPlaybackTimeline = useCallback(async (timelineUrl: string, signal?: AbortSignal) => {
-    const response = await fetch(timelineUrl, { cache: 'no-store', signal });
-    if (!response.ok) {
-      throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
-    }
-    const timeline = normalizePlaybackGrid(await response.json());
-    playbackTimelineRef.current = timeline;
-    return timeline;
+    return timelineLoaderRef.current!.refresh(timelineUrl, signal);
   }, []);
 
   const projectPlaybackTime = useCallback((currentTimeSec: number) => {
@@ -216,6 +225,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
 
   const resetPlaybackProjection = useCallback(() => {
     stopPlaybackProjectionLoop();
+    timelineLoaderRef.current?.reset();
     playbackTimelineRef.current = null;
     playbackStreamBaseSecRef.current = 0;
     lastProjectionRef.current = null;

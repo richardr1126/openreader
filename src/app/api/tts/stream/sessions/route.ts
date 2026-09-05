@@ -111,7 +111,11 @@ export async function POST(request: NextRequest) {
       planObjectKey,
       purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live',
     });
-    const operation = await new ComputeWorkerClient().createTtsPlaybackOperation({
+    const client = new ComputeWorkerClient();
+    const preparedGenerationRunId = parsed.generationExtent === 'document'
+      ? null
+      : `prepared:${expiresAt}:${selectedOrdinal}`;
+    const workerRequest = {
       sessionId,
       userId: scope.userId,
       storageUserId: scope.storageUserId,
@@ -126,16 +130,22 @@ export async function POST(request: NextRequest) {
       // playback cursor; cursor heartbeats enqueue follow-up runs as needed.
       aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
       backgroundExtent,
-      ...(parsed.generationExtent === 'document'
-        ? {}
-        : { generationRunId: `initial:${selectedOrdinal}` }),
+      ...(preparedGenerationRunId === null ? {} : { generationRunId: preparedGenerationRunId }),
       ...(parsed.generationExtent === 'document' ? { generationExtent: 'document' as const } : {}),
       planning,
-    }, { signal: request.signal });
+    };
+    const prepared = preparedGenerationRunId === null ? null
+      : await client.prepareTtsPlaybackSession({
+        ...workerRequest,
+        generationRunId: preparedGenerationRunId,
+      }, { signal: request.signal });
+    const operation = parsed.generationExtent === 'document'
+      ? await client.createTtsPlaybackOperation(workerRequest, { signal: request.signal }) : null;
 
     const responseBase = {
       sessionId,
       operation,
+      ...(prepared ? { sessionInstanceId: prepared.sessionInstanceId } : {}),
       timelineUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/timeline`,
       eventsUrl: `/api/tts/stream/${encodeURIComponent(sessionId)}/events`,
       seekLayoutUrl: parsed.planId

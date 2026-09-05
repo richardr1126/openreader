@@ -27,7 +27,11 @@ export type { ComputeWorkerRouteDeps } from './route-context';
 
 /** Composition root for the compute worker's domain-owned route registrars. */
 export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext): void {
-  const playbackReadModel = createPlaybackSessionReadModel(context);
+  const playbackReadModel = createPlaybackSessionReadModel({
+    storage: context.storage,
+    playbackStorage: context.playbackStorage,
+    logger: context.app.log,
+  });
   const playbackController = createPlaybackSessionController(context, playbackReadModel);
 
   registerHealthRoutes(context);

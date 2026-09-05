@@ -447,6 +447,7 @@ export function registerPlaybackAudioRoutes(
       }
     };
 
-    return Readable.from(streamRange());
+    // Backpressure is measured in bytes, not sixteen whole segment buffers.
+    return Readable.from(streamRange(), { objectMode: false, highWaterMark: 64 * 1024 });
   });
 }

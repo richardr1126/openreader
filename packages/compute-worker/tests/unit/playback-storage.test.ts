@@ -130,6 +130,17 @@ class WatchableMemoryKv extends MemoryKv {
 }
 
 describe('TTS playback storage', () => {
+  test('lists existing segment ordinals only within the exact artifact scope', async () => {
+    const storage = new MemoryStorage();
+    const artifacts = createTtsPlaybackSegmentArtifactStore({ storage, s3Prefix: 'openreader' });
+    const scope = { storageUserId: 'user-1', documentId: 'a'.repeat(64), documentVersion: 1, settingsHash: 'settings-1' };
+    await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 9000 }), Buffer.from('{}'));
+    await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 2 }), Buffer.from('{}'));
+    await storage.putObject(artifacts.sidecarKey({ ...scope, settingsHash: 'other-settings', ordinal: 3 }), Buffer.from('{}'));
+    await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 4 }) + '.tmp', Buffer.from('{}'));
+    expect(await artifacts.listSegmentOrdinals(scope)).toEqual([2, 9000]);
+  });
+
   test('stores sessions and updates cursors in KV', async () => {
     const kv = new MemoryKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });
@@ -183,6 +194,12 @@ describe('TTS playback storage', () => {
     });
 
     await store.patchSession('session-1', { status: 'running', updatedAt: 400 });
+    await store.patchSession('session-1', {
+      playbackActive: true, cursorOrdinal: 99, cursorUpdatedAt: 450, expiresAt: 9999,
+    }, 'replaced-instance');
+    expect(await store.getSession('session-1')).toMatchObject({
+      playbackActive: false, cursorOrdinal: 42, expiresAt: 1234,
+    });
     await store.updateCursor('session-1', 43, 'instance-1', 500);
     expect(await store.getSession('session-1')).toMatchObject({
       status: 'running',

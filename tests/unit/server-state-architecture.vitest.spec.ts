@@ -230,16 +230,18 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/plans/clear',
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
+      'POST /v1/tts-playback/sessions/prepare',
       'POST /v1/tts-playback/sessions/resolve',
       'POST /v1/user-storage/cleanup',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
     expect(workerRoutes).not.toContain('/v1/tts-playback/cache/reset');
     expect(workerRoutes).toContain('await playbackStorage.artifacts.incrementScopeEpoch(scope, now)');
-    expect(workerRoutes).toContain('await playbackStorage.sessions.cancelSessionsForScope(scope, now)');
+    expect(workerRoutes).toContain("await timed('cancel_sessions'");
+    expect(workerRoutes).toContain('playbackStorage.sessions.cancelSessionsForScope(scope, now)');
     expect(workerRoutes).toContain('readModel.invalidateSidecarsForScope(scope)');
-    expect(workerRoutes).toContain('await invalidatePlaybackOperationsForScope({');
-    expect(workerRoutes).toContain('await clearTtsPlaybackArtifacts({');
+    expect(workerRoutes).toContain("await timed('invalidate_operations', () => invalidatePlaybackOperationsForScope({");
+    expect(workerRoutes).toContain("await timed('delete_objects', () => clearTtsPlaybackArtifacts({");
     const compositionRoot = source('packages/compute-worker/src/api/routes.ts');
     expect(compositionRoot).toContain('registerPlaybackAudioRoutes(context, playbackReadModel, playbackController)');
     expect(compositionRoot).not.toContain('app.get(');
@@ -490,7 +492,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");
     expect(workerRoutes).not.toContain("/v1/tts-playback/:sessionId/audio");
     expect(workerRoutes).not.toContain("/v1/tts-playback-plans/operations");
-    expect(workerRoutes).toContain('Readable.from(streamRange())');
+    expect(workerRoutes).toContain("Readable.from(streamRange(), { objectMode: false, highWaterMark: 64 * 1024 })");
     // The audio stream is seekable (range-capable + finite Content-Length) so the
     // browser honors post-generation playbackRate, including on Safari.
     expect(workerRoutes).toContain("reply.header('Accept-Ranges', 'bytes')");

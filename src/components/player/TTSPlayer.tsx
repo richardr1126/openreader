@@ -145,11 +145,14 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
             {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
           </IconButton>
 
+          {/* Loading is cancelable through this same control. Keep it focusable
+              when cancellation flips intent back to Play, even if an older async
+              render has not cleared its processing flag yet. */}
           <IconButton
             onClick={togglePlay}
             aria-label={playbackControl.ariaLabel}
             aria-busy={playbackControl.isPending}
-            disabled={!isPlaying && (!isPlaybackReady || isProcessing || !hasReadableContent)}
+            disabled={!isPlaying && (!isPlaybackReady || !hasReadableContent)}
             className="relative"
           >
             {!hasReadableContent

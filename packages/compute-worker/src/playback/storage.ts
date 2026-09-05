@@ -83,7 +83,7 @@ export interface TtsPlaybackResetScope {
 export interface TtsPlaybackSessionStore {
   getSession(sessionId: string): Promise<TtsPlaybackSessionState | null>;
   putSessionIfNewer(state: TtsPlaybackSessionState): Promise<boolean>;
-  patchSession(sessionId: string, patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>): Promise<void>;
+  patchSession(sessionId: string, patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>, expectedSessionInstanceId?: string): Promise<void>;
   patchSessionIfGenerationRun(
     sessionId: string,
     expectedGenerationRunId: string | null,
@@ -107,6 +107,8 @@ export interface TtsPlaybackSessionStore {
 export interface TtsPlaybackSegmentArtifactStore {
   /** S3 key of one segment's sidecar, addressable directly from the plan ordinal. */
   sidecarKey(input: TtsPlaybackSegmentScope & { ordinal: number }): string;
+  /** Discover stored ordinals without issuing an object-store miss for every ungenerated segment. */
+  listSegmentOrdinals(scope: TtsPlaybackSegmentScope): Promise<number[]>;
   /** Write one segment's sidecar (plain put to its own key — race-free). */
   putSegmentMetadata(metadata: TtsPlaybackSegmentMetadata): Promise<string>;
   /** Read one segment's sidecar by ordinal. Returns null when not yet generated. */
@@ -221,6 +223,7 @@ export function createTtsPlaybackKvStore(input: {
     sessionId: string,
     recordPatch: Partial<TtsPlaybackSessionState>,
     expectedGenerationRunId?: string | null,
+    expectedSessionInstanceId?: string,
   ): Promise<boolean> => {
     const kv = await input.getKv();
     const key = sessionKvKey(sessionId);
@@ -228,6 +231,8 @@ export function createTtsPlaybackKvStore(input: {
       const entry = await kv.get(key);
       if (!isKvPut(entry)) return false;
       const current = sessionCodec.decode(entry.value);
+      if (expectedSessionInstanceId !== undefined
+        && resolveTtsPlaybackSessionInstanceId(current) !== expectedSessionInstanceId) return false;
       if (
         expectedGenerationRunId !== undefined
         && (current.generationRunId ?? null) !== expectedGenerationRunId
@@ -363,12 +368,13 @@ export function createTtsPlaybackKvStore(input: {
       return true;
     },
 
-    async patchSession(sessionId, patch) {
+    async patchSession(sessionId, patch, expectedSessionInstanceId) {
       const kv = await input.getKv();
       const sessionEntry = await kv.get(sessionKvKey(sessionId));
       if (!isKvPut(sessionEntry)) return;
       const currentSession = sessionCodec.decode(sessionEntry.value);
       const sessionInstanceId = resolveTtsPlaybackSessionInstanceId(currentSession);
+      if (expectedSessionInstanceId !== undefined && sessionInstanceId !== expectedSessionInstanceId) return;
       if (patch.playbackActive !== undefined) {
         await kv.put(activityKvKey(sessionId), activityCodec.encode({
           sessionInstanceId,
@@ -396,7 +402,7 @@ export function createTtsPlaybackKvStore(input: {
       // rewriting the record — the cursor key already carries a fresh timestamp.
       const meaningful = Object.keys(recordPatch).filter((field) => field !== 'updatedAt');
       if (meaningful.length === 0) return;
-      await patchSessionRecord(sessionId, recordPatch);
+      await patchSessionRecord(sessionId, recordPatch, undefined, sessionInstanceId);
     },
 
     async patchSessionIfGenerationRun(sessionId, expectedGenerationRunId, patch) {
@@ -555,6 +561,17 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
 
   return {
     sidecarKey,
+
+    async listSegmentOrdinals(scope) {
+      const prefix = sidecarKey({ ...scope, ordinal: 0 }).slice(0, -'0.json'.length);
+      const keys = await input.storage.listPrefix(prefix);
+      return [...new Set(keys.flatMap((key) => {
+        if (!key.startsWith(prefix)) return [];
+        const match = /^(\d+)\.json$/.exec(key.slice(prefix.length));
+        const ordinal = match ? Number(match[1]) : NaN;
+        return Number.isSafeInteger(ordinal) ? [ordinal] : [];
+      }))].sort((a, b) => a - b);
+    },
 
     async putSegmentMetadata(metadata) {
       // One segment → one immutable object at its own key. Plain put, no shared

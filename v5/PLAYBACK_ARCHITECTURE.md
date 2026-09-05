@@ -249,11 +249,13 @@ or another worker is discovered.
 1. The client ensures the canonical worker plan is loaded.
 2. The client maps the selected/highlighted UI state to exactly one worker-plan
    ordinal from that plan.
-3. The client asks the Next proxy for a playback session with that ordinal.
-4. The compute worker validates the ordinal against the immutable plan and uses it
-   as `generationStartOrdinal`.
-5. The worker writes the session record and cursor key with plain `put`.
-6. A JetStream operation is queued for generation.
+3. The client asks the Next proxy to prepare a playback session with that ordinal.
+4. The compute worker validates the ordinal against the immutable plan, writes an
+   inactive session record, and returns its instance identity without queuing generation.
+5. After the browser accepts the response, it activates that exact session instance
+   by writing the cursor and active playback intent.
+6. Activation queues a JetStream operation and uses the ordinal as
+   `generationStartOrdinal`.
 7. The generation job patches non-cursor session fields such as status and
    generation start with plain `put`.
 
@@ -309,13 +311,14 @@ seeking can target ungenerated regions without cutting a segment in half.
 Readiness is derived from sidecars:
 
 - Single-ordinal reads are used by the stream wait loop.
-- Timeline and seek-layout readers use a bounded scan from the start of the plan
-  through `max(highestCachedCompletedOrdinal, cursorOrdinal) + 64`.
+- Timeline and seek-layout readers list existing sidecars for the exact
+  user/document/version/settings prefix and share concurrent catalogue reads.
+  They do not probe ungenerated ordinals before a deep cursor.
 - Reads are batched in groups of 32.
-- Completed sidecars are cached forever within an LRU-ish scope cache capped at 8
-  document/settings scopes.
-- The non-hot `/segments` listing reads all plan ordinals so it can return the full
-  completed set.
+- Completed sidecars with exact alignment are cached within an LRU-ish scope
+  cache capped at 8 document/settings scopes; cache epochs invalidate cleared data.
+- The default `/segments` listing returns the complete discovered cached set;
+  explicit-window requests still read only their requested ordinal window.
 
 When audio is ready before exact alignment, the timeline explicitly labels its
 word schedule as `proportional`. The client may use that schedule immediately,
@@ -1656,3 +1659,89 @@ Playwright matrix with both real playback journeys. A subsequent deployed cold-m
 walkthrough should confirm bounded model progress, uninterrupted audio refill,
 prompt pause/seek cancellation, and exact timing replacement after the model
 becomes ready.
+
+### Step 27 — Production progress and cleanup latency
+
+The production follow-up found delivery-path work that grows with network latency
+and accumulated data, independently of inference CPU load:
+
+- A fresh operation SSE subscription replays the latest event for its exact
+  subject before following new events. This closes the initial-state-read /
+  subscription race that could permanently miss completion. Cursor-based
+  reconnects retain sequence replay. Older snapshots cannot regress the initial
+  state, and immediate terminal replay also tears down its consumer correctly.
+- Reader bootstrap now projects running PDF/download progress from the authorized
+  worker SSE snapshot. Full readiness resolution happens only at operation
+  boundaries; upstream keepalives are forwarded instead of discarded.
+- Exact word timing is persisted in segment sidecars. SSE signals a change, then
+  the browser fetches the timeline; it does not receive a separate event per word.
+  Foreground refresh bursts share active reads and retain a trailing refresh.
+  Timeline reads are scoped to their playback run/session, and reset aborts old
+  requests so late responses cannot restore stale timing.
+- Whole-document timeline/duration reads list existing sidecars for the exact
+  user/document/version/settings scope, rather than probing every ordinal from
+  zero to a deep cursor. Concurrent reads share an in-flight collection. Exact
+  sidecars stay cached across chapters; proportional sidecars are re-read until
+  exact timing is available. This preserves the complete generated-cache view.
+- Playback job startup uses the same scoped catalogue to discover completed
+  segments. It no longer probes every ungenerated segment in the entire book
+  before starting or resuming synthesis. Epoch and plan-membership checks still
+  exclude cleared or unrelated entries.
+- Cache cleanup batches remote operation reads and invalidations, filters by
+  document/version/settings before session ownership reads, and shares repeated
+  ownership lookups. Clearing one document must not invalidate another document's
+  live jobs merely because they belong to the same user.
+- Cache reset still waits for physical cleanup before reporting success. The
+  interactive app-to-worker request has a 45-second confirmation deadline and
+  the browser a 60-second deadline. A timeout reports uncertain completion, not
+  success, and does not automatically retry destructive cleanup. Worker phase
+  timings distinguish session cancellation, operation invalidation, and object
+  deletion on the next production run.
+
+Regression coverage includes a blocked readiness resolver, slow/coalesced reads,
+late old-run responses, a 10,000-segment book with sparse cached audio, scoped
+cleanup, bounded NATS concurrency, and an uncertain cleanup confirmation.
+Production validation remains required for actual Vercel/Railway latency.
+
+Local verification: 132 Vitest files / 662 tests passed, application and worker
+type checks passed, production build and boundary/route-error/bundle guards
+passed, and the final full Chromium/WebKit matrix passed all 24 cases with both
+real-audio journeys. The EPUB test now waits for its asynchronously loaded
+positive duration rather than sampling it once when the rendition first appears.
+No playback assertions, browser projects, or worker-concurrency settings were
+removed. Temporary stdout-only diagnostic configuration was removed afterward.
+
+Follow-up investigation: rapid cancellation before the session-creation response
+arrives produced aborted HTTP requests alongside queued synthesis in local logs.
+Verify cancellation ownership across that boundary separately; this patch does
+not change session-creation cancellation semantics.
+
+### Step 28 — Playback cancellation and stalled-stream recovery
+
+The production playback follow-up exposed three independent failure modes:
+
+- Live sessions are now prepared inactive and enqueue no synthesis. The browser
+  activates the exact session incarnation only after receiving and accepting the
+  preparation response. Abandoned requests therefore remain inert, and a delayed
+  pause/start from a replaced incarnation is rejected.
+- Refill identity includes the predecessor generation run. Concurrent cursor and
+  audio signals still collapse onto one idempotent job, while a later visit to the
+  same cursor cannot reuse a partial job that stopped successfully on pause.
+- The cursor heartbeat returns the current worker operation and retargets the
+  operation-scoped SSE subscription when refill begins. This preserves exact-word
+  timing and readiness delivery without adding another polling loop.
+- A five-second local media-clock watchdog reconnects only when the existing SSE
+  read model already proves enough contiguous cached audio is ready. It reopens
+  the same canonical session at the current ordinal, preserving the cache and
+  projected document time. Two unsuccessful reconnects pause with an actionable
+  error instead of spinning or creating replacement sessions.
+- The worker audio response uses byte-mode backpressure with a 64 KiB high-water
+  mark; it no longer permits Node to queue sixteen whole segment buffers merely
+  because an async generator yields Buffer objects.
+
+Focused coverage locks cancellation before activation, incarnation ordering,
+same-cursor refill identity, SSE operation replacement, and bounded same-session
+media recovery. Local verification passed 133 Vitest files / 669 tests, application
+and worker type checks, the production build and bundle/boundary guards, and the
+complete 24-case Chromium/WebKit matrix with both true-audio journeys. Production
+network validation remains the final deployment check for this step.
