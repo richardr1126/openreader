@@ -204,8 +204,8 @@ export function ComputeLimitsEditor({
       <div className="rounded-lg border border-line bg-surface-sunken p-3">
         <p className="text-sm font-medium text-foreground">Usage and request limits</p>
         <p className="mt-0.5 text-xs text-muted">
-          Each switch has one meaning: enabled limits are enforced; disabled limits are bypassed.
-          Worker safety controls continue to apply either way.
+          Request-limit switches control admission only; the TTS switch controls generated-character usage.
+          Worker queues, resource capacity, and provider capacity continue to apply either way.
         </p>
       </div>
 
@@ -225,7 +225,9 @@ export function ComputeLimitsEditor({
                     ? 'bg-accent-wash text-accent'
                     : 'bg-surface-sunken text-muted'
                 }`}>
-                  {actionPolicy.enabled ? 'Limited' : 'Unlimited'}
+                  {action === 'tts_synthesis'
+                    ? (actionPolicy.enabled ? 'Usage limited' : 'Usage unlimited')
+                    : (actionPolicy.enabled ? 'Admission limited' : 'Admission open')}
                 </span>
               </summary>
               <div className="space-y-3 border-t border-line-soft px-3 pb-3 pt-2">

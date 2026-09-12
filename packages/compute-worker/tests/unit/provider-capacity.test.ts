@@ -23,6 +23,23 @@ class MemoryKv implements KvStoreLike {
 }
 
 describe('provider capacity coordinator', () => {
+  test('exposes the effective provider concurrency for playback scheduling', () => {
+    const policy = cloneComputeLimitPolicyDocument();
+    policy.providers.overrides.serial = {
+      ...policy.providers.defaults,
+      maxConcurrent: 1,
+    };
+    policy.providers.overrides.unlimited = {
+      ...policy.providers.defaults,
+      enabled: false,
+    };
+    const coordinator = new ProviderCapacityCoordinator(() => policy);
+
+    expect(coordinator.configuredMaxConcurrent('serial')).toBe(1);
+    expect(coordinator.configuredMaxConcurrent('missing')).toBe(3);
+    expect(coordinator.configuredMaxConcurrent('unlimited')).toBeNull();
+  });
+
   test('serializes enforced provider calls and releases the slot', async () => {
     const policy = cloneComputeLimitPolicyDocument();
     policy.providers.defaults = {

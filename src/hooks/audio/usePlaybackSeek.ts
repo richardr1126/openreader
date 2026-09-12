@@ -31,6 +31,7 @@ type UsePlaybackSeekInput = {
     documentTimeSec: number,
     targetOrdinal: number,
     targetStartSec: number,
+    options?: { reopenStream?: boolean },
   ) => void;
   setPlaybackPhase: (phase: TtsPlaybackPhase) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
@@ -71,11 +72,12 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     documentTimeSec: number,
     ordinal: number,
     segmentStartSec: number,
+    reopenStream = false,
   ) => {
     const audio = audioRef.current;
     if (!audio || !playbackActiveRef.current || !audio.src) return;
     try {
-      setAudioDocumentTime(audio, documentTimeSec, ordinal, segmentStartSec);
+      setAudioDocumentTime(audio, documentTimeSec, ordinal, segmentStartSec, { reopenStream });
     } catch {
       // Projection still updates even when a browser rejects the media seek.
     }
@@ -142,7 +144,9 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
           || playbackSessionRef.current !== session) return;
         const targetSec = Math.max(0, slot.startMs / 1000);
         setSelectedOrdinal(pendingSeek.ordinal);
-        applyReadyMediaPosition(targetSec, pendingSeek.ordinal, targetSec);
+        // A generated range after a gap cannot be read through the old stream
+        // prefix. Reopen only after SSE proves the target buffer is ready.
+        applyReadyMediaPosition(targetSec, pendingSeek.ordinal, targetSec, true);
         publishPlaybackTimeSec(targetSec, { force: true });
         projectPlaybackTime(targetSec);
         setPendingSeek(null);
@@ -204,13 +208,9 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
       }
       setPlaybackPhase('buffering');
     }
-    if (audio && playbackActiveRef.current && audio.src) {
-      try {
-        setAudioDocumentTime(audio, targetStartSec, target.ordinal, targetStartSec);
-      } catch {
-        // The readiness update re-seeks accurately once audio is available.
-      }
-    }
+    // Do not seek the media element into an ungenerated range. WebKit retries
+    // a 409 response aggressively; the pending-seek effect reopens the stream
+    // after the SSE read model proves contiguous target audio is ready.
     projectPlaybackTime(targetStartSec);
     startPendingSeek(target.ordinal);
   }, [
@@ -219,11 +219,9 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     applyReadyMediaPosition,
     cancelPendingSeek,
     isPlayingRef,
-    playbackActiveRef,
     playbackSeekLayout,
     projectPlaybackTime,
     publishPlaybackTimeSec,
-    setAudioDocumentTime,
     setPlaybackPhase,
     setSelectedOrdinal,
     startPendingSeek,

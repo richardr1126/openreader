@@ -51,7 +51,7 @@ describe('compute limit policy resolution', () => {
   it('builds stable policy versions and fixed UTC windows', () => {
     const policy = cloneComputeLimitPolicyDocument();
     expect(computePolicyVersion(policy)).toBe(computePolicyVersion(policy));
-    policy.actions.pdf_layout.enabled = false;
+    policy.actions.pdf_layout.enabled = true;
     expect(computePolicyVersion(policy)).not.toBe(computePolicyVersion(cloneComputeLimitPolicyDocument()));
 
     expect(fixedWindow(61_000, 60)).toEqual({ startMs: 60_000, endMs: 120_000 });

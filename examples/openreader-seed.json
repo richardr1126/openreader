@@ -16,7 +16,7 @@
       "schemaVersion": 2,
       "actions": {
         "pdf_layout": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 8, "windowSeconds": 60 },
@@ -79,7 +79,7 @@
           }
         },
         "tts_playback_export": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 2, "windowSeconds": 600 },
@@ -100,7 +100,7 @@
           }
         },
         "document_preview": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 30, "windowSeconds": 600 },
@@ -121,7 +121,7 @@
           }
         },
         "document_conversion": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 4, "windowSeconds": 600 },
@@ -142,7 +142,7 @@
           }
         },
         "account_export": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 2, "windowSeconds": 3600 },
@@ -189,7 +189,7 @@
       "providers": {
         "defaults": {
           "enabled": true,
-          "maxConcurrent": 1,
+          "maxConcurrent": 3,
           "requestsPerMinute": 60,
           "charactersPerMinute": 100000,
           "maxWaitSeconds": 30

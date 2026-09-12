@@ -88,6 +88,11 @@ export class ProviderCapacityCoordinator {
     return providers.overrides[providerRef] ?? providers.defaults;
   }
 
+  configuredMaxConcurrent(providerRef: string): number | null {
+    const limits = this.limits(providerRef);
+    return limits.enabled ? limits.maxConcurrent : null;
+  }
+
   private async acquireDistributed(input: {
     providerRef: string;
     characters: number;

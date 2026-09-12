@@ -33,6 +33,19 @@ export function requestedPlaybackSegmentFailed(input: {
     && !input.completedOrdinals.has(input.requiredOrdinal);
 }
 
+export function playbackGenerationCancellationExpected(input: {
+  generationExtent: 'window' | 'document';
+  generationRunId: string | null;
+  session: {
+    generationRunId?: string | null;
+    playbackActive?: boolean;
+  } | null;
+}): boolean {
+  return !input.session
+    || (input.session.generationRunId ?? null) !== input.generationRunId
+    || (input.generationExtent !== 'document' && input.session.playbackActive === false);
+}
+
 export function createTtsPlaybackHandler(input: JobHandlerContext) {
   return async function runTtsPlayback(
     payload: TtsPlaybackJobRequest,
@@ -277,6 +290,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           },
           consumeUsage: consumeTtsSynthesisUsage,
           acquireProviderCapacity: input.acquireProviderCapacity,
+          getProviderMaxConcurrent: input.getProviderMaxConcurrent,
           coolDownProviderCapacity: input.coolDownProviderCapacity,
           onModelDownloadProgress: createModelDownloadProgressReporter({
             publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
@@ -341,6 +355,17 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       return { sessionId: parsed.sessionId, planObjectKey, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     } catch (error) {
       const latest = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
+      if (playbackGenerationCancellationExpected({
+        generationExtent: parsed.generationExtent ?? 'window',
+        generationRunId,
+        session: latest,
+      })) {
+        return {
+          sessionId: parsed.sessionId,
+          planObjectKey: parsed.planObjectKey,
+          timing: { queueWaitMs, computeMs: Date.now() - startedAt },
+        };
+      }
       if (
         (latest?.status === 'queued' || latest?.status === 'running')
         && (latest.generationRunId ?? null) === generationRunId

@@ -376,6 +376,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     s3Prefix,
     logger: app.log,
     acquireProviderCapacity: (input) => providerCapacity.acquire(input),
+    getProviderMaxConcurrent: (providerRef) => providerCapacity.configuredMaxConcurrent(providerRef),
     coolDownProviderCapacity: (providerRef, retryAfterSeconds) => (
       providerCapacity.coolDown(providerRef, retryAfterSeconds)
     ),

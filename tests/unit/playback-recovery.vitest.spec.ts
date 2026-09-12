@@ -57,4 +57,25 @@ describe('same-session media recovery', () => {
     f.recovery.check();
     expect(f.reconnect).toHaveBeenCalledTimes(2);
   });
+
+  test('stops immediately on terminal generation failure instead of retrying the media URL', () => {
+    let failed = false;
+    const reconnect = vi.fn();
+    const onTerminalFailure = vi.fn();
+    const recovery = createPlaybackRecovery({
+      isCurrent: () => true,
+      currentTime: () => 20,
+      readyTarget: () => ({ ordinal: 12 }),
+      hasTerminalFailure: () => failed,
+      reconnect,
+      onExhausted: vi.fn(),
+      onTerminalFailure,
+    });
+    failed = true;
+    recovery.check();
+    expect(onTerminalFailure).toHaveBeenCalledTimes(1);
+    expect(reconnect).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(30_000);
+    expect(onTerminalFailure).toHaveBeenCalledTimes(1);
+  });
 });
