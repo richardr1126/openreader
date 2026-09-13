@@ -163,7 +163,7 @@
           }
         },
         "tts_synthesis": {
-          "enabled": true,
+          "enabled": false,
           "admission": { "windows": [], "active": [] },
           "usage": [
             { "scope": "user", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },

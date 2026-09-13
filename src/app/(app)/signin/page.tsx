@@ -78,7 +78,7 @@ function SignInContent() {
       }
     } catch (err) {
       console.error('Sign in error:', err);
-      setError('Unable to connect. Please try again.');
+      setError('Unable to sign in. Please try again.');
     } finally {
       setLoadingEmail(false);
     }
@@ -121,12 +121,12 @@ function SignInContent() {
 
         <Surface elevation="3" className="w-full max-w-md p-6">
           <h1 className="text-xl font-semibold text-foreground">
-            {sessionExpired ? 'Session Expired' : 'Connect Account'}
+            {sessionExpired ? 'Session Expired' : 'Sign in'}
           </h1>
           <p className="text-sm text-soft mt-1">
             {sessionExpired
               ? 'Please sign in again to continue'
-              : 'Connect an email account to sync your data across devices'}
+              : 'Sign in to sync your data across devices'}
           </p>
 
         {/* Alerts */}
@@ -176,7 +176,7 @@ function SignInContent() {
             <span className="text-sm text-foreground">Remember me</span>
           </label>
 
-          {/* Connect Button */}
+          {/* Sign in button */}
           <Button
             type="submit"
             disabled={isAnyLoading}
@@ -185,7 +185,7 @@ function SignInContent() {
             size="md"
             className="w-full"
           >
-            {loadingEmail ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Connect'}
+            {loadingEmail ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Sign in'}
           </Button>
 
           {/* GitHub */}

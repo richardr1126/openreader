@@ -15,24 +15,11 @@ export async function enterAnonymousLibrary(page: Page) {
     .check();
   await privacyDialog.getByRole('button', { name: 'Continue', exact: true }).click();
 
-  const backToSettings = page.getByRole('button', {
-    name: 'Back to settings',
-    exact: true,
-  });
-  const settingsPanel = page.getByTestId('settings-modal');
-  await expect(backToSettings).toBeVisible();
-  await expect(settingsPanel).not.toHaveAttribute('data-transition', '');
-  await backToSettings.click();
-
-  const settingsDialog = page.getByRole('dialog', { name: /^Settings/ });
-  const closeSettings = settingsDialog.getByRole('button', {
-    name: 'Close dialog',
-    exact: true,
-  });
-  await expect(closeSettings).toBeVisible();
-  await expect(settingsPanel).not.toHaveAttribute('data-transition', '');
-  await closeSettings.click();
-  await expect(settingsPanel).toHaveCount(0);
+  const changelogDialog = page.getByRole('dialog', { name: 'Changelog', exact: true });
+  const changelogPanel = page.getByTestId('changelog-modal');
+  await expect(changelogPanel).toBeVisible();
+  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await expect(changelogPanel).toHaveCount(0);
 
   const declineOptionalCookies = page.getByRole('button', {
     name: 'Decline Non-Essential',

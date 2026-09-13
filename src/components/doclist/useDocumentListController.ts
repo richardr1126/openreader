@@ -265,14 +265,6 @@ export function useDocumentListController() {
       phase: 'uploading' as const,
     };
   }, [activeUploadBatches]);
-  const visibleSelectedCount = useMemo(
-    () => model.visibleDocuments.reduce(
-      (count, document) => count + (selection.isSelected(document) ? 1 : 0),
-      0,
-    ),
-    [model.visibleDocuments, selection],
-  );
-
   return {
     listState,
     model,
@@ -290,7 +282,6 @@ export function useDocumentListController() {
     },
     documentsQueryState,
     retryQueries,
-    visibleSelectedCount,
     requestDeleteDocument,
     documentToDelete,
     cancelDeleteDocument: () => setDocumentToDelete(null),

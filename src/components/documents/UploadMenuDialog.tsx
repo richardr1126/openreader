@@ -13,12 +13,16 @@ import {
 } from '@/components/ui';
 import {
   UploadIcon,
+  DownloadIcon,
   FileIcon,
   RefreshIcon,
   CheckIcon,
   BrowserIcon,
 } from '@/components/icons/Icons';
+import { ProgressPopup } from '@/components/ProgressPopup';
+import { DocumentSelectionModal } from './DocumentSelectionModal';
 import { DocumentUploader, type UploadBatchState } from './DocumentUploader';
+import { useLibraryImport } from './useLibraryImport';
 
 interface UploadMenuDialogProps {
   isOpen: boolean;
@@ -26,7 +30,7 @@ interface UploadMenuDialogProps {
   onUploadBatchChange?: (state: UploadBatchState) => void;
 }
 
-type TabValue = 'file' | 'create' | 'url';
+type TabValue = 'file' | 'create' | 'url' | 'library';
 
 type SidebarSection = {
   id: TabValue;
@@ -38,6 +42,7 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { id: 'file', label: 'Upload Files', icon: UploadIcon },
   { id: 'create', label: 'Create Document', icon: FileIcon },
   { id: 'url', label: 'Import from Web', icon: BrowserIcon },
+  { id: 'library', label: 'Server Library', icon: DownloadIcon },
 ];
 
 export function UploadMenuDialog({
@@ -46,6 +51,7 @@ export function UploadMenuDialog({
   onUploadBatchChange,
 }: UploadMenuDialogProps) {
   const { uploadDocuments } = useDocuments();
+  const libraryImport = useLibraryImport();
   const [activeTab, setActiveTab] = useState<TabValue>('file');
 
   // --- Create Text/Markdown State ---
@@ -161,15 +167,16 @@ export function UploadMenuDialog({
   };
 
   return (
-    <SidebarDialog
-      open={isOpen}
-      onClose={handleClose}
-      headerTitle="Add Documents"
-      sections={SIDEBAR_SECTIONS}
-      activeSectionId={activeTab}
-      onSectionChange={handleTabChange}
-      className="h-[480px]"
-    >
+    <>
+      <SidebarDialog
+        open={isOpen}
+        onClose={handleClose}
+        headerTitle="Add Documents"
+        sections={SIDEBAR_SECTIONS}
+        activeSectionId={activeTab}
+        onSectionChange={handleTabChange}
+        className="h-[480px]"
+      >
       {/* TAB 1: File Uploader */}
       {activeTab === 'file' && (
         <div className="h-full flex flex-col gap-4 animate-fade-in">
@@ -412,6 +419,50 @@ export function UploadMenuDialog({
           </div>
         </div>
       )}
-    </SidebarDialog>
+
+      {activeTab === 'library' && (
+        <div className="flex h-full flex-col justify-center rounded-lg border border-line bg-surface-sunken p-6 text-center animate-fade-in">
+          <DownloadIcon className="mx-auto h-8 w-8 text-accent" />
+          <h3 className="mt-3 text-sm font-semibold text-foreground">Import from the server</h3>
+          <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-soft">
+            Browse documents exposed through this OpenReader server&apos;s mounted library folders and copy selected files into your library.
+          </p>
+          <Button
+            variant="primary"
+            className="mx-auto mt-5"
+            disabled={libraryImport.isImporting}
+            onClick={() => {
+              onClose();
+              libraryImport.openSelection();
+            }}
+          >
+            Browse server library
+          </Button>
+        </div>
+      )}
+      </SidebarDialog>
+
+      <ProgressPopup
+        isOpen={libraryImport.showProgress}
+        progress={libraryImport.progress}
+        estimatedTimeRemaining={libraryImport.estimatedTimeRemaining || undefined}
+        onCancel={libraryImport.cancel}
+        statusMessage={libraryImport.statusMessage}
+        operationType="library"
+        cancelText="Cancel"
+      />
+      <DocumentSelectionModal
+        isOpen={libraryImport.isSelectionOpen}
+        onClose={libraryImport.closeSelection}
+        onConfirm={libraryImport.importDocuments}
+        title="Import from Server Library"
+        confirmLabel="Import"
+        isProcessing={libraryImport.isImporting}
+        defaultSelected={false}
+        files={libraryImport.documents}
+        isLoading={libraryImport.isLoading}
+        errorMessage={libraryImport.errorMessage}
+      />
+    </>
   );
 }

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ClaimDataModal from '@/components/auth/ClaimDataModal';
 import { PrivacyModal } from '@/components/PrivacyModal';
+import { ChangelogModal } from '@/components/settings/ChangelogModal';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
@@ -13,7 +14,7 @@ import { EMPTY_CLAIM_COUNTS, useClaimData } from '@/hooks/useClaimData';
 import type { ClaimableCounts } from '@/types/client';
 
 type OnboardingFlowContextValue = {
-  changelogOpenSignal: number;
+  openChangelog: () => void;
 };
 
 const OnboardingFlowContext = createContext<OnboardingFlowContextValue | null>(null);
@@ -30,7 +31,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const { query: onboardingQuery } = useOnboardingState();
   const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | null>(null);
   const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>(EMPTY_CLAIM_COUNTS);
-  const [changelogOpenSignal, setChangelogOpenSignal] = useState(0);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const pendingChangelogOpenRef = useRef(false);
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
@@ -110,7 +111,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
     if (nextStep === 'changelog') {
       pendingChangelogOpenRef.current = false;
-      setChangelogOpenSignal((value) => value + 1);
+      setIsChangelogOpen(true);
     }
   }, [isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
 
@@ -161,8 +162,8 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   }, [isSessionPending, runFlow, runtimeConfig.appVersion, userId]);
 
   const contextValue = useMemo<OnboardingFlowContextValue>(() => ({
-    changelogOpenSignal,
-  }), [changelogOpenSignal]);
+    openChangelog: () => setIsChangelogOpen(true),
+  }), []);
 
   return (
     <OnboardingFlowContext.Provider value={contextValue}>
@@ -177,6 +178,10 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
         claimableCounts={claimableCounts}
         onDismiss={handleClaimComplete}
         onClaimed={handleClaimComplete}
+      />
+      <ChangelogModal
+        open={isChangelogOpen}
+        onClose={() => setIsChangelogOpen(false)}
       />
     </OnboardingFlowContext.Provider>
   );

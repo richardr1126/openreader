@@ -9,24 +9,49 @@ const sectionFiles = [
   'AccountSettingsPanel.tsx',
   'AdminSettingsPanel.tsx',
   'AppearanceSettingsPanel.tsx',
-  'DocumentSettingsPanel.tsx',
   'ProviderSettingsPanel.tsx',
 ];
 
 describe('settings ownership', () => {
-  test('keeps the public entry point and modal composition small', () => {
-    const publicEntry = source('src/components/SettingsModal.tsx');
-    const modal = source('src/components/settings/SettingsModal.tsx');
-    const sidebarDialog = source('src/components/ui/sidebar-dialog.tsx');
+  test('keeps the routed settings composition separate from section behavior', () => {
+    const route = source('src/app/(app)/app/settings/page.tsx');
+    const page = source('src/components/settings/SettingsPage.tsx');
+    const library = source('src/components/HomeContent.tsx');
 
-    expect(publicEntry).toBe("export { SettingsModal, SettingsTrigger } from './settings/SettingsModal';\n");
+    expect(route).toContain("from '@/components/settings/SettingsPage'");
+    expect(library).toContain('href="/app/settings"');
+    expect(library).not.toContain('SettingsModal');
     for (const sectionFile of sectionFiles) {
-      expect(modal).toContain(`from './${sectionFile.replace('.tsx', '')}'`);
+      expect(page).toContain(`from './${sectionFile.replace('.tsx', '')}'`);
     }
-    expect(modal).not.toContain("fetch('/api/");
-    expect(modal).not.toContain('new EventSource');
-    expect(modal.split('\n').length).toBeLessThan(250);
-    expect(sidebarDialog).toContain("style={{ display: customContent ? 'none' : undefined }}");
+    expect(page).not.toContain("fetch('/api/");
+    expect(page).not.toContain('new EventSource');
+    expect(page).toContain('Close settings');
+    expect(page).toContain('SidebarNavItem');
+    expect(page.split('\n').length).toBeLessThan(320);
+  });
+
+  test('keeps changelog as a standalone modal shared by onboarding and settings', () => {
+    const modal = source('src/components/settings/ChangelogModal.tsx');
+    const changelog = source('src/components/settings/SettingsChangelogPanel.tsx');
+    const onboarding = source('src/contexts/OnboardingFlowContext.tsx');
+
+    expect(modal).toContain('panelTestId="changelog-modal"');
+    expect(modal).toContain('<SettingsChangelogPanel');
+    expect(changelog).toContain('Close changelog');
+    expect(onboarding).toContain('<ChangelogModal');
+    expect(onboarding).toContain('openChangelog');
+  });
+
+  test('keeps account navigation separate from signing out', () => {
+    const userMenu = source('src/components/auth/UserMenu.tsx');
+    const route = source('src/app/(app)/app/settings/page.tsx');
+
+    expect(userMenu).toContain('href="/app/settings?section=account"');
+    expect(userMenu).toContain('aria-label="Open account settings"');
+    expect(userMenu).toContain('aria-label="Sign out"');
+    expect(userMenu).not.toContain('Disconnect account');
+    expect(route).toContain('initialSection={section}');
   });
 
   test('prevents settings sections from importing one another', () => {
@@ -41,11 +66,14 @@ describe('settings ownership', () => {
   });
 
   test('gives long-running import and export work explicit cleanup owners', () => {
-    const libraryImport = source('src/components/settings/useLibraryImport.ts');
+    const libraryImport = source('src/components/documents/useLibraryImport.ts');
+    const uploadDialog = source('src/components/documents/UploadMenuDialog.tsx');
     const accountExport = source('src/components/settings/useAccountExport.ts');
 
     expect(libraryImport).toContain('abortRef.current?.abort()');
     expect(libraryImport).toContain('useEffect(() => cancel, [cancel])');
+    expect(uploadDialog).toContain("id: 'library'");
+    expect(uploadDialog).toContain('Browse server library');
     expect(accountExport).toContain('sourceRef.current?.close()');
     expect(accountExport).toContain('useEffect(() => closeSource, [closeSource])');
   });

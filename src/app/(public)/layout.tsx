@@ -66,7 +66,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                 </p>
                 <div className="public-footer-cta">
                   {enableUserSignups ? (
-                    <ButtonLink href="/signup" variant="outline" size="sm">Create account</ButtonLink>
+                    <ButtonLink href="/signup" variant="outline" size="sm">Sign up</ButtonLink>
                   ) : null}
                   <ButtonAnchor href="https://github.com/richardr1126/openreader" target="_blank" rel="noopener noreferrer" variant="ghost" size="sm">
                     Star on GitHub

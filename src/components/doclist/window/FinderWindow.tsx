@@ -6,7 +6,6 @@ import { LibraryFrame, useIsNarrow } from '@/components/layout';
 interface FinderWindowProps {
   toolbar: ReactNode;
   sidebar: ReactNode;
-  statusBar: ReactNode;
   children: ReactNode;
   /** Controlled sidebar open/closed state (drives mobile drawer + desktop collapse). */
   sidebarOpen: boolean;
@@ -23,7 +22,6 @@ export { useIsNarrow };
 export function FinderWindow({
   toolbar,
   sidebar,
-  statusBar,
   children,
   sidebarOpen,
   onRequestSidebarClose,
@@ -32,7 +30,6 @@ export function FinderWindow({
     <LibraryFrame
       toolbar={toolbar}
       sidebar={sidebar}
-      statusBar={statusBar}
       sidebarOpen={sidebarOpen}
       onRequestSidebarClose={onRequestSidebarClose}
     >

@@ -113,12 +113,15 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
   }, [restartAfterConfigUpdate, setVoice, updateConfigKey]);
 
   const setAudioPlayerSpeedAndRestart = useCallback((speed: number) => {
-    void restartAfterConfigUpdate(
-      () => setAudioSpeed(speed),
-      () => updateConfigKey('audioPlayerSpeed', speed),
-      { resetPlan: false },
-    );
-  }, [restartAfterConfigUpdate, setAudioSpeed, updateConfigKey]);
+    // Browser playback rate is deliberately not part of the generated-audio
+    // plan. Changing it must leave the active media stream, canonical session,
+    // and play intent alone; aborting the stream here leaves an "is playing"
+    // state with no source to resume.
+    setAudioSpeed(speed);
+    void updateConfigKey('audioPlayerSpeed', speed).catch((error: unknown) => {
+      console.error('Could not save audio player speed preference:', error);
+    });
+  }, [setAudioSpeed, updateConfigKey]);
 
   return {
     clearSegmentCaches,

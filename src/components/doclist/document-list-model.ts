@@ -24,8 +24,7 @@ export type DocumentListModel = {
   folders: Folder[];
   folderNameById: Record<string, string>;
   counts: DocumentListCounts;
-  summary: string;
-  totalBytes: number;
+  visibleBytes: number;
 };
 
 export function suggestFolderName(
@@ -64,14 +63,6 @@ export function sortDocuments(
     }
   });
   return direction === 'asc' ? sorted : sorted.reverse();
-}
-
-function buildSummary(counts: DocumentListCounts): string {
-  const parts: string[] = [];
-  if (counts.pdf) parts.push(`${counts.pdf} PDF${counts.pdf === 1 ? '' : 's'}`);
-  if (counts.epub) parts.push(`${counts.epub} EPUB${counts.epub === 1 ? '' : 's'}`);
-  if (counts.html) parts.push(`${counts.html} Text${counts.html === 1 ? ' Doc' : ' Docs'}`);
-  return parts.join(' • ');
 }
 
 export function deriveDocumentListModel({
@@ -171,7 +162,6 @@ export function deriveDocumentListModel({
     folders,
     folderNameById,
     counts,
-    summary: buildSummary(counts),
-    totalBytes: allDocuments.reduce((total, document) => total + document.size, 0),
+    visibleBytes: visibleDocuments.reduce((total, document) => total + document.size, 0),
   };
 }

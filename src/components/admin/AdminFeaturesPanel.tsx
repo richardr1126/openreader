@@ -69,7 +69,11 @@ async function patchAdminSettings(payload: { updates?: Record<string, unknown>; 
   if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
 }
 
-export function AdminFeaturesPanel() {
+export function AdminFeaturesPanel({
+  scope = 'all',
+}: {
+  scope?: 'instance' | 'compute' | 'all';
+}) {
   const queryClient = useQueryClient();
   const { data: session } = useAuthSession();
   const adminSettingsQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
@@ -194,6 +198,8 @@ export function AdminFeaturesPanel() {
   };
 
   const computePolicy = parseComputeLimitPolicyDocument(draft.computeLimitPolicies);
+  const showInstanceSettings = scope === 'instance' || scope === 'all';
+  const showComputeSettings = scope === 'compute' || scope === 'all';
 
   const renderSource = (key: string) => {
     const source = data?.sources?.[key] ?? 'default';
@@ -217,7 +223,7 @@ export function AdminFeaturesPanel() {
 
   return (
     <div className="space-y-4">
-      <Section
+      {showInstanceSettings ? <Section
         title="TTS defaults"
         subtitle="Defaults for new users."
         action={<Badge tone="foreground">Defaults</Badge>}
@@ -269,9 +275,9 @@ export function AdminFeaturesPanel() {
           right={renderSource('showAllProviderModels')}
           variant="flat"
         />
-      </Section>
+      </Section> : null}
 
-      <Section
+      {showComputeSettings ? <Section
         title="Rate limiting"
         subtitle="Direct controls for usage, requests, workers, and TTS providers."
         action={<Badge tone="foreground">Limits</Badge>}
@@ -320,9 +326,9 @@ export function AdminFeaturesPanel() {
             </div>
           </div>
         </div>
-      </Section>
+      </Section> : null}
 
-      <Section
+      {showComputeSettings ? <Section
         title="TTS playback"
         subtitle="Worker generation behavior for progressive playback."
         action={<Badge tone="foreground">Playback</Badge>}
@@ -356,9 +362,9 @@ export function AdminFeaturesPanel() {
             chevronClassName="h-4 w-4 text-muted"
           />
         </div>
-      </Section>
+      </Section> : null}
 
-      <Section
+      {showInstanceSettings ? <Section
         title="Site features"
         subtitle="Feature flags for all users."
         action={<Badge tone="foreground">Feature Flags</Badge>}
@@ -368,7 +374,7 @@ export function AdminFeaturesPanel() {
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">Changelog feed URL</p>
               <p className="text-xs text-muted mt-0.5">
-                Public URL to the changelog manifest JSON used by Settings.
+                Public URL used by the standalone changelog page.
               </p>
             </div>
             <div className="shrink-0">{renderSource('changelogFeedUrl')}</div>
@@ -404,9 +410,9 @@ export function AdminFeaturesPanel() {
           right={renderSource('enableDocxConversion')}
           variant="flat"
         />
-      </Section>
+      </Section> : null}
 
-      <Section
+      {showComputeSettings ? <Section
         title="TTS upstream"
         subtitle="Server-side retry, timeout, and cache controls for TTS generation."
         action={<Badge tone="foreground">Upstream</Badge>}
@@ -465,7 +471,7 @@ export function AdminFeaturesPanel() {
             />
           </div>
         </div>
-      </Section>
+      </Section> : null}
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted">

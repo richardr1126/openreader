@@ -183,7 +183,7 @@ export function AccountSettingsPanel() {
           {session?.user && !session.user.isAnonymous ? (
             <>
               <Button onClick={handleSignOut} variant="outline" size="md">
-                Disconnect account
+                Sign out
               </Button>
 
               <div className="pt-4 mt-4 border-t border-line-soft">
@@ -208,16 +208,16 @@ export function AccountSettingsPanel() {
                     ? 'You are using an anonymous session. Sign up to save your progress permanently, your current data is automatically transferred.'
                     : 'You are using an anonymous session. New account sign-ups are currently disabled by the site administrator.')
                   : (runtimeConfig.enableUserSignups
-                    ? 'No active session. Please sign in or create an account.'
+                    ? 'No active session. Please sign in or sign up.'
                     : 'No active session. Please sign in.')}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link href="/signin">
-                  <Button variant="outline" size="md">Connect</Button>
+                  <Button variant="outline" size="md">Sign in</Button>
                 </Link>
                 {runtimeConfig.enableUserSignups && (
                   <Link href="/signup">
-                    <Button variant="primary" size="md">Create account</Button>
+                    <Button variant="primary" size="md">Sign up</Button>
                   </Link>
                 )}
                 <Link href="/?redirect=false">

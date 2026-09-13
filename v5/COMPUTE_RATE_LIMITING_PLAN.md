@@ -273,9 +273,9 @@ the architecture does not encode unexplained constants as product truth.
 
 The maintained self-host bootstrap policy leaves operation admission limits
 disabled by default. Their configured values remain available as opt-in
-guardrails for a public or shared installation. Uncached synthesis is
-independently limited at the segment boundary, while worker, resource, and
-provider capacity remain enforced.
+guardrails for a public or shared installation. Uncached-synthesis usage limits
+are also opt-in, while worker, resource, and provider capacity remain enforced
+as lightweight protection for the host and upstream services.
 
 | Action | Enabled by default | User admission windows | User active | Site active | Queue / per-worker concurrent |
 | --- | --- | --- | ---: | ---: | --- |
@@ -287,10 +287,10 @@ provider capacity remain enforced.
 | `document_conversion` | no | 4 / 600 seconds; 20 / day | 1 | 8 | 50 / 1 |
 | `account_export` | no | 2 / hour; 4 / day | 1 | 4 | 20 / 1 |
 
-`tts_synthesis` is enabled by default with these daily thresholds: anonymous
-user 50,000; authenticated user 500,000; anonymous IP 100,000; authenticated IP
-1,000,000. Anonymous-device scope uses the anonymous user threshold. All use
-the approved `soft_unit` boundary.
+`tts_synthesis` is disabled by default. When enabled, its configured daily
+thresholds are: anonymous user 50,000; authenticated user 500,000; anonymous IP
+100,000; authenticated IP 1,000,000. Anonymous-device scope uses the anonymous
+user threshold. All use the approved `soft_unit` boundary.
 
 Bootstrap worker execution values are deliberately close to the effective
 three-family behavior of the current default without retaining three unrelated
@@ -493,7 +493,7 @@ Both seed forms must support the complete policy document:
           }
         },
         "tts_synthesis": {
-          "enabled": true,
+          "enabled": false,
           "admission": { "windows": [], "active": [] },
           "usage": [
             { "scope": "user", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },

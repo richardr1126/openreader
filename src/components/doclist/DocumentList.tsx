@@ -15,7 +15,6 @@ import { GalleryView } from './views/GalleryView';
 import { IconsView } from './views/IconsView';
 import { ListView } from './views/ListView';
 import { FinderSidebar } from './window/FinderSidebar';
-import { FinderStatusBar } from './window/FinderStatusBar';
 import { FinderToolbar } from './window/FinderToolbar';
 import { FinderWindow } from './window/FinderWindow';
 import { useDocumentListController } from './useDocumentListController';
@@ -75,6 +74,8 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           onToggleSidebar={controller.toggleSidebar}
           isSidebarOpen={controller.effectiveSidebarOpen}
           showSortControls={sidebarFilter !== 'recents'}
+          itemCount={model.visibleDocuments.length}
+          totalSize={model.visibleBytes}
           leftSlot={brand}
         />
       }
@@ -106,14 +107,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             </div>
           )}
           onRowAction={controller.closeMobileSidebar}
-        />
-      }
-      statusBar={
-        <FinderStatusBar
-          itemCount={model.allDocuments.length}
-          selectedCount={controller.visibleSelectedCount}
-          totalSize={model.totalBytes}
-          summary={model.summary}
         />
       }
       sidebarOpen={controller.effectiveSidebarOpen}

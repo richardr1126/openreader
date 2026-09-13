@@ -80,7 +80,10 @@ export function AdminTasksPanel() {
   const { data, error, isPending: isLoading } = useQuery({
     queryKey: tasksQueryKey,
     queryFn: fetchTasks,
-    refetchInterval: 5000,
+    enabled: Boolean(session?.user?.id),
+    refetchInterval: (query) => (
+      query.state.data?.tasks.some((task) => task.running) ? 2_000 : 30_000
+    ),
   });
 
   useEffect(() => {
@@ -118,7 +121,11 @@ export function AdminTasksPanel() {
   });
 
   return (
-    <Section title="Scheduled tasks" subtitle="Background maintenance jobs. Run them on demand or adjust their schedule.">
+    <Section
+      variant="flat"
+      title="Maintenance schedule"
+      subtitle="Automatic cleanup jobs. Run one now or adjust how often it runs."
+    >
       {data?.scheduler.mode === 'vercel-cron' && (
         <p className="mb-2 text-xs text-soft">
           Vercel Hobby invokes scheduled tasks once daily. Shorter intervals are unavailable on this deployment.
@@ -127,7 +134,7 @@ export function AdminTasksPanel() {
       {isLoading ? (
         <TasksSkeleton />
       ) : (
-        <div className="space-y-2">
+        <ul className="space-y-2">
           {(data?.tasks ?? []).map((task) => (
             <TaskRow
               key={task.key}
@@ -142,9 +149,9 @@ export function AdminTasksPanel() {
             />
           ))}
           {data && data.tasks.length === 0 && (
-            <p className="text-sm text-soft">No tasks registered.</p>
+            <li className="text-sm text-soft">No maintenance tasks registered.</li>
           )}
-        </div>
+        </ul>
       )}
     </Section>
   );
@@ -153,9 +160,13 @@ export function AdminTasksPanel() {
 function TasksSkeleton() {
   const rows = Array.from({ length: 2 });
   return (
-    <div className="space-y-2 animate-pulse" aria-label="Loading scheduled tasks" aria-busy="true">
+    <div
+      className="animate-pulse space-y-2"
+      aria-label="Loading maintenance tasks"
+      aria-busy="true"
+    >
       {rows.map((_, index) => (
-        <Card key={index}>
+        <Card key={index} className="p-3">
           <div className="space-y-2">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5">
@@ -213,76 +224,78 @@ function TaskRow({
   const running = task.running || runPending;
 
   return (
-    <Card>
-      <div className="space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              {running && <RunningDot />}
-              <span className="truncate text-sm font-medium text-foreground">{task.name}</span>
+    <li>
+      <Card className="p-3">
+        <div className="space-y-2.5">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                {running && <RunningDot />}
+                <span className="truncate text-sm font-medium text-foreground">{task.name}</span>
+              </div>
+              {task.description && <p className="mt-0.5 text-xs text-soft">{task.description}</p>}
             </div>
-            {task.description && <p className="mt-0.5 text-xs text-soft">{task.description}</p>}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Switch checked={task.enabled} onChange={onToggle} ariaLabel={`Enable ${task.name}`} disabled={busy} />
-            <Button variant="outline" size="sm" onClick={onRun} disabled={busy || running}>
-              {running ? 'Running…' : 'Run now'}
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-soft">
-            <span
-              className="inline-flex items-center gap-1"
-              title={`Ran in ${formatDuration(task.lastDurationMs)}`}
-            >
-              <ClockIcon className="size-3 text-faint" />
-              {formatRelative(task.lastRunAt)}
-            </span>
-            {task.enabled && schedulerMode === 'vercel-cron' && (
-              <span className="inline-flex items-center gap-1 text-faint">
-                <RefreshIcon className="size-3" />
-                next daily cron
-              </span>
-            )}
-            {task.enabled && schedulerMode !== 'vercel-cron' && task.nextRunAt != null && (
-              <span className="inline-flex items-center gap-1 text-faint">
-                <RefreshIcon className="size-3" />
-                next {formatRelative(task.nextRunAt)}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-faint">
-            <span>Every</span>
-            <Input
-              type="number"
-              min={minimumIntervalMs / 60000}
-              step="any"
-              controlSize="sm"
-              className="w-14 text-center"
-              value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
-              aria-label={`${task.name} interval in minutes`}
-            />
-            <span>min</span>
-            {intervalDirty && (
-              <Button variant="primary" size="xs" onClick={() => onSaveInterval(newIntervalMs)} disabled={busy}>
-                Save
+            <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-start">
+              <Switch checked={task.enabled} onChange={onToggle} ariaLabel={`Enable ${task.name}`} disabled={busy} />
+              <Button variant="outline" size="sm" onClick={onRun} disabled={busy || running}>
+                {running ? 'Running…' : 'Run now'}
               </Button>
-            )}
+            </div>
           </div>
-        </div>
 
-        {task.lastStatus === 'error' && task.lastError ? (
-          <p className="truncate text-xs text-danger" title={task.lastError}>{task.lastError}</p>
-        ) : (
-          task.lastStatus === 'ok' && task.lastResult && (
-            <p className="truncate text-xs text-faint" title={task.lastResult}>{task.lastResult}</p>
-          )
-        )}
-      </div>
-    </Card>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-soft">
+              <span
+                className="inline-flex items-center gap-1"
+                title={`Ran in ${formatDuration(task.lastDurationMs)}`}
+              >
+                <ClockIcon className="size-3 text-faint" />
+                {formatRelative(task.lastRunAt)}
+              </span>
+              {task.enabled && schedulerMode === 'vercel-cron' && (
+                <span className="inline-flex items-center gap-1 text-faint">
+                  <RefreshIcon className="size-3" />
+                  next daily cron
+                </span>
+              )}
+              {task.enabled && schedulerMode !== 'vercel-cron' && task.nextRunAt != null && (
+                <span className="inline-flex items-center gap-1 text-faint">
+                  <RefreshIcon className="size-3" />
+                  next {formatRelative(task.nextRunAt)}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 self-end text-xs text-faint sm:self-auto">
+              <span>Every</span>
+              <Input
+                type="number"
+                min={minimumIntervalMs / 60000}
+                step="any"
+                controlSize="sm"
+                className="w-14 text-center"
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                aria-label={`${task.name} interval in minutes`}
+              />
+              <span>min</span>
+              {intervalDirty && (
+                <Button variant="primary" size="xs" onClick={() => onSaveInterval(newIntervalMs)} disabled={busy}>
+                  Save
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {task.lastStatus === 'error' && task.lastError ? (
+            <p className="truncate text-xs text-danger" title={task.lastError}>{task.lastError}</p>
+          ) : (
+            task.lastStatus === 'ok' && task.lastResult && (
+              <p className="truncate text-xs text-faint" title={task.lastResult}>{task.lastResult}</p>
+            )
+          )}
+        </div>
+      </Card>
+    </li>
   );
 }

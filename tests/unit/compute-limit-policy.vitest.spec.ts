@@ -20,9 +20,9 @@ describe('compute limit policy', () => {
     expect(JSON.stringify(DEFAULT_COMPUTE_LIMIT_POLICIES)).not.toContain('"mode"');
   });
 
-  it('defaults self-host admission open while retaining segment usage limits', () => {
+  it('defaults self-host admission and usage limits off while retaining capacity protection', () => {
     for (const [action, policy] of Object.entries(DEFAULT_COMPUTE_LIMIT_POLICIES.actions)) {
-      expect(policy.enabled, action).toBe(action === 'tts_synthesis');
+      expect(policy.enabled, action).toBe(false);
     }
     expect(DEFAULT_COMPUTE_LIMIT_POLICIES.providers.defaults.enabled).toBe(true);
     expect(DEFAULT_COMPUTE_LIMIT_POLICIES.providers.defaults.maxConcurrent).toBe(3);

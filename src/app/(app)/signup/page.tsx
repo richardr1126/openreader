@@ -95,7 +95,7 @@ export default function SignUpPage() {
       }
     } catch (err) {
       console.error('Signup error:', err);
-      setError('Unable to connect. Please try again.');
+      setError('Unable to sign up. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -129,8 +129,8 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Surface elevation="3" className="w-full max-w-md p-6">
-        <h1 className="text-xl font-semibold text-foreground">Sign Up</h1>
-        <p className="text-sm text-soft mt-1">Create your account to get started</p>
+        <h1 className="text-xl font-semibold text-foreground">Sign up</h1>
+        <p className="text-sm text-soft mt-1">Sign up to sync your reading across devices</p>
 
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
@@ -227,7 +227,7 @@ export default function SignUpPage() {
             size="md"
             className="w-full"
           >
-            {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Create Account'}
+            {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Sign up'}
           </Button>
         </div>
 

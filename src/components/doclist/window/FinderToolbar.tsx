@@ -12,6 +12,7 @@ import {
 import { ChevronUpDownIcon } from '@/components/icons/Icons';
 import { SearchField, SharedListboxButton, SharedListboxOption, SharedListboxOptions, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment } from '@/components/ui';
 import type { ReactNode } from 'react';
+import { formatDocumentSize } from '@/components/doclist/formatSize';
 
 interface FinderToolbarProps {
   viewMode: ViewMode;
@@ -27,6 +28,8 @@ interface FinderToolbarProps {
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
   showSortControls?: boolean;
+  itemCount: number;
+  totalSize: number;
   /** App-level content rendered at the far left (brand/logo). */
   leftSlot?: ReactNode;
   /** App-level content rendered at the far right (settings, user menu). */
@@ -67,6 +70,8 @@ export function FinderToolbar({
   onToggleSidebar,
   isSidebarOpen,
   showSortControls = true,
+  itemCount,
+  totalSize,
   leftSlot,
   rightSlot,
 }: FinderToolbarProps) {
@@ -165,6 +170,18 @@ export function FinderToolbar({
         )}
 
         <div className="flex-1 min-w-0" />
+
+        <span
+          role="status"
+          aria-live="polite"
+          aria-label={`${itemCount} item${itemCount === 1 ? '' : 's'}, ${formatDocumentSize(totalSize)}`}
+          className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-soft"
+        >
+          <span className="sm:hidden">{itemCount}</span>
+          <span className="hidden sm:inline">{itemCount} item{itemCount === 1 ? '' : 's'}</span>
+          <span className="mx-1 text-faint">•</span>
+          {formatDocumentSize(totalSize)}
+        </span>
 
         <SearchField
           value={query}

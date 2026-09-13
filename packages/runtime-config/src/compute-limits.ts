@@ -171,7 +171,7 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
       execution: execution('background', 20, { archive_io: 1 }),
     },
     tts_synthesis: {
-      enabled: true,
+      enabled: false,
       admission: { windows: [], active: [] },
       usage: [
         { scope: 'user', audience: 'anonymous', metric: 'characters', window: 'utc_day', limit: 50_000, boundary: 'soft_unit' },
