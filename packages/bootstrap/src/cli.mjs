@@ -71,6 +71,13 @@ function withDefault(value, fallback) {
   return value && value.trim() ? value.trim() : fallback;
 }
 
+function resolveWorkspacePath(value, fallback) {
+  const configuredPath = withDefault(value, fallback);
+  return path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(workspaceRoot, configuredPath);
+}
+
 function requireAuthEnv(env) {
   const missing = [];
   if (!env.AUTH_SECRET?.trim()) missing.push('AUTH_SECRET');
@@ -292,7 +299,10 @@ async function main() {
     }
 
     if (useEmbeddedWeed) {
-      runtimeEnv.WEED_MINI_DIR = withDefault(runtimeEnv.WEED_MINI_DIR, path.join(workspaceRoot, 'docstore/seaweedfs'));
+      runtimeEnv.WEED_MINI_DIR = resolveWorkspacePath(
+        runtimeEnv.WEED_MINI_DIR,
+        path.join(workspaceRoot, 'docstore', 'seaweedfs'),
+      );
       runtimeEnv.WEED_MINI_WAIT_SEC = withDefault(runtimeEnv.WEED_MINI_WAIT_SEC, '20');
       runtimeEnv.WEED_MINI_BIND_HOST = withDefault(runtimeEnv.WEED_MINI_BIND_HOST, '127.0.0.1');
       runtimeEnv.WEED_MINI_ADVERTISE_HOST = resolveWeedMiniAdvertiseHost(
