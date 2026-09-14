@@ -14,5 +14,6 @@ export function decideRetryAction(input: {
   retryable?: boolean;
 }): RetryAction {
   if (input.retryable === false) return 'term_fail';
-  return input.deliveryCount < input.pdfAttempts ? 'nak_retry' : 'term_fail';
+  const attempts = input.kind === 'email_delivery' ? 3 : input.pdfAttempts;
+  return input.deliveryCount < attempts ? 'nak_retry' : 'term_fail';
 }

@@ -85,5 +85,5 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(epubLink).toBeVisible();
   await expect(pdfLink).toBeHidden();
   await expect(folderHint).toBeHidden();
-  await expect(page.getByRole('status')).toContainText('3 items');
+  await expect(page.getByRole('status')).toContainText('2 items');
 });

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
@@ -19,8 +19,10 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
   const { baseUrl } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
+  const { accountEmailsEnabled } = useRuntimeConfig();
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
   const validateEmail = (email: string): boolean => {
@@ -72,6 +74,7 @@ export default function SignUpPage() {
         email: email.trim(),
         password,
         name: email.trim().split('@')[0], // Use part of email as name
+        callbackURL: '/verify-email?status=success',
       });
 
       if (result.error) {
@@ -82,6 +85,10 @@ export default function SignUpPage() {
           setError(errorMessage);
         }
       } else {
+        if (accountEmailsEnabled) {
+          setAwaitingVerification(true);
+          return;
+        }
         // Auto sign in
         const signInResult = await client.signIn.email({ email: email.trim(), password });
         if (signInResult.error) {
@@ -96,6 +103,19 @@ export default function SignUpPage() {
     } catch (err) {
       console.error('Signup error:', err);
       setError('Unable to sign up. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setLoading(true);
+    try {
+      await getAuthClient(baseUrl).sendVerificationEmail({
+        email: email.trim(),
+        callbackURL: '/verify-email?status=success',
+      });
+      toast.success('Verification email queued');
     } finally {
       setLoading(false);
     }
@@ -116,6 +136,22 @@ export default function SignUpPage() {
                 Sign in
               </Link>
             </p>
+          </div>
+        </Surface>
+      </div>
+    );
+  }
+
+  if (awaitingVerification) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Surface elevation="3" className="w-full max-w-md p-6 text-center">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-xl text-accent">✉</div>
+          <h1 className="mt-4 text-xl font-semibold text-foreground">Check your email</h1>
+          <p className="mt-2 text-sm text-soft">We queued a verification link for <span className="font-medium text-foreground">{email.trim()}</span>. It expires in one hour.</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend email</Button>
+            <Link href="/signin"><Button variant="primary" size="md">Go to sign in</Button></Link>
           </div>
         </Surface>
       </div>

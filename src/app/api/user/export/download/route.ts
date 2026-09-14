@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
@@ -16,12 +16,6 @@ export async function GET(req: NextRequest) {
   });
 
   try {
-    if (!auth) {
-      return errorResponse(new Error('Auth not initialized'), {
-        apiErrorMessage: 'Auth not initialized',
-        normalize: { code: 'USER_EXPORT_AUTH_NOT_INITIALIZED', errorClass: 'auth', httpStatus: 500 },
-      });
-    }
     if (!isComputeWorkerAvailable()) {
       return NextResponse.json(
         { error: 'Compute worker is required for account export.' },
@@ -35,7 +29,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const session = await auth.api.getSession({ headers: req.headers });
+    const session = await (await getAuth()).api.getSession({ headers: req.headers });
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

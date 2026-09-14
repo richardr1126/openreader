@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { GithubIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
@@ -30,8 +30,10 @@ function SignInContent() {
   const [rememberMe, setRememberMe] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
+  const { accountEmailsEnabled } = useRuntimeConfig();
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
   const isAnyLoading = loadingEmail || loadingGithub || loadingAnonymous;
@@ -42,6 +44,7 @@ function SignInContent() {
 
   const handleSignIn = async () => {
     setError(null);
+    setVerificationEmail(null);
 
     if (!email.trim() || !validateEmail(email)) {
       setError('Please enter a valid email address');
@@ -64,7 +67,10 @@ function SignInContent() {
 
       if (result.error) {
         const errorMessage = result.error.message || 'An unknown error occurred';
-        if (errorMessage.toLowerCase().includes('invalid') ||
+        if (accountEmailsEnabled && /not.?verified/i.test(errorMessage)) {
+          setVerificationEmail(email.trim());
+          setError('Verify your email before signing in. We sent a fresh one-hour link.');
+        } else if (errorMessage.toLowerCase().includes('invalid') ||
           errorMessage.toLowerCase().includes('credentials')) {
           setError('Invalid email or password');
         } else {
@@ -79,6 +85,20 @@ function SignInContent() {
     } catch (err) {
       console.error('Sign in error:', err);
       setError('Unable to sign in. Please try again.');
+    } finally {
+      setLoadingEmail(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    if (!verificationEmail) return;
+    setLoadingEmail(true);
+    try {
+      await getAuthClient(baseUrl).sendVerificationEmail({
+        email: verificationEmail,
+        callbackURL: '/verify-email?status=success',
+      });
+      setError('A new verification link was queued. Check your email.');
     } finally {
       setLoadingEmail(false);
     }
@@ -143,6 +163,11 @@ function SignInContent() {
             <p className="text-sm text-danger">{error}</p>
           </div>
         )}
+        {verificationEmail && (
+          <Button type="button" variant="outline" size="sm" className="mt-3" disabled={loadingEmail} onClick={resendVerification}>
+            Resend verification email
+          </Button>
+        )}
 
         <div className="mt-6 space-y-4">
           {/* Email */}
@@ -166,6 +191,11 @@ function SignInContent() {
               controlSize="lg"
             />
           </Field>
+          {accountEmailsEnabled && (
+            <div className="-mt-2 text-right">
+              <Link href="/forgot-password" className="text-xs text-soft underline hover:text-foreground">Forgot password?</Link>
+            </div>
+          )}
 
           {/* Remember Me */}
           <label className="flex items-center gap-2 cursor-pointer">

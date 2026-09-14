@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { listAdminProviders, toPublic } from '@/lib/server/admin/providers';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  * client needs to render the provider picker.
  */
 export async function GET(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  const session = await (await getAuth()).api.getSession({ headers: req.headers });
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

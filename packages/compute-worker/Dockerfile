@@ -23,6 +23,7 @@ RUN apt-get update && \
 WORKDIR /workspace
 
 COPY --from=deploy-stage /opt/compute-worker ./
+COPY public/web-app-manifest-192x192.png ./public/web-app-manifest-192x192.png
 
 ENV COMPUTE_WORKER_HOST=0.0.0.0
 ENV PORT=8081

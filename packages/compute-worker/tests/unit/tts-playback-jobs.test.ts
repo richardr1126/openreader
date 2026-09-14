@@ -23,6 +23,7 @@ describe('worker job composition', () => {
       'runDocumentPreview',
       'runDocumentConversion',
       'runAccountExport',
+      'runEmailDelivery',
     ]);
     expect(Object.values(handlers).every((handler) => typeof handler === 'function')).toBe(true);
   });

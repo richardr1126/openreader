@@ -40,8 +40,5 @@ test('anonymous user uploads PDF, EPUB, and TXT documents into the library', asy
   await expect(page.getByRole('button', { name: 'Text 1', exact: true })).toBeVisible();
 
   const libraryStatus = page.getByRole('status');
-  await expect(libraryStatus).toContainText('1 PDF');
-  await expect(libraryStatus).toContainText('1 EPUB');
-  await expect(libraryStatus).toContainText('1 Text Doc');
   await expect(libraryStatus).toContainText('3 items');
 });

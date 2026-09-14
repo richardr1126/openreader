@@ -11,7 +11,7 @@ credential broker; credentials are not embedded in NATS jobs or playback artifac
 
 **Per-user Settings modal** (Settings > TTS Provider): users may select an enabled shared provider, model, instructions, and voice. Credentials remain server-side.
 
-**Environment variables**: `API_KEY` and `API_BASE` exist as a one-shot first-boot seed that auto-creates a `default-openai` admin shared provider. After the first boot they are no longer read by the running app.
+**Environment variables**: `API_KEY`, `API_BASE`, and `API_MODEL_NAME` form a one-shot first-boot seed that auto-creates a `default-openai` admin shared provider. `API_MODEL_NAME` defaults to `kokoro` and does not trigger provider creation by itself. After the first boot these variables are no longer read by the running app.
 
 ## Providers
 

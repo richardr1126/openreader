@@ -262,6 +262,22 @@ export interface AccountExportJobResult {
   timing?: WorkerJobTiming;
 }
 
+export type EmailDeliveryPurpose = 'email_verification' | 'password_reset' | 'admin_test';
+
+export interface EmailDeliveryJobRequest {
+  deliveryId: string;
+  purpose: EmailDeliveryPurpose;
+  envelopeCiphertext: string;
+  envelopeIv: string;
+  expiresAt: number;
+}
+
+export interface EmailDeliveryJobResult {
+  deliveryId: string;
+  status: 'accepted';
+  resendMessageId: string;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -345,7 +361,8 @@ export type WorkerOperationKind =
   | 'tts_playback_export'
   | 'document_preview'
   | 'document_conversion'
-  | 'account_export';
+  | 'account_export'
+  | 'email_delivery';
 
 /**
  * The two exhaustive sides keep worker operation kinds and the shared compute
@@ -360,8 +377,8 @@ export const WORKER_OPERATION_COMPUTE_ACTION = {
   document_preview: 'document_preview',
   document_conversion: 'document_conversion',
   account_export: 'account_export',
-} as const satisfies Record<WorkerOperationKind, WorkerOperationAction>
-  & Record<WorkerOperationAction, WorkerOperationKind>;
+} as const satisfies Record<Exclude<WorkerOperationKind, 'email_delivery'>, WorkerOperationAction>
+  & Record<WorkerOperationAction, Exclude<WorkerOperationKind, 'email_delivery'>>;
 
 /**
  * Per-kind operation policy. The exhaustive Record forces every new operation
@@ -390,6 +407,7 @@ export const WORKER_OPERATION_KIND_POLICY: Record<WorkerOperationKind, {
   document_preview: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
   document_conversion: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
   account_export: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
+  email_delivery: { reusesSucceeded: true, slowJobLogThresholdMs: 10_000 },
 };
 
 export interface PdfLayoutOperationRequest {
@@ -434,6 +452,12 @@ export interface AccountExportOperationRequest {
   payload: AccountExportJobRequest;
 }
 
+export interface EmailDeliveryOperationRequest {
+  kind: 'email_delivery';
+  opKey: string;
+  payload: EmailDeliveryJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
@@ -441,7 +465,8 @@ export type WorkerOperationRequest =
   | TtsPlaybackExportArtifactOperationRequest
   | DocumentPreviewOperationRequest
   | DocumentConversionOperationRequest
-  | AccountExportOperationRequest;
+  | AccountExportOperationRequest
+  | EmailDeliveryOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

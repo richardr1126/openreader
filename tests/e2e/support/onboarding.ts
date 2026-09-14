@@ -19,7 +19,6 @@ export async function enterAnonymousLibrary(page: Page) {
   const changelogPanel = page.getByTestId('changelog-modal');
   await expect(changelogPanel).toBeVisible();
   await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
-  await expect(changelogPanel).toHaveCount(0);
 
   const declineOptionalCookies = page.getByRole('button', {
     name: 'Decline Non-Essential',

@@ -3,7 +3,7 @@ import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/c
 import { proxyOperationEvents } from '@/lib/server/compute-worker/operation-events-proxy';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,9 +15,6 @@ export async function GET(request: NextRequest) {
     request,
   });
   try {
-    if (!auth) {
-      return NextResponse.json({ error: 'Auth not initialized' }, { status: 500 });
-    }
     if (!isComputeWorkerAvailable()) {
       return NextResponse.json(
         { error: 'Compute worker is required for account export.' },
@@ -28,7 +25,7 @@ export async function GET(request: NextRequest) {
     const opId = request.nextUrl.searchParams.get('opId')?.trim() ?? '';
     if (!opId) return NextResponse.json({ error: 'opId is required' }, { status: 400 });
 
-    const session = await auth.api.getSession({ headers: request.headers });
+    const session = await (await getAuth()).api.getSession({ headers: request.headers });
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const operation = await getComputeWorkerClient().getOperation(opId);

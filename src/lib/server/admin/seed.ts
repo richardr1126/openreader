@@ -20,7 +20,8 @@ import type { TtsProviderId } from '@openreader/tts/provider-catalog';
  *     - runtimeConfig: strict validation against RUNTIME_CONFIG_SCHEMA
  *     - providers: optional shared providers seed list
  *  2) Legacy provider fallback: if providers were not supplied in JSON and
- *     no provider rows exist, seed default-openai from API_KEY/API_BASE.
+ *     no provider rows exist, seed default-openai from API_KEY/API_BASE and
+ *     use API_MODEL_NAME for its default model when provided.
  *  3) Legacy row cleanup for historical defaultTtsProvider/defaultTtsModel rows.
  */
 
@@ -281,6 +282,7 @@ async function seedAdminProvidersFromJson(providers: SeedProviderInput[]): Promi
 async function seedDefaultAdminProviderFromEnvFallback(): Promise<void> {
   const apiKey = process.env.API_KEY?.trim() ?? '';
   const baseUrl = process.env.API_BASE?.trim() || null;
+  const defaultModel = process.env.API_MODEL_NAME?.trim() || 'kokoro';
   if (!apiKey && !baseUrl) return;
 
   let existing: Array<unknown>;
@@ -321,7 +323,7 @@ async function seedDefaultAdminProviderFromEnvFallback(): Promise<void> {
       apiKeyCiphertext: enc.ciphertext,
       apiKeyIv: enc.iv,
       apiKeyLast4: apiKeyLast4(apiKey),
-      defaultModel: 'kokoro',
+      defaultModel,
       enabled: 1,
       createdAt: now,
       updatedAt: now,

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
+import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
 import {
   ClockIcon,
   KeyIcon,
@@ -11,7 +12,7 @@ import {
   SpeedometerIcon,
 } from '@/components/icons/Icons';
 
-type AdminSubTab = 'providers' | 'instance' | 'compute' | 'maintenance';
+type AdminSubTab = 'providers' | 'email' | 'instance' | 'compute' | 'maintenance';
 
 const ADMIN_AREAS = [
   {
@@ -31,6 +32,12 @@ const ADMIN_AREAS = [
     label: 'Compute',
     description: 'Limits, playback, retries, and cache',
     icon: SpeedometerIcon,
+  },
+  {
+    id: 'email' as const,
+    label: 'Email',
+    description: 'Verification, recovery, and Resend delivery',
+    icon: SettingsIcon,
   },
   {
     id: 'maintenance' as const,
@@ -86,6 +93,7 @@ export function AdminSettingsPanel() {
           </p>
         </div>
         {activeTab === 'providers' ? <AdminProvidersPanel /> : null}
+        {activeTab === 'email' ? <AdminEmailPanel /> : null}
         {activeTab === 'instance' ? <AdminFeaturesPanel scope="instance" /> : null}
         {activeTab === 'compute' ? <AdminFeaturesPanel scope="compute" /> : null}
         {activeTab === 'maintenance' ? <AdminTasksPanel /> : null}

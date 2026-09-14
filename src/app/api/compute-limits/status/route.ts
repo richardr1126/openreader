@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { headers } from 'next/headers';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const runtimeConfig = await getResolvedRuntimeConfig();
     const policy = runtimeConfig.computeLimitPolicies;
     const enabled = policy.actions.tts_synthesis.enabled;
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await (await getAuth()).api.getSession({ headers: await headers() });
     if (!session?.user) {
       const nominal = applicableUsageLimits(policy, 'tts_synthesis', {
         userId: 'unavailable',

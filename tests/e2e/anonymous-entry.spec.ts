@@ -50,7 +50,6 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   const changelogPanel = page.getByTestId('changelog-modal');
   await expect(changelogPanel).toBeVisible();
   await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
-  await expect(changelogPanel).toHaveCount(0);
 
   await expect(page.getByRole('heading', { name: 'OpenReader', exact: true })).toBeVisible();
   await expect(

@@ -17,6 +17,7 @@ export const TTS_PLAYBACK_EXPORT_JOBS_SUBJECT = 'jobs.tts_playback_export';
 export const DOCUMENT_PREVIEW_JOBS_SUBJECT = 'jobs.document_preview';
 export const DOCUMENT_CONVERSION_JOBS_SUBJECT = 'jobs.document_conversion';
 export const ACCOUNT_EXPORT_JOBS_SUBJECT = 'jobs.account_export';
+export const EMAIL_DELIVERY_JOBS_SUBJECT = 'jobs.email_delivery';
 export const LAYOUT_CONSUMER_NAME = 'compute_layout';
 export const TTS_PLAYBACK_CONSUMER_NAME = 'compute_tts_playback';
 export const TTS_PLAYBACK_PLAN_CONSUMER_NAME = 'compute_tts_playback_plan';
@@ -24,6 +25,7 @@ export const TTS_PLAYBACK_EXPORT_CONSUMER_NAME = 'compute_tts_playback_export';
 export const DOCUMENT_PREVIEW_CONSUMER_NAME = 'compute_document_preview';
 export const DOCUMENT_CONVERSION_CONSUMER_NAME = 'compute_document_conversion';
 export const ACCOUNT_EXPORT_CONSUMER_NAME = 'compute_account_export';
+export const EMAIL_DELIVERY_CONSUMER_NAME = 'compute_email_delivery';
 export const EVENTS_STREAM_NAME = 'compute_events';
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -53,6 +55,7 @@ export async function ensureJetStreamResources(input: {
       DOCUMENT_PREVIEW_JOBS_SUBJECT,
       DOCUMENT_CONVERSION_JOBS_SUBJECT,
       ACCOUNT_EXPORT_JOBS_SUBJECT,
+      EMAIL_DELIVERY_JOBS_SUBJECT,
     ],
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
@@ -121,5 +124,6 @@ export async function ensureJetStreamResources(input: {
     ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
     ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
     ensureConsumer(ACCOUNT_EXPORT_CONSUMER_NAME, ACCOUNT_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
+    ensureConsumer(EMAIL_DELIVERY_CONSUMER_NAME, EMAIL_DELIVERY_JOBS_SUBJECT, 60_000, 3),
   ]);
 }

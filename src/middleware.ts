@@ -25,10 +25,14 @@ const PUBLIC_PATH_PREFIXES = [
   '/api/auth',   // Better Auth endpoints (sign-in, sign-up, callbacks, etc.)
   '/signin',
   '/signup',
+  '/verify-email',
+  '/forgot-password',
+  '/reset-password',
   '/privacy',
 ];
 const SERVICE_AUTHENTICATED_PATHS = new Set([
   '/api/internal/compute/tts-credentials',
+  '/api/internal/compute/email-execution',
 ]);
 
 function isPublicPath(pathname: string): boolean {
@@ -36,6 +40,15 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === '/') return true;
 
   return PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function publicRouteResponse(pathname: string): NextResponse {
+  const response = NextResponse.next();
+  if (pathname === '/verify-email' || pathname === '/reset-password') {
+    response.headers.set('Referrer-Policy', 'no-referrer');
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  }
+  return response;
 }
 
 function isAnonymousAuthEnabled(): boolean {
@@ -112,7 +125,7 @@ export function middleware(request: NextRequest) {
 
   // Public routes are always accessible.
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    return publicRouteResponse(pathname);
   }
 
   // When anonymous auth is enabled, unauthenticated users need to reach

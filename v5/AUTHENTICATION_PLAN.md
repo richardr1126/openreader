@@ -834,3 +834,22 @@ True v4.4.0-to-v5 full-Compose upgrade checkpoint on 2026-09-02:
   the broker path, and the live v4.4.0 upgrade journey passed.
 - Stop or leave the single Compose stack running according to the active test
   session request; never start a Playwright-owned stack on the same ports.
+
+## Opt-in account email implementation — 2026-09-13
+
+- Added DB-backed **Admin → Email** configuration without a schema migration.
+  The Resend key is encrypted with the existing `AUTH_SECRET` helper and is
+  never returned by an admin or public runtime response.
+- Better Auth is now resolved asynchronously from cached enabled/disabled
+  configurations on each request. Enabled password sign-in fails closed for
+  unverified accounts; verification and reset tokens expire after one hour and
+  password reset revokes existing sessions.
+- Verification, recovery, and test mail use the durable `email_delivery`
+  operation. NATS stores an encrypted envelope and nonsensitive identifiers;
+  the standalone worker retains no SQL access or `AUTH_SECRET` and fetches
+  execution data through `/api/internal/compute/email-execution` using the
+  existing broker token.
+- Email has a dedicated JetStream consumer with concurrency one. The worker
+  uses the official Resend SDK, fixed escaped HTML/plain-text templates, and
+  the delivery UUID as the Resend idempotency key. Successful operation state
+  says `accepted`, not delivered.

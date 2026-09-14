@@ -301,7 +301,7 @@ describe('runtime config JSON seeding', () => {
 describe('provider seeding and fallback precedence', () => {
   const testSlugs = ['json-seeded-provider', 'default-openai'];
 
-  test('seeds providers from JSON and skips API_BASE/API_KEY fallback', async () => {
+  test('seeds providers from JSON and skips API_BASE/API_KEY/API_MODEL_NAME fallback', async () => {
     const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
     const runtimeSeed = JSON.stringify({
       version: 1,
@@ -326,6 +326,7 @@ describe('provider seeding and fallback precedence', () => {
         RUNTIME_SEED_JSON_PATH: undefined,
         API_BASE: 'http://localhost:9999/v1',
         API_KEY: 'fallback_should_not_be_used',
+        API_MODEL_NAME: 'fallback-model-should-not-be-used',
         AUTH_SECRET: 'seed-test-auth-secret-123',
       }, async () => {
         await __seedInternals.runSeed();
@@ -357,7 +358,7 @@ describe('provider seeding and fallback precedence', () => {
     }
   });
 
-  test('falls back to API_BASE/API_KEY when JSON providers are absent', async () => {
+  test('falls back to API_BASE/API_KEY/API_MODEL_NAME when JSON providers are absent', async () => {
     const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
     const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { enableUserSignups: true } });
 
@@ -371,6 +372,7 @@ describe('provider seeding and fallback precedence', () => {
         RUNTIME_SEED_JSON_PATH: undefined,
         API_BASE: 'http://localhost:8880/v1',
         API_KEY: 'fallback_env_api_key_9876',
+        API_MODEL_NAME: 'supertonic-3',
         AUTH_SECRET: 'seed-test-auth-secret-456',
       }, async () => {
         await __seedInternals.runSeed();
@@ -393,7 +395,7 @@ describe('provider seeding and fallback precedence', () => {
         displayName: 'Default (from env)',
         providerType: 'custom-openai',
         baseUrl: 'http://localhost:8880/v1',
-        defaultModel: 'kokoro',
+        defaultModel: 'supertonic-3',
         apiKeyLast4: '9876',
       });
     } finally {
@@ -415,6 +417,7 @@ describe('provider seeding and fallback precedence', () => {
         RUNTIME_SEED_JSON_PATH: undefined,
         API_BASE: 'http://localhost:8880/v1',
         API_KEY: '',
+        API_MODEL_NAME: '',
         AUTH_SECRET: 'seed-test-auth-secret-keyless',
       }, async () => {
         await __seedInternals.runSeed();
@@ -424,6 +427,7 @@ describe('provider seeding and fallback precedence', () => {
         .select({
           slug: adminProviders.slug,
           baseUrl: adminProviders.baseUrl,
+          defaultModel: adminProviders.defaultModel,
           apiKeyLast4: adminProviders.apiKeyLast4,
         })
         .from(adminProviders);
@@ -432,6 +436,7 @@ describe('provider seeding and fallback precedence', () => {
       expect(rows[0]).toMatchObject({
         slug: 'default-openai',
         baseUrl: 'http://localhost:8880/v1',
+        defaultModel: 'kokoro',
         apiKeyLast4: '',
       });
     } finally {
@@ -439,7 +444,37 @@ describe('provider seeding and fallback precedence', () => {
     }
   });
 
-  test('does not use API_BASE/API_KEY fallback when providers key is present but empty', async () => {
+  test('does not create a provider from API_MODEL_NAME alone', async () => {
+    const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
+    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { enableUserSignups: true } });
+
+    try {
+      await db.delete(adminProviders).where(inArray(adminProviders.slug, testSlugs));
+      const blockedByOtherRows = await hasNonTestProviderRows(testSlugs);
+      if (blockedByOtherRows) return;
+
+      await withEnv({
+        RUNTIME_SEED_JSON: runtimeSeed,
+        RUNTIME_SEED_JSON_PATH: undefined,
+        API_BASE: undefined,
+        API_KEY: undefined,
+        API_MODEL_NAME: 'supertonic-3',
+        AUTH_SECRET: 'seed-test-auth-secret-model-only',
+      }, async () => {
+        await __seedInternals.runSeed();
+      });
+
+      const rows = await db
+        .select({ slug: adminProviders.slug })
+        .from(adminProviders)
+        .where(eq(adminProviders.slug, 'default-openai')) as Array<{ slug: string }>;
+      expect(rows).toHaveLength(0);
+    } finally {
+      await restoreProvidersBySlug(testSlugs, providerSnapshot);
+    }
+  });
+
+  test('does not use API_BASE/API_KEY/API_MODEL_NAME fallback when providers key is present but empty', async () => {
     const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
     const runtimeSeed = JSON.stringify({ version: 1, providers: [] });
 
@@ -453,6 +488,7 @@ describe('provider seeding and fallback precedence', () => {
         RUNTIME_SEED_JSON_PATH: undefined,
         API_BASE: 'http://localhost:7777/v1',
         API_KEY: 'fallback_should_stay_unused_1111',
+        API_MODEL_NAME: 'fallback-model-should-stay-unused',
         AUTH_SECRET: 'seed-test-auth-secret-789',
       }, async () => {
         await __seedInternals.runSeed();
@@ -474,6 +510,7 @@ describe('provider seeding and fallback precedence', () => {
       RUNTIME_SEED_JSON_PATH: undefined,
       API_BASE: undefined,
       API_KEY: undefined,
+      API_MODEL_NAME: undefined,
       AUTH_SECRET: 'seed-test-auth-secret-abc',
     }, async () => {
       await expect(__seedInternals.runSeed()).rejects.toThrow(/invalid/i);

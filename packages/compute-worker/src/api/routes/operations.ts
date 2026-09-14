@@ -1,6 +1,7 @@
 import { encodeSseFrame } from '../../operations/sse';
 import type {
   AccountExportJobResult,
+  EmailDeliveryJobResult,
   DocumentConversionJobResult,
   DocumentPreviewJobResult,
   PdfLayoutJobResult,
@@ -31,7 +32,8 @@ type OperationRouteResult =
   | TtsPlaybackExportArtifactResult
   | DocumentPreviewJobResult
   | DocumentConversionJobResult
-  | AccountExportJobResult;
+  | AccountExportJobResult
+  | EmailDeliveryJobResult;
 
 export function registerOperationRoutes(context: ComputeWorkerRouteContext): void {
   const {

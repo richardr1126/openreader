@@ -102,6 +102,19 @@ export function buildAccountExportOperationKey(input: {
   ].join('|');
 }
 
+export function buildEmailDeliveryOperationKey(deliveryId: string): string {
+  return ['email_delivery', 'v1', deliveryId].join('|');
+}
+
+export function emailDeliverySubjectFromOperationKey(opKey: string): {
+  kind: 'email_delivery';
+  deliveryId: string;
+} | null {
+  const [kind, version, deliveryId] = opKey.split('|');
+  if (kind !== 'email_delivery' || version !== 'v1' || !deliveryId) return null;
+  return { kind: 'email_delivery', deliveryId };
+}
+
 export function accountExportSubjectFromOperationKey(opKey: string): {
   kind: 'account_export';
   storageUserId: string;

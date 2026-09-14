@@ -25,6 +25,7 @@ export interface RuntimeConfig {
   ttsUpstreamMaxRetries: number;
   ttsUpstreamTimeoutMs: number;
   computeAvailable: boolean;
+  accountEmailsEnabled: boolean;
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
@@ -41,6 +42,7 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   ttsUpstreamMaxRetries: 2,
   ttsUpstreamTimeoutMs: 285_000,
   computeAvailable: true,
+  accountEmailsEnabled: false,
 };
 
 declare global {

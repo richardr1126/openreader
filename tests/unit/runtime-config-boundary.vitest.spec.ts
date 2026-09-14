@@ -17,6 +17,7 @@ const documentedEnvironmentVariables = [
   'ADMIN_EMAILS',
   'API_BASE',
   'API_KEY',
+  'API_MODEL_NAME',
   'AUTH_SECRET',
   'AUTH_TRUSTED_ORIGINS',
   'BASE_URL',

@@ -12,6 +12,7 @@ import {
 } from './routes/document-jobs';
 import { registerHealthRoutes } from './routes/health';
 import { registerOperationRoutes } from './routes/operations';
+import { registerEmailDeliveryRoutes } from './routes/email-deliveries';
 import { registerPlaybackAudioRoutes } from './routes/playback/audio';
 import {
   registerPlaybackExportJobRoutes,
@@ -44,6 +45,7 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerDocumentJobRoutes(context);
   registerPlaybackJobRoutes(context, playbackController);
   registerAccountExportRoutes(context);
+  registerEmailDeliveryRoutes(context);
   registerPlaybackExportJobRoutes(context);
   registerDocumentResolutionRoutes(context);
   registerOperationRoutes(context);

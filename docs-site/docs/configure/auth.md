@@ -26,10 +26,32 @@ You can designate one or more users as admins via the `ADMIN_EMAILS` env var:
 ADMIN_EMAILS=alice@example.com,bob@example.com
 ```
 
-Admins see a new **Admin** tab in **Settings** with two sub-tabs:
+Admins see an **Admin** tab in **Settings** with dedicated areas for providers,
+account email, instance settings, compute, and maintenance.
 
 - **Shared TTS providers** — server-managed TTS provider instances with encrypted keys, visible to all users.
 - **Site features** — runtime overrides for what were previously build-time public env flags (including account signup availability, default TTS provider, audiobook export, etc.).
+
+## Email verification and password recovery
+
+Account email is opt-in and disabled by default. An administrator configures it
+under **Settings → Admin → Email** using a verified Resend sender and a
+sending-only API key, sends a test, and then explicitly enables it.
+
+When enabled:
+
+- password registrations receive a one-hour verification link;
+- password sign-in is blocked for existing and new unverified accounts and can
+  resend a fresh verification link;
+- **Forgot password?** sends a generic acknowledgement whether or not the
+  address exists;
+- reset links expire after one hour, successful resets revoke existing
+  sessions, and the user signs in again;
+- GitHub sign-in and already-active sessions keep their existing behavior.
+
+When disabled, registration and password sign-in retain their previous
+behavior and recovery actions are clearly unavailable. Turning the feature off
+also prevents queued verification/reset messages from being delivered.
 
 Admin assignment is reconciled on every session resolution, so removing an email from `ADMIN_EMAILS` demotes the user on next login without a restart. See [Admin Panel](./admin-panel) for the full reference.
 
@@ -39,6 +61,7 @@ Admin assignment is reconciled on every session resolution, so removing an email
 - `/app` is the protected app home (document list and uploader UI).
 - If a valid session exists (including anonymous), visiting `/` redirects to `/app`.
 - Protected app routes continue to require auth; when anonymous sessions are disabled and no session exists, users are redirected to `/signin`.
+- `/verify-email`, `/forgot-password`, and `/reset-password` are public. Token-bearing pages send a `no-referrer` policy and are excluded from indexing.
 
 ## Related docs
 

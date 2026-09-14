@@ -4,6 +4,7 @@ import { Kvm } from '@nats-io/kv';
 import { connect, type ConnectionOptions, type NatsConnection } from '@nats-io/transport-node';
 import {
   ACCOUNT_EXPORT_CONSUMER_NAME,
+  EMAIL_DELIVERY_CONSUMER_NAME,
   COMPUTE_STATE_BUCKET,
   COMPUTE_STATE_TTL_MS,
   DOCUMENT_CONVERSION_CONSUMER_NAME,
@@ -35,6 +36,7 @@ export interface NatsSession {
   documentPreviewConsumer: Consumer;
   documentConversionConsumer: Consumer;
   accountExportConsumer: Consumer;
+  emailDeliveryConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -171,6 +173,7 @@ export function createNatsSessionManager(input: {
         documentPreviewConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_PREVIEW_CONSUMER_NAME),
         documentConversionConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_CONVERSION_CONSUMER_NAME),
         accountExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, ACCOUNT_EXPORT_CONSUMER_NAME),
+        emailDeliveryConsumer: await js.consumers.get(JOBS_STREAM_NAME, EMAIL_DELIVERY_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

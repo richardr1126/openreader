@@ -45,6 +45,7 @@ On native Linux Docker, `host.docker.internal` needs `--add-host=host.docker.int
 
 ```env
 API_BASE=http://host.docker.internal:7788/v1
+API_MODEL_NAME=supertonic-3
 ```
 
 Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.

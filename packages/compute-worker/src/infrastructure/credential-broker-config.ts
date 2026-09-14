@@ -64,6 +64,13 @@ export function getComputeLimitCompletionBrokerConfig(): TtsCredentialBrokerConf
   return { ...config, url };
 }
 
+export function getEmailExecutionBrokerConfig(): TtsCredentialBrokerConfig {
+  const config = getTtsCredentialBrokerConfig();
+  const url = new URL(config.url);
+  url.pathname = '/api/internal/compute/email-execution';
+  return { ...config, url };
+}
+
 export function requireTtsSegmentTextHashSecret(): string {
   const playbackSecret = process.env.TTS_PLAYBACK_TOKEN_SECRET?.trim();
   if (!playbackSecret) throw new Error('TTS_PLAYBACK_TOKEN_SECRET is required for playback segment metadata');
