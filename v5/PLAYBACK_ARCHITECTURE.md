@@ -1806,8 +1806,8 @@ Status: implemented and locally validated; production latency validation pending
   is coordinated across workers; the pipeline simply lets a provider configured
   above one build useful audio runway. Alignment remains one ordered lane, with
   the listener's earliest segment retaining timing priority.
-- Self-host operation admission remains open by default. Generated-character
-  thresholds, worker/resource scheduling, and provider capacity remain enabled;
+- Self-host operation admission and generated-character thresholds remain off
+  by default. Worker/resource scheduling and provider capacity remain enabled;
   the provider concurrency default is three and can be reduced for a strictly
   serial local TTS server.
 

@@ -13,6 +13,8 @@ type EmailSettings = {
   apiKeyMask: string | null;
 };
 
+type EmailSettingsDraft = Pick<EmailSettings, 'senderName' | 'senderEmail' | 'replyTo'>;
+
 const EMPTY: EmailSettings = {
   enabled: false,
   senderName: 'OpenReader',
@@ -24,6 +26,7 @@ const EMPTY: EmailSettings = {
 
 export function AdminEmailPanel() {
   const [settings, setSettings] = useState<EmailSettings>(EMPTY);
+  const [draft, setDraft] = useState<EmailSettingsDraft>(EMPTY);
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,11 +35,13 @@ export function AdminEmailPanel() {
   useEffect(() => {
     void fetch('/api/admin/email', { cache: 'no-store' }).then(async (response) => {
       if (!response.ok) throw new Error('Unable to load email settings');
-      setSettings(await response.json() as EmailSettings);
+      const loaded = await response.json() as EmailSettings;
+      setSettings(loaded);
+      setDraft(loaded);
     }).catch(() => toast.error('Failed to load email settings')).finally(() => setLoading(false));
   }, []);
 
-  const save = async (patch: Record<string, unknown>) => {
+  const save = async (patch: Record<string, unknown>, syncDraft = false) => {
     setSaving(true);
     try {
       const response = await fetch('/api/admin/email', {
@@ -45,7 +50,8 @@ export function AdminEmailPanel() {
       const body = await response.json() as EmailSettings & { error?: string };
       if (!response.ok) throw new Error(body.error || 'Unable to save email settings');
       setSettings(body);
-      setApiKey('');
+      if (syncDraft) setDraft(body);
+      if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) setApiKey('');
       toast.success('Email settings saved');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to save email settings');
@@ -56,29 +62,38 @@ export function AdminEmailPanel() {
 
   const sendTest = async () => {
     setTestState('queued');
-    const response = await fetch('/api/admin/email/test', { method: 'POST' });
-    const body = await response.json() as { operation?: { opId: string; status: string; result?: { status?: string } }; error?: string };
-    if (!response.ok || !body.operation) {
-      setTestState('failed');
-      toast.error(body.error || 'Unable to queue test email');
-      return;
-    }
-    if (body.operation.status === 'succeeded') {
-      setTestState('accepted');
-      return;
-    }
-    const source = new EventSource(`/api/admin/email/test/events?opId=${encodeURIComponent(body.operation.opId)}`);
-    source.addEventListener('snapshot', (event) => {
-      const payload = JSON.parse((event as MessageEvent).data) as { snapshot?: { status?: string } };
-      if (payload.snapshot?.status === 'succeeded') {
-        setTestState('accepted');
-        source.close();
-      } else if (payload.snapshot?.status === 'failed') {
-        setTestState('failed');
-        source.close();
+    try {
+      const response = await fetch('/api/admin/email/test', { method: 'POST' });
+      const body = await response.json() as { operation?: { opId: string; status: string; result?: { status?: string } }; error?: string };
+      if (!response.ok || !body.operation) {
+        throw new Error(body.error || 'Unable to queue test email');
       }
-    });
-    source.onerror = () => { setTestState('failed'); source.close(); };
+      if (body.operation.status === 'succeeded') {
+        setTestState('accepted');
+        return;
+      }
+      const source = new EventSource(`/api/admin/email/test/events?opId=${encodeURIComponent(body.operation.opId)}`);
+      source.addEventListener('snapshot', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data) as { snapshot?: { status?: string } };
+          if (payload.snapshot?.status === 'succeeded') {
+            setTestState('accepted');
+            source.close();
+          } else if (payload.snapshot?.status === 'failed') {
+            setTestState('failed');
+            source.close();
+          }
+        } catch {
+          setTestState('failed');
+          source.close();
+          toast.error('Unable to read test email status');
+        }
+      });
+      source.onerror = () => { setTestState('failed'); source.close(); };
+    } catch (error) {
+      setTestState('failed');
+      toast.error(error instanceof Error ? error.message : 'Unable to queue test email');
+    }
   };
 
   if (loading) return <div className="h-52 animate-pulse rounded-lg bg-surface-sunken" aria-label="Loading email settings" />;
@@ -98,15 +113,15 @@ export function AdminEmailPanel() {
             onChange={(enabled) => void save({ enabled })}
           />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Sender name"><Input value={settings.senderName} onChange={(event) => setSettings({ ...settings, senderName: event.target.value })} /></Field>
-            <Field label="Sender email"><Input type="email" value={settings.senderEmail} placeholder="reader@example.com" onChange={(event) => setSettings({ ...settings, senderEmail: event.target.value })} /></Field>
-            <Field label="Reply-to (optional)"><Input type="email" value={settings.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setSettings({ ...settings, replyTo: event.target.value || null })} /></Field>
+            <Field label="Sender name"><Input aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} /></Field>
+            <Field label="Sender email"><Input aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} /></Field>
+            <Field label="Reply-to (optional)"><Input aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} /></Field>
             <Field label="Resend API key" hint={settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved'}>
-              <Input type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />
+              <Input aria-label="Resend API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />
             </Field>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" size="sm" disabled={saving} onClick={() => void save({ senderName: settings.senderName, senderEmail: settings.senderEmail, replyTo: settings.replyTo, ...(apiKey ? { apiKey } : {}) })}>Save configuration</Button>
+            <Button variant="primary" size="sm" disabled={saving} onClick={() => void save({ ...draft, ...(apiKey ? { apiKey } : {}) }, true)}>Save configuration</Button>
             {settings.apiKeyConfigured && <Button variant="outline" size="sm" disabled={saving} onClick={() => void save({ apiKey: null })}>Remove saved key</Button>}
             <Button variant="outline" size="sm" disabled={saving || !settings.apiKeyConfigured || !settings.senderEmail || testState === 'queued'} onClick={sendTest}>Send test email</Button>
           </div>

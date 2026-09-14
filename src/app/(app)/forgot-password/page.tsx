@@ -14,17 +14,22 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
     if (!email.trim()) return;
     setLoading(true);
+    setError(null);
     try {
       // The acknowledgement is deliberately generic for known and unknown addresses.
-      await getAuthClient(baseUrl).requestPasswordReset({
+      const result = await getAuthClient(baseUrl).requestPasswordReset({
         email: email.trim(),
         redirectTo: '/reset-password',
       });
+      if (result.error) throw new Error(result.error.message || 'Password reset request failed');
       setSubmitted(true);
+    } catch {
+      setError('Unable to send a reset email right now. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -45,6 +50,11 @@ export default function ForgotPasswordPage() {
         ) : (
           <>
             <p className="mt-1 text-sm text-soft">Enter your account email and we’ll send a one-hour reset link.</p>
+            {error && (
+              <div className="mt-4 rounded-lg border border-danger bg-danger-wash p-3">
+                <p className="text-sm text-danger">{error}</p>
+              </div>
+            )}
             <div className="mt-6 space-y-4">
               <Field label="Email">
                 <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="me@example.com" controlSize="lg" autoComplete="email" />

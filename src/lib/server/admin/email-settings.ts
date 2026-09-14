@@ -244,6 +244,9 @@ export async function updateAccountEmailSettings(
     next.replyTo = normalizeEmail(patch.replyTo, 'Reply-to email', true);
   }
   if (patch.apiKey !== undefined) {
+    if (patch.apiKey !== null && typeof patch.apiKey !== 'string') {
+      throw new AccountEmailSettingsError('Resend API key must be a string or null');
+    }
     const apiKey = patch.apiKey?.trim() ?? '';
     if (!apiKey) {
       next.apiKeyCiphertext = null;

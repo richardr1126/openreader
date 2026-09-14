@@ -82,4 +82,14 @@ describe('account email settings', () => {
       apiKeyMask: null,
     });
   });
+
+  test('rejects a non-string API key as a validation error', async () => {
+    await expect(updateAccountEmailSettings({ apiKey: 123 as never }))
+      .rejects.toMatchObject({
+        name: 'AccountEmailSettingsError',
+        message: 'Resend API key must be a string or null',
+        status: 400,
+      });
+    expect(mocks.encryptSecret).not.toHaveBeenCalled();
+  });
 });

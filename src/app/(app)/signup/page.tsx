@@ -8,7 +8,7 @@ import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext
 import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
-import { Button, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
+import { Button, ButtonLink, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 export default function SignUpPage() {
@@ -111,11 +111,14 @@ export default function SignUpPage() {
   const resendVerification = async () => {
     setLoading(true);
     try {
-      await getAuthClient(baseUrl).sendVerificationEmail({
+      const result = await getAuthClient(baseUrl).sendVerificationEmail({
         email: email.trim(),
         callbackURL: '/verify-email?status=success',
       });
+      if (result.error) throw new Error(result.error.message || 'Verification email request failed');
       toast.success('Verification email queued');
+    } catch {
+      toast.error('Unable to resend the verification email right now. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -151,7 +154,7 @@ export default function SignUpPage() {
           <p className="mt-2 text-sm text-soft">We queued a verification link for <span className="font-medium text-foreground">{email.trim()}</span>. It expires in one hour.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend email</Button>
-            <Link href="/signin"><Button variant="primary" size="md">Go to sign in</Button></Link>
+            <ButtonLink href="/signin" variant="primary" size="md">Go to sign in</ButtonLink>
           </div>
         </Surface>
       </div>

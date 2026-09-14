@@ -31,6 +31,7 @@ function SignInContent() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
   const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
   const { accountEmailsEnabled } = useRuntimeConfig();
@@ -45,6 +46,7 @@ function SignInContent() {
   const handleSignIn = async () => {
     setError(null);
     setVerificationEmail(null);
+    setVerificationNotice(null);
 
     if (!email.trim() || !validateEmail(email)) {
       setError('Please enter a valid email address');
@@ -93,12 +95,17 @@ function SignInContent() {
   const resendVerification = async () => {
     if (!verificationEmail) return;
     setLoadingEmail(true);
+    setError(null);
+    setVerificationNotice(null);
     try {
-      await getAuthClient(baseUrl).sendVerificationEmail({
+      const result = await getAuthClient(baseUrl).sendVerificationEmail({
         email: verificationEmail,
         callbackURL: '/verify-email?status=success',
       });
-      setError('A new verification link was queued. Check your email.');
+      if (result.error) throw new Error(result.error.message || 'Verification email request failed');
+      setVerificationNotice('A new verification link was queued. Check your email.');
+    } catch {
+      setError('Unable to resend the verification email right now. Please try again.');
     } finally {
       setLoadingEmail(false);
     }
@@ -161,6 +168,11 @@ function SignInContent() {
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
             <p className="text-sm text-danger">{error}</p>
+          </div>
+        )}
+        {verificationNotice && (
+          <div className="mt-4 p-3 bg-accent-wash border border-accent-line rounded-lg">
+            <p className="text-sm text-accent">{verificationNotice}</p>
           </div>
         )}
         {verificationEmail && (

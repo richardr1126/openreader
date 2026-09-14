@@ -354,7 +354,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       }
       return { sessionId: parsed.sessionId, planObjectKey, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     } catch (error) {
-      const latest = await playbackStorage.sessions.getSession(parsed.sessionId).catch(() => null);
+      const latest = await playbackStorage.sessions.getSession(parsed.sessionId);
       if (playbackGenerationCancellationExpected({
         generationExtent: parsed.generationExtent ?? 'window',
         generationRunId,

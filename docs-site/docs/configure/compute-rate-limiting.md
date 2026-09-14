@@ -20,7 +20,7 @@ TTS usage is measured at the segment that actually needs provider synthesis:
 - The next missing segment stops. Playback can finish the audio already generated.
 - One stable event key makes retries and redelivery free of duplicate charges.
 
-The self-host default enables only these generated-character thresholds, preserving separate anonymous and authenticated user/IP thresholds plus an anonymous-device backstop. Resets occur at midnight UTC.
+The self-host default keeps these generated-character thresholds configured but disabled. Administrators can opt in without rebuilding the policy; when enabled, the separate anonymous and authenticated user/IP thresholds plus an anonymous-device backstop reset at midnight UTC.
 
 Users can see their generated-character usage and reset timing in **Settings → Account**. The reader controls remain available after the threshold is reached so cached audio can still be played and sought normally.
 
@@ -33,7 +33,7 @@ Users can see their generated-character usage and reset timing in **Settings →
 - Live playback keeps up to three ordered segment requests ready, while the provider's configurable **Max concurrent** value remains the actual cross-worker limit. The self-host default of three restores useful playback runway; lower it for a server that cannot synthesize requests in parallel.
 - Provider `429 Retry-After` responses cool down that provider's shared capacity bucket.
 - All operation admission limits are disabled by default for self-hosted installations. The configured values remain available as an opt-in for public or shared installations.
-- New-generation character limits remain enabled by default and stop only uncached provider work at a segment boundary.
+- New-generation character limits are disabled by default. When enabled, they stop only uncached provider work at a segment boundary.
 
 The application owns SQL admission and usage decisions. The worker owns local execution scheduling and provider capacity. No database two-phase commit is used.
 

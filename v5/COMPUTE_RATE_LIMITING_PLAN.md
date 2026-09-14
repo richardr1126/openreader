@@ -307,7 +307,7 @@ archive_io                  2
 ```
 
 Every operation kind starts with `maxConcurrentPerWorker = 1`. Provider limits
-are enabled with one concurrent request, 60 requests/minute, 100,000
+are enabled with three concurrent requests, 60 requests/minute, 100,000
 characters/minute, and a 30-second maximum wait. Admins should customize the
 default or a named override to match their service plan.
 

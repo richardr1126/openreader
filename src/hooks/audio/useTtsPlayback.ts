@@ -440,6 +440,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         },
         onTerminalFailure: () => {
           pauseActivePlayback();
+          resetPlaybackSession();
           clearAudioSource();
           setIsPlaying(false);
           setPlaybackPhase('failed');

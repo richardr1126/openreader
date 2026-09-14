@@ -1,9 +1,8 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Button, Surface } from '@/components/ui';
+import { ButtonLink, Surface } from '@/components/ui';
 import { LoadingSpinner } from '@/components/Spinner';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
@@ -38,8 +37,8 @@ function VerifyEmailContent() {
         </p>
         {displayState === 'working' ? <LoadingSpinner className="mx-auto mt-5 h-6 w-6" /> : (
           <div className="mt-6 flex justify-center gap-2">
-            <Link href="/signin"><Button variant="primary" size="md">Sign in</Button></Link>
-            {displayState === 'error' && <Link href="/signin"><Button variant="outline" size="md">Resend from sign in</Button></Link>}
+            <ButtonLink href="/signin" variant="primary" size="md">Sign in</ButtonLink>
+            {displayState === 'error' && <ButtonLink href="/signin" variant="outline" size="md">Resend from sign in</ButtonLink>}
           </div>
         )}
       </Surface>

@@ -30,7 +30,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && DISABLE_AUTH_RATE_LIMIT=true pnpm start',
     url: 'http://localhost:3003',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120 * 1000,
     env: {
       // Playwright owns a disposable control-plane/data-plane stack. Keeping
