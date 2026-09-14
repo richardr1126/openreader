@@ -14,6 +14,7 @@ export type UploadSource = {
 
 type UploadOptions = {
   signal?: AbortSignal;
+  folderId?: string;
 };
 
 type FinalizeUploadPayload = {
@@ -151,7 +152,7 @@ async function requestUploadFinalization(
   const response = await fetch('/api/documents/blob/upload/finalize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uploads }),
+    body: JSON.stringify({ uploads, ...(options?.folderId ? { folderId: options.folderId } : {}) }),
     signal: options?.signal,
   });
   const data = (await response.json().catch(() => null)) as FinalizeResponse | null;

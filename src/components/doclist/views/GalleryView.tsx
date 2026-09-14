@@ -146,8 +146,13 @@ export function GalleryView({
 }: GalleryViewProps) {
   const { setVisibleOrder } = useDocumentSelection();
   const railRef = useRef<HTMLDivElement | null>(null);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const activeDoc = useMemo(() => documents[activeIdx], [documents, activeIdx]);
+  const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(null);
+  const documentKeys = useMemo(
+    () => documents.map((document) => documentIdentityKey(document)),
+    [documents],
+  );
+  const activeIdx = Math.max(0, activeDocumentKey ? documentKeys.indexOf(activeDocumentKey) : 0);
+  const activeDoc = documents[activeIdx];
   const openHref = activeDoc ? `/${activeDoc.type}/${encodeURIComponent(activeDoc.id)}` : null;
 
   useEffect(() => {
@@ -155,16 +160,15 @@ export function GalleryView({
   }, [documents, setVisibleOrder]);
 
   useEffect(() => {
-    if (activeIdx >= documents.length) {
-      setActiveIdx(Math.max(0, documents.length - 1));
-    }
-  }, [documents.length, activeIdx]);
+    if (!activeDocumentKey || documentKeys.includes(activeDocumentKey)) return;
+    setActiveDocumentKey(documentKeys[0] ?? null);
+  }, [activeDocumentKey, documentKeys]);
 
   useEffect(() => {
     const rail = railRef.current;
     if (!rail) return;
     rail.scrollLeft = 0;
-  }, [documents.length]);
+  }, [documentKeys]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -172,11 +176,17 @@ export function GalleryView({
       const target = e.target as HTMLElement;
       if (target?.closest('input, textarea, [contenteditable]')) return;
       if (e.key === 'ArrowRight') {
-        setActiveIdx((i) => Math.min(documents.length - 1, i + 1));
+        setActiveDocumentKey((current) => {
+          const index = current ? documentKeys.indexOf(current) : 0;
+          return documentKeys[Math.min(documentKeys.length - 1, Math.max(0, index) + 1)] ?? null;
+        });
       } else if (e.key === 'ArrowLeft') {
-        setActiveIdx((i) => Math.max(0, i - 1));
+        setActiveDocumentKey((current) => {
+          const index = current ? documentKeys.indexOf(current) : 0;
+          return documentKeys[Math.max(0, index - 1)] ?? null;
+        });
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        const doc = documents[activeIdx];
+        const doc = activeDoc;
         if (doc) {
           e.preventDefault();
           onDeleteDoc(doc);
@@ -185,7 +195,7 @@ export function GalleryView({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [documents, activeIdx, onDeleteDoc]);
+  }, [activeDoc, documentKeys, documents.length, onDeleteDoc]);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -195,7 +205,7 @@ export function GalleryView({
           <div className="w-full max-w-[920px] flex flex-col md:flex-row items-center md:items-start justify-center gap-4 md:gap-6">
             <div className="flex flex-col items-center gap-3 w-[180px] sm:w-[260px] md:w-[320px] shrink-0">
               <div className="w-full aspect-[3/4] rounded-lg overflow-hidden border border-line shadow-elev-2">
-                <DocumentPreview doc={activeDoc} />
+                <DocumentPreview key={`${activeDoc.type}-${activeDoc.id}-${activeDoc.lastModified}`} doc={activeDoc} />
               </div>
               <div className="text-center">
                 <h2 className="text-[14px] font-semibold text-foreground truncate max-w-[320px]">
@@ -254,7 +264,7 @@ export function GalleryView({
               key={`${doc.type}-${doc.id}`}
               doc={doc}
               active={i === activeIdx}
-              onClick={() => setActiveIdx(i)}
+              onClick={() => setActiveDocumentKey(documentIdentityKey(doc))}
               onMergeIntoFolder={onMergeIntoFolder}
             />
           ))}

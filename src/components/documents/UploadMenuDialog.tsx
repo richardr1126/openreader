@@ -28,6 +28,7 @@ interface UploadMenuDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadBatchChange?: (state: UploadBatchState) => void;
+  folderId?: string;
 }
 
 type TabValue = 'file' | 'create' | 'url' | 'library';
@@ -49,9 +50,10 @@ export function UploadMenuDialog({
   isOpen,
   onClose,
   onUploadBatchChange,
+  folderId,
 }: UploadMenuDialogProps) {
   const { uploadDocuments } = useDocuments();
-  const libraryImport = useLibraryImport();
+  const libraryImport = useLibraryImport(folderId);
   const [activeTab, setActiveTab] = useState<TabValue>('file');
 
   // --- Create Text/Markdown State ---
@@ -92,7 +94,7 @@ export function UploadMenuDialog({
       const mimeType = ext === '.md' ? 'text/markdown' : 'text/plain';
       const file = new File([docContent], filename, { type: mimeType });
 
-      await uploadDocuments([file]);
+      await uploadDocuments([file], { folderId });
       toast.success(`"${filename}" created successfully!`);
       
       // Reset inputs & close
@@ -140,7 +142,7 @@ export function UploadMenuDialog({
         type: 'text/markdown',
       });
 
-      await uploadDocuments([file]);
+      await uploadDocuments([file], { folderId });
 
       // Success
       toast.success(`Successfully imported "${displayTitle}"!`);
@@ -184,6 +186,7 @@ export function UploadMenuDialog({
             Select files from your computer or drag and drop them anywhere. Supported formats include PDF, EPUB, TXT, and MD.
           </p>
           <DocumentUploader
+            folderId={folderId}
             className="flex-1 flex flex-col justify-center border-2 border-dashed border-line rounded-lg bg-surface-sunken hover:bg-surface-solid transition-colors duration-base"
             onUploadBatchChange={(state) => {
               onUploadBatchChange?.(state);

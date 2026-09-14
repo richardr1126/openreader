@@ -16,6 +16,7 @@ type RegisterUploadedDocumentInput = {
   type: DocumentType;
   size: number;
   lastModified: number;
+  folderId?: string | null;
   schedulePreview?: (task: () => Promise<void>) => void;
 };
 
@@ -47,6 +48,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
       size: input.size,
       lastModified: input.lastModified,
       filePath: input.documentId,
+      folderId: input.folderId ?? null,
     })
     .onConflictDoUpdate({
       target: [documents.id, documents.userId],
@@ -56,6 +58,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
         size: input.size,
         lastModified: input.lastModified,
         filePath: input.documentId,
+        folderId: input.folderId ?? null,
       },
     });
 
@@ -91,5 +94,6 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     size: input.size,
     lastModified: input.lastModified,
     scope: 'user',
+    folderId: input.folderId ?? undefined,
   };
 }

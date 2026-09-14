@@ -183,7 +183,7 @@ test('anonymous user controls playback across every accepted document journey', 
 
   await page
     .getByRole('complementary')
-    .getByText('Upload documents', { exact: true })
+    .getByRole('button', { name: 'Add Documents', exact: true })
     .click();
   const uploadDialog = page.getByRole('dialog', { name: 'Add Documents', exact: true });
   await expect(uploadDialog.getByRole('heading', { name: 'Add Documents', exact: true })).toBeVisible();

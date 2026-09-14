@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useId, type ReactNode } from 'react';
 import { useDropzone, type FileRejection } from 'react-dropzone';
-import { UploadIcon } from '@/components/icons/Icons';
+import { PlusIcon, UploadIcon } from '@/components/icons/Icons';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { dropzoneSurfaceClass } from '@/components/ui';
@@ -11,6 +11,7 @@ interface DocumentUploaderProps {
   className?: string;
   variant?: 'default' | 'compact' | 'overlay';
   children?: ReactNode;
+  folderId?: string;
   onUploadBatchChange?: (state: UploadBatchState) => void;
   onClick?: () => void;
 }
@@ -28,6 +29,7 @@ export function DocumentUploader({
   className = '',
   variant = 'default',
   children,
+  folderId,
   onUploadBatchChange,
   onClick,
 }: DocumentUploaderProps) {
@@ -60,7 +62,7 @@ export function DocumentUploader({
     });
 
     try {
-      await uploadDocuments(acceptedFiles);
+      await uploadDocuments(acceptedFiles, { folderId });
       completedFiles = acceptedFiles.length;
     } catch (err) {
       setError('Failed to upload file. Please try again.');
@@ -75,7 +77,7 @@ export function DocumentUploader({
         currentFileName: null,
       });
     }
-  }, [uploadDocuments, emitBatchState]);
+  }, [uploadDocuments, emitBatchState, folderId]);
 
   const onDropRejected = useCallback((rejections: FileRejection[]) => {
     if (rejections.length === 0) return;
@@ -149,6 +151,8 @@ export function DocumentUploader({
     );
   }
 
+  const CompactIcon = onClick ? PlusIcon : UploadIcon;
+
   return (
     <div
       {...getRootProps(
@@ -158,6 +162,14 @@ export function DocumentUploader({
                 e.stopPropagation();
                 onClick();
               },
+              onKeyDown: (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onClick();
+              },
+              role: 'button',
+              tabIndex: 0,
+              'aria-label': 'Add Documents',
             }
           : {}
       )}
@@ -171,13 +183,13 @@ export function DocumentUploader({
       <input {...getInputProps()} />
       {variant === 'compact' ? (
         <div className="flex items-center gap-2 text-left w-full min-w-0">
-          <UploadIcon className="w-3.5 h-3.5 text-soft group-hover:text-accent shrink-0 transition-colors duration-base" />
+          <CompactIcon className="w-3.5 h-3.5 text-soft group-hover:text-accent shrink-0 transition-colors duration-base" />
           {isUploading ? (
             <p className="text-[12px] font-medium truncate flex-1">Uploading…</p>
           ) : (
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <p className="text-[12px] truncate flex-1">
-                {isDragActive ? 'Drop files here' : 'Upload documents'}
+                {isDragActive ? 'Drop files here' : onClick ? 'Add Documents' : 'Upload documents'}
               </p>
               {error && <p className="text-[10px] text-danger truncate shrink-0" role="alert">{error}</p>}
             </div>

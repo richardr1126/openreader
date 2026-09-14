@@ -1,5 +1,8 @@
 export const queryKeys = {
   documents: (sessionId: string) => ['documents', sessionId] as const,
+  documentPreview: (documentId: string, type: string, lastModified: number) => (
+    ['document-preview', documentId, type, lastModified] as const
+  ),
   readerBootstraps: () => ['reader-bootstrap'] as const,
   readerBootstrap: (sessionId: string, documentId: string) => ['reader-bootstrap', sessionId, documentId] as const,
   readerDocumentSource: (sessionId: string, documentId: string, contentVersion: string) => (

@@ -94,6 +94,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           topSlot={(
             <DocumentUploader
               variant="compact"
+              folderId={controller.activeFolderId}
               onUploadBatchChange={controller.handleUploadBatchChange}
               onClick={controller.openUploadDialog}
             />
@@ -146,6 +147,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         <div className="flex-1 min-h-0 flex items-center justify-center p-6">
           <DocumentUploader
             className="py-12 w-full max-w-2xl"
+            folderId={controller.activeFolderId}
             onUploadBatchChange={controller.handleUploadBatchChange}
           />
         </div>
@@ -153,6 +155,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         <DocumentUploader
           variant="overlay"
           className="flex-1 min-h-0 flex flex-col"
+          folderId={controller.activeFolderId}
           onUploadBatchChange={controller.handleUploadBatchChange}
         >
           <RefreshIndicator
@@ -240,6 +243,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         isOpen={controller.isUploadDialogOpen}
         onClose={controller.closeUploadDialog}
         onUploadBatchChange={controller.handleUploadBatchChange}
+        folderId={controller.activeFolderId}
       />
     </FinderWindow>
   );

@@ -68,22 +68,34 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await folderName.fill('Reading List');
   await folderName.press('Enter');
 
-  const folderButton = page.getByRole('button', {
+  const initialFolderButton = page.getByRole('button', {
     name: 'Reading List 2',
     exact: true,
   });
   await expect(folderDialog).toBeHidden();
-  await expect(folderButton).toBeVisible();
+  await expect(initialFolderButton).toBeVisible();
   await expect(textLink).toBeVisible();
   await expect(epubLink).toBeVisible();
   await expect(pdfLink).toBeHidden();
+
+  // Uploads started while a folder is selected belong to that folder immediately.
+  await page.getByRole('button', { name: 'Add Documents', exact: true }).click();
+  const uploadDialog = page.getByRole('dialog', { name: 'Add Documents', exact: true });
+  const chooserPromise = page.waitForEvent('filechooser');
+  await uploadDialog.getByText('Drop your file(s) here, or click to select', { exact: true }).click();
+  await (await chooserPromise).setFiles(resolve('tests/files/sample.md'));
+  const markdownLink = page.getByRole('link', { name: 'sample.md', exact: true });
+  await expect(markdownLink).toBeVisible();
+  const folderButton = page.getByRole('button', { name: 'Reading List 3', exact: true });
+  await expect(folderButton).toBeVisible();
 
   await page.reload();
 
   await expect(folderButton).toBeVisible();
   await expect(textLink).toBeVisible();
   await expect(epubLink).toBeVisible();
+  await expect(markdownLink).toBeVisible();
   await expect(pdfLink).toBeHidden();
   await expect(folderHint).toBeHidden();
-  await expect(page.getByRole('status')).toContainText('2 items');
+  await expect(page.getByRole('status')).toContainText('3 items');
 });

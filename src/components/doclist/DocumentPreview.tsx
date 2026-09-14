@@ -1,6 +1,7 @@
 import { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   getDocumentContentSnippet,
   getDocumentPreviewStatus,
@@ -14,12 +15,18 @@ import {
   setInMemoryDocumentPreviewUrl,
 } from '@/lib/client/cache/previews';
 import { formatDocumentSize } from './formatSize';
+import { queryKeys } from '@/lib/client/query-keys';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface DocumentPreviewProps {
   doc: DocumentListDocument;
 }
+
+type CachedPreview = {
+  imagePreview: string | null;
+  textPreview: string | null;
+};
 
 const MAX_TEXT_PREVIEW_CACHE = 100;
 const textPreviewCache = new Map<string, string>();
@@ -64,13 +71,27 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const previewKey = useMemo(() => `${doc.type}:${doc.id}`, [doc.id, doc.type]);
+  const previewQueryKey = useMemo(
+    () => queryKeys.documentPreview(doc.id, doc.type, Number(doc.lastModified)),
+    [doc.id, doc.lastModified, doc.type],
+  );
+  const cachedPreview = queryClient.getQueryData<CachedPreview>(previewQueryKey);
+  const [imagePreview, setImagePreview] = useState<string | null>(
+    () => cachedPreview?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
+  );
   const [isImageReady, setIsImageReady] = useState(false);
-  const [textPreview, setTextPreview] = useState<string | null>(null);
+  const [textPreview, setTextPreview] = useState<string | null>(
+    () => cachedPreview?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
+  );
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const previewKey = useMemo(() => `${doc.type}:${doc.id}`, [doc.id, doc.type]);
+  useEffect(() => {
+    if (!imagePreview && !textPreview) return;
+    queryClient.setQueryData<CachedPreview>(previewQueryKey, { imagePreview, textPreview });
+  }, [imagePreview, previewQueryKey, queryClient, textPreview]);
 
   useEffect(() => {
     const el = containerRef.current;

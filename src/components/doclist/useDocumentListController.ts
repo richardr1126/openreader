@@ -265,6 +265,9 @@ export function useDocumentListController() {
       phase: 'uploading' as const,
     };
   }, [activeUploadBatches]);
+  const activeFolderId = listState.sidebarFilter.startsWith('folder:')
+    ? listState.sidebarFilter.slice('folder:'.length)
+    : undefined;
   return {
     listState,
     model,
@@ -309,6 +312,7 @@ export function useDocumentListController() {
     cancelClearFolders: () => setClearFoldersPrompt(false),
     confirmClearFolders,
     sidebarUploadState,
+    activeFolderId,
     handleUploadBatchChange,
     isUploadDialogOpen,
     openUploadDialog: () => setIsUploadDialogOpen(true),

@@ -90,7 +90,7 @@ describe('document upload client', () => {
       lastModified: 1,
       contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       body: new Uint8Array([1, 2, 3]),
-    }])).resolves.toEqual([expect.objectContaining({
+    }], { folderId: 'reading-list' })).resolves.toEqual([expect.objectContaining({
       id: 'a'.repeat(64),
       name: 'sample.pdf',
       type: 'pdf',
@@ -99,6 +99,13 @@ describe('document upload client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(eventUrls).toEqual([
       '/api/documents/blob/upload/events?opId=op-1&token=123e4567-e89b-12d3-a456-426614174000',
+    ]);
+    const finalizationBodies = fetchMock.mock.calls
+      .filter(([candidate]) => String(candidate) === '/api/documents/blob/upload/finalize')
+      .map(([, init]) => JSON.parse(String(init?.body)) as { folderId?: string });
+    expect(finalizationBodies).toEqual([
+      { folderId: 'reading-list', uploads: expect.any(Array) },
+      { folderId: 'reading-list', uploads: expect.any(Array) },
     ]);
     expect(closedSources).toEqual([{ closed: true }]);
   });

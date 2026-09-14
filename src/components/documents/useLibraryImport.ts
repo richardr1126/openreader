@@ -8,7 +8,7 @@ import { mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
 import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
 import type { BaseDocument } from '@/types/documents';
 
-export function useLibraryImport() {
+export function useLibraryImport(folderId?: string) {
   const { refreshDocuments } = useDocuments();
   const [isSelectionOpen, setIsSelectionOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -73,7 +73,7 @@ export function useLibraryImport() {
           type: mimeTypeForDoc(document),
           lastModified: document.lastModified,
         });
-        const [stored] = await uploadDocuments([file], { signal: controller.signal });
+        const [stored] = await uploadDocuments([file], { signal: controller.signal, folderId });
         if (stored) {
           await cacheStoredDocumentFromBytes(stored, bytes).catch((error) => {
             console.warn('Failed to cache imported document:', stored.id, error);
@@ -102,7 +102,7 @@ export function useLibraryImport() {
       setProgress(0);
       setStatusMessage('');
     }
-  }, [refreshDocuments, setProgress]);
+  }, [folderId, refreshDocuments, setProgress]);
 
   return {
     documents,

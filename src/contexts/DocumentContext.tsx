@@ -18,7 +18,7 @@ interface DocumentContextType {
   epubDocs: Array<BaseDocument & { type: 'epub' }>;
   htmlDocs: Array<BaseDocument & { type: 'html' }>;
   queryState: DerivedQueryState;
-  uploadDocuments: (files: File[]) => Promise<BaseDocument[]>;
+  uploadDocuments: (files: File[], options?: { folderId?: string }) => Promise<BaseDocument[]>;
   deleteDocument: (id: string) => Promise<void>;
   refreshDocuments: () => Promise<void>;
 }
@@ -97,7 +97,9 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, [docs]);
 
   const uploadMutation = useMutation({
-    mutationFn: (files: File[]) => uploadServerDocuments(files),
+    mutationFn: (input: { files: File[]; folderId?: string }) => uploadServerDocuments(input.files, {
+      folderId: input.folderId,
+    }),
     onSuccess: (stored) => {
       queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
         mergeStoredDocuments(previous, stored),
@@ -117,10 +119,13 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
   });
 
-  const uploadDocuments = useCallback(async (files: File[]): Promise<BaseDocument[]> => {
+  const uploadDocuments = useCallback(async (
+    files: File[],
+    options?: { folderId?: string },
+  ): Promise<BaseDocument[]> => {
     if (files.length === 0) return [];
 
-    const stored = await uploadMutation.mutateAsync(files);
+    const stored = await uploadMutation.mutateAsync({ files, folderId: options?.folderId });
     await Promise.allSettled(
       stored.map(async (document, index) => {
         const file = files[index];
