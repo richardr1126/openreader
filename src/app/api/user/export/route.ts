@@ -25,7 +25,7 @@ import {
   ACCOUNT_EXPORT_SCHEMA_VERSION,
   buildUserExportManifest,
 } from '@/lib/server/user/data-export';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { createAdmittedComputeOperation } from '@/lib/server/compute-limits/run-admitted';
@@ -59,12 +59,6 @@ export async function POST(req: NextRequest) {
     request: req,
   });
   try {
-    if (!auth) {
-      return errorResponse(new Error('Auth not initialized'), {
-        apiErrorMessage: 'Auth not initialized',
-        normalize: { code: 'USER_EXPORT_AUTH_NOT_INITIALIZED', errorClass: 'auth', httpStatus: 500 },
-      });
-    }
     if (!isComputeWorkerAvailable()) {
       return NextResponse.json(
         { error: 'Compute worker is required for account export.' },
@@ -81,7 +75,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const bodyRecord = body && typeof body === 'object' ? body as Record<string, unknown> : {};
 
-    const session = await auth.api.getSession({ headers: req.headers });
+    const session = await (await getAuth()).api.getSession({ headers: req.headers });
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

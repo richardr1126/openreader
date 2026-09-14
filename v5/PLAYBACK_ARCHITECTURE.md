@@ -103,6 +103,10 @@ patterns require it:
   fallback proxy routes for old browsers, local object reads, or degraded object
   storage behavior; storage is required and byte proxy fallbacks buffer request
   or object bodies inside Vercel functions.
+- Browser upload progress comes from the direct object-storage transfer itself;
+  worker-owned DOCX conversion progress comes from the existing authenticated
+  operation SSE proxy. These phases feed one client upload lifecycle rather than
+  polling or component-local progress reconstructions.
 - PDF parse and TTS playback generation are worker-owned jobs. Next creates or
   resolves deterministic jobs, returns short snapshots, and proxies operation
   SSE only as a bounded reconnectable stream. Completed parsed PDF artifacts
@@ -857,9 +861,10 @@ Implemented:
 3. Moved LibreOffice invocation and temp-file handling into the compute worker.
    The old Next-side `src/lib/server/documents/docx-convert.ts` helper is gone.
 4. DOCX upload finalize returns `202` with conversion operation state when the
-   worker artifact is not complete. The same existing finalize route registers
-   the converted PDF after worker completion; no new upload-specific SSE route
-   or long wait loop was added.
+   worker artifact is not complete. The client follows that operation through
+   the existing authenticated upload-events SSE proxy, then calls the same
+   finalize route once to register the converted PDF. No polling or long wait
+   loop runs in Next.
 5. The worker writes converted PDF artifacts and metadata sidecars under
    `document_conversions_v1/docx/`; Next copies the ready artifact into the
    canonical document blob location and creates the SQL document row.
@@ -1783,3 +1788,38 @@ media recovery. Local verification passed 133 Vitest files / 669 tests, applicat
 and worker type checks, the production build and bundle/boundary guards, and the
 complete 24-case Chromium/WebKit matrix with both true-audio journeys. Production
 network validation remains the final deployment check for this step.
+
+### Step 29 — Slow-provider runway and terminal stream recovery
+
+Status: implemented and locally validated; production latency validation pending.
+
+- Expected pause and supersession aborts no longer mark the canonical playback
+  session failed. The worker re-reads generation ownership in its error path and
+  treats an inactive, replaced, or removed live run as successful cancellation;
+  genuine errors from the current active run still fail normally.
+- A seek into uncached audio no longer moves the media element into that range.
+  It updates worker intent and waits for the existing SSE seek layout to prove a
+  contiguous start buffer, then reopens the same canonical stream directly at
+  the target ordinal. This prevents WebKit from aggressively retrying a `409`
+  URL while generation is still catching up.
+- Terminal generation state is refreshed into the same SSE-owned read model.
+  Media recovery detaches a failed source immediately rather than reconnecting
+  it, and ordinary stalled-stream recovery now waits for twenty seconds of
+  listening-time runway before its bounded same-session retry.
+- Segment synthesis uses a bounded three-deep ordered pipeline. The existing
+  provider `maxConcurrent` policy is still the only effective upstream limit and
+  is coordinated across workers; the pipeline simply lets a provider configured
+  above one build useful audio runway. Alignment remains one ordered lane, with
+  the listener's earliest segment retaining timing priority.
+- Self-host operation admission and generated-character thresholds remain off
+  by default. Worker/resource scheduling and provider capacity remain enabled;
+  the provider concurrency default is three and can be reduced for a strictly
+  serial local TTS server.
+
+Regression coverage pins cancellation classification, terminal recovery,
+three-request bounded synthesis with ordered alignment, provider capacity, and
+the complete maintained runtime seed. Local validation passed 145 Vitest files /
+735 tests, application and worker type checks, the production and documentation
+builds, route-error and compute-boundary guards, and the complete 24-case
+Chromium/WebKit Playwright matrix including the true-audio journeys. Production
+latency validation remains required.

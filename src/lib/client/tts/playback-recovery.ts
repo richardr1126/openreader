@@ -1,13 +1,16 @@
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { isPlaybackStartBufferReady } from '@/lib/client/tts/playback-control';
+import { PLAYBACK_RECOVERY_BUFFER_WALL_MS } from '@openreader/tts/playback-buffer';
 
 /** Watch the local media clock; readiness comes from the existing SSE read model. */
 export function createPlaybackRecovery<T>(input: {
   isCurrent: () => boolean;
   currentTime: () => number;
   readyTarget: () => T | null;
+  hasTerminalFailure?: () => boolean;
   reconnect: (target: T) => void;
   onExhausted: () => void;
+  onTerminalFailure?: () => void;
   now?: () => number;
 }) {
   const now = input.now ?? Date.now;
@@ -22,6 +25,12 @@ export function createPlaybackRecovery<T>(input: {
       lastTime = time;
       lastAdvance = now();
       attempts = 0;
+      return;
+    }
+    if (input.hasTerminalFailure?.()) {
+      stopped = true;
+      clearInterval(timer);
+      (input.onTerminalFailure ?? input.onExhausted)();
       return;
     }
     if (now() - lastAdvance < 5_000) return;
@@ -52,10 +61,12 @@ export function createTtsMediaRecovery(input: {
   setStreamBase: (seconds: number) => void;
   onBuffering: () => void;
   onExhausted: () => void;
+  onTerminalFailure: () => void;
 }) {
   return createPlaybackRecovery({
     isCurrent: input.isCurrent,
     currentTime: input.getDocumentTime,
+    hasTerminalFailure: () => input.getLayout()?.status === 'failed',
     readyTarget: () => {
       const layout = input.getLayout();
       const ordinal = input.getOrdinal();
@@ -64,6 +75,7 @@ export function createTtsMediaRecovery(input: {
       const documentTime = input.getDocumentTime();
       return isPlaybackStartBufferReady({
         segments: layout.segments, startOrdinal: slot.ordinal, playbackRate: input.audio.playbackRate,
+        minimumWallMs: PLAYBACK_RECOVERY_BUFFER_WALL_MS,
         offsetWithinStartSegmentMs: Math.max(0, documentTime * 1000 - slot.startMs),
       }) ? { slot, documentTime } : null;
     },
@@ -78,5 +90,6 @@ export function createTtsMediaRecovery(input: {
       void input.audio.play().catch(() => undefined);
     },
     onExhausted: input.onExhausted,
+    onTerminalFailure: input.onTerminalFailure,
   });
 }

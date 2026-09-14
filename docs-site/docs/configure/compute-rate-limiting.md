@@ -20,7 +20,7 @@ TTS usage is measured at the segment that actually needs provider synthesis:
 - The next missing segment stops. Playback can finish the audio already generated.
 - One stable event key makes retries and redelivery free of duplicate charges.
 
-The default policy preserves separate anonymous and authenticated user/IP thresholds plus an anonymous-device backstop. Resets occur at midnight UTC.
+The self-host default keeps these generated-character thresholds configured but disabled. Administrators can opt in without rebuilding the policy; when enabled, the separate anonymous and authenticated user/IP thresholds plus an anonymous-device backstop reset at midnight UTC.
 
 Users can see their generated-character usage and reset timing in **Settings → Account**. The reader controls remain available after the threshold is reached so cached audio can still be played and sought normally.
 
@@ -30,8 +30,10 @@ Users can see their generated-character usage and reset timing in **Settings →
 - Active leases cap concurrent user and site work and recover automatically after crashes.
 - Worker concurrency, per-action queues, priorities, and named CPU/model/FFmpeg/LibreOffice/archive resources protect each worker.
 - Provider concurrency and rolling request/character limits are coordinated across worker replicas through JetStream KV.
+- Live playback keeps up to three ordered segment requests ready, while the provider's configurable **Max concurrent** value remains the actual cross-worker limit. The self-host default of three restores useful playback runway; lower it for a server that cannot synthesize requests in parallel.
 - Provider `429 Retry-After` responses cool down that provider's shared capacity bucket.
-- Live playback-session and plan admission limits are disabled by default so they cannot block cached audio. The separate new-generation character limits still stop uncached provider work.
+- All operation admission limits are disabled by default for self-hosted installations. The configured values remain available as an opt-in for public or shared installations.
+- New-generation character limits are disabled by default. When enabled, they stop only uncached provider work at a segment boundary.
 
 The application owns SQL admission and usage decisions. The worker owns local execution scheduling and provider capacity. No database two-phase commit is used.
 

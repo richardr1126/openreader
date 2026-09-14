@@ -29,6 +29,7 @@ Known compatible implementations: [Kokoro-FastAPI](./kokoro-fastapi), [KittenTTS
 ```env
 API_BASE=http://your-tts-server/v1
 # API_KEY=optional-key-if-required
+API_MODEL_NAME=your-model-name
 ```
 
 Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.

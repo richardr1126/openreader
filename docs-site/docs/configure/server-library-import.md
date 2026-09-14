@@ -30,7 +30,7 @@ Server library import lets you browse files from one or more server directories 
 
 ## Import flow
 
-1. Open **Settings -> Documents -> Server Library Import**.
+1. From the library, open **Upload documents -> Server Library**.
 2. Select files in the modal.
 3. Click **Import**.
 

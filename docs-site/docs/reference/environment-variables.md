@@ -7,7 +7,7 @@ This page is the source-of-truth reference for OpenReader environment variables.
 
 :::note Recommended configuration path
 Use **Settings → Admin** as the primary source of truth for shared providers and runtime site features.
-`API_BASE` / `API_KEY` are optional one-time provider bootstrap seeds.
+`API_BASE` / `API_KEY` / `API_MODEL_NAME` are optional one-time provider bootstrap seeds.
 Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`.
 :::
 
@@ -21,6 +21,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `LOG_LEVEL` | Runtime logging | `info` | Set app server log level |
 | `API_BASE` | TTS provider bootstrap seed | unset | Optional first-boot base URL for `default-openai` |
 | `API_KEY` | TTS provider bootstrap seed | unset | Optional first-boot API key for `default-openai` |
+| `API_MODEL_NAME` | TTS provider bootstrap seed | `kokoro` | Optional first-boot default model for `default-openai` |
 | `BASE_URL` | Auth | unset | Required at startup |
 | `AUTH_SECRET` | App auth + provider encryption | unset | Required on the app; never configure it on a standalone worker |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
@@ -117,6 +118,15 @@ Optional first-boot bootstrap API key for the auto-created `default-openai` shar
 
 - Read only for provider bootstrap when shared providers are empty.
 - Stored encrypted at rest after bootstrap.
+- After bootstrap, provider configuration is DB-backed and managed in **Settings → Admin → Shared providers**.
+
+### API_MODEL_NAME
+
+Optional first-boot default model for the auto-created `default-openai` shared provider.
+
+- Default: `kokoro`
+- Examples: `kokoro`, `supertonic-3`, or another model name accepted by the configured OpenAI-compatible endpoint.
+- Read only when `API_BASE` or `API_KEY` triggers provider bootstrap and shared providers are empty. It does not trigger provider creation by itself.
 - After bootstrap, provider configuration is DB-backed and managed in **Settings → Admin → Shared providers**.
 
 ## Auth and Identity
@@ -542,6 +552,7 @@ Supported top-level keys:
 - `version` (required, must be `1`)
 - `runtimeConfig` (optional object, strict-validated against runtime schema)
 - `providers` (optional array of shared provider seed entries)
+- `accountEmail` (optional complete Resend account-email delivery seed)
 
 Example:
 
@@ -572,7 +583,14 @@ Example:
       "defaultModel": "kokoro",
       "enabled": true
     }
-  ]
+  ],
+  "accountEmail": {
+    "enabled": true,
+    "senderName": "OpenReader",
+    "senderEmail": "mail@example.com",
+    "replyTo": "support@example.com",
+    "apiKey": "REPLACE_WITH_RESEND_API_KEY"
+  }
 }
 ```
 
@@ -580,14 +598,22 @@ This minimal seed uses the built-in compute policy. To seed every compute limit 
 
 Provider fallback behavior:
 
-- If the JSON seed includes `providers` (including an empty array), `API_BASE` / `API_KEY` fallback is skipped.
-- If the JSON seed does not include a `providers` key, the legacy `API_BASE` / `API_KEY` bootstrap fallback can still create `default-openai` when provider rows are empty. `API_BASE` alone is sufficient for an upstream that does not require authentication.
+- If the JSON seed includes `providers` (including an empty array), the `API_BASE` / `API_KEY` / `API_MODEL_NAME` fallback is skipped.
+- If the JSON seed does not include a `providers` key, the legacy `API_BASE` / `API_KEY` bootstrap fallback can still create `default-openai` when provider rows are empty. `API_MODEL_NAME` sets that row's default model and defaults to `kokoro`; it does not trigger the fallback by itself. `API_BASE` alone is sufficient for an upstream that does not require authentication.
+
+Account email seed behavior:
+
+- `accountEmail` requires `enabled`, `senderName`, `senderEmail`, and `apiKey`; `replyTo` is optional and may be `null`.
+- The Resend API key is encrypted with `AUTH_SECRET` before it is stored. Keep the seed file or `RUNTIME_SEED_JSON` secret; do not commit the key.
+- The seed only creates the account-email record when it is missing. Later Email-panel changes are never overwritten.
+- The shipped `examples/openreader-seed.json` includes a disabled account-email block with a placeholder key. Replace the placeholder and sender address, then set `enabled` to `true` when configuring Resend.
 
 Precedence summary:
 
 - Runtime reads: admin DB runtime rows override built-in defaults.
 - Seed input (`RUNTIME_SEED_JSON*`) only populates missing runtime rows on first boot; it does not overwrite existing/admin-edited rows.
-- Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY` fallback > no provider bootstrap.
+- Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY`/`API_MODEL_NAME` fallback > no provider bootstrap.
+- Account email bootstrap: JSON `accountEmail` section > no account-email bootstrap.
 
 ## Platform-Supplied Signals
 

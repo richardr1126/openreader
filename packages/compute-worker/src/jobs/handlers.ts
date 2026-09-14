@@ -2,6 +2,8 @@ import type {
   AccountExportJobRequest,
   AccountExportJobResult,
   AccountExportProgress,
+  EmailDeliveryJobRequest,
+  EmailDeliveryJobResult,
   DocumentConversionJobRequest,
   DocumentConversionJobResult,
   DocumentConversionProgress,
@@ -27,6 +29,7 @@ import { createPdfLayoutHandler } from './pdf-layout';
 import { createTtsPlaybackExportHandler } from './playback/export-job';
 import { createTtsPlaybackHandler } from './playback/playback-job';
 import { createTtsPlaybackPlanHandler } from './playback/plan-job';
+import { deliverEmail } from './email-delivery';
 
 export interface JobHandlers {
   runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> }): Promise<PdfLayoutJobResult>;
@@ -36,6 +39,7 @@ export interface JobHandlers {
   runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number): Promise<DocumentPreviewJobResult>;
   runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: DocumentConversionProgress) => Promise<void> }): Promise<DocumentConversionJobResult>;
   runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: AccountExportProgress) => Promise<void> }): Promise<AccountExportJobResult>;
+  runEmailDelivery?(payload: EmailDeliveryJobRequest): Promise<EmailDeliveryJobResult>;
 }
 
 export function createJobHandlers(input: JobHandlerContext): JobHandlers {
@@ -47,5 +51,6 @@ export function createJobHandlers(input: JobHandlerContext): JobHandlers {
     runDocumentPreview: createDocumentPreviewHandler(input),
     runDocumentConversion: createDocumentConversionHandler(input),
     runAccountExport: createAccountExportHandler(input),
+    runEmailDelivery: deliverEmail,
   };
 }

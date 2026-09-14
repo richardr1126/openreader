@@ -10,12 +10,11 @@ import { IconButton } from '@/components/ui';
 import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import { DocumentSelectionProvider } from './dnd/DocumentSelectionContext';
-import { SidebarUploadLoader } from './SidebarUploadLoader';
+import { SidebarUploadStatus } from './SidebarUploadStatus';
 import { GalleryView } from './views/GalleryView';
 import { IconsView } from './views/IconsView';
 import { ListView } from './views/ListView';
 import { FinderSidebar } from './window/FinderSidebar';
-import { FinderStatusBar } from './window/FinderStatusBar';
 import { FinderToolbar } from './window/FinderToolbar';
 import { FinderWindow } from './window/FinderWindow';
 import { useDocumentListController } from './useDocumentListController';
@@ -75,6 +74,8 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           onToggleSidebar={controller.toggleSidebar}
           isSidebarOpen={controller.effectiveSidebarOpen}
           showSortControls={sidebarFilter !== 'recents'}
+          itemCount={model.visibleDocuments.length}
+          totalSize={model.visibleBytes}
           leftSlot={brand}
         />
       }
@@ -93,27 +94,24 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           topSlot={(
             <DocumentUploader
               variant="compact"
-              onUploadBatchChange={controller.handleUploadBatchChange}
+              folderId={controller.activeFolderId}
               onClick={controller.openUploadDialog}
             />
           )}
           bottomSlot={(
             <div className="flex flex-col gap-2">
-              {controller.sidebarUploadState && (
-                <SidebarUploadLoader {...controller.sidebarUploadState} />
+              {controller.uploadSummary && (
+                <SidebarUploadStatus
+                  summary={controller.uploadSummary}
+                  onCancel={controller.cancelUploads}
+                  onRetry={controller.retryFailedUploads}
+                  onDismiss={controller.dismissUploadStatus}
+                />
               )}
               {appActions}
             </div>
           )}
           onRowAction={controller.closeMobileSidebar}
-        />
-      }
-      statusBar={
-        <FinderStatusBar
-          itemCount={model.allDocuments.length}
-          selectedCount={controller.visibleSelectedCount}
-          totalSize={model.totalBytes}
-          summary={model.summary}
         />
       }
       sidebarOpen={controller.effectiveSidebarOpen}
@@ -153,14 +151,14 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         <div className="flex-1 min-h-0 flex items-center justify-center p-6">
           <DocumentUploader
             className="py-12 w-full max-w-2xl"
-            onUploadBatchChange={controller.handleUploadBatchChange}
+            folderId={controller.activeFolderId}
           />
         </div>
       ) : (
         <DocumentUploader
           variant="overlay"
           className="flex-1 min-h-0 flex flex-col"
-          onUploadBatchChange={controller.handleUploadBatchChange}
+          folderId={controller.activeFolderId}
         >
           <RefreshIndicator
             refreshing={documentsQueryState.refreshing}
@@ -246,7 +244,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       <UploadMenuDialog
         isOpen={controller.isUploadDialogOpen}
         onClose={controller.closeUploadDialog}
-        onUploadBatchChange={controller.handleUploadBatchChange}
+        folderId={controller.activeFolderId}
       />
     </FinderWindow>
   );

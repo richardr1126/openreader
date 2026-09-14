@@ -99,7 +99,7 @@ export default async function LandingPage() {
             <div className="public-actions">
               <ButtonLink href="/app" variant="primary" size="lg">Open the reader</ButtonLink>
               {enableUserSignups ? (
-                <ButtonLink href="/signup" variant="outline" size="lg">Create account</ButtonLink>
+                <ButtonLink href="/signup" variant="outline" size="lg">Sign up</ButtonLink>
               ) : (
                 <ButtonLink href="/signin" variant="outline" size="lg">Sign in</ButtonLink>
               )}

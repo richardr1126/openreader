@@ -252,6 +252,59 @@ describe('playback audio-first segment generation', () => {
     expect(onSegmentCompleted).toHaveBeenCalledTimes(4);
   });
 
+  test('pipelines three ordered provider requests and starts the next as capacity frees', async () => {
+    const releases: Array<(audio: Buffer) => void> = [];
+    mocks.generateTTSBuffer.mockImplementation(() => new Promise<Buffer>((resolve) => releases.push(resolve)));
+    mocks.runAlignment.mockResolvedValue({ alignments: [] });
+    const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
+    const playbackStorage = {
+      artifacts: {
+        readSegmentMetadata: vi.fn(async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null),
+        putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
+          sidecars.set(metadata.ordinal, metadata);
+          return `sidecar-${metadata.ordinal}`;
+        }),
+        getScopeEpoch: vi.fn(async () => 0),
+      },
+    } as unknown as TtsPlaybackStorage;
+
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    const run = generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-pipeline', userId: 'user-1', storageUserId: 'user-1',
+        documentId: 'document-1', documentVersion: 1, readerType: 'html',
+        settingsHash: 'settings-1',
+        settingsJson: {
+          providerRef: 'local-kokoro', providerType: 'custom-openai', ttsModel: 'kokoro',
+          voice: 'af_heart', nativeSpeed: 1, ttsInstructions: '', language: 'en',
+        },
+        planning: {}, planObjectKey: 'plan-key',
+      },
+      sessionInstanceId: 'instance-pipeline',
+      s3Prefix: 'openreader',
+      segments: Array.from({ length: 4 }, (_, ordinal) => ({
+        ordinal,
+        segmentKey: `segment-${ordinal}`,
+        text: `Segment ${ordinal}.`,
+        locator: { readerType: 'html' as const, location: String(ordinal) },
+      })),
+      putAudioObject: vi.fn(async () => undefined),
+      audioObjectExists: vi.fn(async () => false),
+      playbackStorage,
+      synthesisTimeoutMs: 30_000,
+      getProviderMaxConcurrent: () => 3,
+    });
+
+    await vi.waitFor(() => expect(mocks.generateTTSBuffer).toHaveBeenCalledTimes(3));
+    expect(releases).toHaveLength(3);
+    releases[0](Buffer.from('segment-0'));
+    await vi.waitFor(() => expect(mocks.generateTTSBuffer).toHaveBeenCalledTimes(4));
+    for (const release of releases.slice(1)) release(Buffer.from('segment'));
+    await run;
+
+    expect([...sidecars.values()].filter((sidecar) => sidecar.status === 'completed')).toHaveLength(4);
+  });
+
   test('aborts an in-flight provider request without persisting an error segment', async () => {
     type GeneratedAudio = Awaited<ReturnType<typeof mocks.generateTTSBuffer>>;
     mocks.generateTTSBuffer.mockImplementationOnce((_request: unknown, signal?: AbortSignal) => (

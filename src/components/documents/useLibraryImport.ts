@@ -4,12 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import { useLibraryDocumentsQuery } from '@/hooks/useLibraryDocumentsQuery';
-import { mimeTypeForDoc, uploadDocuments } from '@/lib/client/api/documents';
-import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
+import { mimeTypeForDoc } from '@/lib/client/api/documents';
 import type { BaseDocument } from '@/types/documents';
 
-export function useLibraryImport() {
-  const { refreshDocuments } = useDocuments();
+export function useLibraryImport(folderId?: string) {
+  const { uploadDocuments } = useDocuments();
   const [isSelectionOpen, setIsSelectionOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
@@ -52,12 +51,13 @@ export function useLibraryImport() {
       setShowProgress(true);
       setProgress(0);
       setIsImporting(true);
+      let importedCount = 0;
 
       for (let index = 0; index < selectedFiles.length; index += 1) {
         if (controller.signal.aborted) break;
         const document = selectedFiles[index];
         setStatusMessage(`Importing ${index + 1}/${selectedFiles.length}: ${document.name}`);
-        setProgress((index / Math.max(1, selectedFiles.length)) * 90);
+        setProgress((index / Math.max(1, selectedFiles.length)) * 100);
 
         const contentResponse = await fetch(
           `/api/local-library/content?id=${encodeURIComponent(document.id)}`,
@@ -73,18 +73,13 @@ export function useLibraryImport() {
           type: mimeTypeForDoc(document),
           lastModified: document.lastModified,
         });
-        const [stored] = await uploadDocuments([file], { signal: controller.signal });
-        if (stored) {
-          await cacheStoredDocumentFromBytes(stored, bytes).catch((error) => {
-            console.warn('Failed to cache imported document:', stored.id, error);
-          });
-        }
+        await uploadDocuments([file], { signal: controller.signal, folderId });
+        importedCount += 1;
+        setProgress(((index + 1) / Math.max(1, selectedFiles.length)) * 100);
       }
 
       if (!controller.signal.aborted) {
-        setProgress(95);
-        await refreshDocuments();
-        setProgress(100);
+        if (importedCount === 0) throw new Error('No server-library documents could be copied');
         setStatusMessage('Import complete');
       }
     } catch (error) {
@@ -102,7 +97,7 @@ export function useLibraryImport() {
       setProgress(0);
       setStatusMessage('');
     }
-  }, [refreshDocuments, setProgress]);
+  }, [folderId, setProgress, uploadDocuments]);
 
   return {
     documents,

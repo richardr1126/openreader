@@ -15,7 +15,7 @@ describe('compute limit runtime config seed', () => {
       'account_export',
       'tts_synthesis',
     ]);
-    expect(policy.actions.tts_synthesis.enabled).toBe(true);
+    expect(policy.actions.tts_synthesis.enabled).toBe(false);
     expect(policy.actions.tts_synthesis.usage).toContainEqual(expect.objectContaining({
       audience: 'authenticated',
       limit: 500_000,

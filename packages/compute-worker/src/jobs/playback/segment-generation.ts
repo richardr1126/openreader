@@ -22,6 +22,10 @@ import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
 
 const SEGMENT_MAX_ATTEMPTS = 2;
+// Keep a small ordered pipeline full so a provider configured for parallel
+// requests can build playback runway. Provider capacity remains the actual,
+// admin-controlled concurrency limit; this is only bounded local look-ahead.
+const TTS_SYNTHESIS_PIPELINE_DEPTH = 3;
 const GENERATION_LEASE_MIN_MS = 60_000;
 const GENERATION_LEASE_GRACE_MS = 30_000;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -144,6 +148,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     characters: number;
     signal?: AbortSignal;
   }) => Promise<() => Promise<void>>;
+  getProviderMaxConcurrent?: (providerRef: string) => number | null;
   coolDownProviderCapacity?: (providerRef: string, retryAfterSeconds: number) => Promise<void>;
 }): Promise<void> {
   if (input.segments.length === 0 || input.signal?.aborted) return;
@@ -161,6 +166,10 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   }
   const effectiveProviderRef = requestCreds.providerRef;
   const resolvedProviderType = requestCreds.providerType;
+  const configuredProviderConcurrency = input.getProviderMaxConcurrent?.(effectiveProviderRef);
+  const synthesisPipelineDepth = configuredProviderConcurrency == null
+    ? TTS_SYNTHESIS_PIPELINE_DEPTH
+    : Math.min(TTS_SYNTHESIS_PIPELINE_DEPTH, Math.max(1, configuredProviderConcurrency));
   const effectiveModel = resolveTtsModelForProvider({
     providerRef: effectiveProviderRef,
     providerType: resolvedProviderType,
@@ -215,6 +224,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     throw new Error('TTS playback storage is required for segment generation');
   }
   const playbackStorage = input.playbackStorage;
+  let stopScheduling = false;
 
   const readSidecar = (segment: (typeof normalized)[number]) =>
     playbackStorage.artifacts.readSegmentMetadata({
@@ -335,8 +345,10 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   // synthesized, and only one alignment model invocation runs at a time.
   let alignmentQueue = Promise.resolve();
   let alignmentQueueStopped = false;
-  const enqueueAlignment = (pending: PendingAlignment): void => {
+  const enqueueAlignment = (pendingResult: Promise<PendingAlignment | null>): void => {
     alignmentQueue = alignmentQueue.then(async () => {
+      const pending = await pendingResult;
+      if (!pending) return;
       if (alignmentQueueStopped) return;
       const planOrdinal = pending.segment.original.ordinal;
       if (!await shouldContinueWrites(planOrdinal)) {
@@ -359,11 +371,15 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     });
   };
 
-  segmentLoop:
-  for (const segment of normalized) {
-    if (input.signal?.aborted) break;
+  const generateSegment = async (
+    segment: (typeof normalized)[number],
+  ): Promise<PendingAlignment | null> => {
+    if (stopScheduling || input.signal?.aborted) return null;
     const planOrdinal = segment.original.ordinal;
-    if (input.onBeforeSegment && await input.onBeforeSegment(planOrdinal) === 'stop') break;
+    if (input.onBeforeSegment && await input.onBeforeSegment(planOrdinal) === 'stop') {
+      stopScheduling = true;
+      return null;
+    }
     const audioKey = buildTtsPlaybackSegmentAudioKey({
       storagePrefix: input.s3Prefix,
       namespace: null,
@@ -377,7 +393,10 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     let existing = await freshSidecar(segment);
     const audioExists = await input.audioObjectExists(audioKey).catch(() => false);
     if (audioExists) {
-      if (!await shouldContinueWrites(planOrdinal)) break;
+      if (!await shouldContinueWrites(planOrdinal)) {
+        stopScheduling = true;
+        return null;
+      }
       let durationMs = existing?.status === 'completed' ? existing.durationMs : null;
       const alignment = existing?.alignment ?? null;
       const needsRebuild = existing?.status !== 'completed' || durationMs == null || !alignment;
@@ -400,36 +419,42 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }
       await input.onSegmentCompleted?.(planOrdinal);
       if (!alignment && storedAudio) {
-        enqueueAlignment({
+        return {
           segment,
           audio: storedAudio,
           audioKey,
           durationMs: Math.max(1, Number(durationMs ?? 1000)),
-        });
+        };
       }
-      continue;
+      return null;
     }
 
     if (existing?.status === 'error') {
       await input.onSegmentErrored?.(planOrdinal);
-      continue;
+      return null;
     }
 
     while (isFreshForeignLease(existing, audioKey)) {
-      if (!await shouldContinueWrites(planOrdinal)) break segmentLoop;
+      if (!await shouldContinueWrites(planOrdinal)) {
+        stopScheduling = true;
+        return null;
+      }
       await sleep(1_000);
       existing = await freshSidecar(segment);
       if (existing?.status === 'completed') {
         await input.onSegmentCompleted?.(planOrdinal);
-        continue segmentLoop;
+        return null;
       }
       if (existing?.status === 'error') {
         await input.onSegmentErrored?.(planOrdinal);
-        continue segmentLoop;
+        return null;
       }
     }
 
-    if (!await shouldContinueWrites(planOrdinal)) break;
+    if (!await shouldContinueWrites(planOrdinal)) {
+      stopScheduling = true;
+      return null;
+    }
     const usage = await (input.consumeUsage ?? (async () => ({ allowed: true })))({
       action: 'tts_synthesis',
       sessionId: input.request.sessionId,
@@ -444,22 +469,26 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }, input.signal);
     if (!usage.allowed) {
       await input.onUsageDenied?.();
-      break;
+      stopScheduling = true;
+      return null;
     }
     await persistSegmentMetadata(segment, 'generating', { audioKey, leaseOwnerId, updatedAt: Date.now() })
       .catch(() => undefined);
     existing = await freshSidecar(segment);
     while (isFreshForeignLease(existing, audioKey)) {
-      if (!await shouldContinueWrites(planOrdinal)) break segmentLoop;
+      if (!await shouldContinueWrites(planOrdinal)) {
+        stopScheduling = true;
+        return null;
+      }
       await sleep(1_000);
       existing = await freshSidecar(segment);
       if (existing?.status === 'completed') {
         await input.onSegmentCompleted?.(planOrdinal);
-        continue segmentLoop;
+        return null;
       }
       if (existing?.status === 'error') {
         await input.onSegmentErrored?.(planOrdinal);
-        continue segmentLoop;
+        return null;
       }
     }
 
@@ -498,14 +527,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         } finally {
           await releaseProvider().catch(() => undefined);
         }
-        if (!await shouldContinueWrites(planOrdinal)) return;
+        if (!await shouldContinueWrites(planOrdinal)) return null;
         await input.putAudioObject(audioKey, audioBuffer);
         if (!await shouldContinueWrites(planOrdinal)) {
           await input.deleteAudioObject?.(audioKey).catch(() => undefined);
-          return;
+          return null;
         }
         const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
-        if (!await shouldContinueWrites(planOrdinal)) return;
+        if (!await shouldContinueWrites(planOrdinal)) return null;
         await persistSegmentMetadata(segment, 'completed', {
           audioKey,
           durationMs,
@@ -521,7 +550,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         completed = true;
         break;
       } catch (error) {
-        if (input.signal?.aborted) return;
+        if (input.signal?.aborted) return null;
         lastError = error;
         const classified = classifySegmentError(error);
         lastErrorInfo = classified.info;
@@ -537,16 +566,52 @@ export async function generateExplicitTtsPlaybackSegments(input: {
 
     if (completed) {
       await input.onSegmentCompleted?.(planOrdinal);
-      if (completedAlignment) enqueueAlignment(completedAlignment);
-      continue;
+      return completedAlignment;
     }
-    if (!await shouldContinueWrites(planOrdinal)) break;
+    if (!await shouldContinueWrites(planOrdinal)) {
+      stopScheduling = true;
+      return null;
+    }
     await persistSegmentMetadata(segment, 'error', {
       audioKey,
       error: lastErrorInfo ?? { message: lastError instanceof Error ? lastError.message : String(lastError) },
       updatedAt: Date.now(),
     }).catch(() => undefined);
     await input.onSegmentErrored?.(planOrdinal);
+    return null;
+  };
+
+  const inFlight = new Set<Promise<void>>();
+  let generationError: unknown;
+  let hasGenerationError = false;
+  for (const segment of normalized) {
+    if (stopScheduling || input.signal?.aborted) break;
+    while (inFlight.size >= synthesisPipelineDepth) {
+      await Promise.race(inFlight);
+      if (stopScheduling || input.signal?.aborted) break;
+    }
+    if (stopScheduling || input.signal?.aborted) break;
+    const generation = generateSegment(segment);
+    // Register alignment in plan order immediately. The lane waits for each
+    // segment's result, so a faster later request cannot steal word-timing
+    // priority from the segment the listener reaches first.
+    enqueueAlignment(generation.catch(() => null));
+    let tracked: Promise<void>;
+    tracked = generation
+      .then(() => undefined)
+      .catch((error) => {
+        stopScheduling = true;
+        if (!hasGenerationError) generationError = error;
+        hasGenerationError = true;
+      })
+      .finally(() => inFlight.delete(tracked));
+    inFlight.add(tracked);
+  }
+  await Promise.all(inFlight);
+  if (hasGenerationError) {
+    alignmentQueueStopped = true;
+    await alignmentQueue.catch(() => undefined);
+    throw generationError;
   }
 
   // Audio production and best-effort exact alignment have different urgency.

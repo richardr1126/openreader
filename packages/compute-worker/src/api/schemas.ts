@@ -99,6 +99,14 @@ export const accountExportResolveSchema = accountExportOperationCreateSchema.pic
   manifestHash: true,
 });
 
+export const emailDeliveryOperationCreateSchema = z.object({
+  deliveryId: z.uuid(),
+  purpose: z.enum(['email_verification', 'password_reset', 'admin_test']),
+  envelopeCiphertext: z.string().min(24).max(32_768),
+  envelopeIv: z.string().min(12).max(128),
+  expiresAt: z.number().int().positive(),
+}).strict();
+
 export const ttsPlaybackPlanningSchema = z.object({
   selectedOrdinal: z.number().int().nonnegative().optional(),
   maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -402,6 +410,10 @@ export const computeOperationSchema = z.object({
       storageUserId: z.string(),
       namespace: z.string().nullable(),
       artifactId: z.string(),
+    }),
+    z.object({
+      kind: z.literal('email_delivery'),
+      deliveryId: z.string(),
     }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),

@@ -59,6 +59,7 @@ LOG_LEVEL=info
 # First-boot seed for the TTS shared provider (optional; manage in-app afterwards)
 # API_KEY=your_replicate_key
 # API_BASE only needed for OpenAI-compatible self-hosted providers
+# API_MODEL_NAME=the-upstream-model-name
 ```
 
 If you also run an external worker service (for example Railway), configure it with:
@@ -76,7 +77,7 @@ not from Vercel or the browser. A Railway worker cannot reach a provider through
 `host.docker.internal` on your personal computer.
 
 :::note Env vars vs. admin panel (important for Vercel)
-`API_KEY` / `API_BASE` are one-shot bootstrap seeds on first deploy. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
+`API_KEY` / `API_BASE` / `API_MODEL_NAME` are one-shot bootstrap seeds on first deploy. `API_MODEL_NAME` sets the seeded provider's default model and defaults to `kokoro`. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
 :::
 
 ## 1a. Railway + Synadia quick start (worker mode)
@@ -109,7 +110,7 @@ After the first successful deploy and admin login, open **Settings → Admin** a
 
 ## 3. Runtime JSON seed (optional)
 
-If you must pre-seed site features/providers at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Prefer the admin panel for ongoing management.
+If you must pre-seed site features, shared providers, or account email delivery at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Keep the seed secret when it contains a Resend API key. Prefer the admin panel for ongoing management.
 
 See [Environment Variables](../reference/environment-variables#runtime-json-seed) for schema and examples.
 

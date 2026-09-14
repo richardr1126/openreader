@@ -62,8 +62,7 @@ describe('document-list model', () => {
     })]);
     expect(model.allDocuments.find((entry) => entry.id === 'html-1')?.folderId).toBeUndefined();
     expect(model.counts).toEqual({ all: 4, pdf: 2, epub: 1, html: 1 });
-    expect(model.summary).toBe('2 PDFs • 1 EPUB • 1 Text Doc');
-    expect(model.totalBytes).toBe(100);
+    expect(model.visibleBytes).toBe(100);
   });
 
   test('filters folder contents and search text before applying the selected sort', () => {
@@ -76,6 +75,7 @@ describe('document-list model', () => {
       sortDirection: 'desc',
     });
     expect(searchModel.visibleDocuments.map((entry) => entry.id)).toEqual(['pdf-2', 'html-1']);
+    expect(searchModel.visibleBytes).toBe(30);
   });
 
   test('keeps recents in last-opened order instead of applying toolbar sorting', () => {

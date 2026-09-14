@@ -4,7 +4,7 @@ import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { parseLibraryRoots } from '@/lib/server/storage/library-mount';
 import type { DocumentType } from '@/types/documents';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -112,8 +112,8 @@ async function scanLibraryRoot(root: string, rootIndex: number, limit: number): 
 export async function GET(req: NextRequest) {
   // Auth check - require session
   try {
-    const session = await auth?.api.getSession({ headers: req.headers });
-    if (auth && !session?.user) {
+    const session = await (await getAuth()).api.getSession({ headers: req.headers });
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
   } catch (error) {

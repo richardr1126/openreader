@@ -271,25 +271,26 @@ Runtime code does not retain a compatibility path.
 Exact production numbers should be finalized using current operation timings;
 the architecture does not encode unexplained constants as product truth.
 
-The maintained bootstrap policy enables limits for expensive standalone work.
-Playback session and plan admission remain disabled by default so admission
-cannot block access to cached audio; uncached synthesis is independently
-limited at the segment boundary.
+The maintained self-host bootstrap policy leaves operation admission limits
+disabled by default. Their configured values remain available as opt-in
+guardrails for a public or shared installation. Uncached-synthesis usage limits
+are also opt-in, while worker, resource, and provider capacity remain enforced
+as lightweight protection for the host and upstream services.
 
 | Action | Enabled by default | User admission windows | User active | Site active | Queue / per-worker concurrent |
 | --- | --- | --- | ---: | ---: | --- |
 | `tts_playback` | no | 12 / 60 seconds; 60 / hour | 2 | 50 | 100 / 1 |
 | `tts_playback_plan` | no | 12 / 60 seconds; 60 / hour | 2 | 20 | 100 / 1 |
-| `pdf_layout` | yes | 8 / 60 seconds; 24 / 600 seconds | 1 | 8 | 50 / 1 |
-| `tts_playback_export` | yes | 2 / 600 seconds; 6 / day | 1 | 4 | 20 / 1 |
-| `document_preview` | yes | 30 / 600 seconds; 200 / day | 4 | 20 | 200 / 1 |
-| `document_conversion` | yes | 4 / 600 seconds; 20 / day | 1 | 8 | 50 / 1 |
-| `account_export` | yes | 2 / hour; 4 / day | 1 | 4 | 20 / 1 |
+| `pdf_layout` | no | 8 / 60 seconds; 24 / 600 seconds | 1 | 8 | 50 / 1 |
+| `tts_playback_export` | no | 2 / 600 seconds; 6 / day | 1 | 4 | 20 / 1 |
+| `document_preview` | no | 30 / 600 seconds; 200 / day | 4 | 20 | 200 / 1 |
+| `document_conversion` | no | 4 / 600 seconds; 20 / day | 1 | 8 | 50 / 1 |
+| `account_export` | no | 2 / hour; 4 / day | 1 | 4 | 20 / 1 |
 
-`tts_synthesis` is enabled by default with these daily thresholds: anonymous
-user 50,000; authenticated user 500,000; anonymous IP 100,000; authenticated IP
-1,000,000. Anonymous-device scope uses the anonymous user threshold. All use
-the approved `soft_unit` boundary.
+`tts_synthesis` is disabled by default. When enabled, its configured daily
+thresholds are: anonymous user 50,000; authenticated user 500,000; anonymous IP
+100,000; authenticated IP 1,000,000. Anonymous-device scope uses the anonymous
+user threshold. All use the approved `soft_unit` boundary.
 
 Bootstrap worker execution values are deliberately close to the effective
 three-family behavior of the current default without retaining three unrelated
@@ -306,7 +307,7 @@ archive_io                  2
 ```
 
 Every operation kind starts with `maxConcurrentPerWorker = 1`. Provider limits
-are enabled with one concurrent request, 60 requests/minute, 100,000
+are enabled with three concurrent requests, 60 requests/minute, 100,000
 characters/minute, and a 30-second maximum wait. Admins should customize the
 default or a named override to match their service plan.
 
@@ -345,7 +346,7 @@ Both seed forms must support the complete policy document:
       "schemaVersion": 2,
       "actions": {
         "pdf_layout": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 8, "windowSeconds": 60 },
@@ -408,7 +409,7 @@ Both seed forms must support the complete policy document:
           }
         },
         "tts_playback_export": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 2, "windowSeconds": 600 },
@@ -429,7 +430,7 @@ Both seed forms must support the complete policy document:
           }
         },
         "document_preview": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 30, "windowSeconds": 600 },
@@ -450,7 +451,7 @@ Both seed forms must support the complete policy document:
           }
         },
         "document_conversion": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 4, "windowSeconds": 600 },
@@ -471,7 +472,7 @@ Both seed forms must support the complete policy document:
           }
         },
         "account_export": {
-          "enabled": true,
+          "enabled": false,
           "admission": {
             "windows": [
               { "scope": "user", "limit": 2, "windowSeconds": 3600 },
@@ -492,7 +493,7 @@ Both seed forms must support the complete policy document:
           }
         },
         "tts_synthesis": {
-          "enabled": true,
+          "enabled": false,
           "admission": { "windows": [], "active": [] },
           "usage": [
             { "scope": "user", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },
@@ -518,7 +519,7 @@ Both seed forms must support the complete policy document:
       "providers": {
         "defaults": {
           "enabled": true,
-          "maxConcurrent": 1,
+          "maxConcurrent": 3,
           "requestsPerMinute": 60,
           "charactersPerMinute": 100000,
           "maxWaitSeconds": 30
@@ -969,6 +970,13 @@ effective limit multiplies with replicas.
 Waiting for provider capacity must remain abortable by pause, seek, superseded
 generation, shutdown, and session expiry. Capacity waits do not create error
 sidecars or consume another user usage event.
+
+Live playback keeps a bounded three-segment synthesis pipeline ready in plan
+order. `maxConcurrent` remains the authoritative cross-worker limit: the
+pipeline cannot exceed it, and named provider overrides can reduce it for a
+single-request local server or increase it only when the upstream supports that
+throughput. The maintained self-host default is three, matching the worker's
+total execution capacity and avoiding an accidental single-request bottleneck.
 
 ---
 

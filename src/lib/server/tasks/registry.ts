@@ -11,8 +11,8 @@ import { pruneComputeLimits } from './handlers/prune-compute-limits';
  */
 export const TASK_REGISTRY: TaskRegistry = {
   'reap-orphaned-blobs': {
-    name: 'Reap orphaned document blobs',
-    description: 'Delete content-addressed document blobs that no longer have any owner.',
+    name: 'Clean up unowned documents',
+    description: 'Remove document files and generated artifacts that no longer have an owner.',
     defaultIntervalMs: 6 * 60 * 60 * 1000,
     maxRunMs: 45_000,
     run: reapOrphanedBlobs,
@@ -25,15 +25,15 @@ export const TASK_REGISTRY: TaskRegistry = {
     run: cleanupTempUploads,
   },
   'expire-export-artifacts': {
-    name: 'Expire export artifacts',
-    description: 'Delete completed account/audiobook export artifacts older than the retention window.',
+    name: 'Clean up expired exports',
+    description: 'Remove completed account and audiobook exports after their retention window.',
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 45_000,
     run: expireExportArtifacts,
   },
   'prune-compute-limits': {
-    name: 'Prune compute limit records',
-    description: 'Reconcile expired leases and remove old compute-limit counters and events.',
+    name: 'Clean up compute history',
+    description: 'Reconcile expired compute leases and remove old limit counters and events.',
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 30_000,
     run: pruneComputeLimits,

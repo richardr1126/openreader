@@ -1,4 +1,3 @@
-import { KeyboardEvent } from 'react';
 import { Button, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface ConfirmDialogProps {
@@ -22,16 +21,8 @@ export function ConfirmDialog({
   cancelText = 'Cancel',
   isDangerous = false,
 }: ConfirmDialogProps) {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    }
-  };
-
   return (
-    <ModalFrame open={isOpen} onClose={onClose} onKeyDown={handleKeyDown} panelTestId="confirm-dialog-panel">
+    <ModalFrame open={isOpen} onClose={onClose} panelTestId="confirm-dialog-panel">
       <ModalTitle>{title}</ModalTitle>
       <div className="mt-2">
         <p className="text-sm text-soft break-words">{message}</p>

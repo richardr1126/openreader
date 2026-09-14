@@ -117,7 +117,7 @@ const admission = (
 
 const providerDefaults: ProviderLimitPolicy = {
   enabled: true,
-  maxConcurrent: 1,
+  maxConcurrent: 3,
   requestsPerMinute: 60,
   charactersPerMinute: 100_000,
   maxWaitSeconds: 30,
@@ -127,7 +127,7 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
   schemaVersion: 2,
   actions: {
     pdf_layout: {
-      enabled: true,
+      enabled: false,
       admission: admission([[8, 60], [24, 600]], 1, 8, 24 * 60 * 60),
       usage: [],
       execution: execution('foreground', 50, { cpu_heavy: 1, model_inference: 1 }),
@@ -147,31 +147,31 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
       execution: execution('foreground', 100, {}),
     },
     tts_playback_export: {
-      enabled: true,
+      enabled: false,
       admission: admission([[2, 600], [6, 86400]], 1, 4, 2 * 60 * 60),
       usage: [],
       execution: execution('foreground', 20, { ffmpeg: 1, archive_io: 1 }),
     },
     document_preview: {
-      enabled: true,
+      enabled: false,
       admission: admission([[30, 600], [200, 86400]], 4, 20, 30 * 60),
       usage: [],
       execution: execution('background', 200, { cpu_heavy: 1 }),
     },
     document_conversion: {
-      enabled: true,
+      enabled: false,
       admission: admission([[4, 600], [20, 86400]], 1, 8, 10 * 60),
       usage: [],
       execution: execution('foreground', 50, { cpu_heavy: 1, libreoffice: 1 }),
     },
     account_export: {
-      enabled: true,
+      enabled: false,
       admission: admission([[2, 3600], [4, 86400]], 1, 4, 2 * 60 * 60),
       usage: [],
       execution: execution('background', 20, { archive_io: 1 }),
     },
     tts_synthesis: {
-      enabled: true,
+      enabled: false,
       admission: { windows: [], active: [] },
       usage: [
         { scope: 'user', audience: 'anonymous', metric: 'characters', window: 'utc_day', limit: 50_000, boundary: 'soft_unit' },

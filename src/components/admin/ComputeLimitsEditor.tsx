@@ -11,6 +11,7 @@ import {
   type ProviderLimitPolicy,
   type WorkerResource,
 } from '@openreader/runtime-config/compute-limits';
+import { ChevronRightIcon } from '@/components/icons/Icons';
 import { Button, Input, Select, ToggleRow } from '@/components/ui';
 
 const ACTION_DETAILS: Record<ComputeAction, { label: string; description: string }> = {
@@ -201,11 +202,11 @@ export function ComputeLimitsEditor({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-line bg-surface-sunken p-3">
+      <div className="border-b border-line-soft px-0.5 pb-3">
         <p className="text-sm font-medium text-foreground">Usage and request limits</p>
         <p className="mt-0.5 text-xs text-muted">
-          Each switch has one meaning: enabled limits are enforced; disabled limits are bypassed.
-          Worker safety controls continue to apply either way.
+          Request-limit switches control admission only; the TTS switch controls generated-character usage.
+          Worker queues, resource capacity, and provider capacity continue to apply either way.
         </p>
       </div>
 
@@ -214,18 +215,23 @@ export function ComputeLimitsEditor({
           const actionPolicy = policy.actions[action];
           const detail = ACTION_DETAILS[action];
           return (
-            <details key={action} className="group rounded-lg border border-line-soft bg-background">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 marker:content-none">
+            <details key={action} className="group overflow-hidden rounded-md border border-line bg-background">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{detail.label}</p>
                   <p className="truncate text-xs text-muted">{detail.description}</p>
                 </div>
-                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                  actionPolicy.enabled
-                    ? 'bg-accent-wash text-accent'
-                    : 'bg-surface-sunken text-muted'
-                }`}>
-                  {actionPolicy.enabled ? 'Limited' : 'Unlimited'}
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                    actionPolicy.enabled
+                      ? 'bg-accent-wash text-accent'
+                      : 'bg-surface-sunken text-muted'
+                  }`}>
+                    {action === 'tts_synthesis'
+                      ? (actionPolicy.enabled ? 'Usage limited' : 'Usage unlimited')
+                      : (actionPolicy.enabled ? 'Request limits on' : 'Request limits off')}
+                  </span>
+                  <ChevronRightIcon className="h-3.5 w-3.5 text-soft transition-transform duration-base group-open:rotate-90" />
                 </span>
               </summary>
               <div className="space-y-3 border-t border-line-soft px-3 pb-3 pt-2">
@@ -355,10 +361,13 @@ export function ComputeLimitsEditor({
         })}
       </div>
 
-      <details className="group rounded-lg border border-line-soft bg-background">
-        <summary className="cursor-pointer list-none px-3 py-2.5 marker:content-none">
-          <p className="text-sm font-medium text-foreground">Worker capacity</p>
-          <p className="text-xs text-muted">Always-enforced local queues and named resource pools.</p>
+      <details className="group overflow-hidden rounded-md border border-line bg-background">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">Worker capacity</span>
+            <span className="block truncate text-xs text-muted">Always-enforced local queues and named resource pools.</span>
+          </span>
+          <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
         </summary>
         <div className="space-y-3 border-t border-line-soft p-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -392,10 +401,13 @@ export function ComputeLimitsEditor({
         </div>
       </details>
 
-      <details className="group rounded-lg border border-line-soft bg-background">
-        <summary className="cursor-pointer list-none px-3 py-2.5 marker:content-none">
-          <p className="text-sm font-medium text-foreground">TTS provider capacity</p>
-          <p className="text-xs text-muted">Shared concurrency and rolling one-minute throughput.</p>
+      <details className="group overflow-hidden rounded-md border border-line bg-background">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">TTS provider capacity</span>
+            <span className="block truncate text-xs text-muted">Shared concurrency and rolling one-minute throughput.</span>
+          </span>
+          <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
         </summary>
         <div className="space-y-2 border-t border-line-soft p-3">
           <ProviderLimits

@@ -1,10 +1,11 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
 export async function DELETE() {
+  const auth = await getAuth();
   const reqHeaders = await headers();
 
   const session = await auth.api.getSession({

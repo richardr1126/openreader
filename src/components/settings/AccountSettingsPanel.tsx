@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DownloadIcon, RefreshIcon, SpeedometerIcon } from '@/components/icons/Icons';
-import { Button, ChoiceTile } from '@/components/ui';
+import { Badge, Button, ChoiceTile } from '@/components/ui';
+import toast from 'react-hot-toast';
 import { formatCharCount, useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -110,7 +111,25 @@ export function AccountSettingsPanel() {
   const { data: session } = useAuthSession();
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
   const { isExporting, startExport } = useAccountExport();
+
+  const resendVerification = async () => {
+    if (!session?.user?.email) return;
+    setResendingVerification(true);
+    try {
+      const result = await getAuthClient(authBaseUrl).sendVerificationEmail({
+        email: session.user.email,
+        callbackURL: '/verify-email?status=success',
+      });
+      if (result.error) throw new Error(result.error.message);
+      toast.success('Verification email queued');
+    } catch {
+      toast.error('Unable to resend verification email');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
 
   const handleSignOut = async () => {
     const client = getAuthClient(authBaseUrl);
@@ -147,7 +166,14 @@ export function AccountSettingsPanel() {
                     : (session.user.name || session.user.email || 'Account')}
                 </p>
                 {!session.user.isAnonymous && (
-                  <p className="text-xs text-soft font-mono">{session.user.email}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-soft font-mono">{session.user.email}</p>
+                    {runtimeConfig.accountEmailsEnabled && (
+                      <Badge tone={session.user.emailVerified ? 'accent' : 'danger'}>
+                        {session.user.emailVerified ? 'Verified' : 'Unverified'}
+                      </Badge>
+                    )}
+                  </div>
                 )}
                 {session.user.isAnonymous && (
                   <p className="text-xs text-accent mt-1">Anonymous session</p>
@@ -157,6 +183,11 @@ export function AccountSettingsPanel() {
               <p className="font-medium text-foreground">No active session</p>
             )}
           </div>
+          {runtimeConfig.accountEmailsEnabled && session?.user && !session.user.isAnonymous && !session.user.emailVerified && (
+            <Button variant="outline" size="sm" disabled={resendingVerification} onClick={resendVerification}>
+              {resendingVerification ? 'Queuing…' : 'Resend verification email'}
+            </Button>
+          )}
         </div>
 
         {session?.user && <TtsUsageCard />}
@@ -183,7 +214,7 @@ export function AccountSettingsPanel() {
           {session?.user && !session.user.isAnonymous ? (
             <>
               <Button onClick={handleSignOut} variant="outline" size="md">
-                Disconnect account
+                Sign out
               </Button>
 
               <div className="pt-4 mt-4 border-t border-line-soft">
@@ -208,16 +239,16 @@ export function AccountSettingsPanel() {
                     ? 'You are using an anonymous session. Sign up to save your progress permanently, your current data is automatically transferred.'
                     : 'You are using an anonymous session. New account sign-ups are currently disabled by the site administrator.')
                   : (runtimeConfig.enableUserSignups
-                    ? 'No active session. Please sign in or create an account.'
+                    ? 'No active session. Please sign in or sign up.'
                     : 'No active session. Please sign in.')}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link href="/signin">
-                  <Button variant="outline" size="md">Connect</Button>
+                  <Button variant="outline" size="md">Sign in</Button>
                 </Link>
                 {runtimeConfig.enableUserSignups && (
                   <Link href="/signup">
-                    <Button variant="primary" size="md">Create account</Button>
+                    <Button variant="primary" size="md">Sign up</Button>
                   </Link>
                 )}
                 <Link href="/?redirect=false">

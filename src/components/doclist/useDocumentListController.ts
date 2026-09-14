@@ -9,7 +9,6 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { putUserPreferences, type PreferencesResponse } from '@/lib/client/api/user-state';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { DocumentListDocument } from '@/types/documents';
-import type { UploadBatchState } from '@/components/documents/DocumentUploader';
 import { useDocumentSelection } from './dnd/DocumentSelectionContext';
 import type { DocumentDragItem } from './dnd/dndTypes';
 import { documentIdentityKey } from './dnd/dndTypes';
@@ -38,7 +37,6 @@ type PendingMerge = {
 export function useDocumentListController() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [activeUploadBatches, setActiveUploadBatches] = useState<Record<string, UploadBatchState>>({});
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<DocumentToDelete | null>(null);
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
@@ -57,6 +55,10 @@ export function useDocumentListController() {
     queryState: documentsQueryState,
     deleteDocument,
     refreshDocuments,
+    uploadSummary,
+    cancelUploads,
+    retryFailedUploads,
+    dismissUploadStatus,
   } = useDocuments();
   const { data: session, isPending: isSessionPending } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
@@ -244,35 +246,9 @@ export function useDocumentListController() {
     ]);
   }, [folderState.query, preferencesQuery, refreshDocuments]);
 
-  const handleUploadBatchChange = useCallback((state: UploadBatchState) => {
-    setActiveUploadBatches((previous) => {
-      if (!state.isActive) {
-        if (!previous[state.uploaderId]) return previous;
-        const next = { ...previous };
-        delete next[state.uploaderId];
-        return next;
-      }
-      return { ...previous, [state.uploaderId]: state };
-    });
-  }, []);
-  const sidebarUploadState = useMemo(() => {
-    const batches = Object.values(activeUploadBatches);
-    if (batches.length === 0) return null;
-    return {
-      totalFiles: batches.reduce((sum, batch) => sum + batch.totalFiles, 0),
-      completedFiles: batches.reduce((sum, batch) => sum + batch.completedFiles, 0),
-      currentFileName: batches.find((batch) => batch.currentFileName)?.currentFileName ?? null,
-      phase: 'uploading' as const,
-    };
-  }, [activeUploadBatches]);
-  const visibleSelectedCount = useMemo(
-    () => model.visibleDocuments.reduce(
-      (count, document) => count + (selection.isSelected(document) ? 1 : 0),
-      0,
-    ),
-    [model.visibleDocuments, selection],
-  );
-
+  const activeFolderId = listState.sidebarFilter.startsWith('folder:')
+    ? listState.sidebarFilter.slice('folder:'.length)
+    : undefined;
   return {
     listState,
     model,
@@ -290,7 +266,6 @@ export function useDocumentListController() {
     },
     documentsQueryState,
     retryQueries,
-    visibleSelectedCount,
     requestDeleteDocument,
     documentToDelete,
     cancelDeleteDocument: () => setDocumentToDelete(null),
@@ -317,8 +292,11 @@ export function useDocumentListController() {
     requestClearFolders: () => setClearFoldersPrompt(true),
     cancelClearFolders: () => setClearFoldersPrompt(false),
     confirmClearFolders,
-    sidebarUploadState,
-    handleUploadBatchChange,
+    uploadSummary,
+    cancelUploads,
+    retryFailedUploads,
+    dismissUploadStatus,
+    activeFolderId,
     isUploadDialogOpen,
     openUploadDialog: () => setIsUploadDialogOpen(true),
     closeUploadDialog: () => setIsUploadDialogOpen(false),

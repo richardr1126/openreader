@@ -2,7 +2,9 @@
 title: Admin Panel
 ---
 
-The admin panel lets a designated set of users manage **shared TTS providers** and **site-wide feature flags** directly from the Settings modal — without touching env vars or redeploying.
+The admin panel lets a designated set of users manage shared TTS providers,
+account email, site-wide feature flags, compute policy, and maintenance directly
+from Settings without touching environment variables or redeploying.
 
 It is gated behind authentication, so you must have auth enabled to use it ([Auth](./auth)).
 
@@ -18,10 +20,36 @@ ADMIN_EMAILS=alice@example.com,bob@example.com
 
 On every session resolution the server compares the user's email against this list and writes `user.is_admin = true` (or `false` for emails removed from the list). No restart is required to demote — the next page load picks it up.
 
-When the logged-in user is an admin, an **Admin** tab appears in **Settings → sidebar** with two sub-tabs:
+When the logged-in user is an admin, an **Admin** tab appears in **Settings → sidebar** with dedicated areas:
 
 - **Shared providers** — server-side TTS provider instances visible to all users.
 - **Site features** — runtime-editable replacements for what were previously build-time public env flags.
+- **Email** — Resend delivery, sender identity, test delivery, verification, and password recovery.
+- **Compute** — admission, usage, queue, and worker execution limits.
+- **Maintenance** — scheduled cleanup and recent task status.
+
+## Account email through Resend
+
+Account email is disabled by default. In **Admin → Email**:
+
+1. Verify your sending domain in Resend.
+2. Create a sending-only API key, preferably restricted to that domain.
+3. Save the sender name, sender email, optional reply-to, and API key.
+4. Send a test and wait for **Accepted by Resend**. This means the API accepted
+   the request; it is not a claim that the message reached the inbox.
+5. Enable account emails.
+
+The saved key is encrypted with the same `AUTH_SECRET`-derived AES-256-GCM
+helper used for other administrator-managed secrets. APIs return only whether a
+key exists and its final four characters. Removing the key automatically
+disables account email.
+
+Next.js owns configuration and creates an encrypted, expiring delivery
+envelope. NATS contains only that ciphertext plus nonsensitive delivery
+identifiers. A dedicated worker consumer (concurrency one) resolves the current
+Resend key through the credential-broker authentication boundary and calls
+Resend over HTTPS. Verification and recovery messages stop when the feature is
+disabled; administrator tests remain available before activation.
 
 ## Shared TTS providers
 
@@ -49,9 +77,9 @@ On first boot, if `admin_providers` is empty and `API_BASE` or `API_KEY` is set,
 
 - slug `default-openai`, displayName `Default (from env)`, providerType `custom-openai`
 - baseUrl from `API_BASE`, apiKey from `API_KEY` when provided (blank keys are supported)
-- defaultModel set to `kokoro` (you can edit it in Admin → Shared providers)
+- defaultModel from `API_MODEL_NAME`, falling back to `kokoro` when unset or blank
 
-After this seed runs, the legacy `API_KEY` / `API_BASE` env vars are no longer read by the TTS routes — the DB row is authoritative. You can rename, edit, disable, or delete this row like any other from the admin UI, and remove the env vars from your `.env` when convenient.
+After this seed runs, the legacy `API_KEY` / `API_BASE` / `API_MODEL_NAME` env vars are no longer read by the TTS routes — the DB row is authoritative. You can rename, edit, disable, or delete this row like any other from the admin UI, and remove the env vars from your `.env` when convenient.
 
 :::warning Upgrading from v2.2.0
 In v2.2.0 and earlier, `API_KEY` / `API_BASE` were read live by the TTS routes on every request. As of v3.0.0 they are **one-shot seeds** consumed only on the first boot where `admin_providers` is empty. After upgrading, boot the app once and confirm a `default-openai` row exists in **Settings → Admin → Shared providers** with the correct base URL. If it is missing or wrong (e.g. the env vars were not set on first boot, or the table was already non-empty from a pre-release), create or edit the shared provider manually — TTS will not fall back to the env vars.
@@ -116,16 +144,16 @@ Self-hosted Node.js deployments tick the scheduler in-process once per minute. V
 
 ## Migrating off env vars
 
-In v4, runtime site features are managed by admin settings and optional JSON seed. To minimize env surface area:
+In v4, runtime site features, shared providers, and account email delivery are managed by admin settings and optional JSON seed. To minimize env surface area:
 
 1. Deploy this version with your existing env values in place.
 2. Boot the app once. Open Settings → Admin and verify:
    - Seeded settings appear as **from seed** (if you supplied a runtime JSON seed).
-   - A `default-openai` row exists in **Shared providers** (if you had `API_BASE` or `API_KEY` set).
+   - A `default-openai` row exists in **Shared providers** (if you had `API_BASE` or `API_KEY` set), with the `API_MODEL_NAME` value shown as its default model.
 3. Remove any bootstrap env vars you no longer need from `.env`.
 4. Redeploy. Behavior is unchanged — the DB is now the source of truth.
 
-You can keep `API_BASE` / `API_KEY` if you intentionally want bootstrap fallback behavior on empty provider tables.
+You can keep `API_BASE` / `API_KEY` / `API_MODEL_NAME` if you intentionally want bootstrap fallback behavior on empty provider tables.
 
 ## How keys are protected
 
@@ -142,4 +170,4 @@ Because the encryption key for `admin_providers` is derived from `AUTH_SECRET`, 
 
 - [Auth](./auth) — required to use the admin panel.
 - [TTS Providers](./tts-providers) — shared-provider configuration and user-selectable behavior.
-- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed.
+- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed (including optional `accountEmail`).

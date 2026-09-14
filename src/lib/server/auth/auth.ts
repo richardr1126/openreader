@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@openreader/database";
 import { getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
@@ -14,6 +14,7 @@ import * as authSchemaPostgres from "@openreader/database/schema-auth-postgres";
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import { tryGetOrigin } from "@/lib/shared/urls";
+import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 
 // Heavy modules (S3 SDK, blobstore, rate-limiter, claim-data) are loaded
 // lazily via dynamic import() inside the beforeDelete / onLinkAccount
@@ -53,7 +54,7 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 const requiredAuthEnv = getRequiredAuthEnv();
 
-const createAuth = () => betterAuth({
+const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   database: drizzleAdapter(db as any, {
     provider: process.env.POSTGRES_URL ? "pg" : "sqlite",
@@ -64,15 +65,36 @@ const createAuth = () => betterAuth({
   trustedOrigins: getTrustedOrigins(),
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false, // Set to true in production
-    async sendResetPassword(data) {
-      // Send an email to the user with a link to reset their password
-      serverLogger.info({
-        event: 'auth.password_reset.requested',
-        userEmailHash: hashForLog(data.user.email),
-      }, 'Password reset requested');
-    },
+    requireEmailVerification: accountEmailsEnabled,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    revokeSessionsOnPasswordReset: true,
+    ...(accountEmailsEnabled ? {
+      async sendResetPassword(data: { user: { email: string }; url: string }) {
+        const { enqueueAccountEmail } = await import('@/lib/server/email/delivery');
+        await enqueueAccountEmail({
+          purpose: 'password_reset',
+          recipient: data.user.email,
+          actionUrl: data.url,
+        });
+      },
+    } : {}),
   },
+  ...(accountEmailsEnabled ? {
+    emailVerification: {
+      expiresIn: 60 * 60,
+      sendOnSignUp: true,
+      sendOnSignIn: true,
+      autoSignInAfterVerification: false,
+      async sendVerificationEmail(data: { user: { email: string }; url: string }) {
+        const { enqueueAccountEmail } = await import('@/lib/server/email/delivery');
+        await enqueueAccountEmail({
+          purpose: 'email_verification',
+          recipient: data.user.email,
+          actionUrl: data.url,
+        });
+      },
+    },
+  } : {}),
   user: {
     additionalFields: {
       isAdmin: {
@@ -194,9 +216,38 @@ const createAuth = () => betterAuth({
     // still append Set-Cookie headers that are forwarded to Next.js.
     nextCookies(),
   ],
+  advanced: {
+    backgroundTasks: {
+      handler: (promise) => after(async () => { await promise; }),
+    },
+  },
 });
 
-export const auth = createAuth();
+const authInstances = new Map<boolean, ReturnType<typeof createAuth>>();
+
+/** Resolve the Better Auth configuration for the current saved email policy. */
+export async function getAuth(): Promise<ReturnType<typeof createAuth>> {
+  let enabled: boolean;
+  try {
+    enabled = await isAccountEmailEnabled();
+  } catch (error) {
+    // Verification is security policy. If configuration cannot be read, never
+    // silently downgrade a previously-enabled (or unknown) instance.
+    enabled = true;
+    logDegraded(serverLogger, {
+      event: 'auth.email_policy.resolve.failed',
+      msg: 'Account email policy read failed; using fail-closed auth configuration',
+      step: 'resolve_account_email_policy',
+      error,
+    });
+  }
+  let instance = authInstances.get(enabled);
+  if (!instance) {
+    instance = createAuth(enabled);
+    authInstances.set(enabled, instance);
+  }
+  return instance;
+}
 
 type AuthInstance = ReturnType<typeof createAuth>;
 export type Session = AuthInstance["$Infer"]["Session"];
@@ -212,6 +263,7 @@ export type AuthContext = {
 };
 
 export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Promise<AuthContext> {
+  const auth = await getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   const user = (session?.user ?? null) as User | null;
   const userId = user?.id ?? null;

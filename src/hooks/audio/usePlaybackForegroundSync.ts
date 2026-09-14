@@ -161,6 +161,9 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
         }
         if (snapshot.status === 'failed') {
           toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
+          // Publish the terminal read model to media recovery. It will detach
+          // the failed stream instead of letting the browser retry a 409 URL.
+          refresh.request();
           return;
         }
         if (snapshot.phase === 'downloading_model') {

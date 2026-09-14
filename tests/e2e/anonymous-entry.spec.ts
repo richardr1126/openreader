@@ -46,23 +46,10 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await expect(privacyContinue).toBeEnabled();
   await privacyContinue.click();
 
-  const backToSettings = page.getByRole('button', {
-    name: 'Back to settings',
-    exact: true,
-  });
-  await expect(backToSettings).toBeVisible();
-  await backToSettings.click();
-
-  const settingsDialog = page.getByRole('dialog', { name: /^Settings/ });
-  const closeSettings = settingsDialog.getByRole('button', {
-    name: 'Close dialog',
-    exact: true,
-  });
-  const settingsPanel = page.getByTestId('settings-modal');
-  await expect(closeSettings).toBeVisible();
-  await expect(settingsPanel).not.toHaveAttribute('data-transition', '');
-  await closeSettings.click();
-  await expect(settingsPanel).toHaveCount(0);
+  const changelogDialog = page.getByRole('dialog', { name: 'Changelog', exact: true });
+  const changelogPanel = page.getByTestId('changelog-modal');
+  await expect(changelogPanel).toBeVisible();
+  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: 'OpenReader', exact: true })).toBeVisible();
   await expect(
@@ -73,21 +60,30 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   ).toBeVisible();
   await expect(page.getByRole('status')).toContainText('0 items');
 
-  const settingsTrigger = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsTrigger = page.getByRole('link', { name: 'Settings', exact: true });
   await settingsTrigger.focus();
   await expect(settingsTrigger).toBeFocused();
   await page.keyboard.press('Enter');
 
-  await expect(settingsPanel).toBeVisible();
-  await expect(settingsDialog).toBeFocused();
-  await expect(
-    settingsDialog.getByRole('button', { name: 'Appearance', exact: true }),
-  ).toBeVisible();
-  await expect(
-    settingsDialog.getByRole('button', { name: 'Documents', exact: true }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/settings$/);
+  await expect(page.getByTestId('settings-page')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Appearance', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Documents', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Changelog', exact: true }).first().click();
+  await expect(changelogPanel).toBeVisible();
+  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/settings$/);
 
-  await page.keyboard.press('Escape');
-  await expect(settingsPanel).toHaveCount(0);
-  await expect(settingsTrigger).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Appearance', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();
+  const hasHorizontalOverflow = await page.getByTestId('settings-page').evaluate(
+    (element) => element.scrollWidth > element.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+
+  const closeSettings = page.getByRole('link', { name: 'Close settings', exact: true });
+  await closeSettings.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/app$/);
 });

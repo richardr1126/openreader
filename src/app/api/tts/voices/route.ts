@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { isBuiltInTtsProviderId } from '@openreader/tts/provider-catalog';
 import { defaultModelForProviderType, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth?.api.getSession({ headers: req.headers });
-    if (auth && !session?.user) {
+    const session = await (await getAuth()).api.getSession({ headers: req.headers });
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

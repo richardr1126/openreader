@@ -56,6 +56,7 @@ docker run --name kokoro-tts \
 
 ```env
 API_BASE=http://host.docker.internal:8880/v1
+API_MODEL_NAME=kokoro
 ```
 
 > Use `host.docker.internal` only when OpenReader/its embedded worker run in Docker and Kokoro runs

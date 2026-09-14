@@ -27,6 +27,8 @@ import { OperationOrchestrator } from '../operations/service';
 import type {
   AccountExportJobRequest,
   AccountExportJobResult,
+  EmailDeliveryJobRequest,
+  EmailDeliveryJobResult,
   DocumentPreviewJobRequest,
   DocumentPreviewJobResult,
   DocumentConversionJobRequest,
@@ -63,6 +65,7 @@ import { ProviderCapacityCoordinator } from '../jobs/provider-capacity';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
   ACCOUNT_EXPORT_JOBS_SUBJECT,
+  EMAIL_DELIVERY_JOBS_SUBJECT,
   EVENTS_STREAM_NAME,
   DOCUMENT_PREVIEW_JOBS_SUBJECT,
   DOCUMENT_CONVERSION_JOBS_SUBJECT,
@@ -280,12 +283,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const documentPreviewJobCodec = createJsonCodec<QueuedJob<DocumentPreviewJobRequest>>();
   const documentConversionJobCodec = createJsonCodec<QueuedJob<DocumentConversionJobRequest>>();
   const accountExportJobCodec = createJsonCodec<QueuedJob<AccountExportJobRequest>>();
+  const emailDeliveryJobCodec = createJsonCodec<QueuedJob<EmailDeliveryJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -305,6 +309,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     documentPreviewSubject: DOCUMENT_PREVIEW_JOBS_SUBJECT,
     documentConversionSubject: DOCUMENT_CONVERSION_JOBS_SUBJECT,
     accountExportSubject: ACCOUNT_EXPORT_JOBS_SUBJECT,
+    emailDeliverySubject: EMAIL_DELIVERY_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -376,6 +381,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     s3Prefix,
     logger: app.log,
     acquireProviderCapacity: (input) => providerCapacity.acquire(input),
+    getProviderMaxConcurrent: (providerRef) => providerCapacity.configuredMaxConcurrent(providerRef),
     coolDownProviderCapacity: (providerRef, retryAfterSeconds) => (
       providerCapacity.coolDown(providerRef, retryAfterSeconds)
     ),
@@ -394,6 +400,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     documentPreviewCodec: documentPreviewJobCodec,
     documentConversionCodec: documentConversionJobCodec,
     accountExportCodec: accountExportJobCodec,
+    emailDeliveryCodec: emailDeliveryJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -446,6 +453,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         documentPreview: session.documentPreviewConsumer,
         documentConversion: session.documentConversionConsumer,
         accountExport: session.accountExportConsumer,
+        emailDelivery: session.emailDeliveryConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

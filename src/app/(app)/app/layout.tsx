@@ -10,7 +10,9 @@ import { OnboardingFlowProvider } from '@/contexts/OnboardingFlowContext';
 export default function AppHomeLayout({ children }: { children: ReactNode }) {
   return (
     <DocumentProvider>
-      <OnboardingFlowProvider>{children}</OnboardingFlowProvider>
+      <OnboardingFlowProvider>
+        {children}
+      </OnboardingFlowProvider>
     </DocumentProvider>
   );
 }

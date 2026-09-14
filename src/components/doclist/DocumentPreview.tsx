@@ -1,6 +1,7 @@
 import { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   getDocumentContentSnippet,
   getDocumentPreviewStatus,
@@ -14,12 +15,22 @@ import {
   setInMemoryDocumentPreviewUrl,
 } from '@/lib/client/cache/previews';
 import { formatDocumentSize } from './formatSize';
+import { queryKeys } from '@/lib/client/query-keys';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface DocumentPreviewProps {
   doc: DocumentListDocument;
 }
+
+type CachedPreview = {
+  imagePreview: string | null;
+  textPreview: string | null;
+};
+
+type PreviewState = CachedPreview & {
+  key: string;
+};
 
 const MAX_TEXT_PREVIEW_CACHE = 100;
 const textPreviewCache = new Map<string, string>();
@@ -64,13 +75,56 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const previewKey = useMemo(
+    () => `${doc.type}:${doc.id}:${Number(doc.lastModified)}`,
+    [doc.id, doc.lastModified, doc.type],
+  );
+  const previewQueryKey = useMemo(
+    () => queryKeys.documentPreview(doc.id, doc.type, Number(doc.lastModified)),
+    [doc.id, doc.lastModified, doc.type],
+  );
+  const cachedPreview = queryClient.getQueryData<CachedPreview>(previewQueryKey);
+  const [previewState, setPreviewState] = useState<PreviewState>(() => ({
+    key: previewKey,
+    imagePreview: cachedPreview?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
+    textPreview: cachedPreview?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
+  }));
+  const imagePreview = previewState.key === previewKey ? previewState.imagePreview : null;
+  const textPreview = previewState.key === previewKey ? previewState.textPreview : null;
+  const setImagePreview = useCallback((value: string | null) => {
+    setPreviewState((previous) => previous.key === previewKey
+      ? { ...previous, imagePreview: value }
+      : previous);
+  }, [previewKey]);
+  const setTextPreview = useCallback((value: string | null) => {
+    setPreviewState((previous) => previous.key === previewKey
+      ? { ...previous, textPreview: value }
+      : previous);
+  }, [previewKey]);
   const [isImageReady, setIsImageReady] = useState(false);
-  const [textPreview, setTextPreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const previewKey = useMemo(() => `${doc.type}:${doc.id}`, [doc.id, doc.type]);
+  useEffect(() => {
+    const cached = queryClient.getQueryData<CachedPreview>(previewQueryKey);
+    setPreviewState({
+      key: previewKey,
+      imagePreview: cached?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
+      textPreview: cached?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
+    });
+    setIsImageReady(false);
+    setIsGenerating(false);
+  }, [previewKey, previewQueryKey, queryClient]);
+
+  useEffect(() => {
+    if (previewState.key !== previewKey) return;
+    if (!previewState.imagePreview && !previewState.textPreview) return;
+    queryClient.setQueryData<CachedPreview>(previewQueryKey, {
+      imagePreview: previewState.imagePreview,
+      textPreview: previewState.textPreview,
+    });
+  }, [previewKey, previewQueryKey, previewState, queryClient]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -224,7 +278,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       closePreviewEvents?.();
       controller.abort();
     };
-  }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey]);
+  }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey, setImagePreview, setTextPreview]);
 
   useEffect(() => {
     setIsImageReady(false);

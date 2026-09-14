@@ -7,7 +7,10 @@ import {
   stripId3Tag,
 } from '../../src/jobs/playback/ffmpeg-export';
 import { classifySegmentError } from '../../src/jobs/playback/segment-generation';
-import { requestedPlaybackSegmentFailed } from '../../src/jobs/playback/playback-job';
+import {
+  playbackGenerationCancellationExpected,
+  requestedPlaybackSegmentFailed,
+} from '../../src/jobs/playback/playback-job';
 
 describe('worker job composition', () => {
   test('composes the exhaustive worker-loop handler surface', () => {
@@ -20,6 +23,7 @@ describe('worker job composition', () => {
       'runDocumentPreview',
       'runDocumentConversion',
       'runAccountExport',
+      'runEmailDelivery',
     ]);
     expect(Object.values(handlers).every((handler) => typeof handler === 'function')).toBe(true);
   });
@@ -72,6 +76,33 @@ describe('TTS playback requested-segment failures', () => {
       requiredOrdinal: 24,
       completedOrdinals: new Set([24]),
       erroredOrdinals: new Set([24]),
+    })).toBe(false);
+  });
+});
+
+describe('TTS playback generation cancellation', () => {
+  test('treats pause, supersession, and session removal as expected live-playback cancellation', () => {
+    expect(playbackGenerationCancellationExpected({
+      generationExtent: 'window', generationRunId: 'run-1',
+      session: { generationRunId: 'run-1', playbackActive: false },
+    })).toBe(true);
+    expect(playbackGenerationCancellationExpected({
+      generationExtent: 'window', generationRunId: 'run-1',
+      session: { generationRunId: 'run-2', playbackActive: true },
+    })).toBe(true);
+    expect(playbackGenerationCancellationExpected({
+      generationExtent: 'window', generationRunId: 'run-1', session: null,
+    })).toBe(true);
+  });
+
+  test('still fails errors from the current active run and document generation', () => {
+    expect(playbackGenerationCancellationExpected({
+      generationExtent: 'window', generationRunId: 'run-1',
+      session: { generationRunId: 'run-1', playbackActive: true },
+    })).toBe(false);
+    expect(playbackGenerationCancellationExpected({
+      generationExtent: 'document', generationRunId: 'run-1',
+      session: { generationRunId: 'run-1', playbackActive: false },
     })).toBe(false);
   });
 });

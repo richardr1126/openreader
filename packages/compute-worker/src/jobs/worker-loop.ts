@@ -2,6 +2,8 @@ import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
   AccountExportJobRequest,
   AccountExportJobResult,
+  EmailDeliveryJobRequest,
+  EmailDeliveryJobResult,
   DocumentPreviewJobRequest,
   DocumentPreviewJobResult,
   DocumentConversionJobRequest,
@@ -24,6 +26,7 @@ import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 import { toErrorMessage } from '../infrastructure/errors';
 import { TtsCredentialBrokerClientError } from './tts-credential-broker-error';
+import { EmailDeliveryError } from './email-delivery';
 import {
   type ComputeLimitPolicyDocument,
   type WorkerOperationAction,
@@ -121,6 +124,7 @@ export function createWorkerLoopController(input: {
   documentPreviewCodec?: JsonCodec<QueuedJob<DocumentPreviewJobRequest>>;
   documentConversionCodec?: JsonCodec<QueuedJob<DocumentConversionJobRequest>>;
   accountExportCodec?: JsonCodec<QueuedJob<AccountExportJobRequest>>;
+  emailDeliveryCodec?: JsonCodec<QueuedJob<EmailDeliveryJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -152,7 +156,7 @@ export function createWorkerLoopController(input: {
   type WorkDefinition<TPayload, TResult> = {
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: JobRunner<TPayload, TResult>;
-    action: WorkerOperationAction;
+    action?: WorkerOperationAction;
   };
 
   const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
@@ -183,8 +187,11 @@ export function createWorkerLoopController(input: {
     try {
       const decoded = work.codec.decode(work.msg.data);
       const startedAt = Date.now();
-      const maxQueueAgeMs = input.getComputePolicy()
-        .actions[work.action].execution!.maxQueueAgeSeconds * 1000;
+      const maxQueueAgeMs = work.action
+        ? input.getComputePolicy().actions[work.action].execution!.maxQueueAgeSeconds * 1000
+        : Math.max(1, decoded.payload && typeof decoded.payload === 'object' && 'expiresAt' in decoded.payload
+          ? Number((decoded.payload as { expiresAt: number }).expiresAt) - decoded.queuedAt
+          : 60 * 60 * 1000);
       context = {
         decoded,
         workerLabel: work.workerLabel,
@@ -269,7 +276,9 @@ export function createWorkerLoopController(input: {
           kind,
           deliveryCount,
           pdfAttempts: input.pdfAttempts,
-          retryable: error instanceof TtsCredentialBrokerClientError ? error.retryable : undefined,
+          retryable: error instanceof TtsCredentialBrokerClientError || error instanceof EmailDeliveryError
+            ? error.retryable
+            : undefined,
         });
       const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
       if (context) {
@@ -300,7 +309,12 @@ export function createWorkerLoopController(input: {
           }, 'compute admission completion callback failed'));
         }
       }
-      if (action === 'nak_retry') work.msg.nak();
+      if (action === 'nak_retry') {
+        const retryDelayMs = error instanceof EmailDeliveryError
+          ? error.retryAfterMs ?? Math.min(10_000, 500 * (2 ** Math.max(0, deliveryCount - 1)))
+          : undefined;
+        work.msg.nak(retryDelayMs);
+      }
       else work.msg.term(errorMessage);
       input.logger.error({
         worker: context?.workerLabel,
@@ -348,16 +362,18 @@ export function createWorkerLoopController(input: {
           }
         }, RUNNING_HEARTBEAT_MS);
         try {
-          const acquisition = await scheduler.acquire(work.action);
-          if (acquisition.status === 'acquired') executionLease = acquisition.lease;
-          else if (acquisition.status === 'expired') {
-            await processMessage({ ...work, msg, queueExpired: true });
-            continue;
+          if (work.action) {
+            const acquisition = await scheduler.acquire(work.action);
+            if (acquisition.status === 'acquired') executionLease = acquisition.lease;
+            else if (acquisition.status === 'expired') {
+              await processMessage({ ...work, msg, queueExpired: true });
+              continue;
+            }
           }
         } finally {
           clearInterval(queueHeartbeat);
         }
-        if (!executionLease) {
+        if (work.action && !executionLease) {
           msg.nak();
           continue;
         }
@@ -389,6 +405,7 @@ export function createWorkerLoopController(input: {
       documentPreview?: Consumer;
       documentConversion?: Consumer;
       accountExport?: Consumer;
+      emailDelivery?: Consumer;
     }): void {
       stopRequested = false;
       loops = [];
@@ -445,6 +462,10 @@ export function createWorkerLoopController(input: {
             action: 'account_export',
           }
           : null;
+      const emailDeliveryWork: WorkDefinition<EmailDeliveryJobRequest, EmailDeliveryJobResult> | null =
+        input.emailDeliveryCodec && consumers.emailDelivery && input.handlers.runEmailDelivery
+          ? { codec: input.emailDeliveryCodec, run: input.handlers.runEmailDelivery }
+          : null;
       let loopSlots = 0;
       const addLoopSlot = (i: number): void => {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
@@ -477,6 +498,14 @@ export function createWorkerLoopController(input: {
           loopSlots += 1;
         }
       };
+      if (emailDeliveryWork && consumers.emailDelivery) {
+        loops.push(runLoop({
+          owner,
+          consumer: consumers.emailDelivery,
+          ...emailDeliveryWork,
+          workerLabel: 'email-delivery-1',
+        }));
+      }
       growLoops();
     },
     async stop(): Promise<void> {

@@ -22,7 +22,6 @@ export function useIsNarrow(): boolean {
 export function LibraryFrame({
   toolbar,
   sidebar,
-  statusBar,
   children,
   sidebarOpen,
   onRequestSidebarClose,
@@ -30,7 +29,6 @@ export function LibraryFrame({
 }: {
   toolbar: ReactNode;
   sidebar: ReactNode;
-  statusBar: ReactNode;
   children: ReactNode;
   sidebarOpen: boolean;
   onRequestSidebarClose?: () => void;
@@ -45,7 +43,6 @@ export function LibraryFrame({
         {!isNarrow && sidebarOpen && <div className="h-full">{sidebar}</div>}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">{children}</div>
       </div>
-      {statusBar}
       {isNarrow && (
         <LibrarySidebarDrawer open={sidebarOpen} onClose={onRequestSidebarClose}>
           {sidebar}

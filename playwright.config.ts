@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { resolve } from 'node:path';
 import 'dotenv/config';
 
 const playbackTest = /playback-controls\.spec\.ts/;
@@ -8,6 +9,7 @@ const coreProjects = [
   'webkit',
 ];
 const includePlaybackProjects = !process.env.CI;
+const e2eRuntimeDir = resolve('tests/results/runtime');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -28,8 +30,27 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && DISABLE_AUTH_RATE_LIMIT=true pnpm start',
     url: 'http://localhost:3003',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120 * 1000,
+    env: {
+      // Playwright owns a disposable control-plane/data-plane stack. Keeping
+      // its state under outputDir makes every invocation start without stale
+      // SQL rows, object blobs, or terminal JetStream operations from a prior
+      // run while leaving the developer's normal docstore untouched.
+      SQLITE_DB_PATH: resolve(e2eRuntimeDir, 'sqlite3.db'),
+      USE_EMBEDDED_WEED_MINI: 'true',
+      WEED_MINI_DIR: resolve(e2eRuntimeDir, 'seaweedfs'),
+      EMBEDDED_NATS_STORE_DIR: resolve(e2eRuntimeDir, 'nats'),
+      S3_ACCESS_KEY_ID: 'openreader-e2e',
+      S3_SECRET_ACCESS_KEY: 'openreader-e2e-secret',
+      S3_BUCKET: 'openreader-e2e',
+      S3_REGION: 'us-east-1',
+      S3_INTERNAL_ENDPOINT: 'http://127.0.0.1:8333',
+      S3_BROWSER_TRANSPORT: 'proxy',
+      S3_FORCE_PATH_STYLE: 'true',
+      S3_PREFIX: 'openreader-e2e',
+      RUN_V4_DECOMMISSION: 'false',
+    },
   },
   projects: [
     {

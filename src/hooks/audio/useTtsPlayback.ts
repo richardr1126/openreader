@@ -433,9 +433,21 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         },
         onExhausted: () => {
           pauseActivePlayback();
+          clearAudioSource();
           setIsPlaying(false);
           setPlaybackPhase('failed');
           toast.error('Audio is ready, but playback could not reconnect. Try Play again.', { id: 'tts-playback-error' });
+        },
+        onTerminalFailure: () => {
+          pauseActivePlayback();
+          resetPlaybackSession();
+          clearAudioSource();
+          setIsPlaying(false);
+          setPlaybackPhase('failed');
+          toast.error('TTS generation stopped before more audio became available. Try Play again.', {
+            id: 'tts-playback-error',
+            duration: 7000,
+          });
         },
       });
       publishPlaybackTimeSec(initialStartSec, { force: true });

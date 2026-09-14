@@ -3,19 +3,32 @@ import { evictCachedBlobPrefix, getCachedBlob, previewBlobCacheKey } from '@/lib
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
 const inFlightPreviewPrime = new Map<string, Promise<string | null>>();
+const MAX_IN_MEMORY_PREVIEWS = 100;
 
 function revokeIfBlobUrl(url: string | null | undefined): void {
   if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
 }
 
 export function getInMemoryDocumentPreviewUrl(cacheKey: string): string | null {
-  return inMemoryPreviewUrlCache.get(cacheKey) || null;
+  const value = inMemoryPreviewUrlCache.get(cacheKey);
+  if (!value) return null;
+  inMemoryPreviewUrlCache.delete(cacheKey);
+  inMemoryPreviewUrlCache.set(cacheKey, value);
+  return value;
 }
 
 export function setInMemoryDocumentPreviewUrl(cacheKey: string, url: string): void {
   const prev = inMemoryPreviewUrlCache.get(cacheKey);
   if (prev && prev !== url) revokeIfBlobUrl(prev);
+  if (prev) inMemoryPreviewUrlCache.delete(cacheKey);
   inMemoryPreviewUrlCache.set(cacheKey, url);
+  if (inMemoryPreviewUrlCache.size > MAX_IN_MEMORY_PREVIEWS) {
+    const oldestKey = inMemoryPreviewUrlCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      revokeIfBlobUrl(inMemoryPreviewUrlCache.get(oldestKey));
+      inMemoryPreviewUrlCache.delete(oldestKey);
+    }
+  }
 }
 
 export function clearInMemoryDocumentPreviewCache(): void {

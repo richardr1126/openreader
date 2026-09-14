@@ -229,6 +229,7 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
       documentId: 'a'.repeat(64),
       name: 'Report.pdf',
       type: 'pdf',
+      folderId: undefined,
     }));
   });
 });

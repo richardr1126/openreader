@@ -108,6 +108,16 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/account-exports/jobs', input);
   }
 
+  createEmailDeliveryOperation(input: {
+    deliveryId: string;
+    purpose: 'email_verification' | 'password_reset' | 'admin_test';
+    envelopeCiphertext: string;
+    envelopeIv: string;
+    expiresAt: number;
+  }): Promise<ComputeOperation> {
+    return this.requestJson('POST', '/v1/email-deliveries/jobs', input);
+  }
+
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
     return this.requestJson('POST', '/v1/pdf-layout/resolve', {
       documentId: input.documentId,

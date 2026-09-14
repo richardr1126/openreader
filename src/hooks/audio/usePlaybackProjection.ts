@@ -111,10 +111,11 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     documentTimeSec: number,
     targetOrdinal: number,
     targetStartSec: number,
+    options?: { reopenStream?: boolean },
   ) => {
     const target = Math.max(0, documentTimeSec);
     let base = playbackStreamBaseSecRef.current;
-    if (target + 0.001 < base) {
+    if (options?.reopenStream || target + 0.001 < base) {
       const session = playbackSessionRef.current;
       if (session) {
         const url = new URL(session.audioUrl, window.location.href);

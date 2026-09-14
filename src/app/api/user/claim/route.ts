@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { claimAnonymousData } from '@/lib/server/user/claim-data';
-import { auth } from '@/lib/server/auth/auth';
+import { getAuth } from '@/lib/server/auth/auth';
 import { db } from '@openreader/database';
 import { documentSettings, documents, userDocumentProgress, userFolders, userOnboarding, userPreferences } from '@openreader/database/schema';
 import { count, eq, ne } from 'drizzle-orm';
@@ -49,7 +49,7 @@ async function getClaimableCounts(
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth?.api.getSession({ headers: req.headers });
+    const session = await (await getAuth()).api.getSession({ headers: req.headers });
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth?.api.getSession({ headers: req.headers });
+    const session = await (await getAuth()).api.getSession({ headers: req.headers });
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

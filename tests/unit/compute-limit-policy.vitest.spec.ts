@@ -20,6 +20,15 @@ describe('compute limit policy', () => {
     expect(JSON.stringify(DEFAULT_COMPUTE_LIMIT_POLICIES)).not.toContain('"mode"');
   });
 
+  it('defaults self-host admission and usage limits off while retaining capacity protection', () => {
+    for (const [action, policy] of Object.entries(DEFAULT_COMPUTE_LIMIT_POLICIES.actions)) {
+      expect(policy.enabled, action).toBe(false);
+    }
+    expect(DEFAULT_COMPUTE_LIMIT_POLICIES.providers.defaults.enabled).toBe(true);
+    expect(DEFAULT_COMPUTE_LIMIT_POLICIES.providers.defaults.maxConcurrent).toBe(3);
+    expect(DEFAULT_COMPUTE_LIMIT_POLICIES.worker.maxExecutingPerWorker).toBe(3);
+  });
+
   it('keeps the copyable architecture seed aligned with the complete default', () => {
     const plan = readFileSync(
       path.resolve(import.meta.dirname, '../../v5/COMPUTE_RATE_LIMITING_PLAN.md'),

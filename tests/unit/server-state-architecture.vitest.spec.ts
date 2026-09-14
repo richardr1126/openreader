@@ -220,6 +220,7 @@ describe('server-state architecture', () => {
       'POST /v1/document-previews/clear',
       'POST /v1/document-previews/jobs',
       'POST /v1/document-previews/resolve',
+      'POST /v1/email-deliveries/jobs',
       'POST /v1/pdf-layout/clear',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
@@ -254,6 +255,9 @@ describe('server-state architecture', () => {
   test('keeps the Next API surface on the hard-cut route map', () => {
     expect(collectNextRoutePaths()).toEqual([
       '/api/account/delete',
+      '/api/admin/email',
+      '/api/admin/email/test',
+      '/api/admin/email/test/events',
       '/api/admin/providers',
       '/api/admin/providers/[id]',
       '/api/admin/settings',
@@ -282,6 +286,7 @@ describe('server-state architecture', () => {
       '/api/documents/import-url',
       '/api/folders',
       '/api/folders/[id]',
+      '/api/internal/compute/email-execution',
       '/api/internal/compute/limits/complete',
       '/api/internal/compute/limits/consume',
       '/api/internal/compute/limits/policy',
@@ -464,8 +469,8 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).not.toContain('downloadUrl');
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/audio/route.ts'))).toBe(false);
     for (const composePath of [
-      'docker/examples/compose.yml',
-      'docker/examples/compose.local-slim.yml',
+      'examples/docker/compose.yml',
+      'examples/docker/compose.local-slim.yml',
     ]) {
       const slimCompose = source(composePath);
       expect(slimCompose, composePath).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');

@@ -7,6 +7,7 @@ import {
   ttsPlaybackExportSubjectFromOperationKey,
   ttsPlaybackPlanSubjectFromOperationKey,
   ttsPlaybackSubjectFromOperationKey,
+  emailDeliverySubjectFromOperationKey,
 } from '../operations/keys';
 
 export type ComputeOperationSubject =
@@ -16,7 +17,8 @@ export type ComputeOperationSubject =
   | { kind: 'tts_playback_export'; documentId: string; artifactId: string; format: 'mp3' | 'm4b' }
   | { kind: 'document_preview'; documentId: string; namespace: string | null; previewKind: 'card' }
   | { kind: 'document_conversion'; conversionId: string; namespace: string | null }
-  | { kind: 'account_export'; storageUserId: string; namespace: string | null; artifactId: string };
+  | { kind: 'account_export'; storageUserId: string; namespace: string | null; artifactId: string }
+  | { kind: 'email_delivery'; deliveryId: string };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -75,7 +77,9 @@ export function toComputeOperation<Result>(
                 namespace: null,
                 artifactId: '',
               })
-              : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
+              : state.kind === 'email_delivery'
+                ? (emailDeliverySubjectFromOperationKey(state.opKey) ?? { kind: 'email_delivery', deliveryId: '' })
+                : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,
     subject,

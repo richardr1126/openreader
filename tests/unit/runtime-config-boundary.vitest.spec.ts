@@ -17,6 +17,7 @@ const documentedEnvironmentVariables = [
   'ADMIN_EMAILS',
   'API_BASE',
   'API_KEY',
+  'API_MODEL_NAME',
   'AUTH_SECRET',
   'AUTH_TRUSTED_ORIGINS',
   'BASE_URL',
@@ -135,11 +136,11 @@ describe('shared runtime configuration boundary', () => {
     const reference = source('docs-site/docs/reference/environment-variables.md');
     const rootExample = source('.env.example');
     const workerExample = source('packages/compute-worker/.env.example');
-    const fullCompose = source('docker/examples/compose.full.yml');
+    const fullCompose = source('examples/docker/compose.full.yml');
     const playwrightWorkflow = source('.github/workflows/playwright.yml');
     const slimComposeFiles = [
-      source('docker/examples/compose.yml'),
-      source('docker/examples/compose.local-slim.yml'),
+      source('examples/docker/compose.yml'),
+      source('examples/docker/compose.local-slim.yml'),
     ];
 
     for (const variable of documentedEnvironmentVariables) {

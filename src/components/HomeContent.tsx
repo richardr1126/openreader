@@ -1,8 +1,6 @@
-'use client';
-
-import { useState } from 'react';
 import { DocumentList } from '@/components/doclist/DocumentList';
-import { SettingsModal, SettingsTrigger } from '@/components/SettingsModal';
+import { SettingsIcon } from '@/components/icons/Icons';
+import { SidebarNavLink } from '@/components/ui';
 import { UserMenu } from '@/components/auth/UserMenu';
 
 const Brand = () => (
@@ -16,14 +14,14 @@ const Brand = () => (
 );
 
 export function HomeContent() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
   const appActions = (
     <div className="flex flex-col gap-0.5 w-full">
-      <SettingsTrigger
-        variant="sidebar"
-        triggerLabel="Settings"
-        onOpen={() => setSettingsOpen(true)}
+      <SidebarNavLink
+        href="/app/settings"
+        compact
+        aria-label="Settings"
+        icon={<SettingsIcon className="h-3.5 w-3.5" />}
+        label="Settings"
       />
       <UserMenu variant="sidebar" />
     </div>
@@ -32,7 +30,6 @@ export function HomeContent() {
   return (
     <div className="w-full h-full">
       <DocumentList brand={<Brand />} appActions={appActions} />
-      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

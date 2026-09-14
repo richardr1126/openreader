@@ -37,16 +37,16 @@ export function SettingsChangelogPanel({
   }, [manifest, normalizedAppVersion]);
 
   return (
-    <div className="h-[490px] flex flex-col bg-surface">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-line-soft bg-background">
-        <IconButton onClick={onClose} aria-label="Back to settings" title="Back">
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="flex h-[min(680px,calc(100dvh-3rem))] flex-col bg-surface sm:h-[490px]">
+      <div className="flex items-center gap-3 border-b border-line-soft bg-background px-4 py-3">
+        <IconButton onClick={onClose} aria-label="Close changelog" title="Close">
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </IconButton>
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-foreground">Changelog</h4>
-          <p className="text-xs text-soft truncate">
+          <p className="truncate text-xs text-soft">
             {normalizedAppVersion
               ? `Current version: v${normalizedAppVersion}`
               : 'Release history from GitHub'}
@@ -58,14 +58,14 @@ export function SettingsChangelogPanel({
         {loading && <div className="py-3 text-sm text-soft">Loading changelog…</div>}
 
         {!loading && error && (
-          <div className="py-3 space-y-2 border-b border-line-soft">
+          <div className="space-y-2 border-b border-line-soft py-3">
             <p className="text-sm text-foreground">Could not load changelog right now.</p>
-            <p className="text-xs text-soft break-words">{error}</p>
+            <p className="break-words text-xs text-soft">{error}</p>
             <a
               href="https://github.com/richardr1126/openreader/releases"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex text-xs font-medium text-accent hover:underline transition duration-base ease-standard transform"
+              className="inline-flex text-xs font-medium text-accent transition duration-base ease-standard hover:underline"
             >
               Open GitHub Releases
             </a>
@@ -94,36 +94,36 @@ export function SettingsChangelogPanel({
                   ...previous,
                   [entry.tag_name]: !isExpanded,
                 }))}
-                className="w-full rounded-md border border-transparent px-2 py-2 text-left flex items-center gap-2 transition duration-base ease-standard hover:border-accent-line hover:bg-accent-wash"
+                className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left transition duration-base ease-standard hover:border-accent-line hover:bg-accent-wash"
               >
                 <ChevronRightIcon
-                  className={`w-3.5 h-3.5 shrink-0 text-soft transition-transform ${
+                  className={`h-3.5 w-3.5 shrink-0 text-soft transition-transform ${
                     isExpanded ? 'rotate-90 text-foreground' : ''
                   }`}
                 />
-                <div className="min-w-0 flex items-center gap-2 text-sm w-full">
-                  <span className="font-semibold text-foreground shrink-0">{entry.tag_name}</span>
+                <div className="flex min-w-0 w-full items-center gap-2 text-sm">
+                  <span className="shrink-0 font-semibold text-foreground">{entry.tag_name}</span>
                   {entry.prerelease && (
-                    <span className="text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 bg-surface-sunken text-soft shrink-0">
+                    <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-soft">
                       prerelease
                     </span>
                   )}
                   {isCurrent && (
-                    <span className="text-[10px] uppercase tracking-wide font-semibold rounded px-1.5 py-0.5 bg-surface-sunken text-accent shrink-0">
+                    <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
                       current
                     </span>
                   )}
-                  {showName && <span className="text-xs text-soft truncate">{entry.name}</span>}
-                  <span className="text-[11px] text-soft shrink-0">
+                  {showName && <span className="truncate text-xs text-soft">{entry.name}</span>}
+                  <span className="ml-auto hidden shrink-0 text-[11px] text-soft xs:inline">
                     {new Date(entry.published_at).toLocaleDateString()}
                   </span>
                 </div>
               </button>
 
               {isExpanded && (
-                <div className="pl-6 pr-1 pb-3 pt-1 space-y-2">
+                <div className="space-y-2 pb-3 pl-6 pr-1 pt-1">
                   {body ? (
-                    <div className="text-sm text-foreground leading-6 space-y-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ul]:pl-5 [&_ol]:pl-5 [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_pre]:bg-surface-sunken [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto [&_a]:text-accent [&_a]:hover:underline [&_a]:transition-colors">
+                    <div className="space-y-2 text-sm leading-6 text-foreground [&_a]:text-accent [&_a]:transition-colors [&_a]:hover:underline [&_code]:rounded [&_code]:bg-surface-sunken [&_code]:px-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-surface-sunken [&_pre]:p-2 [&_ul]:pl-5">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {body.body || '_No release notes provided._'}
                       </ReactMarkdown>
@@ -135,7 +135,7 @@ export function SettingsChangelogPanel({
                     href={entry.html_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex text-xs font-medium text-accent hover:underline transition duration-base ease-standard transform"
+                    className="inline-flex text-xs font-medium text-accent transition duration-base ease-standard hover:underline"
                   >
                     View on GitHub
                   </a>

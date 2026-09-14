@@ -17,20 +17,28 @@ import {
 const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-soft';
 
 export function ProviderSettingsPanel({
-  modalOpen,
+  active = true,
   onSaved,
 }: {
-  modalOpen: boolean;
-  onSaved: () => void;
+  active?: boolean;
+  onSaved?: () => void;
 }) {
   const runtimeConfig = useRuntimeConfig();
-  const { providerRef, providerType, ttsModel, ttsInstructions, updateConfigKey } = useConfig();
+  const {
+    providerRef,
+    providerType,
+    ttsModel,
+    ttsInstructions,
+    updateConfigKey,
+    isLoading: configLoading,
+  } = useConfig();
   const { providers: sharedProviders, isLoading: sharedProvidersLoading } = useSharedProviders();
   const [localProviderRef, setLocalProviderRef] = useState(providerRef);
   const [localProviderType, setLocalProviderType] = useState<TtsProviderType>(providerType);
   const [modelValue, setModelValue] = useState(ttsModel);
   const [customModelInput, setCustomModelInput] = useState('');
   const [localInstructions, setLocalInstructions] = useState(ttsInstructions);
+  const [hydrated, setHydrated] = useState(false);
 
   const viewModel = useMemo(() => resolveTtsSettingsViewModel({
     providerRef: localProviderRef,
@@ -70,12 +78,14 @@ export function ProviderSettingsPanel({
   });
 
   useEffect(() => {
-    if (modalOpen) return;
+    if (configLoading || (active && hydrated)) return;
     setLocalProviderRef(providerRef);
     setLocalProviderType(providerType);
     setModelValue(ttsModel);
+    setCustomModelInput(ttsModel);
     setLocalInstructions(ttsInstructions);
-  }, [modalOpen, providerRef, providerType, ttsInstructions, ttsModel]);
+    setHydrated(true);
+  }, [active, configLoading, hydrated, providerRef, providerType, ttsInstructions, ttsModel]);
 
   useEffect(() => {
     if (!viewModel.models.some((model) => model.id === modelValue) && modelValue !== '') {
@@ -132,8 +142,20 @@ export function ProviderSettingsPanel({
       toast.error('Could not save TTS settings. Please try again.');
       return;
     }
-    onSaved();
+    toast.success('Voice settings saved');
+    onSaved?.();
   };
+
+  if (configLoading || !hydrated) {
+    return (
+      <div className="space-y-3" aria-label="Loading voice settings" aria-busy="true">
+        <div className="h-3 w-24 animate-pulse rounded bg-offbase" />
+        <div className="h-10 w-full animate-pulse rounded-md bg-offbase" />
+        <div className="h-3 w-20 animate-pulse rounded bg-offbase" />
+        <div className="h-10 w-full animate-pulse rounded-md bg-offbase" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

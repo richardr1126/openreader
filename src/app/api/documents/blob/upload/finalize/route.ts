@@ -1,6 +1,9 @@
 import path from 'path';
 import { createHash } from 'node:crypto';
 import { after, NextRequest, NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@openreader/database';
+import { userFolders } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import {
   TEMP_DOCUMENT_UPLOAD_TTL_MS,
@@ -42,7 +45,15 @@ type FinalizeUpload = {
   name: string;
   type: DocumentType;
   lastModified: number;
+  folderId: string | null | undefined;
 };
+
+class UploadFolderError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'UploadFolderError';
+  }
+}
 
 type FinalizeReceipt = {
   stored: BaseDocument;
@@ -90,8 +101,21 @@ function normalizeLastModified(value: unknown): number {
 
 function parseFinalizePayload(body: unknown): FinalizeUpload[] {
   if (!body || typeof body !== 'object') return [];
-  const rawUploads = (body as { uploads?: unknown }).uploads;
+  const request = body as { uploads?: unknown; folderId?: unknown };
+  const rawUploads = request.uploads;
   if (!Array.isArray(rawUploads)) return [];
+  const hasFolderId = Object.prototype.hasOwnProperty.call(request, 'folderId');
+  let folderId: string | null | undefined;
+  if (!hasFolderId) {
+    folderId = undefined;
+  } else if (request.folderId === null) {
+    folderId = null;
+  } else if (typeof request.folderId === 'string') {
+    folderId = request.folderId.trim();
+    if (!folderId) throw new UploadFolderError('folderId must not be empty', 400);
+  } else {
+    throw new UploadFolderError('folderId must be a string or null', 400);
+  }
 
   const uploads: FinalizeUpload[] = [];
   for (const rawUpload of rawUploads) {
@@ -106,9 +130,19 @@ function parseFinalizePayload(body: unknown): FinalizeUpload[] {
       name,
       type: normalizeDocumentType(rec.type, name),
       lastModified: normalizeLastModified(rec.lastModified),
+      folderId,
     });
   }
   return uploads;
+}
+
+async function verifyUploadFolder(folderId: string | null, userId: string): Promise<void> {
+  if (!folderId) return;
+  const [folder] = await db.select({ id: userFolders.id }).from(userFolders).where(and(
+    eq(userFolders.id, folderId),
+    eq(userFolders.userId, userId),
+  )).limit(1);
+  if (!folder) throw new UploadFolderError('Folder not found', 404);
 }
 
 async function loadTempUpload(input: {
@@ -180,6 +214,7 @@ async function registerConvertedDocx(input: {
       type: 'pdf',
       size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : input.artifact.byteLength,
       lastModified: input.upload.lastModified,
+      folderId: input.upload.folderId,
       schedulePreview: input.schedulePreview,
     });
   });
@@ -353,6 +388,7 @@ async function finalizeOne(input: {
       type: finalizedType,
       size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
       lastModified: input.upload.lastModified,
+      folderId: input.upload.folderId,
       schedulePreview: input.schedulePreview,
     });
   });
@@ -392,6 +428,7 @@ export async function POST(req: NextRequest) {
     if (uploads.length === 0) {
       return NextResponse.json({ error: 'No valid uploads provided' }, { status: 400 });
     }
+    await verifyUploadFolder(uploads[0]?.folderId ?? null, userId);
 
     const results = await Promise.all(
       uploads.map((upload) => finalizeOne({
@@ -425,6 +462,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ stored });
   } catch (error) {
+    if (error instanceof UploadFolderError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     if (error instanceof Error && error.message === 'Temporary upload expired before finalize') {
       return NextResponse.json({ error: error.message }, { status: 410 });
     }

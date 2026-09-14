@@ -220,6 +220,7 @@ Use one of these `.env` mode templates:
 
 ```env
 API_BASE=http://127.0.0.1:8880/v1
+API_MODEL_NAME=kokoro
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
@@ -231,9 +232,10 @@ TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
   <TabItem value="auth-with-admin" label="Auth + Admin Panel">
 
 ```env
-# API_BASE and optional API_KEY are seeded into the admin "default-openai" shared provider
+# API_BASE, optional API_KEY, and API_MODEL_NAME are seeded into the admin "default-openai" shared provider
 # on first boot, then no longer read. Manage them in Settings → Admin afterwards.
 API_BASE=http://127.0.0.1:8880/v1
+API_MODEL_NAME=kokoro
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
@@ -246,6 +248,7 @@ ADMIN_EMAILS=you@example.com
 
 ```env
 API_BASE=http://127.0.0.1:8880/v1
+API_MODEL_NAME=kokoro
 USE_EMBEDDED_WEED_MINI=false
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
@@ -266,6 +269,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 
 ```env
 API_BASE=http://127.0.0.1:8880/v1
+API_MODEL_NAME=kokoro
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 COMPUTE_WORKER_URL=http://localhost:8081
@@ -290,7 +294,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 </Tabs>
 
 :::note Env vars vs. admin panel
-On first boot, `API_KEY` / `API_BASE` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config + providers. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
+On first boot, `API_KEY` / `API_BASE` / `API_MODEL_NAME` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config, providers, and (when supplied) account email delivery. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
 :::
 
 :::note TTS credentials

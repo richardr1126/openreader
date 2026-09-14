@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
-import { Button, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
+import { Button, ButtonLink, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 export default function SignUpPage() {
@@ -19,8 +19,10 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
   const { baseUrl } = useAuthConfig();
   const enableUserSignups = useFeatureFlag('enableUserSignups');
+  const { accountEmailsEnabled } = useRuntimeConfig();
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
   const validateEmail = (email: string): boolean => {
@@ -72,6 +74,7 @@ export default function SignUpPage() {
         email: email.trim(),
         password,
         name: email.trim().split('@')[0], // Use part of email as name
+        callbackURL: '/verify-email?status=success',
       });
 
       if (result.error) {
@@ -82,6 +85,10 @@ export default function SignUpPage() {
           setError(errorMessage);
         }
       } else {
+        if (accountEmailsEnabled) {
+          setAwaitingVerification(true);
+          return;
+        }
         // Auto sign in
         const signInResult = await client.signIn.email({ email: email.trim(), password });
         if (signInResult.error) {
@@ -95,7 +102,23 @@ export default function SignUpPage() {
       }
     } catch (err) {
       console.error('Signup error:', err);
-      setError('Unable to connect. Please try again.');
+      setError('Unable to sign up. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setLoading(true);
+    try {
+      const result = await getAuthClient(baseUrl).sendVerificationEmail({
+        email: email.trim(),
+        callbackURL: '/verify-email?status=success',
+      });
+      if (result.error) throw new Error(result.error.message || 'Verification email request failed');
+      toast.success('Verification email queued');
+    } catch {
+      toast.error('Unable to resend the verification email right now. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -122,6 +145,22 @@ export default function SignUpPage() {
     );
   }
 
+  if (awaitingVerification) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Surface elevation="3" className="w-full max-w-md p-6 text-center">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-xl text-accent">✉</div>
+          <h1 className="mt-4 text-xl font-semibold text-foreground">Check your email</h1>
+          <p className="mt-2 text-sm text-soft">We queued a verification link for <span className="font-medium text-foreground">{email.trim()}</span>. It expires in one hour.</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend email</Button>
+            <ButtonLink href="/signin" variant="primary" size="md">Go to sign in</ButtonLink>
+          </div>
+        </Surface>
+      </div>
+    );
+  }
+
   const { checks, strength } = validatePassword(password);
   const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
   const strengthColors = ['bg-danger', 'bg-danger', 'bg-accent', 'bg-accent', 'bg-accent'];
@@ -129,8 +168,8 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Surface elevation="3" className="w-full max-w-md p-6">
-        <h1 className="text-xl font-semibold text-foreground">Sign Up</h1>
-        <p className="text-sm text-soft mt-1">Create your account to get started</p>
+        <h1 className="text-xl font-semibold text-foreground">Sign up</h1>
+        <p className="text-sm text-soft mt-1">Sign up to sync your reading across devices</p>
 
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
@@ -227,7 +266,7 @@ export default function SignUpPage() {
             size="md"
             className="w-full"
           >
-            {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Create Account'}
+            {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Sign up'}
           </Button>
         </div>
 

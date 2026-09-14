@@ -365,6 +365,10 @@ export interface paths {
                                     storageUserId: string;
                                     namespace: string | null;
                                     artifactId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "email_delivery";
+                                    deliveryId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -1290,6 +1294,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1444,6 +1452,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1595,6 +1607,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1769,6 +1785,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -1934,6 +1954,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -2085,6 +2109,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -2254,6 +2282,10 @@ export interface paths {
                                     storageUserId: string;
                                     namespace: string | null;
                                     artifactId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "email_delivery";
+                                    deliveryId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2303,6 +2335,161 @@ export interface paths {
                                     plannedFiles: number;
                                 };
                             } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/email-deliveries/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        deliveryId: string;
+                        /** @enum {string} */
+                        purpose: "email_verification" | "password_reset" | "admin_test";
+                        envelopeCiphertext: string;
+                        envelopeIv: string;
+                        expiresAt: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            opId: string;
+                            subject: {
+                                /** @enum {string} */
+                                kind: "pdf_layout";
+                                documentId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_conversion";
+                                conversionId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
+                            };
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed";
+                            queuedAt: number;
+                            updatedAt: number;
+                            startedAt?: number;
+                            result?: unknown;
+                            error?: {
+                                message: string;
+                                code?: string;
+                            };
+                            timing?: {
+                                queueWaitMs?: number;
+                                s3FetchMs?: number;
+                                computeMs?: number;
+                            };
+                            progress?: {
+                                totalPages: number;
+                                pagesParsed: number;
+                                currentPage?: number;
+                                /** @enum {string} */
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                plannedCount: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating";
+                                /** @enum {string} */
+                                stopReason?: "usage_limit";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
+                            };
                         };
                     };
                 };
@@ -2413,6 +2600,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -2591,6 +2782,10 @@ export interface paths {
                                     storageUserId: string;
                                     namespace: string | null;
                                     artifactId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "email_delivery";
+                                    deliveryId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2743,6 +2938,10 @@ export interface paths {
                                     storageUserId: string;
                                     namespace: string | null;
                                     artifactId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "email_delivery";
+                                    deliveryId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -2922,6 +3121,10 @@ export interface paths {
                                     storageUserId: string;
                                     namespace: string | null;
                                     artifactId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "email_delivery";
+                                    deliveryId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -3095,6 +3298,10 @@ export interface paths {
                                     storageUserId: string;
                                     namespace: string | null;
                                     artifactId: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "email_delivery";
+                                    deliveryId: string;
                                 };
                                 /** @enum {string} */
                                 status: "queued" | "running" | "succeeded" | "failed";
@@ -3235,6 +3442,10 @@ export interface paths {
                                 storageUserId: string;
                                 namespace: string | null;
                                 artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
                             };
                             /** @enum {string} */
                             status: "queued" | "running" | "succeeded" | "failed";
@@ -3601,6 +3812,10 @@ export interface components {
                 storageUserId: string;
                 namespace: string | null;
                 artifactId: string;
+            } | {
+                /** @enum {string} */
+                kind: "email_delivery";
+                deliveryId: string;
             };
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
@@ -3695,6 +3910,10 @@ export interface components {
                     storageUserId: string;
                     namespace: string | null;
                     artifactId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "email_delivery";
+                    deliveryId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -3792,6 +4011,10 @@ export interface components {
                     storageUserId: string;
                     namespace: string | null;
                     artifactId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "email_delivery";
+                    deliveryId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -3911,6 +4134,10 @@ export interface components {
                     storageUserId: string;
                     namespace: string | null;
                     artifactId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "email_delivery";
+                    deliveryId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -4029,6 +4256,10 @@ export interface components {
                     storageUserId: string;
                     namespace: string | null;
                     artifactId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "email_delivery";
+                    deliveryId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -4143,6 +4374,10 @@ export interface components {
                     storageUserId: string;
                     namespace: string | null;
                     artifactId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "email_delivery";
+                    deliveryId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";
@@ -4256,6 +4491,10 @@ export interface components {
                     storageUserId: string;
                     namespace: string | null;
                     artifactId: string;
+                } | {
+                    /** @enum {string} */
+                    kind: "email_delivery";
+                    deliveryId: string;
                 };
                 /** @enum {string} */
                 status: "queued" | "running" | "succeeded" | "failed";

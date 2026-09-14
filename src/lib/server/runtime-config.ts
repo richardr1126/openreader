@@ -7,9 +7,11 @@ import {
   type RuntimeConfigSource,
 } from '@/lib/server/admin/settings';
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 
 export type ResolvedRuntimeConfig = RuntimeConfig & {
   computeAvailable: boolean;
+  accountEmailsEnabled: boolean;
 };
 
 export type PublicRuntimeConfig = Omit<ResolvedRuntimeConfig, 'computeLimitPolicies'>;
@@ -38,6 +40,7 @@ export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig>
   return {
     ...values,
     computeAvailable: isComputeWorkerAvailable(),
+    accountEmailsEnabled: await isAccountEmailEnabled().catch(() => false),
   };
 }
 

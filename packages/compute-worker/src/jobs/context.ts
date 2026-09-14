@@ -14,5 +14,6 @@ export interface JobHandlerContext {
     characters: number;
     signal?: AbortSignal;
   }) => Promise<() => Promise<void>>;
+  getProviderMaxConcurrent?: (providerRef: string) => number | null;
   coolDownProviderCapacity?: (providerRef: string, retryAfterSeconds: number) => Promise<void>;
 }

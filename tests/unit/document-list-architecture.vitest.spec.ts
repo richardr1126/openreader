@@ -28,4 +28,39 @@ describe('document-list ownership', () => {
     expect(model).not.toContain('useMemo');
     expect(preferences).not.toContain('useState');
   });
+
+  test('keeps one upload lifecycle owner instead of component callback aggregation', () => {
+    const context = source('src/contexts/DocumentContext.tsx');
+    const controller = source('src/components/doclist/useDocumentListController.ts');
+    const uploader = source('src/components/documents/DocumentUploader.tsx');
+    const libraryImport = source('src/components/documents/useLibraryImport.ts');
+    const uploadController = source('src/hooks/useDocumentUploads.ts');
+
+    expect(context).toContain('useDocumentUploads(documentsQueryKey)');
+    expect(controller).not.toContain('activeUploadBatches');
+    expect(uploader).not.toContain('UploadBatchState');
+    expect(uploader).not.toContain('onUploadBatchChange');
+    expect(libraryImport).not.toContain("uploadDocuments } from '@/lib/client/api/documents'");
+    expect(libraryImport).not.toContain('cacheStoredDocumentFromBytes');
+    expect(libraryImport).not.toContain('const files: File[]');
+    expect(libraryImport).toContain('await uploadDocuments([file]');
+    expect(uploadController).not.toContain('Promise.allSettled');
+    expect(uploadController).toContain('remapProgressEvent(event, sourceIndexes)');
+  });
+
+  test('suppresses cancellation errors in upload entry points', () => {
+    const dialog = source('src/components/documents/UploadMenuDialog.tsx');
+
+    expect(dialog.split('if (isAbortError(err)) return;')).toHaveLength(3);
+  });
+
+  test('keys preview state by document version and keeps gallery scroll dependencies stable', () => {
+    const preview = source('src/components/doclist/DocumentPreview.tsx');
+    const gallery = source('src/components/doclist/views/GalleryView.tsx');
+
+    expect(preview).toContain('previewState.key !== previewKey');
+    expect(preview).toContain('`${doc.type}:${doc.id}:${Number(doc.lastModified)}`');
+    expect(gallery).toContain('documentOrderSignature');
+    expect(gallery).toContain('}, [documentOrderSignature]);');
+  });
 });

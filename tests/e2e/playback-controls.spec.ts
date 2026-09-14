@@ -183,7 +183,7 @@ test('anonymous user controls playback across every accepted document journey', 
 
   await page
     .getByRole('complementary')
-    .getByText('Upload documents', { exact: true })
+    .getByRole('button', { name: 'Add Documents', exact: true })
     .click();
   const uploadDialog = page.getByRole('dialog', { name: 'Add Documents', exact: true });
   await expect(uploadDialog.getByRole('heading', { name: 'Add Documents', exact: true })).toBeVisible();
@@ -205,9 +205,20 @@ test('anonymous user controls playback across every accepted document journey', 
   await startAndCancelPlayback(page);
 
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
-  await page.getByRole('button', { name: 'Voice: F1', exact: true }).click();
-  await page.getByRole('option', { name: 'F2', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Voice: F2', exact: true })).toBeVisible();
+  const voiceButton = page.getByRole('button', { name: /^Voice: / }).first();
+  const initialVoiceLabel = await voiceButton.getAttribute('aria-label');
+  expect(initialVoiceLabel).toBeTruthy();
+  await voiceButton.click();
+  const voiceOptions = page.getByRole('option');
+  await expect(voiceOptions.first()).toBeVisible();
+  const alternativeVoice = (await voiceOptions.allTextContents())
+    .map((voice) => voice.trim())
+    .find((voice) => voice && !initialVoiceLabel?.includes(voice));
+  expect(alternativeVoice).toBeTruthy();
+  await page.getByRole('option', { name: alternativeVoice!, exact: true }).click();
+  await expect(voiceButton).not.toHaveAttribute('aria-label', initialVoiceLabel!);
+  const changedVoiceLabel = await voiceButton.getAttribute('aria-label');
+  expect(changedVoiceLabel).toBeTruthy();
   await expect(playButton).toBeEnabled({ timeout: 60_000 });
 
   await page.getByRole('button', { name: '1x', exact: true }).click();
@@ -230,7 +241,7 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(
     page.getByRole('heading', { name: 'multilingual-sample.txt', exact: true }),
   ).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole('button', { name: 'Voice: F2', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: changedVoiceLabel!, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '1.1x • 1.1x', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled({
     timeout: 30_000,
