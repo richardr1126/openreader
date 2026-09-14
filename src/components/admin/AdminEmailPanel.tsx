@@ -3,17 +3,12 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Badge, Button, Field, Input, Section, ToggleRow } from '@/components/ui';
-
-type EmailSettings = {
-  enabled: boolean;
-  senderName: string;
-  senderEmail: string;
-  replyTo: string | null;
-  apiKeyConfigured: boolean;
-  apiKeyMask: string | null;
-};
-
-type EmailSettingsDraft = Pick<EmailSettings, 'senderName' | 'senderEmail' | 'replyTo'>;
+import {
+  buildEmailSettingsPatch,
+  emailSettingsDraftFromResponse,
+  type EmailSettings,
+  type EmailSettingsDraft,
+} from './email-settings-form';
 
 const EMPTY: EmailSettings = {
   enabled: false,
@@ -37,7 +32,7 @@ export function AdminEmailPanel() {
       if (!response.ok) throw new Error('Unable to load email settings');
       const loaded = await response.json() as EmailSettings;
       setSettings(loaded);
-      setDraft(loaded);
+      setDraft(emailSettingsDraftFromResponse(loaded));
     }).catch(() => toast.error('Failed to load email settings')).finally(() => setLoading(false));
   }, []);
 
@@ -50,7 +45,7 @@ export function AdminEmailPanel() {
       const body = await response.json() as EmailSettings & { error?: string };
       if (!response.ok) throw new Error(body.error || 'Unable to save email settings');
       setSettings(body);
-      if (syncDraft) setDraft(body);
+      if (syncDraft) setDraft(emailSettingsDraftFromResponse(body));
       if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) setApiKey('');
       toast.success('Email settings saved');
     } catch (error) {
@@ -121,7 +116,7 @@ export function AdminEmailPanel() {
             </Field>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" size="sm" disabled={saving} onClick={() => void save({ ...draft, ...(apiKey ? { apiKey } : {}) }, true)}>Save configuration</Button>
+            <Button variant="primary" size="sm" disabled={saving} onClick={() => void save(buildEmailSettingsPatch(draft, apiKey), true)}>Save configuration</Button>
             {settings.apiKeyConfigured && <Button variant="outline" size="sm" disabled={saving} onClick={() => void save({ apiKey: null })}>Remove saved key</Button>}
             <Button variant="outline" size="sm" disabled={saving || !settings.apiKeyConfigured || !settings.senderEmail || testState === 'queued'} onClick={sendTest}>Send test email</Button>
           </div>
