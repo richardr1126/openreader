@@ -32,11 +32,11 @@ The default slim example runs:
 - Kokoro-FastAPI as a companion container
 
 ```bash
-docker compose -f docker/examples/compose.yml up
+docker compose -f examples/docker/compose.yml up
 # Repository convenience command: pnpm compose
 ```
 
-Compose file: [`docker/examples/compose.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.yml)
+Compose file: [`examples/docker/compose.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.yml)
 
 </TabItem>
 <TabItem value="full" label="Full">
@@ -45,11 +45,11 @@ The full example runs OpenReader, Kokoro-FastAPI, PostgreSQL, SeaweedFS, NATS, a
 worker as separate containers using published images.
 
 ```bash
-docker compose -f docker/examples/compose.full.yml up
+docker compose -f examples/docker/compose.full.yml up
 # Repository convenience command: pnpm compose:full
 ```
 
-Compose file: [`docker/examples/compose.full.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.full.yml)
+Compose file: [`examples/docker/compose.full.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.full.yml)
 
 For details about running the worker separately, see
 [Compute Worker](./compute-worker).
@@ -60,11 +60,11 @@ For details about running the worker separately, see
 The local-slim example runs a slim setup (OpenReader and Kokoro-FastAPI), but builds the OpenReader app image from the current checkout.
 
 ```bash
-docker compose -f docker/examples/compose.local-slim.yml up --build
+docker compose -f examples/docker/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
 ```
 
-Compose file: [`docker/examples/compose.local-slim.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.local-slim.yml)
+Compose file: [`examples/docker/compose.local-slim.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.local-slim.yml)
 
 </TabItem>
 <TabItem value="local-full" label="Local Full">
@@ -72,11 +72,11 @@ Compose file: [`docker/examples/compose.local-slim.yml`](https://github.com/rich
 The local-full example uses the full multi-container layout, but builds the OpenReader app and compute-worker images from the current checkout.
 
 ```bash
-docker compose -f docker/examples/compose.local-full.yml up --build
+docker compose -f examples/docker/compose.local-full.yml up --build
 # Repository convenience command: pnpm compose:local:full
 ```
 
-Compose file: [`docker/examples/compose.local-full.yml`](https://github.com/richardr1126/openreader/blob/main/docker/examples/compose.local-full.yml)
+Compose file: [`examples/docker/compose.local-full.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.local-full.yml)
 
 </TabItem>
 </Tabs>
@@ -119,7 +119,7 @@ Set `BASE_URL` to the Docker host's LAN IP for the default same-origin proxy top
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
-docker compose -f docker/examples/compose.yml up
+docker compose -f examples/docker/compose.yml up
 # Repository convenience command: pnpm compose
 ```
 
@@ -129,7 +129,7 @@ docker compose -f docker/examples/compose.yml up
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
-docker compose -f docker/examples/compose.full.yml up
+docker compose -f examples/docker/compose.full.yml up
 # Repository convenience command: pnpm compose:full
 ```
 
@@ -139,7 +139,7 @@ docker compose -f docker/examples/compose.full.yml up
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
-docker compose -f docker/examples/compose.local-slim.yml up --build
+docker compose -f examples/docker/compose.local-slim.yml up --build
 # Repository convenience command: pnpm compose:local
 ```
 
@@ -149,7 +149,7 @@ docker compose -f docker/examples/compose.local-slim.yml up --build
 ```bash
 BASE_URL=http://192.168.0.XXX:3003 \
 COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
-docker compose -f docker/examples/compose.local-full.yml up --build
+docker compose -f examples/docker/compose.local-full.yml up --build
 # Repository convenience command: pnpm compose:local:full
 ```
 
@@ -201,30 +201,30 @@ Back up the named volumes first, then pull and recreate the same Compose project
 <TabItem value="slim" label="Slim" default>
 
 ```bash
-docker compose -f docker/examples/compose.yml pull
-docker compose -f docker/examples/compose.yml up -d
+docker compose -f examples/docker/compose.yml pull
+docker compose -f examples/docker/compose.yml up -d
 ```
 
 </TabItem>
 <TabItem value="full" label="Full">
 
 ```bash
-docker compose -f docker/examples/compose.full.yml pull
-docker compose -f docker/examples/compose.full.yml up -d
+docker compose -f examples/docker/compose.full.yml pull
+docker compose -f examples/docker/compose.full.yml up -d
 ```
 
 </TabItem>
 <TabItem value="local-slim" label="Local Slim">
 
 ```bash
-docker compose -f docker/examples/compose.local-slim.yml up -d --build
+docker compose -f examples/docker/compose.local-slim.yml up -d --build
 ```
 
 </TabItem>
 <TabItem value="local-full" label="Local Full">
 
 ```bash
-docker compose -f docker/examples/compose.local-full.yml up -d --build
+docker compose -f examples/docker/compose.local-full.yml up -d --build
 ```
 
 </TabItem>

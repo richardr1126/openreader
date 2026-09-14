@@ -469,8 +469,8 @@ describe('server-state architecture', () => {
     expect(streamSessionRoute).not.toContain('downloadUrl');
     expect(existsSync(path.join(root, 'src/app/api/tts/stream/[sessionId]/audio/route.ts'))).toBe(false);
     for (const composePath of [
-      'docker/examples/compose.yml',
-      'docker/examples/compose.local-slim.yml',
+      'examples/docker/compose.yml',
+      'examples/docker/compose.local-slim.yml',
     ]) {
       const slimCompose = source(composePath);
       expect(slimCompose, composePath).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
