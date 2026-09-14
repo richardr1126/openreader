@@ -239,7 +239,14 @@ src/components/doclist/
   useDocumentListController.ts        # derived data and user actions
   document-list-preferences.ts        # normalize/serialize current shape
   document-list-model.ts              # pure folder/filter/sort/status derivation
-  SidebarUploadLoader.tsx
+  SidebarUploadStatus.tsx             # renders the shared upload lifecycle
+
+src/hooks/
+  useDocumentUploads.ts               # upload orchestration, cache, cancel/retry
+
+src/lib/client/uploads/
+  transfer.ts                         # bounded direct-storage byte transfer
+  state.ts                            # pure lifecycle reducer and projection
 ```
 
 Existing view, sidebar, toolbar, status bar, DnD, and selection components
@@ -860,6 +867,22 @@ Plan resolution now reports queued/running work as `202` instead of overloading
 `404`, and the client follows that operation without a fixed attempt limit. It
 accepts valid empty artifacts, rejects mismatched or partially normalized
 artifacts, and does not derive fallback playback segments from reader text.
+
+### Post-roadmap document upload lifecycle hard cut
+
+Document uploads now have one client lifecycle owner in `useDocumentUploads`.
+All file, created-document, web-import, drag-and-drop, and server-library entry
+points route through the same context operation. The old uploader-id callbacks,
+document-list batch map, component-local uploading flags, fake completed-file
+progress, and direct server-library upload/cache path were removed.
+
+Browser-to-object-storage transfer remains browser-owned and reports actual
+uploaded bytes through `XMLHttpRequest`, with a bounded concurrency of three.
+The short prepare/finalize requests remain Next-owned. DOCX conversion continues
+through the existing authenticated operation SSE proxy and projects worker
+`fetching`, `converting`, and `uploading` phases into the same status model. The
+Finder sidebar presents that combined lifecycle with cancel, retry, completion,
+and failure states; no polling or second upload-progress source remains.
 
 ### Step Status
 

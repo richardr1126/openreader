@@ -6,44 +6,33 @@ import type { BaseDocument } from '@/types/documents';
 import {
   deleteDocuments as deleteServerDocuments,
   listDocuments,
-  uploadDocuments as uploadServerDocuments,
 } from '@/lib/client/api/documents';
-import { cacheStoredDocumentFromBytes, evictCachedDocument } from '@/lib/client/cache/documents';
+import { evictCachedDocument } from '@/lib/client/cache/documents';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useDocumentUploads } from '@/hooks/useDocumentUploads';
 import { queryKeys } from '@/lib/client/query-keys';
 import { deriveQueryState, type DerivedQueryState } from '@/lib/client/query/query-state';
+import type { DocumentUploadSummary } from '@/lib/client/uploads/state';
 
 interface DocumentContextType {
   pdfDocs: Array<BaseDocument & { type: 'pdf' }>;
   epubDocs: Array<BaseDocument & { type: 'epub' }>;
   htmlDocs: Array<BaseDocument & { type: 'html' }>;
   queryState: DerivedQueryState;
-  uploadDocuments: (files: File[], options?: { folderId?: string }) => Promise<BaseDocument[]>;
+  uploadDocuments: (
+    files: File[],
+    options?: { folderId?: string; signal?: AbortSignal },
+  ) => Promise<BaseDocument[]>;
+  uploadSummary: DocumentUploadSummary | null;
+  cancelUploads: () => void;
+  retryFailedUploads: () => void;
+  dismissUploadStatus: () => void;
   deleteDocument: (id: string) => Promise<void>;
   refreshDocuments: () => Promise<void>;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
 type SupportedDocument = BaseDocument & { type: 'pdf' | 'epub' | 'html' };
-
-function mergeStoredDocuments(
-  previous: SupportedDocument[] | undefined,
-  uploaded: BaseDocument[],
-): SupportedDocument[] {
-  const next = [...(previous ?? [])];
-
-  for (let index = uploaded.length - 1; index >= 0; index -= 1) {
-    const stored = uploaded[index];
-    if (stored.type !== 'pdf' && stored.type !== 'epub' && stored.type !== 'html') {
-      continue;
-    }
-    const supportedStored = stored as SupportedDocument;
-    const withoutExisting = next.filter((document) => document.id !== supportedStored.id);
-    next.splice(0, next.length, supportedStored, ...withoutExisting);
-  }
-
-  return next;
-}
 
 export function DocumentProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -70,6 +59,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     isError: documentsQuery.isError,
     error: documentsQuery.error,
   });
+  const uploads = useDocumentUploads(documentsQueryKey);
 
   const refreshDocuments = useCallback(async () => {
     if (isSessionPending) return;
@@ -96,17 +86,6 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     return { pdfDocs, epubDocs, htmlDocs };
   }, [docs]);
 
-  const uploadMutation = useMutation({
-    mutationFn: (input: { files: File[]; folderId?: string }) => uploadServerDocuments(input.files, {
-      folderId: input.folderId,
-    }),
-    onSuccess: (stored) => {
-      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
-        mergeStoredDocuments(previous, stored),
-      );
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
-  });
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteServerDocuments({ ids: [id] }),
     onMutate: async (id) => {
@@ -119,44 +98,6 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
   });
 
-  const uploadDocuments = useCallback(async (
-    files: File[],
-    options?: { folderId?: string },
-  ): Promise<BaseDocument[]> => {
-    if (files.length === 0) return [];
-
-    const stored = await uploadMutation.mutateAsync({ files, folderId: options?.folderId });
-    await Promise.allSettled(
-      stored.map(async (document, index) => {
-        const file = files[index];
-        if (!file) return;
-        const sourceType = file.name
-          ? (
-            file.name.toLowerCase().endsWith('.pdf')
-              ? 'pdf'
-              : file.name.toLowerCase().endsWith('.epub')
-                ? 'epub'
-                : file.name.toLowerCase().endsWith('.docx')
-                  ? 'docx'
-                  : 'html'
-          )
-          : (
-            file.type === 'application/pdf'
-              ? 'pdf'
-              : file.type === 'application/epub+zip'
-                ? 'epub'
-                : file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                  ? 'docx'
-                  : 'html'
-          );
-        if (document.type !== sourceType) return;
-        await cacheStoredDocumentFromBytes(document, await file.arrayBuffer());
-      }),
-    );
-
-    return stored;
-  }, [uploadMutation]);
-
   const deleteDocument = useCallback(async (id: string) => {
     await deleteMutation.mutateAsync(id);
     await evictCachedDocument(id);
@@ -168,7 +109,11 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       epubDocs: docsByType.epubDocs,
       htmlDocs: docsByType.htmlDocs,
       queryState,
-      uploadDocuments,
+      uploadDocuments: uploads.uploadDocuments,
+      uploadSummary: uploads.uploadSummary,
+      cancelUploads: uploads.cancelUploads,
+      retryFailedUploads: uploads.retryFailedUploads,
+      dismissUploadStatus: uploads.dismissUploadStatus,
       deleteDocument,
       refreshDocuments,
 

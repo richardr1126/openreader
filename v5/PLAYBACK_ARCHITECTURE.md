@@ -103,6 +103,10 @@ patterns require it:
   fallback proxy routes for old browsers, local object reads, or degraded object
   storage behavior; storage is required and byte proxy fallbacks buffer request
   or object bodies inside Vercel functions.
+- Browser upload progress comes from the direct object-storage transfer itself;
+  worker-owned DOCX conversion progress comes from the existing authenticated
+  operation SSE proxy. These phases feed one client upload lifecycle rather than
+  polling or component-local progress reconstructions.
 - PDF parse and TTS playback generation are worker-owned jobs. Next creates or
   resolves deterministic jobs, returns short snapshots, and proxies operation
   SSE only as a bounded reconnectable stream. Completed parsed PDF artifacts
@@ -857,9 +861,10 @@ Implemented:
 3. Moved LibreOffice invocation and temp-file handling into the compute worker.
    The old Next-side `src/lib/server/documents/docx-convert.ts` helper is gone.
 4. DOCX upload finalize returns `202` with conversion operation state when the
-   worker artifact is not complete. The same existing finalize route registers
-   the converted PDF after worker completion; no new upload-specific SSE route
-   or long wait loop was added.
+   worker artifact is not complete. The client follows that operation through
+   the existing authenticated upload-events SSE proxy, then calls the same
+   finalize route once to register the converted PDF. No polling or long wait
+   loop runs in Next.
 5. The worker writes converted PDF artifacts and metadata sidecars under
    `document_conversions_v1/docx/`; Next copies the ready artifact into the
    canonical document blob location and creates the SQL document row.

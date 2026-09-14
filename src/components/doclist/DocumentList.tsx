@@ -10,7 +10,7 @@ import { IconButton } from '@/components/ui';
 import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import { DocumentSelectionProvider } from './dnd/DocumentSelectionContext';
-import { SidebarUploadLoader } from './SidebarUploadLoader';
+import { SidebarUploadStatus } from './SidebarUploadStatus';
 import { GalleryView } from './views/GalleryView';
 import { IconsView } from './views/IconsView';
 import { ListView } from './views/ListView';
@@ -95,14 +95,18 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             <DocumentUploader
               variant="compact"
               folderId={controller.activeFolderId}
-              onUploadBatchChange={controller.handleUploadBatchChange}
               onClick={controller.openUploadDialog}
             />
           )}
           bottomSlot={(
             <div className="flex flex-col gap-2">
-              {controller.sidebarUploadState && (
-                <SidebarUploadLoader {...controller.sidebarUploadState} />
+              {controller.uploadSummary && (
+                <SidebarUploadStatus
+                  summary={controller.uploadSummary}
+                  onCancel={controller.cancelUploads}
+                  onRetry={controller.retryFailedUploads}
+                  onDismiss={controller.dismissUploadStatus}
+                />
               )}
               {appActions}
             </div>
@@ -148,7 +152,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           <DocumentUploader
             className="py-12 w-full max-w-2xl"
             folderId={controller.activeFolderId}
-            onUploadBatchChange={controller.handleUploadBatchChange}
           />
         </div>
       ) : (
@@ -156,7 +159,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           variant="overlay"
           className="flex-1 min-h-0 flex flex-col"
           folderId={controller.activeFolderId}
-          onUploadBatchChange={controller.handleUploadBatchChange}
         >
           <RefreshIndicator
             refreshing={documentsQueryState.refreshing}
@@ -242,7 +244,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       <UploadMenuDialog
         isOpen={controller.isUploadDialogOpen}
         onClose={controller.closeUploadDialog}
-        onUploadBatchChange={controller.handleUploadBatchChange}
         folderId={controller.activeFolderId}
       />
     </FinderWindow>

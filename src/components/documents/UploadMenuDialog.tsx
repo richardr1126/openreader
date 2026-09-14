@@ -16,18 +16,16 @@ import {
   DownloadIcon,
   FileIcon,
   RefreshIcon,
-  CheckIcon,
   BrowserIcon,
 } from '@/components/icons/Icons';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { DocumentSelectionModal } from './DocumentSelectionModal';
-import { DocumentUploader, type UploadBatchState } from './DocumentUploader';
+import { DocumentUploader } from './DocumentUploader';
 import { useLibraryImport } from './useLibraryImport';
 
 interface UploadMenuDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploadBatchChange?: (state: UploadBatchState) => void;
   folderId?: string;
 }
 
@@ -49,7 +47,6 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
 export function UploadMenuDialog({
   isOpen,
   onClose,
-  onUploadBatchChange,
   folderId,
 }: UploadMenuDialogProps) {
   const { uploadDocuments } = useDocuments();
@@ -66,7 +63,7 @@ export function UploadMenuDialog({
   const [webUrl, setWebUrl] = useState('');
   const [webTitle, setWebTitle] = useState('');
   const [importStep, setImportStep] = useState<
-    'idle' | 'fetching' | 'converting' | 'uploading' | 'error'
+    'idle' | 'fetching' | 'error'
   >('idle');
   const [importError, setImportError] = useState<string | null>(null);
 
@@ -94,13 +91,11 @@ export function UploadMenuDialog({
       const mimeType = ext === '.md' ? 'text/markdown' : 'text/plain';
       const file = new File([docContent], filename, { type: mimeType });
 
-      await uploadDocuments([file], { folderId });
-      toast.success(`"${filename}" created successfully!`);
-      
-      // Reset inputs & close
       setDocName('');
       setDocContent('');
       onClose();
+      await uploadDocuments([file], { folderId });
+      toast.success(`"${filename}" created successfully!`);
     } catch (err) {
       console.error('Failed to create document:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create document');
@@ -128,9 +123,6 @@ export function UploadMenuDialog({
       // Step 1: Connect and scrape content on the server
       const scrapeResult = await importUrl(cleanUrl);
       
-      setImportStep('converting');
-      setImportStep('uploading');
-
       // Create virtual file from markdown content
       const displayTitle = webTitle.trim() || scrapeResult.title || 'Imported Web Page';
       const safeTitle = displayTitle
@@ -142,14 +134,12 @@ export function UploadMenuDialog({
         type: 'text/markdown',
       });
 
-      await uploadDocuments([file], { folderId });
-
-      // Success
-      toast.success(`Successfully imported "${displayTitle}"!`);
       setWebUrl('');
       setWebTitle('');
       setImportStep('idle');
       onClose();
+      await uploadDocuments([file], { folderId });
+      toast.success(`Successfully imported "${displayTitle}"!`);
     } catch (err) {
       console.error('Failed to import URL:', err);
       const message =
@@ -162,7 +152,7 @@ export function UploadMenuDialog({
 
   const handleClose = () => {
     // Only allow closing if not actively processing
-    if (isCreatingDoc || importStep === 'fetching' || importStep === 'converting' || importStep === 'uploading') {
+    if (isCreatingDoc || importStep === 'fetching') {
       return;
     }
     onClose();
@@ -188,13 +178,7 @@ export function UploadMenuDialog({
           <DocumentUploader
             folderId={folderId}
             className="flex-1 flex flex-col justify-center border-2 border-dashed border-line rounded-lg bg-surface-sunken hover:bg-surface-solid transition-colors duration-base"
-            onUploadBatchChange={(state) => {
-              onUploadBatchChange?.(state);
-              // Automatically close modal when files successfully start uploading
-              if (state.isActive) {
-                onClose();
-              }
-            }}
+            onUploadStarted={onClose}
           />
         </div>
       )}
@@ -355,65 +339,11 @@ export function UploadMenuDialog({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-3">
-                      <RefreshIcon className="h-5 w-5 text-accent animate-spin" />
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Importing Article</p>
-                        <p className="text-xs text-soft">Please hold on, converting document...</p>
-                      </div>
-                    </div>
-
-                    {/* Visual Progress Steps */}
-                    <div className="grid grid-cols-3 gap-2 mt-2 pt-2 text-center text-[10px] font-medium">
-                      <div
-                        className={`flex flex-col items-center gap-1 ${
-                          importStep === 'fetching' ? 'text-accent' : 'text-soft'
-                        }`}
-                      >
-                        <span className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] ${
-                          importStep === 'fetching'
-                            ? 'bg-accent text-background'
-                            : importStep === 'converting' || importStep === 'uploading'
-                            ? 'bg-accent-wash text-accent'
-                            : 'bg-surface border border-line'
-                        }`}>
-                          {importStep === 'converting' || importStep === 'uploading' ? (
-                            <CheckIcon className="h-2.5 w-2.5" />
-                          ) : '1'}
-                        </span>
-                        Scraping Page
-                      </div>
-                      <div
-                        className={`flex flex-col items-center gap-1 ${
-                          importStep === 'converting' ? 'text-accent' : 'text-soft'
-                        }`}
-                      >
-                        <span className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] ${
-                          importStep === 'converting'
-                            ? 'bg-accent text-background'
-                            : importStep === 'uploading'
-                            ? 'bg-accent-wash text-accent'
-                            : 'bg-surface border border-line'
-                        }`}>
-                          {importStep === 'uploading' ? (
-                            <CheckIcon className="h-2.5 w-2.5" />
-                          ) : '2'}
-                        </span>
-                        Extracting Text
-                      </div>
-                      <div
-                        className={`flex flex-col items-center gap-1 ${
-                          importStep === 'uploading' ? 'text-accent' : 'text-soft'
-                        }`}
-                      >
-                        <span className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] ${
-                          importStep === 'uploading' ? 'bg-accent text-background animate-pulse' : 'bg-surface border border-line'
-                        }`}>
-                          3
-                        </span>
-                        Uploading
-                      </div>
+                  <div className="flex items-center gap-3">
+                    <RefreshIcon className="h-5 w-5 text-accent animate-spin" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Importing Article</p>
+                      <p className="text-xs text-soft">Fetching and extracting readable content…</p>
                     </div>
                   </div>
                 )}
