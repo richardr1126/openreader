@@ -552,6 +552,7 @@ Supported top-level keys:
 - `version` (required, must be `1`)
 - `runtimeConfig` (optional object, strict-validated against runtime schema)
 - `providers` (optional array of shared provider seed entries)
+- `accountEmail` (optional complete Resend account-email delivery seed)
 
 Example:
 
@@ -582,7 +583,14 @@ Example:
       "defaultModel": "kokoro",
       "enabled": true
     }
-  ]
+  ],
+  "accountEmail": {
+    "enabled": true,
+    "senderName": "OpenReader",
+    "senderEmail": "mail@example.com",
+    "replyTo": "support@example.com",
+    "apiKey": "REPLACE_WITH_RESEND_API_KEY"
+  }
 }
 ```
 
@@ -593,11 +601,19 @@ Provider fallback behavior:
 - If the JSON seed includes `providers` (including an empty array), the `API_BASE` / `API_KEY` / `API_MODEL_NAME` fallback is skipped.
 - If the JSON seed does not include a `providers` key, the legacy `API_BASE` / `API_KEY` bootstrap fallback can still create `default-openai` when provider rows are empty. `API_MODEL_NAME` sets that row's default model and defaults to `kokoro`; it does not trigger the fallback by itself. `API_BASE` alone is sufficient for an upstream that does not require authentication.
 
+Account email seed behavior:
+
+- `accountEmail` requires `enabled`, `senderName`, `senderEmail`, and `apiKey`; `replyTo` is optional and may be `null`.
+- The Resend API key is encrypted with `AUTH_SECRET` before it is stored. Keep the seed file or `RUNTIME_SEED_JSON` secret; do not commit the key.
+- The seed only creates the account-email record when it is missing. Later Email-panel changes are never overwritten.
+- The shipped `examples/openreader-seed.json` includes a disabled account-email block with a placeholder key. Replace the placeholder and sender address, then set `enabled` to `true` when configuring Resend.
+
 Precedence summary:
 
 - Runtime reads: admin DB runtime rows override built-in defaults.
 - Seed input (`RUNTIME_SEED_JSON*`) only populates missing runtime rows on first boot; it does not overwrite existing/admin-edited rows.
 - Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY`/`API_MODEL_NAME` fallback > no provider bootstrap.
+- Account email bootstrap: JSON `accountEmail` section > no account-email bootstrap.
 
 ## Platform-Supplied Signals
 

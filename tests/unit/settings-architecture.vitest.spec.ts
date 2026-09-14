@@ -7,7 +7,6 @@ const source = (relativePath: string) => readFileSync(resolve(root, relativePath
 
 const sectionFiles = [
   'AccountSettingsPanel.tsx',
-  'AdminSettingsPanel.tsx',
   'AppearanceSettingsPanel.tsx',
   'ProviderSettingsPanel.tsx',
 ];
@@ -28,6 +27,12 @@ describe('settings ownership', () => {
     expect(page).not.toContain('new EventSource');
     expect(page).toContain('Close settings');
     expect(page).toContain('SidebarNavItem');
+    expect(page).toContain('>General</SidebarNavGroup>');
+    expect(page).toContain('>Admin</SidebarNavGroup>');
+    expect(page).toContain('<AdminEmailPanel');
+    expect(page).not.toContain('AdminSettingsPanel');
+    expect(page).toContain('useSearchParams');
+    expect(page).toContain('router.replace(`/app/settings?section=${section}`');
     expect(page.split('\n').length).toBeLessThan(320);
   });
 

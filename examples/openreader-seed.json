@@ -209,5 +209,12 @@
       "defaultModel": "kokoro",
       "enabled": true
     }
-  ]
+  ],
+  "accountEmail": {
+    "enabled": false,
+    "senderName": "OpenReader",
+    "senderEmail": "mail@example.com",
+    "replyTo": null,
+    "apiKey": "REPLACE_WITH_RESEND_API_KEY"
+  }
 }

@@ -110,7 +110,7 @@ After the first successful deploy and admin login, open **Settings → Admin** a
 
 ## 3. Runtime JSON seed (optional)
 
-If you must pre-seed site features/providers at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Prefer the admin panel for ongoing management.
+If you must pre-seed site features, shared providers, or account email delivery at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Keep the seed secret when it contains a Resend API key. Prefer the admin panel for ongoing management.
 
 See [Environment Variables](../reference/environment-variables#runtime-json-seed) for schema and examples.
 

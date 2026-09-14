@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import { SettingsPage } from '@/components/settings/SettingsPage';
+import { SettingsPage, type SettingsSectionId } from '@/components/settings/SettingsPage';
 
 export const metadata: Metadata = {
   title: 'Settings',
 };
 
-const SETTINGS_SECTIONS = new Set(['api', 'theme', 'account', 'admin'] as const);
-
-type SettingsSection = 'api' | 'theme' | 'account' | 'admin';
+const SETTINGS_SECTIONS = new Set<SettingsSectionId>([
+  'api', 'theme', 'account', 'providers', 'instance', 'compute', 'email', 'maintenance',
+]);
 
 export default async function SettingsRoute({
   searchParams,
@@ -15,8 +15,8 @@ export default async function SettingsRoute({
   searchParams: Promise<{ section?: string | string[] }>;
 }) {
   const requestedSection = (await searchParams).section;
-  const section = typeof requestedSection === 'string' && SETTINGS_SECTIONS.has(requestedSection as SettingsSection)
-    ? requestedSection as SettingsSection
+  const section = typeof requestedSection === 'string' && SETTINGS_SECTIONS.has(requestedSection as SettingsSectionId)
+    ? requestedSection as SettingsSectionId
     : undefined;
   return <SettingsPage initialSection={section} />;
 }

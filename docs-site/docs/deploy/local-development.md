@@ -294,7 +294,7 @@ S3_SECRET_ACCESS_KEY=your-secret-key
 </Tabs>
 
 :::note Env vars vs. admin panel
-On first boot, `API_KEY` / `API_BASE` / `API_MODEL_NAME` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config + providers. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
+On first boot, `API_KEY` / `API_BASE` / `API_MODEL_NAME` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config, providers, and (when supplied) account email delivery. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
 :::
 
 :::note TTS credentials

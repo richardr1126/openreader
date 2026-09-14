@@ -144,7 +144,7 @@ Self-hosted Node.js deployments tick the scheduler in-process once per minute. V
 
 ## Migrating off env vars
 
-In v4, runtime site features are managed by admin settings and optional JSON seed. To minimize env surface area:
+In v4, runtime site features, shared providers, and account email delivery are managed by admin settings and optional JSON seed. To minimize env surface area:
 
 1. Deploy this version with your existing env values in place.
 2. Boot the app once. Open Settings → Admin and verify:
@@ -170,4 +170,4 @@ Because the encryption key for `admin_providers` is derived from `AUTH_SECRET`, 
 
 - [Auth](./auth) — required to use the admin panel.
 - [TTS Providers](./tts-providers) — shared-provider configuration and user-selectable behavior.
-- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed.
+- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed (including optional `accountEmail`).

@@ -38,6 +38,14 @@ export type AccountEmailSettingsPatch = {
   apiKey?: string | null;
 };
 
+export type AccountEmailSettingsSeed = {
+  enabled: boolean;
+  senderName: string;
+  senderEmail: string;
+  replyTo: string | null;
+  apiKey: string;
+};
+
 export class AccountEmailSettingsError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message);
@@ -102,6 +110,21 @@ function normalizeEmail(value: unknown, label: string, optional = false): string
   return normalized;
 }
 
+function normalizeSenderName(value: unknown): string {
+  const senderName = typeof value === 'string' ? value.trim() : '';
+  if (!senderName || senderName.length > 100) {
+    throw new AccountEmailSettingsError('Sender name must be between 1 and 100 characters');
+  }
+  return senderName;
+}
+
+function normalizeApiKey(value: unknown): string {
+  const apiKey = typeof value === 'string' ? value.trim() : '';
+  if (!apiKey) throw new AccountEmailSettingsError('Resend API key is required');
+  if (apiKey.length > 512) throw new AccountEmailSettingsError('Resend API key is too long');
+  return apiKey;
+}
+
 function validateReady(settings: StoredEmailSettings): void {
   if (!settings.apiKeyCiphertext || !settings.apiKeyIv) {
     throw new AccountEmailSettingsError('Save a Resend API key before enabling account emails');
@@ -141,6 +164,70 @@ export async function isAccountEmailEnabled(): Promise<boolean> {
   return true;
 }
 
+export function parseAccountEmailSettingsSeed(value: unknown): AccountEmailSettingsSeed {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AccountEmailSettingsError('Seed JSON accountEmail must be an object');
+  }
+  const record = value as Record<string, unknown>;
+  const allowed = new Set(['enabled', 'senderName', 'senderEmail', 'replyTo', 'apiKey']);
+  const unknown = Object.keys(record).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new AccountEmailSettingsError(`Seed JSON accountEmail contains unknown keys: ${unknown.join(', ')}`);
+  }
+  if (typeof record.enabled !== 'boolean') {
+    throw new AccountEmailSettingsError('Seed JSON accountEmail.enabled must be a boolean');
+  }
+  if (typeof record.senderEmail !== 'string') {
+    throw new AccountEmailSettingsError('Seed JSON accountEmail.senderEmail must be a string');
+  }
+  if (record.replyTo !== undefined && record.replyTo !== null && typeof record.replyTo !== 'string') {
+    throw new AccountEmailSettingsError('Seed JSON accountEmail.replyTo must be a string or null');
+  }
+  if (typeof record.senderName !== 'string') {
+    throw new AccountEmailSettingsError('Seed JSON accountEmail.senderName must be a string');
+  }
+  if (typeof record.apiKey !== 'string') {
+    throw new AccountEmailSettingsError('Seed JSON accountEmail.apiKey must be a string');
+  }
+  return {
+    enabled: record.enabled,
+    senderName: normalizeSenderName(record.senderName),
+    senderEmail: normalizeEmail(record.senderEmail, 'Seed JSON accountEmail.senderEmail')!,
+    replyTo: normalizeEmail(record.replyTo, 'Seed JSON accountEmail.replyTo', true),
+    apiKey: normalizeApiKey(record.apiKey),
+  };
+}
+
+/** First-boot seed. Existing email settings, including admin edits, always win. */
+export async function seedAccountEmailSettings(input: AccountEmailSettingsSeed): Promise<boolean> {
+  const existing = await db
+    .select({ key: adminSettings.key })
+    .from(adminSettings)
+    .where(eq(adminSettings.key, EMAIL_SETTINGS_KEY))
+    .limit(1);
+  if (existing.length > 0) return false;
+
+  const encrypted = encryptSecret(input.apiKey);
+  const next: StoredEmailSettings = {
+    schemaVersion: 1,
+    enabled: input.enabled,
+    senderName: input.senderName,
+    senderEmail: input.senderEmail,
+    replyTo: input.replyTo,
+    apiKeyCiphertext: encrypted.ciphertext,
+    apiKeyIv: encrypted.iv,
+    apiKeyLast4: input.apiKey.slice(-4),
+  };
+  if (next.enabled) validateReady(next);
+  await db.insert(adminSettings).values({
+    key: EMAIL_SETTINGS_KEY,
+    valueJson: serializeForStorage(next) as never,
+    source: 'json-seed',
+    updatedAt: Date.now(),
+  }).onConflictDoNothing();
+  return true;
+}
+
 export async function updateAccountEmailSettings(
   patch: AccountEmailSettingsPatch,
 ): Promise<PublicAccountEmailSettings> {
@@ -148,11 +235,7 @@ export async function updateAccountEmailSettings(
   const next: StoredEmailSettings = { ...current };
 
   if (patch.senderName !== undefined) {
-    const senderName = String(patch.senderName).trim();
-    if (!senderName || senderName.length > 100) {
-      throw new AccountEmailSettingsError('Sender name must be between 1 and 100 characters');
-    }
-    next.senderName = senderName;
+    next.senderName = normalizeSenderName(patch.senderName);
   }
   if (patch.senderEmail !== undefined) {
     next.senderEmail = normalizeEmail(patch.senderEmail, 'Sender email')!;
@@ -168,11 +251,11 @@ export async function updateAccountEmailSettings(
       next.apiKeyLast4 = null;
       next.enabled = false;
     } else {
-      if (apiKey.length > 512) throw new AccountEmailSettingsError('Resend API key is too long');
-      const encrypted = encryptSecret(apiKey);
+      const normalizedApiKey = normalizeApiKey(apiKey);
+      const encrypted = encryptSecret(normalizedApiKey);
       next.apiKeyCiphertext = encrypted.ciphertext;
       next.apiKeyIv = encrypted.iv;
-      next.apiKeyLast4 = apiKey.slice(-4);
+      next.apiKeyLast4 = normalizedApiKey.slice(-4);
     }
   }
   if (patch.enabled !== undefined) {

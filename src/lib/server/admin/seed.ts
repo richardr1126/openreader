@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/admin/settings';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { validateProviderType, validateSlug } from '@/lib/server/admin/providers';
+import { parseAccountEmailSettingsSeed, seedAccountEmailSettings, type AccountEmailSettingsSeed } from '@/lib/server/admin/email-settings';
 import type { TtsProviderId } from '@openreader/tts/provider-catalog';
 
 /**
@@ -19,6 +20,7 @@ import type { TtsProviderId } from '@openreader/tts/provider-catalog';
  *  1) Optional JSON seed from RUNTIME_SEED_JSON_PATH or RUNTIME_SEED_JSON
  *     - runtimeConfig: strict validation against RUNTIME_CONFIG_SCHEMA
  *     - providers: optional shared providers seed list
+ *     - accountEmail: optional Resend delivery configuration
  *  2) Legacy provider fallback: if providers were not supplied in JSON and
  *     no provider rows exist, seed default-openai from API_KEY/API_BASE and
  *     use API_MODEL_NAME for its default model when provided.
@@ -44,6 +46,7 @@ type ServerSeedDocument = {
   version: number;
   runtimeConfig?: Record<string, unknown>;
   providers?: SeedProviderInput[];
+  accountEmail?: AccountEmailSettingsSeed;
 };
 
 type ParsedSeedResult = {
@@ -84,6 +87,10 @@ async function runSeed(): Promise<void> {
     await seedAdminProvidersFromJson(parsedSeed.seed.providers);
   }
 
+  if (parsedSeed?.seed.accountEmail) {
+    await seedAccountEmailSettings(parsedSeed.seed.accountEmail);
+  }
+
   if (shouldUseEnvProviderFallback(parsedSeed?.hasProvidersSection ?? false)) {
     await seedDefaultAdminProviderFromEnvFallback();
   }
@@ -122,7 +129,7 @@ function parseRuntimeSeedDocument(raw: string): ParsedSeedResult {
   }
 
   const record = parsed as Record<string, unknown>;
-  const allowedTopLevel = new Set(['version', 'runtimeConfig', 'providers']);
+  const allowedTopLevel = new Set(['version', 'runtimeConfig', 'providers', 'accountEmail']);
   const unknownTopLevel = Object.keys(record).filter((key) => !allowedTopLevel.has(key));
   if (unknownTopLevel.length > 0) {
     throw new Error(`Seed JSON contains unknown top-level keys: ${unknownTopLevel.join(', ')}`);
@@ -148,11 +155,16 @@ function parseRuntimeSeedDocument(raw: string): ParsedSeedResult {
     providers = record.providers.map((entry, index) => validateSeedProviderEntry(entry, index));
   }
 
+  const accountEmail = record.accountEmail === undefined
+    ? undefined
+    : parseAccountEmailSettingsSeed(record.accountEmail);
+
   return {
     seed: {
       version: SEED_VERSION,
       ...(runtimeConfig ? { runtimeConfig } : {}),
       ...(providers ? { providers } : {}),
+      ...(accountEmail ? { accountEmail } : {}),
     },
     hasProvidersSection: Object.prototype.hasOwnProperty.call(record, 'providers'),
   };

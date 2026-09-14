@@ -6,6 +6,7 @@ import { db } from '@openreader/database';
 import { adminProviders, adminSettings } from '@openreader/database/schema';
 import { RUNTIME_KEYS, seedRuntimeConfigFromValues } from '../../src/lib/server/admin/settings';
 import { __seedInternals } from '../../src/lib/server/admin/seed';
+import { getAccountEmailSettings } from '../../src/lib/server/admin/email-settings';
 import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 
 type SettingRow = {
@@ -188,6 +189,29 @@ describe('runtime seed JSON parsing', () => {
       baseUrl: 'http://localhost:8880/v1',
     });
     expect(parsed.seed.providers?.[0]).not.toHaveProperty('apiKey');
+  });
+
+  test('accepts a complete account email seed and rejects unknown email fields', () => {
+    const parsed = __seedInternals.parseRuntimeSeedDocument(JSON.stringify({
+      version: 1,
+      accountEmail: {
+        enabled: true,
+        senderName: 'OpenReader',
+        senderEmail: 'mail@example.com',
+        replyTo: 'support@example.com',
+        apiKey: 'resend_seed_key_1234',
+      },
+    }));
+
+    expect(parsed.seed.accountEmail).toMatchObject({
+      enabled: true,
+      senderEmail: 'mail@example.com',
+      apiKey: 'resend_seed_key_1234',
+    });
+    expect(() => __seedInternals.parseRuntimeSeedDocument(JSON.stringify({
+      version: 1,
+      accountEmail: { enabled: false, unexpected: true },
+    }))).toThrow(/accountEmail.*unknown/i);
   });
 });
 
@@ -515,5 +539,81 @@ describe('provider seeding and fallback precedence', () => {
     }, async () => {
       await expect(__seedInternals.runSeed()).rejects.toThrow(/invalid/i);
     });
+  });
+});
+
+describe('account email seeding', () => {
+  const emailSettingsKey = 'accountEmailDelivery';
+
+  test('seeds an encrypted Resend key once without overwriting later settings', async () => {
+    const snapshot = await snapshotSettings([emailSettingsKey]);
+    const firstSeed = JSON.stringify({
+      version: 1,
+      accountEmail: {
+        enabled: true,
+        senderName: 'OpenReader Mail',
+        senderEmail: 'mail@example.com',
+        replyTo: 'support@example.com',
+        apiKey: 'resend_seed_key_1234',
+      },
+    });
+    const secondSeed = JSON.stringify({
+      version: 1,
+      accountEmail: {
+        enabled: false,
+        senderName: 'Replacement',
+        senderEmail: 'replacement@example.com',
+        replyTo: null,
+        apiKey: 'resend_replacement_key_5678',
+      },
+    });
+
+    try {
+      await db.delete(adminSettings).where(eq(adminSettings.key, emailSettingsKey));
+      await withEnv({
+        RUNTIME_SEED_JSON: firstSeed,
+        RUNTIME_SEED_JSON_PATH: undefined,
+        API_BASE: undefined,
+        API_KEY: undefined,
+        API_MODEL_NAME: undefined,
+        AUTH_SECRET: 'seed-test-auth-secret-email',
+      }, async () => {
+        await __seedInternals.runSeed();
+      });
+
+      const row = (await snapshotSettings([emailSettingsKey]))[0];
+      const stored = parseStoredValue(row.valueJson) as Record<string, unknown>;
+      expect(row.source).toBe('json-seed');
+      expect(stored.apiKeyCiphertext).not.toBe('resend_seed_key_1234');
+      expect(stored.apiKeyLast4).toBe('1234');
+      await withEnv({ AUTH_SECRET: 'seed-test-auth-secret-email' }, async () => {
+        await expect(getAccountEmailSettings()).resolves.toMatchObject({
+          enabled: true,
+          senderName: 'OpenReader Mail',
+          senderEmail: 'mail@example.com',
+          apiKey: 'resend_seed_key_1234',
+        });
+      });
+
+      await withEnv({
+        RUNTIME_SEED_JSON: secondSeed,
+        RUNTIME_SEED_JSON_PATH: undefined,
+        API_BASE: undefined,
+        API_KEY: undefined,
+        API_MODEL_NAME: undefined,
+        AUTH_SECRET: 'seed-test-auth-secret-email',
+      }, async () => {
+        await __seedInternals.runSeed();
+      });
+      await withEnv({ AUTH_SECRET: 'seed-test-auth-secret-email' }, async () => {
+        await expect(getAccountEmailSettings()).resolves.toMatchObject({
+          enabled: true,
+          senderEmail: 'mail@example.com',
+          apiKey: 'resend_seed_key_1234',
+        });
+      });
+    } finally {
+      await restoreSettings([emailSettingsKey], snapshot);
+    }
   });
 });
