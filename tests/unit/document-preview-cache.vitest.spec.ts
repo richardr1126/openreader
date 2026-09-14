@@ -44,4 +44,19 @@ describe('document preview cache', () => {
     await expect(primeDocumentPreviewCache('doc-2', 2, 'doc-2:2')).resolves.toBe('blob:preview-image');
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
   });
+
+  test('bounds versioned in-memory preview URLs', async () => {
+    const {
+      getInMemoryDocumentPreviewUrl,
+      setInMemoryDocumentPreviewUrl,
+    } = await import('@/lib/client/cache/previews');
+
+    for (let index = 0; index <= 100; index += 1) {
+      setInMemoryDocumentPreviewUrl(`doc-${index}:1`, `blob:preview-${index}`);
+    }
+
+    expect(getInMemoryDocumentPreviewUrl('doc-0:1')).toBeNull();
+    expect(getInMemoryDocumentPreviewUrl('doc-100:1')).toBe('blob:preview-100');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-0');
+  });
 });

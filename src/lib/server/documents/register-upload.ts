@@ -38,7 +38,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     });
   }
 
-  await db
+  const [storedDocument] = await db
     .insert(documents)
     .values({
       id: input.documentId,
@@ -58,9 +58,10 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
         size: input.size,
         lastModified: input.lastModified,
         filePath: input.documentId,
-        folderId: input.folderId ?? null,
+        ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
       },
-    });
+    })
+    .returning({ folderId: documents.folderId });
 
   const enqueuePreview = async () => {
     await enqueueDocumentPreview(
@@ -94,6 +95,6 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     size: input.size,
     lastModified: input.lastModified,
     scope: 'user',
-    folderId: input.folderId ?? undefined,
+    folderId: storedDocument?.folderId ?? undefined,
   };
 }

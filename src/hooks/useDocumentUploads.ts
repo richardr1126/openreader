@@ -5,6 +5,7 @@ import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type { BaseDocument } from '@/types/documents';
 import {
   uploadDocuments as uploadServerDocuments,
+  type DocumentUploadProgressEvent,
   type UploadOptions,
 } from '@/lib/client/api/documents';
 import { cacheStoredDocumentFromBytes } from '@/lib/client/cache/documents';
@@ -63,11 +64,25 @@ function errorMessage(error: unknown): string {
 }
 
 async function cacheUploadedFiles(files: File[], stored: BaseDocument[]): Promise<void> {
-  await Promise.allSettled(stored.map(async (document, index) => {
+  for (let index = 0; index < stored.length; index += 1) {
+    const document = stored[index];
     const file = files[index];
-    if (!file || document.type !== sourceType(file)) return;
-    await cacheStoredDocumentFromBytes(document, await file.arrayBuffer());
-  }));
+    if (!document || !file || document.type !== sourceType(file)) continue;
+    try {
+      await cacheStoredDocumentFromBytes(document, await file.arrayBuffer());
+    } catch {
+      // The server copy is authoritative; a browser cache failure is non-fatal.
+    }
+  }
+}
+
+function remapProgressEvent(
+  event: DocumentUploadProgressEvent,
+  sourceIndexes: number[],
+): DocumentUploadProgressEvent | null {
+  if (!('sourceIndex' in event)) return event;
+  const sourceIndex = sourceIndexes[event.sourceIndex];
+  return sourceIndex === undefined ? null : { ...event, sourceIndex };
 }
 
 export type DocumentUploadsController = {
@@ -88,28 +103,39 @@ export function useDocumentUploads(documentsQueryKey: QueryKey): DocumentUploads
   const runBatch = useCallback(async (
     batch: DocumentUploadBatch,
     runtime: UploadRuntime,
+    sourceIndexes = runtime.files.map((_, index) => index),
   ): Promise<BaseDocument[]> => {
     const controller = new AbortController();
     const forwardAbort = () => controller.abort(runtime.options?.signal?.reason);
     runtime.options?.signal?.addEventListener('abort', forwardAbort, { once: true });
     if (runtime.options?.signal?.aborted) forwardAbort();
     controllersRef.current.set(batch.id, controller);
+    const files = sourceIndexes.flatMap((index) => {
+      const file = runtime.files[index];
+      return file ? [file] : [];
+    });
+    if (files.length !== sourceIndexes.length) {
+      throw new Error('The upload retry no longer matches its original files');
+    }
 
     try {
-      const stored = await uploadServerDocuments(runtime.files, {
+      const stored = await uploadServerDocuments(files, {
         folderId: runtime.options?.folderId,
         signal: controller.signal,
-        onProgress: (event) => dispatch({ type: 'progress', batchId: batch.id, event }),
+        onProgress: (event) => {
+          const mappedEvent = remapProgressEvent(event, sourceIndexes);
+          if (mappedEvent) dispatch({ type: 'progress', batchId: batch.id, event: mappedEvent });
+        },
       });
       queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (previous) =>
         mergeStoredDocuments(previous, stored),
       );
-      await cacheUploadedFiles(runtime.files, stored);
+      await cacheUploadedFiles(files, stored);
       dispatch({ type: 'progress', batchId: batch.id, event: { phase: 'complete' } });
+      runtimesRef.current.delete(batch.id);
 
       const timer = setTimeout(() => {
         dispatch({ type: 'remove', batchId: batch.id });
-        runtimesRef.current.delete(batch.id);
         completionTimersRef.current.delete(batch.id);
       }, COMPLETION_VISIBILITY_MS);
       completionTimersRef.current.set(batch.id, timer);
@@ -154,8 +180,9 @@ export function useDocumentUploads(documentsQueryKey: QueryKey): DocumentUploads
     for (const batch of failedBatches) {
       const runtime = runtimesRef.current.get(batch.id);
       if (!runtime) continue;
-      dispatch({ type: 'retry', batchId: batch.id, startedAt: Date.now() });
-      void runBatch(batch, runtime).catch(() => {
+      const sourceIndexes = batch.tasks.flatMap((task, index) => task.phase === 'failed' ? [index] : []);
+      dispatch({ type: 'retry', batchId: batch.id, sourceIndexes, startedAt: Date.now() });
+      void runBatch(batch, runtime, sourceIndexes).catch(() => {
         // runBatch keeps the retryable failure in the shared upload state.
       });
     }

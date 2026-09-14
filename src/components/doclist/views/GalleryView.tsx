@@ -151,6 +151,7 @@ export function GalleryView({
     () => documents.map((document) => documentIdentityKey(document)),
     [documents],
   );
+  const documentOrderSignature = useMemo(() => JSON.stringify(documentKeys), [documentKeys]);
   const activeIdx = Math.max(0, activeDocumentKey ? documentKeys.indexOf(activeDocumentKey) : 0);
   const activeDoc = documents[activeIdx];
   const openHref = activeDoc ? `/${activeDoc.type}/${encodeURIComponent(activeDoc.id)}` : null;
@@ -168,7 +169,7 @@ export function GalleryView({
     const rail = railRef.current;
     if (!rail) return;
     rail.scrollLeft = 0;
-  }, [documentKeys]);
+  }, [documentOrderSignature]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -48,7 +48,7 @@ export type DocumentUploadAction =
   | { type: 'add'; batch: DocumentUploadBatch }
   | { type: 'progress'; batchId: string; event: DocumentUploadProgressEvent }
   | { type: 'failed'; batchId: string; error: string }
-  | { type: 'retry'; batchId: string; startedAt: number }
+  | { type: 'retry'; batchId: string; sourceIndexes: number[]; startedAt: number }
   | { type: 'remove'; batchId: string }
   | { type: 'remove-terminal' };
 
@@ -136,16 +136,19 @@ export function documentUploadReducer(
         return { ...batch, tasks: updateTasksForProgress(batch.tasks, action.event) };
       }
       if (action.type === 'retry') {
+        const retryIndexes = new Set(action.sourceIndexes);
         return {
           ...batch,
           startedAt: action.startedAt,
-          tasks: batch.tasks.map((task) => ({
-            ...task,
-            phase: 'queued',
-            transferredBytes: 0,
-            workerPhase: null,
-            error: null,
-          })),
+          tasks: batch.tasks.map((task, index) => retryIndexes.has(index)
+            ? {
+                ...task,
+                phase: 'queued',
+                transferredBytes: 0,
+                workerPhase: null,
+                error: null,
+              }
+            : task),
         };
       }
       return {

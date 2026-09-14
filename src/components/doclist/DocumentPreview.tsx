@@ -1,6 +1,6 @@
 import { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getDocumentContentSnippet,
@@ -26,6 +26,10 @@ interface DocumentPreviewProps {
 type CachedPreview = {
   imagePreview: string | null;
   textPreview: string | null;
+};
+
+type PreviewState = CachedPreview & {
+  key: string;
 };
 
 const MAX_TEXT_PREVIEW_CACHE = 100;
@@ -73,25 +77,54 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
-  const previewKey = useMemo(() => `${doc.type}:${doc.id}`, [doc.id, doc.type]);
+  const previewKey = useMemo(
+    () => `${doc.type}:${doc.id}:${Number(doc.lastModified)}`,
+    [doc.id, doc.lastModified, doc.type],
+  );
   const previewQueryKey = useMemo(
     () => queryKeys.documentPreview(doc.id, doc.type, Number(doc.lastModified)),
     [doc.id, doc.lastModified, doc.type],
   );
   const cachedPreview = queryClient.getQueryData<CachedPreview>(previewQueryKey);
-  const [imagePreview, setImagePreview] = useState<string | null>(
-    () => cachedPreview?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
-  );
+  const [previewState, setPreviewState] = useState<PreviewState>(() => ({
+    key: previewKey,
+    imagePreview: cachedPreview?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
+    textPreview: cachedPreview?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
+  }));
+  const imagePreview = previewState.key === previewKey ? previewState.imagePreview : null;
+  const textPreview = previewState.key === previewKey ? previewState.textPreview : null;
+  const setImagePreview = useCallback((value: string | null) => {
+    setPreviewState((previous) => previous.key === previewKey
+      ? { ...previous, imagePreview: value }
+      : previous);
+  }, [previewKey]);
+  const setTextPreview = useCallback((value: string | null) => {
+    setPreviewState((previous) => previous.key === previewKey
+      ? { ...previous, textPreview: value }
+      : previous);
+  }, [previewKey]);
   const [isImageReady, setIsImageReady] = useState(false);
-  const [textPreview, setTextPreview] = useState<string | null>(
-    () => cachedPreview?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
-  );
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
-    if (!imagePreview && !textPreview) return;
-    queryClient.setQueryData<CachedPreview>(previewQueryKey, { imagePreview, textPreview });
-  }, [imagePreview, previewQueryKey, queryClient, textPreview]);
+    const cached = queryClient.getQueryData<CachedPreview>(previewQueryKey);
+    setPreviewState({
+      key: previewKey,
+      imagePreview: cached?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
+      textPreview: cached?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
+    });
+    setIsImageReady(false);
+    setIsGenerating(false);
+  }, [previewKey, previewQueryKey, queryClient]);
+
+  useEffect(() => {
+    if (previewState.key !== previewKey) return;
+    if (!previewState.imagePreview && !previewState.textPreview) return;
+    queryClient.setQueryData<CachedPreview>(previewQueryKey, {
+      imagePreview: previewState.imagePreview,
+      textPreview: previewState.textPreview,
+    });
+  }, [previewKey, previewQueryKey, previewState, queryClient]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -245,7 +278,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       closePreviewEvents?.();
       controller.abort();
     };
-  }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey]);
+  }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey, setImagePreview, setTextPreview]);
 
   useEffect(() => {
     setIsImageReady(false);

@@ -69,7 +69,12 @@ describe('document upload lifecycle state', () => {
   });
 
   test('retains failed batches for retry and removes terminal status on dismiss', () => {
-    const failed = documentUploadReducer(initialState, {
+    const partiallyComplete = documentUploadReducer(initialState, {
+      type: 'progress',
+      batchId: 'batch-1',
+      event: { phase: 'source-complete', sourceIndex: 0 },
+    });
+    const failed = documentUploadReducer(partiallyComplete, {
       type: 'failed',
       batchId: 'batch-1',
       error: 'Storage unavailable',
@@ -86,9 +91,13 @@ describe('document upload lifecycle state', () => {
     const retried = documentUploadReducer(failed, {
       type: 'retry',
       batchId: 'batch-1',
+      sourceIndexes: [1],
       startedAt: 2,
     });
-    expect(retried.batches[0]?.tasks.every((task) => task.phase === 'queued')).toBe(true);
+    expect(retried.batches[0]?.tasks).toEqual([
+      expect.objectContaining({ phase: 'complete', transferredBytes: 100 }),
+      expect.objectContaining({ phase: 'queued', transferredBytes: 0, error: null }),
+    ]);
     expect(documentUploadReducer(failed, { type: 'remove-terminal' })).toEqual({ batches: [] });
   });
 });

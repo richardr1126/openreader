@@ -31,6 +31,10 @@ interface UploadMenuDialogProps {
 
 type TabValue = 'file' | 'create' | 'url' | 'library';
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 type SidebarSection = {
   id: TabValue;
   label: string;
@@ -97,6 +101,7 @@ export function UploadMenuDialog({
       await uploadDocuments([file], { folderId });
       toast.success(`"${filename}" created successfully!`);
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error('Failed to create document:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create document');
     } finally {
@@ -141,6 +146,7 @@ export function UploadMenuDialog({
       await uploadDocuments([file], { folderId });
       toast.success(`Successfully imported "${displayTitle}"!`);
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error('Failed to import URL:', err);
       const message =
         err instanceof Error ? err.message : 'An error occurred during import';

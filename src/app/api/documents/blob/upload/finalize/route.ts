@@ -45,7 +45,7 @@ type FinalizeUpload = {
   name: string;
   type: DocumentType;
   lastModified: number;
-  folderId: string | null;
+  folderId: string | null | undefined;
 };
 
 class UploadFolderError extends Error {
@@ -104,11 +104,18 @@ function parseFinalizePayload(body: unknown): FinalizeUpload[] {
   const request = body as { uploads?: unknown; folderId?: unknown };
   const rawUploads = request.uploads;
   if (!Array.isArray(rawUploads)) return [];
-  if (request.folderId !== undefined && request.folderId !== null && typeof request.folderId !== 'string') {
+  const hasFolderId = Object.prototype.hasOwnProperty.call(request, 'folderId');
+  let folderId: string | null | undefined;
+  if (!hasFolderId) {
+    folderId = undefined;
+  } else if (request.folderId === null) {
+    folderId = null;
+  } else if (typeof request.folderId === 'string') {
+    folderId = request.folderId.trim();
+    if (!folderId) throw new UploadFolderError('folderId must not be empty', 400);
+  } else {
     throw new UploadFolderError('folderId must be a string or null', 400);
   }
-  const folderId = typeof request.folderId === 'string' ? request.folderId.trim() : null;
-  if (folderId !== null && !folderId) throw new UploadFolderError('folderId must not be empty', 400);
 
   const uploads: FinalizeUpload[] = [];
   for (const rawUpload of rawUploads) {

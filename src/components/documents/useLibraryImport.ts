@@ -51,7 +51,7 @@ export function useLibraryImport(folderId?: string) {
       setShowProgress(true);
       setProgress(0);
       setIsImporting(true);
-      const files: File[] = [];
+      let importedCount = 0;
 
       for (let index = 0; index < selectedFiles.length; index += 1) {
         if (controller.signal.aborted) break;
@@ -73,15 +73,14 @@ export function useLibraryImport(folderId?: string) {
           type: mimeTypeForDoc(document),
           lastModified: document.lastModified,
         });
-        files.push(file);
+        await uploadDocuments([file], { signal: controller.signal, folderId });
+        importedCount += 1;
         setProgress(((index + 1) / Math.max(1, selectedFiles.length)) * 100);
       }
 
       if (!controller.signal.aborted) {
-        if (files.length === 0) throw new Error('No server-library documents could be copied');
-        setShowProgress(false);
-        setStatusMessage('');
-        await uploadDocuments(files, { signal: controller.signal, folderId });
+        if (importedCount === 0) throw new Error('No server-library documents could be copied');
+        setStatusMessage('Import complete');
       }
     } catch (error) {
       if (controller.signal.aborted) {
