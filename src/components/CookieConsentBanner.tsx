@@ -46,10 +46,11 @@ export function CookieConsentBanner() {
       <div className="mx-auto max-w-5xl rounded-lg border border-line bg-surface p-5 shadow-elev-3 md:flex md:items-center md:justify-between md:gap-8">
         <div className="mb-4 md:mb-0">
           <h3 className="mb-2 text-lg font-bold">
-            🍪 We use cookies
+            🍪 Cookies and analytics
           </h3>
           <p className="text-sm leading-relaxed text-soft">
-            We use strictly necessary cookies for authentication. Optional analytics is enabled only when you consent.
+            We use necessary cookies for sessions and anonymous abuse prevention. Optional Vercel Web Analytics is
+            cookieless and loads only when you consent; your choice is saved in local storage.{' '}
             See our <Link href="/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link> for details.
           </p>
         </div>
@@ -69,7 +70,7 @@ export function CookieConsentBanner() {
             size="md"
             className="whitespace-nowrap font-bold shadow-elev-1"
           >
-            Accept All
+            Accept Analytics
           </Button>
         </div>
       </div>

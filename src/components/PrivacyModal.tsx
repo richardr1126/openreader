@@ -22,8 +22,9 @@ function PrivacyModalBody({ origin }: { origin: string }) {
       </div>
 
       <p className="leading-relaxed">
-        We value your privacy. This application uses strictly necessary cookies for authentication
-        and optional analytics only when consent allows it. Your documents are stored encrypted at rest.
+        This application uses necessary cookies for sessions and anonymous abuse prevention. Optional Vercel Web
+        Analytics is cookieless and loads only when you consent; your choice is saved in local storage. Your documents
+        and generated artifacts are stored with server-side encryption.
       </p>
 
       <p className="leading-relaxed">
