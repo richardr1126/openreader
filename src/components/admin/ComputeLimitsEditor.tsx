@@ -13,6 +13,7 @@ import {
 } from '@openreader/runtime-config/compute-limits';
 import { ChevronRightIcon } from '@/components/icons/Icons';
 import { Button, Input, Select, ToggleRow } from '@/components/ui';
+import { formatScope, usageLabel } from './compute-limit-labels';
 
 const ACTION_DETAILS: Record<ComputeAction, { label: string; description: string }> = {
   pdf_layout: {
@@ -63,16 +64,6 @@ const PRIORITIES: ComputePriority[] = ['interactive', 'foreground', 'background'
 function positiveInteger(raw: string, minimum = 1): number {
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? Math.max(minimum, Math.floor(parsed)) : minimum;
-}
-
-function formatScope(scope: string): string {
-  if (scope === 'anonymous_device') return 'anonymous device';
-  return scope;
-}
-
-function usageLabel(scope: string, audience: string): string {
-  if (scope === 'user') return `${audience} user`;
-  return `${audience} ${formatScope(scope)}`;
 }
 
 function LimitNumber({
