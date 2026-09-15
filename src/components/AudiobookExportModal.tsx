@@ -166,7 +166,11 @@ export function AudiobookExportModal({
     };
   }, [stopTracking]);
 
-  const attachArtifact = useCallback((artifactOpId: string, controller: AbortController, fallbackTotal?: number | null) => {
+  const attachArtifact = useCallback(function subscribeToArtifact(
+    artifactOpId: string,
+    controller: AbortController,
+    fallbackTotal?: number | null,
+  ) {
     cleanupSubscription();
     setStatus('generating');
     unsubscribeRef.current = subscribeTtsExportArtifactEvents({
@@ -201,10 +205,18 @@ export function AudiobookExportModal({
               speed: localAudioPlayerSpeed,
             }, controller.signal);
             if (controller.signal.aborted) return;
-            if (!refreshed.downloadUrl) {
-              throw new Error('Audiobook export finished without a download URL.');
+            if (refreshed.downloadUrl) {
+              markReady(refreshed.downloadUrl, refreshed.plannedCount || total, refreshed.skippedCount);
+              return;
             }
-            markReady(refreshed.downloadUrl, refreshed.plannedCount || total, refreshed.skippedCount);
+            if (
+              refreshed.artifactOperationId
+              && (refreshed.artifactStatus === 'queued' || refreshed.artifactStatus === 'running')
+            ) {
+              subscribeToArtifact(refreshed.artifactOperationId, controller, refreshed.plannedCount || total);
+              return;
+            }
+            throw new Error('Audiobook export finished without a download URL.');
           } catch (error) {
             if (controller.signal.aborted) return;
             abortControllerRef.current = null;
@@ -235,12 +247,15 @@ export function AudiobookExportModal({
       markReady(refreshed.downloadUrl, total, refreshed.skippedCount);
       return;
     }
-    if (refreshed.artifactStatus === 'succeeded') {
-      throw new Error('Audiobook export finished without a download URL.');
-    }
-    if (refreshed.artifactOperationId) {
+    if (
+      refreshed.artifactOperationId
+      && (refreshed.artifactStatus === 'queued' || refreshed.artifactStatus === 'running')
+    ) {
       attachArtifact(refreshed.artifactOperationId, controller, total);
       return;
+    }
+    if (refreshed.artifactStatus === 'succeeded') {
+      throw new Error('Audiobook export finished without a download URL.');
     }
     throw new Error('Audiobook export did not return an active operation.');
   }, [

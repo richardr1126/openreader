@@ -351,11 +351,15 @@ describe('server-state architecture', () => {
     expect(workerRoutes).not.toContain('verifyAccountExportDownloadToken');
     expect(workerHandlers).toContain('buildAccountExportArchive');
     const workerArchive = source('packages/compute-worker/src/jobs/account-export-archive.ts');
+    const accountExportManifest = source('src/lib/server/user/data-export.ts');
     expect(workerArchive).toContain('ACCOUNT_EXPORT_SCHEMA_VERSION = 5');
     expect(workerArchive).toContain('compute_limit_admissions.json');
     expect(workerArchive).toContain('compute_limit_events.json');
-    expect(workerArchive).not.toContain('tts_usage.json');
-    expect(workerArchive).not.toContain('job_events.json');
+    expect(workerArchive).toContain('manifest.schemaVersion === 4');
+    expect(workerArchive).toContain('tts_usage.json');
+    expect(workerArchive).toContain('job_events.json');
+    expect(accountExportManifest).not.toContain('ttsUsage');
+    expect(accountExportManifest).not.toContain('jobEvents');
     expect(computeClient).toContain('createAccountExportOperation');
   });
 

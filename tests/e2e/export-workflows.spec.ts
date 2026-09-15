@@ -34,9 +34,16 @@ test('downloads account data and an already-completed audiobook export', async (
   });
 
   const startIntents: boolean[] = [];
+  const artifactSubscriptions: string[] = [];
+  let exportResolveCount = 0;
   await page.route('**/api/tts/export/resolve', async (route) => {
     const body = route.request().postDataJSON() as { start?: boolean };
     startIntents.push(body.start === true);
+    exportResolveCount += 1;
+    const activeArtifactOperationId = exportResolveCount === 1
+      ? 'initial-artifact-operation'
+      : 'replacement-artifact-operation';
+    const artifactReady = exportResolveCount >= 3;
     await route.fulfill({
       json: {
         sessionId: 'completed-session',
@@ -51,7 +58,7 @@ test('downloads account data and an already-completed audiobook export', async (
           progress: { completedCount: 34, skippedCount: 1, plannedCount: 35 },
         },
         artifact: {
-          artifact: {
+          artifact: artifactReady ? {
             artifactId: 'completed-artifact',
             objectKey: 'exports/completed.mp3',
             contentType: 'audio/mpeg',
@@ -62,11 +69,31 @@ test('downloads account data and an already-completed audiobook export', async (
             generatedSegments: 34,
             skippedSegments: 1,
             plannedSegments: 35,
+          } : null,
+          operation: artifactReady ? null : {
+            opId: activeArtifactOperationId,
+            status: 'running',
+            progress: { completedSegments: 35, skippedSegments: 1, plannedSegments: 35 },
           },
-          operation: null,
         },
-        downloadUrl: '/api/tts/export/download?artifactId=completed-artifact&documentId=test-document',
+        downloadUrl: artifactReady
+          ? '/api/tts/export/download?artifactId=completed-artifact&documentId=test-document'
+          : null,
       },
+    });
+  });
+  await page.route('**/api/tts/export/events?**', async (route) => {
+    const operationId = new URL(route.request().url()).searchParams.get('opId') ?? '';
+    artifactSubscriptions.push(operationId);
+    await route.fulfill({
+      body: `event: snapshot\ndata: ${JSON.stringify({
+        snapshot: {
+          opId: operationId,
+          status: 'succeeded',
+          progress: { completedSegments: 35, skippedSegments: 1, plannedSegments: 35 },
+        },
+      })}\n\n`,
+      contentType: 'text/event-stream',
     });
   });
   await page.route('**/api/tts/export/download?**', async (route) => {
@@ -83,7 +110,11 @@ test('downloads account data and an already-completed audiobook export', async (
   await expect(exportSidebar.getByText(/1 segment was unable to be narrated/)).toBeVisible();
   const downloadButton = exportSidebar.getByRole('button', { name: 'Download', exact: true });
   await expect(downloadButton).toBeEnabled();
-  expect(startIntents).toEqual([false]);
+  expect(startIntents).toEqual([false, true, true]);
+  expect(artifactSubscriptions).toEqual([
+    'initial-artifact-operation',
+    'replacement-artifact-operation',
+  ]);
 
   const audiobookDownloadPromise = page.waitForEvent('download');
   await downloadButton.click();
