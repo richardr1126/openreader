@@ -129,7 +129,9 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     }
   }, [activeBlockingModal, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
 
-  runOnceFlowRef.current = runOnceFlow;
+  useEffect(() => {
+    runOnceFlowRef.current = runOnceFlow;
+  }, [runOnceFlow]);
 
   const handleClaimComplete = useCallback(() => {
     if (userId) {
