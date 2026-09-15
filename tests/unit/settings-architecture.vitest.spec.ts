@@ -47,6 +47,7 @@ describe('settings ownership', () => {
     expect(onboarding).toContain('<ChangelogModal');
     expect(onboarding).toContain('openChangelog');
     expect(onboarding).toContain('handleBlockingModalAfterLeave');
+    expect(onboarding).toContain('currentUserIdRef.current !== userId');
     expect(onboarding).not.toContain('openreader:privacyAccepted');
   });
 

@@ -347,6 +347,8 @@ describe('server-state architecture', () => {
     expect(accountExportEventsRoute).toContain("operation.subject.kind !== 'account_export'");
     expect(accountExportEventsRoute).toContain('proxyOperationEvents');
     expect(accountExport).toContain("new EventSource(`/api/user/export/events?opId=");
+    expect(accountExport).toContain("source.addEventListener('error'");
+    expect(accountExport).toContain('resolveExistingExport(snapshot)');
     expect(accountExport).not.toContain("window.open('/api/user/export'");
     expect(workerRoutes).toContain("/v1/account-exports/jobs");
     expect(workerRoutes).toContain("/v1/account-exports/resolve");

@@ -77,6 +77,63 @@ export function useAccountExport() {
 
       const source = new EventSource(`/api/user/export/events?opId=${encodeURIComponent(snapshot.operationId)}`);
       sourceRef.current = source;
+      let recoveryInFlight = false;
+
+      const failExport = (error: unknown) => {
+        closeSource();
+        setIsExporting(false);
+        toast.error(
+          error instanceof Error ? error.message : 'Failed to monitor account export',
+          { id: toastId },
+        );
+      };
+
+      const recoverFromStreamError = async () => {
+        if (recoveryInFlight || sourceRef.current !== source) return;
+        recoveryInFlight = true;
+        let lastError: unknown = new Error('Lost connection while preparing account export');
+
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+          if (sourceRef.current !== source) return;
+
+          try {
+            const refreshed = await resolveExistingExport(snapshot);
+            if (sourceRef.current !== source) return;
+            if (refreshed.status === 'failed') {
+              failExport(new Error('Account export failed.'));
+              return;
+            }
+            if (
+              refreshed.downloadUrl
+              || refreshed.status === 'ready'
+              || refreshed.status === 'succeeded'
+            ) {
+              closeSource();
+              try {
+                await downloadWhenReady(refreshed);
+                toast.success('Account export ready.', { id: toastId });
+                setIsExporting(false);
+              } catch (error) {
+                failExport(error);
+              }
+              return;
+            }
+
+            // The operation is still healthy. Let EventSource resume its normal
+            // reconnect loop and reconcile again only if transport errors continue.
+            recoveryInFlight = false;
+            return;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        if (sourceRef.current === source) {
+          failExport(lastError);
+        }
+      };
+
       source.addEventListener('snapshot', (event) => {
         if (!(event instanceof MessageEvent)) return;
         try {
@@ -116,14 +173,17 @@ export function useAccountExport() {
           // Ignore malformed frames and keep the event stream alive.
         }
       });
+      source.addEventListener('error', () => {
+        void recoverFromStreamError();
+      });
       // EventSource reconnects with Last-Event-ID. The operation snapshot is
-      // the source of truth, so transport errors remain non-terminal here.
+      // the source of truth, so transient transport errors remain non-terminal.
     } catch (error) {
       console.error('Failed to export account data:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to export account data', { id: toastId });
       setIsExporting(false);
     }
-  }, [closeSource, downloadWhenReady, isExporting]);
+  }, [closeSource, downloadWhenReady, isExporting, resolveExistingExport]);
 
   return { isExporting, startExport };
 }

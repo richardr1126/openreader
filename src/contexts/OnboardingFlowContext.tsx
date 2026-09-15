@@ -39,6 +39,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
   const changelogVersionCheckKeyRef = useRef<string | null>(null);
   const changelogVersionCheckInFlightRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef(userId);
 
   const runOnceFlowRef = useRef<() => Promise<void>>(async () => {});
 
@@ -77,7 +78,8 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     if (isClaimEligible) {
       const claimResult = await refetchClaimCounts();
       if (
-        leavingBlockingModalRef.current !== null
+        currentUserIdRef.current !== userId
+        || leavingBlockingModalRef.current !== null
         || (userId !== null && claimDismissedUsersRef.current.has(userId))
       ) {
         return;
@@ -134,6 +136,10 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       setIsChangelogOpen(true);
     }
   }, [activeBlockingModal, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
+
+  useEffect(() => {
+    currentUserIdRef.current = userId;
+  }, [userId]);
 
   useEffect(() => {
     runOnceFlowRef.current = runOnceFlow;
