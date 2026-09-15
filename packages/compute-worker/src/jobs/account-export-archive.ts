@@ -1,7 +1,7 @@
 import archiver from 'archiver';
 import { PassThrough } from 'node:stream';
 
-export const ACCOUNT_EXPORT_SCHEMA_VERSION = 4;
+export const ACCOUNT_EXPORT_SCHEMA_VERSION = 5;
 
 export type AccountExportManifestDocumentFile = {
   documentId: string;
@@ -23,8 +23,8 @@ export type AccountExportManifest = {
     folders: unknown[];
     onboarding: unknown | null;
     readingHistory: unknown[];
-    ttsUsage: unknown[];
-    jobEvents: unknown[];
+    computeLimitAdmissions: unknown[];
+    computeLimitEvents: unknown[];
     documentSettings: unknown[];
     authSessions: unknown[];
     linkedAccounts: unknown[];
@@ -105,8 +105,8 @@ export async function buildAccountExportArchive(input: BuildAccountExportArchive
   appendJson(archive, 'folders.json', manifest.entries.folders);
   if (manifest.entries.onboarding) appendJson(archive, 'onboarding.json', manifest.entries.onboarding);
   appendJson(archive, 'reading_history.json', manifest.entries.readingHistory);
-  appendJson(archive, 'tts_usage.json', manifest.entries.ttsUsage);
-  appendJson(archive, 'job_events.json', manifest.entries.jobEvents);
+  appendJson(archive, 'compute_limit_admissions.json', manifest.entries.computeLimitAdmissions);
+  appendJson(archive, 'compute_limit_events.json', manifest.entries.computeLimitEvents);
   appendJson(archive, 'document_settings.json', manifest.entries.documentSettings);
   appendJson(archive, 'auth_sessions.json', manifest.entries.authSessions);
   appendJson(archive, 'linked_accounts.json', manifest.entries.linkedAccounts);
@@ -144,7 +144,8 @@ export async function buildAccountExportArchive(input: BuildAccountExportArchive
       documentSettingsMetadata: manifest.entries.documentSettings.length,
       authSessionsMetadata: manifest.entries.authSessions.length,
       linkedAccountsMetadata: manifest.entries.linkedAccounts.length,
-      jobEventsMetadata: manifest.entries.jobEvents.length,
+      computeLimitAdmissionsMetadata: manifest.entries.computeLimitAdmissions.length,
+      computeLimitEventsMetadata: manifest.entries.computeLimitEvents.length,
       documentFiles: completedFiles,
       issues: issues.length,
     },

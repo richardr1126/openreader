@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { parseApiError } from '@/lib/client/api/http';
 
 type AccountExportSnapshot = {
   artifactId: string;
@@ -36,8 +37,7 @@ export function useAccountExport() {
       body: JSON.stringify(snapshot),
     });
     if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(detail || `Account export resolve failed with status ${response.status}`);
+      throw await parseApiError(response, 'Failed to resolve account export');
     }
     return await response.json() as AccountExportSnapshot;
   }, []);
@@ -60,8 +60,7 @@ export function useAccountExport() {
     try {
       const response = await fetch('/api/user/export', { method: 'POST' });
       if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw new Error(detail || `Account export failed with status ${response.status}`);
+        throw await parseApiError(response, 'Failed to export account data');
       }
 
       const snapshot = await response.json() as AccountExportSnapshot;
@@ -116,11 +115,8 @@ export function useAccountExport() {
           // Ignore malformed frames and keep the event stream alive.
         }
       });
-      source.addEventListener('error', () => {
-        closeSource();
-        setIsExporting(false);
-        toast.error('Account export progress disconnected.', { id: toastId });
-      });
+      // EventSource reconnects with Last-Event-ID. The operation snapshot is
+      // the source of truth, so transport errors remain non-terminal here.
     } catch (error) {
       console.error('Failed to export account data:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to export account data', { id: toastId });

@@ -31,6 +31,18 @@ export const dynamic = 'force-dynamic';
 
 type ExportFormat = 'mp3' | 'm4b';
 
+function resolveGenerationStatus(generation: {
+  session: unknown;
+  operation: { status?: string } | null;
+}): string | null {
+  const sessionStatus = generation.session && typeof generation.session === 'object'
+    ? (generation.session as { status?: unknown }).status
+    : null;
+  return typeof sessionStatus === 'string'
+    ? sessionStatus
+    : generation.operation?.status ?? null;
+}
+
 function normalizeSpeed(value: unknown): number {
   const speed = Number(value);
   if (!Number.isFinite(speed)) return 1;
@@ -111,7 +123,7 @@ export async function POST(request: NextRequest) {
       purpose: 'export-document',
     });
 
-    const generationStatus = generation.operation?.status ?? (generation.session as { status?: string } | null)?.status ?? null;
+    let generationStatus = resolveGenerationStatus(generation);
     const shouldCreateGeneration = start
       && (!generation.session || generationStatus === 'failed');
     if (shouldCreateGeneration) {
@@ -148,6 +160,7 @@ export async function POST(request: NextRequest) {
         planObjectKey,
         purpose: 'export-document',
       });
+      generationStatus = resolveGenerationStatus(generation);
     }
 
     let artifact = await client.resolveTtsPlaybackExportArtifact({

@@ -18,6 +18,7 @@ export type TtsDocumentAudioExportResolution = {
   seekLayoutUrl: string;
   plannedCount: number;
   completedCount: number | null;
+  skippedCount: number;
 };
 
 type UseTtsDocumentExportInput = {
@@ -74,7 +75,17 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       : generationProgress && Number.isFinite(Number(generationProgress.completedThroughOrdinal))
         ? Math.max(0, Math.floor(Number(generationProgress.completedThroughOrdinal)) + 1)
         : null;
-    const generationStatus = snapshot.generation.operation?.status ?? snapshot.generation.session?.status ?? null;
+    const progressSkippedCount = generationProgress && Number.isFinite(Number(generationProgress.skippedCount))
+      ? Math.max(0, Math.floor(Number(generationProgress.skippedCount)))
+      : 0;
+    const artifactSkippedCount = snapshot.artifact.artifact
+      && Number.isFinite(Number(snapshot.artifact.artifact.skippedSegments))
+      ? Math.max(0, Math.floor(Number(snapshot.artifact.artifact.skippedSegments)))
+      : null;
+    // The durable session is the generation authority. A terminal operation
+    // row can lag or describe a superseded run, so it must not mask a session
+    // that has already committed its complete state.
+    const generationStatus = snapshot.generation.session?.status ?? snapshot.generation.operation?.status ?? null;
     const artifactStatus = snapshot.artifact.artifact ? 'succeeded' : snapshot.artifact.operation?.status ?? null;
     const completedCount = snapshot.downloadUrl || artifactStatus === 'succeeded' || generationStatus === 'succeeded'
       ? plannedCount
@@ -95,6 +106,7 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
         : '',
       plannedCount,
       completedCount,
+      skippedCount: Math.min(plannedCount, artifactSkippedCount ?? progressSkippedCount),
     };
   }, [applyWorkerPlan, buildPlaybackPlanRequest, playbackPlanRef]);
 

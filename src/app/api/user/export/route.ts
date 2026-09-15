@@ -20,7 +20,7 @@ import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/comp
 import { documentKey } from '@/lib/server/documents/blobstore';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
-import { getS3Client, getS3Config, isS3Configured } from '@/lib/server/storage/s3';
+import { getS3Config, getS3InternalClient, isS3Configured } from '@/lib/server/storage/s3';
 import {
   ACCOUNT_EXPORT_SCHEMA_VERSION,
   buildUserExportManifest,
@@ -28,7 +28,10 @@ import {
 import { getAuth } from '@/lib/server/auth/auth';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
-import { createAdmittedComputeOperation } from '@/lib/server/compute-limits/run-admitted';
+import {
+  ComputeAdmissionLimitedError,
+  createAdmittedComputeOperation,
+} from '@/lib/server/compute-limits/run-admitted';
 
 export const dynamic = 'force-dynamic';
 
@@ -220,7 +223,7 @@ export async function POST(req: NextRequest) {
       storageUserId,
       namespace,
     });
-    await getS3Client().send(new PutObjectCommand({
+    await getS3InternalClient().send(new PutObjectCommand({
       Bucket: cfg.bucket,
       Key: manifestObjectKey,
       Body: Buffer.from(manifestBody),
@@ -276,6 +279,16 @@ export async function POST(req: NextRequest) {
         : null,
     });
   } catch (error) {
+    if (error instanceof ComputeAdmissionLimitedError) {
+      return NextResponse.json({
+        error: error.message,
+        code: error.code,
+        retryAfterMs: error.retryAfterMs,
+      }, {
+        status: 429,
+        headers: { 'Retry-After': String(Math.max(1, Math.ceil(error.retryAfterMs / 1000))) },
+      });
+    }
     return errorResponse(error, {
       logger,
       event: 'user.export.resolve_failed',

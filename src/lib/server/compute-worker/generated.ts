@@ -124,6 +124,9 @@ export interface paths {
                             objectKey: string;
                             contentType: string;
                             byteLength: number;
+                            generatedSegments?: number;
+                            skippedSegments?: number;
+                            plannedSegments?: number;
                             dispositionFilename: string;
                             sourceSessionId: string;
                             sourcePlanObjectKey: string;
@@ -396,6 +399,7 @@ export interface paths {
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
+                                    skippedCount?: number;
                                     plannedCount: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating";
@@ -408,6 +412,7 @@ export interface paths {
                                     phase: "assembling" | "transcoding" | "uploading";
                                     completedSegments: number;
                                     plannedSegments: number;
+                                    skippedSegments?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
@@ -421,6 +426,7 @@ export interface paths {
                             progress: {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -1325,6 +1331,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -1337,6 +1344,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -1483,6 +1491,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -1495,6 +1504,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -1638,6 +1648,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -1650,6 +1661,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -1816,6 +1828,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -1828,6 +1841,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -1985,6 +1999,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -1997,6 +2012,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -2140,6 +2156,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -2152,6 +2169,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -2313,6 +2331,7 @@ export interface paths {
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
+                                    skippedCount?: number;
                                     plannedCount: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating";
@@ -2325,6 +2344,7 @@ export interface paths {
                                     phase: "assembling" | "transcoding" | "uploading";
                                     completedSegments: number;
                                     plannedSegments: number;
+                                    skippedSegments?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
@@ -2469,6 +2489,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -2481,6 +2502,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -2631,6 +2653,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -2643,6 +2666,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -2732,6 +2756,9 @@ export interface paths {
                                 objectKey: string;
                                 contentType: string;
                                 byteLength: number;
+                                generatedSegments?: number;
+                                skippedSegments?: number;
+                                plannedSegments?: number;
                                 dispositionFilename: string;
                                 sourceSessionId: string;
                                 sourcePlanObjectKey: string;
@@ -2813,6 +2840,7 @@ export interface paths {
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
+                                    skippedCount?: number;
                                     plannedCount: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating";
@@ -2825,6 +2853,7 @@ export interface paths {
                                     phase: "assembling" | "transcoding" | "uploading";
                                     completedSegments: number;
                                     plannedSegments: number;
+                                    skippedSegments?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
@@ -2969,6 +2998,7 @@ export interface paths {
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
+                                    skippedCount?: number;
                                     plannedCount: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating";
@@ -2981,6 +3011,7 @@ export interface paths {
                                     phase: "assembling" | "transcoding" | "uploading";
                                     completedSegments: number;
                                     plannedSegments: number;
+                                    skippedSegments?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
@@ -3152,6 +3183,7 @@ export interface paths {
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
+                                    skippedCount?: number;
                                     plannedCount: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating";
@@ -3164,6 +3196,7 @@ export interface paths {
                                     phase: "assembling" | "transcoding" | "uploading";
                                     completedSegments: number;
                                     plannedSegments: number;
+                                    skippedSegments?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
@@ -3329,6 +3362,7 @@ export interface paths {
                                 } | {
                                     completedThroughOrdinal: number;
                                     completedCount: number;
+                                    skippedCount?: number;
                                     plannedCount: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating";
@@ -3341,6 +3375,7 @@ export interface paths {
                                     phase: "assembling" | "transcoding" | "uploading";
                                     completedSegments: number;
                                     plannedSegments: number;
+                                    skippedSegments?: number;
                                 } | {
                                     /** @enum {string} */
                                     phase: "fetching" | "converting" | "uploading";
@@ -3473,6 +3508,7 @@ export interface paths {
                             } | {
                                 completedThroughOrdinal: number;
                                 completedCount: number;
+                                skippedCount?: number;
                                 plannedCount: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating";
@@ -3485,6 +3521,7 @@ export interface paths {
                                 phase: "assembling" | "transcoding" | "uploading";
                                 completedSegments: number;
                                 plannedSegments: number;
+                                skippedSegments?: number;
                             } | {
                                 /** @enum {string} */
                                 phase: "fetching" | "converting" | "uploading";
@@ -3670,6 +3707,7 @@ export interface components {
             phase: "assembling" | "transcoding" | "uploading";
             completedSegments: number;
             plannedSegments: number;
+            skippedSegments?: number;
         };
         DocumentConversionProgress: {
             /** @enum {string} */
@@ -3699,6 +3737,9 @@ export interface components {
             objectKey: string;
             contentType: string;
             byteLength: number;
+            generatedSegments?: number;
+            skippedSegments?: number;
+            plannedSegments?: number;
             dispositionFilename: string;
             sourceSessionId: string;
             sourcePlanObjectKey: string;
@@ -3843,6 +3884,7 @@ export interface components {
             } | {
                 completedThroughOrdinal: number;
                 completedCount: number;
+                skippedCount?: number;
                 plannedCount: number;
                 /** @enum {string} */
                 phase?: "downloading_model" | "generating";
@@ -3855,6 +3897,7 @@ export interface components {
                 phase: "assembling" | "transcoding" | "uploading";
                 completedSegments: number;
                 plannedSegments: number;
+                skippedSegments?: number;
             } | {
                 /** @enum {string} */
                 phase: "fetching" | "converting" | "uploading";
@@ -3941,6 +3984,7 @@ export interface components {
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
+                    skippedCount?: number;
                     plannedCount: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating";
@@ -3953,6 +3997,7 @@ export interface components {
                     phase: "assembling" | "transcoding" | "uploading";
                     completedSegments: number;
                     plannedSegments: number;
+                    skippedSegments?: number;
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
@@ -4042,6 +4087,7 @@ export interface components {
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
+                    skippedCount?: number;
                     plannedCount: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating";
@@ -4054,6 +4100,7 @@ export interface components {
                     phase: "assembling" | "transcoding" | "uploading";
                     completedSegments: number;
                     plannedSegments: number;
+                    skippedSegments?: number;
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
@@ -4084,6 +4131,9 @@ export interface components {
                 objectKey: string;
                 contentType: string;
                 byteLength: number;
+                generatedSegments?: number;
+                skippedSegments?: number;
+                plannedSegments?: number;
                 dispositionFilename: string;
                 sourceSessionId: string;
                 sourcePlanObjectKey: string;
@@ -4165,6 +4215,7 @@ export interface components {
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
+                    skippedCount?: number;
                     plannedCount: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating";
@@ -4177,6 +4228,7 @@ export interface components {
                     phase: "assembling" | "transcoding" | "uploading";
                     completedSegments: number;
                     plannedSegments: number;
+                    skippedSegments?: number;
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
@@ -4287,6 +4339,7 @@ export interface components {
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
+                    skippedCount?: number;
                     plannedCount: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating";
@@ -4299,6 +4352,7 @@ export interface components {
                     phase: "assembling" | "transcoding" | "uploading";
                     completedSegments: number;
                     plannedSegments: number;
+                    skippedSegments?: number;
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
@@ -4405,6 +4459,7 @@ export interface components {
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
+                    skippedCount?: number;
                     plannedCount: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating";
@@ -4417,6 +4472,7 @@ export interface components {
                     phase: "assembling" | "transcoding" | "uploading";
                     completedSegments: number;
                     plannedSegments: number;
+                    skippedSegments?: number;
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";
@@ -4522,6 +4578,7 @@ export interface components {
                 } | {
                     completedThroughOrdinal: number;
                     completedCount: number;
+                    skippedCount?: number;
                     plannedCount: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating";
@@ -4534,6 +4591,7 @@ export interface components {
                     phase: "assembling" | "transcoding" | "uploading";
                     completedSegments: number;
                     plannedSegments: number;
+                    skippedSegments?: number;
                 } | {
                     /** @enum {string} */
                     phase: "fetching" | "converting" | "uploading";

@@ -79,6 +79,7 @@ export type TtsExportResolveSnapshot = {
       progress?: {
         completedThroughOrdinal?: number;
         completedCount?: number;
+        skippedCount?: number;
         plannedCount?: number;
       } | null;
       error?: { message?: string } | null;
@@ -86,6 +87,7 @@ export type TtsExportResolveSnapshot = {
     progress?: {
       completedThroughOrdinal?: number;
       completedCount?: number;
+      skippedCount?: number;
       plannedCount?: number;
     } | null;
   };
@@ -98,6 +100,9 @@ export type TtsExportResolveSnapshot = {
       dispositionFilename: string;
       format: 'mp3' | 'm4b';
       speed: number;
+      generatedSegments?: number;
+      skippedSegments?: number;
+      plannedSegments?: number;
     } | null;
     operation: {
       opId?: string;
@@ -106,6 +111,7 @@ export type TtsExportResolveSnapshot = {
         phase?: 'assembling' | 'transcoding' | 'uploading';
         completedSegments?: number;
         plannedSegments?: number;
+        skippedSegments?: number;
       } | null;
       error?: { message?: string } | null;
     } | null;
@@ -261,6 +267,7 @@ export type TtsPlaybackEventSnapshot = {
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   completedThroughOrdinal: number | null;
   completedCount: number | null;
+  skippedCount: number | null;
   plannedCount: number | null;
   phase: 'downloading_model' | 'generating' | null;
   stopReason: 'usage_limit' | null;
@@ -292,6 +299,7 @@ export const subscribeTtsPlaybackEvents = (
           progress?: {
             completedThroughOrdinal?: number;
             completedCount?: number;
+            skippedCount?: number;
             plannedCount?: number;
             phase?: 'downloading_model' | 'generating';
             stopReason?: 'usage_limit';
@@ -310,6 +318,9 @@ export const subscribeTtsPlaybackEvents = (
           : null,
         completedCount: progress && Number.isFinite(Number(progress.completedCount))
           ? Number(progress.completedCount)
+          : null,
+        skippedCount: progress && Number.isFinite(Number(progress.skippedCount))
+          ? Number(progress.skippedCount)
           : null,
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)
@@ -356,6 +367,7 @@ export const subscribeTtsExportGenerationEvents = (
           progress?: {
             completedThroughOrdinal?: number;
             completedCount?: number;
+            skippedCount?: number;
             plannedCount?: number;
             phase?: 'downloading_model' | 'generating';
             stopReason?: 'usage_limit';
@@ -374,6 +386,9 @@ export const subscribeTtsExportGenerationEvents = (
           : null,
         completedCount: progress && Number.isFinite(Number(progress.completedCount))
           ? Number(progress.completedCount)
+          : null,
+        skippedCount: progress && Number.isFinite(Number(progress.skippedCount))
+          ? Number(progress.skippedCount)
           : null,
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)
@@ -409,6 +424,7 @@ export const subscribeTtsExportArtifactEvents = (
       phase: 'assembling' | 'transcoding' | 'uploading' | null;
       completedSegments: number | null;
       plannedSegments: number | null;
+      skippedSegments: number | null;
     }) => void;
     onError?: (error: Event) => void;
   },
@@ -426,6 +442,7 @@ export const subscribeTtsExportArtifactEvents = (
             phase?: 'assembling' | 'transcoding' | 'uploading';
             completedSegments?: number;
             plannedSegments?: number;
+            skippedSegments?: number;
           } | null;
         };
       };
@@ -440,6 +457,9 @@ export const subscribeTtsExportArtifactEvents = (
           : null,
         plannedSegments: progress && Number.isFinite(Number(progress.plannedSegments))
           ? Number(progress.plannedSegments)
+          : null,
+        skippedSegments: progress && Number.isFinite(Number(progress.skippedSegments))
+          ? Number(progress.skippedSegments)
           : null,
       });
     } catch {

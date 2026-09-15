@@ -83,4 +83,46 @@ describe('playback job cache discovery', () => {
       sessionId: 'session', error: 'catalogue unavailable',
     }), 'tts.playback.cache_catalogue_read_failed');
   });
+
+  test('finishes document export generation when the first segment is terminally unrenderable', async () => {
+    vi.mocked(resolveAndPersistTtsPlaybackPlan).mockResolvedValue({
+      planObjectKey: 'plan', plannedSegments: [{ ordinal: 0, text: 'Unreadable.' }], startOrdinal: 0,
+    } as never);
+    const session = {
+      sessionId: 'session', status: 'running', generationRunId: 'run', playbackActive: false,
+      cursorOrdinal: 0, generationStartOrdinal: 0, expiresAt: Date.now() + 60_000,
+    };
+    vi.mocked(generateExplicitTtsPlaybackSegments).mockImplementation(async (input) => {
+      await input.onSegmentErrored?.(0);
+    });
+    const patchSessionIfGenerationRun = vi.fn(async () => true);
+    const onProgress = vi.fn();
+    const run = createTtsPlaybackHandler({
+      storage: {}, s3Prefix: 'test', ttsPlaybackSegmentTimeoutMs: 30_000,
+      playbackStorage: {
+        artifacts: {
+          getScopeEpoch: async () => 0,
+          listSegmentOrdinals: async () => [],
+          readSegmentMetadata: async () => null,
+        },
+        sessions: {
+          getSession: async () => session,
+          patchSessionIfGenerationRun,
+          watchGenerationInvalidation: async () => () => undefined,
+        },
+      },
+    } as never);
+
+    await expect(run({
+      userId: 'user', storageUserId: 'user', documentId: 'document', documentVersion: 1,
+      readerType: 'epub', settingsHash: 'settings', settingsJson: {}, planning: {},
+      sessionId: 'session', generationRunId: 'run', planObjectKey: 'plan', generationExtent: 'document',
+    }, 0, { onProgress })).resolves.toMatchObject({ sessionId: 'session' });
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+      completedCount: 0, skippedCount: 1, plannedCount: 1,
+    }));
+    expect(patchSessionIfGenerationRun).toHaveBeenCalledWith(
+      'session', 'run', expect.objectContaining({ status: 'succeeded' }),
+    );
+  });
 });

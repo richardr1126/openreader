@@ -11,6 +11,7 @@ import {
   playbackGenerationCancellationExpected,
   requestedPlaybackSegmentFailed,
 } from '../../src/jobs/playback/playback-job';
+import { resolveTtsPlaybackExportSegmentSource } from '../../src/jobs/playback/export-job';
 
 describe('worker job composition', () => {
   test('composes the exhaustive worker-loop handler surface', () => {
@@ -108,6 +109,17 @@ describe('TTS playback generation cancellation', () => {
 });
 
 describe('TTS playback export assembly', () => {
+  test('uses terminal segment errors as intentional silence but rejects unsettled segments', () => {
+    expect(resolveTtsPlaybackExportSegmentSource(4, {
+      status: 'error',
+    } as never)).toEqual({ kind: 'silence', durationMs: 1_000 });
+    expect(() => resolveTtsPlaybackExportSegmentSource(5, {
+      status: 'generating',
+    } as never)).toThrow('segment 5 is not durably settled');
+    expect(() => resolveTtsPlaybackExportSegmentSource(6, null))
+      .toThrow('segment 6 is not durably settled');
+  });
+
   test('builds speed-adjusted chapters from locator groups', () => {
     const chapters = buildExportChapters({
       segments: [

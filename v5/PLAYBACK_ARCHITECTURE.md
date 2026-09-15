@@ -703,6 +703,12 @@ Target ownership:
   `generationExtent: 'document'` remains responsible for filling the canonical
   per-ordinal segment cache. The artifact-preparation job consumes that cache
   plus the plan/grid and produces one requested file variant.
+- A durable terminal error sidecar is a settled, intentionally omitted segment,
+  not a reason to retry forever or reject an otherwise useful audiobook. Export
+  substitutes one short frame-valid silence pause for each such ordinal and
+  persists the skipped count in artifact metadata. Missing or still-generating
+  sidecars remain hard failures, and a plan with no narratable audio does not
+  produce a misleading all-silence download.
 - NATS/JetStream owns export job queueing, operation state, progress snapshots,
   and reconnect state. S3 owns the final audio artifact and any small artifact
   metadata sidecar. SQL is not used for export job state.

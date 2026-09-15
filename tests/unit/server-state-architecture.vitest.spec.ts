@@ -137,7 +137,9 @@ describe('server-state architecture', () => {
     expect(modal).toContain("type ExportFormat = 'mp3' | 'm4b'");
     expect(modal).toContain('Audiobook export format');
     expect(modal).toContain('setAudioPlayerSpeedAndRestart');
-    expect(modal).toContain('progressCompleteRef.current');
+    expect(modal).not.toContain('progressCompleteRef');
+    expect(modal).toContain("if (snapshot.status === 'succeeded')");
+    expect(modal).not.toContain("snapshot.status === 'succeeded' || (total > 0 && completed >= total)");
     expect(modal).not.toContain('useAudiobookStatus');
     expect(modal).not.toContain('/api/audiobook');
     expect(modal).not.toContain('getTtsPlaybackSeekLayout');
@@ -329,6 +331,8 @@ describe('server-state architecture', () => {
     expect(accountExportRoute).toContain('buildUserExportManifest');
     expect(accountExportRoute).toContain('createAccountExportOperation');
     expect(accountExportRoute).toContain('resolveAccountExport');
+    expect(accountExportRoute).toContain('getS3InternalClient().send(new PutObjectCommand');
+    expect(accountExportRoute).not.toContain('getS3Client().send(new PutObjectCommand');
     expect(accountExportRoute).toContain('/api/user/export/download');
     expect(accountExportRoute).not.toContain('createAccountExportDownloadToken');
     expect(accountExportDownloadRoute).toContain('sendStorageArtifact');
@@ -346,6 +350,12 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain("/v1/account-exports/resolve");
     expect(workerRoutes).not.toContain('verifyAccountExportDownloadToken');
     expect(workerHandlers).toContain('buildAccountExportArchive');
+    const workerArchive = source('packages/compute-worker/src/jobs/account-export-archive.ts');
+    expect(workerArchive).toContain('ACCOUNT_EXPORT_SCHEMA_VERSION = 5');
+    expect(workerArchive).toContain('compute_limit_admissions.json');
+    expect(workerArchive).toContain('compute_limit_events.json');
+    expect(workerArchive).not.toContain('tts_usage.json');
+    expect(workerArchive).not.toContain('job_events.json');
     expect(computeClient).toContain('createAccountExportOperation');
   });
 

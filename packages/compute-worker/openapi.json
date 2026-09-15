@@ -295,6 +295,9 @@
           },
           "plannedSegments": {
             "type": "number"
+          },
+          "skippedSegments": {
+            "type": "number"
           }
         },
         "required": [
@@ -400,6 +403,15 @@
             "type": "string"
           },
           "byteLength": {
+            "type": "number"
+          },
+          "generatedSegments": {
+            "type": "number"
+          },
+          "skippedSegments": {
+            "type": "number"
+          },
+          "plannedSegments": {
             "type": "number"
           },
           "dispositionFilename": {
@@ -1063,6 +1075,9 @@
                   "completedCount": {
                     "type": "number"
                   },
+                  "skippedCount": {
+                    "type": "number"
+                  },
                   "plannedCount": {
                     "type": "number"
                   },
@@ -1108,6 +1123,9 @@
                     "type": "number"
                   },
                   "plannedSegments": {
+                    "type": "number"
+                  },
+                  "skippedSegments": {
                     "type": "number"
                   }
                 },
@@ -1512,6 +1530,9 @@
                       "completedCount": {
                         "type": "number"
                       },
+                      "skippedCount": {
+                        "type": "number"
+                      },
                       "plannedCount": {
                         "type": "number"
                       },
@@ -1557,6 +1578,9 @@
                         "type": "number"
                       },
                       "plannedSegments": {
+                        "type": "number"
+                      },
+                      "skippedSegments": {
                         "type": "number"
                       }
                     },
@@ -1986,6 +2010,9 @@
                           "completedCount": {
                             "type": "number"
                           },
+                          "skippedCount": {
+                            "type": "number"
+                          },
                           "plannedCount": {
                             "type": "number"
                           },
@@ -2031,6 +2058,9 @@
                             "type": "number"
                           },
                           "plannedSegments": {
+                            "type": "number"
+                          },
+                          "skippedSegments": {
                             "type": "number"
                           }
                         },
@@ -2166,6 +2196,15 @@
                     "type": "string"
                   },
                   "byteLength": {
+                    "type": "number"
+                  },
+                  "generatedSegments": {
+                    "type": "number"
+                  },
+                  "skippedSegments": {
+                    "type": "number"
+                  },
+                  "plannedSegments": {
                     "type": "number"
                   },
                   "dispositionFilename": {
@@ -2552,6 +2591,9 @@
                           "completedCount": {
                             "type": "number"
                           },
+                          "skippedCount": {
+                            "type": "number"
+                          },
                           "plannedCount": {
                             "type": "number"
                           },
@@ -2597,6 +2639,9 @@
                             "type": "number"
                           },
                           "plannedSegments": {
+                            "type": "number"
+                          },
+                          "skippedSegments": {
                             "type": "number"
                           }
                         },
@@ -3132,6 +3177,9 @@
                           "completedCount": {
                             "type": "number"
                           },
+                          "skippedCount": {
+                            "type": "number"
+                          },
                           "plannedCount": {
                             "type": "number"
                           },
@@ -3177,6 +3225,9 @@
                             "type": "number"
                           },
                           "plannedSegments": {
+                            "type": "number"
+                          },
+                          "skippedSegments": {
                             "type": "number"
                           }
                         },
@@ -3690,6 +3741,9 @@
                           "completedCount": {
                             "type": "number"
                           },
+                          "skippedCount": {
+                            "type": "number"
+                          },
                           "plannedCount": {
                             "type": "number"
                           },
@@ -3735,6 +3789,9 @@
                             "type": "number"
                           },
                           "plannedSegments": {
+                            "type": "number"
+                          },
+                          "skippedSegments": {
                             "type": "number"
                           }
                         },
@@ -4237,6 +4294,9 @@
                           "completedCount": {
                             "type": "number"
                           },
+                          "skippedCount": {
+                            "type": "number"
+                          },
                           "plannedCount": {
                             "type": "number"
                           },
@@ -4282,6 +4342,9 @@
                             "type": "number"
                           },
                           "plannedSegments": {
+                            "type": "number"
+                          },
+                          "skippedSegments": {
                             "type": "number"
                           }
                         },
@@ -4502,6 +4565,15 @@
                       "type": "string"
                     },
                     "byteLength": {
+                      "type": "number"
+                    },
+                    "generatedSegments": {
+                      "type": "number"
+                    },
+                    "skippedSegments": {
+                      "type": "number"
+                    },
+                    "plannedSegments": {
                       "type": "number"
                     },
                     "dispositionFilename": {
@@ -5258,6 +5330,9 @@
                                     "completedCount": {
                                       "type": "number"
                                     },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
                                     "plannedCount": {
                                       "type": "number"
                                     },
@@ -5303,6 +5378,9 @@
                                       "type": "number"
                                     },
                                     "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
                                       "type": "number"
                                     }
                                   },
@@ -5380,6 +5458,9 @@
                               "type": "number"
                             },
                             "completedCount": {
+                              "type": "number"
+                            },
+                            "skippedCount": {
                               "type": "number"
                             },
                             "plannedCount": {
@@ -6884,6 +6965,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -6929,6 +7013,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -7428,6 +7515,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -7473,6 +7563,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -7970,6 +8063,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -8015,6 +8111,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -8607,6 +8706,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -8652,6 +8754,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -9203,6 +9308,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -9248,6 +9356,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -9739,6 +9850,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -9784,6 +9898,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -10355,6 +10472,9 @@
                                     "completedCount": {
                                       "type": "number"
                                     },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
                                     "plannedCount": {
                                       "type": "number"
                                     },
@@ -10400,6 +10520,9 @@
                                       "type": "number"
                                     },
                                     "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
                                       "type": "number"
                                     }
                                   },
@@ -10890,6 +11013,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -10935,6 +11061,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -11451,6 +11580,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -11496,6 +11628,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
@@ -11708,6 +11843,15 @@
                               "type": "string"
                             },
                             "byteLength": {
+                              "type": "number"
+                            },
+                            "generatedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
                               "type": "number"
                             },
                             "dispositionFilename": {
@@ -12094,6 +12238,9 @@
                                     "completedCount": {
                                       "type": "number"
                                     },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
                                     "plannedCount": {
                                       "type": "number"
                                     },
@@ -12139,6 +12286,9 @@
                                       "type": "number"
                                     },
                                     "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
                                       "type": "number"
                                     }
                                   },
@@ -12643,6 +12793,9 @@
                                     "completedCount": {
                                       "type": "number"
                                     },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
                                     "plannedCount": {
                                       "type": "number"
                                     },
@@ -12688,6 +12841,9 @@
                                       "type": "number"
                                     },
                                     "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
                                       "type": "number"
                                     }
                                   },
@@ -13319,6 +13475,9 @@
                                     "completedCount": {
                                       "type": "number"
                                     },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
                                     "plannedCount": {
                                       "type": "number"
                                     },
@@ -13364,6 +13523,9 @@
                                       "type": "number"
                                     },
                                     "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
                                       "type": "number"
                                     }
                                   },
@@ -13976,6 +14138,9 @@
                                     "completedCount": {
                                       "type": "number"
                                     },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
                                     "plannedCount": {
                                       "type": "number"
                                     },
@@ -14021,6 +14186,9 @@
                                       "type": "number"
                                     },
                                     "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
                                       "type": "number"
                                     }
                                   },
@@ -14474,6 +14642,9 @@
                             "completedCount": {
                               "type": "number"
                             },
+                            "skippedCount": {
+                              "type": "number"
+                            },
                             "plannedCount": {
                               "type": "number"
                             },
@@ -14519,6 +14690,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
                               "type": "number"
                             }
                           },
