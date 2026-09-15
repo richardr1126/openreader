@@ -8,6 +8,15 @@ export type OnboardingStepSnapshot = {
   changelogPending: boolean;
 };
 
+export function isPrivacyAcceptedForPolicy(
+  privacyAcceptedAtMs: number | null | undefined,
+  policyUpdatedAtMs: number,
+): boolean {
+  return typeof privacyAcceptedAtMs === 'number'
+    && Number.isFinite(privacyAcceptedAtMs)
+    && privacyAcceptedAtMs > policyUpdatedAtMs;
+}
+
 export function resolveNextOnboardingStep(snapshot: OnboardingStepSnapshot): OnboardingStep {
   if (snapshot.privacyRequired && !snapshot.privacyAccepted) {
     return 'privacy';

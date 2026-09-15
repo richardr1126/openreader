@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { ButtonAnchor, ButtonLink } from '@/components/ui';
+import { PRIVACY_POLICY_EFFECTIVE_DATE } from '@/lib/shared/privacy-policy';
 
 export const metadata: Metadata = {
   title: 'Privacy & Data Usage',
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PrivacyPage() {
-  const effectiveDate = 'September 14, 2026';
+  const effectiveDate = PRIVACY_POLICY_EFFECTIVE_DATE;
   const isRichardrDevProductionInstance =
     process.env.RICHARDRDEV_PRODUCTION?.trim().toLowerCase() === 'true';
 

@@ -8,7 +8,8 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
 import { scheduleChangelogCheck } from '@/lib/client/changelog-check';
-import { createCoalescedAsyncRunner, resolveNextOnboardingStep } from '@/lib/client/onboarding-flow';
+import { createCoalescedAsyncRunner, isPrivacyAcceptedForPolicy, resolveNextOnboardingStep } from '@/lib/client/onboarding-flow';
+import { PRIVACY_POLICY_UPDATED_AT_MS } from '@/lib/shared/privacy-policy';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { EMPTY_CLAIM_COUNTS, useClaimData } from '@/hooks/useClaimData';
 import type { ClaimableCounts } from '@/types/client';
@@ -58,7 +59,10 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     }
 
     const privacyRequired = true;
-    const privacyAccepted = !privacyRequired || Boolean(onboardingData.privacyAcceptedAtMs);
+    const privacyAccepted = !privacyRequired || isPrivacyAcceptedForPolicy(
+      onboardingData.privacyAcceptedAtMs,
+      PRIVACY_POLICY_UPDATED_AT_MS,
+    );
 
     const isClaimEligible = Boolean(
       userId

@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'vitest';
 
-import { createCoalescedAsyncRunner, resolveNextOnboardingStep } from '../../src/lib/client/onboarding-flow';
+import { createCoalescedAsyncRunner, isPrivacyAcceptedForPolicy, resolveNextOnboardingStep } from '../../src/lib/client/onboarding-flow';
+
+describe('privacy policy acceptance', () => {
+  const updatedAt = 1_000;
+
+  test('requires acceptance after the policy revision', () => {
+    expect(isPrivacyAcceptedForPolicy(999, updatedAt)).toBe(false);
+    expect(isPrivacyAcceptedForPolicy(updatedAt, updatedAt)).toBe(false);
+    expect(isPrivacyAcceptedForPolicy(1_001, updatedAt)).toBe(true);
+  });
+});
 
 describe('onboarding flow resolver', () => {
   test('resolves deterministic order with privacy first', () => {
