@@ -1,5 +1,15 @@
 import { expect, type Page } from '@playwright/test';
 
+export async function closeChangelog(page: Page) {
+  const changelogDialog = page.getByRole('dialog', { name: 'Changelog', exact: true });
+  const changelogPanel = page.getByTestId('changelog-modal');
+  await expect(changelogPanel).toBeVisible();
+  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await expect.poll(() => changelogDialog.evaluateAll((dialogs) => (
+    dialogs.length === 0 || getComputedStyle(dialogs[0]).pointerEvents === 'none'
+  ))).toBe(true);
+}
+
 export async function enterAnonymousLibrary(page: Page) {
   await page.goto('/app');
 
@@ -15,10 +25,7 @@ export async function enterAnonymousLibrary(page: Page) {
     .check();
   await privacyDialog.getByRole('button', { name: 'Continue', exact: true }).click();
 
-  const changelogDialog = page.getByRole('dialog', { name: 'Changelog', exact: true });
-  const changelogPanel = page.getByTestId('changelog-modal');
-  await expect(changelogPanel).toBeVisible();
-  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await closeChangelog(page);
 
   const declineOptionalCookies = page.getByRole('button', {
     name: 'Decline Non-Essential',
