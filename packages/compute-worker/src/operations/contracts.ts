@@ -147,6 +147,9 @@ export interface TtsPlaybackExportArtifactMetadata {
   objectKey: string;
   contentType: string;
   byteLength: number;
+  generatedSegments?: number;
+  skippedSegments?: number;
+  plannedSegments?: number;
   dispositionFilename: string;
   sourceSessionId: string;
   sourcePlanObjectKey: string;
@@ -324,6 +327,8 @@ export interface PdfLayoutProgress {
 export interface TtsPlaybackProgress {
   completedThroughOrdinal: number;
   completedCount: number;
+  /** Terminal error sidecars intentionally omitted from playback/export audio. */
+  skippedCount?: number;
   plannedCount: number;
   phase?: 'downloading_model' | 'generating';
   stopReason?: 'usage_limit';
@@ -333,8 +338,11 @@ export interface TtsPlaybackProgress {
 
 export interface TtsPlaybackExportProgress {
   phase: 'assembling' | 'transcoding' | 'uploading';
+  /** Artifact sources processed so far, including silence replacements. */
   completedSegments: number;
   plannedSegments: number;
+  /** Total terminal-error segments represented by silence in this artifact. */
+  skippedSegments?: number;
 }
 
 export interface DocumentConversionProgress {

@@ -31,13 +31,16 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
   const { query: onboardingQuery } = useOnboardingState();
   const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | null>(null);
+  const [claimModalOwnerId, setClaimModalOwnerId] = useState<string | null>(null);
   const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>(EMPTY_CLAIM_COUNTS);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const pendingChangelogOpenRef = useRef(false);
+  const leavingBlockingModalRef = useRef<'privacy' | 'claim' | null>(null);
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
   const changelogVersionCheckKeyRef = useRef<string | null>(null);
   const changelogVersionCheckInFlightRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef(userId);
 
   const runOnceFlowRef = useRef<() => Promise<void>>(async () => {});
 
@@ -54,7 +57,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     // reads as "not accepted", the modal flashes on first paint, then closes once the
     // real state arrives.
     const onboardingData = onboardingQuery.data;
-    if (onboardingData === undefined) {
+    if (onboardingData === undefined || leavingBlockingModalRef.current !== null) {
       return;
     }
 
@@ -75,6 +78,13 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
     if (isClaimEligible) {
       const claimResult = await refetchClaimCounts();
+      if (
+        currentUserIdRef.current !== userId
+        || leavingBlockingModalRef.current !== null
+        || (userId !== null && claimDismissedUsersRef.current.has(userId))
+      ) {
+        return;
+      }
       if (claimResult.isError) {
         console.error('Failed to check claimable data:', claimResult.error);
         return;
@@ -100,6 +110,17 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       changelogPending: pendingChangelogOpenRef.current,
     });
 
+    const nextBlockingModal = nextStep === 'privacy' || nextStep === 'claim'
+      ? nextStep
+      : null;
+    // Blocking dialogs own focus and page inertness. Let the current dialog fully
+    // leave before presenting the next step so two Headless UI dialogs never overlap.
+    if (activeBlockingModal !== null && activeBlockingModal !== nextBlockingModal) {
+      leavingBlockingModalRef.current = activeBlockingModal;
+      setActiveBlockingModal(null);
+      return;
+    }
+
     if (nextStep === 'privacy') {
       setActiveBlockingModal('privacy');
       return;
@@ -107,46 +128,56 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
     if (nextStep === 'claim') {
       setClaimableCounts(claimCounts);
+      setClaimModalOwnerId(userId);
       setActiveBlockingModal('claim');
       return;
     }
-
-    setActiveBlockingModal(null);
 
     if (nextStep === 'changelog') {
       pendingChangelogOpenRef.current = false;
       setIsChangelogOpen(true);
     }
-  }, [isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
+  }, [activeBlockingModal, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
 
-  runOnceFlowRef.current = runOnceFlow;
+  useEffect(() => {
+    const previousUserId = currentUserIdRef.current;
+    currentUserIdRef.current = userId;
+    if (
+      previousUserId !== userId
+      && activeBlockingModal === 'claim'
+      && claimModalOwnerId !== userId
+    ) {
+      leavingBlockingModalRef.current = 'claim';
+      setActiveBlockingModal(null);
+    }
+  }, [activeBlockingModal, claimModalOwnerId, userId]);
+
+  useEffect(() => {
+    runOnceFlowRef.current = runOnceFlow;
+  }, [runOnceFlow]);
 
   const handleClaimComplete = useCallback(() => {
-    if (userId) {
-      claimDismissedUsersRef.current.add(userId);
+    if (claimModalOwnerId) {
+      claimDismissedUsersRef.current.add(claimModalOwnerId);
     }
+    leavingBlockingModalRef.current = 'claim';
     setActiveBlockingModal(null);
-    void runFlow();
-  }, [runFlow, userId]);
+  }, [claimModalOwnerId]);
 
   const handlePrivacyAccepted = useCallback(() => {
+    leavingBlockingModalRef.current = 'privacy';
     setActiveBlockingModal(null);
+  }, []);
+
+  const handleBlockingModalAfterLeave = useCallback((modal: 'privacy' | 'claim') => {
+    if (leavingBlockingModalRef.current !== modal) return;
+    leavingBlockingModalRef.current = null;
     void runFlow();
   }, [runFlow]);
 
   useEffect(() => {
     void runFlow();
   }, [isAnonymous, onboardingQuery.data, runFlow, userId]);
-
-  useEffect(() => {
-    const onPrivacyAccepted = () => {
-      void runFlow();
-    };
-    window.addEventListener('openreader:privacyAccepted', onPrivacyAccepted);
-    return () => {
-      window.removeEventListener('openreader:privacyAccepted', onPrivacyAccepted);
-    };
-  }, [runFlow]);
 
   useEffect(() => {
     return scheduleChangelogCheck({
@@ -176,12 +207,14 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
         isOpen={activeBlockingModal === 'privacy'}
         onAccept={handlePrivacyAccepted}
         onDismiss={() => { }}
+        onAfterLeave={() => handleBlockingModalAfterLeave('privacy')}
       />
       <ClaimDataModal
-        isOpen={activeBlockingModal === 'claim'}
+        isOpen={activeBlockingModal === 'claim' && claimModalOwnerId === userId}
         claimableCounts={claimableCounts}
         onDismiss={handleClaimComplete}
         onClaimed={handleClaimComplete}
+        onAfterLeave={() => handleBlockingModalAfterLeave('claim')}
       />
       <ChangelogModal
         open={isChangelogOpen}

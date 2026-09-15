@@ -9,6 +9,7 @@ interface PrivacyModalProps {
   isOpen: boolean;
   onAccept?: () => void;
   onDismiss?: () => void;
+  onAfterLeave?: () => void;
 }
 
 function PrivacyModalBody({ origin }: { origin: string }) {
@@ -48,7 +49,7 @@ function PrivacyModalBody({ origin }: { origin: string }) {
   );
 }
 
-export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps) {
+export function PrivacyModal({ isOpen, onAccept, onDismiss, onAfterLeave }: PrivacyModalProps) {
   const { mutation } = useOnboardingState();
   const [origin, setOrigin] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -72,14 +73,17 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss }: PrivacyModalProps)
       toast.error('Could not save your consent. Please try again.');
       return;
     }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('openreader:privacyAccepted'));
-    }
     onAccept?.();
   };
 
   return (
-    <ModalFrame open={isOpen} onClose={onDismiss ?? (() => {})} panelTestId="privacy-modal" className="z-[80]">
+    <ModalFrame
+      open={isOpen}
+      onClose={onDismiss ?? (() => {})}
+      afterLeave={onAfterLeave}
+      panelTestId="privacy-modal"
+      className="z-[80]"
+    >
       <ModalTitle>Privacy & Data Usage</ModalTitle>
 
       <PrivacyModalBody origin={origin} />

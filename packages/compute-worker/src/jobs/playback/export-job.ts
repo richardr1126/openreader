@@ -1,4 +1,7 @@
+import { getCbrSilenceSecond } from '@openreader/tts/audio-format';
+
 import type { TtsPlaybackExportArtifactMetadata, TtsPlaybackExportArtifactRequest, TtsPlaybackExportArtifactResult, TtsPlaybackExportProgress } from '../../operations/contracts';
+import type { TtsPlaybackSegmentMetadata } from '../../playback/storage';
 import { ttsPlaybackExportArtifactKey, ttsPlaybackExportMetadataArtifactKey } from '../../storage/artifact-addressing';
 import type { JobHandlerContext } from '../context';
 import {
@@ -11,6 +14,29 @@ import {
 } from './ffmpeg-export';
 import { readPersistedTtsPlaybackPlanSegments } from './plan';
 import { ttsPlaybackExportArtifactRequestSchema } from './schemas';
+
+const SKIPPED_SEGMENT_PAUSE_MS = 1_000;
+
+export type TtsPlaybackExportSegmentSource =
+  | { kind: 'audio'; audioKey: string; durationMs: number }
+  | { kind: 'silence'; durationMs: number };
+
+export function resolveTtsPlaybackExportSegmentSource(
+  ordinal: number,
+  sidecar: TtsPlaybackSegmentMetadata | null,
+): TtsPlaybackExportSegmentSource {
+  if (sidecar?.status === 'completed' && sidecar.audioKey) {
+    return {
+      kind: 'audio',
+      audioKey: sidecar.audioKey,
+      durationMs: Math.max(1, Number(sidecar.durationMs ?? 1_000)),
+    };
+  }
+  if (sidecar?.status === 'error') {
+    return { kind: 'silence', durationMs: SKIPPED_SEGMENT_PAUSE_MS };
+  }
+  throw new Error(`TTS playback export segment ${ordinal} is not durably settled`);
+}
 
 export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
   return async function runTtsPlaybackExportArtifact(
@@ -48,7 +74,9 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       throw new Error('TTS playback export requires a loaded canonical plan');
     }
     const durationsByOrdinal = new Map<number, number>();
-    const audioKeysByOrdinal = new Map<number, string>();
+    const sourcesByOrdinal = new Map<number, TtsPlaybackExportSegmentSource>();
+    let generatedSegments = 0;
+    let skippedSegments = 0;
     for (const segment of plannedSegments) {
       const sidecar = await playbackStorage.artifacts.readSegmentMetadata({
         storageUserId: parsed.storageUserId,
@@ -57,20 +85,35 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         settingsHash: parsed.settingsHash,
         ordinal: segment.ordinal,
       });
-      if (sidecar?.status !== 'completed' || !sidecar.audioKey) {
-        throw new Error(`TTS playback export is missing completed audio for ordinal ${segment.ordinal}`);
-      }
-      durationsByOrdinal.set(segment.ordinal, Math.max(1, Number(sidecar.durationMs ?? 1000)));
-      audioKeysByOrdinal.set(segment.ordinal, sidecar.audioKey);
+      const source = resolveTtsPlaybackExportSegmentSource(segment.ordinal, sidecar);
+      sourcesByOrdinal.set(segment.ordinal, source);
+      durationsByOrdinal.set(segment.ordinal, source.durationMs);
+      if (source.kind === 'audio') generatedSegments += 1;
+      else skippedSegments += 1;
+    }
+    if (generatedSegments === 0) {
+      throw new Error('TTS playback export could not generate any narratable audio');
     }
 
     const chunks: Buffer[] = [];
+    let silenceSecond: Buffer | null = null;
     for (let index = 0; index < plannedSegments.length; index += 1) {
       const segment = plannedSegments[index]!;
-      const audioKey = audioKeysByOrdinal.get(segment.ordinal);
-      if (!audioKey) throw new Error(`TTS playback export is missing audio key for ordinal ${segment.ordinal}`);
-      chunks.push(stripId3Tag(Buffer.from(await input.storage.readObject(audioKey))));
-      await hooks?.onProgress?.({ phase: 'assembling', completedSegments: index + 1, plannedSegments: plannedSegments.length });
+      const source = sourcesByOrdinal.get(segment.ordinal);
+      if (!source) throw new Error(`TTS playback export is missing a settled source for ordinal ${segment.ordinal}`);
+      if (source.kind === 'audio') {
+        chunks.push(stripId3Tag(Buffer.from(await input.storage.readObject(source.audioKey))));
+      } else {
+        silenceSecond ??= stripId3Tag(Buffer.from(await getCbrSilenceSecond()));
+        if (silenceSecond.length === 0) throw new Error('TTS playback export could not create skipped-segment silence');
+        chunks.push(silenceSecond);
+      }
+      await hooks?.onProgress?.({
+        phase: 'assembling',
+        completedSegments: index + 1,
+        plannedSegments: plannedSegments.length,
+        skippedSegments,
+      });
     }
     const baseMp3 = Buffer.concat(chunks);
     const chapters = buildExportChapters({ segments: plannedSegments, durationsByOrdinal, speed: parsed.speed });
@@ -79,6 +122,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       phase: needsFfmpeg ? 'transcoding' : 'uploading',
       completedSegments: plannedSegments.length,
       plannedSegments: plannedSegments.length,
+      skippedSegments,
     });
     const output = needsFfmpeg ? await runFfmpegExport({
       source: baseMp3,
@@ -110,6 +154,9 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       objectKey,
       contentType: contentTypeForExportFormat(parsed.format),
       byteLength: output.byteLength,
+      generatedSegments,
+      skippedSegments,
+      plannedSegments: plannedSegments.length,
       dispositionFilename: buildExportFilename({ documentId: parsed.documentId, speed: parsed.speed, format: parsed.format }),
       sourceSessionId: parsed.sessionId,
       sourcePlanObjectKey: parsed.planObjectKey,
@@ -117,7 +164,12 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       createdAt: Date.now(),
     };
     await input.storage.putObject(metadataKey, Buffer.from(JSON.stringify(metadata)), 'application/json');
-    await hooks?.onProgress?.({ phase: 'uploading', completedSegments: plannedSegments.length, plannedSegments: plannedSegments.length });
+    await hooks?.onProgress?.({
+      phase: 'uploading',
+      completedSegments: plannedSegments.length,
+      plannedSegments: plannedSegments.length,
+      skippedSegments,
+    });
     return { artifact: metadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
   };
 }

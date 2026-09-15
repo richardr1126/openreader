@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { AccountExportArtifactMetadata, AccountExportJobRequest, AccountExportJobResult, AccountExportProgress } from '../operations/contracts';
 import { accountExportArtifactKey, accountExportMetadataArtifactKey } from '../storage/artifact-addressing';
-import { buildAccountExportArchive, type AccountExportManifest } from './account-export-archive';
+import { buildAccountExportArchive, type SupportedAccountExportManifest } from './account-export-archive';
 import type { JobHandlerContext } from './context';
 
 const requestSchema = z.object({
@@ -38,7 +38,7 @@ export function createAccountExportHandler(input: JobHandlerContext) {
     ) {
       return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     }
-    const manifest = JSON.parse(Buffer.from(await input.storage.readObject(parsed.manifestObjectKey)).toString('utf8')) as AccountExportManifest;
+    const manifest = JSON.parse(Buffer.from(await input.storage.readObject(parsed.manifestObjectKey)).toString('utf8')) as SupportedAccountExportManifest;
     if (manifest.userId !== parsed.userId || manifest.storageUserId !== parsed.storageUserId || manifest.namespace !== parsed.namespace || manifest.schemaVersion !== parsed.schemaVersion) {
       throw new Error('Account export manifest scope mismatch');
     }

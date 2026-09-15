@@ -1,7 +1,7 @@
 import archiver from 'archiver';
 import { PassThrough } from 'node:stream';
 
-export const ACCOUNT_EXPORT_SCHEMA_VERSION = 4;
+export const ACCOUNT_EXPORT_SCHEMA_VERSION = 5;
 
 export type AccountExportManifestDocumentFile = {
   documentId: string;
@@ -9,27 +9,13 @@ export type AccountExportManifestDocumentFile = {
   entryName: string;
 };
 
-export type AccountExportManifest = {
-  schemaVersion: typeof ACCOUNT_EXPORT_SCHEMA_VERSION;
+type AccountExportManifestBase = {
   exportedAtMs: number;
   userId: string;
   storageUserId: string;
   namespace: string | null;
   scope: 'owned';
   files: AccountExportManifestDocumentFile[];
-  entries: {
-    profile: unknown;
-    preferences: unknown | null;
-    folders: unknown[];
-    onboarding: unknown | null;
-    readingHistory: unknown[];
-    ttsUsage: unknown[];
-    jobEvents: unknown[];
-    documentSettings: unknown[];
-    authSessions: unknown[];
-    linkedAccounts: unknown[];
-    documents: unknown[];
-  };
   includes: {
     metadata: true;
     documentFiles: boolean;
@@ -41,6 +27,38 @@ export type AccountExportManifest = {
   };
 };
 
+type AccountExportManifestEntries = {
+  profile: unknown;
+  preferences: unknown | null;
+  folders: unknown[];
+  onboarding: unknown | null;
+  readingHistory: unknown[];
+  documentSettings: unknown[];
+  authSessions: unknown[];
+  linkedAccounts: unknown[];
+  documents: unknown[];
+};
+
+export type AccountExportManifest = AccountExportManifestBase & {
+  schemaVersion: typeof ACCOUNT_EXPORT_SCHEMA_VERSION;
+  entries: AccountExportManifestEntries & {
+    computeLimitAdmissions: unknown[];
+    computeLimitEvents: unknown[];
+  };
+};
+
+type LegacyAccountExportManifest = AccountExportManifestBase & {
+  // Version 4 jobs can remain durable in JetStream across the v5 rollout.
+  // The app producer emits only version 5; this shape exists to drain those jobs.
+  schemaVersion: 4;
+  entries: AccountExportManifestEntries & {
+    ttsUsage: unknown[];
+    jobEvents: unknown[];
+  };
+};
+
+export type SupportedAccountExportManifest = AccountExportManifest | LegacyAccountExportManifest;
+
 type AccountExportIssue = {
   scope: 'document';
   id: string;
@@ -49,7 +67,7 @@ type AccountExportIssue = {
 };
 
 export type BuildAccountExportArchiveInput = {
-  manifest: AccountExportManifest;
+  manifest: SupportedAccountExportManifest;
   readObject: (key: string) => Promise<ArrayBuffer>;
   onProgress?: (progress: {
     phase: 'assembling' | 'uploading';
@@ -68,9 +86,10 @@ function appendJson(archive: archiver.Archiver, name: string, data: unknown): vo
   archive.append(JSON.stringify(data, null, 2), { name });
 }
 
-function validateManifest(manifest: AccountExportManifest): void {
-  if (manifest.schemaVersion !== ACCOUNT_EXPORT_SCHEMA_VERSION) {
-    throw new Error(`Unsupported account export manifest version: ${String(manifest.schemaVersion)}`);
+function validateManifest(manifest: SupportedAccountExportManifest): void {
+  const schemaVersion = Number(manifest.schemaVersion);
+  if (schemaVersion !== 4 && schemaVersion !== ACCOUNT_EXPORT_SCHEMA_VERSION) {
+    throw new Error(`Unsupported account export manifest version: ${String(schemaVersion)}`);
   }
   if (manifest.scope !== 'owned') {
     throw new Error('Unsupported account export scope');
@@ -105,8 +124,13 @@ export async function buildAccountExportArchive(input: BuildAccountExportArchive
   appendJson(archive, 'folders.json', manifest.entries.folders);
   if (manifest.entries.onboarding) appendJson(archive, 'onboarding.json', manifest.entries.onboarding);
   appendJson(archive, 'reading_history.json', manifest.entries.readingHistory);
-  appendJson(archive, 'tts_usage.json', manifest.entries.ttsUsage);
-  appendJson(archive, 'job_events.json', manifest.entries.jobEvents);
+  if (manifest.schemaVersion === 4) {
+    appendJson(archive, 'tts_usage.json', manifest.entries.ttsUsage);
+    appendJson(archive, 'job_events.json', manifest.entries.jobEvents);
+  } else {
+    appendJson(archive, 'compute_limit_admissions.json', manifest.entries.computeLimitAdmissions);
+    appendJson(archive, 'compute_limit_events.json', manifest.entries.computeLimitEvents);
+  }
   appendJson(archive, 'document_settings.json', manifest.entries.documentSettings);
   appendJson(archive, 'auth_sessions.json', manifest.entries.authSessions);
   appendJson(archive, 'linked_accounts.json', manifest.entries.linkedAccounts);
@@ -144,7 +168,12 @@ export async function buildAccountExportArchive(input: BuildAccountExportArchive
       documentSettingsMetadata: manifest.entries.documentSettings.length,
       authSessionsMetadata: manifest.entries.authSessions.length,
       linkedAccountsMetadata: manifest.entries.linkedAccounts.length,
-      jobEventsMetadata: manifest.entries.jobEvents.length,
+      ...(manifest.schemaVersion === 4
+        ? { jobEventsMetadata: manifest.entries.jobEvents.length }
+        : {
+            computeLimitAdmissionsMetadata: manifest.entries.computeLimitAdmissions.length,
+            computeLimitEventsMetadata: manifest.entries.computeLimitEvents.length,
+          }),
       documentFiles: completedFiles,
       issues: issues.length,
     },

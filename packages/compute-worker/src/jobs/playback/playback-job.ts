@@ -154,9 +154,13 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
             ordinal,
           }).catch(() => null)));
         sidecars.forEach((sidecar) => {
-          if (sidecar?.status !== 'completed' || !sidecar.audioKey) return;
+          if (!sidecar) return;
           if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return;
-          completedOrdinals.add(sidecar.ordinal);
+          if (sidecar.status === 'completed' && sidecar.audioKey) {
+            completedOrdinals.add(sidecar.ordinal);
+          } else if (sidecar.status === 'error') {
+            erroredOrdinals.add(sidecar.ordinal);
+          }
         });
       }
 
@@ -194,6 +198,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         await hooks?.onProgress?.({
           completedThroughOrdinal: lastCompletedThrough,
           completedCount: completedOrdinals.size,
+          skippedCount: erroredOrdinals.size,
           plannedCount: plannedSegments.length,
           phase: 'generating',
           ...(usageLimited ? { stopReason: 'usage_limit' as const } : {}),
@@ -296,6 +301,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
             publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
               completedThroughOrdinal: lastCompletedThrough,
               completedCount: completedOrdinals.size,
+              skippedCount: erroredOrdinals.size,
               plannedCount: plannedSegments.length,
               phase: 'downloading_model',
               downloadedBytes,
@@ -317,7 +323,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         && cacheEpochStillCurrent,
       );
       if (!generationRunIsCurrent) stoppedEarly = true;
-      if (requestedPlaybackSegmentFailed({
+      if (!forceDocumentExtent && requestedPlaybackSegmentFailed({
         generationRunIsCurrent,
         requiredOrdinal: requiredPlaybackOrdinal,
         completedOrdinals,

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { closeChangelog } from './support/onboarding';
 
 test('anonymous visitor completes first-run entry and reaches the library', async ({ page }) => {
   test.setTimeout(45_000);
@@ -46,10 +47,7 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await expect(privacyContinue).toBeEnabled();
   await privacyContinue.click();
 
-  const changelogDialog = page.getByRole('dialog', { name: 'Changelog', exact: true });
-  const changelogPanel = page.getByTestId('changelog-modal');
-  await expect(changelogPanel).toBeVisible();
-  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await closeChangelog(page);
 
   await expect(page.getByRole('heading', { name: 'OpenReader', exact: true })).toBeVisible();
   await expect(
@@ -70,8 +68,7 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await expect(page.getByRole('button', { name: 'Appearance', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Documents', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Changelog', exact: true }).first().click();
-  await expect(changelogPanel).toBeVisible();
-  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await closeChangelog(page);
   await expect(page).toHaveURL(/\/app\/settings$/);
 
   await page.setViewportSize({ width: 390, height: 844 });

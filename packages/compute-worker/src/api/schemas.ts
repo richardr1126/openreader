@@ -268,6 +268,7 @@ export const pdfLayoutProgressSchema = z.object({
 export const ttsPlaybackProgressSchema = z.object({
   completedThroughOrdinal: z.number(),
   completedCount: z.number(),
+  skippedCount: z.number().optional(),
   plannedCount: z.number(),
   phase: z.enum(['downloading_model', 'generating']).optional(),
   stopReason: z.literal('usage_limit').optional(),
@@ -279,6 +280,7 @@ export const ttsPlaybackExportProgressSchema = z.object({
   phase: z.enum(['assembling', 'transcoding', 'uploading']),
   completedSegments: z.number(),
   plannedSegments: z.number(),
+  skippedSegments: z.number().optional(),
 });
 
 export const documentConversionProgressSchema = z.object({
@@ -306,6 +308,9 @@ export const ttsPlaybackExportArtifactMetadataSchema = z.object({
   objectKey: z.string(),
   contentType: z.string(),
   byteLength: z.number(),
+  generatedSegments: z.number().optional(),
+  skippedSegments: z.number().optional(),
+  plannedSegments: z.number().optional(),
   dispositionFilename: z.string(),
   sourceSessionId: z.string(),
   sourcePlanObjectKey: z.string(),
