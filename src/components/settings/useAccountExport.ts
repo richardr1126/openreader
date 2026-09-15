@@ -75,8 +75,9 @@ export function useAccountExport() {
         throw new Error('Account export did not return a worker operation id');
       }
 
-      const source = new EventSource(`/api/user/export/events?opId=${encodeURIComponent(snapshot.operationId)}`);
-      sourceRef.current = source;
+      const operationId = snapshot.operationId;
+      const createSource = () => new EventSource(`/api/user/export/events?opId=${encodeURIComponent(operationId)}`);
+      let source: EventSource | null = null;
       let recoveryInFlight = false;
 
       const failExport = (error: unknown) => {
@@ -88,53 +89,7 @@ export function useAccountExport() {
         );
       };
 
-      const recoverFromStreamError = async () => {
-        if (recoveryInFlight || sourceRef.current !== source) return;
-        recoveryInFlight = true;
-        let lastError: unknown = new Error('Lost connection while preparing account export');
-
-        for (let attempt = 1; attempt <= 3; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, attempt * 750));
-          if (sourceRef.current !== source) return;
-
-          try {
-            const refreshed = await resolveExistingExport(snapshot);
-            if (sourceRef.current !== source) return;
-            if (refreshed.status === 'failed') {
-              failExport(new Error('Account export failed.'));
-              return;
-            }
-            if (
-              refreshed.downloadUrl
-              || refreshed.status === 'ready'
-              || refreshed.status === 'succeeded'
-            ) {
-              closeSource();
-              try {
-                await downloadWhenReady(refreshed);
-                toast.success('Account export ready.', { id: toastId });
-                setIsExporting(false);
-              } catch (error) {
-                failExport(error);
-              }
-              return;
-            }
-
-            // The operation is still healthy. Let EventSource resume its normal
-            // reconnect loop and reconcile again only if transport errors continue.
-            recoveryInFlight = false;
-            return;
-          } catch (error) {
-            lastError = error;
-          }
-        }
-
-        if (sourceRef.current === source) {
-          failExport(lastError);
-        }
-      };
-
-      source.addEventListener('snapshot', (event) => {
+      const handleSnapshot = (event: Event) => {
         if (!(event instanceof MessageEvent)) return;
         try {
           const payload = JSON.parse(event.data) as {
@@ -172,10 +127,73 @@ export function useAccountExport() {
         } catch {
           // Ignore malformed frames and keep the event stream alive.
         }
-      });
-      source.addEventListener('error', () => {
-        void recoverFromStreamError();
-      });
+      };
+
+      const registerSource = (nextSource: EventSource) => {
+        source = nextSource;
+        sourceRef.current = nextSource;
+        nextSource.addEventListener('snapshot', handleSnapshot);
+        nextSource.addEventListener('error', () => {
+          void recoverFromStreamError();
+        });
+      };
+
+      async function recoverFromStreamError() {
+        const recoveringSource = source;
+        if (
+          recoveryInFlight
+          || recoveringSource === null
+          || sourceRef.current !== recoveringSource
+        ) return;
+        recoveryInFlight = true;
+        let lastError: unknown = new Error('Lost connection while preparing account export');
+
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+          if (sourceRef.current !== recoveringSource) return;
+
+          try {
+            const refreshed = await resolveExistingExport(snapshot);
+            if (sourceRef.current !== recoveringSource) return;
+            if (refreshed.status === 'failed') {
+              failExport(new Error('Account export failed.'));
+              return;
+            }
+            if (
+              refreshed.downloadUrl
+              || refreshed.status === 'ready'
+              || refreshed.status === 'succeeded'
+            ) {
+              closeSource();
+              try {
+                await downloadWhenReady(refreshed);
+                toast.success('Account export ready.', { id: toastId });
+                setIsExporting(false);
+              } catch (error) {
+                failExport(error);
+              }
+              return;
+            }
+
+            if (recoveringSource.readyState === EventSource.CLOSED) {
+              registerSource(createSource());
+            }
+            // The operation is still healthy. Let EventSource resume its normal
+            // reconnect loop when possible, replacing only a terminally closed
+            // source before allowing another recovery attempt.
+            recoveryInFlight = false;
+            return;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        if (sourceRef.current === recoveringSource) {
+          failExport(lastError);
+        }
+      }
+
+      registerSource(createSource());
       // EventSource reconnects with Last-Event-ID. The operation snapshot is
       // the source of truth, so transient transport errors remain non-terminal.
     } catch (error) {

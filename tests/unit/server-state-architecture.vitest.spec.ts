@@ -347,7 +347,10 @@ describe('server-state architecture', () => {
     expect(accountExportEventsRoute).toContain("operation.subject.kind !== 'account_export'");
     expect(accountExportEventsRoute).toContain('proxyOperationEvents');
     expect(accountExport).toContain("new EventSource(`/api/user/export/events?opId=");
-    expect(accountExport).toContain("source.addEventListener('error'");
+    expect(accountExport).toContain("nextSource.addEventListener('snapshot', handleSnapshot)");
+    expect(accountExport).toContain("nextSource.addEventListener('error'");
+    expect(accountExport).toContain('recoveringSource.readyState === EventSource.CLOSED');
+    expect(accountExport).toContain('registerSource(createSource())');
     expect(accountExport).toContain('resolveExistingExport(snapshot)');
     expect(accountExport).not.toContain("window.open('/api/user/export'");
     expect(workerRoutes).toContain("/v1/account-exports/jobs");

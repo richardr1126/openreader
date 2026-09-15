@@ -48,6 +48,9 @@ describe('settings ownership', () => {
     expect(onboarding).toContain('openChangelog');
     expect(onboarding).toContain('handleBlockingModalAfterLeave');
     expect(onboarding).toContain('currentUserIdRef.current !== userId');
+    expect(onboarding).toContain('claimModalOwnerId !== userId');
+    expect(onboarding).toContain("activeBlockingModal === 'claim' && claimModalOwnerId === userId");
+    expect(onboarding).toContain('claimDismissedUsersRef.current.add(claimModalOwnerId)');
     expect(onboarding).not.toContain('openreader:privacyAccepted');
   });
 

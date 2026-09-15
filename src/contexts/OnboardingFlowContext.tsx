@@ -31,6 +31,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
   const { query: onboardingQuery } = useOnboardingState();
   const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | null>(null);
+  const [claimModalOwnerId, setClaimModalOwnerId] = useState<string | null>(null);
   const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>(EMPTY_CLAIM_COUNTS);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
@@ -127,6 +128,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
     if (nextStep === 'claim') {
       setClaimableCounts(claimCounts);
+      setClaimModalOwnerId(userId);
       setActiveBlockingModal('claim');
       return;
     }
@@ -138,20 +140,29 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   }, [activeBlockingModal, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
 
   useEffect(() => {
+    const previousUserId = currentUserIdRef.current;
     currentUserIdRef.current = userId;
-  }, [userId]);
+    if (
+      previousUserId !== userId
+      && activeBlockingModal === 'claim'
+      && claimModalOwnerId !== userId
+    ) {
+      leavingBlockingModalRef.current = 'claim';
+      setActiveBlockingModal(null);
+    }
+  }, [activeBlockingModal, claimModalOwnerId, userId]);
 
   useEffect(() => {
     runOnceFlowRef.current = runOnceFlow;
   }, [runOnceFlow]);
 
   const handleClaimComplete = useCallback(() => {
-    if (userId) {
-      claimDismissedUsersRef.current.add(userId);
+    if (claimModalOwnerId) {
+      claimDismissedUsersRef.current.add(claimModalOwnerId);
     }
     leavingBlockingModalRef.current = 'claim';
     setActiveBlockingModal(null);
-  }, [userId]);
+  }, [claimModalOwnerId]);
 
   const handlePrivacyAccepted = useCallback(() => {
     leavingBlockingModalRef.current = 'privacy';
@@ -199,7 +210,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
         onAfterLeave={() => handleBlockingModalAfterLeave('privacy')}
       />
       <ClaimDataModal
-        isOpen={activeBlockingModal === 'claim'}
+        isOpen={activeBlockingModal === 'claim' && claimModalOwnerId === userId}
         claimableCounts={claimableCounts}
         onDismiss={handleClaimComplete}
         onClaimed={handleClaimComplete}
