@@ -25,6 +25,10 @@ import {
   ACCOUNT_EXPORT_SCHEMA_VERSION,
   buildUserExportManifest,
 } from '@/lib/server/user/data-export';
+import {
+  parseSupportedAccountExportSchemaVersion,
+  resolveAccountExportReference,
+} from '@/lib/server/user/account-export-resolution';
 import { getAuth } from '@/lib/server/auth/auth';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
@@ -48,10 +52,12 @@ function accountExportManifestObjectKey(input: {
 function buildAccountExportDownloadUrl(input: {
   artifactId: string;
   manifestHash: string;
+  schemaVersion: number;
 }): string {
   const params = new URLSearchParams({
     artifactId: input.artifactId,
     manifestHash: input.manifestHash,
+    schemaVersion: String(input.schemaVersion),
   });
   return `/api/user/export/download?${params.toString()}`;
 }
@@ -93,21 +99,36 @@ export async function POST(req: NextRequest) {
       if (!/^[a-f0-9]{8,128}$/i.test(existingArtifactId) || !/^[a-f0-9]{64}$/i.test(existingManifestHash)) {
         return NextResponse.json({ error: 'Invalid account export artifact reference' }, { status: 400 });
       }
-      const resolved = await new ComputeWorkerClient().resolveAccountExport({
-        artifactId: existingArtifactId,
-        storageUserId,
-        namespace,
-        schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
-        manifestHash: existingManifestHash,
+      const rawSchemaVersion = bodyRecord.schemaVersion;
+      const preferredSchemaVersion = rawSchemaVersion === undefined
+        ? null
+        : parseSupportedAccountExportSchemaVersion(rawSchemaVersion);
+      if (rawSchemaVersion !== undefined && preferredSchemaVersion === null) {
+        return NextResponse.json({ error: 'Unsupported account export schema version' }, { status: 400 });
+      }
+      const { resolution: resolved, schemaVersion } = await resolveAccountExportReference({
+        client: new ComputeWorkerClient(),
+        preferredSchemaVersion,
+        reference: {
+          artifactId: existingArtifactId,
+          storageUserId,
+          namespace,
+          manifestHash: existingManifestHash,
+        },
       });
       return NextResponse.json({
         artifactId: existingArtifactId,
         manifestHash: existingManifestHash,
+        schemaVersion,
         status: resolved.artifact ? 'ready' : resolved.operation?.status ?? 'queued',
         operationId: resolved.operation?.opId ?? null,
         progress: resolved.operation?.progress ?? null,
         downloadUrl: resolved.artifact
-          ? buildAccountExportDownloadUrl({ artifactId: existingArtifactId, manifestHash: existingManifestHash })
+          ? buildAccountExportDownloadUrl({
+              artifactId: existingArtifactId,
+              manifestHash: existingManifestHash,
+              schemaVersion,
+            })
           : null,
       });
     }
@@ -223,14 +244,6 @@ export async function POST(req: NextRequest) {
       storageUserId,
       namespace,
     });
-    await getS3InternalClient().send(new PutObjectCommand({
-      Bucket: cfg.bucket,
-      Key: manifestObjectKey,
-      Body: Buffer.from(manifestBody),
-      ContentType: 'application/json',
-      ServerSideEncryption: 'AES256',
-    }));
-
     const client = new ComputeWorkerClient();
     let resolved = await client.resolveAccountExport({
       artifactId,
@@ -249,15 +262,24 @@ export async function POST(req: NextRequest) {
           userId,
           isAnonymous: Boolean((session.user as { isAnonymous?: boolean }).isAnonymous),
         },
-        create: () => client.createAccountExportOperation({
-          artifactId,
-          userId,
-          storageUserId,
-          namespace,
-          schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
-          manifestHash,
-          manifestObjectKey,
-        }),
+        create: async () => {
+          await getS3InternalClient().send(new PutObjectCommand({
+            Bucket: cfg.bucket,
+            Key: manifestObjectKey,
+            Body: Buffer.from(manifestBody),
+            ContentType: 'application/json',
+            ServerSideEncryption: 'AES256',
+          }));
+          return client.createAccountExportOperation({
+            artifactId,
+            userId,
+            storageUserId,
+            namespace,
+            schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
+            manifestHash,
+            manifestObjectKey,
+          });
+        },
       });
       resolved = await client.resolveAccountExport({
         artifactId,
@@ -271,11 +293,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       artifactId,
       manifestHash,
+      schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
       status: resolved.artifact ? 'ready' : resolved.operation?.status ?? 'queued',
       operationId: resolved.operation?.opId ?? null,
       progress: resolved.operation?.progress ?? null,
       downloadUrl: resolved.artifact
-        ? buildAccountExportDownloadUrl({ artifactId, manifestHash })
+        ? buildAccountExportDownloadUrl({
+            artifactId,
+            manifestHash,
+            schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
+          })
         : null,
     });
   } catch (error) {

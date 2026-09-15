@@ -76,6 +76,12 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
     if (isClaimEligible) {
       const claimResult = await refetchClaimCounts();
+      if (
+        leavingBlockingModalRef.current !== null
+        || (userId !== null && claimDismissedUsersRef.current.has(userId))
+      ) {
+        return;
+      }
       if (claimResult.isError) {
         console.error('Failed to check claimable data:', claimResult.error);
         return;

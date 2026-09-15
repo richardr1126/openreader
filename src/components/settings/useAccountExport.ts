@@ -7,6 +7,7 @@ import { parseApiError } from '@/lib/client/api/http';
 type AccountExportSnapshot = {
   artifactId: string;
   manifestHash: string;
+  schemaVersion: number;
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'ready';
   operationId: string | null;
   progress?: {
@@ -29,7 +30,7 @@ export function useAccountExport() {
   useEffect(() => closeSource, [closeSource]);
 
   const resolveExistingExport = useCallback(async (
-    snapshot: Pick<AccountExportSnapshot, 'artifactId' | 'manifestHash'>,
+    snapshot: Pick<AccountExportSnapshot, 'artifactId' | 'manifestHash' | 'schemaVersion'>,
   ) => {
     const response = await fetch('/api/user/export', {
       method: 'POST',

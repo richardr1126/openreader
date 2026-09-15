@@ -5,7 +5,10 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 import { createRequestLogger } from '@/lib/server/logger';
 import { sendStorageArtifact } from '@/lib/server/storage/artifact-download';
 import { isS3Configured } from '@/lib/server/storage/s3';
-import { ACCOUNT_EXPORT_SCHEMA_VERSION } from '@/lib/server/user/data-export';
+import {
+  parseSupportedAccountExportSchemaVersion,
+  resolveAccountExportReference,
+} from '@/lib/server/user/account-export-resolution';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,13 +42,23 @@ export async function GET(req: NextRequest) {
     if (!/^[a-f0-9]{8,128}$/i.test(artifactId) || !/^[a-f0-9]{64}$/i.test(manifestHash)) {
       return NextResponse.json({ error: 'Invalid account export artifact reference' }, { status: 400 });
     }
+    const rawSchemaVersion = req.nextUrl.searchParams.get('schemaVersion');
+    const preferredSchemaVersion = rawSchemaVersion === null
+      ? null
+      : parseSupportedAccountExportSchemaVersion(rawSchemaVersion);
+    if (rawSchemaVersion !== null && preferredSchemaVersion === null) {
+      return NextResponse.json({ error: 'Unsupported account export schema version' }, { status: 400 });
+    }
 
-    const resolved = await new ComputeWorkerClient().resolveAccountExport({
-      artifactId,
-      storageUserId: session.user.id,
-      namespace: null,
-      schemaVersion: ACCOUNT_EXPORT_SCHEMA_VERSION,
-      manifestHash,
+    const { resolution: resolved } = await resolveAccountExportReference({
+      client: new ComputeWorkerClient(),
+      preferredSchemaVersion,
+      reference: {
+        artifactId,
+        storageUserId: session.user.id,
+        namespace: null,
+        manifestHash,
+      },
     });
 
     if (!resolved.artifact) {

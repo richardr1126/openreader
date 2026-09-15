@@ -331,12 +331,14 @@ describe('server-state architecture', () => {
     expect(accountExportRoute).toContain('buildUserExportManifest');
     expect(accountExportRoute).toContain('createAccountExportOperation');
     expect(accountExportRoute).toContain('resolveAccountExport');
+    expect(accountExportRoute).toContain('resolveAccountExportReference');
     expect(accountExportRoute).toContain('getS3InternalClient().send(new PutObjectCommand');
     expect(accountExportRoute).not.toContain('getS3Client().send(new PutObjectCommand');
     expect(accountExportRoute).toContain('/api/user/export/download');
     expect(accountExportRoute).not.toContain('createAccountExportDownloadToken');
     expect(accountExportDownloadRoute).toContain('sendStorageArtifact');
     expect(accountExportDownloadRoute).toContain('resolveAccountExport');
+    expect(accountExportDownloadRoute).toContain('resolveAccountExportReference');
     const artifactDownloadHelper = source('src/lib/server/storage/artifact-download.ts');
     expect(artifactDownloadHelper).toContain('getSignedUrl');
     expect(artifactDownloadHelper).toContain('NextResponse.redirect');
