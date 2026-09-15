@@ -91,7 +91,7 @@ export function AdminEmailPanel() {
     }
   };
 
-  if (loading) return <div className="h-52 animate-pulse rounded-lg bg-surface-sunken" aria-label="Loading email settings" />;
+  if (loading) return <EmailSettingsSkeleton />;
   return (
     <div className="space-y-4">
       <Section
@@ -133,6 +133,52 @@ export function AdminEmailPanel() {
           <li>Create a sending-only API key, preferably restricted to that domain.</li>
           <li>Save the key and sender above, then send a test before enabling account emails.</li>
         </ol>
+      </Section>
+    </div>
+  );
+}
+
+function EmailSettingsSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse" aria-label="Loading email settings" aria-busy="true">
+      <Section
+        title="Account email delivery"
+        subtitle="Verification and password recovery use Resend through the durable compute queue."
+        action={<div className="h-4 w-20 rounded bg-offbase" />}
+      >
+        <div className="rounded-md border border-line px-2.5 py-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="h-4 w-40 rounded bg-offbase" />
+              <div className="h-3 w-72 max-w-full rounded bg-offbase" />
+            </div>
+            <div className="h-5 w-9 shrink-0 rounded-pill bg-offbase" />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="space-y-1">
+              <div className="h-3 w-24 rounded bg-offbase" />
+              <div className="h-9 w-full rounded-md bg-offbase" />
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="h-8 w-32 rounded-md bg-offbase" />
+          <div className="h-8 w-28 rounded-md bg-offbase" />
+          <div className="h-8 w-28 rounded-md bg-offbase" />
+        </div>
+      </Section>
+
+      <Section
+        title="Resend setup"
+        subtitle="Domain ownership and API key permissions are managed in Resend."
+      >
+        <div className="space-y-2">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="h-4 w-4/5 max-w-md rounded bg-offbase" />
+          ))}
+        </div>
       </Section>
     </div>
   );
