@@ -11,6 +11,7 @@ type ClaimDataModalProps = {
   claimableCounts: ClaimableCounts;
   onDismiss: () => void;
   onClaimed: () => void;
+  onAfterLeave?: () => void;
 };
 
 export default function ClaimDataModal({
@@ -18,6 +19,7 @@ export default function ClaimDataModal({
   claimableCounts,
   onDismiss,
   onClaimed,
+  onAfterLeave,
 }: ClaimDataModalProps) {
   const router = useRouter();
   const { mutation: claimMutation } = useClaimData(false);
@@ -40,7 +42,13 @@ export default function ClaimDataModal({
   };
 
   return (
-    <ModalFrame open={isOpen} onClose={onDismiss} panelTestId="claim-modal" className="z-[80]">
+    <ModalFrame
+      open={isOpen}
+      onClose={onDismiss}
+      afterLeave={onAfterLeave}
+      panelTestId="claim-modal"
+      className="z-[80]"
+    >
       <ModalTitle className="mb-4">Existing Data Found</ModalTitle>
 
       <p className="text-sm text-soft mb-2">

@@ -39,11 +39,6 @@ export function SettingsChangelogPanel({
   return (
     <div className="flex h-[min(680px,calc(100dvh-3rem))] flex-col bg-surface sm:h-[490px]">
       <div className="flex items-center gap-3 border-b border-line-soft bg-background px-4 py-3">
-        <IconButton onClick={onClose} aria-label="Close changelog" title="Close">
-          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </IconButton>
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-foreground">Changelog</h4>
           <p className="truncate text-xs text-soft">
@@ -52,6 +47,16 @@ export function SettingsChangelogPanel({
               : 'Release history from GitHub'}
           </p>
         </div>
+        <IconButton
+          onClick={onClose}
+          aria-label="Close changelog"
+          title="Close changelog"
+          className="ml-auto shrink-0"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </IconButton>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3">

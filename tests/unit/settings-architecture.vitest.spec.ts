@@ -46,6 +46,8 @@ describe('settings ownership', () => {
     expect(changelog).toContain('Close changelog');
     expect(onboarding).toContain('<ChangelogModal');
     expect(onboarding).toContain('openChangelog');
+    expect(onboarding).toContain('handleBlockingModalAfterLeave');
+    expect(onboarding).not.toContain('openreader:privacyAccepted');
   });
 
   test('keeps account navigation separate from signing out', () => {

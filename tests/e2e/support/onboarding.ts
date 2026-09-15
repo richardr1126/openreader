@@ -3,8 +3,19 @@ import { expect, type Page } from '@playwright/test';
 export async function closeChangelog(page: Page) {
   const changelogDialog = page.getByRole('dialog', { name: 'Changelog', exact: true });
   const changelogPanel = page.getByTestId('changelog-modal');
+  const closeButton = changelogDialog.getByRole('button', { name: 'Close changelog', exact: true });
   await expect(changelogPanel).toBeVisible();
-  await changelogDialog.getByRole('button', { name: 'Close changelog', exact: true }).click();
+  await expect(closeButton).toBeVisible();
+
+  const [panelBox, closeBox] = await Promise.all([
+    changelogPanel.boundingBox(),
+    closeButton.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(closeBox).not.toBeNull();
+  expect(closeBox!.x).toBeGreaterThan(panelBox!.x + panelBox!.width / 2);
+
+  await closeButton.click();
   await expect.poll(() => changelogDialog.evaluateAll((dialogs) => (
     dialogs.length === 0 || getComputedStyle(dialogs[0]).pointerEvents === 'none'
   ))).toBe(true);
