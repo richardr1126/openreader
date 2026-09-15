@@ -190,11 +190,13 @@ export function AudiobookExportModal({
           ? Math.max(0, Math.floor(snapshot.plannedSegments))
           : Math.max(0, Math.floor(fallbackTotal ?? 0));
         if (total > 0) {
-          const completed = Math.max(0, Math.min(total, Math.floor(snapshot.completedSegments ?? 0)));
+          // Artifact completedSegments already includes processed silence
+          // replacements; skippedSegments is metadata and must not be added again.
+          const settled = Math.max(0, Math.min(total, Math.floor(snapshot.completedSegments ?? 0)));
           setPlannedSegments(total);
-          setCompletedSegments(completed);
+          setCompletedSegments(settled);
           setSkippedSegments(Math.max(0, Math.min(total, Math.floor(snapshot.skippedSegments ?? 0))));
-          setProgress(clampProgress(completed, total));
+          setProgress(clampProgress(settled, total));
         }
 
         if (snapshot.status === 'succeeded') {

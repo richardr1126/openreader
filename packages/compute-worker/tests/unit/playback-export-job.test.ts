@@ -118,6 +118,9 @@ describe('TTS playback export job', () => {
       status: 'ready', generatedSegments: 2, skippedSegments: 1, plannedSegments: 3,
     });
     expect(storage.objects.get(result.artifact.objectKey)?.toString()).toBe('onepausetwo');
+    expect(onProgress).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      completedSegments: 1, plannedSegments: 3, skippedSegments: 1,
+    }));
     expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
       completedSegments: 3, plannedSegments: 3, skippedSegments: 1,
     }));

@@ -338,8 +338,10 @@ export interface TtsPlaybackProgress {
 
 export interface TtsPlaybackExportProgress {
   phase: 'assembling' | 'transcoding' | 'uploading';
+  /** Artifact sources processed so far, including silence replacements. */
   completedSegments: number;
   plannedSegments: number;
+  /** Total terminal-error segments represented by silence in this artifact. */
   skippedSegments?: number;
 }
 
