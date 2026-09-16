@@ -17,7 +17,7 @@ test('one-time first administrator changes the initial password', async ({ page 
   await expect(page.getByText('Finish administrator setup')).toBeVisible();
   await expect(page.getByText('admin-e2e@example.test').first()).toBeVisible();
   await expect(page.getByText('Email verification and address changes are unavailable')).toBeVisible();
-  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel('Display name').fill('First Administrator');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Display name updated')).toBeVisible();
