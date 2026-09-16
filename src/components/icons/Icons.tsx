@@ -553,6 +553,28 @@ export function DocumentIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function MailIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      className={props.className}
+      width={props.width || "1.5em"}
+      height={props.height || "1.5em"}
+      {...props}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0l-8.539 5.693a2.25 2.25 0 01-2.422 0L2.25 6.75"
+      />
+    </svg>
+  );
+}
+
 export function FileSettingsIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg

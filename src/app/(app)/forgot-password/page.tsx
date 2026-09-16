@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Button, Field, Input, Surface } from '@/components/ui';
 import { LoadingSpinner } from '@/components/Spinner';
+import { MailIcon } from '@/components/icons/Icons';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { getAuthClient } from '@/lib/client/auth-client';
@@ -43,9 +44,14 @@ export default function ForgotPasswordPage() {
         {!accountEmailsEnabled ? (
           <p className="mt-3 text-sm text-soft">Password recovery by email is not enabled on this OpenReader instance.</p>
         ) : submitted ? (
-          <div className="mt-5 rounded-lg border border-accent-line bg-accent-wash p-4">
-            <p className="text-sm font-medium text-foreground">Check your email</p>
-            <p className="mt-1 text-sm text-soft">If an account exists for that address, a reset link is on its way. It expires in one hour.</p>
+          <div className="mt-5 flex items-start gap-3 rounded-lg border border-accent-line bg-accent-wash p-4">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-accent">
+              <MailIcon className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Check your email</p>
+              <p className="mt-1 text-sm text-soft">If an account exists for that address, a reset link is on its way. It expires in one hour.</p>
+            </div>
           </div>
         ) : (
           <>

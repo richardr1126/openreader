@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ButtonLink, Surface } from '@/components/ui';
 import { LoadingSpinner } from '@/components/Spinner';
+import { MailIcon } from '@/components/icons/Icons';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { getAuthClient } from '@/lib/client/auth-client';
@@ -28,7 +29,9 @@ function VerifyEmailContent() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Surface elevation="3" className="w-full max-w-md p-6 text-center">
-        <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-xl text-accent">✉</div>
+        <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-accent">
+          <MailIcon className="h-6 w-6" aria-hidden="true" />
+        </div>
         <h1 className="mt-4 text-xl font-semibold text-foreground">
           {displayState === 'working' ? 'Verifying your email' : displayState === 'success' ? 'Email verified' : 'Link unavailable'}
         </h1>

@@ -8,6 +8,7 @@ import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext
 import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
+import { MailIcon } from '@/components/icons/Icons';
 import { Button, ButtonLink, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -116,7 +117,7 @@ export default function SignUpPage() {
         callbackURL: '/verify-email?status=success',
       });
       if (result.error) throw new Error(result.error.message || 'Verification email request failed');
-      toast.success('Verification email queued');
+      toast.success('If verification is still needed, another email is on its way.');
     } catch {
       toast.error('Unable to resend the verification email right now. Please try again.');
     } finally {
@@ -149,12 +150,18 @@ export default function SignUpPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Surface elevation="3" className="w-full max-w-md p-6 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-xl text-accent">✉</div>
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-accent">
+            <MailIcon className="h-6 w-6" aria-hidden="true" />
+          </div>
           <h1 className="mt-4 text-xl font-semibold text-foreground">Check your email</h1>
-          <p className="mt-2 text-sm text-soft">We queued a verification link for <span className="font-medium text-foreground">{email.trim()}</span>. It expires in one hour.</p>
+          <p className="mt-2 text-sm text-soft">
+            If <span className="font-medium text-foreground">{email.trim()}</span> can be registered, a one-hour verification link is on its way.
+            If you already have an account, sign in or reset your password.
+          </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend email</Button>
-            <ButtonLink href="/signin" variant="primary" size="md">Go to sign in</ButtonLink>
+            <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend verification</Button>
+            <ButtonLink href="/forgot-password" variant="outline" size="md">Reset password</ButtonLink>
+            <ButtonLink href="/signin" variant="primary" size="md">Sign in</ButtonLink>
           </div>
         </Surface>
       </div>

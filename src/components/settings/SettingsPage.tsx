@@ -8,6 +8,7 @@ import {
   DocumentIcon,
   InfoIcon,
   KeyIcon,
+  MailIcon,
   PaletteIcon,
   SettingsIcon,
   SpeedometerIcon,
@@ -91,7 +92,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Email',
     shortLabel: 'Email',
     description: 'Verification, recovery, and Resend delivery.',
-    icon: DocumentIcon,
+    icon: MailIcon,
     group: 'admin',
   },
   {
