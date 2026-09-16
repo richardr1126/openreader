@@ -171,6 +171,10 @@ interface ComputeLimitPolicyDocument {
   worker: {
     maxExecutingPerWorker: number;
     resources: Record<WorkerResource, number>;
+    // How often each worker re-fetches the policy from the control plane.
+    // Default is 300s (was 60s originally). Raised on 2026-09-16 to cut the
+    // volume of `/api/internal/compute/limits/policy` invocations on Vercel
+    // Fluid Compute; the policy changes rarely, so a 5-minute refresh is ample.
     policyRefreshSeconds: number;
   };
   providers: {
@@ -514,7 +518,7 @@ Both seed forms must support the complete policy document:
           "libreoffice": 1,
           "archive_io": 2
         },
-        "policyRefreshSeconds": 60
+        "policyRefreshSeconds": 300
       },
       "providers": {
         "defaults": {

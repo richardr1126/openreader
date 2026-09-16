@@ -6,6 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { readFile } from 'node:fs/promises';
 import { serverLogger } from '@/lib/server/logger';
 import {
+  invalidateRuntimeConfigCache,
   seedRuntimeConfigFromValues,
 } from '@/lib/server/admin/settings';
 import { logDegraded } from '@/lib/server/errors/logging';
@@ -97,6 +98,8 @@ async function runSeed(): Promise<void> {
 
   await cleanupLegacyDefaultTtsProviderSeedRow();
   await cleanupLegacyDefaultTtsModelRows();
+  // These delete runtime keys directly, so drop any cached snapshot they touched.
+  invalidateRuntimeConfigCache();
 }
 
 function shouldUseEnvProviderFallback(hasProvidersSection: boolean): boolean {
