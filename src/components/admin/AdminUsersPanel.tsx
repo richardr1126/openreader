@@ -328,7 +328,7 @@ export function AdminUsersPanel() {
               const expanded = expandedId === user.id;
               const busy = updateMutation.isPending || deleteMutation.isPending;
               return (
-                <article key={user.id} className={selectedIds.has(user.id) ? 'group bg-accent-wash/40' : 'group'}>
+                <article key={user.id} className={selectedIds.has(user.id) ? 'group bg-accent-wash' : 'group'}>
                   <div className={`p-3 ${columns}`}>
                     <div className="flex min-w-0 items-center gap-2">
                       <Checkbox
