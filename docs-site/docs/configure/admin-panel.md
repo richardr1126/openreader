@@ -21,7 +21,10 @@ BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 
 OpenReader creates the initial credential account once, without granting its
 admin role yet. Sign in and change the initial password in **Settings → Account**
-to activate the role. No configuration edit or restart is needed afterward;
+to activate the role. If account email delivery is enabled, the seeded account
+is created unverified, so follow the emailed verification link before signing in
+— Better Auth requires a verified address to sign in when email delivery is on.
+No configuration edit or restart is needed afterward;
 removing the seed values later is optional secret hygiene. An existing
 administrator is never replaced by the seed, and deleting the initial account
 does not re-run it. `ADMIN_EMAILS` no longer grants access. Existing v4 admin

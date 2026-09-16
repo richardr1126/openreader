@@ -52,6 +52,22 @@ describe('v5 user administration migration', () => {
     }
   });
 
+  test('treats a JSON-string "false" signup setting as closed', () => {
+    const database = createLegacyDatabase();
+    try {
+      database.exec(`
+        INSERT INTO admin_settings (key, value_json, source, updated_at)
+        VALUES ('enableUserSignups', '"false"', 'admin', 77);
+      `);
+      database.exec(migration);
+      expect(database.prepare('SELECT value_json FROM admin_settings WHERE key = ?').get('signupPolicy')).toEqual({
+        value_json: '"closed"',
+      });
+    } finally {
+      database.close();
+    }
+  });
+
   test('preserves an open signup setting', () => {
     const database = createLegacyDatabase();
     try {

@@ -326,7 +326,7 @@ export function AdminUsersPanel() {
             {data?.users.map((user) => {
               const isSelf = user.id === session?.user?.id;
               const expanded = expandedId === user.id;
-              const busy = updateMutation.isPending || deleteMutation.isPending;
+              const busy = bulkMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
               return (
                 <article key={user.id} className={selectedIds.has(user.id) ? 'group bg-accent-wash' : 'group'}>
                   <div className={`p-3 ${columns}`}>

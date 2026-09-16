@@ -10,7 +10,7 @@ WHERE EXISTS (SELECT 1 FROM `user` WHERE `is_admin` = 1)
 ON CONFLICT(`key`) DO NOTHING;
 --> statement-breakpoint
 INSERT INTO `admin_settings` (`key`, `value_json`, `source`, `updated_at`)
-SELECT 'signupPolicy', CASE WHEN json_extract(`value_json`, '$') = 0 THEN '"closed"' ELSE '"open"' END, `source`, `updated_at`
+SELECT 'signupPolicy', CASE WHEN json_extract(`value_json`, '$') IN (0, 'false') THEN '"closed"' ELSE '"open"' END, `source`, `updated_at`
 FROM `admin_settings` WHERE `key` = 'enableUserSignups'
 ON CONFLICT(`key`) DO NOTHING;
 --> statement-breakpoint
