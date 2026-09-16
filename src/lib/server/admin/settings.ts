@@ -145,10 +145,16 @@ const RUNTIME_CONFIG_CACHE_TTL_MS = (() => {
 })();
 
 let runtimeConfigRowsCache: { rows: RuntimeConfigRows; expiresAt: number } | null = null;
+// Bumped on every invalidation. A read captures the generation before its
+// `db.select()` and only publishes its rows if it still matches — so a read
+// that started before a concurrent write cannot repopulate the cache with
+// pre-write rows after that write invalidated it.
+let runtimeConfigCacheGeneration = 0;
 
 /** Drop the in-process runtime-config read cache. Called after every write. */
 export function invalidateRuntimeConfigCache(): void {
   runtimeConfigRowsCache = null;
+  runtimeConfigCacheGeneration += 1;
 }
 
 async function resolveImplicitDefaultTtsProvider(): Promise<string | undefined> {
@@ -198,6 +204,9 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
   ) {
     return runtimeConfigRowsCache.rows;
   }
+  // Capture the generation before the read so a write that invalidates the cache
+  // while this `db.select()` is in flight prevents us from publishing stale rows.
+  const generationAtReadStart = runtimeConfigCacheGeneration;
   try {
     const rows = await db.select().from(adminSettings);
     const out: RuntimeConfigRows = new Map();
@@ -205,7 +214,7 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
       const parsed = parseStoredValue(row.valueJson);
       out.set(row.key, { value: parsed, source: row.source });
     }
-    if (RUNTIME_CONFIG_CACHE_TTL_MS > 0) {
+    if (RUNTIME_CONFIG_CACHE_TTL_MS > 0 && runtimeConfigCacheGeneration === generationAtReadStart) {
       runtimeConfigRowsCache = { rows: out, expiresAt: now + RUNTIME_CONFIG_CACHE_TTL_MS };
     }
     return out;
