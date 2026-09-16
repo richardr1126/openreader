@@ -239,8 +239,9 @@ API_MODEL_NAME=kokoro
 BASE_URL=http://localhost:3003
 AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
-# Comma-separated emails to auto-promote to admin on signin.
-ADMIN_EMAILS=you@example.com
+# First-admin credential for a fresh database; remove after changing the password in Settings → Account.
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 ```
 
   </TabItem>

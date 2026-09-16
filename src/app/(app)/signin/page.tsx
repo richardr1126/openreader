@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { GithubIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
@@ -33,8 +33,8 @@ function SignInContent() {
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
   const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
-  const enableUserSignups = useFeatureFlag('enableUserSignups');
-  const { accountEmailsEnabled } = useRuntimeConfig();
+  const { accountEmailsEnabled, signupPolicy } = useRuntimeConfig();
+  const canSignUp = signupPolicy !== 'closed';
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
   const isAnyLoading = loadingEmail || loadingGithub || loadingAnonymous;
@@ -268,7 +268,7 @@ function SignInContent() {
 
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-line-soft text-center space-y-2">
-          {enableUserSignups && (
+          {canSignUp && (
             <p className="text-xs text-soft">
               Don&apos;t have an account?{' '}
               <Link href="/signup" className="underline hover:text-foreground">

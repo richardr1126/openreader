@@ -15,7 +15,7 @@ export interface RuntimeConfig {
   defaultTtsProvider: string;
   changelogFeedUrl: string;
   appVersion: string;
-  enableUserSignups: boolean;
+  signupPolicy: 'open' | 'approval' | 'closed';
   enableTtsProvidersTab: boolean;
   enableAudiobookExport: boolean;
   enableDocxConversion: boolean;
@@ -32,7 +32,7 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   defaultTtsProvider: 'custom-openai',
   changelogFeedUrl: 'https://docs.openreader.richardr.dev/changelog/manifest.json',
   appVersion: '0.0.0',
-  enableUserSignups: true,
+  signupPolicy: 'open',
   enableTtsProvidersTab: true,
   enableAudiobookExport: true,
   enableDocxConversion: true,

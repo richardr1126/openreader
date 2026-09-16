@@ -20,14 +20,24 @@ OpenReader has two common runtime modes:
 
 ## Admin role
 
-You can designate one or more users as admins via the `ADMIN_EMAILS` env var:
+On a fresh installation, set a one-time first-admin credential before boot:
 
 ```env
-ADMIN_EMAILS=alice@example.com,bob@example.com
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 ```
 
-Admins see an **Admin** tab in **Settings** with dedicated areas for providers,
-account email, instance settings, compute, and maintenance.
+OpenReader creates that account once. Sign in and change the initial password
+under **Settings → Account**; the **Admin** tab appears after the password change.
+If account email delivery is already enabled, the first sign-in attempt sends
+a verification link. Follow it before signing in. No configuration edit or
+restart is needed afterward. The initial password is invalid after the change;
+removing the seed values later is optional. The email is not an admin allowlist,
+and changing it later does not alter the role. Existing v4 admins are preserved
+on upgrade. Additional admins are granted under **Settings → Admin → Users**.
+
+Admins see dedicated areas for users, providers, account email, instance
+settings, compute, and maintenance.
 
 - **Shared TTS providers** — server-managed TTS provider instances with encrypted keys, visible to all users.
 - **Site features** — runtime overrides for what were previously build-time public env flags (including account signup availability, default TTS provider, audiobook export, etc.).
@@ -48,12 +58,17 @@ When enabled:
 - reset links expire after one hour, successful resets revoke existing
   sessions, and the user signs in again;
 - GitHub sign-in and already-active sessions keep their existing behavior.
+- Registered users can request a new address in **Settings → Account**. The
+  address changes only after the new inbox's verification link is followed.
 
 When disabled, registration and password sign-in retain their previous
-behavior and recovery actions are clearly unavailable. Turning the feature off
-also prevents queued verification/reset messages from being delivered.
+behavior; verification, email change, and recovery actions are clearly
+unavailable. Users can still change a known password under **Settings → Account**.
+Turning the feature off also prevents queued verification/reset messages from
+being delivered.
 
-Admin assignment is reconciled on every session resolution, so removing an email from `ADMIN_EMAILS` demotes the user on next login without a restart. See [Admin Panel](./admin-panel) for the full reference.
+Changing a password signs out other sessions. Admin role changes and signup
+approval are managed in [Admin Panel](./admin-panel), not through email lists.
 
 ## Route behavior
 

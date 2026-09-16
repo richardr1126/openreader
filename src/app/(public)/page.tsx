@@ -52,7 +52,7 @@ const FORMATS = ['EPUB', 'PDF', 'TXT', 'MD', 'DOCX'];
 
 export default async function LandingPage() {
   const runtimeConfig = await getResolvedRuntimeConfigForRsc();
-  const enableUserSignups = runtimeConfig.enableUserSignups;
+  const canSignUp = runtimeConfig.signupPolicy !== 'closed';
 
   const instanceBadge =
     process.env.RICHARDRDEV_PRODUCTION === 'true'
@@ -98,7 +98,7 @@ export default async function LandingPage() {
 
             <div className="public-actions">
               <ButtonLink href="/app" variant="primary" size="lg">Open the reader</ButtonLink>
-              {enableUserSignups ? (
+              {canSignUp ? (
                 <ButtonLink href="/signup" variant="outline" size="lg">Sign up</ButtonLink>
               ) : (
                 <ButtonLink href="/signin" variant="outline" size="lg">Sign in</ButtonLink>
@@ -308,7 +308,7 @@ export default async function LandingPage() {
                 <ButtonAnchor href="https://github.com/richardr1126/openreader#readme" target="_blank" rel="noopener noreferrer" variant="primary" size="lg">
                   View the repository
                 </ButtonAnchor>
-                <ButtonAnchor href="https://docs.openreader.richardr.dev/docker-quick-start" target="_blank" rel="noopener noreferrer" variant="outline" size="lg">
+                <ButtonAnchor href="https://docs.openreader.richardr.dev/deploy/docker-compose" target="_blank" rel="noopener noreferrer" variant="outline" size="lg">
                   Deployment guides
                 </ButtonAnchor>
               </div>
@@ -323,19 +323,13 @@ export default async function LandingPage() {
               </div>
               <pre className="public-terminal-body">
                 <code>
-                  <span className="public-term-comment"># pull and run</span>
+                  <span className="public-term-comment"># run the maintained Compose example</span>
                   {'\n'}
-                  <span className="public-term-prompt">$</span> docker run --name openreader \{'\n'}
-                  {'    '}-p <span className="public-term-accent">3003:3003</span> -p{' '}
-                  <span className="public-term-accent">8333:8333</span> \{'\n'}
-                  {'    '}-v <span className="public-term-accent">openreader_docstore:/app/docstore</span> \{'\n'}
-                  {'    '}-e BASE_URL=
-                  <span className="public-term-accent">http://localhost:3003</span> \{'\n'}
-                  {'    '}-e AUTH_SECRET=
-                  <span className="public-term-accent">$(openssl rand -base64 32)</span> \{'\n'}
-                  {'    '}-e ADMIN_EMAILS=
-                  <span className="public-term-accent">you@example.com</span> \{'\n'}
-                  {'    '}ghcr.io/richardr1126/openreader:latest{'\n'}
+                  <span className="public-term-prompt">$</span> git clone https://github.com/richardr1126/openreader.git{'\n'}
+                  <span className="public-term-prompt">$</span> cd openreader{'\n'}
+                  <span className="public-term-comment"># add first-admin credentials to .env</span>{'\n'}
+                  <span className="public-term-prompt">$</span> docker compose -f{' '}
+                  <span className="public-term-accent">examples/docker/compose.yml</span> up -d{'\n'}
                   {'\n'}
                   <span className="public-term-comment"># open the reading room</span>
                   {'\n'}

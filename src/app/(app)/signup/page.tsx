@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-import { useFeatureFlag, useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
 import { MailIcon } from '@/components/icons/Icons';
@@ -21,9 +21,10 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [awaitingVerification, setAwaitingVerification] = useState(false);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
   const { baseUrl } = useAuthConfig();
-  const enableUserSignups = useFeatureFlag('enableUserSignups');
-  const { accountEmailsEnabled } = useRuntimeConfig();
+  const { accountEmailsEnabled, signupPolicy } = useRuntimeConfig();
+  const canSignUp = signupPolicy !== 'closed';
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
   const validateEmail = (email: string): boolean => {
@@ -44,7 +45,7 @@ export default function SignUpPage() {
 
   const handleSignUp = async () => {
     setError(null);
-    if (!enableUserSignups) {
+    if (!canSignUp) {
       setError('New account sign-ups are currently disabled by the site administrator.');
       return;
     }
@@ -86,6 +87,10 @@ export default function SignUpPage() {
           setError(errorMessage);
         }
       } else {
+        if (signupPolicy === 'approval') {
+          setAwaitingApproval(true);
+          return;
+        }
         if (accountEmailsEnabled) {
           setAwaitingVerification(true);
           return;
@@ -125,7 +130,7 @@ export default function SignUpPage() {
     }
   };
 
-  if (!enableUserSignups) {
+  if (!canSignUp) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-background">
         <Surface elevation="3" className="w-full max-w-md p-6">
@@ -168,6 +173,29 @@ export default function SignUpPage() {
     );
   }
 
+  if (awaitingApproval) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Surface elevation="3" className="w-full max-w-md p-6 text-center">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-wash text-accent">
+            <MailIcon className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <h1 className="mt-4 text-xl font-semibold text-foreground">Request received</h1>
+          <p className="mt-2 text-sm text-soft">
+            Your account is waiting for an administrator to approve access.
+            {accountEmailsEnabled
+              ? ' Check your email to verify your address as well. You can sign in once both steps are complete.'
+              : ' You can sign in after it is approved.'}
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {accountEmailsEnabled ? <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend verification</Button> : null}
+            <ButtonLink href="/signin" variant="primary" size="md">Return to sign in</ButtonLink>
+          </div>
+        </Surface>
+      </div>
+    );
+  }
+
   const { checks, strength } = validatePassword(password);
   const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
   const strengthColors = ['bg-danger', 'bg-danger', 'bg-accent', 'bg-accent', 'bg-accent'];
@@ -176,7 +204,11 @@ export default function SignUpPage() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Surface elevation="3" className="w-full max-w-md p-6">
         <h1 className="text-xl font-semibold text-foreground">Sign up</h1>
-        <p className="text-sm text-soft mt-1">Sign up to sync your reading across devices</p>
+        <p className="text-sm text-soft mt-1">
+          {signupPolicy === 'approval'
+            ? 'Request an account to sync your reading across devices'
+            : 'Sign up to sync your reading across devices'}
+        </p>
 
         {error && (
           <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
@@ -273,7 +305,7 @@ export default function SignUpPage() {
             size="md"
             className="w-full"
           >
-            {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Sign up'}
+            {loading ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : signupPolicy === 'approval' ? 'Request access' : 'Sign up'}
           </Button>
         </div>
 

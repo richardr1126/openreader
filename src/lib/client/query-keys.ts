@@ -16,6 +16,7 @@ export const queryKeys = {
   ttsVoices: (sessionId: string, providerRef: string, model: string) => ['tts-voices', sessionId, providerRef, model] as const,
   claimCounts: (sessionId: string) => ['claim-counts', sessionId] as const,
   computeLimits: (sessionId: string) => ['compute-limits', sessionId] as const,
+  adminRoot: (sessionId: string) => ['admin', sessionId] as const,
   admin: (sessionId: string, scope: string) => ['admin', sessionId, scope] as const,
   // Changelog is public/global content, so it is keyed by URL rather than session.
   changelogManifest: (manifestUrl: string) => ['changelog', 'manifest', manifestUrl] as const,

@@ -159,7 +159,7 @@ describe('runtime seed JSON parsing', () => {
   test('rejects unknown top-level seed keys', () => {
     const raw = JSON.stringify({
       version: 1,
-      runtimeConfig: { enableUserSignups: true },
+      runtimeConfig: { signupPolicy: 'open' },
       extra: true,
     });
 
@@ -217,38 +217,38 @@ describe('runtime seed JSON parsing', () => {
 
 describe('runtime config JSON seeding', () => {
   test('seeds validated values with json-seed source and does not overwrite', async () => {
-    const keys: string[] = ['enableUserSignups', 'ttsUpstreamMaxRetries'];
+    const keys: string[] = ['signupPolicy', 'ttsUpstreamMaxRetries'];
     const snapshot = await snapshotSettings(keys);
 
     try {
       await db.delete(adminSettings).where(inArray(adminSettings.key, keys));
 
       const first = await seedRuntimeConfigFromValues({
-        enableUserSignups: false,
+        signupPolicy: 'closed',
         ttsUpstreamMaxRetries: 9,
       }, 'json-seed');
 
       expect(first.unknown).toEqual([]);
       expect(first.invalid).toEqual([]);
-      expect(first.seeded.sort()).toEqual(['enableUserSignups', 'ttsUpstreamMaxRetries']);
+      expect(first.seeded.sort()).toEqual(['signupPolicy', 'ttsUpstreamMaxRetries']);
 
       const rowsAfterFirst = await snapshotSettings(keys);
       const byKeyFirst = new Map(rowsAfterFirst.map((row) => [row.key, row]));
 
-      expect(parseStoredValue(byKeyFirst.get('enableUserSignups')?.valueJson)).toBe(false);
+      expect(parseStoredValue(byKeyFirst.get('signupPolicy')?.valueJson)).toBe('closed');
       expect(parseStoredValue(byKeyFirst.get('ttsUpstreamMaxRetries')?.valueJson)).toBe(9);
-      expect(byKeyFirst.get('enableUserSignups')?.source).toBe('json-seed');
+      expect(byKeyFirst.get('signupPolicy')?.source).toBe('json-seed');
       expect(byKeyFirst.get('ttsUpstreamMaxRetries')?.source).toBe('json-seed');
 
       const second = await seedRuntimeConfigFromValues({
-        enableUserSignups: true,
+        signupPolicy: 'open',
         ttsUpstreamMaxRetries: 1,
       }, 'json-seed');
 
       expect(second.seeded).toEqual([]);
       const rowsAfterSecond = await snapshotSettings(keys);
       const byKeySecond = new Map(rowsAfterSecond.map((row) => [row.key, row]));
-      expect(parseStoredValue(byKeySecond.get('enableUserSignups')?.valueJson)).toBe(false);
+      expect(parseStoredValue(byKeySecond.get('signupPolicy')?.valueJson)).toBe('closed');
       expect(parseStoredValue(byKeySecond.get('ttsUpstreamMaxRetries')?.valueJson)).toBe(9);
     } finally {
       await restoreSettings(keys, snapshot);
@@ -256,17 +256,17 @@ describe('runtime config JSON seeding', () => {
   });
 
   test('strictly rejects unknown/invalid entries without writes', async () => {
-    const key = 'enableUserSignups';
+    const key = 'signupPolicy';
     const snapshot = await snapshotSettings([key]);
     try {
       await db.delete(adminSettings).where(eq(adminSettings.key, key));
       const result = await seedRuntimeConfigFromValues({
         unknownRuntimeSetting: true,
-        enableUserSignups: 'false',
+        signupPolicy: 'invalid',
       }, 'json-seed');
 
       expect(result.unknown).toEqual(['unknownRuntimeSetting']);
-      expect(result.invalid).toEqual(['enableUserSignups']);
+      expect(result.invalid).toEqual(['signupPolicy']);
       expect(result.seeded).toEqual([]);
 
       const rows = await snapshotSettings([key]);
@@ -282,7 +282,7 @@ describe('runtime config JSON seeding', () => {
     const fullPayload: Record<string, unknown> = {
       defaultTtsProvider: 'seed-shared-provider',
       changelogFeedUrl: 'https://example.com/changelog/manifest.json',
-      enableUserSignups: false,
+      signupPolicy: 'approval',
       enableTtsProvidersTab: false,
       enableAudiobookExport: false,
       enableDocxConversion: false,
@@ -305,7 +305,7 @@ describe('runtime config JSON seeding', () => {
       const rows = await snapshotSettings(keys);
       const byKey = new Map(rows.map((row) => [row.key, row]));
       expect(parseStoredValue(byKey.get('defaultTtsProvider')?.valueJson)).toBe('seed-shared-provider');
-      expect(parseStoredValue(byKey.get('enableUserSignups')?.valueJson)).toBe(false);
+      expect(parseStoredValue(byKey.get('signupPolicy')?.valueJson)).toBe('approval');
       expect(parseStoredValue(byKey.get('ttsUpstreamTimeoutMs')?.valueJson)).toBe(120_000);
       expect(parseStoredValue(byKey.get('maxUploadMb')?.valueJson)).toBe(150);
       expect(byKey.get('defaultTtsProvider')?.source).toBe('json-seed');
@@ -384,7 +384,7 @@ describe('provider seeding and fallback precedence', () => {
 
   test('falls back to API_BASE/API_KEY/API_MODEL_NAME when JSON providers are absent', async () => {
     const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
-    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { enableUserSignups: true } });
+    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { signupPolicy: 'open' } });
 
     try {
       await db.delete(adminProviders).where(inArray(adminProviders.slug, testSlugs));
@@ -429,7 +429,7 @@ describe('provider seeding and fallback precedence', () => {
 
   test('falls back to API_BASE with a blank API_KEY', async () => {
     const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
-    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { enableUserSignups: true } });
+    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { signupPolicy: 'open' } });
 
     try {
       await db.delete(adminProviders).where(inArray(adminProviders.slug, testSlugs));
@@ -470,7 +470,7 @@ describe('provider seeding and fallback precedence', () => {
 
   test('does not create a provider from API_MODEL_NAME alone', async () => {
     const providerSnapshot = await snapshotProvidersBySlug(testSlugs);
-    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { enableUserSignups: true } });
+    const runtimeSeed = JSON.stringify({ version: 1, runtimeConfig: { signupPolicy: 'open' } });
 
     try {
       await db.delete(adminProviders).where(inArray(adminProviders.slug, testSlugs));

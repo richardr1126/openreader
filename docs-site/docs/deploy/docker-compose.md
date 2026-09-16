@@ -95,6 +95,22 @@ Compose file: [`examples/docker/compose.local-full.yml`](https://github.com/rich
 On first boot, `RUNTIME_SEED_JSON` creates an enabled Kokoro shared provider and selects it as the
 default TTS provider.
 
+To require approval for future registrations, add `"signupPolicy": "approval"`
+under `runtimeConfig` in the chosen Compose example before first boot, or set
+**Settings → Admin → Instance → Signups** to **Approve** afterward. Approvals
+are handled in **Settings → Admin → Users**. This setting does not block the
+server-created first-admin credential.
+
+For a new installation, set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` in the
+Compose project's `.env` before the first start. The password must contain at least 16
+characters. OpenReader creates that credential account once, even when public signup is closed
+or approval-only. Sign in and change the initial password in **Settings → Account** to activate
+administrator access. Setup is then complete without an `.env` edit or restart;
+removing the now-inert values later is optional secret hygiene. They are not an ongoing admin
+allowlist, and subsequent administrators are granted in **Settings → Admin → Users**. If account
+email delivery is enabled, the first sign-in attempt sends a verification link;
+follow it, then sign in and change the password.
+
 The full examples also opt into `S3_AUTO_CREATE_BUCKET`, allowing the app to create the configured
 SeaweedFS bucket before startup storage cleanup when the stack uses a new data volume.
 
@@ -175,6 +191,8 @@ For a persistent deployment, generate each secret once, store the values in the 
 
 ```dotenv
 AUTH_SECRET=<openssl-rand-base64-32>
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 COMPUTE_WORKER_TOKEN=<openssl-rand-base64-32>
 COMPUTE_CREDENTIAL_BROKER_TOKEN=<openssl-rand-base64-32>
 TTS_PLAYBACK_TOKEN_SECRET=<openssl-rand-base64-32>
@@ -186,6 +204,9 @@ credential-broker token and `TTS_PLAYBACK_TOKEN_SECRET` before
 exposing a stack outside your trusted local network. The full worker receives neither
 `AUTH_SECRET` nor application database credentials; it resolves enabled TTS providers through the
 private app-owned credential broker.
+The initial admin password is a temporary secret: keep `.env` private and
+change the password in **Settings → Account**. The old value then cannot sign
+in, even if it remains in `.env`. Removing it later is optional cleanup.
 :::
 
 For the complete configuration reference, see
@@ -232,6 +253,8 @@ docker compose -f examples/docker/compose.local-full.yml up -d --build
 
 Keep the same Compose project name, volumes, `AUTH_SECRET`, and storage settings. Add stable values
 for the v5 worker, credential-broker, and playback secrets before recreating the services.
+Existing administrators are preserved by the migration; do not set first-admin seed values for
+an upgrade. `ADMIN_EMAILS` does not grant roles in v5.
 
 The OpenReader entrypoint waits for its database and storage dependencies, applies pending schema
 migrations, and then idempotently deletes the retired v4 object prefixes

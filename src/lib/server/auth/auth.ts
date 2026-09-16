@@ -1,14 +1,16 @@
 import { betterAuth } from "better-auth";
+import { APIError } from 'better-auth/api';
 import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { and, eq } from 'drizzle-orm';
 import { after, NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@openreader/database";
 import { getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
-import { isAdminEmail, syncAdminFlag } from "@/lib/server/admin/email-sync";
+import { ensureInitialAdmin } from '@/lib/server/auth/bootstrap-admin';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
-import { assertUserSignupAllowed } from '@/lib/server/auth/signup-policy';
+import { assertUserSignupAllowed, initialAccessStatus } from '@/lib/server/auth/signup-policy';
 import * as authSchemaSqlite from "@openreader/database/schema-auth-sqlite";
 import * as authSchemaPostgres from "@openreader/database/schema-auth-postgres";
 import { hashForLog, serverLogger } from '@/lib/server/logger';
@@ -52,9 +54,10 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
 }
 
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
+const authUserTable = authSchema.user;
 const requiredAuthEnv = getRequiredAuthEnv();
 
-const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
+const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   database: drizzleAdapter(db as any, {
     provider: process.env.POSTGRES_URL ? "pg" : "sqlite",
@@ -65,6 +68,7 @@ const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
   trustedOrigins: getTrustedOrigins(),
   emailAndPassword: {
     enabled: true,
+    autoSignIn: !approvalRequired,
     requireEmailVerification: accountEmailsEnabled,
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
@@ -96,17 +100,39 @@ const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
     },
   } : {}),
   user: {
+    changeEmail: {
+      // A new address never replaces the old one until the delivery-backed
+      // verification link has been completed.
+      enabled: accountEmailsEnabled,
+    },
     additionalFields: {
       isAdmin: {
         type: 'boolean',
         required: false,
         defaultValue: false,
-        input: false, // never settable from the client; controlled by ADMIN_EMAILS
+        input: false,
+      },
+      adminSource: {
+        type: 'string',
+        required: false,
+        defaultValue: 'none',
+        input: false,
+      },
+      accessStatus: {
+        type: 'string',
+        required: false,
+        defaultValue: 'active',
+        input: false,
       },
     },
     deleteUser: {
       enabled: true,
       beforeDelete: async (user) => {
+        const { assertNotLastAdmin } = await import('@/lib/server/admin/users');
+        await assertNotLastAdmin({
+          isAdmin: Boolean((user as typeof user & { isAdmin?: boolean }).isAdmin),
+          accessStatus: (user as typeof user & { accessStatus?: 'active' | 'pending' | 'suspended' }).accessStatus ?? 'active',
+        });
         try {
           const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
           await deleteUserStorageData(user.id, null);
@@ -130,18 +156,59 @@ const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
       create: {
         before: async (user) => {
           const runtimeConfig = await getResolvedRuntimeConfig();
+          const isAnonymous = Boolean((user as { isAnonymous?: boolean }).isAnonymous);
           assertUserSignupAllowed({
-            enableUserSignups: runtimeConfig.enableUserSignups,
-            isAnonymous: Boolean((user as { isAnonymous?: boolean }).isAnonymous),
+            signupPolicy: runtimeConfig.signupPolicy,
+            isAnonymous,
           });
-          // Stamp newly-created users with the correct isAdmin value if their
-          // email matches ADMIN_EMAILS. This avoids a follow-up UPDATE on
-          // first signup. The `input: false` above prevents clients from
-          // forcing isAdmin=true through signup payloads.
-          if (isAdminEmail(user.email)) {
-            return { data: { ...user, isAdmin: true } };
+          return {
+            data: {
+              ...user,
+              isAdmin: false,
+              adminSource: 'none',
+              accessStatus: initialAccessStatus({
+                signupPolicy: runtimeConfig.signupPolicy,
+                isAnonymous,
+              }),
+            },
+          };
+        },
+      },
+    },
+    account: {
+      update: {
+        after: async (account, context) => {
+          // The one-time bootstrap account cannot administer the instance
+          // until its deployment-provided password has been replaced.
+          if (account.providerId !== 'credential' || !account.password
+            || (context?.path !== '/change-password' && context?.path !== '/reset-password')) return;
+          await db.update(authUserTable).set({ isAdmin: true, adminSource: 'managed' })
+            .where(and(eq(authUserTable.id, account.userId), eq(authUserTable.adminSource, 'bootstrap')));
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session) => {
+          const rows = await db
+            .select({ accessStatus: authUserTable.accessStatus })
+            .from(authUserTable)
+            .where(eq(authUserTable.id, session.userId))
+            .limit(1) as Array<{ accessStatus?: string | null }>;
+          const accessStatus = rows[0]?.accessStatus ?? 'active';
+          if (accessStatus === 'pending') {
+            throw new APIError('FORBIDDEN', {
+              code: 'ACCOUNT_PENDING_APPROVAL',
+              message: 'Your account is waiting for administrator approval.',
+            });
           }
-          return { data: user };
+          if (accessStatus === 'suspended') {
+            throw new APIError('FORBIDDEN', {
+              code: 'ACCOUNT_SUSPENDED',
+              message: 'Your account has been suspended by an administrator.',
+            });
+          }
+          return { data: session };
         },
       },
     },
@@ -163,7 +230,7 @@ const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days (reasonable for user experience)
     updateAge: 60 * 60 * 1, // 1 hour (refresh more frequently)
     cookieCache: {
-      maxAge: 60 * 5, // 5 minutes – revalidate session against DB regularly
+      enabled: false, // admin role/access changes must revoke sessions immediately
     },
   },
   plugins: [
@@ -223,7 +290,7 @@ const createAuth = (accountEmailsEnabled: boolean) => betterAuth({
   },
 });
 
-const authInstances = new Map<boolean, ReturnType<typeof createAuth>>();
+const authInstances = new Map<string, ReturnType<typeof createAuth>>();
 
 /** Resolve the Better Auth configuration for the current saved email policy. */
 export async function getAuth(): Promise<ReturnType<typeof createAuth>> {
@@ -241,10 +308,15 @@ export async function getAuth(): Promise<ReturnType<typeof createAuth>> {
       error,
     });
   }
-  let instance = authInstances.get(enabled);
+  // Better Auth captures autoSignIn at construction time, while the admin may
+  // change signup policy without restarting the app.
+  const approvalRequired = (await getResolvedRuntimeConfig()).signupPolicy === 'approval';
+  await ensureInitialAdmin();
+  const cacheKey = `${enabled}:${approvalRequired}`;
+  let instance = authInstances.get(cacheKey);
   if (!instance) {
-    instance = createAuth(enabled);
-    authInstances.set(enabled, instance);
+    instance = createAuth(enabled, approvalRequired);
+    authInstances.set(cacheKey, instance);
   }
   return instance;
 }
@@ -254,6 +326,7 @@ export type Session = AuthInstance["$Infer"]["Session"];
 type AuthSessionUser = AuthInstance["$Infer"]["Session"]["user"];
 export type User = AuthSessionUser & {
   isAnonymous?: boolean;
+  accessStatus?: 'active' | 'pending' | 'suspended';
 };
 
 export type AuthContext = {
@@ -267,17 +340,6 @@ export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Pro
   const session = await auth.api.getSession({ headers: request.headers });
   const user = (session?.user ?? null) as User | null;
   const userId = user?.id ?? null;
-
-  // Keep user.isAdmin in sync with ADMIN_EMAILS on every session resolution.
-  // Cheap when nothing changes (no-ops at the DB layer); promotes/demotes
-  // when the env list is edited. Skips anonymous users (no real email).
-  if (user && userId && user.email && !user.isAnonymous) {
-    const current = (user as unknown as { isAdmin?: boolean }).isAdmin ?? false;
-    const resolved = await syncAdminFlag(userId, user.email, current);
-    if (resolved !== current) {
-      (user as unknown as { isAdmin: boolean }).isAdmin = resolved;
-    }
-  }
 
   return { session, user, userId };
 }

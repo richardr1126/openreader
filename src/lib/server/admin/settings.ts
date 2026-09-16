@@ -19,6 +19,7 @@ import {
  */
 
 export type RuntimeConfigSource = 'json-seed' | 'env-seed' | 'admin';
+export type SignupPolicy = 'open' | 'approval' | 'closed';
 
 export interface RuntimeConfigKeyDef<T> {
   /** TS-level default. Used when neither DB nor env have a value. */
@@ -90,7 +91,7 @@ function computeLimitPoliciesValue(): RuntimeConfigKeyDef<ComputeLimitPolicyDocu
 export const RUNTIME_CONFIG_SCHEMA = {
   defaultTtsProvider: stringValue('custom-openai'),
   changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json'),
-  enableUserSignups: booleanFlag(true),
+  signupPolicy: enumValue(['open', 'approval', 'closed'] as const, 'open'),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
   enableTtsProvidersTab: booleanFlag(true),

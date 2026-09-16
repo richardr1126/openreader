@@ -14,7 +14,9 @@ const storageTransportConsumers = [
 ];
 
 const documentedEnvironmentVariables = [
-  'ADMIN_EMAILS',
+  'BOOTSTRAP_ADMIN_EMAIL',
+  'BOOTSTRAP_ADMIN_PASSWORD',
+  'BOOTSTRAP_ADMIN_PASSWORD_FILE',
   'API_BASE',
   'API_KEY',
   'API_MODEL_NAME',

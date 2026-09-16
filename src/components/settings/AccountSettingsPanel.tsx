@@ -3,15 +3,16 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { DownloadIcon, RefreshIcon, SpeedometerIcon } from '@/components/icons/Icons';
-import { Badge, Button, ChoiceTile } from '@/components/ui';
-import toast from 'react-hot-toast';
+import { Button, ChoiceTile } from '@/components/ui';
 import { formatCharCount, useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAccountExport } from './useAccountExport';
+import { AccountSecurityPanel } from './AccountSecurityPanel';
 
 function TtsUsageCard() {
   const {
@@ -111,25 +112,7 @@ export function AccountSettingsPanel() {
   const { data: session } = useAuthSession();
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [resendingVerification, setResendingVerification] = useState(false);
   const { isExporting, startExport } = useAccountExport();
-
-  const resendVerification = async () => {
-    if (!session?.user?.email) return;
-    setResendingVerification(true);
-    try {
-      const result = await getAuthClient(authBaseUrl).sendVerificationEmail({
-        email: session.user.email,
-        callbackURL: '/verify-email?status=success',
-      });
-      if (result.error) throw new Error(result.error.message);
-      toast.success('Verification email queued');
-    } catch {
-      toast.error('Unable to resend verification email');
-    } finally {
-      setResendingVerification(false);
-    }
-  };
 
   const handleSignOut = async () => {
     const client = getAuthClient(authBaseUrl);
@@ -140,13 +123,17 @@ export function AccountSettingsPanel() {
   const handleDeleteAccount = async () => {
     try {
       const response = await fetch('/api/account/delete', { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete account');
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error || 'Failed to delete account');
+      }
 
       const client = getAuthClient(authBaseUrl);
       await client.signOut();
-      window.location.href = runtimeConfig.enableUserSignups ? '/signup' : '/signin';
+      window.location.href = runtimeConfig.signupPolicy !== 'closed' ? '/signup' : '/signin';
     } catch (error) {
       console.error('Failed to delete account:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete account');
     }
     setShowDeleteConfirm(false);
   };
@@ -154,41 +141,19 @@ export function AccountSettingsPanel() {
   return (
     <>
       <div className="space-y-2">
-        <div className="rounded-lg bg-background border border-line p-4 space-y-2">
-          <h4 className="text-sm font-medium text-foreground">Current Session</h4>
-          <div className="text-sm space-y-1">
-            <p className="text-soft">Logged in as:</p>
-            {session?.user ? (
-              <>
-                <p className="font-medium text-foreground">
-                  {session.user.isAnonymous
-                    ? 'Anonymous'
-                    : (session.user.name || session.user.email || 'Account')}
-                </p>
-                {!session.user.isAnonymous && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs text-soft font-mono">{session.user.email}</p>
-                    {runtimeConfig.accountEmailsEnabled && (
-                      <Badge tone={session.user.emailVerified ? 'accent' : 'danger'}>
-                        {session.user.emailVerified ? 'Verified' : 'Unverified'}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-                {session.user.isAnonymous && (
-                  <p className="text-xs text-accent mt-1">Anonymous session</p>
-                )}
-              </>
-            ) : (
-              <p className="font-medium text-foreground">No active session</p>
-            )}
+        {session?.user && !session.user.isAnonymous ? <AccountSecurityPanel /> : (
+          <div className="rounded-lg bg-background border border-line p-4 space-y-2">
+            <h4 className="text-sm font-medium text-foreground">Current Session</h4>
+            <div className="text-sm space-y-1">
+              <p className="text-soft">Logged in as:</p>
+              {session?.user ? (
+                <p className="font-medium text-foreground">Anonymous session</p>
+              ) : (
+                <p className="font-medium text-foreground">No active session</p>
+              )}
+            </div>
           </div>
-          {runtimeConfig.accountEmailsEnabled && session?.user && !session.user.isAnonymous && !session.user.emailVerified && (
-            <Button variant="outline" size="sm" disabled={resendingVerification} onClick={resendVerification}>
-              {resendingVerification ? 'Queuing…' : 'Resend verification email'}
-            </Button>
-          )}
-        </div>
+        )}
 
         {session?.user && <TtsUsageCard />}
 
@@ -235,10 +200,10 @@ export function AccountSettingsPanel() {
             <div className="pt-2 border-t border-line-soft">
               <p className="text-sm text-soft mb-3">
                 {session?.user?.isAnonymous
-                  ? (runtimeConfig.enableUserSignups
+                  ? (runtimeConfig.signupPolicy !== 'closed'
                     ? 'You are using an anonymous session. Sign up to save your progress permanently, your current data is automatically transferred.'
                     : 'You are using an anonymous session. New account sign-ups are currently disabled by the site administrator.')
-                  : (runtimeConfig.enableUserSignups
+                  : (runtimeConfig.signupPolicy !== 'closed'
                     ? 'No active session. Please sign in or sign up.'
                     : 'No active session. Please sign in.')}
               </p>
@@ -246,7 +211,7 @@ export function AccountSettingsPanel() {
                 <Link href="/signin">
                   <Button variant="outline" size="md">Sign in</Button>
                 </Link>
-                {runtimeConfig.enableUserSignups && (
+                {runtimeConfig.signupPolicy !== 'closed' && (
                   <Link href="/signup">
                     <Button variant="primary" size="md">Sign up</Button>
                   </Link>

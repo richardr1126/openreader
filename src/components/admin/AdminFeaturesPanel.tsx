@@ -8,6 +8,7 @@ import {
   Section,
   ToggleRow,
   Select,
+  SegmentedControl,
   Button,
   Input,
 } from '@/components/ui';
@@ -34,6 +35,7 @@ interface ProviderOption {
 }
 
 type PlaybackBackgroundExtent = 'section' | 'document';
+type SignupPolicy = 'open' | 'approval' | 'closed';
 
 interface PlaybackBackgroundExtentOption {
   value: PlaybackBackgroundExtent;
@@ -386,14 +388,28 @@ export function AdminFeaturesPanel({
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
           />
         </div>
-        <ToggleRow
-          label="Allow new account sign-ups"
-          description="When off, new accounts cannot be created. Existing accounts can still sign in."
-          checked={Boolean(draft.enableUserSignups)}
-          onChange={(checked) => updateDraft('enableUserSignups', checked)}
-          right={renderSource('enableUserSignups')}
-          variant="flat"
-        />
+        <div className="space-y-2 border-b border-line-soft pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">New account sign-ups</p>
+              <p className="mt-0.5 text-xs text-soft">
+                Open access, collect requests for approval, or close registration. Approval does not verify email ownership.
+              </p>
+            </div>
+            <div className="shrink-0">{renderSource('signupPolicy')}</div>
+          </div>
+          <SegmentedControl<SignupPolicy>
+            value={draft.signupPolicy === 'approval' || draft.signupPolicy === 'closed' ? draft.signupPolicy : 'open'}
+            options={[
+              { value: 'open', label: 'Open' },
+              { value: 'approval', label: 'Approve' },
+              { value: 'closed', label: 'Closed' },
+            ]}
+            onChange={(value) => updateDraft('signupPolicy', value)}
+            ariaLabel="New account sign-up policy"
+            className="grid-cols-3"
+          />
+        </div>
         <ToggleRow
           label="Audiobook export"
           description='Show "Export audiobook" on PDF/EPUB pages.'

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
-import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useRouter } from 'next/navigation';
@@ -19,7 +19,8 @@ export function UserMenu({
   variant?: UserMenuVariant;
 }) {
   const { baseUrl } = useAuthConfig();
-  const enableUserSignups = useFeatureFlag('enableUserSignups');
+  const { signupPolicy } = useRuntimeConfig();
+  const canSignUp = signupPolicy !== 'closed';
   const { data: session, isPending } = useAuthSession();
   const router = useRouter();
 
@@ -41,7 +42,7 @@ export function UserMenu({
             icon={<UserIcon className="h-3.5 w-3.5" />}
             label="Sign in"
           />
-          {enableUserSignups && (
+          {canSignUp && (
             <SidebarNavLink
               href="/signup"
               compact
@@ -58,7 +59,7 @@ export function UserMenu({
         <ButtonLink href="/signin" variant="secondary" size="sm">
           Sign in
         </ButtonLink>
-        {enableUserSignups && (
+        {canSignUp && (
           <ButtonLink href="/signup" variant="primary" size="sm">
             Sign up
           </ButtonLink>

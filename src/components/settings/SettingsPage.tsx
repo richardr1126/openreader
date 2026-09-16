@@ -3,21 +3,13 @@
 import { useMemo, type ComponentType, type SVGProps } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  ClockIcon,
-  DocumentIcon,
-  InfoIcon,
-  KeyIcon,
-  MailIcon,
-  PaletteIcon,
-  SettingsIcon,
-  SpeedometerIcon,
-  UserIcon,
-} from '@/components/icons/Icons';
+import { ClockIcon, DocumentIcon, InfoIcon, KeyIcon, MailIcon,
+  PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
+import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
 import { Sidebar, SidebarNav, SidebarNavGroup, SidebarNavItem, Toolbar } from '@/components/ui';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
@@ -28,7 +20,7 @@ import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'providers' | 'instance' | 'compute' | 'email' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'email' | 'maintenance';
 type SettingsSection = {
   id: SettingsSectionId;
   label: string;
@@ -59,9 +51,17 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'account',
     label: 'Account',
     shortLabel: 'Account',
-    description: 'Review your session, usage, exports, and account controls.',
+    description: 'Manage your profile, email, password, usage, and account data.',
     icon: UserIcon,
     group: 'general',
+  },
+  {
+    id: 'users',
+    label: 'Users',
+    shortLabel: 'Users',
+    description: 'Approve accounts, inspect usage, and manage access.',
+    icon: UserIcon,
+    group: 'admin',
   },
   {
     id: 'providers',
@@ -301,6 +301,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                     </div>
                   ) : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
+                  {isAdmin && activeSection === 'users' ? <AdminUsersPanel /> : null}
                   {isAdmin && activeSection === 'providers' ? <AdminProvidersPanel /> : null}
                   {isAdmin && activeSection === 'instance' ? <AdminFeaturesPanel scope="instance" /> : null}
                   {isAdmin && activeSection === 'compute' ? <AdminFeaturesPanel scope="compute" /> : null}

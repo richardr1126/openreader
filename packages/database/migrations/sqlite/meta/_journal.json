@@ -141,6 +141,13 @@
       "when": 1789018188815,
       "tag": "0019_reset_compute_limit_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1789553714608,
+      "tag": "0020_user_administration",
+      "breakpoints": true
     }
   ]
 }

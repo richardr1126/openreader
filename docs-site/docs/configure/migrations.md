@@ -54,6 +54,8 @@ state while applying the later v5 migrations.
 | `0013`–`0014` | SQLite + Postgres | Adds transitional SQL playback-session state used during v5 development. |
 | `0015` | SQLite + Postgres | Removes the retired SQL TTS cache, transitional playback sessions, legacy audiobook tables, and their obsolete cleanup task. v5 playback artifacts live in object storage. |
 | `0016` | SQLite + Postgres | Adds explicit account identity issuers, normalizes existing credential/GitHub identities, and adds identity indexes. |
+| `0017`–`0019` | SQLite + Postgres | Introduces unified compute admissions, metered usage, and active-scope tracking; resets the superseded v5-only compute policy to the maintained schema. |
+| `0020` | SQLite + Postgres | Adds user approval status and admin grant source, preserves existing admins, and converts the legacy signup switch to `signupPolicy`. |
 
 To skip automatic startup migrations:
 
@@ -82,7 +84,6 @@ The decommission is idempotent and deletes only these retired object roots benea
 - `audiobooks_v1/`
 
 No manual `pnpm` command or migration-only container is needed for the supported Docker paths. See
-[Docker Quick Start](../docker-quick-start#3-upgrade-from-v44-to-v5) or
 [Docker Compose](../deploy/docker-compose#upgrade-from-v44-to-v5).
 
 ### Native source and custom/serverless deployments
