@@ -1821,6 +1821,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'active'"
+        },
+        "deletion_requested_at": {
+          "name": "deletion_requested_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

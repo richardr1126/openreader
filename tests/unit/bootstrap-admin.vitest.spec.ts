@@ -26,7 +26,7 @@ beforeAll(async () => {
     create table user (
       id text primary key, name text not null, email text not null unique,
       email_verified integer not null, image text, is_anonymous integer, is_admin integer not null,
-      admin_source text not null, access_status text not null,
+      admin_source text not null, access_status text not null, deletion_requested_at integer,
       created_at integer not null, updated_at integer not null
     );
     create table account (

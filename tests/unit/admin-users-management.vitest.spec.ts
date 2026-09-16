@@ -1,38 +1,58 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { user } from '../../packages/database/src/schema_auth_sqlite';
 
-const mocks = vi.hoisted(() => ({
-  selectedRows: [] as unknown[][],
-  update: vi.fn(),
-  remove: vi.fn(),
-  cleanup: vi.fn(),
-}));
-
-vi.mock('@openreader/database', () => ({
-  db: {
+const mocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m: any = {
+    selectedRows: [] as unknown[][],
+    update: vi.fn(),
+    remove: vi.fn(),
+    cleanup: vi.fn(),
+  };
+  // One connection object backs both the plain `db` handle and the transaction
+  // connection passed to `runInDbTransaction`, so both share `selectedRows`.
+  m.conn = {
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: () => Promise.resolve(mocks.selectedRows.shift() ?? []),
-          then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve(mocks.selectedRows.shift() ?? []).then(resolve),
+          limit: () => Promise.resolve(m.selectedRows.shift() ?? []),
+          then: (resolve: (rows: unknown[]) => unknown) =>
+            Promise.resolve(m.selectedRows.shift() ?? []).then(resolve),
         }),
       }),
     }),
     update: (...args: unknown[]) => {
-      mocks.update(...args);
+      m.update(...args);
       return { set: () => ({ where: () => Promise.resolve() }) };
     },
     delete: (...args: unknown[]) => {
-      mocks.remove(...args);
+      m.remove(...args);
       return { where: () => Promise.resolve() };
     },
-  },
+    execute: () => Promise.resolve(),
+  };
+  return m;
+});
+
+vi.mock('@openreader/database', () => ({ db: mocks.conn }));
+vi.mock('@openreader/database/run-in-transaction', () => ({
+  runInDbTransaction: (fn: (conn: unknown) => unknown) => fn(mocks.conn),
 }));
 vi.mock('@/lib/server/user/data-cleanup', () => ({ deleteUserStorageData: mocks.cleanup }));
 
-import { deleteManagedUser, updateManagedUser } from '../../src/lib/server/admin/users';
+import {
+  deleteManagedUser,
+  resumePendingUserDeletions,
+  updateManagedUser,
+} from '../../src/lib/server/admin/users';
 
 function target(overrides: Record<string, unknown> = {}) {
   return { id: 'target-1', email: 'reader@example.test', isAnonymous: false, isAdmin: false, adminSource: 'none', accessStatus: 'active', ...overrides };
+}
+
+// Did phase 2 remove the account row (as opposed to only revoking sessions)?
+function userRowDeleted(): boolean {
+  return mocks.remove.mock.calls.some((call: unknown[]) => call[0] === user);
 }
 
 describe('admin user mutation guards', () => {
@@ -71,12 +91,31 @@ describe('admin user mutation guards', () => {
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
-  test('never deletes the account when storage cleanup fails', async () => {
+  test('durably suspends and marks before cleaning up storage and the row', async () => {
+    mocks.selectedRows = [[target()]];
+    await deleteManagedUser({ actorUserId: 'owner', targetUserId: 'target-1' });
+    // Phase 1 wrote the suspend + deletionRequestedAt marker...
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    // ...and phase 2 cleaned up storage then removed the row.
+    expect(mocks.cleanup).toHaveBeenCalledTimes(1);
+    expect(userRowDeleted()).toBe(true);
+  });
+
+  test('never deletes the account row when storage cleanup fails', async () => {
     mocks.selectedRows = [[target()]];
     mocks.cleanup.mockRejectedValue(new Error('storage unavailable'));
     await expect(deleteManagedUser({ actorUserId: 'owner', targetUserId: 'target-1' }))
       .rejects.toThrow(/storage unavailable/);
-    expect(mocks.remove).not.toHaveBeenCalled();
+    // The durable marker was written and sessions revoked, but the irreversible
+    // row deletion never ran — a later sweep can retry it.
+    expect(userRowDeleted()).toBe(false);
+  });
+
+  test('resume sweep finishes durably marked deletions', async () => {
+    mocks.selectedRows = [[{ id: 'u1' }, { id: 'u2' }]];
+    await resumePendingUserDeletions();
+    expect(mocks.cleanup).toHaveBeenCalledTimes(2);
+    expect(mocks.remove.mock.calls.filter((call: unknown[]) => call[0] === user)).toHaveLength(2);
   });
 
   test('revokes sessions after an approval', async () => {

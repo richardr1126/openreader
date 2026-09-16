@@ -20,6 +20,7 @@ export const user = sqliteTable("user", {
   isAdmin: integer("is_admin", { mode: "boolean" }).default(false).notNull(),
   adminSource: text("admin_source").default("none").notNull(),
   accessStatus: text("access_status").default("active").notNull(),
+  deletionRequestedAt: integer("deletion_requested_at", { mode: "timestamp_ms" }),
 });
 
 export const session = sqliteTable(

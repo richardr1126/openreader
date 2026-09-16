@@ -2,6 +2,8 @@ ALTER TABLE "user" ADD COLUMN "access_status" text DEFAULT 'active' NOT NULL;
 --> statement-breakpoint
 ALTER TABLE "user" ADD COLUMN "admin_source" text DEFAULT 'none' NOT NULL;
 --> statement-breakpoint
+ALTER TABLE "user" ADD COLUMN "deletion_requested_at" timestamp;
+--> statement-breakpoint
 UPDATE "user" SET "admin_source" = 'managed' WHERE "is_admin" = true;
 --> statement-breakpoint
 INSERT INTO "admin_settings" ("key", "value_json", "source", "updated_at")

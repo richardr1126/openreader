@@ -1,9 +1,12 @@
-import { and, asc, count, desc, eq, inArray, isNull, like, max, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, max, or, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
+import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { computeLimitEvents, documents } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 import { deleteUserStorageData } from '@/lib/server/user/data-cleanup';
+import { hashForLog, serverLogger } from '@/lib/server/logger';
+import { logDegraded } from '@/lib/server/errors/logging';
 
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 const { user, session } = authSchema;
@@ -11,6 +14,30 @@ const { user, session } = authSchema;
 // that union statically, while every query below uses columns shared by both.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const database = db as any;
+
+// Every admin-removal path (demote, suspend, delete, and the Better Auth
+// self-delete guard) serializes on this one advisory lock so the last-admin
+// count and the mutation that acts on it stay atomic. The constant is
+// arbitrary but must be stable across processes.
+const ADMIN_MUTATION_LOCK_KEY = 4915231001;
+
+/**
+ * Run `fn` inside a transaction that holds the shared admin-mutation lock.
+ * On Postgres a transaction-scoped advisory lock serializes across app
+ * instances; on SQLite the dedicated BEGIN IMMEDIATE connection already
+ * serializes every such transaction globally.
+ */
+async function withAdminMutationLock<T>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fn: (conn: any) => Promise<T>,
+): Promise<T> {
+  return runInDbTransaction(async (conn) => {
+    if (process.env.POSTGRES_URL) {
+      await conn.execute(sql.raw(`SELECT pg_advisory_xact_lock(${ADMIN_MUTATION_LOCK_KEY})`));
+    }
+    return fn(conn);
+  });
+}
 
 export type UserAccessStatus = 'active' | 'pending' | 'suspended';
 export type AdminUserKindFilter = 'all' | 'account' | 'anonymous';
@@ -187,31 +214,47 @@ export async function listAdminUsers(input: {
   };
 }
 
-async function getTargetUser(userId: string): Promise<{
+interface TargetUser {
   id: string;
   isAnonymous: boolean;
   isAdmin: boolean;
   accessStatus: UserAccessStatus;
-} | null> {
-  const rows = await database.select({
+  deletionRequestedAt: Date | null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getTargetUser(userId: string, conn: any = database): Promise<TargetUser | null> {
+  const rows = await conn.select({
     id: user.id,
     isAnonymous: user.isAnonymous,
     isAdmin: user.isAdmin,
     accessStatus: user.accessStatus,
+    deletionRequestedAt: user.deletionRequestedAt,
   }).from(user).where(eq(user.id, userId)).limit(1) as Array<Record<string, unknown>>;
   const row = rows[0];
   if (!row) return null;
+  const requestedAt = row.deletionRequestedAt;
   return {
     id: String(row.id),
     isAnonymous: Boolean(row.isAnonymous),
     isAdmin: Boolean(row.isAdmin),
     accessStatus: normalizeAccessStatus(row.accessStatus),
+    deletionRequestedAt: requestedAt == null ? null : new Date(requestedAt as string | number | Date),
   };
 }
 
-export async function assertNotLastAdmin(target: { isAdmin: boolean; accessStatus: UserAccessStatus }): Promise<void> {
+/**
+ * Throw if `target` is the final removable administrator. Runs on the caller's
+ * connection so it can be part of the same transaction as the mutation it
+ * guards; `assertNotLastAdmin` is the standalone (self-locking) entry point.
+ */
+async function assertNotLastAdminOn(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  conn: any,
+  target: { isAdmin: boolean; accessStatus: UserAccessStatus },
+): Promise<void> {
   if (!target.isAdmin) return;
-  const rows = await database.select({ value: count() }).from(user).where(
+  const rows = await conn.select({ value: count() }).from(user).where(
     target.accessStatus === 'active'
       ? and(eq(user.isAdmin, true), eq(user.accessStatus, 'active'))
       : eq(user.isAdmin, true),
@@ -219,6 +262,11 @@ export async function assertNotLastAdmin(target: { isAdmin: boolean; accessStatu
   if (numeric(rows[0]?.value) <= 1) {
     throw new AdminUserManagementError('The final administrator cannot be removed.', 409);
   }
+}
+
+export async function assertNotLastAdmin(target: { isAdmin: boolean; accessStatus: UserAccessStatus }): Promise<void> {
+  if (!target.isAdmin) return;
+  await withAdminMutationLock((conn) => assertNotLastAdminOn(conn, target));
 }
 
 export class AdminUserManagementError extends Error {
@@ -233,35 +281,41 @@ export async function updateManagedUser(input: {
   isAdmin?: boolean;
   accessStatus?: UserAccessStatus;
 }): Promise<void> {
-  const target = await getTargetUser(input.targetUserId);
-  if (!target) throw new AdminUserManagementError('User not found.', 404);
-  if (target.isAnonymous && (input.isAdmin !== undefined || input.accessStatus !== undefined)) {
-    throw new AdminUserManagementError('Anonymous users cannot receive account roles or approval state.', 400);
-  }
+  // Identity-only checks do not depend on live table state, so reject early.
   if (input.targetUserId === input.actorUserId && input.isAdmin === false) {
     throw new AdminUserManagementError('You cannot remove your own administrator access.', 409);
   }
   if (input.targetUserId === input.actorUserId && input.accessStatus && input.accessStatus !== 'active') {
     throw new AdminUserManagementError('You cannot suspend your own account.', 409);
   }
-  if (input.isAdmin === true && (target.accessStatus !== 'active'
-    || (input.accessStatus !== undefined && input.accessStatus !== 'active'))) {
-    throw new AdminUserManagementError('Approve or restore the account before granting administrator access.', 409);
-  }
-  if ((input.isAdmin === false || (input.accessStatus && input.accessStatus !== 'active')) && target.isAdmin) {
-    await assertNotLastAdmin(target);
-  }
 
-  const updates: Record<string, unknown> = {};
-  if (input.isAdmin !== undefined) {
-    updates.isAdmin = input.isAdmin;
-    updates.adminSource = input.isAdmin ? 'managed' : 'none';
-  }
-  if (input.accessStatus !== undefined) updates.accessStatus = input.accessStatus;
-  if (Object.keys(updates).length === 0) return;
+  // The target read, last-admin guard, and mutation share one locked
+  // transaction so the count cannot go stale between check and write.
+  await withAdminMutationLock(async (conn) => {
+    const target = await getTargetUser(input.targetUserId, conn);
+    if (!target) throw new AdminUserManagementError('User not found.', 404);
+    if (target.isAnonymous && (input.isAdmin !== undefined || input.accessStatus !== undefined)) {
+      throw new AdminUserManagementError('Anonymous users cannot receive account roles or approval state.', 400);
+    }
+    if (input.isAdmin === true && (target.accessStatus !== 'active'
+      || (input.accessStatus !== undefined && input.accessStatus !== 'active'))) {
+      throw new AdminUserManagementError('Approve or restore the account before granting administrator access.', 409);
+    }
+    if ((input.isAdmin === false || (input.accessStatus && input.accessStatus !== 'active')) && target.isAdmin) {
+      await assertNotLastAdminOn(conn, target);
+    }
 
-  await database.update(user).set(updates).where(eq(user.id, input.targetUserId));
-  await database.delete(session).where(eq(session.userId, input.targetUserId));
+    const updates: Record<string, unknown> = {};
+    if (input.isAdmin !== undefined) {
+      updates.isAdmin = input.isAdmin;
+      updates.adminSource = input.isAdmin ? 'managed' : 'none';
+    }
+    if (input.accessStatus !== undefined) updates.accessStatus = input.accessStatus;
+    if (Object.keys(updates).length === 0) return;
+
+    await conn.update(user).set(updates).where(eq(user.id, input.targetUserId));
+    await conn.delete(session).where(eq(session.userId, input.targetUserId));
+  });
 }
 
 export async function deleteManagedUser(input: {
@@ -271,9 +325,69 @@ export async function deleteManagedUser(input: {
   if (input.actorUserId === input.targetUserId) {
     throw new AdminUserManagementError('Use Account settings to delete your own account.', 409);
   }
-  const target = await getTargetUser(input.targetUserId);
-  if (!target) throw new AdminUserManagementError('User not found.', 404);
-  if (target.isAdmin) await assertNotLastAdmin(target);
-  await deleteUserStorageData(target.id, null);
-  await database.delete(user).where(eq(user.id, target.id));
+  // Phase 1 durably records the intent (atomic with the last-admin guard);
+  // phase 2 performs the irreversible storage + row cleanup. If phase 2 fails
+  // the marker survives, so the request is retryable and the startup sweep
+  // (`resumePendingUserDeletions`) finishes it.
+  await requestUserDeletion(input.targetUserId);
+  await finalizeUserDeletion(input.targetUserId);
+}
+
+/**
+ * Phase 1: guard against removing the last admin, then durably mark the
+ * account for deletion — suspend it, stamp `deletionRequestedAt`, and revoke
+ * sessions — all inside one locked transaction. Idempotent: re-marking an
+ * already-marked account skips the guard so a resumed deletion can proceed.
+ */
+async function requestUserDeletion(targetUserId: string): Promise<void> {
+  await withAdminMutationLock(async (conn) => {
+    const target = await getTargetUser(targetUserId, conn);
+    if (!target) throw new AdminUserManagementError('User not found.', 404);
+    if (target.deletionRequestedAt === null && target.isAdmin) {
+      await assertNotLastAdminOn(conn, target);
+    }
+    await conn.update(user)
+      .set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
+      .where(eq(user.id, target.id));
+    await conn.delete(session).where(eq(session.userId, target.id));
+  });
+}
+
+/**
+ * Phase 2: remove user-owned storage, then the account row. Both steps are
+ * idempotent — storage cleanup fails safe (throws before the row is removed),
+ * and a missing row is a completed deletion.
+ */
+async function finalizeUserDeletion(targetUserId: string): Promise<void> {
+  await deleteUserStorageData(targetUserId, null);
+  await database.delete(user).where(eq(user.id, targetUserId));
+}
+
+/**
+ * Startup sweep: complete any deletion whose durable marker survived a crash
+ * or a transient storage-cleanup failure. Per-account errors are logged and
+ * skipped so one stuck account cannot block the rest (or startup).
+ */
+export async function resumePendingUserDeletions(): Promise<void> {
+  const rows = await database.select({ id: user.id }).from(user)
+    .where(isNotNull(user.deletionRequestedAt)) as Array<{ id: string }>;
+  if (rows.length === 0) return;
+  serverLogger.info({
+    event: 'admin.user_delete.resume_sweep',
+    count: rows.length,
+  }, `Resuming ${rows.length} pending user deletion(s)`);
+  for (const row of rows) {
+    const targetUserId = String(row.id);
+    try {
+      await finalizeUserDeletion(targetUserId);
+    } catch (error) {
+      logDegraded(serverLogger, {
+        event: 'admin.user_delete.resume_failed',
+        msg: 'Failed to finish a pending user deletion; will retry on next sweep',
+        step: 'finalize_user_deletion',
+        context: { userIdHash: hashForLog(targetUserId) },
+        error,
+      });
+    }
+  }
 }
