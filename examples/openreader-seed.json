@@ -3,7 +3,7 @@
   "runtimeConfig": {
     "defaultTtsProvider": "custom-openai",
     "changelogFeedUrl": "https://docs.openreader.richardr.dev/changelog/manifest.json",
-    "enableUserSignups": true,
+    "signupPolicy": "open",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,
     "enableDocxConversion": true,

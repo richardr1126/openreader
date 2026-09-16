@@ -18,6 +18,8 @@ export const user = sqliteTable("user", {
     .notNull(),
   isAnonymous: integer("is_anonymous", { mode: "boolean" }).default(false),
   isAdmin: integer("is_admin", { mode: "boolean" }).default(false).notNull(),
+  adminSource: text("admin_source").default("none").notNull(),
+  accessStatus: text("access_status").default("active").notNull(),
 });
 
 export const session = sqliteTable(

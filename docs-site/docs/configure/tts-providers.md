@@ -7,7 +7,7 @@ compute worker. Provider credentials are always admin-managed and never accepted
 The worker resolves the selected provider just in time through the authenticated app-owned
 credential broker; credentials are not embedded in NATS jobs or playback artifacts.
 
-**Admin-managed shared providers** (Settings > Admin > Shared providers): DB-backed instances configured by an admin and visible to all users. Keys are encrypted at rest and never exposed to the client. Available only when [auth is enabled](./auth) and your account is in `ADMIN_EMAILS`. See [Admin Panel](./admin-panel).
+**Admin-managed shared providers** (Settings > Admin > Shared providers): DB-backed instances configured by an admin and visible to all users. Keys are encrypted at rest and never exposed to the client. Available only when [auth is enabled](./auth) and your account has an administrator grant. See [Admin Panel](./admin-panel).
 
 **Per-user Settings modal** (Settings > TTS Provider): users may select an enabled shared provider, model, instructions, and voice. Credentials remain server-side.
 

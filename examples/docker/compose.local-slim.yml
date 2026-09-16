@@ -12,6 +12,8 @@ services:
     environment:
       BASE_URL: ${BASE_URL:-http://localhost:3003}
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}
       COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
       COMPUTE_WORKER_HOST: 0.0.0.0

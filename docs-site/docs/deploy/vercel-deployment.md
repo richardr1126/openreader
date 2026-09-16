@@ -41,7 +41,8 @@ S3_PREFIX=openreader
 # Auth (required for the admin panel)
 BASE_URL=https://your-app.vercel.app
 AUTH_SECRET=...
-ADMIN_EMAILS=you@example.com  # comma-separated; admins manage TTS + features in-app
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com # new database only; remove after setup
+BOOTSTRAP_ADMIN_PASSWORD=... # unique 16+ character initial password; remove after rotation
 CRON_SECRET=...               # generate with: openssl rand -base64 32
 
 # Heavy compute (required on Vercel in current releases)
@@ -97,13 +98,17 @@ For complete Railway worker env vars (`NATS_*`, `S3_*`, health checks, and Synad
 
 ## 2. First-run admin configuration (recommended)
 
-After the first successful deploy and admin login, open **Settings → Admin** and configure:
+On a fresh database, sign in with the seeded credential and change its password
+in **Settings → Account** to activate the administrator role. No second deploy
+is required. The initial password is then invalid; removing the bootstrap
+values from Vercel later is optional secret hygiene. Existing v4 administrators keep their
+roles during migration. Then open **Settings → Admin** and configure:
 
 - **Shared providers**: create/edit your provider key(s) here (encrypted at rest).
 - **Site features**:
   - `enableDocxConversion=true` when the published compute-worker image is connected.
   - `enableTtsProvidersTab=false` if you want shared-provider-only UX.
-  - `enableUserSignups=true` unless you explicitly want an invite-only deployment.
+  - `signupPolicy=open`, `approval`, or `closed` according to your registration policy.
   - `defaultTtsProvider=replicate` (or your preferred shared slug).
   - `showAllProviderModels=false` if you want users locked to each provider's default model.
   - `enableAudiobookExport=true`.

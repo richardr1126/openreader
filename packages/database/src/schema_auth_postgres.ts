@@ -14,6 +14,8 @@ export const user = pgTable("user", {
     .notNull(),
   isAnonymous: boolean("is_anonymous").default(false),
   isAdmin: boolean("is_admin").default(false).notNull(),
+  adminSource: text("admin_source").default("none").notNull(),
+  accessStatus: text("access_status").default("active").notNull(),
 });
 
 export const session = pgTable(

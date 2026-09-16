@@ -2,7 +2,7 @@
 title: Admin Panel
 ---
 
-The admin panel lets a designated set of users manage shared TTS providers,
+The admin panel lets administrators manage users, shared TTS providers,
 account email, site-wide feature flags, compute policy, and maintenance directly
 from Settings without touching environment variables or redeploying.
 
@@ -10,23 +10,52 @@ It is gated behind authentication, so you must have auth enabled to use it ([Aut
 
 ## Designating admins
 
-Set `ADMIN_EMAILS` to a comma-separated list of emails:
+For a new instance, provide a one-time credential before first boot:
 
 ```env
 AUTH_SECRET=...        # required for auth
 BASE_URL=...           # required for auth
-ADMIN_EMAILS=alice@example.com,bob@example.com
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 ```
 
-On every session resolution the server compares the user's email against this list and writes `user.is_admin = true` (or `false` for emails removed from the list). No restart is required to demote — the next page load picks it up.
+OpenReader creates the initial credential account once, without granting its
+admin role yet. Sign in and change the initial password in **Settings → Account**
+to activate the role. No configuration edit or restart is needed afterward;
+removing the seed values later is optional secret hygiene. An existing
+administrator is never replaced by the seed, and deleting the initial account
+does not re-run it. `ADMIN_EMAILS` no longer grants access. Existing v4 admin
+roles are preserved by the migration.
 
 When the logged-in user is an admin, an **Admin** tab appears in **Settings → sidebar** with dedicated areas:
 
 - **Shared providers** — server-side TTS provider instances visible to all users.
+- **Users** — registered and anonymous accounts, status, usage, approval, role management, and deletion.
 - **Site features** — runtime-editable replacements for what were previously build-time public env flags.
 - **Email** — Resend delivery, sender identity, test delivery, verification, and password recovery.
 - **Compute** — admission, usage, queue, and worker execution limits.
 - **Maintenance** — scheduled cleanup and recent task status.
+
+## Managing users
+
+The **Users** area includes registered and anonymous accounts, email
+verification, signup status, creation and last session activity, document
+counts and owned bytes, and metered compute events. Search and filters are
+server-side. Compute totals are not a full billing ledger; they reflect only
+actions for which usage metering was enabled.
+
+Admins can approve pending registrations, suspend or restore accounts, grant or
+revoke admin access, and delete another user. Deletion first cleans up
+user-owned storage; if cleanup fails, the account remains. The last active
+administrator cannot be removed, and self-demotion, self-suspension, and
+self-deletion are blocked. Role and access changes revoke affected sessions.
+
+Approval is not email verification. If email ownership matters to your
+deployment, enable account email delivery and check verification before
+approval, or verify identity out of band. In **Site features**, set
+`signupPolicy=approval` for approve-only registration, `open` for immediate
+access, or `closed` to reject new registrations. Anonymous sessions are a
+separate deployment opt-in.
 
 ## Account email through Resend
 
@@ -93,7 +122,7 @@ Runtime-editable settings, one row per key:
 | --- | --- |
 | `defaultTtsProvider` | Default provider id new users start with (built-in id or shared slug). |
 | `changelogFeedUrl` | Public changelog manifest URL used by the Settings modal changelog panel. |
-| `enableUserSignups` | Controls whether new accounts can be created. Existing accounts can still sign in when this is `false`. |
+| `signupPolicy` | `open`, `approval`, or `closed`. Approval creates pending accounts that cannot sign in until approved under **Admin → Users**; closed refuses new accounts. |
 | `enableTtsProvidersTab` | Whether the user-facing TTS Provider tab in Settings is shown. |
 | `showAllProviderModels` | When `false`, users are restricted to each provider's default model (shared provider `defaultModel` or built-in provider default). |
 | `enableAudiobookExport` | Show the audiobook export entry points on PDF/EPUB pages. |
@@ -170,4 +199,4 @@ Because the encryption key for `admin_providers` is derived from `AUTH_SECRET`, 
 
 - [Auth](./auth) — required to use the admin panel.
 - [TTS Providers](./tts-providers) — shared-provider configuration and user-selectable behavior.
-- [Environment Variables](../reference/environment-variables) — `ADMIN_EMAILS`, provider bootstrap vars, and runtime JSON seed (including optional `accountEmail`).
+- [Environment Variables](../reference/environment-variables) — first-admin seed, provider bootstrap vars, and runtime JSON seed (including optional `accountEmail`).

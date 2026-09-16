@@ -60,7 +60,6 @@ of this document as each phase lands.
 - Do not change browser playback-token semantics as part of the broker cut.
 - Do not split public audio and private control routes onto separate listeners
   in this plan.
-- Do not change the accepted `ADMIN_EMAILS` promotion policy in this plan.
 - Do not introduce a second provider-at-rest encryption key without a complete
   v4 data migration design.
 

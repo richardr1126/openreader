@@ -35,8 +35,7 @@ OpenReader is an open-source, self-host-friendly text-to-speech document reader 
 
 | Goal | Link |
 | --- | --- |
-| Run with Docker | [Docker Quick Start](https://docs.openreader.richardr.dev/docker-quick-start) |
-| Run a Compose example | [Docker Compose](https://docs.openreader.richardr.dev/deploy/docker-compose) |
+| Run with Docker Compose | [Docker Compose](https://docs.openreader.richardr.dev/deploy/docker-compose) |
 | Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
 | Deploy external compute worker | [Compute Worker (NATS JetStream)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
 | Develop locally | [Local Development](https://docs.openreader.richardr.dev/deploy/local-development) |

@@ -267,6 +267,8 @@ describe('server-state architecture', () => {
       '/api/admin/tasks/[key]',
       '/api/admin/tasks/[key]/run',
       '/api/admin/tasks/tick',
+      '/api/admin/users',
+      '/api/admin/users/[id]',
       '/api/auth/[...all]',
       '/api/compute-limits/status',
       '/api/documents',

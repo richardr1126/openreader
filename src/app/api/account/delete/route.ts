@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { getAuth } from '@/lib/server/auth/auth';
+import { AdminUserManagementError } from '@/lib/server/admin/users';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
@@ -25,6 +26,9 @@ export async function DELETE() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof AdminUserManagementError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     serverLogger.error({
       event: 'account.delete.failed',
       error: errorToLog(error),

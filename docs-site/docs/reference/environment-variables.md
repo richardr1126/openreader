@@ -28,7 +28,9 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
-| `ADMIN_EMAILS` | Admin | empty | Comma-separated emails auto-promoted to admin |
+| `BOOTSTRAP_ADMIN_EMAIL` | First-admin seed (app only) | unset | Initial credential account email on a fresh instance |
+| `BOOTSTRAP_ADMIN_PASSWORD` | First-admin seed (app only) | unset | Initial password (16+ characters); remove after rotation |
+| `BOOTSTRAP_ADMIN_PASSWORD_FILE` | First-admin seed (app only) | unset | Read initial password from a mounted file instead of inline env |
 | `CRON_SECRET` | Scheduled tasks | unset | Required for Vercel cron invocations |
 | `RICHARDRDEV_PRODUCTION` | Official hosted instance | `false`; enabled only by exact `true` | Enables the official-instance label, privacy notice, and US region gate |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
@@ -171,12 +173,21 @@ GitHub OAuth client secret.
 
 - Set with `GITHUB_CLIENT_ID`
 
-### ADMIN_EMAILS
+### BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, BOOTSTRAP_ADMIN_PASSWORD_FILE
 
-Comma-separated list of email addresses auto-promoted to admin.
+One-time first-administrator credential for a fresh database. Set the email and
+exactly one password source before first boot. The password must have at least
+16 characters; the file form reads a mounted secret file and removes one
+trailing newline. Do not put these values in `RUNTIME_SEED_JSON`.
 
-- Requires auth to be enabled
-- Admins can manage shared providers and runtime site features in-app
+The account starts without active admin privileges. Sign in, change its
+password under **Settings → Account**, and then use **Settings → Admin → Users**
+to grant subsequent admin roles. If account email delivery is enabled, verify
+the address before sign-in. After rotation, no `.env` edit or restart is
+required; removing the now-inert seed values later is optional secret hygiene.
+The seed is consumed once in the database; restarting or deleting the account does not
+recreate it. An existing admin prevents new seeding. `ADMIN_EMAILS` is no
+longer used for authorization.
 
 ### CRON_SECRET
 
@@ -560,7 +571,7 @@ Example:
 {
   "version": 1,
   "runtimeConfig": {
-    "enableUserSignups": true,
+    "signupPolicy": "open",
     "defaultTtsProvider": "custom-openai",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,

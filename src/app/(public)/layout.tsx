@@ -6,7 +6,7 @@ import './public.css';
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
   const runtimeConfig = await getResolvedRuntimeConfigForRsc();
-  const enableUserSignups = runtimeConfig.enableUserSignups;
+  const canSignUp = runtimeConfig.signupPolicy !== 'closed';
 
   return (
     <div className="public-shell">
@@ -65,7 +65,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                   synchronized, listenable audio that&rsquo;s yours to self-host.
                 </p>
                 <div className="public-footer-cta">
-                  {enableUserSignups ? (
+                  {canSignUp ? (
                     <ButtonLink href="/signup" variant="outline" size="sm">Sign up</ButtonLink>
                   ) : null}
                   <ButtonAnchor href="https://github.com/richardr1126/openreader" target="_blank" rel="noopener noreferrer" variant="ghost" size="sm">
