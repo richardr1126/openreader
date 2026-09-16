@@ -37,6 +37,25 @@ export async function getCachedBlob(
   return response;
 }
 
+/**
+ * Read-only Cache Storage lookup: returns a cached full response if present,
+ * without ever issuing a network request. Used for a warm-cache fast path that
+ * must not trigger a fetch (e.g. before we know which preview transport is in
+ * play, so a miss doesn't hit a route that would 409).
+ */
+export async function matchCachedBlob(stableKey: string): Promise<Response | null> {
+  if (!canUseCacheStorage()) return null;
+  try {
+    const cache = await caches.open(BLOB_CACHE_NAME);
+    const cached = await cache.match(stableKey);
+    if (cached && isCacheableFullResponse(cached)) return cached;
+    if (cached) await cache.delete(stableKey).catch(() => {});
+  } catch {
+    // Cache Storage unavailable/blocked: treat as a miss.
+  }
+  return null;
+}
+
 export async function putCachedBlob(stableKey: string, response: Response): Promise<void> {
   if (!canUseCacheStorage() || !isCacheableFullResponse(response)) return;
   const cache = await caches.open(BLOB_CACHE_NAME).catch(() => null);

@@ -10,7 +10,7 @@ import {
 } from '@/lib/client/api/documents';
 import {
   getInMemoryDocumentPreviewUrl,
-  getPersistedDocumentPreviewUrl,
+  peekDocumentPreviewUrl,
   primeDocumentPreviewCache,
   setInMemoryDocumentPreviewUrl,
 } from '@/lib/client/cache/previews';
@@ -75,6 +75,9 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  // Guards a single re-resolve after an image load error (e.g. an expired
+  // presigned URL), reset whenever the preview identity changes.
+  const previewErrorRetriedRef = useRef(false);
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
   const previewKey = useMemo(
@@ -115,6 +118,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     });
     setIsImageReady(false);
     setIsGenerating(false);
+    previewErrorRetriedRef.current = false;
   }, [previewKey, previewQueryKey, queryClient]);
 
   useEffect(() => {
@@ -166,6 +170,18 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     let closePreviewEvents: (() => void) | null = null;
 
     const applyReadyPreview = async (status: DocumentPreviewReady) => {
+      // Presigned transport: render straight from the S3 URL so the image load
+      // never hits the Vercel presign route, and cache it so remounts/scroll-back
+      // reuse the same URL for the life of its (now 1h) signature.
+      if (status.directUrl) {
+        setInMemoryDocumentPreviewUrl(previewKey, status.directUrl);
+        setImagePreview(status.directUrl);
+        setTextPreview(null);
+        return;
+      }
+
+      // Proxy transport: fetch the image bytes once and persist them in Cache
+      // Storage keyed by preview version.
       const primedUrl = await primeDocumentPreviewCache(
         doc.id,
         status.previewVersion || Number(doc.lastModified),
@@ -190,7 +206,9 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       let keepGeneratingForEvents = false;
       try {
         if (doc.type === 'pdf' || doc.type === 'epub') {
-          const persistedUrl = await getPersistedDocumentPreviewUrl(
+          // Warm-cache fast path only — never fetches, so a cold preview in
+          // presigned mode doesn't fire a doomed request at the proxy route.
+          const persistedUrl = await peekDocumentPreviewUrl(
             doc.id,
             Number(doc.lastModified),
             previewKey,
@@ -347,13 +365,18 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             onError={() => {
               if (!imagePreview) return;
               setIsImageReady(false);
-              void primeDocumentPreviewCache(
-                doc.id,
-                Number(doc.lastModified),
-                previewKey,
-              ).then((url) => {
-                if (url) setImagePreview(url);
-              }).catch(() => { });
+              // A cached presigned S3 URL may have expired; re-resolve it once
+              // via the status endpoint rather than looping on the same URL.
+              if (previewErrorRetriedRef.current) return;
+              previewErrorRetriedRef.current = true;
+              void getDocumentPreviewStatus(doc.id)
+                .then((status) => {
+                  if (status.kind !== 'ready') return;
+                  const nextUrl = status.directUrl || status.presignUrl;
+                  setInMemoryDocumentPreviewUrl(previewKey, nextUrl);
+                  setImagePreview(nextUrl);
+                })
+                .catch(() => { });
             }}
           />
           {isImageReady ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/15" /> : null}
