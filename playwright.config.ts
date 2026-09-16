@@ -51,6 +51,10 @@ export default defineConfig({
       S3_FORCE_PATH_STYLE: 'true',
       S3_PREFIX: 'openreader-e2e',
       RUN_V4_DECOMMISSION: 'false',
+      // The browser is driven at localhost:3003 while CI sets BASE_URL to the
+      // 127.0.0.1 origin; trust both so credential sign-in is not rejected as a
+      // cross-origin request, independent of any developer .env.
+      AUTH_TRUSTED_ORIGINS: 'http://localhost:3003,http://127.0.0.1:3003',
       BOOTSTRAP_ADMIN_EMAIL: 'admin-e2e@example.test',
       BOOTSTRAP_ADMIN_PASSWORD: 'InitialAdminSecret#2026',
     },
