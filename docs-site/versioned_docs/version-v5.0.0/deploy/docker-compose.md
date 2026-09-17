@@ -1,0 +1,263 @@
+---
+title: Docker Compose
+description: Run OpenReader with the slim, full, local-slim, or local-full Docker Compose examples.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+Use these examples to run OpenReader with Kokoro-FastAPI and persistent storage. Choose the slim
+stack for the simplest deployment, or the full stack when you want PostgreSQL, SeaweedFS, NATS,
+and the compute worker as separate containers. Local build variants are also available for both slim
+and full stacks to build the application from your current checkout.
+
+## Prerequisites
+
+- A recent Docker version with Docker Compose
+- A clone of the OpenReader repository
+
+```bash
+git clone https://github.com/richardr1126/openreader.git
+cd openreader
+```
+
+## Choose a stack
+
+<Tabs groupId="docker-compose-stack">
+<TabItem value="slim" label="Slim" default>
+
+The default slim example runs:
+
+- OpenReader with embedded SeaweedFS, NATS, compute worker, and SQLite
+- Kokoro-FastAPI as a companion container
+
+```bash
+docker compose -f examples/docker/compose.yml up
+# Repository convenience command: pnpm compose
+```
+
+Compose file: [`examples/docker/compose.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.yml)
+
+</TabItem>
+<TabItem value="full" label="Full">
+
+The full example runs OpenReader, Kokoro-FastAPI, PostgreSQL, SeaweedFS, NATS, and the compute
+worker as separate containers using published images.
+
+```bash
+docker compose -f examples/docker/compose.full.yml up
+# Repository convenience command: pnpm compose:full
+```
+
+Compose file: [`examples/docker/compose.full.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.full.yml)
+
+For details about running the worker separately, see
+[Compute Worker](./compute-worker).
+
+</TabItem>
+<TabItem value="local-slim" label="Local Slim">
+
+The local-slim example runs a slim setup (OpenReader and Kokoro-FastAPI), but builds the OpenReader app image from the current checkout.
+
+```bash
+docker compose -f examples/docker/compose.local-slim.yml up --build
+# Repository convenience command: pnpm compose:local
+```
+
+Compose file: [`examples/docker/compose.local-slim.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.local-slim.yml)
+
+</TabItem>
+<TabItem value="local-full" label="Local Full">
+
+The local-full example uses the full multi-container layout, but builds the OpenReader app and compute-worker images from the current checkout.
+
+```bash
+docker compose -f examples/docker/compose.local-full.yml up --build
+# Repository convenience command: pnpm compose:local:full
+```
+
+Compose file: [`examples/docker/compose.local-full.yml`](https://github.com/richardr1126/openreader/blob/main/examples/docker/compose.local-full.yml)
+
+</TabItem>
+</Tabs>
+
+## Included services
+
+| Service | Slim | Full | Local Slim | Local Full |
+| --- | --- | --- | --- | --- |
+| OpenReader | Published image | Published image | Local build | Local build |
+| Kokoro-FastAPI | Container | Container | Container | Container |
+| Database | Embedded SQLite | PostgreSQL container | Embedded SQLite | PostgreSQL container |
+| SeaweedFS | Embedded | Container | Embedded | Container |
+| NATS | Embedded | Container | Embedded | Container |
+| Compute worker | Embedded | Published image | Embedded | Local build |
+
+On first boot, `RUNTIME_SEED_JSON` creates an enabled Kokoro shared provider and selects it as the
+default TTS provider.
+
+To require approval for future registrations, add `"signupPolicy": "approval"`
+under `runtimeConfig` in the chosen Compose example before first boot, or set
+**Settings → Admin → Instance → Signups** to **Approve** afterward. Approvals
+are handled in **Settings → Admin → Users**. This setting does not block the
+server-created first-admin credential.
+
+For a new installation, set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` in the
+Compose project's `.env` before the first start. The password must contain at least 16
+characters. OpenReader creates that credential account once, even when public signup is closed
+or approval-only. Sign in and change the initial password in **Settings → Account** to activate
+administrator access. Setup is then complete without an `.env` edit or restart;
+removing the now-inert values later is optional secret hygiene. They are not an ongoing admin
+allowlist, and subsequent administrators are granted in **Settings → Admin → Users**. If account
+email delivery is enabled, the first sign-in attempt sends a verification link;
+follow it, then sign in and change the password.
+
+The full examples also opt into `S3_AUTO_CREATE_BUCKET`, allowing the app to create the configured
+SeaweedFS bucket before startup storage cleanup when the stack uses a new data volume.
+
+## Endpoints
+
+- OpenReader: `http://localhost:3003`
+- SeaweedFS S3: `http://localhost:8333`
+- Kokoro-FastAPI: `http://localhost:8880`
+- Compute worker playback audio: `http://localhost:8081`
+
+All examples publish port `8081` so browsers can load signed worker-owned TTS playback audio. In
+the full examples, the app still reaches the worker over the internal `http://compute-worker:8081`
+URL; PostgreSQL and NATS remain internal to the Compose network.
+
+## LAN access
+
+Set `BASE_URL` to the Docker host's LAN IP for the default same-origin proxy topology:
+
+<Tabs groupId="docker-compose-lan-stack">
+<TabItem value="slim" label="Slim" default>
+
+```bash
+BASE_URL=http://192.168.0.XXX:3003 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
+docker compose -f examples/docker/compose.yml up
+# Repository convenience command: pnpm compose
+```
+
+</TabItem>
+<TabItem value="full" label="Full">
+
+```bash
+BASE_URL=http://192.168.0.XXX:3003 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
+docker compose -f examples/docker/compose.full.yml up
+# Repository convenience command: pnpm compose:full
+```
+
+</TabItem>
+<TabItem value="local-slim" label="Local Slim">
+
+```bash
+BASE_URL=http://192.168.0.XXX:3003 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
+docker compose -f examples/docker/compose.local-slim.yml up --build
+# Repository convenience command: pnpm compose:local
+```
+
+</TabItem>
+<TabItem value="local-full" label="Local Full">
+
+```bash
+BASE_URL=http://192.168.0.XXX:3003 \
+COMPUTE_WORKER_PUBLIC_URL=http://192.168.0.XXX:8081 \
+docker compose -f examples/docker/compose.local-full.yml up --build
+# Repository convenience command: pnpm compose:local:full
+```
+
+</TabItem>
+</Tabs>
+
+Replace `192.168.0.XXX` with your Docker host's LAN IP. Allow inbound TCP ports `3003` and `8081`.
+The embedded/proxy storage endpoint does not need browser access.
+
+:::info Internal full-stack endpoint
+The full and local-full app and compute workers use `http://seaweedfs:8333` internally.
+For direct browser storage, configure `S3_BROWSER_TRANSPORT=presigned` and a public HTTPS `S3_PUBLIC_ENDPOINT`; do not use a path-mounted S3 reverse proxy.
+`COMPUTE_WORKER_PUBLIC_URL` configures the browser-facing worker playback audio URL.
+:::
+
+## Configuration
+
+The examples use local-only default credentials. Override existing `${VARIABLE}` values through
+your shell environment before using them beyond local development.
+
+For a persistent deployment, generate each secret once, store the values in the Compose project's
+`.env` file, and reuse that file whenever the services are recreated:
+
+```dotenv
+AUTH_SECRET=<openssl-rand-base64-32>
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
+COMPUTE_WORKER_TOKEN=<openssl-rand-base64-32>
+COMPUTE_CREDENTIAL_BROKER_TOKEN=<openssl-rand-base64-32>
+TTS_PLAYBACK_TOKEN_SECRET=<openssl-rand-base64-32>
+```
+
+:::warning Protect public deployments
+Replace the default `AUTH_SECRET`, PostgreSQL credentials, S3 credentials, compute-worker token,
+credential-broker token and `TTS_PLAYBACK_TOKEN_SECRET` before
+exposing a stack outside your trusted local network. The full worker receives neither
+`AUTH_SECRET` nor application database credentials; it resolves enabled TTS providers through the
+private app-owned credential broker.
+The initial admin password is a temporary secret: keep `.env` private and
+change the password in **Settings → Account**. The old value then cannot sign
+in, even if it remains in `.env`. Removing it later is optional cleanup.
+:::
+
+For the complete configuration reference, see
+[Environment Variables](../reference/environment-variables). See [Database](../configure/database)
+for PostgreSQL and SQLite behavior.
+
+## Upgrade from v4.4 to v5
+
+Back up the named volumes first, then pull and recreate the same Compose project. Do not use
+`docker compose down -v`: the `-v` option deletes the data being upgraded.
+
+<Tabs groupId="docker-compose-upgrade-stack">
+<TabItem value="slim" label="Slim" default>
+
+```bash
+docker compose -f examples/docker/compose.yml pull
+docker compose -f examples/docker/compose.yml up -d
+```
+
+</TabItem>
+<TabItem value="full" label="Full">
+
+```bash
+docker compose -f examples/docker/compose.full.yml pull
+docker compose -f examples/docker/compose.full.yml up -d
+```
+
+</TabItem>
+<TabItem value="local-slim" label="Local Slim">
+
+```bash
+docker compose -f examples/docker/compose.local-slim.yml up -d --build
+```
+
+</TabItem>
+<TabItem value="local-full" label="Local Full">
+
+```bash
+docker compose -f examples/docker/compose.local-full.yml up -d --build
+```
+
+</TabItem>
+</Tabs>
+
+Keep the same Compose project name, volumes, `AUTH_SECRET`, and storage settings. Add stable values
+for the v5 worker, credential-broker, and playback secrets before recreating the services.
+Existing administrators are preserved by the migration; do not set first-admin seed values for
+an upgrade. `ADMIN_EMAILS` does not grant roles in v5.
+
+The OpenReader entrypoint waits for its database and storage dependencies, applies pending schema
+migrations, and then idempotently deletes the retired v4 object prefixes
+`tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`. A separate migration container is not
+required. Confirm the migration and decommission completion messages in the OpenReader logs before
+performing the post-upgrade smoke test.
