@@ -11,6 +11,24 @@ This page covers application-level configuration for provider access and authent
 - Anonymous auth sessions are disabled by default.
 - Set `USE_ANONYMOUS_AUTH_SESSIONS=true` to enable anonymous session flows.
 
+## Single sign-on (OAuth / OIDC)
+
+Alongside email/password, two optional SSO methods are supported. Each appears on the sign-in page only when configured:
+
+- **GitHub** — set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. The OAuth callback URL to register with GitHub is `<BASE_URL>/api/auth/callback/github`.
+- **Generic OIDC** — for self-hosted identity providers (Pocket ID, Authelia, Authentik, Keycloak, etc.). Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_DISCOVERY_URL` (the provider's `/.well-known/openid-configuration` URL). The callback URL to register with your provider is `<BASE_URL>/api/auth/callback/<OIDC_PROVIDER_ID>` (`oidc` unless you override `OIDC_PROVIDER_ID`). Optional: `OIDC_PROVIDER_NAME` labels the sign-in button (defaults to `SSO`), and `OIDC_SCOPES` overrides the requested scopes (defaults to `openid profile email`).
+
+```env
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
+OIDC_PROVIDER_NAME=Pocket ID
+```
+
+`OIDC_DISCOVERY_URL` must use `https://`; plain `http://` is accepted only for `localhost` during development, because the discovery document decides where the client secret and authorization codes are sent.
+
+A user who originally signed up with email/password and later signs in through your identity provider with the same email address is attached to their existing account, keeping their documents and settings. Linking requires both sides to be verified: the provider must return `email_verified: true` for the user, and the local account's email must be verified, which requires [account email delivery](./admin-panel#account-email-through-resend) to be enabled. Whether the provider sends `email_verified` depends on its configuration — Pocket ID reflects its email-verification setting, Authentik 2025.10+ sends `false` unless you add a scope mapping, and Keycloak reflects the per-user flag — so check the claim in your provider before relying on linking. When either side is unverified, an existing email/password user who tries the OIDC button is told to sign in with their password instead, while users who never had a local account can still sign up through the provider.
+
 ## Runtime modes
 
 OpenReader has two common runtime modes:

@@ -7,16 +7,39 @@ import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
-import { GithubIcon } from '@/components/icons/Icons';
+import { GithubIcon, KeyIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, Checkbox, Field, InlineButton, Input, Surface } from '@/components/ui';
 
-function SessionExpiredLoader({ setSessionExpired }: { setSessionExpired: (v: boolean) => void }) {
+function describeOAuthError(code: string): string {
+  switch (code) {
+    case 'account_not_linked':
+      return 'An account with this email already exists but could not be linked '
+        + 'automatically because its email address is not verified. Sign in with '
+        + 'your password instead.';
+    case 'ACCOUNT_PENDING_APPROVAL':
+      return 'Your account is waiting for administrator approval.';
+    case 'ACCOUNT_SUSPENDED':
+      return 'Your account has been suspended by an administrator.';
+    default:
+      return 'Single sign-on failed. Please try again.';
+  }
+}
+
+function SearchParamsLoader({
+  setSessionExpired,
+  setError,
+}: {
+  setSessionExpired: (v: boolean) => void;
+  setError: (v: string | null) => void;
+}) {
   const searchParams = useSearchParams();
   useEffect(() => {
     const reason = searchParams.get('reason');
     setSessionExpired(reason === 'expired');
-  }, [searchParams, setSessionExpired]);
+    const oauthError = searchParams.get('error');
+    if (oauthError) setError(describeOAuthError(oauthError));
+  }, [searchParams, setSessionExpired, setError]);
   return null;
 }
 
@@ -26,18 +49,19 @@ function SignInContent() {
   const [password, setPassword] = useState('');
   const [loadingEmail, setLoadingEmail] = useState(false);
   const [loadingGithub, setLoadingGithub] = useState(false);
+  const [loadingOidc, setLoadingOidc] = useState(false);
   const [loadingAnonymous, setLoadingAnonymous] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
-  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthConfig();
+  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth } = useAuthConfig();
   const { accountEmailsEnabled, signupPolicy } = useRuntimeConfig();
   const canSignUp = signupPolicy !== 'closed';
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
-  const isAnyLoading = loadingEmail || loadingGithub || loadingAnonymous;
+  const isAnyLoading = loadingEmail || loadingGithub || loadingOidc || loadingAnonymous;
 
   const validateEmail = (email: string): boolean => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -124,6 +148,28 @@ function SignInContent() {
     }
   };
 
+  const handleOidcSignIn = async () => {
+    if (!oidcAuth) return;
+    setError(null);
+    setLoadingOidc(true);
+    try {
+      const client = getAuthClient(baseUrl);
+      const result = await client.signIn.social({
+        provider: oidcAuth.providerId,
+        callbackURL: '/app',
+        errorCallbackURL: '/signin',
+      });
+      if (result.error) {
+        setError(result.error.message || 'Unable to connect. Please try again.');
+      }
+    } catch (err) {
+      console.error('OIDC sign in error:', err);
+      setError('Unable to connect. Please try again.');
+    } finally {
+      setLoadingOidc(false);
+    }
+  };
+
   const handleAnonymousContinue = async () => {
     setLoadingAnonymous(true);
     setError(null);
@@ -143,7 +189,7 @@ function SignInContent() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Suspense fallback={null}>
-        <SessionExpiredLoader setSessionExpired={setSessionExpired} />
+        <SearchParamsLoader setSessionExpired={setSessionExpired} setError={setError} />
       </Suspense>
 
         <Surface elevation="3" className="w-full max-w-md p-6">
@@ -246,6 +292,27 @@ function SignInContent() {
               <>
                 <GithubIcon className="w-4 h-4" />
                 Sign in with GitHub
+              </>
+            )}
+          </Button>
+          )}
+
+          {/* Generic OIDC */}
+          {oidcAuth && (
+          <Button
+            type="button"
+            disabled={isAnyLoading}
+            onClick={handleOidcSignIn}
+            variant="outline"
+            size="md"
+            className="w-full gap-2"
+          >
+            {loadingOidc ? (
+              <LoadingSpinner className="w-4 h-4" />
+            ) : (
+              <>
+                <KeyIcon className="w-4 h-4" />
+                Sign in with {oidcAuth.providerName}
               </>
             )}
           </Button>

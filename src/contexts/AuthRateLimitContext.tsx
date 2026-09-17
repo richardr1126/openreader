@@ -16,11 +16,17 @@ export interface RateLimitStatus {
   enabled: boolean;
 }
 
+export interface OidcAuthPublicConfig {
+  providerId: string;
+  providerName: string;
+}
+
 interface AuthRateLimitContextType {
   // Auth Config
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
+  oidcAuth: OidcAuthPublicConfig | null;
 
   // Rate Limit
   status: RateLimitStatus | null;
@@ -42,8 +48,8 @@ export function useAuthRateLimit(): AuthRateLimitContextType {
 }
 
 export function useAuthConfig() {
-  const { authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled } = useAuthRateLimit();
-  return { baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled };
+  const { authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth } = useAuthRateLimit();
+  return { baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth };
 }
 
 function calculateTimeUntilReset(resetTimeMs: number): string {
@@ -103,6 +109,7 @@ interface AuthRateLimitProviderProps {
   authBaseUrl: string | null;
   allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
+  oidcAuth: OidcAuthPublicConfig | null;
 }
 
 export function AuthRateLimitProvider({
@@ -110,6 +117,7 @@ export function AuthRateLimitProvider({
   authBaseUrl,
   allowAnonymousAuthSessions,
   githubAuthEnabled,
+  oidcAuth,
 }: AuthRateLimitProviderProps) {
   // Read the session directly from the prop-provided base URL. We can't use
   // useAuthSession() here: it resolves the base URL via useAuthConfig() ->
@@ -165,6 +173,7 @@ export function AuthRateLimitProvider({
     authBaseUrl,
     allowAnonymousAuthSessions,
     githubAuthEnabled,
+    oidcAuth,
     status,
     loading,
     error,

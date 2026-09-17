@@ -1,13 +1,13 @@
 import { betterAuth } from "better-auth";
 import { APIError } from 'better-auth/api';
 import { nextCookies } from "better-auth/next-js";
-import { anonymous } from "better-auth/plugins";
+import { anonymous, genericOAuth } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { and, eq } from 'drizzle-orm';
 import { after, NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@openreader/database";
-import { getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
+import { getOidcAuthConfig, getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
 import { ensureInitialAdmin } from '@/lib/server/auth/bootstrap-admin';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { assertUserSignupAllowed, initialAccessStatus } from '@/lib/server/auth/signup-policy';
@@ -56,6 +56,7 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 const authUserTable = authSchema.user;
 const requiredAuthEnv = getRequiredAuthEnv();
+const oidcAuthConfig = getOidcAuthConfig();
 
 const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -276,6 +277,21 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
             }
             // Note: Anonymous user will be automatically deleted after this callback completes
           },
+        }),
+      ]
+      : []),
+    ...(oidcAuthConfig
+      ? [
+        genericOAuth({
+          config: [
+            {
+              providerId: oidcAuthConfig.providerId,
+              clientId: oidcAuthConfig.clientId,
+              clientSecret: oidcAuthConfig.clientSecret,
+              discoveryUrl: oidcAuthConfig.discoveryUrl,
+              scopes: oidcAuthConfig.scopes,
+            },
+          ],
         }),
       ]
       : []),

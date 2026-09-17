@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getAuthBaseUrl, getRequiredAuthEnv, isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '../../src/lib/server/auth/config';
+import { getAuthBaseUrl, getOidcAuthConfig, getOidcPublicAuthConfig, getRequiredAuthEnv, isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '../../src/lib/server/auth/config';
 import { withEnv } from './support/env';
 
 describe('auth config contract', () => {
@@ -89,5 +89,163 @@ describe('auth config contract', () => {
     await withEnv(env, async () => {
       expect(isGithubAuthEnabled()).toBe(expected);
     });
+  });
+
+  test.each([
+    {
+      title: 'returns null when OIDC client id is missing',
+      env: {
+        OIDC_CLIENT_ID: undefined,
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+      },
+    },
+    {
+      title: 'returns null when OIDC client secret is missing',
+      env: {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: undefined,
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+      },
+    },
+    {
+      title: 'returns null when OIDC discovery URL is missing',
+      env: {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: undefined,
+      },
+    },
+  ])('$title', async ({ env }) => {
+    await withEnv(env, async () => {
+      expect(getOidcAuthConfig()).toBeNull();
+      expect(getOidcPublicAuthConfig()).toBeNull();
+    });
+  });
+
+  test('OIDC config applies defaults for optional values', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_ID: undefined,
+        OIDC_PROVIDER_NAME: undefined,
+        OIDC_SCOPES: undefined,
+      },
+      async () => {
+        expect(getOidcAuthConfig()).toEqual({
+          providerId: 'oidc',
+          providerName: 'SSO',
+          clientId: 'id',
+          clientSecret: 'secret',
+          discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
+          scopes: ['openid', 'profile', 'email'],
+        });
+      },
+    );
+  });
+
+  test('OIDC config honors optional overrides and scope parsing', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_ID: 'pocket-id',
+        OIDC_PROVIDER_NAME: 'Pocket ID',
+        OIDC_SCOPES: 'openid, profile email',
+      },
+      async () => {
+        const config = getOidcAuthConfig();
+        expect(config).toMatchObject({
+          providerId: 'pocket-id',
+          providerName: 'Pocket ID',
+          scopes: ['openid', 'profile', 'email'],
+        });
+      },
+    );
+  });
+
+  test('OIDC public config exposes only provider id and name', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_NAME: 'Pocket ID',
+        OIDC_PROVIDER_ID: undefined,
+      },
+      async () => {
+        expect(getOidcPublicAuthConfig()).toEqual({
+          providerId: 'oidc',
+          providerName: 'Pocket ID',
+        });
+      },
+    );
+  });
+
+  test('OIDC config rejects provider ids that are not URL-safe', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_ID: 'bad/provider id',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/OIDC_PROVIDER_ID/);
+      },
+    );
+  });
+
+  test('OIDC config rejects provider ids reserved by built-in providers', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_ID: 'github',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/reserved/);
+      },
+    );
+  });
+
+  test('OIDC config rejects plain-HTTP discovery URLs on non-loopback hosts', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'http://idp.example.com/.well-known/openid-configuration',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/https/);
+      },
+    );
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'not a url',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/OIDC_DISCOVERY_URL/);
+      },
+    );
+  });
+
+  test('OIDC config allows plain-HTTP discovery URLs on loopback for local development', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'http://localhost:1411/.well-known/openid-configuration',
+      },
+      async () => {
+        expect(getOidcAuthConfig()?.discoveryUrl).toBe('http://localhost:1411/.well-known/openid-configuration');
+      },
+    );
   });
 });
