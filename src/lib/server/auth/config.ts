@@ -57,25 +57,36 @@ export type OidcAuthConfig = {
   scopes: string[];
 };
 
-/**
- * Public subset of the OIDC config that is safe to send to the client
- * (never include the client secret here).
- */
+/** Client-safe subset of the OIDC config. */
 export type OidcPublicAuthConfig = Pick<OidcAuthConfig, 'providerId' | 'providerName'>;
 
 /**
  * Generic OIDC sign-in is available when OIDC_CLIENT_ID, OIDC_CLIENT_SECRET,
- * and OIDC_DISCOVERY_URL are all set. Optional overrides:
- * - OIDC_PROVIDER_ID: URL-safe id used in the OAuth callback path
- *   (`/api/auth/callback/<id>`), defaults to "oidc"
- * - OIDC_PROVIDER_NAME: display name for the sign-in button, defaults to "SSO"
- * - OIDC_SCOPES: space- or comma-separated, defaults to "openid profile email"
+ * and OIDC_DISCOVERY_URL are all set.
  */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** Discovery must be fetched over TLS; plain HTTP is allowed only on loopback. */
+function assertSecureOidcUrl(raw: string): void {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Invalid OIDC_DISCOVERY_URL: not a valid absolute URL.');
+  }
+  if (url.protocol === 'https:') return;
+  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) return;
+  throw new Error(
+    'Invalid OIDC_DISCOVERY_URL: must use https:// (http:// is only allowed for localhost).',
+  );
+}
+
 export function getOidcAuthConfig(): OidcAuthConfig | null {
   const clientId = process.env.OIDC_CLIENT_ID?.trim();
   const clientSecret = process.env.OIDC_CLIENT_SECRET?.trim();
   const discoveryUrl = process.env.OIDC_DISCOVERY_URL?.trim();
   if (!clientId || !clientSecret || !discoveryUrl) return null;
+  assertSecureOidcUrl(discoveryUrl);
 
   const providerId = process.env.OIDC_PROVIDER_ID?.trim() || 'oidc';
   if (!/^[a-zA-Z0-9_-]+$/.test(providerId)) {
@@ -84,8 +95,6 @@ export function getOidcAuthConfig(): OidcAuthConfig | null {
       + 'and may only contain letters, numbers, hyphens, and underscores.',
     );
   }
-  // Generic providers share the social-provider namespace with the built-in
-  // GitHub provider and the email/password "credential" account type.
   if (providerId === 'github' || providerId === 'credential') {
     throw new Error(`Invalid OIDC_PROVIDER_ID: "${providerId}" is reserved.`);
   }

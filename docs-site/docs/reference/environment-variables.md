@@ -195,6 +195,8 @@ Client secret for the OIDC provider.
 
 The provider's OIDC discovery document URL, e.g. `https://auth.example.com/.well-known/openid-configuration`. Endpoints are resolved from the discovery document.
 
+- Must use `https://`; `http://` is only accepted for `localhost` / `127.0.0.1`
+
 ### OIDC_PROVIDER_ID
 
 URL-safe identifier for the provider (letters, numbers, hyphens, underscores).

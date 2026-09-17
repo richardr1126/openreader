@@ -25,7 +25,9 @@ OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
 OIDC_PROVIDER_NAME=Pocket ID
 ```
 
-OIDC sign-ins are trusted for account linking: a user who originally signed up with email/password and later signs in through your identity provider with the same email address is attached to their existing account, keeping their documents and settings. OpenReader does not verify local email addresses. The IdP's email claim serves as ownership proof — only enable OIDC against an identity provider you operate and trust.
+`OIDC_DISCOVERY_URL` must use `https://`; plain `http://` is accepted only for `localhost` during development, because the discovery document decides where the client secret and authorization codes are sent.
+
+OIDC sign-ins are trusted for account linking: a user who originally signed up with email/password and later signs in through your identity provider with the same email address is attached to their existing account, keeping their documents and settings. Linking only happens when the local account's email address is verified, which requires [account email delivery](./admin-panel#account-email-through-resend) to be enabled. Without it, an existing email/password user who tries the OIDC button is told to sign in with their password instead, while users who never had a local account can still sign up through the provider.
 
 ## Runtime modes
 

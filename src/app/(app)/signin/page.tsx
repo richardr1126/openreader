@@ -11,12 +11,35 @@ import { GithubIcon, KeyIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, Checkbox, Field, InlineButton, Input, Surface } from '@/components/ui';
 
-function SessionExpiredLoader({ setSessionExpired }: { setSessionExpired: (v: boolean) => void }) {
+function describeOAuthError(code: string): string {
+  switch (code) {
+    case 'account_not_linked':
+      return 'An account with this email already exists but could not be linked '
+        + 'automatically because its email address is not verified. Sign in with '
+        + 'your password instead.';
+    case 'ACCOUNT_PENDING_APPROVAL':
+      return 'Your account is waiting for administrator approval.';
+    case 'ACCOUNT_SUSPENDED':
+      return 'Your account has been suspended by an administrator.';
+    default:
+      return 'Single sign-on failed. Please try again.';
+  }
+}
+
+function SearchParamsLoader({
+  setSessionExpired,
+  setError,
+}: {
+  setSessionExpired: (v: boolean) => void;
+  setError: (v: string | null) => void;
+}) {
   const searchParams = useSearchParams();
   useEffect(() => {
     const reason = searchParams.get('reason');
     setSessionExpired(reason === 'expired');
-  }, [searchParams, setSessionExpired]);
+    const oauthError = searchParams.get('error');
+    if (oauthError) setError(describeOAuthError(oauthError));
+  }, [searchParams, setSessionExpired, setError]);
   return null;
 }
 
@@ -131,11 +154,10 @@ function SignInContent() {
     setLoadingOidc(true);
     try {
       const client = getAuthClient(baseUrl);
-      // Better Auth registers genericOAuth providers as first-class social
-      // providers, so they share the GitHub sign-in entry point.
       const result = await client.signIn.social({
         provider: oidcAuth.providerId,
-        callbackURL: '/app'
+        callbackURL: '/app',
+        errorCallbackURL: '/signin',
       });
       if (result.error) {
         setError(result.error.message || 'Unable to connect. Please try again.');
@@ -167,7 +189,7 @@ function SignInContent() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Suspense fallback={null}>
-        <SessionExpiredLoader setSessionExpired={setSessionExpired} />
+        <SearchParamsLoader setSessionExpired={setSessionExpired} setError={setError} />
       </Suspense>
 
         <Surface elevation="3" className="w-full max-w-md p-6">

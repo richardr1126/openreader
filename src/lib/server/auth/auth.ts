@@ -230,21 +230,9 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
   ...(oidcAuthConfig && {
     account: {
       accountLinking: {
-        enabled: true,
-        // Let OIDC sign-ins attach to an existing account with the same
-        // email (e.g. a user who originally signed up with email/password)
-        // instead of failing with "account already exists".
+        // Link same-email OIDC sign-ins to existing (email-verified) accounts
+        // even if the IdP does not assert `email_verified`.
         trustedProviders: [oidcAuthConfig.providerId],
-        // Local emails are only verified when account email delivery is
-        // enabled. Without it, Better Auth's default of requiring
-        // `emailVerified: true` on the local row would permanently block
-        // linking for every email/password user, so rely on the trusted
-        // IdP's email claim as ownership proof instead. Trade-off: an
-        // unverified local account at some email can be linked by whoever
-        // owns that email at the IdP — acceptable when the IdP is operated
-        // by the same admin deploying OpenReader. Once delivery is enabled,
-        // fall back to Better Auth's stricter default.
-        requireLocalEmailVerified: accountEmailsEnabled,
       },
     },
   }),

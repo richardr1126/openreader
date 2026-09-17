@@ -129,6 +129,9 @@ describe('auth config contract', () => {
         OIDC_CLIENT_ID: 'id',
         OIDC_CLIENT_SECRET: 'secret',
         OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_ID: undefined,
+        OIDC_PROVIDER_NAME: undefined,
+        OIDC_SCOPES: undefined,
       },
       async () => {
         expect(getOidcAuthConfig()).toEqual({
@@ -171,6 +174,7 @@ describe('auth config contract', () => {
         OIDC_CLIENT_SECRET: 'secret',
         OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
         OIDC_PROVIDER_NAME: 'Pocket ID',
+        OIDC_PROVIDER_ID: undefined,
       },
       async () => {
         expect(getOidcPublicAuthConfig()).toEqual({
@@ -205,6 +209,42 @@ describe('auth config contract', () => {
       },
       async () => {
         expect(() => getOidcAuthConfig()).toThrow(/reserved/);
+      },
+    );
+  });
+
+  test('OIDC config rejects plain-HTTP discovery URLs on non-loopback hosts', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'http://idp.example.com/.well-known/openid-configuration',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/https/);
+      },
+    );
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'not a url',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/OIDC_DISCOVERY_URL/);
+      },
+    );
+  });
+
+  test('OIDC config allows plain-HTTP discovery URLs on loopback for local development', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'http://localhost:1411/.well-known/openid-configuration',
+      },
+      async () => {
+        expect(getOidcAuthConfig()?.discoveryUrl).toBe('http://localhost:1411/.well-known/openid-configuration');
       },
     );
   });
