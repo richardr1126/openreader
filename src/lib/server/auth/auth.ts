@@ -227,15 +227,6 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
       },
     }),
   },
-  ...(oidcAuthConfig && {
-    account: {
-      accountLinking: {
-        // Link same-email OIDC sign-ins to existing (email-verified) accounts
-        // even if the IdP does not assert `email_verified`.
-        trustedProviders: [oidcAuthConfig.providerId],
-      },
-    },
-  }),
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (reasonable for user experience)
     updateAge: 60 * 60 * 1, // 1 hour (refresh more frequently)
