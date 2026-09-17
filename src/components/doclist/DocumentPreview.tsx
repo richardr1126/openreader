@@ -181,10 +181,12 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       }
 
       // Proxy transport: fetch the image bytes once and persist them in Cache
-      // Storage keyed by preview version.
+      // Storage. Key by lastModified so the write matches the warm-cache peek
+      // (and the component's previewKey identity); otherwise the next-session
+      // lookup misses and forces an unnecessary ensure request.
       const primedUrl = await primeDocumentPreviewCache(
         doc.id,
-        status.previewVersion || Number(doc.lastModified),
+        Number(doc.lastModified),
         previewKey,
         { signal: controller.signal },
       ).catch(() => null);
