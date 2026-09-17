@@ -145,13 +145,24 @@ const RUNTIME_CONFIG_CACHE_TTL_MS = (() => {
 })();
 
 let runtimeConfigRowsCache: { rows: RuntimeConfigRows; expiresAt: number } | null = null;
+// Last successful read, retained across invalidations purely as an error
+// fallback. A write busts `runtimeConfigRowsCache` (so the next read is fresh),
+// but must not erase this — otherwise a transient DB failure on that very next
+// read would leave `readAllRows()` with nothing and snap every key back to its
+// built-in default (which could, e.g., momentarily reopen signups). It is never
+// consulted on the normal cache-hit path, only when a read throws.
+let runtimeConfigLastKnownGood: RuntimeConfigRows | null = null;
 // Bumped on every invalidation. A read captures the generation before its
 // `db.select()` and only publishes its rows if it still matches — so a read
 // that started before a concurrent write cannot repopulate the cache with
 // pre-write rows after that write invalidated it.
 let runtimeConfigCacheGeneration = 0;
 
-/** Drop the in-process runtime-config read cache. Called after every write. */
+/**
+ * Drop the in-process runtime-config read cache so the next read is fresh.
+ * Called after every write. The last-known-good fallback snapshot is
+ * deliberately preserved for read-error resilience.
+ */
 export function invalidateRuntimeConfigCache(): void {
   runtimeConfigRowsCache = null;
   runtimeConfigCacheGeneration += 1;
@@ -216,6 +227,11 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
     }
     if (RUNTIME_CONFIG_CACHE_TTL_MS > 0 && runtimeConfigCacheGeneration === generationAtReadStart) {
       runtimeConfigRowsCache = { rows: out, expiresAt: now + RUNTIME_CONFIG_CACHE_TTL_MS };
+      // Keep the fallback snapshot in lockstep with a published read: same
+      // generation guard, so an in-flight read that raced a write never
+      // downgrades it to pre-write rows, and disabled under tests (TTL 0) so a
+      // stale snapshot can't leak across cases that mutate admin_settings.
+      runtimeConfigLastKnownGood = out;
     }
     return out;
   } catch (error) {
@@ -226,8 +242,11 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
       error,
     });
     // Prefer last-known-good config over snapping every key back to its default
-    // during a transient DB blip (which could, e.g., momentarily reopen signups).
+    // during a transient DB blip (which could, e.g., momentarily reopen
+    // signups). A recent write nulls the active cache but leaves the fallback
+    // snapshot intact, so this still resolves the last successfully-read config.
     if (runtimeConfigRowsCache) return runtimeConfigRowsCache.rows;
+    if (runtimeConfigLastKnownGood) return runtimeConfigLastKnownGood;
     return new Map();
   }
 }
