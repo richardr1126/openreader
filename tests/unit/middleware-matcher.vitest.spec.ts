@@ -27,11 +27,16 @@ describe('middleware matcher', () => {
     const previous = process.env.RICHARDRDEV_PRODUCTION;
     process.env.RICHARDRDEV_PRODUCTION = 'true';
     try {
-      const response = middleware(new NextRequest(
-        'http://localhost/api/internal/compute/tts-credentials',
-        { method: 'POST' },
-      ));
-      expect(response.headers.get('x-middleware-next')).toBe('1');
+      for (const path of [
+        '/api/internal/compute/tts-credentials',
+        '/api/internal/compute/email-execution',
+        '/api/internal/compute/limits/policy',
+        '/api/internal/compute/limits/consume',
+        '/api/internal/compute/limits/complete',
+      ]) {
+        const response = middleware(new NextRequest(`http://localhost${path}`, { method: 'POST' }));
+        expect(response.headers.get('x-middleware-next')).toBe('1');
+      }
     } finally {
       if (previous === undefined) delete process.env.RICHARDRDEV_PRODUCTION;
       else process.env.RICHARDRDEV_PRODUCTION = previous;

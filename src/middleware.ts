@@ -33,6 +33,9 @@ const PUBLIC_PATH_PREFIXES = [
 const SERVICE_AUTHENTICATED_PATHS = new Set([
   '/api/internal/compute/tts-credentials',
   '/api/internal/compute/email-execution',
+  '/api/internal/compute/limits/policy',
+  '/api/internal/compute/limits/consume',
+  '/api/internal/compute/limits/complete',
 ]);
 
 function isPublicPath(pathname: string): boolean {
