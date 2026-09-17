@@ -194,4 +194,18 @@ describe('auth config contract', () => {
       },
     );
   });
+
+  test('OIDC config rejects provider ids reserved by built-in providers', async () => {
+    await withEnv(
+      {
+        OIDC_CLIENT_ID: 'id',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_DISCOVERY_URL: 'https://idp.example.com/.well-known/openid-configuration',
+        OIDC_PROVIDER_ID: 'github',
+      },
+      async () => {
+        expect(() => getOidcAuthConfig()).toThrow(/reserved/);
+      },
+    );
+  });
 });

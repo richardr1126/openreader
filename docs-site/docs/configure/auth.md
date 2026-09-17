@@ -16,7 +16,7 @@ This page covers application-level configuration for provider access and authent
 Alongside email/password, two optional SSO methods are supported. Each appears on the sign-in page only when configured:
 
 - **GitHub** — set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. The OAuth callback URL to register with GitHub is `<BASE_URL>/api/auth/callback/github`.
-- **Generic OIDC** — for self-hosted identity providers (Pocket ID, Authelia, Authentik, Keycloak, etc.). Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_DISCOVERY_URL` (the provider's `/.well-known/openid-configuration` URL). The callback URL to register with your provider is `<BASE_URL>/api/auth/oauth2/callback/<OIDC_PROVIDER_ID>` (`oidc` unless you override `OIDC_PROVIDER_ID`). Optional: `OIDC_PROVIDER_NAME` labels the sign-in button (defaults to `SSO`), and `OIDC_SCOPES` overrides the requested scopes (defaults to `openid profile email`).
+- **Generic OIDC** — for self-hosted identity providers (Pocket ID, Authelia, Authentik, Keycloak, etc.). Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_DISCOVERY_URL` (the provider's `/.well-known/openid-configuration` URL). The callback URL to register with your provider is `<BASE_URL>/api/auth/callback/<OIDC_PROVIDER_ID>` (`oidc` unless you override `OIDC_PROVIDER_ID`). Optional: `OIDC_PROVIDER_NAME` labels the sign-in button (defaults to `SSO`), and `OIDC_SCOPES` overrides the requested scopes (defaults to `openid profile email`).
 
 ```env
 OIDC_CLIENT_ID=your-client-id

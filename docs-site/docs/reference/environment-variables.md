@@ -200,7 +200,7 @@ The provider's OIDC discovery document URL, e.g. `https://auth.example.com/.well
 URL-safe identifier for the provider (letters, numbers, hyphens, underscores).
 
 - Default: `oidc`
-- Forms the OAuth callback path: `<BASE_URL>/api/auth/oauth2/callback/<OIDC_PROVIDER_ID>`
+- Forms the OAuth callback path: `<BASE_URL>/api/auth/callback/<OIDC_PROVIDER_ID>`
 
 ### OIDC_PROVIDER_NAME
 

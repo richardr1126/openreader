@@ -131,8 +131,10 @@ function SignInContent() {
     setLoadingOidc(true);
     try {
       const client = getAuthClient(baseUrl);
-      const result = await client.signIn.oauth2({
-        providerId: oidcAuth.providerId,
+      // Better Auth registers genericOAuth providers as first-class social
+      // providers, so they share the GitHub sign-in entry point.
+      const result = await client.signIn.social({
+        provider: oidcAuth.providerId,
         callbackURL: '/app'
       });
       if (result.error) {

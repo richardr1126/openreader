@@ -67,7 +67,7 @@ export type OidcPublicAuthConfig = Pick<OidcAuthConfig, 'providerId' | 'provider
  * Generic OIDC sign-in is available when OIDC_CLIENT_ID, OIDC_CLIENT_SECRET,
  * and OIDC_DISCOVERY_URL are all set. Optional overrides:
  * - OIDC_PROVIDER_ID: URL-safe id used in the OAuth callback path
- *   (`/api/auth/oauth2/callback/<id>`), defaults to "oidc"
+ *   (`/api/auth/callback/<id>`), defaults to "oidc"
  * - OIDC_PROVIDER_NAME: display name for the sign-in button, defaults to "SSO"
  * - OIDC_SCOPES: space- or comma-separated, defaults to "openid profile email"
  */
@@ -83,6 +83,11 @@ export function getOidcAuthConfig(): OidcAuthConfig | null {
       'Invalid OIDC_PROVIDER_ID: it becomes part of the OAuth callback URL '
       + 'and may only contain letters, numbers, hyphens, and underscores.',
     );
+  }
+  // Generic providers share the social-provider namespace with the built-in
+  // GitHub provider and the email/password "credential" account type.
+  if (providerId === 'github' || providerId === 'credential') {
+    throw new Error(`Invalid OIDC_PROVIDER_ID: "${providerId}" is reserved.`);
   }
 
   const providerName = process.env.OIDC_PROVIDER_NAME?.trim() || 'SSO';
