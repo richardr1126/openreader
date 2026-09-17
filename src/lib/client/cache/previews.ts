@@ -1,9 +1,13 @@
 import { documentPreviewPresignUrl } from '@/lib/client/api/documents';
-import { evictCachedBlobPrefix, getCachedBlob, previewBlobCacheKey } from '@/lib/client/cache/blob-cache';
+import { evictCachedBlobPrefix, getCachedBlob, matchCachedBlob, previewBlobCacheKey } from '@/lib/client/cache/blob-cache';
 
 const inMemoryPreviewUrlCache = new Map<string, string>();
 const inFlightPreviewPrime = new Map<string, Promise<string | null>>();
-const MAX_IN_MEMORY_PREVIEWS = 100;
+// Holds resolved preview URLs (blob: URLs in proxy mode, presigned S3 URLs in
+// presigned mode) so scroll-back and remounts reuse them without re-hitting the
+// network. Sized for large libraries so scrolling doesn't evict still-visible
+// cards and force a refetch.
+const MAX_IN_MEMORY_PREVIEWS = 300;
 
 function revokeIfBlobUrl(url: string | null | undefined): void {
   if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
@@ -45,12 +49,26 @@ function isReadyPreviewImage(response: Response): boolean {
     && response.headers.get('content-type')?.toLowerCase().startsWith('image/') === true;
 }
 
-export async function getPersistedDocumentPreviewUrl(
+/**
+ * Warm-cache lookup that never touches the network: in-memory first, then a
+ * read-only Cache Storage hit. Returns null on a miss instead of fetching, so a
+ * cold preview doesn't fire a request at a route that may be disabled (409) for
+ * the active transport before we've resolved the ready status.
+ */
+export async function peekDocumentPreviewUrl(
   docId: string,
   previewVersion: string | number,
   cacheKey: string,
 ): Promise<string | null> {
-  return primeDocumentPreviewCache(docId, previewVersion, cacheKey);
+  const memory = getInMemoryDocumentPreviewUrl(cacheKey);
+  if (memory) return memory;
+  const response = await matchCachedBlob(previewBlobCacheKey(docId, previewVersion)).catch(() => null);
+  if (!response || !isReadyPreviewImage(response)) return null;
+  const blob = await response.blob();
+  if (blob.size === 0) return null;
+  const url = URL.createObjectURL(blob);
+  setInMemoryDocumentPreviewUrl(cacheKey, url);
+  return url;
 }
 
 export async function primeDocumentPreviewCache(

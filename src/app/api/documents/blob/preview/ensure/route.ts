@@ -41,7 +41,10 @@ export async function GET(req: NextRequest) {
     }
 
     const directUrl = getBrowserStorageTransport() === 'presigned'
-      ? await presignDocumentPreviewGet(doc.id, null)
+      // Longer-lived so the client can render the image straight from S3 and
+      // reuse the same URL across remounts/scroll-back for most of a session,
+      // instead of re-hitting the presign route on every image load.
+      ? await presignDocumentPreviewGet(doc.id, null, { expiresInSeconds: 3600 })
       : undefined;
     return NextResponse.json(
       {

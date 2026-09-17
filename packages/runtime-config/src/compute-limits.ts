@@ -192,7 +192,7 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
       libreoffice: 1,
       archive_io: 2,
     },
-    policyRefreshSeconds: 60,
+    policyRefreshSeconds: 300,
   },
   providers: {
     defaults: providerDefaults,

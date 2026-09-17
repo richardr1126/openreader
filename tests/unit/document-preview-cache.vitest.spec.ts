@@ -51,12 +51,13 @@ describe('document preview cache', () => {
       setInMemoryDocumentPreviewUrl,
     } = await import('@/lib/client/cache/previews');
 
-    for (let index = 0; index <= 100; index += 1) {
+    // One past the in-memory cap (300) to force a single LRU eviction.
+    for (let index = 0; index <= 300; index += 1) {
       setInMemoryDocumentPreviewUrl(`doc-${index}:1`, `blob:preview-${index}`);
     }
 
     expect(getInMemoryDocumentPreviewUrl('doc-0:1')).toBeNull();
-    expect(getInMemoryDocumentPreviewUrl('doc-100:1')).toBe('blob:preview-100');
+    expect(getInMemoryDocumentPreviewUrl('doc-300:1')).toBe('blob:preview-300');
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview-0');
   });
 });

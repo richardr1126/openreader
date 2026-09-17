@@ -122,6 +122,52 @@ export type RuntimeConfig = {
 
 const RUNTIME_KEYS = Object.keys(RUNTIME_CONFIG_SCHEMA) as RuntimeConfigKey[];
 
+// --- Runtime config read cache ---------------------------------------------
+// getRuntimeConfig() and getRuntimeConfigWithSources() previously issued a fresh
+// `SELECT * FROM admin_settings` on every call. The hot internal broker routes
+// (compute limit policy/consume) and the tts routes call getRuntimeConfig() on
+// every request, so that round trip was inflating each function invocation's
+// wall-clock duration — which is exactly what Vercel Fluid Compute bills for.
+// A warm Fluid instance serves many concurrent invocations in the same process,
+// so a short module-level cache collapses that round trip across them. Staleness
+// is bounded by the TTL per instance; every admin write busts the cache in the
+// process that served it, so an admin sees their own edit immediately and other
+// instances catch up within one TTL.
+type RuntimeConfigRows = Map<string, { value: unknown; source: string }>;
+
+const RUNTIME_CONFIG_CACHE_TTL_MS = (() => {
+  // Disable caching under test runners so a cached read never leaks across cases
+  // that mutate admin_settings directly (bypassing the write-through bust).
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') return 0;
+  const raw = Number(process.env.RUNTIME_CONFIG_CACHE_TTL_MS);
+  if (Number.isFinite(raw) && raw >= 0) return raw;
+  return 15_000;
+})();
+
+let runtimeConfigRowsCache: { rows: RuntimeConfigRows; expiresAt: number } | null = null;
+// Last successful read, retained across invalidations purely as an error
+// fallback. A write busts `runtimeConfigRowsCache` (so the next read is fresh),
+// but must not erase this — otherwise a transient DB failure on that very next
+// read would leave `readAllRows()` with nothing and snap every key back to its
+// built-in default (which could, e.g., momentarily reopen signups). It is never
+// consulted on the normal cache-hit path, only when a read throws.
+let runtimeConfigLastKnownGood: RuntimeConfigRows | null = null;
+// Bumped on every invalidation. A read captures the generation before its
+// `db.select()` and only publishes its rows if it still matches — so a read
+// that started before a concurrent write cannot repopulate the cache with
+// pre-write rows after that write invalidated it.
+let runtimeConfigCacheGeneration = 0;
+
+/**
+ * Drop the in-process runtime-config read cache so the next read is fresh.
+ * Called after every write. The last-known-good fallback snapshot is
+ * deliberately preserved for read-error resilience.
+ */
+export function invalidateRuntimeConfigCache(): void {
+  runtimeConfigRowsCache = null;
+  runtimeConfigCacheGeneration += 1;
+}
+
 async function resolveImplicitDefaultTtsProvider(): Promise<string | undefined> {
   try {
     const rows = await db
@@ -159,13 +205,33 @@ function buildDefaults(): RuntimeConfig {
   return out;
 }
 
-async function readAllRows(): Promise<Map<string, { value: unknown; source: string }>> {
+async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeConfigRows> {
+  const now = Date.now();
+  if (
+    RUNTIME_CONFIG_CACHE_TTL_MS > 0
+    && !options?.forceFresh
+    && runtimeConfigRowsCache
+    && now < runtimeConfigRowsCache.expiresAt
+  ) {
+    return runtimeConfigRowsCache.rows;
+  }
+  // Capture the generation before the read so a write that invalidates the cache
+  // while this `db.select()` is in flight prevents us from publishing stale rows.
+  const generationAtReadStart = runtimeConfigCacheGeneration;
   try {
     const rows = await db.select().from(adminSettings);
-    const out = new Map<string, { value: unknown; source: string }>();
+    const out: RuntimeConfigRows = new Map();
     for (const row of rows as Array<{ key: string; valueJson: unknown; source: string }>) {
       const parsed = parseStoredValue(row.valueJson);
       out.set(row.key, { value: parsed, source: row.source });
+    }
+    if (RUNTIME_CONFIG_CACHE_TTL_MS > 0 && runtimeConfigCacheGeneration === generationAtReadStart) {
+      runtimeConfigRowsCache = { rows: out, expiresAt: now + RUNTIME_CONFIG_CACHE_TTL_MS };
+      // Keep the fallback snapshot in lockstep with a published read: same
+      // generation guard, so an in-flight read that raced a write never
+      // downgrades it to pre-write rows, and disabled under tests (TTL 0) so a
+      // stale snapshot can't leak across cases that mutate admin_settings.
+      runtimeConfigLastKnownGood = out;
     }
     return out;
   } catch (error) {
@@ -175,6 +241,12 @@ async function readAllRows(): Promise<Map<string, { value: unknown; source: stri
       step: 'read_runtime_config_rows',
       error,
     });
+    // Prefer last-known-good config over snapping every key back to its default
+    // during a transient DB blip (which could, e.g., momentarily reopen
+    // signups). A recent write nulls the active cache but leaves the fallback
+    // snapshot intact, so this still resolves the last successfully-read config.
+    if (runtimeConfigRowsCache) return runtimeConfigRowsCache.rows;
+    if (runtimeConfigLastKnownGood) return runtimeConfigLastKnownGood;
     return new Map();
   }
 }
@@ -231,7 +303,9 @@ export async function getRuntimeConfigWithSources(): Promise<{
 }> {
   const values = buildDefaults();
   const sources = {} as Record<RuntimeConfigKey, RuntimeConfigSource | 'default'>;
-  const rows = await readAllRows();
+  // Admin inspection path: always reflect DB truth so an admin never sees a
+  // stale cached value on the settings screen.
+  const rows = await readAllRows({ forceFresh: true });
   let implicitDefaultTtsProvider: string | null | undefined;
   for (const key of RUNTIME_KEYS) {
     const row = rows.get(key);
@@ -282,11 +356,13 @@ export async function setRuntimeConfigKey<K extends RuntimeConfigKey>(
       target: adminSettings.key,
       set: { valueJson: serialized as never, source: 'admin', updatedAt: now },
     });
+  invalidateRuntimeConfigCache();
 }
 
 /** Delete a runtime config row (resets to default/implicit behavior). */
 export async function clearRuntimeConfigKey(key: RuntimeConfigKey): Promise<void> {
   await db.delete(adminSettings).where(eq(adminSettings.key, key));
+  invalidateRuntimeConfigCache();
 }
 
 /**
@@ -301,7 +377,9 @@ export async function seedRuntimeConfigFromValues(
   const invalid: string[] = [];
   const unknown: string[] = [];
   const validEntries: Array<{ key: RuntimeConfigKey; value: RuntimeConfig[RuntimeConfigKey] }> = [];
-  const existing = await readAllRows();
+  // Seeding decides insert-vs-skip per key, so it must see live rows, not a
+  // cached snapshot.
+  const existing = await readAllRows({ forceFresh: true });
   const now = Date.now();
 
   for (const [rawKey, rawValue] of Object.entries(input)) {
@@ -346,6 +424,8 @@ export async function seedRuntimeConfigFromValues(
       });
     }
   }
+
+  if (seeded.length > 0) invalidateRuntimeConfigCache();
 
   return { seeded, invalid, unknown };
 }
