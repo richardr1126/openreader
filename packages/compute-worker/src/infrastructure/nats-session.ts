@@ -66,7 +66,7 @@ export function createNatsSessionManager(input: {
   isStopping: () => boolean;
   getActivity: () => NatsActivitySnapshot;
   markActivity: (reason: string) => void;
-  startWorkers: (session: NatsSession) => void;
+  startWorkers: (session: NatsSession) => Promise<void> | void;
   stopWorkers: () => Promise<void>;
   runReconciliation: () => Promise<void>;
 }) {
@@ -140,8 +140,8 @@ export function createNatsSessionManager(input: {
   };
 
   const ensureConnected = async (): Promise<NatsSession> => {
-    if (session) return session;
     if (connecting) return connecting;
+    if (session) return session;
     connecting = (async () => {
       const nc = await connect(input.connectOptions);
       const js = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
@@ -178,7 +178,7 @@ export function createNatsSessionManager(input: {
       session = next;
       generation += 1;
       input.markActivity('nats_connected');
-      input.startWorkers(next);
+      await input.startWorkers(next);
       startTimers();
       void nc.closed().then(() => {
         if (session?.nc === nc) session = null;

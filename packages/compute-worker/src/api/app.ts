@@ -139,9 +139,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const timeoutConfig = getComputeTimeoutConfig();
 
   let computePolicy = cloneComputeLimitPolicyDocument();
+  let computePolicyLastFetchedAt = 0;
   if (!disableWorkers) {
     try {
       computePolicy = await fetchComputeLimitPolicy();
+      computePolicyLastFetchedAt = Date.now();
     } catch (error) {
       computePolicy.worker.maxExecutingPerWorker = 1;
       for (const resource of Object.keys(computePolicy.worker.resources)) {
@@ -410,16 +412,32 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     onOperationTerminal: notifyComputeAdmissionTerminal,
   });
 
+  let computePolicyRefresh: Promise<void> | null = null;
+  const refreshComputePolicy = (): Promise<void> => {
+    if (computePolicyRefresh) return computePolicyRefresh;
+    computePolicyRefresh = fetchComputeLimitPolicy().then((nextPolicy) => {
+      computePolicy = nextPolicy;
+      computePolicyLastFetchedAt = Date.now();
+      configureComputeJobConcurrency(nextPolicy.worker.maxExecutingPerWorker);
+      workerLoops.policyChanged();
+    }).catch((error) => {
+      app.log.error({ error: String(error) }, 'compute policy refresh failed');
+    }).finally(() => {
+      computePolicyRefresh = null;
+    });
+    return computePolicyRefresh;
+  };
+
   const scheduleComputePolicyRefresh = (): void => {
     if (disableWorkers || stopping) return;
     computePolicyRefreshTimer = setTimeout(() => {
-      void fetchComputeLimitPolicy().then((nextPolicy) => {
-        computePolicy = nextPolicy;
-        configureComputeJobConcurrency(nextPolicy.worker.maxExecutingPerWorker);
-        workerLoops.policyChanged();
-      }).catch((error) => {
-        app.log.error({ error: String(error) }, 'compute policy refresh failed');
-      }).finally(scheduleComputePolicyRefresh);
+      // A disconnected worker has no active queue consumers. Broker traffic here
+      // would prevent Railway from sleeping even though the worker is idle.
+      if (!sessionManager.isConnected()) {
+        scheduleComputePolicyRefresh();
+        return;
+      }
+      void refreshComputePolicy().finally(scheduleComputePolicyRefresh);
     }, computePolicy.worker.policyRefreshSeconds * 1000);
   };
   scheduleComputePolicyRefresh();
@@ -443,8 +461,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       lastActivityReason,
     }),
     markActivity,
-    startWorkers: (session) => {
+    startWorkers: async (session) => {
       if (disableWorkers) return;
+      if (Date.now() - computePolicyLastFetchedAt >= computePolicy.worker.policyRefreshSeconds * 1000) {
+        await refreshComputePolicy();
+      }
       workerLoops.start(session, {
         pdfLayout: session.layoutConsumer,
         ttsPlayback: session.ttsPlaybackConsumer,
