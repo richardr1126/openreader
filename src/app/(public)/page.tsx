@@ -63,6 +63,29 @@ export default async function LandingPage() {
     <main className="public-main">
       {/* ───────────────────────────── Hero ───────────────────────────── */}
       <section className="public-hero">
+        <div className="public-wrap">
+          <div className="public-ios-announcement public-reveal-1">
+            <div className="public-ios-announcement-copy">
+              <p className="public-ios-kicker">iPhone &amp; iPad · Beta signups open</p>
+              <p className="public-ios-headline">OpenReader for iOS is coming soon.</p>
+              <p className="public-ios-description">
+                Read and listen entirely on your device, with Kokoro speech
+                powered by Apple&rsquo;s Core AI. Join the beta group now.
+              </p>
+            </div>
+            <ButtonAnchor
+              href="https://testflight.apple.com/join/eJTYjDwV"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="primary"
+              size="lg"
+              className="public-ios-cta"
+            >
+              Join the iOS beta <span aria-hidden="true">↗</span>
+            </ButtonAnchor>
+          </div>
+        </div>
+
         <div className="public-wrap public-hero-grid">
           <div className="public-hero-lede public-reveal-1">
             <p className="public-eyebrow">
