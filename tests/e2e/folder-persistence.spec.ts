@@ -29,6 +29,22 @@ test('anonymous user creates a folder by dragging documents together and keeps i
     'href',
     'https://testflight.apple.com/join/eJTYjDwV',
   );
+
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    const mobileTitle = iosBanner.getByText('OpenReader for iOS', { exact: true });
+    const mobileAction = iosBanner.getByRole('link', { name: 'Join beta' });
+    await expect(mobileTitle).toBeVisible();
+    await expect(mobileAction).toBeInViewport();
+    const titleBox = await mobileTitle.boundingBox();
+    const actionBox = await mobileAction.boundingBox();
+    expect(titleBox).not.toBeNull();
+    expect(actionBox).not.toBeNull();
+    expect(actionBox!.y).toBeLessThan(titleBox!.y + 36);
+    expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(width);
+  }
+
+  await page.setViewportSize({ width: 1280, height: 720 });
   await iosBanner.getByRole('button', { name: 'Dismiss iOS beta banner' }).click();
   await expect(iosBanner).toBeHidden();
 

@@ -78,7 +78,7 @@ export default async function LandingPage() {
               target="_blank"
               rel="noopener noreferrer"
               variant="primary"
-              size="lg"
+              size="md"
               className="public-ios-cta"
             >
               Join the iOS beta <span aria-hidden="true">↗</span>

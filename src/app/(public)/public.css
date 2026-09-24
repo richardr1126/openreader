@@ -205,7 +205,7 @@
 }
 
 .public-hero {
-  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+  padding-top: clamp(1.2rem, 2.5vw, 2rem);
 }
 
 .public-ios-announcement {
@@ -213,9 +213,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem 2rem;
+  gap: 1rem 1.5rem;
   overflow: hidden;
-  padding: clamp(1.3rem, 3vw, 2rem) clamp(1.4rem, 3.5vw, 2.5rem);
+  padding: clamp(1rem, 2vw, 1.4rem) clamp(1.2rem, 2.5vw, 1.8rem);
   border: 1px solid color-mix(in srgb, var(--pub-accent) 42%, var(--pub-line));
   border-radius: var(--pub-radius);
   background:
@@ -239,24 +239,25 @@
 
 .public-ios-kicker {
   color: var(--pub-accent);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .public-ios-headline {
-  margin-top: 0.45rem;
-  font-size: clamp(1.45rem, 2.5vw, 2.25rem);
+  margin-top: 0.35rem;
+  font-size: clamp(1.25rem, 2vw, 1.8rem);
   font-weight: 750;
   letter-spacing: -0.035em;
   line-height: 1.15;
 }
 
 .public-ios-description {
-  margin-top: 0.6rem;
+  margin-top: 0.35rem;
   color: var(--pub-soft);
-  line-height: 1.55;
+  font-size: 0.93rem;
+  line-height: 1.45;
 }
 
 .public-ios-cta {
@@ -274,7 +275,7 @@
 }
 
 .public-hero-grid {
-  margin-top: clamp(2.5rem, 6vw, 5rem);
+  margin-top: clamp(2.2rem, 5vw, 4rem);
   display: grid;
   grid-template-columns: 1fr;
   gap: clamp(2rem, 4vw, 3.5rem);
