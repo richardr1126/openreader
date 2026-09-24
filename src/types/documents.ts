@@ -52,7 +52,7 @@ export type SidebarFilter = string;
 export interface DocumentListState {
   sortBy: SortBy;
   sortDirection: SortDirection;
-  showHint: boolean;
+  iosBetaBannerDismissed?: boolean;
   viewMode?: ViewMode | 'grid';
   iconSize?: IconSize;
   sidebarWidth?: number;

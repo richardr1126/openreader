@@ -106,12 +106,13 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     expect(sanitizeSavedVoices(['af_sarah'])).toEqual({});
   });
 
-  test('accepts old document-list preferences without rewriting obsolete folder fields', () => {
+  test('accepts old document-list preferences without retaining obsolete fields', () => {
     const { patch } = sanitizePreferencesPatch({
       documentListState: {
         sortBy: 'name',
         sortDirection: 'asc',
         showHint: true,
+        iosBetaBannerDismissed: true,
         folders: [{ id: 'legacy-folder' }],
         collapsedFolders: ['legacy-folder'],
       },
@@ -120,7 +121,7 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     expect(patch.documentListState).toEqual({
       sortBy: 'name',
       sortDirection: 'asc',
-      showHint: true,
+      iosBetaBannerDismissed: true,
     });
   });
 });

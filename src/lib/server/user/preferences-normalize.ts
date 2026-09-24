@@ -124,7 +124,8 @@ export function sanitizePreferencesPatch(
       case 'documentListState':
         if (isRecord(value)) {
           out[key] = Object.fromEntries(
-            Object.entries(value).filter(([field]) => field !== 'folders' && field !== 'collapsedFolders'),
+            Object.entries(value).filter(([field]) =>
+              field !== 'folders' && field !== 'collapsedFolders' && field !== 'showHint'),
           ) as unknown as SyncedPreferencesPatch[typeof key];
         }
         break;

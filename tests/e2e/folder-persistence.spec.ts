@@ -23,13 +23,14 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(epubLink).toBeVisible();
   await expect(pdfLink).toBeVisible();
   await expect(page.getByRole('button', { name: 'All Documents 3', exact: true })).toBeVisible();
-  const folderHint = page.getByText(
-    'Drag files onto each other to make folders. Drop into the sidebar to move.',
-    { exact: true },
+  const iosBanner = page.getByRole('complementary', { name: 'OpenReader for iOS beta' });
+  await expect(iosBanner).toBeVisible();
+  await expect(iosBanner.getByRole('link', { name: 'Join iOS beta' })).toHaveAttribute(
+    'href',
+    'https://testflight.apple.com/join/eJTYjDwV',
   );
-  await expect(folderHint).toBeVisible();
-  await page.getByRole('button', { name: 'Dismiss hint', exact: true }).click();
-  await expect(folderHint).toBeHidden();
+  await iosBanner.getByRole('button', { name: 'Dismiss iOS beta banner' }).click();
+  await expect(iosBanner).toBeHidden();
 
   const textTile = page.locator('[data-doc-tile]').filter({ has: textLink });
   const epubTile = page.locator('[data-doc-tile]').filter({ has: epubLink });
@@ -96,6 +97,6 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(epubLink).toBeVisible();
   await expect(markdownLink).toBeVisible();
   await expect(pdfLink).toBeHidden();
-  await expect(folderHint).toBeHidden();
+  await expect(iosBanner).toBeHidden();
   await expect(page.getByRole('status')).toContainText('3 items');
 });

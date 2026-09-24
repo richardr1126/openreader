@@ -34,9 +34,9 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const {
     sortBy,
     sortDirection,
+    iosBetaBannerDismissed,
     viewMode,
     iconSize,
-    showHint,
     sidebarWidth,
     sidebarFilter,
   } = listState;
@@ -117,23 +117,41 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       sidebarOpen={controller.effectiveSidebarOpen}
       onRequestSidebarClose={controller.closeMobileSidebar}
     >
-      {!initialLoading && !queryError && showHint && model.allDocuments.length > 1 && (
+      {!initialLoading && !queryError && !iosBetaBannerDismissed && (
         <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
-          <div className="flex items-center justify-between bg-surface border border-line rounded-md px-3 py-1 text-[12px]">
-            <p className="text-foreground">
-              Drag files onto each other to make folders. Drop into the sidebar to move.
-            </p>
-            <IconButton
-              onClick={() => controller.updateListState({ showHint: false }, true)}
-              size="xs"
-              className="h-6 w-6"
-              aria-label="Dismiss hint"
+          <aside
+            aria-label="OpenReader for iOS beta"
+            className="relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-accent-line bg-surface py-2.5 pl-3 pr-11 shadow-elev-1"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent-line bg-accent-wash text-accent" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
+                <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+                <path d="M10.5 18.5h3" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div className="min-w-[180px] flex-1">
+              <p className="text-sm font-semibold leading-tight text-foreground">OpenReader for iOS is coming soon</p>
+              <p className="mt-0.5 text-xs leading-snug text-soft">On-device reading and Kokoro speech with Apple&rsquo;s Core AI.</p>
+            </div>
+            <a
+              href="https://testflight.apple.com/join/eJTYjDwV"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-accent-line bg-accent-wash px-3 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              Join iOS beta <span aria-hidden="true">↗</span>
+            </a>
+            <IconButton
+              onClick={() => controller.updateListState({ iosBetaBannerDismissed: true }, true)}
+              size="sm"
+              className="absolute right-2 top-2"
+              aria-label="Dismiss iOS beta banner"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
               </svg>
             </IconButton>
-          </div>
+          </aside>
         </div>
       )}
 

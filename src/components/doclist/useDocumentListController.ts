@@ -202,7 +202,7 @@ export function useDocumentListController() {
     const folderId = crypto.randomUUID();
     setPendingMerge(null);
     setNewFolderName('');
-    updateListState({ showHint: false, sidebarFilter: `folder:${folderId}` });
+    updateListState({ sidebarFilter: `folder:${folderId}` });
     selection.clear();
     try {
       const { folder } = await folderState.create.mutateAsync({ id: folderId, name, documentIds });
