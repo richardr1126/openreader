@@ -67,5 +67,6 @@ export type TtsExportResolveSnapshot = {
     operationId: string | null;
     issue: TtsExportIssue | null;
   };
-  downloadUrl: string | null;
+  /** Present only when the requested book or chapter file is ready. */
+  download: { url: string; filename: string } | null;
 };

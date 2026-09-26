@@ -29,9 +29,15 @@ type ResolveExport = (
   signal?: AbortSignal,
 ) => Promise<TtsExportResolveSnapshot>;
 
-function triggerDownload(url: string): void {
+/**
+ * Saves a same-origin export file. The `download` attribute makes this a
+ * download rather than a navigation, which WebKit requires once the click is
+ * no longer inside the user gesture (chapter files resolve asynchronously).
+ */
+export function triggerDownload(download: { url: string; filename: string }): void {
   const link = document.createElement('a');
-  link.href = url;
+  link.href = download.url;
+  link.download = download.filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -209,9 +215,9 @@ export function useAudiobookExport(input: {
         setSnapshot((previous) => previous
           ? { ...previous, generation: next.generation, progress: next.progress }
           : previous);
-        if (next.downloadUrl) {
+        if (next.download) {
           setChapter(null);
-          triggerDownload(next.downloadUrl);
+          triggerDownload(next.download);
           return;
         }
         if (next.artifact.state === 'building' && next.artifact.operationId) {

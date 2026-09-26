@@ -12,7 +12,11 @@ import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { Badge, Button, IconButton, RangeField, Section, SegmentedControl } from '@/components/ui';
-import { useAudiobookExport, type AudiobookChapterDownloadState } from '@/hooks/audio/useAudiobookExport';
+import {
+  triggerDownload,
+  useAudiobookExport,
+  type AudiobookChapterDownloadState,
+} from '@/hooks/audio/useAudiobookExport';
 import { useTimeEstimation } from '@/hooks/useTimeEstimation';
 import {
   describeExportIssue,
@@ -195,7 +199,7 @@ export function AudiobookExportModal({
   const isGenerating = generationState === 'generating' || isQueued;
   const isBuilding = artifactState === 'building';
   const isActive = isGenerating || isBuilding;
-  const canDownload = Boolean(snapshot?.downloadUrl);
+  const canDownload = Boolean(snapshot?.download);
   const progress = snapshot?.progress ?? null;
   const planned = liveCounts?.planned ?? progress?.plannedSegments ?? 0;
   const skipped = liveCounts?.skipped ?? progress?.skippedSegments ?? 0;
@@ -241,12 +245,7 @@ export function AudiobookExportModal({
   }, [audioPlayerSpeed, localAudioPlayerSpeed, setAudioPlayerSpeedAndRestart]);
 
   const handleDownload = useCallback(() => {
-    if (!snapshot?.downloadUrl) return;
-    const link = document.createElement('a');
-    link.href = snapshot.downloadUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if (snapshot?.download) triggerDownload(snapshot.download);
   }, [snapshot]);
 
   const primaryAction = (() => {

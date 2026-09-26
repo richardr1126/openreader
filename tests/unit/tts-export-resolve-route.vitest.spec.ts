@@ -230,7 +230,7 @@ describe('POST /api/tts/export/resolve', () => {
 
     expect(json.generation.state).toBe('usage_limited');
     expect(json.generation.issue.code).toBe('COMPUTE_USAGE_LIMIT_REACHED');
-    expect(json.downloadUrl).toBeNull();
+    expect(json.download).toBeNull();
 
     await post({ action: 'start' });
     expect(hoisted.createPlayback).toHaveBeenCalledOnce();
@@ -273,10 +273,33 @@ describe('POST /api/tts/export/resolve', () => {
 
     const resolved = await post({ action: 'resolve' });
     expect(resolved.json.artifact.state).toBe('stale');
-    expect(resolved.json.downloadUrl).toBeNull();
+    expect(resolved.json.download).toBeNull();
 
     await post({ action: 'start' });
     expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+  });
+
+  test('returns the ready file with its server filename for the download link', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 10)]));
+    hoisted.resolveArtifact.mockReset();
+    hoisted.resolveArtifact.mockResolvedValue({
+      artifact: {
+        artifactId: 'abcdef1234567890',
+        generatedSegments: 20,
+        skippedSegments: 0,
+        dispositionFilename: 'openreader-document.mp3',
+      },
+      operation: null,
+    });
+
+    const { json } = await post({ action: 'resolve' });
+
+    expect(json.artifact.state).toBe('ready');
+    expect(json.download).toEqual({
+      url: '/api/tts/export/download?artifactId=abcdef1234567890&documentId=doc-1',
+      filename: 'openreader-document.mp3',
+    });
   });
 
   test('builds a settled chapter while the rest of the book is still generating', async () => {

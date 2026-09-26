@@ -63,8 +63,11 @@ test('downloads account data and an already-completed audiobook export', async (
           operationId: artifactReady ? null : 'book-artifact-operation',
           issue: null,
         },
-        downloadUrl: artifactReady
-          ? `/api/tts/export/download?artifactId=${chapterDownload ? 'chapter-artifact' : 'completed-artifact'}&documentId=test-document`
+        download: artifactReady
+          ? {
+            url: `/api/tts/export/download?artifactId=${chapterDownload ? 'chapter-artifact' : 'completed-artifact'}&documentId=test-document`,
+            filename: chapterDownload ? 'completed-chapter-001.mp3' : 'completed.mp3',
+          }
           : null,
       },
     });

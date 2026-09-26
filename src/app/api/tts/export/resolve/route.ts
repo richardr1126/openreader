@@ -242,8 +242,11 @@ export async function POST(request: NextRequest) {
         operationId: artifact.operation?.opId ?? null,
         issue: artifactState === 'failed' ? exportOperationIssue(artifact.operation) : null,
       },
-      downloadUrl: artifactState === 'ready'
-        ? `/api/tts/export/download?artifactId=${encodeURIComponent(artifactId)}&documentId=${encodeURIComponent(parsed.documentId)}`
+      download: artifactState === 'ready' && artifact.artifact
+        ? {
+          url: `/api/tts/export/download?artifactId=${encodeURIComponent(artifactId)}&documentId=${encodeURIComponent(parsed.documentId)}`,
+          filename: artifact.artifact.dispositionFilename,
+        }
         : null,
     };
     const response = NextResponse.json(snapshot);
