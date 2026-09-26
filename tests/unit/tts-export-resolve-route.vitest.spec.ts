@@ -219,6 +219,26 @@ describe('POST /api/tts/export/resolve', () => {
     expect(hoisted.createArtifact).not.toHaveBeenCalled();
   });
 
+  test('gives concurrent starts of the same stopped export one run, and a later resume a new one', async () => {
+    const stopped = {
+      session: { status: 'canceled', generationRunId: 'run-1', updatedAt: 100 },
+      operation: { opId: 'generation-op-1', status: 'succeeded' },
+      progress: null,
+    };
+    hoisted.resolveSession.mockResolvedValue(stopped);
+
+    await Promise.all([post({ action: 'start' }), post({ action: 'start' })]);
+    const [first, second] = hoisted.createPlayback.mock.calls.map(([input]) => input.generationRunId);
+    expect(first).toBe(second);
+
+    hoisted.resolveSession.mockResolvedValue({
+      ...stopped,
+      session: { status: 'canceled', generationRunId: first, updatedAt: 200 },
+    });
+    await post({ action: 'start' });
+    expect(hoisted.createPlayback.mock.calls[2]?.[0].generationRunId).not.toBe(first);
+  });
+
   test('keeps a usage-limited run resumable instead of building an incomplete book', async () => {
     hoisted.resolveSession.mockResolvedValue({
       session: { status: 'succeeded', stopReason: 'usage_limit', lastError: 'COMPUTE_USAGE_LIMIT_REACHED' },

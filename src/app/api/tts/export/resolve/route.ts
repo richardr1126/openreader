@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   buildTtsPlaybackCanonicalSessionId,
@@ -30,6 +29,7 @@ import { buildTtsPlaybackAdmissionRequestKey } from '@/lib/server/compute-limits
 import {
   classifyExportArtifact,
   classifyExportGeneration,
+  exportGenerationRunId,
   exportOperationIssue,
   parseTtsExportAction,
 } from '@/lib/server/tts/export-state';
@@ -175,9 +175,13 @@ export async function POST(request: NextRequest) {
           aheadWindow: TTS_PLAYBACK_AHEAD_WINDOW,
           backgroundExtent: 'document',
           generationExtent: 'document',
-          // A fresh run id per start supersedes a stopped run that is still
-          // draining its in-flight segments instead of reusing its operation.
-          generationRunId: randomUUID(),
+          // A new run id per observed state supersedes a stopped run that is
+          // still draining, while concurrent duplicate starts share one run.
+          generationRunId: exportGenerationRunId({
+            sessionId,
+            action,
+            session: current.generation.session,
+          }),
           ...(action === 'retry-skipped' ? { retryErroredSegments: true } : {}),
           planning,
         }),

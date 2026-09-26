@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   ComputeOperation,
   TtsPlaybackExportArtifactResolution,
@@ -11,6 +12,32 @@ import type {
 } from '@/types/tts-export';
 
 const EXPORT_ACTIONS: readonly TtsExportAction[] = ['resolve', 'start', 'retry-skipped', 'stop'];
+
+/**
+ * Run id for a document export start, derived from the session state the
+ * request observed. Concurrent starts (double click, two tabs) that saw the
+ * same state get the same run id, so the worker's operation key dedupes them
+ * into one run; any later start sees a changed session and gets a new run.
+ */
+export function exportGenerationRunId(input: {
+  sessionId: string;
+  action: TtsExportAction;
+  session: unknown;
+}): string {
+  const observed = input.session && typeof input.session === 'object'
+    ? input.session as { generationRunId?: unknown; status?: unknown; updatedAt?: unknown }
+    : null;
+  return createHash('sha256')
+    .update(JSON.stringify([
+      input.sessionId,
+      input.action,
+      observed?.generationRunId ?? null,
+      observed?.status ?? null,
+      observed?.updatedAt ?? null,
+    ]))
+    .digest('hex')
+    .slice(0, 32);
+}
 
 export function parseTtsExportAction(value: unknown): TtsExportAction {
   return EXPORT_ACTIONS.find((candidate) => candidate === value) ?? 'resolve';
