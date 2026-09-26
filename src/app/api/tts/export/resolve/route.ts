@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
     }
 
     const chapter = chapterIndex === null ? null : current.progress?.chapters[chapterIndex] ?? null;
-    if (chapterIndex !== null && current.progress && !chapter) {
+    if (chapterIndex !== null && !chapter) {
       return NextResponse.json({ error: 'Chapter not found in this export' }, { status: 404 });
     }
     const counts = chapter ?? (current.progress

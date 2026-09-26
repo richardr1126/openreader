@@ -359,6 +359,17 @@ describe('POST /api/tts/export/resolve', () => {
     expect(hoisted.resolveArtifact).not.toHaveBeenCalled();
   });
 
+  test('rejects a chapter it cannot find, even for a complete book without progress', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(null);
+
+    const { status } = await post({ action: 'start', chapterIndex: 7 });
+
+    expect(status).toBe(404);
+    expect(hoisted.createAdmitted).not.toHaveBeenCalled();
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+  });
+
   test('returns the admission retry hint when export work is rate limited', async () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
     const { ComputeAdmissionLimitedError } = await import('@/lib/server/compute-limits/run-admitted');
