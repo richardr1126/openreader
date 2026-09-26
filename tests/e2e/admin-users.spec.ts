@@ -4,6 +4,11 @@ const password = 'TestAccount#2026';
 
 async function signUp(page: import('@playwright/test').Page, email: string) {
   await page.goto('/signup');
+  // A fresh context shows the consent banner after a delay; settle it before
+  // it can slide over the form's submit button.
+  const declineOptionalCookies = page.getByRole('button', { name: 'Decline Non-Essential', exact: true });
+  await declineOptionalCookies.click();
+  await expect(declineOptionalCookies).toBeHidden();
   await page.getByPlaceholder('me@example.com').fill(email);
   await page.getByPlaceholder('Password', { exact: true }).fill(password);
   await page.getByPlaceholder('Confirm Password').fill(password);
