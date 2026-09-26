@@ -200,6 +200,18 @@ export function createWorkerLoopController(input: {
   }): Promise<void> => {
     let context: Context<TPayload> | null = null;
     let heartbeat: NodeJS.Timeout | null = null;
+    // State writes for one job apply in order, so a heartbeat or progress
+    // update still in flight cannot land after (and hide) the terminal state.
+    let stateWrites: Promise<unknown> = Promise.resolve();
+    const writeState = <T>(write: () => Promise<T>): Promise<T> => {
+      const next = stateWrites.then(write, write);
+      stateWrites = next.catch(() => undefined);
+      return next;
+    };
+    const stopHeartbeat = (): void => {
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = null;
+    };
     try {
       const decoded = work.codec.decode(work.msg.data);
       const startedAt = Date.now();
@@ -218,7 +230,7 @@ export function createWorkerLoopController(input: {
       if (startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
-      await markRunning(context, startedAt);
+      await writeState(() => markRunning(context!, startedAt));
       input.logger.info({
         worker: work.workerLabel,
         kind: decoded.kind,
@@ -228,7 +240,7 @@ export function createWorkerLoopController(input: {
         deliveryCount: work.msg.info.deliveryCount,
       }, 'job.started');
       heartbeat = setInterval(() => {
-        void markRunning(context!, Date.now()).catch((error) => {
+        void writeState(() => markRunning(context!, Date.now())).catch((error) => {
           input.logger.error({
             worker: work.workerLabel,
             opId: context?.decoded.opId,
@@ -251,17 +263,18 @@ export function createWorkerLoopController(input: {
             }, 'failed to extend JetStream ack wait on progress');
           }
           context!.latestProgress = progress;
-          await markRunning(context!, Date.now());
+          await writeState(() => markRunning(context!, Date.now()));
         },
       });
       const timing = extractTiming(result);
       const now = Date.now();
-      await input.orchestrator.markSucceeded({
+      stopHeartbeat();
+      await writeState(() => input.orchestrator.markSucceeded({
         opId: decoded.opId,
         result,
         updatedAt: now,
         ...(timing ? { timing } : {}),
-      });
+      }));
       await input.onOperationTerminal?.({ operationId: decoded.opId, state: 'succeeded' })
         .catch((error) => input.logger.warn({
           opId: decoded.opId,
@@ -299,18 +312,20 @@ export function createWorkerLoopController(input: {
             : undefined,
         });
       const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
+      stopHeartbeat();
       if (context) {
-        const update = action === 'nak_retry'
-          ? markRunning(context, Date.now())
+        const failedContext = context;
+        const update = writeState(() => (action === 'nak_retry'
+          ? markRunning(failedContext, Date.now())
           : input.orchestrator.markFailed({
-            opId: context.decoded.opId,
+            opId: failedContext.decoded.opId,
             error: {
               message: errorMessage,
               ...(notStarted ? { code: error.code } : {}),
             },
             updatedAt: Date.now(),
             ...(timing ? { timing } : {}),
-          });
+          })));
         await update.catch((stateError) => input.logger.error({
           worker: context?.workerLabel,
           opId: context?.decoded.opId,
@@ -347,7 +362,7 @@ export function createWorkerLoopController(input: {
         retryAction: action === 'nak_retry' ? 'nack_retry' : 'term',
       }, 'job.terminal');
     } finally {
-      if (heartbeat) clearInterval(heartbeat);
+      stopHeartbeat();
     }
   };
 

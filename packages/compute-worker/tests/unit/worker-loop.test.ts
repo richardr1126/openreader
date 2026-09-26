@@ -420,6 +420,58 @@ describe('worker loop controller', () => {
     }));
   });
 
+  test('writes the terminal state only after an in-flight progress write settles', async () => {
+    const owner = {};
+    const writes: string[] = [];
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => { complete = resolve; });
+    const orchestrator: WorkerLoopOrchestrator = {
+      markRunning: async (input) => { writes.push('running'); return input as never; },
+      // A slow KV write that is still in flight when the job returns.
+      markProgress: async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        writes.push('progress');
+        return input as never;
+      },
+      markSucceeded: async (input) => { writes.push('succeeded'); complete(); return input as never; },
+      markFailed: async (input) => { writes.push('failed'); complete(); return input as never; },
+    };
+    const pdf = createMessage({
+      jobId: 'job-pdf',
+      opId: 'op-pdf',
+      opKey: 'pdf-key',
+      kind: 'pdf_layout',
+      queuedAt: Date.now(),
+      payload: { documentId: 'a'.repeat(64), namespace: null, documentObjectKey: 'openreader/doc.pdf' },
+    });
+    const handlers = {
+      runPdfLayout: async (_payload: unknown, _queueWaitMs: number, hooks?: {
+        onProgress?: (progress: PdfLayoutProgress) => Promise<void>;
+      }) => {
+        void hooks?.onProgress?.({ totalPages: 2, pagesParsed: 2, currentPage: 2, phase: 'merge' });
+        return { parsedObjectKey: 'openreader/parsed.json' };
+      },
+    } as unknown as JobHandlers;
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: cloneComputeLimitPolicyDocument,
+      pdfAttempts: 1,
+      pdfCodec: pdf.codec,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+    });
+
+    controller.start(owner, { pdfLayout: createConsumer(pdf.msg) });
+    await completed;
+    await controller.stop();
+
+    expect(writes).toEqual(['running', 'progress', 'succeeded']);
+  });
+
   test('keeps live playback flowing while whole-document exports queue on their own consumer', async () => {
     const owner = {};
     const playbackJob = (id: string, generationExtent?: 'document') => createMessage({
