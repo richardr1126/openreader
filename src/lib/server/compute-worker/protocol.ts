@@ -35,7 +35,7 @@ export type TtsPlaybackCursorResponse =
 export type TtsPlaybackCursorUpdateRequest =
   paths['/v1/tts-playback/sessions/{sessionId}/cursor']['put']['requestBody']['content']['application/json'];
 export type TtsPlaybackPlanRequest =
-  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent'>;
+  Omit<TtsPlaybackRequest, 'sessionId' | 'planObjectKey' | 'generationRunId' | 'expiresAt' | 'aheadWindow' | 'backgroundExtent' | 'generationExtent' | 'retryErroredSegments'>;
 export type TtsPlaybackSessionResolveRequest =
   paths['/v1/tts-playback/sessions/resolve']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionResolution =
@@ -46,6 +46,8 @@ export type TtsPlaybackExportArtifactResolution =
   paths['/v1/tts-playback/exports/resolve']['post']['responses'][200]['content']['application/json'];
 export type TtsPlaybackExportArtifactMetadata =
   NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
+export type TtsPlaybackExportProgressSummary =
+  paths['/v1/tts-playback/sessions/{sessionId}/export-progress']['get']['responses'][200]['content']['application/json'];
 export type DocumentPreviewRequest =
   paths['/v1/document-previews/jobs']['post']['requestBody']['content']['application/json'];
 export type DocumentPreviewResolution =

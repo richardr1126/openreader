@@ -38,7 +38,8 @@ import {
   type EpubRenderedAnchorResult,
   type EpubPlanLocatorResult,
 } from '@/hooks/audio/useTtsDocumentNavigation';
-import { useTtsDocumentExport, type TtsDocumentAudioExportResolution } from '@/hooks/audio/useTtsDocumentExport';
+import { useTtsDocumentExport, type TtsDocumentAudioExportRequest } from '@/hooks/audio/useTtsDocumentExport';
+import type { TtsExportResolveSnapshot } from '@/types/tts-export';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
@@ -99,8 +100,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   playbackPhase: TtsPlaybackPhase;
   audioSpeed: number;
   playbackPlanSegmentCount: number | null;
-  resolveDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
-  startDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
+  resolveDocumentAudioExport: (options: TtsDocumentAudioExportRequest, signal?: AbortSignal) => Promise<TtsExportResolveSnapshot>;
 
   // Control functions
   togglePlay: () => void;
@@ -382,7 +382,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   });
-  const { resolveDocumentAudioExport, startDocumentAudioExport } = useTtsDocumentExport({
+  const { resolveDocumentAudioExport } = useTtsDocumentExport({
     playbackPlanRef,
     applyWorkerPlan,
     buildPlaybackPlanRequest,
@@ -638,7 +638,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     audioSpeed,
     playbackPlanSegmentCount: playbackPlan ? sentences.length : null,
     resolveDocumentAudioExport,
-    startDocumentAudioExport,
     currDocPage,
     currDocPageNumber,
     currDocPages,
@@ -674,7 +673,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentences,
     playbackPlan,
     resolveDocumentAudioExport,
-    startDocumentAudioExport,
     selectedOrdinal,
     playbackPhase,
     audioSpeed,

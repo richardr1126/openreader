@@ -3,7 +3,8 @@ import { Button } from '@/components/ui';
 interface ProgressCardProps {
   progress: number;
   estimatedTimeRemaining?: string;
-  onCancel: (e?: React.MouseEvent) => void;
+  /** Omit for work that cannot be canceled from the card. */
+  onCancel?: (e?: React.MouseEvent) => void;
   operationType?: 'sync' | 'load' | 'library' | 'audiobook';
   cancelText?: string;
   currentChapter?: string;
@@ -52,15 +53,17 @@ export function ProgressCard({
             </div>
           )}
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="shrink-0"
-          onClick={(e) => onCancel(e)}
-        >
-          <span>{cancelText}</span>
-        </Button>
+        {onCancel && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="shrink-0"
+            onClick={(e) => onCancel(e)}
+          >
+            <span>{cancelText}</span>
+          </Button>
+        )}
       </div>
 
       {/* Progress bar */}

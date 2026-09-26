@@ -105,6 +105,8 @@ import {
 } from './schemas';
 import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
+const INITIAL_POLICY_RETRY_MS = 5_000;
+
 export type { ComputeWorkerRouteDeps } from './routes';
 
 export interface CreateComputeWorkerAppOptions {
@@ -413,6 +415,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   });
 
   let computePolicyRefresh: Promise<void> | null = null;
+  let initialPolicyRetries = 0;
   const refreshComputePolicy = (): Promise<void> => {
     if (computePolicyRefresh) return computePolicyRefresh;
     computePolicyRefresh = fetchComputeLimitPolicy().then((nextPolicy) => {
@@ -430,6 +433,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const scheduleComputePolicyRefresh = (): void => {
     if (disableWorkers || stopping) return;
+    // An embedded worker usually boots before the app it fetches policy from is
+    // listening. Until one fetch succeeds it runs every action one at a time,
+    // so retry soon instead of waiting a full refresh interval.
+    const intervalMs = computePolicy.worker.policyRefreshSeconds * 1000;
+    const delayMs = computePolicyLastFetchedAt === 0
+      ? Math.min(intervalMs, INITIAL_POLICY_RETRY_MS * 2 ** initialPolicyRetries++)
+      : intervalMs;
     computePolicyRefreshTimer = setTimeout(() => {
       // A disconnected worker has no active queue consumers. Broker traffic here
       // would prevent Railway from sleeping even though the worker is idle.
@@ -438,7 +448,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         return;
       }
       void refreshComputePolicy().finally(scheduleComputePolicyRefresh);
-    }, computePolicy.worker.policyRefreshSeconds * 1000);
+    }, delayMs);
   };
   scheduleComputePolicyRefresh();
 

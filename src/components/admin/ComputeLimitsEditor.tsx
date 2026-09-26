@@ -24,13 +24,17 @@ const ACTION_DETAILS: Record<ComputeAction, { label: string; description: string
     label: 'Live playback sessions',
     description: 'Session starts only. Leave this off if cached playback must always remain available.',
   },
+  tts_playback_document: {
+    label: 'Audiobook generation',
+    description: 'Whole-document narration for audiobook export. Runs beside live playback instead of blocking it.',
+  },
   tts_playback_plan: {
     label: 'Playback plan creation',
     description: 'Builds the reusable text and segment plan behind playback.',
   },
   tts_playback_export: {
     label: 'Audiobook assembly',
-    description: 'Long-running audio generation and archive assembly.',
+    description: 'Builds the downloadable book or chapter file from generated audio.',
   },
   document_preview: {
     label: 'Document previews',

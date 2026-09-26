@@ -8,6 +8,7 @@ describe('compute limit runtime config seed', () => {
     expect(Object.keys(policy.actions)).toEqual([
       'pdf_layout',
       'tts_playback',
+      'tts_playback_document',
       'tts_playback_plan',
       'tts_playback_export',
       'document_preview',

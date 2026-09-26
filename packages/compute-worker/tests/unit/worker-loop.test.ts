@@ -419,4 +419,130 @@ describe('worker loop controller', () => {
       }),
     }));
   });
+
+  test('keeps live playback flowing while whole-document exports queue for their own slot', async () => {
+    const owner = {};
+    const playbackJob = (id: string, generationExtent?: 'document') => createMessage({
+      jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
+      queuedAt: Date.now(),
+      payload: { sessionId: `session-${id}`, ...(generationExtent ? { generationExtent } : {}) },
+    });
+    const exportA = playbackJob('export-a', 'document');
+    const exportB = playbackJob('export-b', 'document');
+    const live = playbackJob('live');
+    const messages = [exportA.msg, exportB.msg, live.msg];
+    let nextMessage = 0;
+    const consumer = {
+      next: async () => {
+        const message = messages[nextMessage];
+        nextMessage += 1;
+        if (message) return message;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return null;
+      },
+    } as unknown as Consumer;
+    const policy = cloneComputeLimitPolicyDocument();
+    policy.worker.maxExecutingPerWorker = 2;
+    let releaseExportA!: () => void;
+    const exportAGate = new Promise<void>((resolve) => { releaseExportA = resolve; });
+    let liveRan!: () => void;
+    const liveCompletion = new Promise<void>((resolve) => { liveRan = resolve; });
+    const started: string[] = [];
+    const handlers = {
+      runTtsPlayback: async (payload: { sessionId: string }) => {
+        started.push(payload.sessionId);
+        if (payload.sessionId === 'session-export-a') await exportAGate;
+        if (payload.sessionId === 'session-live') liveRan();
+        return { sessionId: payload.sessionId };
+      },
+    } as unknown as JobHandlers;
+    const { orchestrator } = createOrchestrator();
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: () => policy,
+      pdfAttempts: 1,
+      pdfCodec: exportA.codec as never,
+      ttsPlaybackCodec: exportA.codec as never,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+    });
+
+    controller.start(owner, { pdfLayout: createConsumer(), ttsPlayback: consumer });
+    await liveCompletion;
+    // Export B still waits for the single document slot held by export A.
+    expect(started).toEqual(['session-export-a', 'session-live']);
+
+    releaseExportA();
+    await vi.waitFor(() => expect(exportB.ack).toHaveBeenCalledOnce());
+    expect(started).toEqual(['session-export-a', 'session-live', 'session-export-b']);
+    await controller.stop();
+  });
+
+  test('fails queued playback work that a stopping worker cannot redeliver', async () => {
+    const job = (id: string) => createMessage({
+      jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
+      queuedAt: Date.now(),
+      payload: { sessionId: `session-${id}`, generationExtent: 'document' },
+    });
+    const running = job('running');
+    const queued = job('queued');
+    const messages = [running.msg, queued.msg];
+    let nextMessage = 0;
+    const consumer = {
+      next: async () => {
+        const message = messages[nextMessage];
+        nextMessage += 1;
+        if (message) return message;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return null;
+      },
+    } as unknown as Consumer;
+    const policy = cloneComputeLimitPolicyDocument();
+    policy.worker.maxExecutingPerWorker = 2;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const runningStarted = new Promise<void>((resolve) => { started = resolve; });
+    const { orchestrator, calls } = createOrchestrator();
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers: {
+        runTtsPlayback: async (payload: { sessionId: string }) => {
+          started();
+          await gate;
+          return { sessionId: payload.sessionId };
+        },
+      } as unknown as JobHandlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: () => policy,
+      pdfAttempts: 1,
+      pdfCodec: running.codec as never,
+      ttsPlaybackCodec: running.codec as never,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+    });
+
+    controller.start({}, { pdfLayout: createConsumer(), ttsPlayback: consumer });
+    await runningStarted;
+    await vi.waitFor(() => expect(nextMessage).toBeGreaterThanOrEqual(2));
+    const stopping = controller.stop();
+    release();
+    await stopping;
+
+    expect(queued.term).toHaveBeenCalledOnce();
+    expect(queued.nak).not.toHaveBeenCalled();
+    expect(calls).toContainEqual(expect.objectContaining({
+      method: 'failed',
+      input: expect.objectContaining({
+        opId: 'op-queued',
+        error: expect.objectContaining({ code: 'COMPUTE_WORK_NOT_STARTED' }),
+      }),
+    }));
+  });
 });

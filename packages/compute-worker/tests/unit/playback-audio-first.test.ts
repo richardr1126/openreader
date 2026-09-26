@@ -371,8 +371,10 @@ describe('playback audio-first segment generation', () => {
     await expect(run).resolves.toBeUndefined();
 
     expect(putAudioObject).not.toHaveBeenCalled();
-    expect(sidecars).toHaveLength(1);
+    // The abandoned lease is released (not failed) so a resumed run can claim it.
+    expect(sidecars).toHaveLength(2);
     expect(sidecars[0]).toMatchObject({ status: 'generating', error: null });
+    expect(sidecars[1]).toMatchObject({ status: 'generating', error: null, leaseOwnerId: null, leaseUpdatedAt: 0 });
   });
 
   test('stops cleanly before provider work when the next uncached segment is denied', async () => {

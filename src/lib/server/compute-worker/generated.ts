@@ -127,6 +127,7 @@ export interface paths {
                             generatedSegments?: number;
                             skippedSegments?: number;
                             plannedSegments?: number;
+                            chapterIndex?: number;
                             dispositionFilename: string;
                             sourceSessionId: string;
                             sourcePlanObjectKey: string;
@@ -221,6 +222,7 @@ export interface paths {
                         backgroundExtent?: "section" | "document";
                         /** @enum {string} */
                         generationExtent?: "window" | "document";
+                        retryErroredSegments?: boolean;
                     };
                 };
             };
@@ -668,6 +670,160 @@ export interface paths {
             };
         };
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback/sessions/{sessionId}/export-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessionId: string;
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed" | "canceled";
+                            stopReason: "usage_limit" | null;
+                            lastError: string | null;
+                            plannedSegments: number;
+                            completedSegments: number;
+                            skippedSegments: number;
+                            lastSkipError: {
+                                message: string | null;
+                                code: string | null;
+                            } | null;
+                            chapters: {
+                                index: number;
+                                title: string;
+                                spineHref: string | null;
+                                page: number | null;
+                                plannedSegments: number;
+                                completedSegments: number;
+                                skippedSegments: number;
+                                generatingSegments: number;
+                                durationMs: number;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback/sessions/{sessionId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1744,6 +1900,7 @@ export interface paths {
                         backgroundExtent?: "section" | "document";
                         /** @enum {string} */
                         generationExtent?: "window" | "document";
+                        retryErroredSegments?: boolean;
                     };
                 };
             };
@@ -2569,6 +2726,7 @@ export interface paths {
                         /** @enum {string} */
                         format: "mp3" | "m4b";
                         speed: number;
+                        chapterIndex?: number;
                     };
                 };
             };
@@ -2759,6 +2917,7 @@ export interface paths {
                                 generatedSegments?: number;
                                 skippedSegments?: number;
                                 plannedSegments?: number;
+                                chapterIndex?: number;
                                 dispositionFilename: string;
                                 sourceSessionId: string;
                                 sourcePlanObjectKey: string;
@@ -3740,6 +3899,7 @@ export interface components {
             generatedSegments?: number;
             skippedSegments?: number;
             plannedSegments?: number;
+            chapterIndex?: number;
             dispositionFilename: string;
             sourceSessionId: string;
             sourcePlanObjectKey: string;
@@ -4134,6 +4294,7 @@ export interface components {
                 generatedSegments?: number;
                 skippedSegments?: number;
                 plannedSegments?: number;
+                chapterIndex?: number;
                 dispositionFilename: string;
                 sourceSessionId: string;
                 sourcePlanObjectKey: string;

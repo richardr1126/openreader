@@ -139,6 +139,7 @@ export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSc
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   generationExtent: z.enum(['window', 'document']).optional(),
+  retryErroredSegments: z.boolean().optional(),
 }).strict();
 
 export const ttsPlaybackSessionPrepareSchema = ttsPlaybackOperationCreateSchema.extend({
@@ -200,6 +201,7 @@ export const ttsPlaybackExportArtifactCreateSchema = z.object({
   planObjectKey: z.string().trim().min(1).max(2048),
   format: ttsPlaybackExportFormatSchema,
   speed: z.number().min(0.5).max(3),
+  chapterIndex: z.number().int().nonnegative().optional(),
 }).strict();
 
 export const ttsPlaybackExportArtifactResolveSchema = z.object({
@@ -311,6 +313,7 @@ export const ttsPlaybackExportArtifactMetadataSchema = z.object({
   generatedSegments: z.number().optional(),
   skippedSegments: z.number().optional(),
   plannedSegments: z.number().optional(),
+  chapterIndex: z.number().optional(),
   dispositionFilename: z.string(),
   sourceSessionId: z.string(),
   sourcePlanObjectKey: z.string(),
@@ -456,6 +459,33 @@ export const ttsPlaybackSessionResolutionSchema = z.object({
   session: z.unknown().nullable(),
   operation: computeOperationSchema.nullable(),
   progress: ttsPlaybackProgressSchema.nullable(),
+});
+
+const ttsPlaybackSegmentErrorSchema = z.object({
+  message: z.string().nullable(),
+  code: z.string().nullable(),
+});
+
+export const ttsPlaybackExportProgressSummarySchema = z.object({
+  sessionId: z.string(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'canceled']),
+  stopReason: z.literal('usage_limit').nullable(),
+  lastError: z.string().nullable(),
+  plannedSegments: z.number(),
+  completedSegments: z.number(),
+  skippedSegments: z.number(),
+  lastSkipError: ttsPlaybackSegmentErrorSchema.nullable(),
+  chapters: z.array(z.object({
+    index: z.number(),
+    title: z.string(),
+    spineHref: z.string().nullable(),
+    page: z.number().nullable(),
+    plannedSegments: z.number(),
+    completedSegments: z.number(),
+    skippedSegments: z.number(),
+    generatingSegments: z.number(),
+    durationMs: z.number(),
+  })),
 });
 
 export const ttsPlaybackExportArtifactResolutionSchema = z.object({

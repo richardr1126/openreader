@@ -1,6 +1,7 @@
 export const COMPUTE_ACTIONS = [
   'pdf_layout',
   'tts_playback',
+  'tts_playback_document',
   'tts_playback_plan',
   'tts_playback_export',
   'document_preview',
@@ -10,6 +11,8 @@ export const COMPUTE_ACTIONS = [
 ] as const;
 
 export type ComputeAction = typeof COMPUTE_ACTIONS[number];
+/** Actions introduced after policy schema 2 shipped; saved policies may omit them. */
+const ADDITIVE_COMPUTE_ACTIONS: readonly ComputeAction[] = ['tts_playback_document'];
 export type WorkerOperationAction = Exclude<ComputeAction, 'tts_synthesis'>;
 export type ComputeLimitScope = 'user' | 'anonymous_device' | 'ip' | 'site';
 export type ComputeLimitAudience = 'anonymous' | 'authenticated' | 'all';
@@ -139,6 +142,16 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
       admission: admission([[12, 60], [60, 3600]], 2, 50, 30 * 60),
       usage: [],
       execution: execution('interactive', 100, {}),
+    },
+    tts_playback_document: {
+      // Whole-document audiobook generation. Separate from interactive
+      // playback so a long export queues behind other exports instead of
+      // starving the reader's playback slot for hours.
+      enabled: false,
+      admission: admission([[6, 600], [30, 86400]], 1, 20, 12 * 60 * 60),
+      usage: [],
+      // Exports queue behind each other for hours on a busy worker.
+      execution: { ...execution('background', 50, {}), maxQueueAgeSeconds: 6 * 60 * 60 },
     },
     tts_playback_plan: {
       enabled: false,
@@ -331,8 +344,14 @@ function parseProviderLimit(value: unknown): ProviderLimitPolicy | null {
 
 export function parseComputeLimitPolicyDocument(value: unknown): ComputeLimitPolicyDocument | undefined {
   if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'actions', 'worker', 'providers'])
-    || value.schemaVersion !== 2 || !isRecord(value.actions)
-    || !hasExactKeys(value.actions, COMPUTE_ACTIONS) || !isRecord(value.worker)
+    || value.schemaVersion !== 2 || !isRecord(value.actions)) return undefined;
+  // Actions added after a policy was saved start from their defaults; unknown
+  // actions are still rejected.
+  const storedActions: Record<string, unknown> = { ...value.actions };
+  for (const action of ADDITIVE_COMPUTE_ACTIONS) {
+    if (!(action in storedActions)) storedActions[action] = DEFAULT_COMPUTE_LIMIT_POLICIES.actions[action];
+  }
+  if (!hasExactKeys(storedActions, COMPUTE_ACTIONS) || !isRecord(value.worker)
     || !hasExactKeys(value.worker, ['maxExecutingPerWorker', 'resources', 'policyRefreshSeconds'])
     || !isPositiveInt(value.worker.maxExecutingPerWorker)
     || !isPositiveInt(value.worker.policyRefreshSeconds)
@@ -352,7 +371,7 @@ export function parseComputeLimitPolicyDocument(value: unknown): ComputeLimitPol
 
   const actions = {} as Record<ComputeAction, ComputeActionPolicy>;
   for (const action of COMPUTE_ACTIONS) {
-    const parsed = parseActionPolicy(action, value.actions[action]);
+    const parsed = parseActionPolicy(action, storedActions[action]);
     if (!parsed) return undefined;
     if (parsed.execution) {
       if (parsed.execution.maxConcurrentPerWorker > value.worker.maxExecutingPerWorker) return undefined;

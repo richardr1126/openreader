@@ -13,6 +13,11 @@ export type PlaybackSegmentState =
   | { status: 'error'; ordinal: number; durationMs: number }
   | { status: 'pending'; ordinal: number };
 
+export type PlaybackSegmentSettledState =
+  | { status: 'completed'; durationMs: number }
+  | { status: 'error'; message: string | null; code: string | null }
+  | { status: 'generating' };
+
 export type PlaybackSegmentManifestRow = {
   ordinal: number;
   segmentKey: string | null;
@@ -32,6 +37,8 @@ export interface PlaybackSessionReadModel {
   ): Promise<PlaybackSegmentManifestRow[]>;
   readSegmentState(session: PlaybackSessionRow, ordinal: number): Promise<PlaybackSegmentState>;
   listCompletedDurations(session: PlaybackSessionRow, planLength: number): Promise<Map<number, number>>;
+  /** Every stored segment state for export progress, keyed by plan ordinal. */
+  listSegmentStates(session: PlaybackSessionRow, planLength: number): Promise<Map<number, PlaybackSegmentSettledState>>;
   forgetCachedSidecar(session: PlaybackSessionRow, ordinal: number): Promise<void>;
   invalidateSidecarsForScope(scope: PlaybackScope): number;
   invalidatePlansUnderPrefix(prefix: string): number;
@@ -89,6 +96,10 @@ export function createPlaybackSessionReadModel(input: {
   const sidecarScopes = new Map<string, Map<number, TtsPlaybackSegmentMetadata>>();
   const scopeCollections = new Map<string, Promise<Map<number, TtsPlaybackSegmentMetadata>>>();
   const plans = new Map<string, Array<{ ordinal: number; text: string }>>();
+  // Completed audio never changes status or duration within one cache epoch
+  // (alignment may still arrive, which export progress does not need), so
+  // progress refreshes re-read only error/generating sidecars.
+  const completedDurationScopes = new Map<string, Map<number, number>>();
 
   const getScopeEpoch = async (session: PlaybackSessionRow): Promise<number> => {
     return await playbackStorage?.artifacts.getScopeEpoch({
@@ -318,6 +329,53 @@ export function createPlaybackSessionReadModel(input: {
       }
       return durations;
     },
+    async listSegmentStates(session, planLength) {
+      const cacheEpoch = await getScopeEpoch(session);
+      const key = scopeCacheKey(session, cacheEpoch);
+      let completed = completedDurationScopes.get(key);
+      if (!completed) {
+        if (completedDurationScopes.size >= SIDECAR_SCOPE_CACHE_MAX) {
+          const oldest = completedDurationScopes.keys().next().value;
+          if (oldest !== undefined) completedDurationScopes.delete(oldest);
+        }
+        completed = new Map();
+        completedDurationScopes.set(key, completed);
+      }
+      const states = new Map<number, PlaybackSegmentSettledState>();
+      for (const [ordinal, durationMs] of completed) states.set(ordinal, { status: 'completed', durationMs });
+      const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(session).catch((error) => {
+        logger?.warn({
+          sessionId: session.sessionId,
+          error: toErrorMessage(error),
+        }, 'tts.playback.segment_state_catalogue_read_failed');
+        return [];
+      }) ?? []).filter((ordinal) => ordinal < planLength && !completed.has(ordinal));
+      for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
+        const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
+        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
+        batch.forEach((ordinal, batchIndex) => {
+          const sidecar = fetched[batchIndex];
+          if (!sidecar) return;
+          if (sidecar.status === 'completed' && sidecar.audioKey) {
+            const durationMs = Math.max(1, Number(sidecar.durationMs ?? 1000));
+            completed.set(ordinal, durationMs);
+            states.set(ordinal, { status: 'completed', durationMs });
+          } else if (sidecar.status === 'error') {
+            const error = sidecar.error && typeof sidecar.error === 'object'
+              ? sidecar.error as { message?: unknown; code?: unknown }
+              : null;
+            states.set(ordinal, {
+              status: 'error',
+              message: typeof error?.message === 'string' ? error.message : null,
+              code: typeof error?.code === 'string' ? error.code : null,
+            });
+          } else if (sidecar.status === 'generating') {
+            states.set(ordinal, { status: 'generating' });
+          }
+        });
+      }
+      return states;
+    },
     async forgetCachedSidecar(session, ordinal) {
       getSidecarScope(session, await getScopeEpoch(session)).delete(ordinal);
     },
@@ -333,6 +391,11 @@ export function createPlaybackSessionReadModel(input: {
       for (const key of [...scopeCollections.keys()]) {
         if (key === prefix || key.startsWith(`${prefix}\0`)) {
           scopeCollections.delete(key);
+        }
+      }
+      for (const key of [...completedDurationScopes.keys()]) {
+        if (key === prefix || key.startsWith(`${prefix}\0`)) {
+          completedDurationScopes.delete(key);
         }
       }
       return invalidated;

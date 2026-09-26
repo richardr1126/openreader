@@ -109,9 +109,10 @@ export async function POST(request: NextRequest) {
       purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live',
     });
     const device = scope.isAnonymousUser ? getOrCreateDeviceId(request) : null;
+    const admissionAction = parsed.generationExtent === 'document' ? 'tts_playback_document' : 'tts_playback';
     const admission = await reserveComputeAdmission({
       policy: runtimeConfig.computeLimitPolicies,
-      action: 'tts_playback',
+      action: admissionAction,
       requestKey: buildTtsPlaybackAdmissionRequestKey(sessionId, now),
       subject: {
         userId: scope.userId,
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
     }
     const playbackLeaseSeconds = Math.max(
       60,
-      ...runtimeConfig.computeLimitPolicies.actions.tts_playback.admission.active
+      ...runtimeConfig.computeLimitPolicies.actions[admissionAction].admission.active
         .map((limit) => limit.leaseSeconds),
     );
     await activateComputeAdmission({

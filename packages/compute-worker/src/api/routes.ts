@@ -18,6 +18,7 @@ import {
   registerPlaybackExportJobRoutes,
   registerPlaybackExportRetentionRoute,
   registerPlaybackExportRoutes,
+  registerPlaybackExportSessionRoutes,
 } from './routes/playback/exports';
 import {
   registerPlaybackJobRoutes,
@@ -38,6 +39,7 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerHealthRoutes(context);
   registerPlaybackExportRoutes(context);
   registerPlaybackSessionRoutes(context, playbackReadModel, playbackController);
+  registerPlaybackExportSessionRoutes(context, playbackReadModel);
   registerCleanupRoutes(context, playbackReadModel);
   registerAccountExportRetentionRoute(context);
   registerPlaybackExportRetentionRoute(context);

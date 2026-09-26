@@ -16,6 +16,7 @@ import type {
   TtsPlaybackCursorUpdateRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
+  TtsPlaybackExportProgressSummary,
   TtsPlaybackPlanRequest,
   TtsPlaybackSessionState,
   TtsPlaybackCompletedSegment,
@@ -191,6 +192,19 @@ export class ComputeWorkerClient {
       if (error instanceof WorkerHttpError && error.status === 404) return null;
       throw error;
     }
+  }
+
+  async getTtsPlaybackExportProgress(sessionId: string): Promise<TtsPlaybackExportProgressSummary | null> {
+    try {
+      return await this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}/export-progress`);
+    } catch (error) {
+      if (error instanceof WorkerHttpError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  cancelTtsPlaybackSession(sessionId: string): Promise<{ sessionId: string; status: string }> {
+    return this.requestJson('POST', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}/cancel`, {});
   }
 
   async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {

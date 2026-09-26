@@ -49,6 +49,22 @@ class ComputeQueueExpiredError extends Error {
   }
 }
 
+/**
+ * Queued work that never started because this worker stopped or its local
+ * queue was full, and that its consumer will not redeliver. Failing it keeps
+ * the operation from reading as queued forever.
+ */
+class ComputeWorkNotStartedError extends Error {
+  readonly code = 'COMPUTE_WORK_NOT_STARTED';
+
+  constructor(reason: 'rejected' | 'cancelled') {
+    super(reason === 'rejected'
+      ? 'Compute work was rejected because the worker queue is full'
+      : 'Compute worker stopped before queued work could start');
+    this.name = 'ComputeWorkNotStartedError';
+  }
+}
+
 export interface QueuedJob<TPayload> {
   jobId: string;
   opId: string;
@@ -136,6 +152,7 @@ export function createWorkerLoopController(input: {
 }) {
   const scheduler = new ComputeExecutionScheduler(input.getComputePolicy);
   let loops: Promise<void>[] = [];
+  const deferredRuns = new Set<Promise<void>>();
   let stopRequested = false;
   let growLoops: (() => void) | null = null;
 
@@ -157,6 +174,12 @@ export function createWorkerLoopController(input: {
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: JobRunner<TPayload, TResult>;
     action?: WorkerOperationAction;
+    /**
+     * Per-message action for a consumer that carries more than one kind of
+     * work. Messages resolved to a different action than `action` wait for
+     * their own execution slot without parking this consumer's pull loop.
+     */
+    actionFor?: (payload: TPayload) => WorkerOperationAction;
   };
 
   const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
@@ -180,7 +203,7 @@ export function createWorkerLoopController(input: {
   const processMessage = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
     msg: JsMsg;
     workerLabel: string;
-    queueExpired?: boolean;
+    notStarted?: ComputeQueueExpiredError | ComputeWorkNotStartedError;
   }): Promise<void> => {
     let context: Context<TPayload> | null = null;
     let heartbeat: NodeJS.Timeout | null = null;
@@ -198,7 +221,8 @@ export function createWorkerLoopController(input: {
         startedAt,
         queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
       };
-      if (work.queueExpired || startedAt - decoded.queuedAt > maxQueueAgeMs) {
+      if (work.notStarted) throw work.notStarted;
+      if (startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
       await markRunning(context, startedAt);
@@ -270,7 +294,8 @@ export function createWorkerLoopController(input: {
       const errorLog = toErrorLog(error);
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
-      const action = error instanceof ComputeQueueExpiredError
+      const notStarted = error instanceof ComputeQueueExpiredError || error instanceof ComputeWorkNotStartedError;
+      const action = notStarted
         ? 'term'
         : decideRetryAction({
           kind,
@@ -288,7 +313,7 @@ export function createWorkerLoopController(input: {
             opId: context.decoded.opId,
             error: {
               message: errorMessage,
-              ...(error instanceof ComputeQueueExpiredError ? { code: error.code } : {}),
+              ...(notStarted ? { code: error.code } : {}),
             },
             updatedAt: Date.now(),
             ...(timing ? { timing } : {}),
@@ -333,6 +358,79 @@ export function createWorkerLoopController(input: {
     }
   };
 
+  const handleMessage = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
+    msg: JsMsg;
+    workerLabel: string;
+  }, detached: () => boolean): Promise<'continue' | 'return'> => {
+    const { msg } = work;
+    let executionLease: ComputeExecutionLease | null = null;
+    input.markActivity(`job_received:${work.workerLabel}`);
+    input.onInFlightJobsChanged(1);
+    try {
+      const queueHeartbeat = setInterval(() => {
+        try {
+          msg.working();
+        } catch {
+          // A detached or redelivered message is handled by the normal loop path.
+        }
+      }, RUNNING_HEARTBEAT_MS);
+      try {
+        if (work.action) {
+          const acquisition = await scheduler.acquire(work.action);
+          if (acquisition.status === 'acquired') executionLease = acquisition.lease;
+          else if (acquisition.status === 'expired') {
+            await processMessage({ ...work, notStarted: new ComputeQueueExpiredError() });
+            return 'continue';
+          } else if (!canRedeliver(work, msg)) {
+            await processMessage({ ...work, notStarted: new ComputeWorkNotStartedError(acquisition.status) });
+            return 'continue';
+          }
+        }
+      } finally {
+        clearInterval(queueHeartbeat);
+      }
+      if (work.action && !executionLease) {
+        msg.nak();
+        return 'continue';
+      }
+      if (detached()) {
+        msg.nak();
+        return 'return';
+      }
+      await processMessage(work);
+      return 'continue';
+    } finally {
+      if (executionLease) scheduler.release(executionLease);
+      input.onInFlightJobsChanged(-1);
+      input.markActivity(`job_completed:${work.workerLabel}`);
+    }
+  };
+
+  const canRedeliver = <TPayload, TResult>(work: WorkDefinition<TPayload, TResult>, msg: JsMsg): boolean => {
+    try {
+      return decideRetryAction({
+        kind: work.codec.decode(msg.data).kind,
+        deliveryCount: msg.info.deliveryCount,
+        pdfAttempts: input.pdfAttempts,
+      }) === 'nak_retry';
+    } catch {
+      return true;
+    }
+  };
+
+  const resolveMessageAction = <TPayload, TResult>(
+    work: WorkDefinition<TPayload, TResult>,
+    msg: JsMsg,
+  ): WorkerOperationAction | undefined => {
+    if (!work.actionFor) return work.action;
+    try {
+      return work.actionFor(work.codec.decode(msg.data).payload);
+    } catch {
+      // processMessage reports undecodable messages as failed operations.
+      return work.action;
+    }
+  };
+
   const runLoop = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
     owner: object;
     consumer: Consumer;
@@ -341,54 +439,31 @@ export function createWorkerLoopController(input: {
     const detached = () => input.isStopping() || stopRequested || !input.isOwnerActive(work.owner);
     while (!detached()) {
       let msg: JsMsg | null = null;
-      let executionLease: ComputeExecutionLease | null = null;
       try {
-        try {
-          msg = await work.consumer.next({ expires: PULL_EXPIRES_MS });
-        } catch (error) {
-          if (detached()) return;
-          input.logger.error({ error: toErrorMessage(error), worker: work.workerLabel }, 'worker pull failed');
-          await sleep(LOOP_ERROR_BACKOFF_MS);
-          continue;
-        }
-        if (!msg) continue;
-        input.markActivity(`job_received:${work.workerLabel}`);
-        input.onInFlightJobsChanged(1);
-        const queueHeartbeat = setInterval(() => {
-          try {
-            msg?.working();
-          } catch {
-            // A detached or redelivered message is handled by the normal loop path.
-          }
-        }, RUNNING_HEARTBEAT_MS);
-        try {
-          if (work.action) {
-            const acquisition = await scheduler.acquire(work.action);
-            if (acquisition.status === 'acquired') executionLease = acquisition.lease;
-            else if (acquisition.status === 'expired') {
-              await processMessage({ ...work, msg, queueExpired: true });
-              continue;
-            }
-          }
-        } finally {
-          clearInterval(queueHeartbeat);
-        }
-        if (work.action && !executionLease) {
-          msg.nak();
-          continue;
-        }
-        if (detached()) {
-          msg.nak();
-          return;
-        }
-        await processMessage({ ...work, msg });
-      } finally {
-        if (msg) {
-          if (executionLease) scheduler.release(executionLease);
-          input.onInFlightJobsChanged(-1);
-          input.markActivity(`job_completed:${work.workerLabel}`);
-        }
+        msg = await work.consumer.next({ expires: PULL_EXPIRES_MS });
+      } catch (error) {
+        if (detached()) return;
+        input.logger.error({ error: toErrorMessage(error), worker: work.workerLabel }, 'worker pull failed');
+        await sleep(LOOP_ERROR_BACKOFF_MS);
+        continue;
       }
+      if (!msg) continue;
+      const action = resolveMessageAction(work, msg);
+      if (action !== work.action) {
+        // Long whole-document runs share the playback consumer but must not
+        // hold its pull loop while they queue for their own slot; interactive
+        // playback behind them would otherwise expire unpulled.
+        const deferred = handleMessage({ ...work, action, msg }, detached)
+          .then(() => undefined)
+          .catch((error) => input.logger.error({
+            error: toErrorMessage(error),
+            worker: work.workerLabel,
+          }, 'deferred job handling failed'));
+        deferredRuns.add(deferred);
+        void deferred.finally(() => deferredRuns.delete(deferred));
+        continue;
+      }
+      if (await handleMessage({ ...work, msg }, detached) === 'return') return;
     }
   };
 
@@ -420,6 +495,7 @@ export function createWorkerLoopController(input: {
             codec: input.ttsPlaybackCodec,
             run: input.handlers.runTtsPlayback,
             action: 'tts_playback',
+            actionFor: (payload) => payload.generationExtent === 'document' ? 'tts_playback_document' : 'tts_playback',
           }
           : null;
       const ttsPlaybackPlanWork: WorkDefinition<TtsPlaybackPlanJobRequest, TtsPlaybackPlanJobResult> | null =
@@ -512,7 +588,7 @@ export function createWorkerLoopController(input: {
       stopRequested = true;
       growLoops = null;
       scheduler.cancelWaiters();
-      await Promise.allSettled(loops);
+      await Promise.allSettled([...loops, ...deferredRuns]);
       loops = [];
     },
   };

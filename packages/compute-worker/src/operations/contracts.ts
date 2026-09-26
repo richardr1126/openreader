@@ -69,6 +69,11 @@ export interface TtsPlaybackJobRequest {
    * forward plan even while the cursor is fresh.
    */
   generationExtent?: 'window' | 'document';
+  /**
+   * Document runs only: regenerate segments whose sidecar recorded a terminal
+   * synthesis error instead of keeping their silence replacement.
+   */
+  retryErroredSegments?: boolean;
   planning: {
     /** Optional absolute worker-plan ordinal selected by the UI from a known plan row. */
     selectedOrdinal?: number;
@@ -130,6 +135,8 @@ export interface TtsPlaybackExportArtifactRequest {
   planObjectKey: string;
   format: TtsPlaybackExportFormat;
   speed: number;
+  /** Export one settled chapter (plan locator group) instead of the book. */
+  chapterIndex?: number;
 }
 
 export interface TtsPlaybackExportArtifactMetadata {
@@ -150,6 +157,7 @@ export interface TtsPlaybackExportArtifactMetadata {
   generatedSegments?: number;
   skippedSegments?: number;
   plannedSegments?: number;
+  chapterIndex?: number;
   dispositionFilename: string;
   sourceSessionId: string;
   sourcePlanObjectKey: string;
@@ -380,6 +388,9 @@ export type WorkerOperationKind =
 export const WORKER_OPERATION_COMPUTE_ACTION = {
   pdf_layout: 'pdf_layout',
   tts_playback: 'tts_playback',
+  // Whole-document runs are tts_playback operations scheduled under their own
+  // action (resolved per message by the worker loop).
+  tts_playback_document: 'tts_playback',
   tts_playback_plan: 'tts_playback_plan',
   tts_playback_export: 'tts_playback_export',
   document_preview: 'document_preview',

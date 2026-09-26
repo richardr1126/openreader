@@ -18,6 +18,8 @@ import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
+import { findEpubTocTitle } from '@/lib/client/epub/toc-titles';
+import type { TtsExportChapterProgress } from '@/types/tts-export';
 
 export default function EPUBPage() {
   const { id } = useParams();
@@ -54,7 +56,14 @@ function EpubReader({
     isPlaybackReady,
     failPlacement,
     metadataLanguage,
+    tocRef,
   } = epubState;
+  const resolveChapterTitle = useCallback(
+    (chapter: TtsExportChapterProgress) => (
+      chapter.spineHref ? findEpubTocTitle(tocRef.current ?? [], chapter.spineHref) : null
+    ),
+    [tocRef],
+  );
   const {
     sentences,
     stop,
@@ -177,6 +186,7 @@ function EpubReader({
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
           documentType="epub"
           documentId={routeDocumentId || ''}
+          resolveChapterTitle={resolveChapterTitle}
         />
       )}
       <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} />
